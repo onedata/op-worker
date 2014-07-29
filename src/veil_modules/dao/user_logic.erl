@@ -33,9 +33,6 @@
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
 -export([synchronize_spaces_info/2]).
 
--define(UserRootPerms, 8#600).
--define(SpaceDirPerm, 8#1770).
-
 
 %% ====================================================================
 %% API functions
@@ -66,12 +63,14 @@ sign_in(Proplist, AccessToken) ->
 
     ?info("Login with token: ~p", [AccessToken]),
 
+    fslogic_context:set_access_token(GlobalId, AccessToken),
+
     User = case get_user({global_id, GlobalId}) of
                {ok, ExistingUser} ->
-                   User1 = synchronize_user_info(ExistingUser, Teams, Emails, DnList),
+                   User1 = synchronize_user_info(ExistingUser, Teams, Emails, DnList, AccessToken),
                    synchronize_spaces_info(User1, AccessToken);
                {error, user_not_found} ->
-                   case create_user(GlobalId, Login, Name, Teams, Emails, DnList) of
+                   case create_user(GlobalId, Login, Name, Teams, Emails, DnList, AccessToken) of
                        {ok, NewUser} ->
                            synchronize_spaces_info(NewUser, AccessToken);
                        {error, Error} ->
@@ -100,6 +99,8 @@ sign_in(Proplist, AccessToken) ->
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
 create_user(GlobalId, Login, Name, Teams, Email, DnList) ->
+    create_user(GlobalId, Login, Name, Teams, Email, DnList, <<>>).
+create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken) ->
     ?debug("Creating user: ~p", [{GlobalId, Login, Name, Teams, Email, DnList}]),
     Quota = #quota{},
     {QuotaAns, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
@@ -123,7 +124,9 @@ create_user(GlobalId, Login, Name, Teams, Email, DnList) ->
                       List when is_list(List) -> [Login | List];
                       _ -> [Login]
                   end,
-        quota_doc = QuotaUUID
+        quota_doc = QuotaUUID,
+
+        access_token = AccessToken
     },
     {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
     GetUserAns = get_user({uuid, UUID}),
@@ -188,6 +191,8 @@ synchronize_spaces_info(#veil_document{record = UserRec} = UserDoc, AccessToken)
                 end,
 
             ?info("New spaces: ~p", [NewSpaces]),
+
+            [fslogic_spaces:initialize(SpaceId) || SpaceId <- NewSpaces],
 
             UserDoc1 = UserDoc#veil_document{record = UserRec#user{spaces = NewSpaces}},
             case dao_lib:apply(dao_users, save_user, [UserDoc1], 1) of
@@ -612,11 +617,15 @@ invert_dn_string(DNString) ->
     Result :: user_doc().
 %% ====================================================================
 synchronize_user_info(User, Teams, Emails, DnList) ->
+    synchronize_user_info(User, Teams, Emails, DnList, <<>>).
+synchronize_user_info(User, Teams, Emails, DnList, AccessToken) ->
     %% Actual updates will probably happen so rarely, that there is no need to scoop those 3 DB updates into one.
-    User2 = case (get_teams(User) =:= Teams) or (Teams =:= []) of
-                true -> User;
+    User1 = update_access_token(User, AccessToken),
+
+    User2 = case (get_teams(User1) =:= Teams) or (Teams =:= []) of
+                true -> User1;
                 false ->
-                    {ok, NewUser} = update_teams(User, Teams),
+                    {ok, NewUser} = update_teams(User1, Teams),
                     NewUser
             end,
 
@@ -645,6 +654,9 @@ synchronize_user_info(User, Teams, Emails, DnList) ->
                     NewUser4
             end,
     User4.
+
+update_access_token(#veil_document{record = #user{} = User} = UserDoc, AccessToken) ->
+    UserDoc#veil_document{record = User#user{access_token = AccessToken}}.
 
 
 %% oid_code_to_shortname/1

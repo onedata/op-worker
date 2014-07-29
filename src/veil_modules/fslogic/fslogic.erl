@@ -169,19 +169,12 @@ handle(_ProtocolVersion, _Msg) ->
 maybe_handle_fuse_message(RequestBody) ->
     PathCtx = extract_logical_path(RequestBody),
     {ok, AbsolutePathCtx} = fslogic_path:get_full_file_name(PathCtx),
-    {ok, #space_info{space_id = SpaceId, name = SpaceName, providers = Providers}} = fslogic_utils:get_space_info_for_path(AbsolutePathCtx),
+    {ok, #space_info{name = SpaceName, providers = Providers} = SpaceInfo} = fslogic_utils:get_space_info_for_path(AbsolutePathCtx),
 
     Self = cluster_manager_lib:get_provider_id(),
 
-%%     {ok, Providers} =
-%%         case SpaceId of
-%%             "" ->
-%%                 {ok, [Self]};
-%%             _ ->
-%%                 registry_spaces:get_space_providers(SpaceId)
-%%         end,
-
-    ?info("Space for request: ~p, providers: ~p (current ~p). AccessToken: ~p", [SpaceName, Providers, Self, fslogic_context:get_access_token()]),
+    ?debug("Space for request: ~p, providers: ~p (current ~p). AccessToken: ~p, ~p, FullName: ~p / ~p",
+        [SpaceName, Providers, Self, fslogic_context:get_access_token(), RequestBody, PathCtx, AbsolutePathCtx]),
 
     case lists:member(Self, Providers) of
         true ->
@@ -190,8 +183,17 @@ maybe_handle_fuse_message(RequestBody) ->
             [RerouteToProvider | _] = Providers,
             {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(RerouteToProvider),
             ?info("Reroute to: ~p", [URLs]),
-            provider_proxy:reroute_pull_message({RerouteToProvider, URLs}, fslogic_context:get_access_token(),
-                fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
+            try
+                provider_proxy:reroute_pull_message({RerouteToProvider, URLs}, fslogic_context:get_access_token(),
+                    fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
+            catch
+                Type:Reason ->
+                    ?error_stacktrace("Unable to process remote fslogic request to provider ~p due to: ~p", [RerouteToProvider, {Type, Reason}]),
+                    case fslogic_remote:local_clean_postprocess(SpaceInfo, Reason, RequestBody) of
+                        undefined -> throw({unable_to_reroute_message, Reason});
+                        LocalResponse -> LocalResponse
+                    end
+            end
     end.
 
 %% handle_test/2
@@ -403,6 +405,8 @@ extract_logical_path(#changefilegroup{file_logic_name = Path}) ->
 extract_logical_path(#changefileperms{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#updatetimes{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#createfileack{file_logic_name = Path}) ->
     Path;
 extract_logical_path(_) ->
     "/".

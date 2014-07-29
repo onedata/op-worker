@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author RoXeon
+%%% @author Rafal Slota
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
 %%%
@@ -7,7 +7,7 @@
 %%% Created : 26. Jul 2014 03:07
 %%%-------------------------------------------------------------------
 -module(provider_proxy).
--author("RoXeon").
+-author("Rafal Slota").
 
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
@@ -37,10 +37,12 @@ reroute_pull_message({ProviderId, [URL | _]}, {GlobalID, AccessToken}, FuseId, M
     {AnswerDecoderName, AnswerType} = records_translator:get_answer_decoder_and_type(Message),
     MsgBytes = encode(Message),
 
+    TokenHash = access_token_hash(GlobalID, AccessToken),
+
     ClusterMessage =
         #clustermsg{synch = true, protocol_version = 1, module_name = a2l(TargetModule), message_id = 0,
                     answer_decoder_name = a2l(AnswerDecoderName), answer_type = a2l(AnswerType), input = MsgBytes,
-                    access_token = vcn_utils:ensure_binary(AccessToken),
+                    token_hash = TokenHash, global_user_id = GlobalID,
                     message_decoder_name = a2l(get_message_decoder(Message)), message_type = a2l(get_message_type(Message))},
 
     ?info("1 ~p", [FuseId]),
@@ -77,19 +79,20 @@ communicate_bin({ProviderId, URL}, PRMBin) ->
             throw(Reason)
     end.
 
+access_token_hash(_GlobalId, AccessToken) ->
+    base64:encode(crypto:hash(sha512, AccessToken)).
+
 
 encode(#fusemessage{input = Input, message_type = MType} = FM) ->
     ?info("Message o encode0: ~p", [Input]),
     FMBin = erlang:iolist_to_binary(erlang:apply(fuse_messages_pb, encoder_method(MType), [Input])),
     ?info("Message o encode1: ~p", [FM#fusemessage{input = FMBin}]),
     erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FM#fusemessage{input = FMBin, message_type = a2l(MType)}));
-encode(#remotefilemangement{}) ->
-    <<>>.
-
-prepare_message(Synch, Task, AnswerDecoderName, ProtocolVersion, Msg, MsgId, AnswerType, MsgBytes) ->
-    #clustermsg{synch = Synch, protocol_version = ProtocolVersion, module_name = Task, message_id = 0,
-                answer_decoder_name = AnswerDecoderName, answer_type = AnswerType, input = MsgBytes,
-                message_decoder_name = get_message_decoder(Msg), message_type = get_message_type(Msg)}.
+encode(#remotefilemangement{input = Input, message_type = MType} = RFM) ->
+    ?info("Message o encode0: ~p", [Input]),
+    RFMBin = erlang:iolist_to_binary(erlang:apply(remote_file_management_pb, encoder_method(MType), [Input])),
+    ?info("Message o encode1: ~p", [RFM#remotefilemangement{input = RFMBin}]),
+    erlang:iolist_to_binary(remote_file_management_pb:encode_remotefilemangement(RFM#remotefilemangement{input = RFMBin, message_type = a2l(MType)})).
 
 
 

@@ -94,11 +94,11 @@ get_storage({Type, StorageID}) ->
 %% ====================================================================
 get_user(#veil_document{record = #user{}} = UserDoc) ->
     {ok, UserDoc};
-get_user({dn, UserDN}) ->
-    case UserDN of
+get_user({Key, UserGID}) ->
+    case UserGID of
         undefined -> {ok, #veil_document{uuid = ?CLUSTER_USER_ID, record = #user{login = "root", role = admin}}};
         DN ->
-            case user_logic:get_user({dn, DN}) of
+            case user_logic:get_user({Key, DN}) of
                 {ok, #veil_document{}} = OKRet -> OKRet;
                 {error, Reason} ->
                     {error, {get_user_error, {Reason, {dn, DN}}}}
@@ -114,7 +114,12 @@ get_user({dn, UserDN}) ->
 -spec get_user() -> {ok, UserDoc :: user_doc()} | {error, any()}.
 %% ====================================================================
 get_user() ->
-    get_user({dn, fslogic_context:get_user_dn()}).
+    case fslogic_context:get_access_token() of
+        {UserGID, _} when UserGID =/= undefined ->
+            get_user({global_id, UserGID});
+        {_, _} ->
+            get_user({dn, fslogic_context:get_user_dn()})
+    end.
 
 
 %% get_file/1

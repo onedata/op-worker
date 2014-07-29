@@ -108,6 +108,7 @@ get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
                             {ok, filename:join([?SPACES_BASE_DIR_NAME | SpaceTokens])};
                         _ ->
                             Root = get_user_root(UserDoc),
+                            ?info("UserRoot: ~p", [Root]),
                             {ok, filename:join([?SPACES_BASE_DIR_NAME, Root] ++ Tokens)}
                     end;
                 _ -> {error, invalid_group_access}
@@ -198,6 +199,7 @@ get_user_root(#user{spaces = []}) ->
     throw(no_spaces);
 get_user_root(#user{spaces = [PrimarySpaceId | _]}) ->
     {ok, #space_info{name = SpaceName}} = fslogic_objects:get_space({uuid, PrimarySpaceId}),
+    ?info("get user root: ~p ~p ~p", [PrimarySpaceId, SpaceName, unicode:characters_to_list(SpaceName)]),
     unicode:characters_to_list(SpaceName).
 
 

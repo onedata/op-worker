@@ -63,12 +63,12 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
-handle(ProtocolVersion, Record) when is_record(Record, remotefilemangement) ->
-    RequestBody = Record#remotefilemangement.input,
+handle(ProtocolVersion, #remotefilemangement{input = RequestBody, space_id = SpaceId}) ->
+    ?info("RFM space ctx ~p", [SpaceId]),
     RequestType = element(1, RequestBody),
 
     fslogic_context:set_protocol_version(ProtocolVersion),
-    fslogic:fslogic_runner(fun handle_message/1, RequestType, RequestBody, remote_files_manager_errors);
+    fslogic:fslogic_runner(fun(ReqBody) -> maybe_handle_message(ReqBody, SpaceId) end, RequestType, RequestBody, remote_files_manager_errors);
 
 handle(_ProtocolVersion, _Msg) ->
   ?warning("Wrong request: ~p", [_Msg]),
@@ -81,6 +81,29 @@ handle(_ProtocolVersion, _Msg) ->
 %% ====================================================================
 cleanup() ->
   ok.
+
+
+maybe_handle_message(RequestBody, SpaceId) ->
+    {ok, #space_info{providers = Providers}} = fslogic_objects:get_space({uuid, SpaceId}),
+
+    Self = cluster_manager_lib:get_provider_id(),
+
+    case lists:member(Self, Providers) of
+        true ->
+            handle_message(RequestBody);
+        false ->
+            [RerouteToProvider | _] = Providers,
+            {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(RerouteToProvider),
+            ?info("Reroute to: ~p", [URLs]),
+            try
+                provider_proxy:reroute_pull_message({RerouteToProvider, URLs}, fslogic_context:get_access_token(),
+                    fslogic_context:get_fuse_id(), #remotefilemangement{space_id = SpaceId, input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
+            catch
+                Type:Reason ->
+                    ?error_stacktrace("Unable to process remote files manager request to provider ~p due to: ~p", [RerouteToProvider, {Type, Reason}]),
+                    throw({unable_to_reroute_message, Reason})
+            end
+    end.
 
 %% ====================================================================
 %% Internal functions

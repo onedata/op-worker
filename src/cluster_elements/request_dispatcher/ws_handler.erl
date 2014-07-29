@@ -26,7 +26,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 %% Holds state of websocket connection. peer_dn field contains DN of certificate of connected peer.
--record(hander_state, {peer_dn, peer_serial, dispatcher_timeout, fuse_id = "", connection_id = "", peer_type = user, provider_id = <<>>, access_token = <<>>}).
+-record(hander_state, {peer_dn, peer_serial, dispatcher_timeout, fuse_id = "", connection_id = "", peer_type = user, provider_id = <<>>, access_token, user_global_id}).
 
 %% ====================================================================
 %% API
@@ -76,7 +76,7 @@ websocket_init(TransportName, Req, _Opts) ->
                     [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
                 {ok, 1} ->
                     InitCtx = #hander_state{peer_serial = Serial, dispatcher_timeout = DispatcherTimeout},
-                    {ok, Req, setup_connection(InitCtx, OtpCert, Certs, gsi_handler:is_provider(OtpCert))};
+                    {ok, Req, setup_connection(InitCtx, OtpCert, Certs, auth_handler:is_provider(OtpCert))};
                 {ok, 0, Errno} ->
                     ?info("Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
                     {shutdown, Req};
@@ -99,7 +99,7 @@ setup_connection(InitCtx, OtpCert, Certs, false) ->
     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
     InitCtx#hander_state{peer_dn = DnString, peer_type = user};
 setup_connection(InitCtx, OtpCert, _Certs, true) ->
-    ProviderId = gsi_handler:get_provider_id(OtpCert),
+    ProviderId = auth_handler:get_provider_id(OtpCert),
     ?info("Provider ~p connected.", [ProviderId]),
     InitCtx#hander_state{provider_id = ProviderId, peer_type = provider}.
 
@@ -133,7 +133,9 @@ websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString, peer_typ
         {cert_confirmation_required, UserLogin, MsgId2} -> {reply, {binary, encode_answer(cert_confirmation_required, MsgId2, UserLogin)}, Req, State};
         {cert_denied_by_user, MsgId2}                   -> {reply, {binary, encode_answer(cert_denied_by_user, MsgId2)}, Req, State};
         {AtomError, MsgId2} when is_atom(AtomError)     -> {reply, {binary, encode_answer(AtomError, MsgId2)}, Req, State};
-        _:_ -> {reply, {binary, encode_answer(ws_handler_error)}, Req, State}
+        _:Reason ->
+            ?error_stacktrace("WSHandler failed due to: ~p", [Reason]),
+            {reply, {binary, encode_answer(ws_handler_error)}, Req, State}
     end;
 websocket_handle({Type, Data}, Req, State) ->
     ?warning("Unknown WebSocket request. Type: ~p, Payload: ~p", [Type, Data]),
@@ -193,15 +195,15 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = NewFuseId})}, Req, NewState};
 
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
-handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, AccessToken}, #hander_state{peer_dn = DnString} = State) ->
-    UID = %% Fetch user's ID
-    case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
-        {ok, #veil_document{uuid = UID1}} ->
-            UID1;
-        {error, Error} ->
-            ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
-            throw({no_user_found_error, Error, MsgId})
-    end,
+handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, {_GlobalId, _TokenHash}}, #hander_state{peer_dn = DnString} = State) ->
+    {UID, AccessToken, UserGID} = %% Fetch user's ID
+        case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
+            {ok, #veil_document{uuid = UID1, record = #user{access_token = AccessToken1, global_id = UserGID1}}} ->
+                {UID1, AccessToken1, UserGID1};
+            {error, Error} ->
+                ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
+                throw({no_user_found_error, Error, MsgId})
+        end,
 
     %% Fetch session data (using FUSE ID)
     case dao_lib:apply(dao_cluster, get_fuse_session, [NewFuseId], ProtocolVersion) of
@@ -220,7 +222,8 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
 
             %% Session data found, and its user ID matches -> send OK status and update current connection state
             ?debug("User ~p assigned FUSE ID ~p to the connection (PID: ~p)", [DnString, NewFuseId, self()]),
-            {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State#hander_state{fuse_id = NewFuseId, connection_id = ConnID}};
+            {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req,
+                        State#hander_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = AccessToken, user_global_id = UserGID}};
         {ok, #veil_document{record = #fuse_session{uid = OtherUID}}} ->
             %% Current user does not match session owner
             ?warning("User ~p tried to access someone else's session (fuse ID: ~p, session owner UID: ~p)", [DnString, NewFuseId, OtherUID]),
@@ -231,13 +234,15 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
     end;
 
 %% Handle other messages
-handle(Req, {push, {Msg, MsgId} = CLM}, #hander_state{peer_type = provider} = State) ->
+handle(Req, {push, FuseID, {Msg, MsgId} = CLM}, #hander_state{peer_type = provider} = State) ->
     ?info("Got push msg: ~p", [Msg]),
     {reply, {binary, encode_answer(ok, MsgId)}, Req, State};
-handle(Req, {pull, FuseID, CLM}, #hander_state{peer_type = provider} = State) ->
+handle(Req, {pull, FuseID, CLM}, #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
     ?info("Got pull msg: ~p from ~p", [CLM, FuseID]),
-    handle(Req, CLM, State#hander_state{fuse_id = FuseID});
-handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, AccessToken} = CLM, #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID} = State) ->
+    handle(Req, CLM, State#hander_state{fuse_id = vcn_utils:ensure_list( fslogic_context:gen_global_fuse_id(ProviderId, FuseID) )});
+handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = CLM,
+        #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
+                      access_token = SessionAccessToken, user_global_id = SessionUserGID} = State) ->
     %% Check if received message requires FuseId
     MsgType = case Msg of
                   M0 when is_tuple(M0) -> erlang:element(1, M0); %% Record
@@ -249,12 +254,33 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         {FID, _} when is_list(FID) -> ok                               % FuseId is present
     end,
 
+    ?info("Session: ~p ~p", [SessionUserGID, SessionAccessToken]),
+    ?info("CTX for msg: ~p ~p", [GlobalId, TokenHash]),
+
+    {UserGID, AccessToken} =
+        try {SessionUserGID =/= undefined orelse not registry_openid:client_verify(GlobalId, TokenHash), SessionAccessToken} of
+            {true, undefined} ->
+                auth_handler:get_access_token(SessionUserGID);
+            {true, _} ->
+                {SessionUserGID, SessionAccessToken};
+            _ ->
+                auth_handler:get_access_token(GlobalId)
+        catch
+            Reason ->
+                ?error("Cannot verify user (~p) authentication due to: ~p", [GlobalId, Reason]),
+                throw({unable_to_authenticate, MsgId})
+        end,
+
+    ?info("CTX1 for msg: ~p ~p", [UserGID, AccessToken]),
+
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->
-                      #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}};
+                      #veil_request{subject = DnString, request =
+                        #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}, access_token = {UserGID, AccessToken}};
                   CallbackMsg2 when is_record(CallbackMsg2, channelclose) ->
-                      #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}};
-                  _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {<<>>, AccessToken}}
+                      #veil_request{subject = DnString, request =
+                        #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}, access_token = {UserGID, AccessToken}};
+                  _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
               end,
 
     case Synch of
@@ -385,17 +411,19 @@ decode_clustermsg_pb(MsgBytes, DN) ->
                    end,
 
     #clustermsg{module_name = ModuleName, message_type = Message_type, message_decoder_name = Message_decoder_name, answer_type = Answer_type,
-        answer_decoder_name = Answer_decoder_name, synch = Synch, protocol_version = Prot_version, message_id = MsgId, input = Bytes, access_token = AccessToken} = DecodedBytes,
+        answer_decoder_name = Answer_decoder_name, synch = Synch, protocol_version = Prot_version, message_id = MsgId, input = Bytes,
+        token_hash = TokenHash, global_user_id = GlobalId} = DecodedBytes,
 
-    Msg = try
-        erlang:apply(list_to_atom(Message_decoder_name ++ "_pb"), list_to_atom("decode_" ++ Message_type), [Bytes])
-          catch
-              _:_ -> throw({wrong_internal_message_type, MsgId})
-          end,
+    Msg =
+        try
+            erlang:apply(list_to_atom(Message_decoder_name ++ "_pb"), list_to_atom("decode_" ++ Message_type), [Bytes])
+        catch
+            _:_ -> throw({wrong_internal_message_type, MsgId})
+        end,
 
     TranslatedMsg = records_translator:translate(Msg, Message_decoder_name),
     case checkMessage(TranslatedMsg, DN) of
-        true -> {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type, AccessToken};
+        true -> {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type, {GlobalId, TokenHash}};
         false -> throw({message_not_supported, MsgId})
     end.
 
@@ -482,6 +510,7 @@ encode_answer(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer
     Result :: binary().
 %% ====================================================================
 encode_answer(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription) ->
+    ?info("Encoding answer ~p ~p ~p ~p ~p ~p", [Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription]),
     Message = encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription),
     erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message)).
 

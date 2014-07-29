@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author RoXeon
+%%% @author Rafal Slota
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
 %%%
@@ -7,7 +7,7 @@
 %%% Created : 25. Jul 2014 15:36
 %%%-------------------------------------------------------------------
 -module(cluster_manager_lib).
--author("RoXeon").
+-author("Rafal Slota").
 
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -21,5 +21,5 @@ get_provider_id() ->
     [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
     PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
 
-    gsi_handler:get_provider_id(PeerCert).
+    auth_handler:get_provider_id(PeerCert).
 
