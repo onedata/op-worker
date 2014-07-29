@@ -1,18 +1,26 @@
+/**
+ * @file bufferAgent.cc
+ * @author Rafal Slota
+ * @copyright (C) 2013 ACK CYFRONET AGH
+ * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
+ */
+
 #include "bufferAgent.h"
+
+#include "fileCache.h"
 #include "helpers/storageHelperFactory.h"
 #include "logging.h"
 
-using boost::shared_ptr;
-using boost::thread;
-using boost::bind;
+#include <functional>
+#include <thread>
 
-using std::string;
-
-namespace veil {
-namespace helpers {
+namespace veil
+{
+namespace helpers
+{
 
 // Static declarations
-boost::recursive_mutex BufferAgent::m_bufferSizeMutex;
+std::recursive_mutex    BufferAgent::m_bufferSizeMutex;
 volatile size_t         BufferAgent::m_rdBufferTotalSize;
 volatile size_t         BufferAgent::m_wrBufferTotalSize;
 rdbuf_size_mem_t        BufferAgent::m_rdBufferSizeMem;
@@ -25,7 +33,7 @@ BufferAgent::BufferAgent(const BufferLimits &bufferLimits, write_fun w, read_fun
     doRead(r),
     m_bufferLimits{bufferLimits}
 {
-    agentStart(1); // Start agent with only 2 * 1 threads
+    agentStart(1); // Start agent with only 2 * 1 std::threads
 }
 
 BufferAgent::~BufferAgent()
@@ -102,7 +110,7 @@ int BufferAgent::onOpen(const std::string &path, ffi_type ffi)
         unique_lock guard(m_wrMutex);
         m_wrCacheMap.erase(ffi->fh);
 
-        write_buffer_ptr lCache(new WriteCache());
+        write_buffer_ptr lCache = std::make_shared<WriteCache>();
         lCache->fileName = path;
         lCache->buffer = newFileCache(true);
         lCache->ffi = *ffi;
@@ -116,7 +124,7 @@ int BufferAgent::onOpen(const std::string &path, ffi_type ffi)
         if(( it = m_rdCacheMap.find(path) ) != m_rdCacheMap.end()) {
             it->second->openCount++;
         } else {
-            read_buffer_ptr lCache(new ReadCache());
+            read_buffer_ptr lCache = std::make_shared<ReadCache>();
             lCache->fileName = path;
             lCache->openCount = 1;
             lCache->ffi = *ffi;
@@ -201,7 +209,7 @@ int BufferAgent::onRead(const std::string &path, std::string &buf, size_t size, 
     if(buf.size() < size) {
 
         // Do read missing data from filesystem
-        string buf2;
+        std::string buf2;
         int ret = doRead(path, buf2, size - buf.size(), offset + buf.size(), &wrapper->ffi);
         if(ret < 0)
             return ret;
@@ -217,7 +225,7 @@ int BufferAgent::onRead(const std::string &path, std::string &buf, size_t size, 
         guard.unlock();
     } else {
         // All data could be fetch from cache, lets chceck if next calls would read form cache too
-        string tmp;
+        std::string tmp;
         size_t prefSize = std::max(2*size, wrapper->blockSize);
         off_t prefFrom = offset + size + m_bufferLimits.preferedBlockSize;
         wrapper->buffer->readData(prefFrom, prefSize, tmp);
@@ -321,8 +329,8 @@ void BufferAgent::agentStart(int worker_count)
 
     while(worker_count--)
     {
-        m_workers.push_back(shared_ptr<thread>(new thread(bind(&BufferAgent::writerLoop, this))));
-        m_workers.push_back(shared_ptr<thread>(new thread(bind(&BufferAgent::readerLoop, this))));
+        m_workers.push_back(std::make_shared<std::thread>(&BufferAgent::writerLoop, this));
+        m_workers.push_back(std::make_shared<std::thread>(&BufferAgent::readerLoop, this));
     }
 }
 
@@ -367,11 +375,11 @@ void BufferAgent::readerLoop()
 
             // Check how many bytes do we have available in cache
             // Download only those that aren't available
-            string buff;
+            std::string buff;
             wrapper->buffer->readData(job.offset, job.size, buff);
             if(buff.size() < job.size)
             {
-                string tmp;
+                std::string tmp;
                 off_t effectiveOffset = job.offset + buff.size();
                 int ret = doRead(wrapper->fileName, tmp, job.size, effectiveOffset, &wrapper->ffi);
 
@@ -483,9 +491,9 @@ void BufferAgent::writerLoop()
     }
 }
 
-boost::shared_ptr<FileCache> BufferAgent::newFileCache(bool isBuffer)
+std::shared_ptr<FileCache> BufferAgent::newFileCache(bool isBuffer)
 {
-    return boost::shared_ptr<FileCache>(new FileCache(m_bufferLimits.preferedBlockSize, isBuffer));
+    return std::make_shared<FileCache>(m_bufferLimits.preferedBlockSize, isBuffer);
 }
 
 } // namespace helpers

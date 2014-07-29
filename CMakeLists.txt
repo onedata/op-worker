@@ -12,13 +12,6 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 set(DEPS_DIR "deps")
 link_directories(${PROJECT_BINARY_DIR})
 
-string( TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_L )
-if(CMAKE_BUILD_TYPE_L MATCHES "debug")
-    set(VeilHelpers_DEBUG 1)
-else()
-    set(VeilHelpers_DEBUG 0)
-endif()
-
 configure_file (
     "${PROJECT_SOURCE_DIR}/include/veilConfig.h.in"
     "${PROJECT_BINARY_DIR}/veilConfig.h"
@@ -83,26 +76,14 @@ include_directories(${FUSE_INCLUDE_DIRS})
 
 
 # Setup Boost
-set(Boost_USE_STATIC_LIBS       OFF)
+if(${PREFER_STATIC_LINK})
+    set(Boost_USE_STATIC_LIBS       ON)
+else()
+    set(Boost_USE_STATIC_LIBS       OFF)
+endif()
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME    OFF)
 find_package(Boost COMPONENTS thread filesystem system random REQUIRED)
-
-if(${PREFER_STATIC_LINK})
-
-    set(BOOST_LIBS boost_thread boost_filesystem boost_system boost_random)
-
-    foreach(LIB ${BOOST_LIBS})
-        find_library(BOOST_${LIB}_LIBRARY NAMES lib${LIB}-mt.a lib${LIB}.a ${LIB}-mt ${LIB})
-        if(${BOOST_${LIB}_LIBRARY} MATCHES .*_LIBRARY-NOTFOUND)
-            message( FATAL_ERROR "ERROR: ${LIB} NOT FOUND!")
-        endif()
-        set(BOOST_DEPS ${BOOST_DEPS};${BOOST_${LIB}_LIBRARY})
-    endforeach()
-    set(Boost_LIBRARIES ${BOOST_DEPS})
-
-endif()
-
 
 link_directories(${Boost_LIBRARY_DIRS})
 include_directories(${Boost_INCLUDE_DIRS})
@@ -136,7 +117,7 @@ PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # Setup sources
-file(GLOB HELPER_SOURCES "src/[a-zA-Z]*.cc")
+file(GLOB_RECURSE HELPER_SOURCES src/*.cc include/*.h)
 
 # Setup compile flags
 if(${PREFER_STATIC_LINK}) # Try to link libstdc++.a
@@ -157,14 +138,12 @@ else()
 endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SECTION_FRAGMENTATION_FLAGS} -Wall -fPIC -std=c++11")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
-add_definitions(${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -D_WEBSOCKETPP_CPP11_STL_)
+add_definitions(${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -D_WEBSOCKETPP_CPP11_STL_ -DBOOST_BIND_NO_PLACEHOLDERS)
 
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
 
-# Define targets
 
+# Define targets
 add_library(veilprotocol ${PROTO_SRCS})
 
 add_library(veilhelpers_obj OBJECT ${HELPER_SOURCES})
@@ -219,6 +198,13 @@ enable_testing()
 include_directories(${GTEST_INCLUDE_DIR})
 include_directories(${GMOCK_INCLUDE_DIR})
 
+set(TEST_SOURCES_DIR "test")
+include_directories(${TEST_SOURCES_DIR}/include)
+
+file(GLOB_RECURSE HELPER_TEST_HEADERS ${TEST_SOURCES_DIR}/include/*.h)
+add_library(testRunner OBJECT ${TEST_SOURCES_DIR}/testRunner.cc)
+add_dependencies(testRunner glog gmock gtest)
+
 add_custom_target(cunit)
 macro(run_test test_target)
   string(REGEX REPLACE "_test" "" test_name "${test_target}")
@@ -229,14 +215,11 @@ macro(run_test test_target)
   add_dependencies(cunit ${test_target}_runtest)
 endmacro()
 
-set(TEST_SOURCES_DIR "test")
-include_directories(${TEST_SOURCES_DIR}/include)
-
-file(GLOB files ${TEST_SOURCES_DIR}/*_test.cc)
+file(GLOB_RECURSE files ${TEST_SOURCES_DIR}/*_test.cc)
 foreach(file ${files})
     get_filename_component(TEST_NAME ${file} NAME_WE)
-    add_executable(${TEST_NAME} ${file})
-    add_dependencies(${TEST_NAME} gtest gmock veilFuse veilhelpers veilclient veilprotocol)
+    add_executable(${TEST_NAME} ${file} ${HELPER_TEST_HEADERS} $<TARGET_OBJECTS:testRunner>)
+    add_dependencies(${TEST_NAME} gmock gtest veilhelpers veilprotocol)
     target_link_libraries(${TEST_NAME}
         ${GTEST_LIBRARIES}
         ${Boost_LIBRARIES_SHARED}
