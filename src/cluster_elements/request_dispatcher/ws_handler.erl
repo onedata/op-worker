@@ -260,7 +260,7 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
     {UserGID, AccessToken} =
         try {SessionUserGID =/= undefined orelse not registry_openid:client_verify(GlobalId, TokenHash), SessionAccessToken} of
             {true, undefined} ->
-                {SessionUserGID, auth_handler:get_access_token(SessionUserGID)};
+                auth_handler:get_access_token(SessionUserGID);
             {true, _} ->
                 {SessionUserGID, SessionAccessToken};
             _ ->
