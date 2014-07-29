@@ -108,9 +108,8 @@ get_protocol_version() ->
 get_user_id() ->
     case fslogic_objects:get_user() of
         {ok, #veil_document{uuid = UID}} -> {ok, UID};
-        Error ->
-          ?error("Cannot get user id, error: ~p", [Error]),
-          Error
+        _ ->
+            {ok, ?CLUSTER_USER_ID}
     end.
 
 
