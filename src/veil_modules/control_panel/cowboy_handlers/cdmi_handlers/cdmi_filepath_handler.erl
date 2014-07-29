@@ -61,7 +61,7 @@ rest_init(Req, []) ->
     end;
 rest_init(Req, [Type]) ->
     {ok,DnString} = rest_utils:verify_peer_cert(Req),
-    case rest_utils:prepare_context(DnString) of %todo check all required request header/body fields
+    case rest_utils:prepare_context(DnString) of %todo check all required request header/body fields, and return badrequest error if something is missing
         ok ->
             {Method, _} = cowboy_req:method(Req),
             {PathInfo, _} = cowboy_req:path_info(Req),
@@ -100,14 +100,10 @@ allowed_methods(Req, State) ->
 %% @end
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
-resource_exists(Req, #state{filepath = Filepath, filetype = dir} = State) ->
+resource_exists(Req, #state{filepath = Filepath, filetype = Filetype} = State) ->
     case logical_files_manager:getfileattr(Filepath) of
-        {ok, #fileattributes{type = "DIR"} = Attr} -> {true, Req, State#state{attributes = Attr}};
-        _ -> {false, Req, State}
-    end;
-resource_exists(Req, #state{filepath = Filepath, filetype = reg} = State) ->
-    case logical_files_manager:getfileattr(Filepath) of
-        {ok, #fileattributes{type = "REG"} = Attr} -> {true, Req, State#state{attributes = Attr}};
+        {ok, #fileattributes{type = "DIR"} = Attr} when Filetype =:= dir -> {true, Req, State#state{attributes = Attr}};
+        {ok, #fileattributes{type = "REG"} = Attr} when Filetype =:= reg -> {true, Req, State#state{attributes = Attr}};
         _ -> {false, Req, State}
     end.
 
@@ -230,7 +226,7 @@ put_dir(Req, #state{filepath = Filepath} = State) ->
 %% @end
 -spec put_cdmi_file(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_cdmi_file(Req,State) -> %todo handle writing in chunks
+put_cdmi_file(Req,#state{filepath = Filepath} = State) ->
     {ok,RawBody,_} = cowboy_req:body(Req),
     Body = parse_body(RawBody),
     ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>,Body,<<"utf-8">>),  %todo check given body opts, store given mimetype
@@ -239,29 +235,6 @@ put_cdmi_file(Req,State) -> %todo handle writing in chunks
         <<"base64">> -> base64:decode(Value);
         <<"utf-8">> -> Value
     end,
-    put_file(Req,State,RawValue).
-
-%% put_noncdmi_file/2
-%% ====================================================================
-%% @doc Callback function for cdmi data object PUT operation with non-cdmi
-%% body content-type. In that case we treat whole body as file content.
-%% @end
--spec put_noncdmi_file(req(), #state{}) -> {term(), req(), #state{}}.
-%% ====================================================================
-put_noncdmi_file(Req,State) ->
-    ct:print("noncdmi!"),
-    {ok,Body,_} = cowboy_req:body(Req),
-    put_file(Req,State,Body).
-
-%% put_file/3
-%% ====================================================================
-%% @doc Final step of object put operation. It creates file and fills
-%% it with given data, returning proper cdmi error codes if something
-%% unexpected happens
-%% @end
--spec put_file(req(), #state{},binary()) -> {term(), req(), #state{}}.
-%% ====================================================================
-put_file(Req,#state{filepath = Filepath} =State,RawValue) ->
     case logical_files_manager:create(Filepath) of
         ok ->
             case logical_files_manager:write(Filepath,RawValue) of
@@ -279,6 +252,27 @@ put_file(Req,#state{filepath = Filepath} =State,RawValue) ->
             {ok,Req2} = cowboy_req:reply(?error_conflict_code,Req),
             {halt, Req2, State};
         Error -> %todo handle common errors
+            ?error("Creating cdmi object end up with error: ~p", [Error]),
+            {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+            {halt, Req2, State}
+    end.
+
+
+%% put_noncdmi_file/2
+%% ====================================================================
+%% @doc Callback function for cdmi data object PUT operation with non-cdmi
+%% body content-type. In that case we treat whole body as file content.
+%% @end
+-spec put_noncdmi_file(req(), #state{}) -> {term(), req(), #state{}}.
+%% ====================================================================
+put_noncdmi_file(Req,#state{filepath = Filepath} = State) ->
+    case logical_files_manager:create(Filepath) of %todo can be potentially refactored and combined with put_cdmi_file (some code is duplicated)
+        ok ->
+            write_body_to_file(Req,State,0);
+        {error, file_exists} ->
+            {ok,Req2} = cowboy_req:reply(?error_conflict_code,Req),
+            {halt, Req2, State};
+        Error ->
             ?error("Creating cdmi object end up with error: ~p", [Error]),
             {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
             {halt, Req2, State}
@@ -415,6 +409,29 @@ parse_body(RawBody) ->
             Ans
     end.
 
+%% write_body_to_file/3
+%% ====================================================================
+%% @doc Reads request's body and writes it to file obtained from state.
+%% This callback return value is compatibile with put requests.
+%% @end
+-spec write_body_to_file(req(),#state{},integer()) -> {boolean(),req(),#state{}}.
+%% ====================================================================
+write_body_to_file(Req,#state{filepath = Filepath} = State,Offset) ->
+    case cowboy_req:stream_body(Req) of
+        {ok, Chunk, Req2} ->
+            case logical_files_manager:write(Filepath,Offset,Chunk) of
+                Bytes when is_integer(Bytes) ->
+                    write_body_to_file(Req2,State,Offset+Bytes);
+                Error ->
+                    ?error("Writing to cdmi object end up with error: ~p", [Error]),
+                    logical_files_manager:delete(Filepath),
+                    {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+                    {halt, Req2, State}
+            end;
+        {done, Req2} ->
+            {true,Req2,State}
+    end.
+
 %% read_file/3
 %% ====================================================================
 %% @doc Reads given range of bytes (defaults to whole file) from file (obtained from state filepath), result is
@@ -437,8 +454,6 @@ read_file(State,Range,<<"base64">>) ->
     end;
 read_file(#state{filepath = Path},{From,To},<<"utf-8">>) ->
     logical_files_manager:read(Path,From, To-From+1).
-
-
 
 %% fs_remove/1
 %% ====================================================================

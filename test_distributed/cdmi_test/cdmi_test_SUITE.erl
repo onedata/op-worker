@@ -5,8 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This test is an example that shows how distributed test
-%% should look like.
+%% @doc This file contains cdmi protocol tests
 %% @end
 %% ===================================================================
 
