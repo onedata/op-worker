@@ -15,6 +15,7 @@ message FuseMessage {
 
 message GetFileLocation {
     required string file_logic_name = 1;
+    optional string open_mode = 2 [default = ""];
 }
 
 message GetNewFileLocation {
@@ -150,6 +151,13 @@ message HandshakeRequest {
     }
 
     repeated EnvVariable variable = 2;
+
+    message CertConfirmation {
+        required string login = 1;
+        required bool result = 2;
+    }
+
+    optional CertConfirmation cert_confirmation = 3;
 }
 
 message HandshakeResponse {
