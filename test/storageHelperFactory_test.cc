@@ -5,8 +5,9 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "connectionPool_mock.h"
 #include "helpers/storageHelperFactory.h"
+
+#include "communication/communicator_mock.h"
 
 #include <gtest/gtest.h>
 
@@ -17,7 +18,7 @@ using namespace veil::helpers;
 
 TEST(StorageHelperFactoryTest, ObjectBuild)
 {
-    StorageHelperFactory factory(std::make_shared<MockConnectionPool>(), BufferLimits{});
+    StorageHelperFactory factory(std::make_shared<MockCommunicator>(), BufferLimits{});
 
     EXPECT_NE((IStorageHelper*)0, factory.getStorageHelper("DirectIO", IStorageHelper::ArgsMap{}).get());
 

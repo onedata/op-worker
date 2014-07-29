@@ -17,7 +17,7 @@
 namespace veil
 {
 
-class SimpleConnectionPool;
+namespace communication{ class Communicator; }
 
 namespace helpers
 {
@@ -49,7 +49,7 @@ class StorageHelperFactory
 {
 public:
     StorageHelperFactory() = default;
-    StorageHelperFactory(std::shared_ptr<SimpleConnectionPool> connectionPool,
+    StorageHelperFactory(std::shared_ptr<communication::Communicator> communicator,
                          const BufferLimits &limits);
     virtual ~StorageHelperFactory() = default;
 
@@ -63,7 +63,7 @@ public:
                                                              const IStorageHelper::ArgsMap &args);
 
 private:
-    const std::shared_ptr<SimpleConnectionPool> m_connectionPool;
+    const std::shared_ptr<communication::Communicator> m_communicator;
     const BufferLimits m_limits;
 };
 

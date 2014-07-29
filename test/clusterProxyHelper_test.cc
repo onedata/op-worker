@@ -6,9 +6,9 @@
  */
 
 #include "clusterProxyHelper_proxy.h"
-#include "communicationHandler_mock.h"
-#include "connectionPool_mock.h"
+#include "communication/communicator_mock.h"
 #include "helpers/storageHelperFactory.h"
+#include "make_unique.h"
 #include "veilErrors.h"
 
 #include <boost/algorithm/string.hpp>
@@ -38,8 +38,7 @@ bool identityEqual(const T &lhs, const T &rhs)
 class ClusterProxyHelperTest: public ::testing::Test
 {
 protected:
-    std::shared_ptr<MockConnectionPool> mockPool;
-    std::shared_ptr<MockCommunicationHandler> mockConnection;
+    std::shared_ptr<MockCommunicator> mockCommunicator;
     std::shared_ptr<ProxyClusterProxyHelper> proxy;
 
     struct fuse_file_info ffi;
@@ -47,85 +46,31 @@ protected:
 
     void SetUp() override
     {
-        mockPool = std::make_shared<MockConnectionPool>();
-        mockConnection = std::make_shared<MockCommunicationHandler>();
-        proxy = std::make_shared<ProxyClusterProxyHelper>(mockPool, IStorageHelper::ArgsMap{});
-
-        EXPECT_CALL(*mockPool, selectConnection(_)).WillRepeatedly(Return(mockConnection));
-        EXPECT_CALL(*mockPool, releaseConnection(_)).WillRepeatedly(Return());
+        mockCommunicator = std::make_shared<MockCommunicator>();
+        proxy = std::make_shared<ProxyClusterProxyHelper>(mockCommunicator,
+                                                          IStorageHelper::ArgsMap{});
     }
 };
 
-
-TEST_F(ClusterProxyHelperTest, commonClusterMsgSetup)
-{
-    std::string inputData = "inputData";
-    ClusterMsg msg = proxy->commonClusterMsgSetup("inputType", inputData);
-
-    EXPECT_EQ(PROTOCOL_VERSION, msg.protocol_version());
-    EXPECT_EQ(true, msg.synch());
-    EXPECT_EQ(RFM_MODULE_NAME, msg.module_name());
-    EXPECT_EQ(RFM_DECODER, msg.message_decoder_name());
-    EXPECT_EQ("remotefilemangement", msg.message_type());
-
-    RemoteFileMangement rfm;
-    rfm.ParseFromString(msg.input());
-
-    EXPECT_EQ("inputtype", rfm.message_type());
-    EXPECT_EQ(inputData, rfm.input());
-}
-
-TEST_F(ClusterProxyHelperTest, sendClusterMessage)
-{
-    ClusterMsg clm;
-    Answer answer;
-
-    answer.set_answer_status("ok");
-    EXPECT_CALL(*mockConnection, communicate(Truly(bind(identityEqual<ClusterMsg>, std::cref(clm), _1)), _, _)).WillOnce(Return(answer));
-
-    Answer real = proxy->sendClusterMessage(clm);
-    EXPECT_EQ("ok", real.answer_status());
-}
-
-TEST_F(ClusterProxyHelperTest, requestMessage)
-{
-    Answer answer;
-
-    answer.set_answer_status("ok");
-    answer.set_worker_answer("worker");
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(Return(answer));
-
-    std::string inputData = "inputData";
-    EXPECT_EQ("worker", proxy->requestMessage("inputType", "answerType", inputData));
-}
-
-TEST_F(ClusterProxyHelperTest, requestAtom)
-{
-    Answer answer;
-    Atom atom;
-    atom.set_value("value");
-    answer.set_answer_status("ok");
-    answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(Return(answer));
-
-    EXPECT_EQ("value", proxy->requestAtom("inputType", "inputData"));
-}
 
 TEST_F(ClusterProxyHelperTest, open)
 {
     EXPECT_EQ(0, proxy->sh_open("file_id", &ffi));
 }
 
+ACTION_P(SaveMsg, msg)
+{
+    msg->CopyFrom(arg1);
+}
 
 TEST_F(ClusterProxyHelperTest, read)
 {
     ::google::protobuf::LogSilencer silencer; //silence protobuf error logs for this testcase, to test malformatted msg processing
     FileData resp;
     Answer answer;
-    ClusterMsg msg;
     std::string sbuf;
 
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
     EXPECT_EQ(-EIO, proxy->doRead("file_id", sbuf, 10, 2, &ffi));
 
     answer.set_answer_status(VOK);
@@ -135,27 +80,19 @@ TEST_F(ClusterProxyHelperTest, read)
     std::string strRaw(str, 9);
     resp.set_data(strRaw);
     answer.set_worker_answer(resp.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
     EXPECT_EQ(9, proxy->doRead("file_id", sbuf, 10, 2, &ffi));
     for(int i = 0; i < 9; ++i )
         EXPECT_EQ(str[i], sbuf[i]);
 
+    RemoteFileMangement sentMsg;
+
     resp.set_answer_status(VENOENT);
     answer.set_worker_answer(resp.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
     EXPECT_EQ(-ENOENT, proxy->doRead("file_id", sbuf, 10, 2, &ffi));
 
     RemoteFileMangement rfm;
-
-    EXPECT_EQ(true, msg.synch());
-    EXPECT_EQ(RFM_MODULE_NAME, msg.module_name());
-    EXPECT_EQ(PROTOCOL_VERSION, msg.protocol_version());
-    EXPECT_EQ(RFM_DECODER, msg.message_decoder_name());
-    EXPECT_EQ(tolower(rfm.GetDescriptor()->name()), msg.message_type());
-
-    EXPECT_EQ(tolower(FileData::descriptor()->name()), msg.answer_type());
-    EXPECT_EQ(RFM_DECODER, msg.answer_decoder_name());
-
 
     ReadFile subMsg;
     subMsg.set_file_id("file_id");
@@ -165,7 +102,7 @@ TEST_F(ClusterProxyHelperTest, read)
     rfm.set_input(subMsg.SerializeAsString());
     rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
 
-    EXPECT_EQ(rfm.SerializeAsString(), msg.input());
+    EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 }
 
 
@@ -174,13 +111,12 @@ TEST_F(ClusterProxyHelperTest, write)
     ::google::protobuf::LogSilencer silencer; //silence protobuf error logs for this testcase, to test malformatted msg processing
     WriteInfo resp;
     Answer answer;
-    ClusterMsg msg;
     char str[] = {0, 1, 45, 34, 0, 0, 0, 34, 56, 2};
     std::string strRaw(str, 10);
     std::string sbuf;
     sbuf = strRaw;
 
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
     EXPECT_EQ(-EIO, proxy->doWrite("file_id", sbuf, 10, 2, &ffi));
 
     answer.set_answer_status(VOK);
@@ -188,25 +124,17 @@ TEST_F(ClusterProxyHelperTest, write)
     resp.set_answer_status(VOK);
     resp.set_bytes_written(9);
     answer.set_worker_answer(resp.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
     EXPECT_EQ(9, proxy->doWrite("file_id", sbuf, 10, 2, &ffi));
+
+    RemoteFileMangement sentMsg;
 
     resp.set_answer_status(VENOENT);
     answer.set_worker_answer(resp.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
     EXPECT_EQ(-ENOENT, proxy->doWrite("file_id", sbuf, 10, 2, &ffi));
 
     RemoteFileMangement rfm;
-
-    EXPECT_EQ(true, msg.synch());
-    EXPECT_EQ(RFM_MODULE_NAME, msg.module_name());
-    EXPECT_EQ(PROTOCOL_VERSION, msg.protocol_version());
-    EXPECT_EQ(RFM_DECODER, msg.message_decoder_name());
-    EXPECT_EQ(tolower(rfm.GetDescriptor()->name()), msg.message_type());
-
-    EXPECT_EQ(tolower(WriteInfo::descriptor()->name()), msg.answer_type());
-    EXPECT_EQ(RFM_DECODER, msg.answer_decoder_name());
-
 
     WriteFile subMsg;
     subMsg.set_file_id("file_id");
@@ -216,7 +144,7 @@ TEST_F(ClusterProxyHelperTest, write)
     rfm.set_input(subMsg.SerializeAsString());
     rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
 
-    EXPECT_EQ(rfm.SerializeAsString(), msg.input());
+    EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 }
 
 
@@ -263,37 +191,29 @@ TEST_F(ClusterProxyHelperTest, readdir)
     EXPECT_EQ(ENOTSUP, proxy->sh_readdir("file_id", NULL, NULL, 0, &ffi));
 }
 
+
 TEST_F(ClusterProxyHelperTest, mknod)
 {
     Atom atom;
     Answer answer;
-    ClusterMsg msg;
 
     answer.set_answer_status(VOK);
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
     EXPECT_EQ(-EIO, proxy->sh_mknod("file_id", 0755, 0));
 
     atom.set_value(VOK);
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
     EXPECT_EQ(0, proxy->sh_mknod("file_id", 0755, 0));
+
+    RemoteFileMangement sentMsg;
 
     atom.set_value(VEEXIST);
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
     EXPECT_EQ(-EEXIST, proxy->sh_mknod("file_id", 0755, 0));
 
     RemoteFileMangement rfm;
-
-    EXPECT_EQ(true, msg.synch());
-    EXPECT_EQ(RFM_MODULE_NAME, msg.module_name());
-    EXPECT_EQ(PROTOCOL_VERSION, msg.protocol_version());
-    EXPECT_EQ(RFM_DECODER, msg.message_decoder_name());
-    EXPECT_EQ(tolower(rfm.GetDescriptor()->name()), msg.message_type());
-
-    EXPECT_EQ(tolower(Atom::descriptor()->name()), msg.answer_type());
-    EXPECT_EQ(COMMUNICATION_PROTOCOL_DECODER, msg.answer_decoder_name());
-
 
     CreateFile subMsg;
     subMsg.set_file_id("file_id");
@@ -302,7 +222,7 @@ TEST_F(ClusterProxyHelperTest, mknod)
     rfm.set_input(subMsg.SerializeAsString());
     rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
 
-    EXPECT_EQ(rfm.SerializeAsString(), msg.input());
+    EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 }
 
 
@@ -316,33 +236,24 @@ TEST_F(ClusterProxyHelperTest, unlink)
 {
     Atom atom;
     Answer answer;
-    ClusterMsg msg;
 
     answer.set_answer_status(VOK);
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
     EXPECT_EQ(-EIO, proxy->sh_unlink("file_id"));
 
     atom.set_value(VOK);
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
     EXPECT_EQ(0, proxy->sh_unlink("file_id"));
+
+    RemoteFileMangement sentMsg;
 
     atom.set_value(VEEXIST);
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
     EXPECT_EQ(-EEXIST, proxy->sh_unlink("file_id"));
 
     RemoteFileMangement rfm;
-
-    EXPECT_EQ(true, msg.synch());
-    EXPECT_EQ(RFM_MODULE_NAME, msg.module_name());
-    EXPECT_EQ(PROTOCOL_VERSION, msg.protocol_version());
-    EXPECT_EQ(RFM_DECODER, msg.message_decoder_name());
-    EXPECT_EQ(tolower(rfm.GetDescriptor()->name()), msg.message_type());
-
-    EXPECT_EQ(tolower(Atom::descriptor()->name()), msg.answer_type());
-    EXPECT_EQ(COMMUNICATION_PROTOCOL_DECODER, msg.answer_decoder_name());
-
 
     DeleteFileAtStorage subMsg;
     subMsg.set_file_id("file_id");
@@ -350,7 +261,7 @@ TEST_F(ClusterProxyHelperTest, unlink)
     rfm.set_input(subMsg.SerializeAsString());
     rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
 
-    EXPECT_EQ(rfm.SerializeAsString(), msg.input());
+    EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 }
 
 
@@ -397,30 +308,22 @@ TEST_F(ClusterProxyHelperTest, truncate)
     ClusterMsg msg;
 
     answer.set_answer_status(VOK);
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
     EXPECT_EQ(-EIO, proxy->sh_truncate("file_id", 10));
 
     atom.set_value(VOK);
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
     EXPECT_EQ(0, proxy->sh_truncate("file_id", 10));
+
+    RemoteFileMangement sentMsg;
 
     atom.set_value(VEEXIST);
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
     EXPECT_EQ(-EEXIST, proxy->sh_truncate("file_id", 10));
 
     RemoteFileMangement rfm;
-
-    EXPECT_EQ(true, msg.synch());
-    EXPECT_EQ(RFM_MODULE_NAME, msg.module_name());
-    EXPECT_EQ(PROTOCOL_VERSION, msg.protocol_version());
-    EXPECT_EQ(RFM_DECODER, msg.message_decoder_name());
-    EXPECT_EQ(tolower(rfm.GetDescriptor()->name()), msg.message_type());
-
-    EXPECT_EQ(tolower(Atom::descriptor()->name()), msg.answer_type());
-    EXPECT_EQ(COMMUNICATION_PROTOCOL_DECODER, msg.answer_decoder_name());
-
 
     TruncateFile subMsg;
     subMsg.set_file_id("file_id");
@@ -429,7 +332,5 @@ TEST_F(ClusterProxyHelperTest, truncate)
     rfm.set_input(subMsg.SerializeAsString());
     rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
 
-    EXPECT_EQ(rfm.SerializeAsString(), msg.input());
+    EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 }
-
-
