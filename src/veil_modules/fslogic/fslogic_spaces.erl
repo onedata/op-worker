@@ -32,7 +32,7 @@ initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
         {error, dir_exists} ->
             {ok, #veil_document{record = #file{extensions = Ext} = File} = FileDoc} = dao_lib:apply(dao_vfs, get_space_file, [{uuid, SpaceId}], 1),
             NewExt = lists:keyreplace(?file_space_info_extestion, 1, Ext, {?file_space_info_extestion, SpaceInfo}),
-            NewFile = File#file{extensions = NewExt},
+            NewFile = File#file{extensions = NewExt, name = unicode:characters_to_list(SpaceName)},
             {ok, _} = dao_lib:apply(vfs, save_file, [FileDoc#veil_document{record = NewFile}], 1),
             {ok, SpaceInfo};
         {error, Reason} ->
