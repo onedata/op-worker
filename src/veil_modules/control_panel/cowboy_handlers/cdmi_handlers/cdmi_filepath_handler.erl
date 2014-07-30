@@ -19,7 +19,7 @@
 -include("veil_modules/control_panel/cdmi.hrl").
 
 -define(default_get_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
--define(default_get_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>,<<"valuetransferencoding">>,<<"valuerange">>,<<"value">>]).
+-define(default_get_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>, <<"valuerange">>, <<"value">>]).
 -define(default_post_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
 -define(default_post_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
 
@@ -33,7 +33,7 @@
 }).
 
 %% Callbacks
--export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2,content_types_accepted/2, delete_resource/2]).
+-export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 -export([put_dir/2, put_cdmi_file/2, put_noncdmi_file/2, get_dir/2, get_cdmi_file/2, get_noncdmi_file/2]).
 
 %% init/3
@@ -61,19 +61,19 @@ rest_init(Req, []) ->
         false -> rest_init(Req, [reg])
     end;
 rest_init(Req, [Type]) ->
-    {ok,DnString} = rest_utils:verify_peer_cert(Req),
+    {ok, DnString} = rest_utils:verify_peer_cert(Req),
     case rest_utils:prepare_context(DnString) of %todo check all required request header/body fields, and return badrequest error if something is missing
         ok ->
             {Method, _} = cowboy_req:method(Req),
             {PathInfo, _} = cowboy_req:path_info(Req),
-            {RawOpts,_} = cowboy_req:qs(Req),
+            {RawOpts, _} = cowboy_req:qs(Req),
             {CdmiVersion, _} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
             Path = case PathInfo == [] of
-                     true -> "/";
-                     false -> gui_str:binary_to_unicode_list(rest_utils:join_to_path(PathInfo))
-                 end,
-            {ok, Req, #state{method = Method, filepath = Path,filetype = Type, opts = parse_opts(RawOpts),cdmi_version = CdmiVersion}};
-        Error -> {ok,Req,Error}
+                       true -> "/";
+                       false -> gui_str:binary_to_unicode_list(rest_utils:join_to_path(PathInfo))
+                   end,
+            {ok, Req, #state{method = Method, filepath = Path, filetype = Type, opts = parse_opts(RawOpts), cdmi_version = CdmiVersion}};
+        Error -> {ok, Req, Error}
     end.
 
 %% allowed_methods/2
@@ -126,7 +126,7 @@ content_types_provided(Req, #state{filetype = reg, cdmi_version = undefined} = S
     ], Req, State};
 content_types_provided(Req, #state{filetype = reg} = State) ->
     {[
-        {<<"application/cdmi-object">>,get_cdmi_file}
+        {<<"application/cdmi-object">>, get_cdmi_file}
     ], Req, State}.
 
 %% get_dir/2
@@ -137,7 +137,7 @@ content_types_provided(Req, #state{filetype = reg} = State) ->
 -spec get_dir(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_dir(Req, #state{opts = Opts} = State) ->
-    DirCdmi = prepare_container_ans(case Opts of [] -> ?default_get_dir_opts; _ -> Opts end,State),
+    DirCdmi = prepare_container_ans(case Opts of [] -> ?default_get_dir_opts; _ -> Opts end, State),
     Response = rest_utils:encode_to_json({struct, DirCdmi}),
     {Response, Req, State}.
 
@@ -148,7 +148,7 @@ get_dir(Req, #state{opts = Opts} = State) ->
 %% @end
 -spec get_noncdmi_file(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-get_noncdmi_file(Req,#state{filepath = Filepath, attributes = #fileattributes{size = Size}} = State) ->
+get_noncdmi_file(Req, #state{filepath = Filepath, attributes = #fileattributes{size = Size}} = State) ->
     StreamFun = file_download_handler:cowboy_file_stream_fun(Filepath, Size),
     NewReq = file_download_handler:content_disposition_attachment_headers(Req, filename:basename(Filepath)),
     {Type, Subtype, _} = cow_mimetypes:all(list_to_binary(Filepath)),
@@ -168,14 +168,14 @@ get_cdmi_file(Req, #state{opts = Opts} = State) ->
     case proplists:get_value(<<"value">>, DirCdmi) of
         {range, Range} ->
             Encoding = <<"base64">>, %todo send also utf-8 when possible
-            case read_file(State,Range,Encoding) of
-                {ok,Data} ->
-                    DirCdmiWithValue = lists:append(proplists:delete(<<"value">>,DirCdmi), [{<<"value">>,Data}]),
+            case read_file(State, Range, Encoding) of
+                {ok, Data} ->
+                    DirCdmiWithValue = lists:append(proplists:delete(<<"value">>, DirCdmi), [{<<"value">>, Data}]),
                     Response = rest_utils:encode_to_json({struct, DirCdmiWithValue}),
                     {Response, Req, State};
                 Error ->
                     ?error("Reading cdmi object end up with error: ~p", [Error]),
-                    {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+                    {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
                     {halt, Req2, State}
             end;
         undefined ->
@@ -197,11 +197,11 @@ content_types_accepted(Req, #state{filetype = dir} = State) -> %todo handle nonc
     ], Req, State};
 content_types_accepted(Req, #state{filetype = reg, cdmi_version = undefined} = State) ->
     {[
-        {<<"application/binary">> ,put_noncdmi_file}
+        {<<"application/binary">>, put_noncdmi_file}
     ], Req, State};
 content_types_accepted(Req, #state{filetype = reg} = State) ->
     {[
-        {<<"application/cdmi-object">>,put_cdmi_file}
+        {<<"application/cdmi-object">>, put_cdmi_file}
     ], Req, State}.
 
 %% put_dir/2
@@ -213,17 +213,17 @@ content_types_accepted(Req, #state{filetype = reg} = State) ->
 put_dir(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:mkdir(Filepath) of
         ok -> %todo check given body
-            Response = rest_utils:encode_to_json({struct, prepare_container_ans(?default_post_dir_opts,State)}),
-            Req2 = cowboy_req:set_resp_body(Response,Req),
-            {true,Req2,State};
+            Response = rest_utils:encode_to_json({struct, prepare_container_ans(?default_post_dir_opts, State)}),
+            Req2 = cowboy_req:set_resp_body(Response, Req),
+            {true, Req2, State};
         {error, dir_exists} ->
-            {ok,Req2} = cowboy_req:reply(?error_conflict_code,Req),
+            {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
             {halt, Req2, State};
-        {logical_file_system_error,"enoent"} ->
-            {ok,Req2} = cowboy_req:reply(?error_not_found_code,Req),
+        {logical_file_system_error, "enoent"} ->
+            {ok, Req2} = cowboy_req:reply(?error_not_found_code, Req),
             {halt, Req2, State};
         _ ->
-            {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
             {halt, Req2, State}
     end.
 
@@ -234,34 +234,34 @@ put_dir(Req, #state{filepath = Filepath} = State) ->
 %% @end
 -spec put_cdmi_file(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_cdmi_file(Req,#state{filepath = Filepath} = State) ->
-    {ok,RawBody,_} = cowboy_req:body(Req),
+put_cdmi_file(Req, #state{filepath = Filepath} = State) ->
+    {ok, RawBody, _} = cowboy_req:body(Req),
     Body = parse_body(RawBody),
-    ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>,Body,<<"utf-8">>),  %todo check given body opts, store given mimetype
-    Value = proplists:get_value(<<"value">>,Body,<<>>),
+    ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body, <<"utf-8">>),  %todo check given body opts, store given mimetype
+    Value = proplists:get_value(<<"value">>, Body, <<>>),
     RawValue = case ValueTransferEncoding of
-        <<"base64">> -> base64:decode(Value);
-        <<"utf-8">> -> Value
-    end,
+                   <<"base64">> -> base64:decode(Value);
+                   <<"utf-8">> -> Value
+               end,
     case logical_files_manager:create(Filepath) of
         ok ->
-            case logical_files_manager:write(Filepath,RawValue) of
+            case logical_files_manager:write(Filepath, RawValue) of
                 Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                    Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_post_file_opts,State)}),
+                    Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_post_file_opts, State)}),
                     Req2 = cowboy_req:set_resp_body(Response, Req),
-                    {true,Req2,State};
+                    {true, Req2, State};
                 Error ->
                     ?error("Writing to cdmi object end up with error: ~p", [Error]),
                     logical_files_manager:delete(Filepath),
-                    {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+                    {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
                     {halt, Req2, State}
             end;
         {error, file_exists} ->
-            {ok,Req2} = cowboy_req:reply(?error_conflict_code,Req),
+            {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
             {halt, Req2, State};
         Error -> %todo handle common errors
             ?error("Creating cdmi object end up with error: ~p", [Error]),
-            {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
             {halt, Req2, State}
     end.
 
@@ -273,16 +273,16 @@ put_cdmi_file(Req,#state{filepath = Filepath} = State) ->
 %% @end
 -spec put_noncdmi_file(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_noncdmi_file(Req,#state{filepath = Filepath} = State) ->
+put_noncdmi_file(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:create(Filepath) of %todo can be potentially refactored and combined with put_cdmi_file (some code is duplicated)
         ok ->
-            write_body_to_file(Req,State,0);
+            write_body_to_file(Req, State, 0);
         {error, file_exists} ->
-            {ok,Req2} = cowboy_req:reply(?error_conflict_code,Req),
+            {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
             {halt, Req2, State};
         Error ->
             ?error("Creating cdmi object end up with error: ~p", [Error]),
-            {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
             {halt, Req2, State}
     end.
 
@@ -297,18 +297,18 @@ delete_resource(Req, #state{filepath = Filepath, filetype = dir} = State) ->
     case is_group_dir(Filepath) of
         false ->
             fs_remove_dir(Filepath),
-            {true, Req,State};
+            {true, Req, State};
         true ->
-            {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
             {halt, Req2, State}
     end;
 delete_resource(Req, #state{filepath = Filepath, filetype = reg} = State) ->
     case logical_files_manager:delete(Filepath) of
-       ok ->
-           {true, Req, State};
-       _ ->
-           {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
-           {halt, Req2 ,State}
+        ok ->
+            {true, Req, State};
+        _ ->
+            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+            {halt, Req2, State}
     end.
 
 %% ====================================================================
@@ -319,26 +319,26 @@ delete_resource(Req, #state{filepath = Filepath, filetype = reg} = State) ->
 %% ====================================================================
 %% @doc Prepares proplist formatted answer with field names from given list of binaries
 %% @end
--spec prepare_container_ans([FieldName :: binary()],#state{}) -> [{FieldName :: binary(), Value :: term()}].
+-spec prepare_container_ans([FieldName :: binary()], #state{}) -> [{FieldName :: binary(), Value :: term()}].
 %% ====================================================================
-prepare_container_ans([],_State) ->
+prepare_container_ans([], _State) ->
     [];
-prepare_container_ans([<<"objectType">> | Tail],State) ->
-    [{<<"objectType">>, <<"application/cdmi-container">>} | prepare_container_ans(Tail,State)];
-prepare_container_ans([<<"objectName">> | Tail],#state{filepath = Filepath} = State) ->
-    [{<<"objectName">>, list_to_binary([filename:basename(Filepath),"/"])} | prepare_container_ans(Tail,State)];
-prepare_container_ans([<<"parentURI">> | Tail],#state{filepath = <<"/">>} = State) ->
-    [{<<"parentURI">>, <<>>} | prepare_container_ans(Tail,State)];
-prepare_container_ans([<<"parentURI">> | Tail],#state{filepath = Filepath} = State) ->
-    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_container_ans(Tail,State)];
+prepare_container_ans([<<"objectType">> | Tail], State) ->
+    [{<<"objectType">>, <<"application/cdmi-container">>} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
+    [{<<"objectName">>, list_to_binary([filename:basename(Filepath), "/"])} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = <<"/">>} = State) ->
+    [{<<"parentURI">>, <<>>} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
+    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"completionStatus">> | Tail], State) ->
-    [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(Tail,State)];
-prepare_container_ans([<<"metadata">> | Tail],State) -> %todo extract metadata
-    [{<<"metadata">>, <<>>} | prepare_container_ans(Tail,State)];
-prepare_container_ans([<<"children">> | Tail],#state{filepath = Filepath} = State) ->
-    [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(Tail,State)];
-prepare_container_ans([Other | Tail],State) ->
-    [{Other, <<>>} | prepare_container_ans(Tail,State)].
+    [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"metadata">> | Tail], State) -> %todo extract metadata
+    [{<<"metadata">>, <<>>} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
+    [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(Tail, State)];
+prepare_container_ans([Other | Tail], State) ->
+    [{Other, <<>>} | prepare_container_ans(Tail, State)].
 
 %% prepare_object_ans/2
 %% ====================================================================
@@ -367,14 +367,14 @@ prepare_object_ans([<<"valuetransferencoding">> | Tail], State) ->
     [{<<"valuetransferencoding">>, <<"base64">>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"value">> | Tail], State) ->
     [{<<"value">>, {range, default}} | prepare_object_ans(Tail, State)];
-prepare_object_ans([{<<"value">>,From,To} | Tail], State) ->
-    [{<<"value">>, {range, {From,To}}} | prepare_object_ans(Tail, State)];
-prepare_object_ans([<<"valuerange">> | Tail], #state{opts = Opts,attributes = Attrs} = State) ->
-    case lists:keyfind(<<"value">>,1,Opts) of
-        {<<"value">>,From,To} ->
-            [{<<"valuerange">>, iolist_to_binary([integer_to_binary(From),<<"-">>,integer_to_binary(To)])} | prepare_object_ans(Tail, State)];
+prepare_object_ans([{<<"value">>, From, To} | Tail], State) ->
+    [{<<"value">>, {range, {From, To}}} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"valuerange">> | Tail], #state{opts = Opts, attributes = Attrs} = State) ->
+    case lists:keyfind(<<"value">>, 1, Opts) of
+        {<<"value">>, From, To} ->
+            [{<<"valuerange">>, iolist_to_binary([integer_to_binary(From), <<"-">>, integer_to_binary(To)])} | prepare_object_ans(Tail, State)];
         _ ->
-            [{<<"valuerange">>, iolist_to_binary([<<"0-">>,integer_to_binary(Attrs#fileattributes.size-1)])} | prepare_object_ans(Tail, State)]
+            [{<<"valuerange">>, iolist_to_binary([<<"0-">>, integer_to_binary(Attrs#fileattributes.size - 1)])} | prepare_object_ans(Tail, State)]
     end;
 prepare_object_ans([Other | Tail], State) ->
     [{Other, <<>>} | prepare_object_ans(Tail, State)].
@@ -385,18 +385,18 @@ prepare_object_ans([Other | Tail], State) ->
 %% them by ';' separator and handling range values,
 %% i. e. input: binary("aaa;bbb:1-2;ccc") will return [binary(aaa),{binary(bbb),1,2},binary(ccc)]
 %% @end
--spec parse_opts(binary()) -> [binary() | {binary(), From ::integer(), To :: integer()}].
+-spec parse_opts(binary()) -> [binary() | {binary(), From :: integer(), To :: integer()}].
 %% ====================================================================
 parse_opts(<<>>) ->
     [];
 parse_opts(RawOpts) ->
-    Opts = binary:split(RawOpts,<<";">>,[global]),
+    Opts = binary:split(RawOpts, <<";">>, [global]),
     lists:map(
         fun(Opt) ->
-            case binary:split(Opt,<<":">>) of
+            case binary:split(Opt, <<":">>) of
                 [SimpleOpt] -> SimpleOpt;
                 [SimpleOpt, Range] ->
-                    [From,To] = binary:split(Range,<<"-">>),
+                    [From, To] = binary:split(Range, <<"-">>),
                     {SimpleOpt, binary_to_integer(From), binary_to_integer(To)}
             end
         end,
@@ -413,7 +413,7 @@ parse_body(RawBody) ->
     case gui_str:binary_to_unicode_list(RawBody) of
         "" -> [];
         NonEmptyBody ->
-            {struct,Ans} = rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody)),
+            {struct, Ans} = rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody)),
             Ans
     end.
 
@@ -422,22 +422,22 @@ parse_body(RawBody) ->
 %% @doc Reads request's body and writes it to file obtained from state.
 %% This callback return value is compatibile with put requests.
 %% @end
--spec write_body_to_file(req(),#state{},integer()) -> {boolean(),req(),#state{}}.
+-spec write_body_to_file(req(), #state{}, integer()) -> {boolean(), req(), #state{}}.
 %% ====================================================================
-write_body_to_file(Req,#state{filepath = Filepath} = State,Offset) ->
+write_body_to_file(Req, #state{filepath = Filepath} = State, Offset) ->
     case cowboy_req:stream_body(Req) of
         {ok, Chunk, Req2} ->
-            case logical_files_manager:write(Filepath,Offset,Chunk) of
+            case logical_files_manager:write(Filepath, Offset, Chunk) of
                 Bytes when is_integer(Bytes) ->
-                    write_body_to_file(Req2,State,Offset+Bytes);
+                    write_body_to_file(Req2, State, Offset + Bytes);
                 Error ->
                     ?error("Writing to cdmi object end up with error: ~p", [Error]),
                     logical_files_manager:delete(Filepath),
-                    {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+                    {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
                     {halt, Req2, State}
             end;
         {done, Req2} ->
-            {true,Req2,State}
+            {true, Req2, State}
     end.
 
 %% read_file/3
@@ -445,23 +445,23 @@ write_body_to_file(Req,#state{filepath = Filepath} = State,Offset) ->
 %% @doc Reads given range of bytes (defaults to whole file) from file (obtained from state filepath), result is
 %% encoded according to 'Encoding' argument
 %% @end
--spec read_file(State :: #state{}, Range, Encoding ) -> Result when
-    Range :: default | {From  :: integer(), To :: integer()},
+-spec read_file(State :: #state{}, Range, Encoding) -> Result when
+    Range :: default | {From :: integer(), To :: integer()},
     Encoding :: binary(),
     Result :: {ok, Bytes} | {ErrorGeneral, ErrorDetail},
     Bytes :: binary(),
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
-read_file(#state{attributes = Attrs} = State,default,Encoding) ->
-    read_file(State,{0,Attrs#fileattributes.size-1},Encoding); %default range shuold remain consistent with parse_object_ans/2 valuerange clause
-read_file(State,Range,<<"base64">>) ->
-    case read_file(State,Range,<<"utf-8">>) of
-        {ok,Data} -> {ok,base64:encode(Data)};
+read_file(#state{attributes = Attrs} = State, default, Encoding) ->
+    read_file(State, {0, Attrs#fileattributes.size - 1}, Encoding); %default range shuold remain consistent with parse_object_ans/2 valuerange clause
+read_file(State, Range, <<"base64">>) ->
+    case read_file(State, Range, <<"utf-8">>) of
+        {ok, Data} -> {ok, base64:encode(Data)};
         Error -> Error
     end;
-read_file(#state{filepath = Path},{From,To},<<"utf-8">>) ->
-    logical_files_manager:read(Path,From, To-From+1).
+read_file(#state{filepath = Path}, {From, To}, <<"utf-8">>) ->
+    logical_files_manager:read(Path, From, To - From + 1).
 
 %% fs_remove/1
 %% ====================================================================
@@ -469,7 +469,7 @@ read_file(#state{filepath = Path},{From,To},<<"utf-8">>) ->
 %% done recursively.
 %% @end
 -spec fs_remove(Path :: string()) -> Result when
-Result :: ok | {ErrorGeneral :: atom(), ErrorDetail::term()}.
+    Result :: ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
 fs_remove(Path) ->
     {ok, FA} = logical_files_manager:getfileattr(Path),
@@ -483,14 +483,14 @@ fs_remove(Path) ->
 %% @doc Removes given dir with all files and subdirectories.
 %% @end
 -spec fs_remove_dir(DirPath :: string()) -> Result when
-    Result :: ok | {ErrorGeneral :: atom(), ErrorDetail::term()}.
+    Result :: ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
 fs_remove_dir(DirPath) ->
     case is_group_dir(DirPath) of
         true -> ok;
         false ->
             ItemList = fs_list_dir(DirPath),
-            lists:foreach(fun(Item) -> fs_remove(filename:join(DirPath,Item)) end, ItemList),
+            lists:foreach(fun(Item) -> fs_remove(filename:join(DirPath, Item)) end, ItemList),
             logical_files_manager:rmdir(DirPath)
     end.
 
@@ -527,9 +527,9 @@ fs_list_dir(Path, Offset, Count, Result) ->
 is_group_dir(Path) ->
     case Path of
         "/groups" -> true;
-        [$/,$g,$r,$o,$u,$p,$s | Rest] -> case length(string:tokens(Rest, "/")) of
-                                             1 -> true;
-                                             _ -> false
-                                         end;
+        [$/, $g, $r, $o, $u, $p, $s | Rest] -> case length(string:tokens(Rest, "/")) of
+                                                   1 -> true;
+                                                   _ -> false
+                                               end;
         _ -> false
     end.
