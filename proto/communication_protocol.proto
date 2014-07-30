@@ -20,6 +20,7 @@ message Answer {
     optional string message_type = 3 [default = ""];
     optional bytes worker_answer = 4;
     optional string error_description = 5;
+    optional string message_decoder_name = 6;
 }
 
 message ProviderMsg {
