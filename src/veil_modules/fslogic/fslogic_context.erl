@@ -183,4 +183,3 @@ is_global_fuse_id(GlobalFuseId) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-request_dispatcher:send_to_fuse(<<"04ff44a3ab0db710a92a86edc5dfbd15::04ff5e82ac26cf3b236943fbe1de369f">>, {atom, "ping"}, "communication_protocol").
