@@ -19,7 +19,7 @@
 -export([main/0, event/1, api_event/3, comet_loop/1]).
 
 %% Common page CCS styles
--define(MESSAGE_STYLE, <<"position: fixed; width: 100%; top: 120px; z-index: 1; display: none;">>).
+-define(MESSAGE_STYLE, <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>).
 -define(CONTENT_COLUMN_STYLE, <<"padding-right: 0">>).
 -define(NAVIGATION_COLUMN_STYLE, <<"border-left-width: 0; width: 20px; padding-left: 0;">>).
 -define(DESCRIPTION_STYLE, <<"border-width: 0; text-align: right; width: 10%; padding-left: 0; padding-right: 0;">>).
@@ -89,7 +89,7 @@ body() ->
                 image = <<"/images/spinner.gif">>
             }
         },
-        vcn_gui_utils:top_menu(spaces_tab, spaces_submenu()),
+        vcn_gui_utils:top_menu(spaces_tab),
         #panel{
             id = <<"ok_message">>,
             style = ?MESSAGE_STYLE,
@@ -101,67 +101,50 @@ body() ->
             class = <<"dialog dialog-danger">>
         },
         #panel{
-            style = <<"position: relative; margin-top: 200px; margin-bottom: 50px;">>,
-            body = #table{
-                class = <<"table table-bordered table-striped">>,
-                style = <<"width: 50%; margin: 0 auto; table-layout: fixed;">>,
-                body = #tbody{
-                    id = <<"spaces">>,
-                    body = #tr{
-                        cells = [
-                            #th{
-                                style = <<"font-size: large;">>,
-                                body = <<"Spaces">>
-                            },
-                            #th{
-                                style = ?NAVIGATION_COLUMN_STYLE,
-                                body = spinner()
-                            }
-                        ]
-                    }
-                }
-            }
-        }
-    ].
-
-
-%% spaces_submenu/0
-%% ====================================================================
-%% @doc Submenu that will end up concatenated to top menu.
--spec spaces_submenu() -> [#panel{}].
-%% ====================================================================
-spaces_submenu() ->
-    [
-        #panel{
-            class = <<"navbar-inner">>,
-            style = <<"border-bottom: 1px solid gray; padding-bottom: 5px;">>,
-            body = [
+            style = <<"position: relative; margin-top: 160px; margin-bottom: 100px;">>,
+            body =
+            [
+                #h6{
+                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; width: 162px;">>,
+                    body = <<"Manage Spaces">>
+                },
                 #panel{
-                    class = <<"container">>,
+                    style = <<"margin: 0 auto; width: 50%; margin-top: 30px; text-align: center;">>,
                     body = [
-                        #panel{
-                            class = <<"btn-group">>,
-                            style = <<"margin: 12px 15px;">>,
-                            body = #button{
-                                id = <<"create_space_button">>,
-                                postback = create_space,
-                                class = <<"btn btn-inverse">>,
-                                style = <<"height: 34px; padding: 6px 13px 8px;">>,
-                                body = <<"Create Space">>
-                            }
+                        #button{
+                            id = <<"create_space_button">>,
+                            postback = create_space,
+                            class = <<"btn btn-primary">>,
+                            style = <<"margin-right: 1em;">>,
+                            body = <<"Create Space">>
                         },
-                        #panel{
-                            class = <<"btn-group">>,
-                            style = <<"margin: 12px 15px;">>,
-                            body = #button{
-                                id = <<"join_space_button">>,
-                                postback = join_space,
-                                class = <<"btn btn-inverse">>,
-                                style = <<"height: 34px; padding: 6px 13px 8px;">>,
-                                body = <<"Join Space">>
-                            }
+                        #button{
+                            id = <<"join_space_button">>,
+                            postback = join_space,
+                            class = <<"btn btn-primary">>,
+                            style = <<"margin-left: 1em;">>,
+                            body = <<"Join Space">>
                         }
                     ]
+                },
+                #table{
+                    class = <<"table table-bordered table-striped">>,
+                    style = <<"width: 50%; margin: 0 auto; margin-top: 30px; table-layout: fixed;">>,
+                    body = #tbody{
+                        id = <<"spaces">>,
+                        body = #tr{
+                            cells = [
+                                #th{
+                                    style = <<"font-size: large;">>,
+                                    body = <<"Spaces">>
+                                },
+                                #th{
+                                    style = ?NAVIGATION_COLUMN_STYLE,
+                                    body = spinner()
+                                }
+                            ]
+                        }
+                    }
                 }
             ]
         }
