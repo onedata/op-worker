@@ -833,9 +833,9 @@ send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
         true ->
             provider_proxy:reroute_push_message(fslogic_context:read_global_fuse_id(FuseId), Message, MessageDecoder);
         false ->
-            send_to_fuse(FuseId, Message, MessageDecoder, SendNum)
-    end;
-send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
+            send_to_fuse1(FuseId, Message, MessageDecoder, SendNum)
+    end.
+send_to_fuse1(FuseId, Message, MessageDecoder, SendNum) ->
   Ans = try
     Node = gen_server:call(?Dispatcher_Name, {get_callback, FuseId}, 500),
     case Node of
