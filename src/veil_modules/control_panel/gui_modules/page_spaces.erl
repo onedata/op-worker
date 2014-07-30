@@ -691,10 +691,8 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
 -spec event(Event :: term()) -> no_return().
 %% ====================================================================
 event(init) ->
-    ?info("Init!!!!!"),
     case gr_adapter:get_user_spaces(gui_ctx:get_access_token()) of
         {ok, SpaceIds} ->
-            ?info("Spaces: ~p", [SpaceIds]),
             gui_jq:wire(#api{name = "createSpace", tag = "createSpace"}, false),
             gui_jq:wire(#api{name = "joinSpace", tag = "joinSpace"}, false),
             gui_jq:wire(#api{name = "leaveSpace", tag = "leaveSpace"}, false),
@@ -706,7 +704,6 @@ event(init) ->
             {ok, Pid} = gui_comet:spawn(fun() ->
                 comet_loop(#?STATE{counter = length(SpaceIds) + 1, space_rows = SpaceRows})
             end),
-            ?info("Pid: ~p", [Pid]),
             Pid ! render_spaces_table,
             put(?COMET_PID, Pid);
         _ ->

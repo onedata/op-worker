@@ -777,7 +777,7 @@ group_row_collapsed(SpaceId, GroupId, RowId) ->
                 style = ?CONTENT_COLUMN_STYLE,
                 body = #table{
                     style = ?TABLE_STYLE,
-                    body = lists:map(fun({Description, Main}) ->
+                    body = [
                         #tr{
                             cells = [
                                 #td{
@@ -785,19 +785,19 @@ group_row_collapsed(SpaceId, GroupId, RowId) ->
                                     body = #label{
                                         style = ?LABEL_STYLE,
                                         class = <<"label label-large label-inverse">>,
-                                        body = Description
+                                        body = <<"Name">>
                                     }
                                 },
                                 #td{
                                     style = ?MAIN_STYLE,
                                     body = #p{
                                         style = ?PARAGRAPH_STYLE,
-                                        body = Main
+                                        body = Name
                                     }
                                 }
                             ]
                         }
-                    end, [{<<"Name">>, Name}])
+                    ]
                 }
             },
             #td{

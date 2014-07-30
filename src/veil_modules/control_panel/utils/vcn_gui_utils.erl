@@ -245,20 +245,20 @@ top_menu(ActiveTabID, SubMenuBody) ->
         [
             {brand_tab, #li{body = #link{style = <<"padding: 18px;">>, url = "/",
                 body = [
-                    #span{class = <<"fui-home">>},
+                    #span{style = <<"font-size: xx-large;">>, class = <<"fui-home">>},
                     #b{style = <<"font-size: x-large;">>, body = <<"OneData">>}
                 ]}
             }},
             {data_tab, #li{body = [
                 #link{style = "padding: 18px;", body = "Data"},
-                #list{style = "top: 37px;", body = [
+                #list{style = "top: 37px; width: 120px;", body = [
                     #li{body = #link{url = "/file_manager", body = "File manager"}},
                     #li{body = #link{url = "/shared_files", body = "Shared files"}}
                 ]}
             ]}},
             {spaces_tab, #li{body = [
                 #link{style = "padding: 18px;", body = "Spaces"},
-                #list{style = "top: 37px;", body = [
+                #list{style = "top: 37px; width: 120px;", body = [
                     #li{body = #link{url = "/spaces", body = "Settings"}},
                     #li{body = #link{url = "/tokens", body = "Tokens"}}
                 ]}
@@ -267,7 +267,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
                  true ->
                      [{administration_tab, #li{body = [
                          #link{style = "padding: 18px;", body = "Administration"},
-                         #list{style = "top: 37px;", body = LogsCaptions ++ MonitoringCaption}
+                         #list{style = "top: 37px; width: 120px;", body = LogsCaptions ++ MonitoringCaption}
                      ]}}];
                  _ -> []
              end,

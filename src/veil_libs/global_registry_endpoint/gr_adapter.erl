@@ -20,6 +20,7 @@
 -export([get_space_providers/2, get_provider_details/3]).
 -export([get_space_users/2, get_user_details/3, invite_user/2]).
 -export([get_space_groups/2, get_group_details/3]).
+-export([get_access_code/1, get_tokens/1, delete_token/2]).
 
 %% send_req/2
 %% ====================================================================
@@ -282,5 +283,47 @@ change_space_name(SpaceId, Name, {UserGID, AccessToken}) ->
     catch
         _:Reason ->
             ?error("Cannot change Space name for Space with ID ~p: ~p", [SpaceId, Reason]),
+            {error, Reason}
+    end.
+
+get_access_code({UserGID, AccessToken}) ->
+    try
+        Uri = "/openid/client/access_code",
+        {ok, "200", _ResHeaders, ResBody} = send_req(Uri, get, {UserGID, AccessToken}),
+        AccessCode = proplists:get_value(<<"accessCode">>, mochijson2:decode(ResBody, [{format, proplist}])),
+        true = (AccessCode =/= undefiend),
+        {ok, AccessCode}
+    catch
+        _:Reason ->
+            ?error("Cannot get access code: ~p", [Reason]),
+            {error, Reason}
+    end.
+
+get_tokens({UserGID, AccessToken}) ->
+    try
+        Uri = "/openid/client/tokens",
+        {ok, "200", _ResHeaders, ResBody} = send_req(Uri, get, {UserGID, AccessToken}),
+        TokenInfo = proplists:get_value(<<"tokenInfo">>, mochijson2:decode(ResBody, [{format, proplist}])),
+        Tokens = lists:map(fun(Token) ->
+            {
+                proplists:get_value(<<"accessId">>, Token),
+                proplists:get_value(<<"clientName">>, Token)
+            }
+        end, TokenInfo),
+        {ok, Tokens}
+    catch
+        _:Reason ->
+            ?error("Cannot get access code: ~p", [Reason]),
+            {error, Reason}
+    end.
+
+delete_token(AccessId, {UserGID, AccessToken}) ->
+    try
+        Uri = "/openid/client/tokens/" ++ binary_to_list(AccessId),
+        {ok, "204", _ResHeaders, _ResBody} = send_req(Uri, delete, {UserGID, AccessToken}),
+        ok
+    catch
+        _:Reason ->
+            ?error("Cannot get delete token: ~p", [Reason]),
             {error, Reason}
     end.
