@@ -235,7 +235,7 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
 
 %% Handle other messages
 handle(Req, {push, FuseID, {Msg, MsgId} = CLM}, #hander_state{peer_type = provider} = State) ->
-    ?info("Got push msg: ~p", [Msg]),
+    ?info("Got push msg for ~p: ~p", [FuseID, Msg]),
     {reply, {binary, encode_answer(ok, MsgId)}, Req, State};
 handle(Req, {pull, FuseID, CLM}, #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
     ?info("Got pull msg: ~p from ~p", [CLM, FuseID]),

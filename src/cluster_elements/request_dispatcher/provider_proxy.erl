@@ -85,7 +85,10 @@ reroute_push_message({ProviderId, FuseId}, Message, MessageDecoder) ->
 
     CLMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Answer)),
 
-    provider_proxy_con:send(URL, 0, CLMBin).
+    ProviderMsg = #providermsg{message_type = "answer", input = CLMBin, fuse_id = vcn_utils:ensure_binary(FuseId)},
+    PRMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_providermsg(ProviderMsg)),
+
+    provider_proxy_con:send(URL, 0, PRMBin).
 
 
 %% communicate_bin({ProviderId, URL}, PRMBin) ->
