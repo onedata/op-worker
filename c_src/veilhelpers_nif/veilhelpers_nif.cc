@@ -81,8 +81,9 @@ private:
         m_gid = gid;
 
         if(uid != 0) {
-            seteuid(-1);
+            setgroups(0, NULL);
             setegid(-1);
+            seteuid(-1);
         }
 
         setfsuid(m_uid);
