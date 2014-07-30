@@ -81,7 +81,7 @@ private:
         m_gid = gid;
 
         if(uid != 0) {
-            setgroups(0, NULL);
+            setgroups(0, nullptr);
             setegid(-1);
             seteuid(-1);
         }
