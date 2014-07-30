@@ -728,7 +728,7 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
     CreateTeamsDirs = fun(#space_info{name = SpaceName} = SpaceInfo, TmpAns) ->
         Dir = unicode:characters_to_list(SpaceName),
         DirName = filename:join(["", ?SPACES_BASE_DIR_NAME, Dir]),
-        storage_files_manager:mkdir(SHI, filename:join(["", ?SPACES_BASE_DIR_NAME])),
+        storage_files_manager:mkdir(SHI, filename:join(["", ?SPACES_BASE_DIR_NAME, ?EX_ALL_PERM bor ?RWE_USR_PERM])),
         Ans = storage_files_manager:mkdir(SHI, DirName),
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->

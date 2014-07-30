@@ -29,7 +29,7 @@
 %% ====================================================================
 %% Physical files organization management (to better organize files on storage;
 %% the user does not see results of these operations)
--export([mkdir/2, mv/3, delete_dir/2, chmod/3, chown/4]).
+-export([mkdir/2, mkdir/3, mv/3, delete_dir/2, chmod/3, chown/4]).
 
 %% Physical files access (used to create temporary copies for remote files)
 -export([read/4, write/4, write/3, create/2, create/3, truncate/3, delete/2, ls/0]).
@@ -64,47 +64,43 @@
   ErrorDetail :: term().
 %% ====================================================================
 mkdir(Storage_helper_info, Dir) ->
-  {ModeStatus, NewDirStorageMode} = application:get_env(?APP_Name, new_dir_storage_mode),
-  case ModeStatus of
-    ok ->
-      {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [Dir]),
-      case ErrorCode of
+    {ok, Mode} = application:get_env(?APP_Name, new_dir_storage_mode),
+    mkdir(Storage_helper_info, Dir, Mode).
+mkdir(Storage_helper_info, Dir, Mode) ->
+    {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [Dir]),
+    case ErrorCode of
         0 -> {error, dir_or_file_exists};
         error -> {ErrorCode, Stat};
         _ ->
-          ErrorCode2 = veilhelpers:exec(mkdir, Storage_helper_info, [Dir, NewDirStorageMode]),
-          case ErrorCode2 of
-            0 ->
-              derive_gid_from_parent(Storage_helper_info, Dir),
+            ErrorCode2 = veilhelpers:exec(mkdir, Storage_helper_info, [Dir, Mode]),
+            case ErrorCode2 of
+                0 ->
+                    derive_gid_from_parent(Storage_helper_info, Dir),
 
-              UserID = fslogic_context:get_user_dn(),
+                    UserID = fslogic_context:get_user_dn(),
 
-              case UserID of
-                undefined -> ok;
+                    case UserID of
+                    undefined -> ok;
+                    _ ->
+                        {GetUserAns, User} = user_logic:get_user({dn, UserID}),
+                        case GetUserAns of
+                            ok ->
+                                UserRecord = User#veil_document.record,
+                                Login = UserRecord#user.login,
+                                ChownAns = chown(Storage_helper_info, Dir, Login, ""),
+                                case ChownAns of
+                                    ok -> ok;
+                                    _ ->  {cannot_change_dir_owner, ChownAns}
+                                end;
+                            _ -> {cannot_change_dir_owner, get_user_error}
+                        end
+                    end;
+                {error, 'NIF_not_loaded'} -> ErrorCode2;
                 _ ->
-                  {GetUserAns, User} = user_logic:get_user({dn, UserID}),
-                  case GetUserAns of
-                    ok ->
-                      UserRecord = User#veil_document.record,
-                      Login = UserRecord#user.login,
-                      ChownAns = chown(Storage_helper_info, Dir, Login, ""),
-                      case ChownAns of
-                        ok ->
-                          ok;
-                        _ ->
-                          {cannot_change_dir_owner, ChownAns}
-                      end;
-                    _ -> {cannot_change_dir_owner, get_user_error}
-                  end
-              end;
-            {error, 'NIF_not_loaded'} -> ErrorCode2;
-            _ ->
-%%               ?error("Can not create dir %p, code: %p, helper info: %p, mode: %p%n", [Dir, ErrorCode2, Storage_helper_info, NewDirStorageMode]),
-              {wrong_mkdir_return_code, ErrorCode2}
-          end
-      end;
-    _ -> {error, cannot_get_file_mode}
-  end.
+                    %% ?error("Can not create dir %p, code: %p, helper info: %p, mode: %p%n", [Dir, ErrorCode2, Storage_helper_info, NewDirStorageMode]),
+                    {wrong_mkdir_return_code, ErrorCode2}
+            end
+    end.
 
 %% mv/3
 %% ====================================================================

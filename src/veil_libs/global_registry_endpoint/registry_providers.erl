@@ -17,7 +17,7 @@
 
 
 get_provider_info(ProviderId) ->
-    case global_registry:provider_request(get, "providers/" ++ binary_to_list(ProviderId)) of
+    case global_registry:provider_request(get, "providers/" ++ vcn_utils:ensure_binary(ProviderId)) of
         {ok, Data} ->
             ?info("ProviderData: ~p", [Data]),
             {ok, Data};
