@@ -54,7 +54,7 @@ send_req(Uri, Method, Body, Options, {_UserGID, AccessToken}) ->
     Url = "https://onedata.org:8443",
     KeyFile = "./certs/grpkey.pem",
     CertFile = "./certs/grpcert.pem",
-    CACertFile = "./certs/grpca.pem",
+    CACertFile = "./cacerts/grpCA.pem",
     {ok, Key} = file:read_file(KeyFile),
     {ok, Cert} = file:read_file(CertFile),
     {ok, CACert} = file:read_file(CACertFile),
