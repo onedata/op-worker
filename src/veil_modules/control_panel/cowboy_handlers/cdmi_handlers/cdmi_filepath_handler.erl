@@ -525,11 +525,8 @@ fs_list_dir(Path, Offset, Count, Result) ->
 -spec is_group_dir(Path :: string()) -> boolean().
 %% ====================================================================
 is_group_dir(Path) ->
-    case Path of
-        "/groups" -> true;
-        [$/, $g, $r, $o, $u, $p, $s | Rest] -> case length(string:tokens(Rest, "/")) of
-                                                   1 -> true;
-                                                   _ -> false
-                                               end;
+    case string:tokens(Path,"/") of
+        [?GROUPS_BASE_DIR_NAME] -> true;
+        [?GROUPS_BASE_DIR_NAME , _GroupName] ->  true;
         _ -> false
     end.
