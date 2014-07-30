@@ -16,9 +16,14 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([reroute_pull_message/4]).
+-export([reroute_pull_message/4, reroute_push_message/3]).
 
-reroute_pull_message({ProviderId, [URL | _]}, {GlobalID, AccessToken}, FuseId, Message) ->
+reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
+    {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(ProviderId),
+    ?info("Reroute pull to: ~p", [URLs]),
+
+    [URL | _] = URLs,
+
     TargetModule =
         case Message of
             #fusemessage{}              -> fslogic;
@@ -64,6 +69,23 @@ reroute_pull_message({ProviderId, [URL | _]}, {GlobalID, AccessToken}, FuseId, M
     after 5000 ->
         throw(reroute_timeout)
     end.
+
+reroute_push_message({ProviderId, FuseId}, Message, MessageDecoder) ->
+    {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(ProviderId),
+    ?info("Reroute push to: ~p", [URLs]),
+
+    [URL | _] = URLs,
+
+    MType = a2l(get_message_type(Message)),
+    MsgBytes = erlang:iolist_to_binary(erlang:apply(pb_module(MessageDecoder), encoder_method(MType), [Message])),
+
+    Answer =
+        #answer{answer_status = "push", message_id = 0, message_type = MType,
+                message_decoder_name = MessageDecoder, worker_answer = MsgBytes},
+
+    CLMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Answer)),
+
+    provider_proxy_con:send(URL, 0, CLMBin).
 
 
 %% communicate_bin({ProviderId, URL}, PRMBin) ->
