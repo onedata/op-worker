@@ -100,7 +100,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
       end,
       {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
       {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
-      {ok, CertFile} = application:get_env(?APP_Name, ssl_cert_path),
+      {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
 
       Dispatch = cowboy_router:compile([{'_', [{?VEILCLIENT_URI_PATH, ws_handler, []}]}]),
 

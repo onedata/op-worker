@@ -53,7 +53,7 @@ init(_Args) ->
     % Get params from env for gui
     {ok, DocRoot} = application:get_env(veil_cluster_node, control_panel_static_files_root),
 
-    {ok, Cert} = application:get_env(veil_cluster_node, ssl_cert_path),
+    {ok, Cert} = application:get_env(veil_cluster_node, web_ssl_cert_path),
     CertString = atom_to_list(Cert),
 
     {ok, GuiPort} = application:get_env(veil_cluster_node, control_panel_port),

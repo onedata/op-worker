@@ -9,6 +9,7 @@ This document intends to provide essential information for VeilCluster developer
 
 * c_src               # TODO uzupelnic
 * cacerts             # TODO uzupelnic
+* certs               # TODO uzupelnic
 * config              # TODO uzupelnic
 * include             # TODO uzupelnic
 * releases            # folder for generated VeilCluster releases
