@@ -240,6 +240,11 @@ veil_cluster_node_env:
       value: cacerts
 
   - parameter:
+      name: certs_dir
+      description: path to dir containing server certs used by GSI handler
+      value: certs
+
+  - parameter:
       name: crl_update_interval
       description: the interval between CRL updates done by GSI handler
       value: 3600000

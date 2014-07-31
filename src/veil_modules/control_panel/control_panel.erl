@@ -88,7 +88,7 @@ init(_Args) ->
             {port, GuiPort},
             {certfile, CertString},
             {keyfile, CertString},
-            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
+            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs_from_all_cert_dirs())},
             {password, ""},
             {ciphers, gsi_handler:get_ciphers()}
         ],
@@ -134,7 +134,7 @@ init(_Args) ->
             {port, RestPort},
             {certfile, CertString},
             {keyfile, CertString},
-            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
+            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs_from_all_cert_dirs())},
             {password, ""},
             {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}},
             {ciphers, gsi_handler:get_ciphers()}
