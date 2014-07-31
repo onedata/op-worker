@@ -303,9 +303,10 @@ function start_client {
     cl_host_i=$(($4 % $cl_host_count))
     cl_host_i=$(($cl_host_i + 1))
     cl_host=`nth "$CLUSTER_NODES" "$cl_host_i"`    
-    cl_host=${cl_host#*@}   
+    cl_host=${cl_host#*@}
+    no_check_certificate="--no-check-certificate"
 
-    mount_cmd="PEER_CERTIFICATE_FILE=\"$S_DIR/peer.pem\" PATH=\$HOME:\$PATH veilFuse $2"
+    mount_cmd="PEER_CERTIFICATE_FILE=\"$S_DIR/peer.pem\" PATH=\$HOME:\$PATH veilFuse $no_check_certificate $2"
     if [[ "$group_id" != "" ]]; then
         mount_cmd="FUSE_OPT_GROUP_ID=\"$group_id\" $mount_cmd"
     fi
