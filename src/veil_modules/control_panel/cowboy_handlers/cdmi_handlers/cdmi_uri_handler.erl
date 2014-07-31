@@ -9,7 +9,7 @@
 %% It handles cdmi object/container PUT, GET and DELETE requests
 %% @end
 %% ===================================================================
--module(cdmi_filepath_handler).
+-module(cdmi_uri_handler).
 -author("Tomasz Lichon").
 
 -include("err.hrl").
@@ -35,6 +35,10 @@
 %% Callbacks
 -export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 -export([put_dir/2, put_cdmi_file/2, put_noncdmi_file/2, get_dir/2, get_cdmi_file/2, get_noncdmi_file/2]).
+
+%% ====================================================================
+%% Cowboy rest callbacks
+%% ====================================================================
 
 %% init/3
 %% ====================================================================
@@ -129,6 +133,56 @@ content_types_provided(Req, #state{filetype = reg} = State) ->
         {<<"application/cdmi-object">>, get_cdmi_file}
     ], Req, State}.
 
+%% content_types_accepted/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns content-types that are accepted by REST handler and what
+%% functions should be used to process the requests.
+%% @end
+-spec content_types_accepted(req(), #state{}) -> {term(), req(), #state{}}.
+%% ====================================================================
+content_types_accepted(Req, #state{filetype = dir} = State) -> %todo handle noncdmi dir put
+    {[
+        {<<"application/cdmi-container">>, put_dir}
+    ], Req, State};
+content_types_accepted(Req, #state{filetype = reg, cdmi_version = undefined} = State) ->
+    {[
+        {<<"application/binary">>, put_noncdmi_file}
+    ], Req, State};
+content_types_accepted(Req, #state{filetype = reg} = State) ->
+    {[
+        {<<"application/cdmi-object">>, put_cdmi_file}
+    ], Req, State}.
+
+%% delete_resource/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Handles DELETE requests.
+%% @end
+-spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
+%% ====================================================================
+delete_resource(Req, #state{filepath = Filepath, filetype = dir} = State) ->
+    case is_group_dir(Filepath) of
+        false ->
+            fs_remove_dir(Filepath),
+            {true, Req, State};
+        true ->
+            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+            {halt, Req2, State}
+    end;
+delete_resource(Req, #state{filepath = Filepath, filetype = reg} = State) ->
+    case logical_files_manager:delete(Filepath) of
+        ok ->
+            {true, Req, State};
+        _ ->
+            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+            {halt, Req2, State}
+    end.
+
+%% ====================================================================
+%% User callbacks registered in content_types_provided/content_types_accepted
+%% ====================================================================
+
 %% get_dir/2
 %% ====================================================================
 %% @doc Cowboy callback function
@@ -182,27 +236,6 @@ get_cdmi_file(Req, #state{opts = Opts} = State) ->
             Response = rest_utils:encode_to_json({struct, DirCdmi}),
             {Response, Req, State}
     end.
-
-%% content_types_accepted/2
-%% ====================================================================
-%% @doc Cowboy callback function
-%% Returns content-types that are accepted by REST handler and what
-%% functions should be used to process the requests.
-%% @end
--spec content_types_accepted(req(), #state{}) -> {term(), req(), #state{}}.
-%% ====================================================================
-content_types_accepted(Req, #state{filetype = dir} = State) -> %todo handle noncdmi dir put
-    {[
-        {<<"application/cdmi-container">>, put_dir}
-    ], Req, State};
-content_types_accepted(Req, #state{filetype = reg, cdmi_version = undefined} = State) ->
-    {[
-        {<<"application/binary">>, put_noncdmi_file}
-    ], Req, State};
-content_types_accepted(Req, #state{filetype = reg} = State) ->
-    {[
-        {<<"application/cdmi-object">>, put_cdmi_file}
-    ], Req, State}.
 
 %% put_dir/2
 %% ====================================================================
@@ -282,31 +315,6 @@ put_noncdmi_file(Req, #state{filepath = Filepath} = State) ->
             {halt, Req2, State};
         Error ->
             ?error("Creating cdmi object end up with error: ~p", [Error]),
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
-            {halt, Req2, State}
-    end.
-
-%% delete_resource/2
-%% ====================================================================
-%% @doc Cowboy callback function
-%% Handles DELETE requests.
-%% @end
--spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
-%% ====================================================================
-delete_resource(Req, #state{filepath = Filepath, filetype = dir} = State) ->
-    case is_group_dir(Filepath) of
-        false ->
-            fs_remove_dir(Filepath),
-            {true, Req, State};
-        true ->
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
-            {halt, Req2, State}
-    end;
-delete_resource(Req, #state{filepath = Filepath, filetype = reg} = State) ->
-    case logical_files_manager:delete(Filepath) of
-        ok ->
-            {true, Req, State};
-        _ ->
             {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
             {halt, Req2, State}
     end.
