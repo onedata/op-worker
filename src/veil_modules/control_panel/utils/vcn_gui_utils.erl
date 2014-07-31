@@ -98,11 +98,7 @@ get_user_role() ->
 -spec gen_logout_token() -> binary().
 %% ====================================================================
 gen_logout_token() ->
-    Chrs = list_to_tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"),
-    ChrsSize = size(Chrs),
-    list_to_binary(lists:foldl(fun(_, R) ->
-        [element(random:uniform(ChrsSize), Chrs) | R]
-    end, "", lists:seq(1, 20))).
+    base64:encode(crypto:rand_bytes(20)).
 
 
 %% get_logout_token/0

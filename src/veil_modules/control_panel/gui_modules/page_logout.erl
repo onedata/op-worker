@@ -29,6 +29,7 @@ body() ->
     LogoutToken = vcn_gui_utils:get_logout_token(),
     case proplists:get_value(?logout_token, Params) of
         LogoutToken ->
+            ?debug("User ~p logged out", [gui_ctx:get_user_id()]),
             gui_ctx:clear_session(),
             #panel{style = <<"position: relative;">>, body =
             [
