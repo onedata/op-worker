@@ -100,7 +100,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
       end,
       {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
       {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
-      {ok, CertFile} = application:get_env(?APP_Name, ssl_cert_path),
+      {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
 
       Dispatch = cowboy_router:compile([{'_', [{?VEILCLIENT_URI_PATH, ws_handler, []}]}]),
 
@@ -108,7 +108,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
         [
           {port, Port},
           {certfile, atom_to_list(CertFile)},
-          {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
+          {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs_from_all_cert_dirs())},
           {keyfile, atom_to_list(CertFile)},
           {password, ""},
           {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}},

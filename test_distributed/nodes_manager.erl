@@ -319,7 +319,7 @@ stop_deps() ->
 %% ====================================================================
 
 start_app_local(Vars) ->
-  set_env_vars([{nif_prefix, './'}, {ca_dir, './cacerts/'}] ++ Vars),
+  set_env_vars([{nif_prefix, './'}, {ca_dir, './cacerts/'}, {certs_dir, './certs'}] ++ Vars),
   application:stop(?APP_Name), %% Make sure that veil_cluster isn't running before starting new instance
   application:start(?APP_Name).
 
