@@ -51,10 +51,12 @@ body() ->
                                 page_error:redirect_with_error(?error_openid_login_error);
                             {ok, Proplist} ->
                                 {Login, UserDoc} = user_logic:sign_in(Proplist),
+                                LogoutToken = vcn_gui_utils:gen_logout_token(),
                                 gui_ctx:create_session(),
                                 gui_ctx:set_user_id(Login),
                                 vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
                                 vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
+                                vcn_gui_utils:set_logout_token(LogoutToken),
                                 gui_jq:redirect_from_login(),
                                 ?debug("User ~p logged in", [Login])
                         end
