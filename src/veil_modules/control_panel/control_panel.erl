@@ -126,7 +126,7 @@ init(_Args) ->
     RestDispatch = [
         {'_', [
             {"/rest/:version/[...]", rest_handler, []},
-            {"/cdmi/[...]", cdmi_uri_handler, []}
+            {"/cdmi/[...]", cdmi_handler, []}
         ]}
     ],
     % Start the listener for REST handler
