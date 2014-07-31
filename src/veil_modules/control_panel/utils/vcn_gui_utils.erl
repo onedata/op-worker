@@ -100,11 +100,9 @@ get_user_role() ->
 gen_logout_token() ->
     Chrs = list_to_tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"),
     ChrsSize = size(Chrs),
-    Token = list_to_binary(lists:foldl(fun(_, R) ->
+    list_to_binary(lists:foldl(fun(_, R) ->
         [element(random:uniform(ChrsSize), Chrs) | R]
-    end, "", lists:seq(1, 20))),
-    ?info("========> Gen logout token: ~p", [Token]),
-    Token.
+    end, "", lists:seq(1, 20))).
 
 
 %% get_logout_token/0
@@ -114,9 +112,7 @@ gen_logout_token() ->
 -spec get_logout_token() -> binary().
 %% ====================================================================
 get_logout_token() ->
-    Token = wf:session(logout_token),
-    ?info("========> Get logout token: ~p", [Token]),
-    Token.
+    wf:session(logout_token).
 
 
 %% set_logout_token/1
@@ -126,7 +122,6 @@ get_logout_token() ->
 -spec set_logout_token(Token :: binary()) -> atom().
 %% ====================================================================
 set_logout_token(Token) ->
-    ?info("========> Set logout token: ~p", [Token]),
     wf:session(logout_token, Token).
 
 
