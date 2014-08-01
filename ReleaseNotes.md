@@ -1,3 +1,19 @@
+VeilCluster 1.5
+===========
+
+VeilCluster 1.5 is a part of VeilFS 1.5. This is mainly a bug-fix release. See further details below. VeilFS 1.5 updates only VeilClient and VeilCluster so it links version 1.0 of other modules.
+
+New features
+-----
+
+* WebGUI and FUSE client handler can use different certificates.
+
+Fixed Bugs
+-----
+
+* Xss and csrf protection mechanisms added.
+* Attack with symbolic links is not possible due to security mechanism update.
+
 VeilCluster 1.0
 ===========
 

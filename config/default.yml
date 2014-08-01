@@ -79,11 +79,20 @@ veil_cluster_node_env:
       value: 1000
 
   - parameter:
-      name: ssl_cert_path
-      description: Path to certificate used by ranch_ssl
+      name: web_ssl_cert_path
+      description: Path to certificate used by ranch_ssl in gui handler
       value: |
-        "\'./cacerts/VeilFSServer.pem\'"
-      erlang_term: "'./cacerts/VeilFSServer.pem'"
+        "\'./certs/VeilFSServerWeb.pem\'"
+      erlang_term: "'./certs/VeilFSServerWeb.pem'"
+      # this has to be in double quotes so that single quotes are preserved after
+      # conversion to list and it ends up correct in app.src
+
+  - parameter:
+      name: fuse_ssl_cert_path
+      description: Path to certificate used by ranch_ssl in fuse clients handler
+      value: |
+        "\'./certs/VeilFSServerFuse.pem\'"
+      erlang_term: "'./certs/VeilFSServerFuse.pem'"
       # this has to be in double quotes so that single quotes are preserved after
       # conversion to list and it ends up correct in app.src
 
@@ -229,6 +238,11 @@ veil_cluster_node_env:
       name: ca_dir
       description: path to dir containing CA and CRL certs used by GSI handler
       value: cacerts
+
+  - parameter:
+      name: certs_dir
+      description: path to dir containing server certs used by GSI handler
+      value: certs
 
   - parameter:
       name: crl_update_interval
