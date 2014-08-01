@@ -29,32 +29,16 @@
 %% Should return a tuple:
 %% - the module that will be called to handle requested REST resource (atom)
 %% - resource id or undefined if none was specified (binary or atom (undefined))
-%% or undefined if no module was matched
+%% or {error, path_invalid} if no module was matched
 %% @end
--spec route([binary()]) -> {atom(), binary()}.
+-spec route([binary()]) -> {atom(), binary() | undefined} | {error, path_invalid} .
 %% ====================================================================
 route([<<"files">>])                -> {rest_files, undefined};
-route([<<"files">>|Path])           -> {rest_files, join_to_path(Path)};
+route([<<"files">>|Path])           -> {rest_files, rest_utils:join_to_path(Path)};
 route([<<"attrs">>])                -> {rest_attrs, undefined};
-route([<<"attrs">>|Path])           -> {rest_attrs, join_to_path(Path)};
+route([<<"attrs">>|Path])           -> {rest_attrs, rest_utils:join_to_path(Path)};
 route([<<"shares">>])               -> {rest_shares, undefined};
 route([<<"shares">>, ID])           -> {rest_shares, ID};
 route([?connection_check_path])     -> {rest_connection_check, undefined};
-route(_)                            -> undefined.
+route(_)                            -> {error, path_invalid}.
 
-
-%% join_to_path/1
-%% ====================================================================
-%% @doc 
-%% This function joins a list of binaries with slashes so they represent a filepath.
-%% @end
--spec join_to_path([binary()]) -> binary().
-%% ====================================================================
-join_to_path([Binary|Tail]) ->
-    join_to_path(Binary, Tail).
-
-join_to_path(Path, []) ->
-    Path;
-
-join_to_path(Path, [Binary|Tail]) ->
-    join_to_path(<<Path/binary, "/", Binary/binary>>, Tail).
