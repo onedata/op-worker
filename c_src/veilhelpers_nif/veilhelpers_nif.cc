@@ -15,9 +15,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/fsuid.h>
 #include <pwd.h>
 #include <grp.h>
+
+#ifndef __APPLE__
+#include <sys/fsuid.h>
+#endif
 
 #include <cstring>
 #include <memory>
@@ -64,8 +67,10 @@ public:
 
     ~UserCTX()
     {
+#ifndef __APPLE__
         setfsuid(0);
         setfsgid(0);
+#endif
     }
 
     uid_t uid()
@@ -87,6 +92,7 @@ private:
         m_uid = uid;
         m_gid = gid;
 
+#ifndef __APPLE__
         if(uid != 0) {
             setgroups(0, nullptr);
             setegid(-1);
@@ -95,6 +101,7 @@ private:
 
         setfsuid(m_uid);
         setfsgid(m_gid);
+#endif
     }
 
     uid_t uNameToUID(std::string uname)
