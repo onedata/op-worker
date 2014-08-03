@@ -73,6 +73,7 @@ exec(UserName, GroupId, Method, Args) when is_atom(Method), is_list(Args) ->
     Args1 = [UserName, GroupId] ++ Args,
     ?debug("VeilHelpers Storage CTX ~p ~p", [UserName, GroupId]),
     ?debug("veilhelpers:exec with args: ~p ~p", [Method, Args1]),
+
     case gsi_handler:call(veilhelpers_nif, Method, Args1) of
         {error, 'NIF_not_loaded'} ->
             ok = load_veilhelpers(),

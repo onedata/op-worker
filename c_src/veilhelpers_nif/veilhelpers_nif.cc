@@ -88,8 +88,9 @@ private:
         m_gid = gid;
 
         if(uid != 0) {
-            seteuid(-1);
+            setgroups(0, nullptr);
             setegid(-1);
+            seteuid(-1);
         }
 
         setfsuid(m_uid);
@@ -229,6 +230,7 @@ static ERL_NIF_TERM sh_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     INIT;
   
     struct fuse_file_info ffi = get_ffi(env, argv[5]);
+    ffi.flags |= O_NOFOLLOW;
     int ret = sh->sh_open(get_string(env, argv[4]).c_str(), &ffi);
 
     return enif_make_tuple2(env, enif_make_int(env, ret), make_ffi(env, ffi));
