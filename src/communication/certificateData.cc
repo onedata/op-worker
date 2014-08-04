@@ -46,7 +46,7 @@ FilesystemCertificate::initContext(std::shared_ptr<boost::asio::ssl::context> ct
 {
     ctx->use_certificate_chain_file(m_certPath);
     ctx->use_private_key_file(m_keyPath, keyFormat());
-    return std::move(ctx);
+    return ctx;
 }
 
 InMemoryCertificate::InMemoryCertificate(boost::asio::const_buffer certData,
@@ -63,7 +63,7 @@ InMemoryCertificate::initContext(std::shared_ptr<boost::asio::ssl::context> ctx)
 {
     ctx->use_certificate_chain(m_certData);
     ctx->use_private_key(m_keyData, keyFormat());
-    return std::move(ctx);
+    return ctx;
 }
 
 } // namespace communication

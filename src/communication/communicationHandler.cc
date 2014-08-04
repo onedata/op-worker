@@ -89,7 +89,7 @@ CommunicationHandler::communicate(Message &message, const Pool poolType,
     }
 
     sendWithRetry(message, poolType, retries);
-    return std::move(future);
+    return future;
 }
 
 std::function<void()> CommunicationHandler::subscribe(SubscriptionData data)

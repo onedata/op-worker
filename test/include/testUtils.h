@@ -31,7 +31,7 @@ std::string randomString(const unsigned int length)
     static thread_local std::uniform_int_distribution<char> dis{'a', 'z'};
     std::string result;
     std::generate_n(std::back_inserter(result), length, std::bind(dis, gen));
-    return std::move(result);
+    return result;
 }
 
 std::string randomString()
