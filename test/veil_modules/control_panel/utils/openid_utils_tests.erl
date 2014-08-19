@@ -38,12 +38,11 @@
     "openid.sreg.required=nickname,email,fullname&openid.ns.ext1=http://openid.net/srv/ax/1.0&openid.ext1.mode=fetch_request&",
     "openid.ext1.type.dn1=http://openid.plgrid.pl/certificate/dn1&openid.ext1.type.dn2=http://openid.plgrid.pl/certificate/dn2&",
     "openid.ext1.type.dn3=http://openid.plgrid.pl/certificate/dn3&openid.ext1.type.teams=http://openid.plgrid.pl/userTeamsXML&",
-    "openid.ext1.type.POSTresponse=http://openid.plgrid.pl/POSTresponse&",
-    "openid.ext1.if_available=dn1,dn2,dn3,teams,POSTresponse">>).
+    "openid.ext1.if_available=dn1,dn2,dn3,teams">>).
 
 -define(mock_signed_params, {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
 "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.dn2,ext1.value.dn2,ext1.type.dn3,",
-"ext1.value.dn3,ext1.type.teams,ext1.value.teams,ext1.type.POSTresponse,ext1.value.POSTresponse,",
+"ext1.value.dn3,ext1.type.teams,ext1.value.teams,",
 "sreg.nickname,sreg.email,sreg.fullname">>}).
 
 
