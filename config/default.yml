@@ -324,12 +324,12 @@ veil_cluster_node_env:
   - parameter:
       name: control_panel_sessions_clearing_period
       description: Period between automatic deletion of expired session tokens, in seconds.
-      value: 86400 # one day in seconds
+      value: 7200 # two hours
 
   - parameter:
       name: control_panel_sessions_cookie_ttl
       description: Cookies time to live - expiration date will be set this many seconds from time of creation (in seconds).
-      value: 2592000 # 30 days in seconds
+      value: 3600 # one hour
 
 
   # Files management

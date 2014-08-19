@@ -50,7 +50,6 @@ get_login_url(HostName, RedirectParams) ->
         "&", ?openid_ext1_type_dn2,
         "&", ?openid_ext1_type_dn3,
         "&", ?openid_ext1_type_teams,
-        "&", ?openid_ext1_post_response,
         "&", ?openid_ext1_if_available>>
     catch Type:Message ->
         ?error_stacktrace("Unable to resolve OpenID Provider endpoint - ~p: ~p", [Type, Message]),
@@ -70,13 +69,13 @@ get_login_url(HostName, RedirectParams) ->
 %% ====================================================================
 prepare_validation_parameters() ->
     try
-        POSTParams = gui_ctx:form_params(),
+        Params = gui_ctx:get_request_params(),
         % Make sure received endpoint is really the PLGrid endpoint
-        EndpointURL = proplists:get_value(<<?openid_op_endpoint_key>>, POSTParams),
+        EndpointURL = proplists:get_value(<<?openid_op_endpoint_key>>, Params),
         true = (discover_op_endpoint(?xrds_url) =:= EndpointURL),
 
         % 'openid.signed' contains parameters that must be contained in validation request
-        SignedArgsNoPrefix = binary:split(proplists:get_value(<<?openid_signed_key>>, POSTParams), <<",">>, [global]),
+        SignedArgsNoPrefix = binary:split(proplists:get_value(<<?openid_signed_key>>, Params), <<",">>, [global]),
         % Add 'openid.' prefix to all parameters
         % And add 'openid.sig' and 'openid.signed' params which are required for validation
         SignedArgs = lists:map(
@@ -87,7 +86,7 @@ prepare_validation_parameters() ->
         % Create a POST request body
         RequestParameters = lists:foldl(
             fun(Key, Acc) ->
-                Value = case proplists:get_value(Key, POSTParams) of
+                Value = case proplists:get_value(Key, Params) of
                             undefined -> throw("Value for " ++ gui_str:to_list(Key) ++ " not found");
                             Val -> Val
                         end,
@@ -123,7 +122,7 @@ validate_openid_login({EndpointURL, ValidationRequestBody}) ->
         case Response of
             <<?valid_auth_info>> -> ok;
             _ ->
-                ?alert("Security breach attempt spotted. Invalid redirect URL contained:~n~p", [gui_ctx:form_params()]),
+                ?alert("Security breach attempt spotted. Invalid redirect URL contained:~n~p", [gui_ctx:get_request_params()]),
                 {error, auth_invalid}
         end
 
@@ -147,9 +146,9 @@ validate_openid_login({EndpointURL, ValidationRequestBody}) ->
 %% ====================================================================
 retrieve_user_info() ->
     try
-        POSTParams = gui_ctx:form_params(),
+        Params = gui_ctx:get_request_params(),
         % Check which params were signed by PLGrid
-        SignedParamsNoPrefix = binary:split(proplists:get_value(<<?openid_signed_key>>, POSTParams), <<",">>, [global]),
+        SignedParamsNoPrefix = binary:split(proplists:get_value(<<?openid_signed_key>>, Params), <<",">>, [global]),
         % Add 'openid.' prefix to all parameters
         % And add 'openid.sig' and 'openid.signed' params which are required for validation
         SignedParams = lists:map(
@@ -157,18 +156,18 @@ retrieve_user_info() ->
                 <<"openid.", X/binary>>
             end, SignedParamsNoPrefix),
 
-        Login = get_signed_param(<<?openid_login_key>>, POSTParams, SignedParams, unicode),
+        Login = get_signed_param(<<?openid_login_key>>, Params, SignedParams, unicode),
         % Login must be retrieved from OpenID, other info is not mandatory.
         case Login of
             [] -> throw(login_undefined);
             _ -> ok
         end,
-        Name = get_signed_param(<<?openid_name_key>>, POSTParams, SignedParams, unicode),
-        Teams = parse_teams(get_signed_param(<<?openid_teams_key>>, POSTParams, SignedParams, utf8)),
-        Email = get_signed_param(<<?openid_email_key>>, POSTParams, SignedParams, unicode),
-        DN1 = get_signed_param(<<?openid_dn1_key>>, POSTParams, SignedParams, unicode),
-        DN2 = get_signed_param(<<?openid_dn2_key>>, POSTParams, SignedParams, unicode),
-        DN3 = get_signed_param(<<?openid_dn3_key>>, POSTParams, SignedParams, unicode),
+        Name = get_signed_param(<<?openid_name_key>>, Params, SignedParams, unicode),
+        Teams = parse_teams(get_signed_param(<<?openid_teams_key>>, Params, SignedParams, utf8)),
+        Email = get_signed_param(<<?openid_email_key>>, Params, SignedParams, unicode),
+        DN1 = get_signed_param(<<?openid_dn1_key>>, Params, SignedParams, unicode),
+        DN2 = get_signed_param(<<?openid_dn2_key>>, Params, SignedParams, unicode),
+        DN3 = get_signed_param(<<?openid_dn3_key>>, Params, SignedParams, unicode),
         DnList = lists:filter(
             fun(X) ->
                 (X /= [])
