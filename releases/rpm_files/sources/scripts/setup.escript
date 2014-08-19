@@ -409,10 +409,10 @@ setup_remove_veil_nodes() ->
         {none, []} ->
             warn("There are no nodes configured on this machine"),
             setup_manage_veil();
-        {worker, {worker, WorkerName, _}} ->
+        {worker, {worker_node, WorkerName, _}} ->
             info("Nodes currently configured on this machine:"),
             li(atom_to_list(WorkerName) ++ get(hostname));
-        {ccm_plus_worker, {{ccm, CCMName, _}, {worker, WorkerName, _}}} ->
+        {ccm_plus_worker, {{ccm_node, CCMName, _}, {worker_node, WorkerName, _}}} ->
             info("Currently configured on this machine:"),
             li(atom_to_list(CCMName) ++ get(hostname)),
             li(atom_to_list(WorkerName) ++ get(hostname))
@@ -434,11 +434,11 @@ do_remove_veil_nodes() ->
     info("Stopping node(s)..."),
     os:cmd(?init_d_script_path ++ " stop_veil"),
     case get_nodes_from_config(veil) of
-        {worker, {worker, Name, Path}} ->
+        {worker, {worker_node, Name, Path}} ->
             info("Removing " ++ atom_to_list(Name) ++ get(hostname)),
             os:cmd("rm -rf " ++ filename:join([Path, atom_to_list(Name)])),
             remove_node_from_config(Name);
-        {ccm_plus_worker, {{ccm, CCMName, CCMPath}, {worker, WorkerName, WorkerPath}}} ->
+        {ccm_plus_worker, {{ccm_node, CCMName, CCMPath}, {worker_node, WorkerName, WorkerPath}}} ->
             info("Removing " ++ atom_to_list(CCMName)),
             os:cmd("rm -rf " ++ filename:join([CCMPath, atom_to_list(CCMName)])),
             remove_node_from_config(CCMName),

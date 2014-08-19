@@ -105,7 +105,7 @@ start_db_node() ->
         {none, []} ->
             nothing_to_start;
 
-        {db_node, Db} ->
+        {db, Db} ->
             start_db(Db)
     end.
 
@@ -114,7 +114,7 @@ stop_db_node() ->
         {none, []} ->
             nothing_to_stop;
 
-        {db_node, Db} ->
+        {db, Db} ->
             stop_db(Db)
     end.
 
@@ -153,7 +153,7 @@ stop_veil_nodes() ->
 
 
 % Connect to one of CCMs specified in config.args, get ccm and dbnode list from it, recofigure the release and start it.
-start_worker({worker, Name, Path}) ->
+start_worker({worker_node, Name, Path}) ->
     ConfigArgsPath = filename:join([Path, atom_to_list(Name), ?config_args_path]),
     OldMainCCM = read_config_args(ConfigArgsPath, "main_ccm", false),
     OldOptCCMs = read_config_args(ConfigArgsPath, "opt_ccms", true),
@@ -164,7 +164,7 @@ start_worker({worker, Name, Path}) ->
 
 
 % Stop a worker running on this machine, right after saving latest configuration
-stop_worker({worker, Name, Path}) ->
+stop_worker({worker_node, Name, Path}) ->
     LongName = atom_to_list(Name) ++ get(hostname),
     {[MainCCM | OptCCMs], DBNodes, _WorkerList} = discover_node(LongName),
 
@@ -174,7 +174,7 @@ stop_worker({worker, Name, Path}) ->
 
 % If this is an only CCM, assume cluster is empty - simply start CCM and worker.
 % If not, connect to one of CCMs specified in config.args, get ccm and dbnode list from it, recofigure the releases and start them.
-start_ccm_plus_worker({ccm, CCMName, CCMPath}, {worker, WorkerName, WorkerPath}) ->
+start_ccm_plus_worker({ccm_node, CCMName, CCMPath}, {worker_node, WorkerName, WorkerPath}) ->
     ConfigArgsPath = filename:join([CCMPath, atom_to_list(CCMName), ?config_args_path]),
     OldMainCCM = read_config_args(ConfigArgsPath, "main_ccm", false),
     OldOptCCMs = read_config_args(ConfigArgsPath, "opt_ccms", true),
@@ -209,8 +209,8 @@ start_ccm_plus_worker({ccm, CCMName, CCMPath}, {worker, WorkerName, WorkerPath})
 
 
 % Reconfigure cluster appropriately and stop ccm and worker
-stop_ccm_plus_worker({ccm, CCMName, CCMPath}, {worker, WorkerName, WorkerPath}) ->
-    stop_worker({worker, WorkerName, WorkerPath}),
+stop_ccm_plus_worker({ccm_node, CCMName, CCMPath}, {worker_node, WorkerName, WorkerPath}) ->
+    stop_worker({worker_node, WorkerName, WorkerPath}),
 
     LongName = atom_to_list(CCMName) ++ get(hostname),
     {[MainCCM | OptCCMs], DBNodes, WorkerList} = discover_node(LongName),
