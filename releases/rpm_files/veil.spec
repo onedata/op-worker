@@ -57,7 +57,7 @@ cp -r /opt/veil/files/onepanel_node /opt/veil/nodes/onepanel
 sed -i s/"-name .*"/"-name onepanel@"`hostname -f`/g `find /opt/veil/nodes/onepanel/releases -name vm.args`
 if [ -n "$ONEPANEL_MULTICAST_ADDRESS" ]
 then
-    sed -i s/"-onepanel multicast_address .*"/"-onepanel multicast_address $ONEPANEL_MULTICAST_ADDRESS"/g `find /opt/veil/nodes/onepanel/releases -name vm.args`
+    sed -i s/"-onepanel multicast_address .*"/"-onepanel multicast_address \"\\\{`echo $ONEPANEL_MULTICAST_ADDRESS | sed s/"\."/", "/g`\\\}\""/g `find /opt/veil/nodes/onepanel/releases -name vm.args`
 fi
 chkconfig --add veil
 chkconfig --add onepanel
