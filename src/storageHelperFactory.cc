@@ -32,7 +32,7 @@ namespace utils {
 
     std::string tolower(std::string input) {
         boost::algorithm::to_lower(input);
-        return std::move(input);
+        return input;
     }
 
 } // namespace utils
