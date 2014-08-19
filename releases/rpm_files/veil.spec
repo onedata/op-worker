@@ -55,7 +55,7 @@ Veil service - allows installation of veil cluster nodes.
 mkdir -p /opt/veil/nodes
 cp -r /opt/veil/files/onepanel_node /opt/veil/nodes/onepanel
 sed -i s/"-name .*"/"-name onepanel@"`hostname -f`/g `find /opt/veil/nodes/onepanel/releases -name vm.args`
-if [ -n "$ONEPANEL_MULTICAST_ADDRESS" ]
+if [[ -n "$ONEPANEL_MULTICAST_ADDRESS" ]]
 then
     sed -i s/"-onepanel multicast_address .*"/"-onepanel multicast_address \"\\\{`echo $ONEPANEL_MULTICAST_ADDRESS | sed s/"\."/", "/g`\\\}\""/g `find /opt/veil/nodes/onepanel/releases -name vm.args`
 fi
