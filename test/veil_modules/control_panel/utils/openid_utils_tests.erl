@@ -143,15 +143,13 @@ validate_login_test_() ->
 parameter_processing_test_() ->
     {foreach,
         fun() ->
-            meck:new(cowboy_req),
-            meck:new(wf_context),
+            meck:new(gui_ctx),
             meck:new(wf),
             meck:new(gui_utils),
             meck:new(lager)
         end,
         fun(_) ->
-            meck:unload(cowboy_req),
-            meck:unload(wf_context),
+            meck:unload(gui_ctx),
             meck:unload(wf),
             meck:unload(gui_utils),
             meck:unload(lager)
@@ -161,10 +159,9 @@ parameter_processing_test_() ->
                 meck:expect(gui_utils, https_get, fun(_, _) -> {ok, <<?mock_xrds_file>>} end),
                 KeyValueList = lists:zip(openid_keys(), openid_values()),
                 FullKeyValueList = KeyValueList ++ [?mock_signed_params],
-                meck:expect(wf_context, context, fun() -> #context{req = []} end),
-                meck:expect(cowboy_req, body_qs,
-                    fun(_) ->
-                        {ok, FullKeyValueList, []}
+                meck:expect(gui_ctx, get_request_params,
+                    fun() ->
+                        FullKeyValueList
                     end),
 
                 meck:expect(wf, url_encode, fun(Key) -> Key end),
@@ -177,44 +174,40 @@ parameter_processing_test_() ->
                 Server = binary_to_list(proplists:get_value(<<"openid.op_endpoint">>, FullKeyValueList)),
                 ?assertEqual({Server, gui_str:to_list(FullCorrectRequest)}, openid_utils:prepare_validation_parameters()),
                 ?assert(meck:validate(gui_utils)),
-                ?assert(meck:validate(cowboy_req)),
-                ?assert(meck:validate(wf_context)),
+                ?assert(meck:validate(gui_ctx)),
                 ?assert(meck:validate(wf))
             end},
 
             {"Missing 'signed' parameter case",
                 fun() ->
-                    meck:expect(wf_context, context, fun() -> #context{req = []} end),
-                    meck:expect(cowboy_req, body_qs,
-                        fun(_) ->
-                            {ok, [], []}
+                    meck:expect(gui_ctx, get_request_params,
+                        fun() ->
+                            []
                         end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
 
                     ?assertEqual({error, invalid_request},
                         openid_utils:prepare_validation_parameters()),
-                    ?assert(meck:validate(cowboy_req)),
-                    ?assert(meck:validate(wf_context)),
+                    ?assert(meck:validate(gui_ctx)),
                     ?assert(meck:validate(lager))
                 end},
 
             {"Missing parameters case",
                 fun() ->
                     meck:expect(wf_context, context, fun() -> #context{req = []} end),
-                    meck:expect(cowboy_req, body_qs,
-                        fun(_) ->
-                            {ok, [
+                    meck:expect(gui_ctx, get_request_params,
+                        fun() ->
+                            [
                                 ?mock_signed_params,
                                 {<<"openid.op_endpoint">>, <<"serverAddress">>}
-                            ], []}
+                            ]
                         end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
                     meck:expect(wf, url_encode, fun(Key) -> Key end),
 
                     ?assertEqual({error, invalid_request},
                         openid_utils:prepare_validation_parameters()),
-                    ?assert(meck:validate(cowboy_req)),
-                    ?assert(meck:validate(wf_context)),
+                    ?assert(meck:validate(gui_ctx)),
                     ?assert(meck:validate(wf)),
                     ?assert(meck:validate(lager))
                 end},
@@ -225,9 +218,9 @@ parameter_processing_test_() ->
                         ?mock_signed_params
                     ],
                     meck:expect(wf_context, context, fun() -> #context{req = []} end),
-                    meck:expect(cowboy_req, body_qs,
-                        fun(_) ->
-                            {ok, KeyValueList, []}
+                    meck:expect(gui_ctx, get_request_params,
+                        fun() ->
+                            KeyValueList
                         end),
 
                     CorrectResult =
@@ -243,8 +236,7 @@ parameter_processing_test_() ->
                         fun(Key) ->
                             ?assertEqual(proplists:get_value(Key, Result), proplists:get_value(Key, CorrectResult))
                         end, [login, name, teams, email, dn_list]),
-                    ?assert(meck:validate(wf_context)),
-                    ?assert(meck:validate(cowboy_req))
+                    ?assert(meck:validate(gui_ctx))
                 end},
 
             {"User info - undefined DN case",
@@ -252,9 +244,9 @@ parameter_processing_test_() ->
                     KeyValueList = lists:zip(user_info_keys() -- [<<?openid_dn1_key>>, <<?openid_dn3_key>>],
                         user_info_values() -- [<<"dn1">>, <<"dn3">>]) ++ [?mock_signed_params],
                     meck:expect(wf_context, context, fun() -> #context{req = []} end),
-                    meck:expect(cowboy_req, body_qs,
-                        fun(_) ->
-                            {ok, KeyValueList, []}
+                    meck:expect(gui_ctx, get_request_params,
+                        fun() ->
+                            KeyValueList
                         end),
 
                     CorrectResult =
@@ -271,8 +263,7 @@ parameter_processing_test_() ->
                         fun(Key) ->
                             ?assertEqual(proplists:get_value(Key, Result), proplists:get_value(Key, CorrectResult))
                         end, [login, name, teams, email, dn_list]),
-                    ?assert(meck:validate(cowboy_req)),
-                    ?assert(meck:validate(wf_context)),
+                    ?assert(meck:validate(gui_ctx)),
                     ?assert(meck:validate(wf))
                 end}
         ]}.
@@ -302,8 +293,6 @@ openid_keys() ->
         <<"openid.ext1.value.dn3">>,
         <<"openid.ext1.type.teams">>,
         <<"openid.ext1.value.teams">>,
-        <<"openid.ext1.type.POSTresponse">>,
-        <<"openid.ext1.value.POSTresponse">>,
         <<"openid.sreg.nickname">>,
         <<"openid.sreg.email">>,
         <<"openid.sreg.fullname">>,
@@ -314,7 +303,7 @@ openid_keys() ->
 % Values are whatever, its important if they were all used.
 % With exception of endpoint
 openid_values() ->
-    [<<"https://openid.plgrid.pl/server">> | lists:map(fun(X) -> integer_to_binary(X) end, lists:seq(1, 22))].
+    [<<"https://openid.plgrid.pl/server">> | lists:map(fun(X) -> integer_to_binary(X) end, lists:seq(1, 20))].
 
 
 % Used in "Retrieve user info" test, names of keys
