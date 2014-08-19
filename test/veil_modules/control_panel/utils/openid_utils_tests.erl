@@ -194,7 +194,6 @@ parameter_processing_test_() ->
 
             {"Missing parameters case",
                 fun() ->
-                    meck:expect(wf_context, context, fun() -> #context{req = []} end),
                     meck:expect(gui_ctx, get_request_params,
                         fun() ->
                             [
@@ -217,7 +216,6 @@ parameter_processing_test_() ->
                     KeyValueList = lists:zip(user_info_keys(), user_info_values()) ++ [
                         ?mock_signed_params
                     ],
-                    meck:expect(wf_context, context, fun() -> #context{req = []} end),
                     meck:expect(gui_ctx, get_request_params,
                         fun() ->
                             KeyValueList
@@ -243,7 +241,6 @@ parameter_processing_test_() ->
                 fun() ->
                     KeyValueList = lists:zip(user_info_keys() -- [<<?openid_dn1_key>>, <<?openid_dn3_key>>],
                         user_info_values() -- [<<"dn1">>, <<"dn3">>]) ++ [?mock_signed_params],
-                    meck:expect(wf_context, context, fun() -> #context{req = []} end),
                     meck:expect(gui_ctx, get_request_params,
                         fun() ->
                             KeyValueList
