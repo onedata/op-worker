@@ -32,6 +32,7 @@ using namespace std::placeholders;
 struct ConnectionMock: public veil::communication::Connection
 {
     static std::atomic<unsigned int> openConnections;
+    static std::mutex connectionOpenedMutex;
     static std::condition_variable connectionOpened;
 
     ConnectionMock(std::function<void(const std::string&)> onMessageCallback,
@@ -41,6 +42,7 @@ struct ConnectionMock: public veil::communication::Connection
         : veil::communication::Connection{onMessageCallback, onFailCallback,
                                           onOpenCallback, onErrorCallback}
     {
+        std::lock_guard<std::mutex> guard{connectionOpenedMutex};
         ++openConnections;
         connectionOpened.notify_all();
     }
@@ -62,6 +64,7 @@ private:
     std::thread thread;
 };
 decltype(ConnectionMock::openConnections) ConnectionMock::openConnections{0};
+decltype(ConnectionMock::connectionOpenedMutex) ConnectionMock::connectionOpenedMutex;
 decltype(ConnectionMock::connectionOpened) ConnectionMock::connectionOpened;
 
 struct ConnectionPoolProxy: public veil::communication::ConnectionPool
@@ -216,8 +219,7 @@ TEST_F(ConnectionPoolTest, shouldRecreateAllConnectionsOnSend)
     ASSERT_EQ(0u, ConnectionMock::openConnections);
 
     auto openConnections = [&]{
-        std::mutex m;
-        std::unique_lock<std::mutex> lock{m};
+        std::unique_lock<std::mutex> lock{ConnectionMock::connectionOpenedMutex};
         const auto res = ConnectionMock::connectionOpened.wait_for(lock,
                             std::chrono::seconds{5},
                             [&]{ return ConnectionMock::openConnections == connectionNumber; });
@@ -240,8 +242,7 @@ TEST_F(ConnectionPoolTest, shouldWaitOnSendUntilConnectionIsAvailable)
     std::atomic<bool> sent{false};
 
     auto openConnections = [&]{
-        std::mutex m;
-        std::unique_lock<std::mutex> lock{m};
+        std::unique_lock<std::mutex> lock{ConnectionMock::connectionOpenedMutex};
         const auto res = ConnectionMock::connectionOpened.wait_for(lock,
                             std::chrono::seconds{5},
                             [&]{ return ConnectionMock::openConnections == connectionNumber; });
@@ -249,7 +250,7 @@ TEST_F(ConnectionPoolTest, shouldWaitOnSendUntilConnectionIsAvailable)
         ASSERT_TRUE(res);
         ASSERT_FALSE(sent);
 
-        for(auto &c: connectionPool->createdConnections)
+        for(const auto &c: connectionPool->createdConnections)
             c->m_onOpenCallback();
     };
 
