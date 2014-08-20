@@ -18,7 +18,7 @@
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
--export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1]).
+-export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, reply_with_error/5, join_to_path/1, list_dir/1]).
 
 %% ====================================================================
 %% API functions
@@ -174,19 +174,27 @@ prepare_context(DnString) ->
 
 %% reply_with_error/4
 %% ====================================================================
-%% Replies with 500 error cose, content-type set to application/json and
-%% an error message
-%% @end
+%% @doc @equiv reply_with_error(Req, Severity, ErrorDesc, Args, 500)
 -spec reply_with_error(req(), atom(), {string(), string()}, list()) -> req().
 %% ====================================================================
 reply_with_error(Req, Severity, ErrorDesc, Args) ->
+    reply_with_error(Req, Severity, ErrorDesc, Args, 500).
+
+%% reply_with_error/5
+%% ====================================================================
+%% @doc Replies with 500 error cose, content-type set to application/json,
+%% an error message and error code
+%% @end
+-spec reply_with_error(req(), atom(), {string(), string()}, list(), integer()) -> req().
+%% ====================================================================
+reply_with_error(Req, Severity, ErrorDesc, Args, Code) ->
     ErrorRec = case Severity of
                    warning -> ?report_warning(ErrorDesc, Args);
                    error -> ?report_error(ErrorDesc, Args);
                    alert -> ?report_alert(ErrorDesc, Args)
                end,
     Req2 = cowboy_req:set_resp_body(rest_utils:error_reply(ErrorRec), Req),
-    {ok, Req3} = cowboy_req:reply(500, Req2),
+    {ok, Req3} = cowboy_req:reply(Code, Req2),
     Req3.
 
 

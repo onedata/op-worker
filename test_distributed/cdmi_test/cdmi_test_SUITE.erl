@@ -24,9 +24,9 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 %% -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1,get_file_test/1 , create_dir_test/1, create_file_test/1, delete_dir_test/1, delete_file_test/1]).
+-export([list_dir_test/1,get_file_test/1 , create_dir_test/1, create_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1]).
 
-all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, delete_dir_test, delete_file_test].
+all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, delete_dir_test, delete_file_test, version_test].
 
 %% ====================================================================
 %% Test functions
@@ -326,7 +326,27 @@ delete_file_test(_Config) ->
     ?assert(not object_exists(GroupFileName)).
     %%------------------------------
 
+% tests version checking (X-CDMI-Specification-Version header)
+version_test(_Config) ->
+    %%----- version supported ------
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2, 1.0.1, 1.0.0"}],
+    {Code1, Headers1, _Response1} = do_request([], get, RequestHeaders1, []),
+    ?assertEqual("200",Code1),
+    ?assertEqual(proplists:get_value("x-cdmi-specification-version", Headers1), "1.0.2"),
+    %%------------------------------
 
+    %%--- version not supported ----
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.0, 2.0.1"}],
+    {Code2, Headers2, _Response2} = do_request([], get, RequestHeaders2, []),
+    ?assertEqual("400",Code2),
+    ?assertEqual(proplists:get_value("x-cdmi-specification-version", Headers2), undefined),
+    %%------------------------------
+
+    %%--------- non cdmi -----------
+    {Code3, Headers3, _Response3} = do_request(filename:join(?Test_dir_name,?Test_file_name), get, [], []),
+    ?assertEqual("200",Code3),
+    ?assertEqual(proplists:get_value("x-cdmi-specification-version", Headers3), undefined).
+    %%------------------------------
 
 %% ====================================================================
 %% SetUp and TearDown functions

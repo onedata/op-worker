@@ -23,6 +23,8 @@
     opts = [] :: [binary()]
 }).
 
+-define(error_bad_request_code, 400).
+-define(error_unauthorized_code, 401).
 -define(error_forbidden_code, 403).
 -define(error_not_found_code, 404).
 -define(error_not_acceptable_code, 406).
