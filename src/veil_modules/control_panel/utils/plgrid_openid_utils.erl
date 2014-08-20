@@ -69,7 +69,6 @@ get_login_url(HostName, RedirectParams) ->
 prepare_validation_parameters() ->
     try
         Params = gui_ctx:get_request_params(),
-        ?dump(Params),
         % Make sure received endpoint is really the PLGrid endpoint
         EndpointURL = proplists:get_value(<<?openid_op_endpoint_key>>, Params),
         true = (discover_op_endpoint(?xrds_url) =:= EndpointURL),
