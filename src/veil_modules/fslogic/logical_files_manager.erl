@@ -489,14 +489,22 @@ delete(File) ->
                     _ ->
                       ok
                   end,
-                  ok;
-                _ -> {logical_file_system_error, Response3}
+                  clear_cache(File);
+                _ ->
+                  clear_cache(File),
+                  {logical_file_system_error, Response3}
               end;
-            _ -> {Status3, TmpAns3}
+            _ ->
+              clear_cache(File),
+              {Status3, TmpAns3}
           end;
-        _ -> TmpAns2_2
+        _ ->
+          clear_cache(File),
+          TmpAns2_2
       end;
-    _ -> {Response, Response2}
+    _ ->
+      clear_cache(File),
+      {Response, Response2}
   end.
 
 %% change_file_perm/2
@@ -1049,3 +1057,13 @@ write_enabled(UserDn) ->
     [{_Key, _Value}] -> false;
     _ -> true
   end.
+
+%% clear_cache/1
+%% ====================================================================
+%% @doc Clears caches connected with file.
+%% @end
+-spec clear_cache(File :: string()) -> ok.
+clear_cache(File) ->
+  erase(File),
+  erase({File, size}),
+  ok.
