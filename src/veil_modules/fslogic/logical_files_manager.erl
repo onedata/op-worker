@@ -119,10 +119,14 @@ mv(From, To) ->
     ok ->
       Response = TmpAns#atom.value,
       case Response of
-        ?VOK -> ok;
-        _ -> {logical_file_system_error, Response}
+        ?VOK -> clear_cache(From);
+        _ ->
+          clear_cache(From),
+          {logical_file_system_error, Response}
       end;
-    _ -> {Status, TmpAns}
+    _ ->
+      clear_cache(From),
+      {Status, TmpAns}
   end.
 
 %% chown/3
