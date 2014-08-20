@@ -515,9 +515,12 @@ put_to_clipboard(Type) ->
 
 
 paste_from_clipboard() ->
+    ClipboardItems = get_clipboard_items(),
+    ClipboardType = get_clipboard_type(),
+    clear_clipboard(),
     ErrorMessage = lists:foldl(
         fun({Path, Basename}, Acc) ->
-            case get_clipboard_type() of
+            case ClipboardType of
                 cut ->
                     case fs_mv(Path, get_working_directory()) of
                         ok ->
@@ -536,14 +539,13 @@ paste_from_clipboard() ->
                     fs_copy(Path, get_working_directory()),
                     Acc
             end
-        end, <<"">>, get_clipboard_items()),
+        end, <<"">>, ClipboardItems),
     case ErrorMessage of
         <<"">> ->
             ok;
         _ ->
             gui_jq:wire(#alert{text = ErrorMessage})
     end,
-    clear_clipboard(),
     clear_workspace().
 
 
