@@ -24,15 +24,30 @@ title() -> <<"Login page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    case gui_ctx:user_logged_in() of
-        true ->
-            gui_jq:redirect(<<"/">>),
-            [];
-        false ->
-            {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
-            gui_jq:redirect(atom_to_binary(GlobalRegistryHostname, latin1)),
-            []
-    end.
+    LoginProplist = [
+        {global_id, "abcd"},
+        {login, "plglopiola"},
+        {name, "Siema Eniu"},
+        {teams, ["plggveilfs"]},
+        {emails, ["email@email.com"]},
+        {dn_list, []}
+    ],
+    {Login, UserDoc} = user_logic:sign_in(LoginProplist),
+    gui_ctx:create_session(),
+    gui_ctx:set_user_id(Login),
+    vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
+    vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
+    gui_jq:redirect(<<"/">>),
+    ok.
+%%     case gui_ctx:user_logged_in() of
+%%         true ->
+%%             gui_jq:redirect(<<"/">>),
+%%             [];
+%%         false ->
+%%             {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
+%%             gui_jq:redirect(atom_to_binary(GlobalRegistryHostname, latin1)),
+%%             []
+%%     end.
 
 
 event(init) -> ok;
