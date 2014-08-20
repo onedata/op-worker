@@ -28,8 +28,7 @@
 -define(openid_ext1_type_dn2, "openid.ext1.type.dn2=http://openid.plgrid.pl/certificate/dn2").
 -define(openid_ext1_type_dn3, "openid.ext1.type.dn3=http://openid.plgrid.pl/certificate/dn3").
 -define(openid_ext1_type_teams, "openid.ext1.type.teams=http://openid.plgrid.pl/userTeamsXML").
--define(openid_ext1_post_response, "openid.ext1.type.POSTresponse=http://openid.plgrid.pl/POSTresponse").
--define(openid_ext1_if_available, "openid.ext1.if_available=dn1,dn2,dn3,teams,POSTresponse").
+-define(openid_ext1_if_available, "openid.ext1.if_available=dn1,dn2,dn3,teams").
 
 
 %% Macros used for check_authentication phase
