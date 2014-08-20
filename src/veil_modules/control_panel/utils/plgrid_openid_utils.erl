@@ -69,6 +69,7 @@ get_login_url(HostName, RedirectParams) ->
 prepare_validation_parameters() ->
     try
         Params = gui_ctx:get_request_params(),
+        ?dump(Params),
         % Make sure received endpoint is really the PLGrid endpoint
         EndpointURL = proplists:get_value(<<?openid_op_endpoint_key>>, Params),
         true = (discover_op_endpoint(?xrds_url) =:= EndpointURL),
@@ -172,10 +173,11 @@ retrieve_user_info() ->
                 (X /= [])
             end, [DN1, DN2, DN3]),
         {ok, [
+            {global_id, "plgrid__" ++ Login},
             {login, Login},
             {name, Name},
             {teams, Teams},
-            {email, Email},
+            {emails, [Email]},
             {dn_list, lists:usort(DnList)}
         ]}
     catch Type:Message ->
