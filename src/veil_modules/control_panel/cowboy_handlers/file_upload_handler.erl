@@ -159,10 +159,16 @@ handle_rest_upload(Req, Path, Overwrite) ->
     end.
 
 %% ====================================================================
-%% INTERNAL FUNCTIONS - website upload handling
+%% INTERNAL FUNCTIONS - HTTP upload handling
 %% ====================================================================
 
-% Parses a multipart data POST request and returns set of field values and file body
+%% handle_rest_upload/3
+%% ====================================================================
+%% @doc Parses a multipart data POST request and returns set of field values and
+%% filenames of files that were successfully uploaded.
+%% @end
+-spec parse_multipart(Req :: req(), Params :: [tuple()], Files :: [tuple()]) -> {ok, Params :: [tuple()], Files :: [tuple()]}.
+%% ====================================================================
 parse_multipart(Req, Params, Files) ->
     case cowboy_req:part(Req) of
         {ok, Headers, Req2} ->
@@ -180,7 +186,7 @@ parse_multipart(Req, Params, Files) ->
                     RequestedFullPath = gui_str:binary_to_unicode_list(filename:absname(Filename, TargetDir)),
                     FullPath = ensure_unique_filename(RequestedFullPath, 0),
                     try
-                        stream_file_to_fslogic(Req, FullPath, get_upload_buffer_size())
+                        stream_file_to_fslogic(Req2, FullPath, get_upload_buffer_size())
                     catch Type:Message ->
                         logical_files_manager:delete(FullPath),
                         throw({"Error in parse_file", Type, Message})
@@ -192,7 +198,12 @@ parse_multipart(Req, Params, Files) ->
     end.
 
 
-% Tries to create a file until one is created (changing its name every time)
+%% ensure_unique_filename/2
+%% ====================================================================
+%% @doc Tries to create a file until one is created (changing its name every time).
+%% @end
+-spec ensure_unique_filename(Req :: req(), Counter :: integer()) -> string() | no_return().
+%% ====================================================================
 ensure_unique_filename(RequestedPath, 0) ->
     Ans = logical_files_manager:create(RequestedPath),
     case Ans of
@@ -214,9 +225,14 @@ ensure_unique_filename(RequestedPath, Counter) ->
     end.
 
 
-% Streams a chunk of data to file from socket (incoming multipart data)
+%% ensure_unique_filename/2
+%% ====================================================================
+%% @doc Tries to create a file until one is created (changing its name every time).
+%% @end
+-spec ensure_unique_filename(Req :: req(), Counter :: integer()) -> string() | no_return().
+%% ====================================================================
 stream_file_to_fslogic(Req, FullPath, BufferSize) ->
-    case cowboy_req:part_body(Req) of
+    case cowboy_req:part_body(Req, [{length, BufferSize}, {read_timeout, ?UPLOAD_PART_TIMEOUT}]) of
         {ok, Binary, Req2} ->
             write_to_file(Binary, FullPath),
             Req2;
@@ -260,23 +276,46 @@ get_upload_buffer_size() ->
 % parses a multipart data POST request and write its data to a file
 % at specified path
 parse_rest_upload(Req, Path) ->
-    Part = try multipart_data(Req) catch _:_ -> {false, Req} end,
-    case Part of
-        {eof, NewReq} ->
-            {true, NewReq};
-        {headers, Headers, NewReq} ->
-            case (length(Headers) == 1) of
-                true -> {true, NewReq};
-                false -> NewReq2 = try
-                    stream_file_to_fslogic(NewReq, Path, get_upload_buffer_size())
-                                   catch _:_ ->
-                                       logical_files_manager:delete(Path),
-                                       {false, NewReq}
-                                   end,
-                    {true, NewReq2}
+    case cowboy_req:part(Req) of
+        {ok, Headers, Req2} ->
+            case cow_multipart:form_data(Headers) of
+                {data, _FieldName} ->
+                    % Form field
+                    {ok, _FieldBody, Req3} = cowboy_req:part_body(Req2),
+                    parse_rest_upload(Req3, Path);
+                {file, _FieldName, _Filename, _CType, _CTransferEncoding} ->
+                    % File
+                    try
+                        Req3 = stream_file_to_fslogic(Req2, Path, get_upload_buffer_size()),
+                        {true, Req3}
+                    catch T:M ->
+                        ?error_stacktrace("Cannot process REST upload request - ~p:~p", [T, M]),
+                        logical_files_manager:delete(Path),
+                        {false, Req2}
+                    end
             end;
-        _ -> {false, Req}
+        {done, Req2} ->
+            {false, Req2}
     end.
+
+
+%%     Part = try multipart_data(Req) catch _:_ -> {false, Req} end,
+%%     case Part of
+%%         {eof, NewReq} ->
+%%             {true, NewReq};
+%%         {headers, Headers, NewReq} ->
+%%             case (length(Headers) == 1) of
+%%                 true -> {true, NewReq};
+%%                 false -> NewReq2 = try
+%%                     stream_file_to_fslogic(NewReq, Path, get_upload_buffer_size())
+%%                                    catch _:_ ->
+%%                                        logical_files_manager:delete(Path),
+%%                                        {false, NewReq}
+%%                                    end,
+%%                     {true, NewReq2}
+%%             end;
+%%         _ -> {false, Req}
+%%     end.
 
 % try to create empty file at specified path if it doesn't exist
 % or truncate its size to 0 if it exists and "overwrite" is set
@@ -677,5 +716,3 @@ create_file_and_required_parent_dirs(Path, []) ->
 %%         {ok, Data2} -> {ok, Data2, Req};
 %%         {error, Reason} -> {error, Reason}
 %%     end.
-
-multipart_data(_) -> ij.
