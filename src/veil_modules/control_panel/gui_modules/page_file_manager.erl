@@ -1150,14 +1150,14 @@ fs_remove(BinPath) ->
     Path = gui_str:binary_to_unicode_list(BinPath),
     Item = item_new(Path),
     case item_is_dir(Item) of
-        true -> fs_remove_dir(Path);
+        true -> fs_remove_dir(BinPath);
         false -> logical_files_manager:delete(Path)
     end.
 
 
 fs_remove_dir(BinDirPath) ->
     DirPath = gui_str:binary_to_unicode_list(BinDirPath),
-    case is_group_dir(DirPath) of
+    case is_group_dir(BinDirPath) of
         true ->
             skip;
         false ->
