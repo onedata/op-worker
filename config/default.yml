@@ -79,11 +79,20 @@ veil_cluster_node_env:
       value: 1000
 
   - parameter:
-      name: ssl_cert_path
-      description: Path to certificate used by ranch_ssl
+      name: web_ssl_cert_path
+      description: Path to certificate used by ranch_ssl in gui handler
       value: |
-        "\'./cacerts/VeilFSServer.pem\'"
-      erlang_term: "'./cacerts/VeilFSServer.pem'"
+        "\'./certs/VeilFSServerWeb.pem\'"
+      erlang_term: "'./certs/VeilFSServerWeb.pem'"
+      # this has to be in double quotes so that single quotes are preserved after
+      # conversion to list and it ends up correct in app.src
+
+  - parameter:
+      name: fuse_ssl_cert_path
+      description: Path to certificate used by ranch_ssl in fuse clients handler
+      value: |
+        "\'./certs/VeilFSServerFuse.pem\'"
+      erlang_term: "'./certs/VeilFSServerFuse.pem'"
       # this has to be in double quotes so that single quotes are preserved after
       # conversion to list and it ends up correct in app.src
 
@@ -211,6 +220,11 @@ veil_cluster_node_env:
       value: cacerts
 
   - parameter:
+      name: certs_dir
+      description: path to dir containing server certs used by GSI handler
+      value: certs
+
+  - parameter:
       name: crl_update_interval
       description: the interval between CRL updates done by GSI handler
       value: 3600000
@@ -283,12 +297,12 @@ veil_cluster_node_env:
   - parameter:
       name: control_panel_sessions_clearing_period
       description: Period between automatic deletion of expired session tokens, in seconds.
-      value: 86400 # one day in seconds
+      value: 7200 # two hours
 
   - parameter:
       name: control_panel_sessions_cookie_ttl
       description: Cookies time to live - expiration date will be set this many seconds from time of creation (in seconds).
-      value: 2592000 # 30 days in seconds
+      value: 3600 # one hour
 
 
   # Global Registry interfacing
