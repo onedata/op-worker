@@ -38,22 +38,21 @@ allowed_methods(Req, State) ->
 %% depending on requested operation
 %% @end
 %% ====================================================================
--spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}}.
+-spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
 malformed_request(Req, #state{cdmi_version = undefined} = State) ->
     {false, Req, State};
-malformed_request(Req, #state{method = delete} = State) ->
+malformed_request(Req, #state{method = <<"GET">>} = State) ->
     {false,Req,State};
-malformed_request(Req, #state{method = Method} = State) ->
+malformed_request(Req, #state{method = <<"DELETE">>} = State) ->
+    {false,Req,State};
+malformed_request(Req, State) -> % put cdmi
     {<<"application/cdmi-object">>, _} = cowboy_req:header(<<"content-type">>, Req),
-    case Method of
-        put ->
-            {ok, RawBody, Req2} = cowboy_req:body(Req),
-            Body = rest_utils:parse_body(RawBody),
-            rest_utils:validate_body(Body),
-            {false, Req2, State};
-        get -> {false, Req, State}
-    end.
+    {ok, RawBody, Req2} = cowboy_req:body(Req),
+    Body = rest_utils:parse_body(RawBody),
+    rest_utils:validate_body(Body),
+    {false, Req2, State}.
+
 
 %% resource_exists/2
 %% ====================================================================
