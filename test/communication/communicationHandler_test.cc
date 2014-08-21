@@ -197,11 +197,9 @@ TEST_F(CommunicationHandlerTest, shouldCallSubscribedCallbackOnPredicateFulfilme
     auto callback = [&](const veil::protocol::communication_protocol::Answer &ans) {
         ++callbackCalled;
         answerGiven = ans;
-        return true;
     };
 
-    communicationHandler->subscribe(
-                veil::communication::CommunicationHandler::SubscriptionData{pred, callback});
+    communicationHandler->subscribe({pred, callback});
 
     for(int i = 0; i < 1000; ++i)
     {

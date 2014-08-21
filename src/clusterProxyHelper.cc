@@ -32,7 +32,7 @@ std::unique_ptr<RemoteFileMangement> wrap(const google::protobuf::Message &msg, 
     wrapper->set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
     msg.SerializeToString(wrapper->mutable_input());
     wrapper->set_space_id(spaceId);
-    return std::move(wrapper);
+    return wrapper;
 }
 
 template<typename AnswerType>

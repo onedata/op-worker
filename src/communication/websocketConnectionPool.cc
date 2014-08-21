@@ -37,10 +37,8 @@ WebsocketConnectionPool::WebsocketConnectionPool(const unsigned int connectionsN
     using websocketpp::lib::bind;
     namespace p = websocketpp::lib::placeholders;
 
-#ifdef NDEBUG
     m_endpoint.clear_access_channels(websocketpp::log::alevel::all);
     m_endpoint.clear_error_channels(websocketpp::log::elevel::all);
-#endif
 
     m_endpoint.init_asio();
     m_endpoint.start_perpetual();

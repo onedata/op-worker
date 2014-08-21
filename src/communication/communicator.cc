@@ -186,7 +186,7 @@ Communicator::createMessage(const std::string &module,
     cmsg->set_synch(synchronous);
     msg.SerializeToString(cmsg->mutable_input());
 
-    return std::move(cmsg);
+    return cmsg;
 }
 
 CommunicationHandler::Pool Communicator::poolType(const google::protobuf::Message &msg) const

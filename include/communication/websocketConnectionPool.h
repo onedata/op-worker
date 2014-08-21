@@ -16,6 +16,7 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_client.hpp>
 
+#include <string>
 #include <thread>
 #include <unordered_set>
 

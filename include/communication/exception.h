@@ -9,7 +9,7 @@
 #define VEILHELPERS_COMMUNICATION_EXCEPTION_H
 
 
-#include <exception>
+#include <stdexcept>
 
 namespace veil
 {
