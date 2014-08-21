@@ -13,12 +13,10 @@
 -include("veil_modules/control_panel/cdmi.hrl").
 
 -define(default_get_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
--define(default_post_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
 
 %% API
--export([allowed_methods/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
+-export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
 -export([get_cdmi_container/2, put_cdmi_container/2]).
-
 
 %% allowed_methods/2
 %% ====================================================================
@@ -30,6 +28,30 @@
 %% ====================================================================
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
+
+%% malformed_request/2
+%% ====================================================================
+%% @doc
+%% Checks if request contains all mandatory fields and their values are set properly
+%% depending on requested operation
+%% @end
+%% ====================================================================
+-spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}}.
+%% ====================================================================
+malformed_request(Req, #state{cdmi_version = undefined} = State) ->
+    {false, Req, State};
+malformed_request(Req, #state{method = delete} = State) ->
+    {false,Req,State};
+malformed_request(Req, #state{method = Method} = State) ->
+    {<<"application/cdmi-container">>, _} = cowboy_req:header(<<"content-type">>, Req),
+    case Method of
+        put ->
+            {ok, RawBody, Req2} = cowboy_req:body(Req),
+            Body = rest_utils:parse_body(RawBody),
+            rest_utils:validate_body(Body),
+            {false, Req2, State};
+        get -> {false, Req, State}
+    end.
 
 %% resource_exists/2
 %% ====================================================================
@@ -104,7 +126,7 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
 
 %% get_cdmi_container/2
 %% ====================================================================
-%% @doc Callback function for cdmi container GET operation (create dir)
+%% @doc Callback function for cdmi container GET operation (list dir)
 %% @end
 -spec get_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
@@ -122,7 +144,7 @@ get_cdmi_container(Req, #state{opts = Opts} = State) ->
 put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:mkdir(Filepath) of
         ok -> %todo check given body
-            Response = rest_utils:encode_to_json({struct, prepare_container_ans(?default_post_dir_opts, State)}),
+            Response = rest_utils:encode_to_json({struct, prepare_container_ans(?default_get_dir_opts, State)}),
             Req2 = cowboy_req:set_resp_body(Response, Req),
             {true, Req2, State};
         {error, dir_exists} ->
@@ -162,8 +184,8 @@ prepare_container_ans([<<"metadata">> | Tail], State) -> %todo extract metadata
     [{<<"metadata">>, <<>>} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(Tail, State)];
-prepare_container_ans([Other | Tail], State) ->
-    [{Other, <<>>} | prepare_container_ans(Tail, State)].
+prepare_container_ans([_Other | Tail], State) ->
+    prepare_container_ans(Tail, State).
 
 %% fs_remove/1
 %% ====================================================================

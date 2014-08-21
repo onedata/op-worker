@@ -15,7 +15,7 @@
 -include("veil_modules/control_panel/cdmi.hrl").
 
 %% Callbacks
--export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
+-export([init/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 %% Content type routing functions
 -export([get_cdmi_container/2, get_cdmi_object/2, get_binary/2]).
 -export([put_cdmi_container/2, put_cdmi_object/2, put_binary/2]).
@@ -88,6 +88,25 @@ allowed_methods(Req, {error,Error}) ->
     {halt, NewReq, error};
 allowed_methods(Req, #state{handler_module = Handler} = State) ->
     Handler:allowed_methods(Req,State).
+
+%% malformed_request/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Checks if request contains all mandatory fields and their values are set properly
+%% depending on requested operation
+%% @end
+%% ====================================================================
+-spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}}.
+%% ====================================================================
+malformed_request(Req, #state{handler_module = Handler} = State) ->
+    try
+        Handler:malformed_request(Req,State)
+    catch
+        _Type:Error  ->
+            ?error("Malformatted request error: ~p",[Error]),
+            NewReq = rest_utils:reply_with_error(Req, error, ?error_bad_request, [],?error_bad_request_code),
+            {true,NewReq,State}
+    end.
 
 %% resource_exists/2
 %% ====================================================================

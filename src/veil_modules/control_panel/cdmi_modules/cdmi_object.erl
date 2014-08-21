@@ -17,7 +17,7 @@
 -define(default_post_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
 
 %% API
--export([allowed_methods/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
+-export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
 -export([get_binary/2, get_cdmi_object/2, put_binary/2, put_cdmi_object/2]).
 
 %% allowed_methods/2
@@ -30,6 +30,30 @@
 %% ====================================================================
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
+
+%% malformed_request/2
+%% ====================================================================
+%% @doc
+%% Checks if request contains all mandatory fields and their values are set properly
+%% depending on requested operation
+%% @end
+%% ====================================================================
+-spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}}.
+%% ====================================================================
+malformed_request(Req, #state{cdmi_version = undefined} = State) ->
+    {false, Req, State};
+malformed_request(Req, #state{method = delete} = State) ->
+    {false,Req,State};
+malformed_request(Req, #state{method = Method} = State) ->
+    {<<"application/cdmi-object">>, _} = cowboy_req:header(<<"content-type">>, Req),
+    case Method of
+        put ->
+            {ok, RawBody, Req2} = cowboy_req:body(Req),
+            Body = rest_utils:parse_body(RawBody),
+            rest_utils:validate_body(Body),
+            {false, Req2, State};
+        get -> {false, Req, State}
+    end.
 
 %% resource_exists/2
 %% ====================================================================
@@ -177,7 +201,7 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
 %% ====================================================================
 put_cdmi_object(Req, #state{filepath = Filepath} = State) ->
     {ok, RawBody, _} = cowboy_req:body(Req),
-    Body = parse_body(RawBody),
+    Body = rest_utils:parse_body(RawBody),
     ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body, <<"utf-8">>),  %todo check given body opts, store given mimetype
     Value = proplists:get_value(<<"value">>, Body, <<>>),
     RawValue = case ValueTransferEncoding of
@@ -297,16 +321,3 @@ read_file(State, Range, <<"base64">>) ->
 read_file(#state{filepath = Path}, {From, To}, <<"utf-8">>) ->
     logical_files_manager:read(Path, From, To - From + 1).
 
-%% parse_body/1
-%% ====================================================================
-%% @doc Parses json request body to erlang proplist format.
-%% @end
--spec parse_body(binary()) -> list().
-%% ====================================================================
-parse_body(RawBody) ->
-    case gui_str:binary_to_unicode_list(RawBody) of
-        "" -> [];
-        NonEmptyBody ->
-            {struct, Ans} = rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody)),
-            Ans
-    end.
