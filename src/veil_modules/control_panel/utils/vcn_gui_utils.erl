@@ -300,7 +300,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
                 body = #form{
                     id = <<"logout_form">>,
                     style = <<"margin: 0; padding: 18px;">>,
-                    method = <<"POST">>,
+                    method = "post",
                     action = <<"/logout">>,
                     body = [
                         #textbox{
