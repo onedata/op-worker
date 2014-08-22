@@ -62,14 +62,14 @@ validate_login() ->
 
         {struct, Proplist} = mochijson2:decode(base64decode(Payload)),
 
-        GlobalID = gui_str:binary_to_unicode_list(proplists:get_value(<<"sub">>, Proplist)),
+        GRUID = gui_str:binary_to_unicode_list(proplists:get_value(<<"sub">>, Proplist)),
         Name = gui_str:binary_to_unicode_list(proplists:get_value(<<"name">>, Proplist)),
         EmailsBin = proplists:get_value(<<"email">>, Proplist),
         Emails = lists:map(fun({struct, [{<<"email">>, Email}]}) -> binary_to_list(Email) end, EmailsBin),
-        Login = get_user_login(GlobalID),
+        Login = get_user_login(GRUID),
         Teams = [],
         LoginProplist = [
-            {global_id, GlobalID},
+            {global_id, GRUID},
             {login, Login},
             {name, Name},
             {teams, Teams},
@@ -80,9 +80,10 @@ validate_login() ->
             {Login, UserDoc} = user_logic:sign_in(LoginProplist, AccessToken),
             gui_ctx:create_session(),
             gui_ctx:set_user_id(Login),
-            gui_ctx:set_access_token(GlobalID, AccessToken),
+            vcn_gui_utils:set_global_user_id(GRUID),
+            vcn_gui_utils:set_access_token(AccessToken),
 
-            ?info("GUI set_access_token: ~p ~p", [{GlobalID, AccessToken}, gui_ctx:get_access_token()]),
+            ?info("GUI GRUID: ~p, access token: ~p", [GRUID, AccessToken]),
 
             vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
             vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
@@ -148,10 +149,10 @@ urldecode_digit(D) -> D.
 %% @doc
 %% Returns user login if it exists or generates a new one.
 %% @end
--spec get_user_login(GlobalID :: string()) -> string().
+-spec get_user_login(GRUID :: string()) -> string().
 %% ====================================================================
-get_user_login(GlobalID) ->
-    case user_logic:get_user({global_id, GlobalID}) of
+get_user_login(GRUID) ->
+    case user_logic:get_user({global_id, GRUID}) of
         {ok, #veil_document{record = #user{login = Login}}} -> Login;
         _ -> next_free_user_login(1)
     end.
@@ -162,7 +163,7 @@ get_user_login(GlobalID) ->
 %% @doc
 %% Returns a user login string that is not occupied.
 %% @end
--spec next_free_user_login(GlobalID :: string()) -> string().
+-spec next_free_user_login(GRUID :: string()) -> string().
 %% ====================================================================
 next_free_user_login(Counter) ->
     NewLogin = ?user_login_prefix ++ integer_to_list(Counter),

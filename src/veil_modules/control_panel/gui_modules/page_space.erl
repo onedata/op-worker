@@ -12,7 +12,10 @@
 
 -module(page_space).
 -include("veil_modules/control_panel/common.hrl").
--include("veil_modules/dao/dao_spaces.hrl").
+-include_lib("ctool/include/global_registry/gr_users.hrl").
+-include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/global_registry/gr_groups.hrl").
+-include_lib("ctool/include/global_registry/gr_providers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % n2o API and comet
@@ -83,8 +86,9 @@ body() ->
             [];
         Id ->
             SpaceId = gui_str:to_binary(Id),
-            case gr_adapter:get_space_info(SpaceId, gui_ctx:get_access_token()) of
-                {ok, SpaceInfo} -> space(SpaceInfo);
+            case gr_users:get_space_details({user, vcn_gui_utils:get_access_token()}, SpaceId) of
+                {ok, SpaceDetails} ->
+                    space(SpaceDetails);
                 _ ->
                     page_error:redirect_with_error(?error_space_permission_denied),
                     []
@@ -95,9 +99,9 @@ body() ->
 %% space/1
 %% ====================================================================
 %% @doc Renders Space settings.
--spec space(SpaceInfo :: #space_info{}) -> [#panel{}].
+-spec space(SpaceDetails :: #space_details{}) -> [#panel{}].
 %% ====================================================================
-space(#space_info{space_id = SpaceId, name = Name}) ->
+space(#space_details{space_id = SpaceId, name = Name}) ->
     [
         #panel{
             id = <<"main_spinner">>,
@@ -313,7 +317,7 @@ providers_table_collapsed(SpaceId) ->
         ]
     },
     try
-        {ok, ProviderIds} = gr_adapter:get_space_providers(SpaceId, gui_ctx:get_access_token()),
+        {ok, ProviderIds} = gr_spaces:get_providers({user, vcn_gui_utils:get_access_token()}, SpaceId),
         Rows = lists:map(fun({ProviderId, Counter}) ->
             RowId = <<"provider_", (integer_to_binary(Counter))/binary>>,
             #tr{
@@ -351,7 +355,7 @@ providers_table_expanded(SpaceId) ->
         ]
     },
     try
-        {ok, ProviderIds} = gr_adapter:get_space_providers(SpaceId, gui_ctx:get_access_token()),
+        {ok, ProviderIds} = gr_spaces:get_providers({user, vcn_gui_utils:get_access_token()}, SpaceId),
         Rows = lists:map(fun({ProviderId, Counter}) ->
             RowId = <<"provider_", (integer_to_binary(Counter))/binary>>,
             #tr{
@@ -419,8 +423,8 @@ provider_row_collapsed(SpaceId, ProviderId, RowId) ->
 %% ====================================================================
 provider_row_expanded(SpaceId, ProviderId, RowId) ->
     try
-        {ok, {_, Urls, RedirectionPoint}} =
-            gr_adapter:get_provider_details(SpaceId, ProviderId, gui_ctx:get_access_token()),
+        {ok, #provider_details{urls = URLs, redirectionPoint = RedirectionPoint}} =
+            gr_spaces:get_provider_details({user, vcn_gui_utils:get_access_token()}, SpaceId, ProviderId),
         SpinnerId = <<RowId/binary, "_spinner">>,
         [
             #td{
@@ -462,12 +466,12 @@ provider_row_expanded(SpaceId, ProviderId, RowId) ->
                                         style = ?MAIN_STYLE,
                                         body = #list{
                                             style = <<"list-style-type: none; margin: 0 auto;">>,
-                                            body = lists:map(fun(Url) ->
+                                            body = lists:map(fun(URL) ->
                                                 #li{body = #p{
                                                     style = ?PARAGRAPH_STYLE,
-                                                    body = Url}
+                                                    body = URL}
                                                 }
-                                            end, Urls)
+                                            end, URLs)
                                         }
                                     }
                                 ]
@@ -530,7 +534,7 @@ users_table_collapsed(SpaceId) ->
         ]
     },
     try
-        {ok, UserIds} = gr_adapter:get_space_users(SpaceId, gui_ctx:get_access_token()),
+        {ok, UserIds} = gr_spaces:get_users({user, vcn_gui_utils:get_access_token()}, SpaceId),
         Rows = lists:map(fun({UserId, Counter}) ->
             RowId = <<"user_", (integer_to_binary(Counter))/binary>>,
             #tr{
@@ -568,7 +572,7 @@ users_table_expanded(SpaceId) ->
         ]
     },
     try
-        {ok, UserIds} = gr_adapter:get_space_users(SpaceId, gui_ctx:get_access_token()),
+        {ok, UserIds} = gr_spaces:get_users({user, vcn_gui_utils:get_access_token()}, SpaceId),
         Rows = lists:map(fun({UserId, Counter}) ->
             RowId = <<"user_", (integer_to_binary(Counter))/binary>>,
             #tr{
@@ -592,7 +596,7 @@ users_table_expanded(SpaceId) ->
 %% ====================================================================
 user_row_collapsed(SpaceId, UserId, RowId) ->
     try
-        {ok, {_, Name}} = gr_adapter:get_user_details(SpaceId, UserId, gui_ctx:get_access_token()),
+        {ok, #user_details{name = Name}} = gr_spaces:get_user_details({user, vcn_gui_utils:get_access_token()}, SpaceId, UserId),
         SpinnerId = <<RowId/binary, "_spinner">>,
         [
             #td{
@@ -643,7 +647,7 @@ user_row_collapsed(SpaceId, UserId, RowId) ->
 %% ====================================================================
 user_row_expanded(SpaceId, UserId, RowId) ->
     try
-        {ok, {_, Name}} = gr_adapter:get_user_details(SpaceId, UserId, gui_ctx:get_access_token()),
+        {ok, #user_details{name = Name}} = gr_spaces:get_user_details({user, vcn_gui_utils:get_access_token()}, SpaceId, UserId),
         SpinnerId = <<RowId/binary, "_spinner">>,
         [
             #td{
@@ -708,7 +712,7 @@ groups_table_collapsed(SpaceId) ->
         ]
     },
     try
-        {ok, GroupIds} = gr_adapter:get_space_groups(SpaceId, gui_ctx:get_access_token()),
+        {ok, GroupIds} = gr_spaces:get_groups({user, vcn_gui_utils:get_access_token()}, SpaceId),
         Rows = lists:map(fun({GroupId, Counter}) ->
             RowId = <<"group_", (integer_to_binary(Counter))/binary>>,
             #tr{
@@ -746,7 +750,7 @@ groups_table_expanded(SpaceId) ->
         ]
     },
     try
-        {ok, GroupIds} = gr_adapter:get_space_groups(SpaceId, gui_ctx:get_access_token()),
+        {ok, GroupIds} = gr_spaces:get_groups({user, vcn_gui_utils:get_access_token()}, SpaceId),
         Rows = lists:map(fun({GroupId, Counter}) ->
             RowId = <<"group_", (integer_to_binary(Counter))/binary>>,
             #tr{
@@ -770,7 +774,7 @@ groups_table_expanded(SpaceId) ->
 %% ====================================================================
 group_row_collapsed(SpaceId, GroupId, RowId) ->
     try
-        {ok, {_, Name}} = gr_adapter:get_group_details(SpaceId, GroupId, gui_ctx:get_access_token()),
+        {ok, #group_details{name = Name}} = gr_spaces:get_group_details({user, vcn_gui_utils:get_access_token()}, SpaceId, GroupId),
         SpinnerId = <<RowId/binary, "_spinner">>,
         [
             #td{
@@ -821,7 +825,7 @@ group_row_collapsed(SpaceId, GroupId, RowId) ->
 %% ====================================================================
 group_row_expanded(SpaceId, GroupId, RowId) ->
     try
-        {ok, {_, Name}} = gr_adapter:get_group_details(SpaceId, GroupId, gui_ctx:get_access_token()),
+        {ok, #group_details{name = Name}} = gr_spaces:get_group_details({user, vcn_gui_utils:get_access_token()}, SpaceId, GroupId),
         SpinnerId = <<RowId/binary, "_spinner">>,
         [
             #td{
@@ -999,7 +1003,7 @@ comet_loop(#?STATE{} = State) ->
     NewState = try
         receive
             {request_support, SpaceId} ->
-                case gr_adapter:request_support(SpaceId, gui_ctx:get_access_token()) of
+                case gr_spaces:get_invite_provider_token({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                     {ok, Token} ->
                         Message = <<"Give underlying token to any Provider that is willing to support your Space.",
                         "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", Token/binary, "\">">>,
@@ -1013,7 +1017,7 @@ comet_loop(#?STATE{} = State) ->
                 State;
 
             {invite_user, SpaceId} ->
-                case gr_adapter:invite_user(SpaceId, gui_ctx:get_access_token()) of
+                case gr_spaces:get_invite_user_token({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                     {ok, Token} ->
                         Message = <<"Give underlying token to any User that is willing to join your Space.",
                         "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", Token/binary, "\">">>,
@@ -1173,14 +1177,15 @@ event({cancel_new_space_name_submit, SpaceId, Name}) ->
     gui_jq:update(<<"space_name">>, space_name(SpaceId, Name));
 
 event({submit_new_space_name, SpaceId, Name}) ->
-    NewUsername = gui_ctx:postback_param(<<"new_space_name_textbox">>),
-    {UserGID, AccessToken} = gui_ctx:get_access_token(),
-    case user_logic:get_user({global_id, UserGID}) of
+    NewSpaceName = gui_ctx:postback_param(<<"new_space_name_textbox">>),
+    GRUID = vcn_gui_utils:get_global_user_id(),
+    AccessToken = vcn_gui_utils:get_access_token(),
+    case user_logic:get_user({global_id, GRUID}) of
         {ok, UserDoc} ->
-            case gr_adapter:change_space_name(SpaceId, NewUsername, gui_ctx:get_access_token()) of
+            case gr_spaces:modify_details({user, vcn_gui_utils:get_access_token()}, SpaceId, [{<<"name">>, Name}]) of
                 ok ->
                     user_logic:synchronize_spaces_info(UserDoc, AccessToken),
-                    gui_jq:update(<<"space_name">>, space_name(SpaceId, NewUsername));
+                    gui_jq:update(<<"space_name">>, space_name(SpaceId, NewSpaceName));
                 _ ->
                     message(<<"error_message">>, <<"Cannot change Space name.">>),
                     gui_jq:update(<<"space_name">>, space_name(SpaceId, Name))

@@ -12,6 +12,7 @@
 
 -module(page_tokens).
 -include("veil_modules/control_panel/common.hrl").
+-include_lib("ctool/include/global_registry/gr_openid.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % n2o API and comet
@@ -155,8 +156,8 @@ tokens_table() ->
         ]
     },
     try
-        {ok, Tokens} = gr_adapter:get_tokens(gui_ctx:get_access_token()),
-        Rows = lists:map(fun({{AccessId, Name}, Counter}) ->
+        {ok, Tokens} = gr_openid:get_client_tokens({user, vcn_gui_utils:get_access_token()}),
+        Rows = lists:map(fun({#client_token_details{id = AccessId, name = Name}, Counter}) ->
             RowId = <<"token_", (integer_to_binary(Counter))/binary>>,
             #tr{
                 id = RowId,
@@ -210,22 +211,22 @@ token_row(AccessId, Name, RowId) ->
         #td{
             id = SpinnerId,
             style = ?NAVIGATION_COLUMN_STYLE,
-            body = delete_token(AccessId, Name, SpinnerId, RowId)
+            body = remove_token(AccessId, Name, SpinnerId, RowId)
         }
     ].
 
 
-%% delete_token/4
+%% remove_token/4
 %% ====================================================================
-%% @doc Renders delete token button.
--spec delete_token(AccessId :: binary(), Name :: binary(), SpinnerId :: binary(), RowId :: binary()) -> Result when
+%% @doc Renders remove token button.
+-spec remove_token(AccessId :: binary(), Name :: binary(), SpinnerId :: binary(), RowId :: binary()) -> Result when
     Result :: #link{}.
 %% ====================================================================
-delete_token(AccessId, Name, SpinnerId, RowId) ->
+remove_token(AccessId, Name, SpinnerId, RowId) ->
     #link{
-        title = <<"Delete token">>,
+        title = <<"Remove token">>,
         class = <<"glyph-link">>,
-        postback = {delete_token, AccessId, Name, SpinnerId, RowId},
+        postback = {remove_token, AccessId, Name, SpinnerId, RowId},
         body = #span{
             style = <<"font-size: large;  vertical-align: top;">>,
             class = <<"fui-trash">>
@@ -303,7 +304,7 @@ comet_loop(#?STATE{} = State) ->
     NewCometLoopState = try
         receive
             get_access_code ->
-                case gr_adapter:get_access_code(gui_ctx:get_access_token()) of
+                case gr_openid:get_client_access_code({user, vcn_gui_utils:get_access_token()}) of
                     {ok, AccessCode} ->
                         Message = <<"Enter underlying access code into FUSE client.",
                         "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", AccessCode/binary, "\">">>,
@@ -315,14 +316,14 @@ comet_loop(#?STATE{} = State) ->
                 gui_comet:flush(),
                 State;
 
-            {delete_token, AccessId, Name, SpinnerId, RowId} ->
-                case gr_adapter:delete_token(AccessId, gui_ctx:get_access_token()) of
+            {remove_token, AccessId, Name, SpinnerId, RowId} ->
+                case gr_openid:remove_client_token({user, vcn_gui_utils:get_access_token()}, AccessId) of
                     ok ->
                         gui_jq:remove(RowId),
-                        message(<<"ok_message">>, <<"Token: <b>", AccessId/binary, "</b> deleted successfully.">>);
+                        message(<<"ok_message">>, <<"Token: <b>", AccessId/binary, "</b> removed successfully.">>);
                     _ ->
-                        gui_jq:update(SpinnerId, delete_token(AccessId, Name, SpinnerId, RowId)),
-                        message(<<"error_message">>, <<"Cannot delete token: <b>", AccessId/binary, "</b>.">>)
+                        gui_jq:update(SpinnerId, remove_token(AccessId, Name, SpinnerId, RowId)),
+                        message(<<"error_message">>, <<"Cannot remove token: <b>", AccessId/binary, "</b>.">>)
                 end,
                 gui_comet:flush(),
                 State
@@ -343,7 +344,7 @@ comet_loop(#?STATE{} = State) ->
 %% ====================================================================
 event(init) ->
     gui_jq:update(<<"tokens">>, tokens_table()),
-    gui_jq:wire(#api{name = "deleteToken", tag = "deleteToken"}, false),
+    gui_jq:wire(#api{name = "removeToken", tag = "removeToken"}, false),
     {ok, Pid} = gui_comet:spawn(fun() -> comet_loop(#?STATE{}) end),
     put(?COMET_PID, Pid);
 
@@ -351,10 +352,10 @@ event(get_access_code) ->
     get(?COMET_PID) ! get_access_code,
     gui_jq:show(<<"main_spinner">>);
 
-event({delete_token, AccessId, Name, SpinnerId, RowId}) ->
-    Message = <<"Are you sure you want to delete token:<br><b>", AccessId/binary, "</b>?">>,
-    Script = <<"deleteToken(['", AccessId/binary, "','", Name/binary, "','", SpinnerId/binary, "','", RowId/binary, "']);">>,
-    dialog_popup(<<"Delete token">>, Message, Script);
+event({remove_token, AccessId, Name, SpinnerId, RowId}) ->
+    Message = <<"Are you sure you want to remove token:<br><b>", AccessId/binary, "</b>?">>,
+    Script = <<"removeToken(['", AccessId/binary, "','", Name/binary, "','", SpinnerId/binary, "','", RowId/binary, "']);">>,
+    dialog_popup(<<"Remove token">>, Message, Script);
 
 event({close_message, MessageId}) ->
     gui_jq:hide(MessageId);
@@ -367,7 +368,7 @@ event(terminate) ->
 %% @doc Handles page events.
 -spec api_event(Name :: string(), Args :: string(), Req :: string()) -> no_return().
 %% ====================================================================
-api_event("deleteToken", Args, _) ->
+api_event("removeToken", Args, _) ->
     [AccessId, Name, SpinnerId, RowId] = mochijson2:decode(Args),
-    get(?COMET_PID) ! {delete_token, AccessId, Name, SpinnerId, RowId},
+    get(?COMET_PID) ! {remove_token, AccessId, Name, SpinnerId, RowId},
     gui_jq:update(SpinnerId, spinner()).

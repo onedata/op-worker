@@ -18,7 +18,8 @@
 -export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0, can_view_monitoring/0]).
 
 % Saving and retrieving information that does not change during one session
--export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0]).
+-export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0,
+    set_access_token/1, get_access_token/0, set_global_user_id/1, get_global_user_id/0]).
 
 % Functions to check for user's session
 -export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/4]).
@@ -35,7 +36,7 @@
 %% ====================================================================
 %% @doc Returns user's DN retrieved from his session state.
 %% @end
--spec get_user_dn() -> string().
+-spec get_user_dn() -> string() | undefined.
 %% ====================================================================
 get_user_dn() ->
     try
@@ -50,9 +51,49 @@ get_user_dn() ->
     end.
 
 
+%% set_global_user_id/1
+%% ====================================================================
+%% @doc Sets user's global ID in his session state.
+%% @end
+-spec set_global_user_id(GRUID :: binary()) -> binary().
+%% ====================================================================
+set_global_user_id(GRUID) ->
+    wf:session(gruid, GRUID).
+
+
+%% get_global_user_id/0
+%% ====================================================================
+%% @doc Returns user's global ID from his session state.
+%% @end
+-spec get_global_user_id() -> GRUID :: binary() | undefined.
+%% ====================================================================
+get_global_user_id() ->
+    wf:session(gruid).
+
+
+%% set_access_token/2
+%% ====================================================================
+%% @doc Sets user's access token in his session state.
+%% @end
+-spec set_access_token(AccessToken :: binary()) -> binary().
+%% ====================================================================
+set_access_token(AccessToken) ->
+    wf:session(access_token, AccessToken).
+
+
+%% get_access_token/0
+%% ====================================================================
+%% @doc Returns user's access token from his session state.
+%% @end
+-spec get_access_token() -> AccessToken :: binary() | undefined.
+%% ====================================================================
+get_access_token() ->
+    wf:session(access_token).
+
+
 %% set_user_fullname/1
 %% ====================================================================
-%% @doc Returns user's full name retrieved from his session state.
+%% @doc Sets user's full name in his session state.
 %% @end
 -spec set_user_fullname(Fullname :: string()) -> string().
 %% ====================================================================
@@ -64,7 +105,7 @@ set_user_fullname(Fullname) ->
 %% ====================================================================
 %% @doc Returns user's full name retrieved from his session state.
 %% @end
--spec get_user_fullname() -> string().
+-spec get_user_fullname() -> string() | undefined.
 %% ====================================================================
 get_user_fullname() ->
     wf:session(fullname).
@@ -72,7 +113,7 @@ get_user_fullname() ->
 
 %% set_user_role/1
 %% ====================================================================
-%% @doc Returns user's role retrieved from his session state.
+%% @doc Sets user's role in his session state.
 %% @end
 -spec set_user_role(Role :: atom()) -> atom().
 %% ====================================================================
@@ -84,7 +125,7 @@ set_user_role(Role) ->
 %% ====================================================================
 %% @doc Returns user's role retrieved from his session state.
 %% @end
--spec get_user_role() -> atom().
+-spec get_user_role() -> atom() | undefined.
 %% ====================================================================
 get_user_role() ->
     wf:session(role).
@@ -176,6 +217,7 @@ maybe_redirect(NeedLogin, NeedDN, NeedStorage, SaveSourcePage) ->
 apply_or_redirect(Module, Fun, NeedDN) ->
     apply_or_redirect(Module, Fun, [], NeedDN).
 
+
 %% apply_or_redirect/4
 %% ====================================================================
 %% @doc Checks if the client has right to do the operation (is logged in and possibly 
@@ -215,6 +257,7 @@ apply_or_redirect(Module, Fun, Args, NeedDN) ->
 %% ====================================================================
 top_menu(ActiveTabID) ->
     top_menu(ActiveTabID, []).
+
 
 %% top_menu/2
 %% ====================================================================
