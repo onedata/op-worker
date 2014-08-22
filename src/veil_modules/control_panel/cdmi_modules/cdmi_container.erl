@@ -38,23 +38,11 @@ allowed_methods(Req, State) ->
 %% ====================================================================
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
-malformed_request(Req, #state{cdmi_version = undefined} = State) ->
-    {false, Req, State};
-malformed_request(Req, #state{method = <<"GET">>} = State) ->
-    {false,Req,State};
-malformed_request(Req, #state{method = <<"DELETE">>} = State) ->
-    {false,Req,State};
-malformed_request(Req, State) ->
-    ct:print("!! 1"),
-    ct:print("req: ~p,~n~n state: ~p",[Req,State]),
+malformed_request(Req, #state{cdmi_version = Version, method = <<"PUT">>} = State) when is_binary(Version) ->
     {<<"application/cdmi-container">>, Req2} = cowboy_req:header(<<"content-type">>, Req),
-    ct:print("req2: ~p",[Req2]),
-    ct:print("!! 2"),
-    {ok, RawBody, Req3} = cowboy_req:body(Req2),
-    ct:print("!! 3"),
-    Body = rest_utils:parse_body(RawBody),
-    rest_utils:validate_body(Body),
-    {false, Req3, State}.
+    {false, Req2, State};
+malformed_request(Req, State) ->
+    {false, Req, State}.
 
 %% resource_exists/2
 %% ====================================================================

@@ -40,18 +40,11 @@ allowed_methods(Req, State) ->
 %% ====================================================================
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
-malformed_request(Req, #state{cdmi_version = undefined} = State) ->
-    {false, Req, State};
-malformed_request(Req, #state{method = <<"GET">>} = State) ->
-    {false,Req,State};
-malformed_request(Req, #state{method = <<"DELETE">>} = State) ->
-    {false,Req,State};
-malformed_request(Req, State) -> % put cdmi
+malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version } = State) when is_binary(Version) -> % put cdmi
     {<<"application/cdmi-object">>, _} = cowboy_req:header(<<"content-type">>, Req),
-    {ok, RawBody, Req2} = cowboy_req:body(Req),
-    Body = rest_utils:parse_body(RawBody),
-    rest_utils:validate_body(Body),
-    {false, Req2, State}.
+    {false,Req,State};
+malformed_request(Req, State) ->
+    {false, Req, State}.
 
 
 %% resource_exists/2
@@ -198,7 +191,7 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
 %% @end
 -spec put_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_cdmi_object(Req, #state{filepath = Filepath} = State) ->
+put_cdmi_object(Req, #state{filepath = Filepath} = State) -> %todo read body in chunks
     {ok, RawBody, _} = cowboy_req:body(Req),
     Body = rest_utils:parse_body(RawBody),
     ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body, <<"utf-8">>),  %todo check given body opts, store given mimetype

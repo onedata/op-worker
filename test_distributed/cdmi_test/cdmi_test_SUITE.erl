@@ -362,29 +362,13 @@ request_format_check_test(_Config) ->
     ?assertEqual("400",Code1),
     %%------------------------------
 
-    %%--- obj duplicated value -----
-    RequestHeaders2 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
-    RequestBody2 = [{<<"value">>, FileContent},{<<"value">>, FileContent}],
-    RawRequestBody2 = rest_utils:encode_to_json(RequestBody2),
-    {Code2, _Headers2, _Response2} = do_request(FileToCreate, put, RequestHeaders2, RawRequestBody2),
-    ?assertEqual("400",Code2),
-
     %%-- dir missing content-type --
     RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     RequestBody3 = [{<<"metadata">>, <<"">>}],
     RawRequestBody3 = rest_utils:encode_to_json(RequestBody3),
     {Code3, _Headers3, _Response3} = do_request(DirToCreate, put, RequestHeaders3, RawRequestBody3),
-    ?assertEqual("400",Code3),
+    ?assertEqual("400",Code3).
     %%------------------------------
-
-    %%--- dir duplicated value -----
-    RequestHeaders4 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
-    RequestBody4 = [{<<"metadata">>, <<"">>},{<<"metadata">>, <<"">>}],
-    RawRequestBody4 = rest_utils:encode_to_json(RequestBody4),
-    {Code4, _Headers4, _Response4} = do_request(DirToCreate, put, RequestHeaders4, RawRequestBody4),
-    ?assertEqual("400",Code4).
-    %%------------------------------
-
 
 %% ====================================================================
 %% SetUp and TearDown functions
