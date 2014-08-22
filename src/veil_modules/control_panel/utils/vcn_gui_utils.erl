@@ -18,7 +18,7 @@
 -export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0, can_view_monitoring/0]).
 
 % Saving and retrieving information that does not change during one session
--export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0]).
+-export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0, gen_logout_token/0, set_logout_token/1, get_logout_token/0]).
 
 % Functions to check for user's session
 -export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/4]).
@@ -52,7 +52,7 @@ get_user_dn() ->
 
 %% set_user_fullname/1
 %% ====================================================================
-%% @doc Returns user's full name retrieved from his session state.
+%% @doc Sets user's full name in his session state.
 %% @end
 -spec set_user_fullname(Fullname :: string()) -> string().
 %% ====================================================================
@@ -72,7 +72,7 @@ get_user_fullname() ->
 
 %% set_user_role/1
 %% ====================================================================
-%% @doc Returns user's role retrieved from his session state.
+%% @doc Sets user's role in his session state.
 %% @end
 -spec set_user_role(Role :: atom()) -> atom().
 %% ====================================================================
@@ -88,6 +88,37 @@ set_user_role(Role) ->
 %% ====================================================================
 get_user_role() ->
     wf:session(role).
+
+
+%% gen_logout_token/0
+%% ====================================================================
+%% @doc Returns random character sequence that is used to verify user
+%% logout.
+%% @end
+-spec gen_logout_token() -> binary().
+%% ====================================================================
+gen_logout_token() ->
+    base64:encode(crypto:rand_bytes(20)).
+
+
+%% get_logout_token/0
+%% ====================================================================
+%% @doc Returns user's logout token retrieved from his session state.
+%% @end
+-spec get_logout_token() -> binary().
+%% ====================================================================
+get_logout_token() ->
+    wf:session(logout_token).
+
+
+%% set_logout_token/1
+%% ====================================================================
+%% @doc Sets user's logout token in his session state.
+%% @end
+-spec set_logout_token(Token :: binary()) -> atom().
+%% ====================================================================
+set_logout_token(Token) ->
+    wf:session(logout_token, Token).
 
 
 %% storage_defined/0
@@ -265,8 +296,30 @@ top_menu(ActiveTabID, SubMenuBody) ->
             %    url="/contact_support", body=#span{ class="fui-question" } } } },
             {about_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"About">>,
                 url = <<"/about">>, body = #span{class = <<"fui-info">>}}}},
-            {logout_button, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Log out">>,
-                url = <<"/logout">>, body = #span{class = <<"fui-power">>}}}}
+            {logout_button, #li{
+                body = #form{
+                    id = <<"logout_form">>,
+                    style = <<"margin: 0; padding: 18px;">>,
+                    method = "post",
+                    action = <<"/logout">>,
+                    body = [
+                        #textbox{
+                            style = <<"display: none">>,
+                            name = ?logout_token,
+                            value = vcn_gui_utils:get_logout_token()
+                        },
+                        #link{
+                            style = <<"font-size: 24px;">>,
+                            class = <<"glyph-link">>,
+                            data_fields = [{<<"onclick">>, <<"document.getElementById('logout_form').submit(); return false;">>}],
+                            title = <<"Log out">>,
+                            body = #span{class = <<"fui-power">>}
+                        }
+                    ]
+                }}
+            }
+%%                 #li{body = #link{style = <<"padding: 18px;">>, title = <<"Log out">>,
+%%                 url = <<"/logout">>, body = #span{class = <<"fui-power">>}}}}
         ],
 
     MenuCaptionsProcessed = lists:map(
@@ -294,7 +347,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
                 ]}
             ]}
         ] ++ SubMenuBody}
-    ] ++ gui_utils:cookie_policy_popup_body(?privacy_policy_url).
+    ] ++ gui_utils:cookie_policy_popup_body(<<?privacy_policy_url>>).
 
 
 %% logotype_footer/1

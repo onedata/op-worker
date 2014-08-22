@@ -46,6 +46,7 @@ mkdir -p distributed_tests_out
 cp -R test_distributed/* distributed_tests_out
 cd distributed_tests_out
 cp -R ../cacerts .
+cp -R ../certs .
 cp -R ../c_lib/ .
 cp -R ../src/veil_modules/dao/views .
 cp -R ../src/gui_static .
@@ -96,6 +97,7 @@ done
 rm -f Emakefile
 rm -f *.sh
 rm -rf cacerts
+rm -rf certs
 rm -rf c_lib
 rm -rf views
 rm -rf gui_static
