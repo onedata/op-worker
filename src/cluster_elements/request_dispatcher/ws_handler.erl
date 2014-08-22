@@ -234,8 +234,9 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
     end;
 
 %% Handle other messages
-handle(Req, {push, FuseID, {Msg, MsgId} = CLM}, #hander_state{peer_type = provider} = State) ->
-    ?info("Got push msg: ~p", [Msg]),
+handle(Req, {push, FuseID, {Msg, MsgId, DecoderName1, MsgType} = CLM}, #hander_state{peer_type = provider} = State) ->
+    ?info("Got push msg for ~p: ~p ~p ~p", [FuseID, Msg, DecoderName1, MsgType]),
+    request_dispatcher:send_to_fuse(vcn_utils:ensure_list(FuseID), Msg, DecoderName1),
     {reply, {binary, encode_answer(ok, MsgId)}, Req, State};
 handle(Req, {pull, FuseID, CLM}, #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
     ?info("Got pull msg: ~p from ~p", [CLM, FuseID]),
@@ -254,8 +255,8 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         {FID, _} when is_list(FID) -> ok                               % FuseId is present
     end,
 
-    ?info("Session: ~p ~p", [SessionUserGID, SessionAccessToken]),
-    ?info("CTX for msg: ~p ~p", [GlobalId, TokenHash]),
+    %?info("Session: ~p ~p", [SessionUserGID, SessionAccessToken]),
+    %?info("CTX for msg: ~p ~p", [GlobalId, TokenHash]),
 
     {UserGID, AccessToken} =
         try {SessionUserGID =/= undefined orelse not registry_openid:client_verify(GlobalId, TokenHash), SessionAccessToken} of
@@ -271,7 +272,7 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                 throw({unable_to_authenticate, MsgId})
         end,
 
-    ?info("CTX1 for msg: ~p ~p", [UserGID, AccessToken]),
+    %?info("CTX1 for msg: ~p ~p", [UserGID, AccessToken]),
 
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->
@@ -435,18 +436,23 @@ decode_answer_pb(MsgBytes, DN) ->
                        _:_ -> throw(wrong_message_format)
                    end,
 
-    #answer{message_type = MsgType, worker_answer = Input, message_id = MsgId} = DecodedBytes,
+    #answer{message_type = MsgType, worker_answer = Input, message_id = MsgId, message_decoder_name = DecoderName} = DecodedBytes,
     ?info("Decoding answer ~p", [DecodedBytes]),
 
+    DecoderName1 = case DecoderName of
+                       [] -> "fuse_messages";
+                       _  -> DecoderName
+                   end,
+
     Msg = try
-        erlang:apply(fuse_messages_pb, list_to_atom("decode_" ++ MsgType), [Input])
+        erlang:apply(list_to_atom(DecoderName1 ++ "_pb"), list_to_atom("decode_" ++ MsgType), [Input])
           catch
               _:_ -> throw({wrong_internal_message_type, MsgId})
           end,
 
-    TranslatedMsg = records_translator:translate(Msg, "fuse_messages"),
+    TranslatedMsg = records_translator:translate(Msg, DecoderName1),
     case checkMessage(TranslatedMsg, DN) of
-        true -> {TranslatedMsg, MsgId};
+        true -> {TranslatedMsg, MsgId, DecoderName1, MsgType};
         false -> throw({message_not_supported, MsgId})
     end.
 
@@ -459,11 +465,12 @@ decode_providermsg_pb(MsgBytes, DN) ->
 
     #providermsg{message_type = MsgType, input = Input, fuse_id = FuseID} = DecodedBytes,
     ?info("FuseID from providermsg: ~p", [FuseID]),
+    FuseID1 = case FuseID of undefined -> "cluster_fid"; _ -> FuseID end,
     case MsgType of
         "clustermsg" ->
-            {pull, case FuseID of undefined -> "cluster_fid"; _ -> FuseID end, decode_clustermsg_pb(Input, DN)};
+            {pull, FuseID1, decode_clustermsg_pb(Input, DN)};
         "answer" ->
-            {push, decode_answer_pb(Input, DN)}
+            {push, FuseID1, decode_answer_pb(Input, DN)}
     end.
 
 

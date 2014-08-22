@@ -53,38 +53,13 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% ====================================================================
 rest_init(Req, _Opts) when Req#http_req.path_info =:= [?connection_check_path] ->
     % when checking connection, continue without cert verification
-    do_init(Req);
+    init_state(Req);
 rest_init(Req, _Opts) ->
-    {OtpCert, Certs} = try
-        {ok, PeerCert} = ssl:peercert(cowboy_req:get(socket, Req)),
-        {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
-        [{_, [TryOtpCert | TryCerts], _}] = ets:lookup(gsi_state, {Serial, Issuer}),
-        {TryOtpCert, TryCerts}
-                       catch
-                           _:_ ->
-                               ?error("[REST] Peer connected but cerificate chain was not found. Please check if GSI validation is enabled."),
-                               erlang:error(invalid_cert)
-                       end,
-
-    case gsi_handler:call(gsi_nif, verify_cert_c,
-        [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate
-            [public_key:pkix_encode('OTPCertificate', Cert, otp) || Cert <- Certs], %% peer CA chain
-            [DER || [DER] <- ets:match(gsi_state, {{ca, '_'}, '$1', '_'})],         %% cluster CA store
-            [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
-        {ok, 1} ->
-            {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
-            {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
-            {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
-            {ok, _Req, _State} = do_init(Req, DnString);
-        {ok, 0, Errno} ->
-            ?info("[REST] Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
-            erlang:error({gsi_error_code, Errno});
-        {error, Reason} ->
-            ?error("[REST] GSI peer verification callback error: ~p", [Reason]),
-            erlang:error(Reason);
-        Other ->
-            ?error("[REST] GSI verification callback returned unknown response ~p", [Other]),
-            erlang:error({gsi_unknown_response, Other})
+    {ok,DnString} = rest_utils:verify_peer_cert(Req),
+    Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req),
+    case rest_utils:prepare_context(DnString) of
+        ok -> init_state(Req2);
+        Error -> {ok,Req2,Error}
     end.
 
 
@@ -108,7 +83,7 @@ allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
     % Check if requested version is supported
     case proplists:get_value(RequestedVersion, MethodsVersionInfo, undefined) of
         undefined ->
-            NewReq = reply_with_error(Req2, warning, ?error_version_unsupported, [binary_to_list(RequestedVersion)]),
+            NewReq = rest_utils:reply_with_error(Req2, warning, ?error_version_unsupported, [binary_to_list(RequestedVersion)]),
             {halt, NewReq, State};
         AllowedMethods ->
             {Method, _} = cowboy_req:method(Req2),
@@ -122,7 +97,7 @@ allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
                     % Check if content-type is acceptable (for PUT or POST)
                     case (Method =/= <<"POST">> andalso Method =/= <<"PUT">>) orelse (content_type_supported(Req2)) of
                         false ->
-                            NewReq = reply_with_error(Req2, warning, ?error_media_type_unsupported, []),
+                            NewReq = rest_utils:reply_with_error(Req2, warning, ?error_media_type_unsupported, []),
                             {halt, NewReq, State};
                         true ->
                             {AllowedMethods, Req2, State#state{version = RequestedVersion}}
@@ -135,8 +110,8 @@ allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
 % because cowboy doesn't allow returning errors in rest_init.
 allowed_methods(Req, {error, Type}) ->
     NewReq = case Type of
-                 path_invalid -> reply_with_error(Req, warning, ?error_path_invalid, []);
-                 {user_unknown, DnString} -> reply_with_error(Req, error, ?error_user_unknown, [DnString])
+                 path_invalid -> rest_utils:reply_with_error(Req, warning, ?error_path_invalid, []);
+                 {user_unknown, DnString} -> rest_utils:reply_with_error(Req, error, ?error_user_unknown, [DnString])
              end,
     {halt, NewReq, error}.
 
@@ -265,10 +240,9 @@ handle_json_data(Req, #state{handler_module = Mod, version = Version, resource_i
 %% @end
 -spec handle_multipart_data(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
-handle_multipart_data(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) ->
+handle_multipart_data(Req, #state{handler_module = Mod, version = Version, resource_id = Id, method = Method} = State) ->
     {Result, NewReq} = case erlang:function_exported(Mod, handle_multipart_data, 4) of
                            true ->
-                               {Method, _} = cowboy_req:method(Req),
                                {Answer, Req2} = Mod:handle_multipart_data(Req, Version, Method, Id),
                                process_callback_answer(Answer, Req2);
                            false ->
@@ -294,6 +268,17 @@ delete_resource(Req, #state{handler_module = Mod, version = Version, resource_id
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+init_state(Req) ->
+    {Method, _} = cowboy_req:method(Req),
+    {Version, _} = cowboy_req:binding(version, Req), % :version in cowboy router
+    {PathInfo, _} = cowboy_req:path_info(Req),
+    case rest_routes:route(PathInfo) of
+        {error, Error} ->
+            {ok, Req, {error,Error}};
+        {Module,Id} ->
+            {ok, Req, #state{version = Version, handler_module = Module, method = Method, resource_id = Id}}
+    end.
+
 
 %% handle_data/5
 %% ====================================================================
@@ -312,49 +297,12 @@ handle_data(Req, Mod, Version, Id, Data) ->
     process_callback_answer(Answer, Req2).
 
 
-%% do_init/1
-%% ====================================================================
-%% Initializes request context, without peer validation
-%% @end
--spec do_init(req()) -> {ok, req(), #state{} | {error, term()}}.
-%% ====================================================================
-do_init(Req) ->
-    Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req),
-    {PathInfo, _} = cowboy_req:path_info(Req2),
-    case rest_routes:route(PathInfo) of
-        undefined ->
-            {ok, Req2, {error, path_invalid}};
-        {Module, Id} ->
-            {Method, _} = cowboy_req:method(Req2),
-            {Version, _} = cowboy_req:binding(version, Req2), % :version in cowboy router
-            Req3 = cowboy_req:set_resp_header(<<"Access-Control-Allow-Origin">>, <<"*">>, Req2),
-            {ok, Req3, #state{version = Version, handler_module = Module, method = Method, resource_id = Id}}
-    end.
-%% do_init/2
-%% ====================================================================
-%% Initializes request context after the peer has been validated. Checks if user
-%% exists in the database and requested URI is supported.
-%% @end
--spec do_init(req(), string()) -> {ok, req(), #state{} | {error, term()}}.
-%% ====================================================================
-do_init(Req, DnString) ->
-    Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req),
-    case user_logic:get_user({dn, DnString}) of
-        {ok, _} ->
-            fslogic_context:set_user_dn(DnString),
-            ?info("[REST] Peer connected using certificate with subject: ~p ~n", [DnString]),
-            do_init(Req2);
-        _ ->
-            {ok, Req2, {error, {user_unknown, DnString}}}
-    end.
-
-
-%% process_callback_answer/1
+%% process_callback_answer/2
 %% ====================================================================
 %% Unifies replying from PUT / POST / DELETE requests - first argument is response
 %% from a callback, that should conform to rules specified in rest_module_behaviour
 %% @end
--spec process_callback_answer(term(), req()) -> {true | false, req()}.
+-spec process_callback_answer(term(), req()) -> {boolean(), req()}.
 %% ====================================================================
 process_callback_answer(Answer, Req) ->
     case Answer of
@@ -374,26 +322,7 @@ process_callback_answer(Answer, Req) ->
             {false, Req2}
     end.
 
-
-%% reply_with_error/2
-%% ====================================================================
-%% Replies with 500 error cose, content-type set to application/json and
-%% an error message
-%% @end
--spec reply_with_error(req(), atom(), {string(), string()}, list()) -> req().
-%% ====================================================================
-reply_with_error(Req, Severity, ErrorDesc, Args) ->
-    ErrorRec = case Severity of
-                   warning -> ?report_warning(ErrorDesc, Args);
-                   error -> ?report_error(ErrorDesc, Args);
-                   alert -> ?report_alert(ErrorDesc, Args)
-               end,
-    Req2 = cowboy_req:set_resp_body(rest_utils:error_reply(ErrorRec), Req),
-    {ok, Req3} = cowboy_req:reply(500, Req2),
-    Req3.
-
-
-%% content_type_supported/2
+%% content_type_supported/1
 %% ====================================================================
 %% Checks if request content-type is supported by rest modules.
 %% @end

@@ -189,7 +189,7 @@ handle_multipart_data(Req, _Version, Method, Id) ->
 -spec list_dir_to_json(string()) -> {body, binary()} | {error, binary()}.
 %% ====================================================================
 list_dir_to_json(Path) ->
-    case list_dir(Path) of
+    case rest_utils:list_dir(Path) of
         {error, not_a_dir} ->
             {error, <<"error: not a dir">>};
         DirList ->
@@ -202,22 +202,3 @@ list_dir_to_json(Path) ->
     end.
 
 
-%% list_dir/1
-%% ====================================================================
-%% @doc List the given directory, calling itself recursively if there is more to fetch.
-%% @end
--spec list_dir(string()) -> [string()].
-%% ====================================================================
-list_dir(Path) ->
-    list_dir(Path, 0, 10, []).
-
-list_dir(Path, Offset, Count, Result) ->
-    case logical_files_manager:ls(Path, Count, Offset) of
-        {ok, FileList} ->
-            case length(FileList) of
-                Count -> list_dir(Path, Offset + Count, Count * 10, Result ++ FileList);
-                _ -> Result ++ FileList
-            end;
-        _ ->
-            {error, not_a_dir}
-    end.

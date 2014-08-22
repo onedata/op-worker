@@ -54,7 +54,7 @@ integration_test(Config) ->
     % Open
     {ErrorCode1, FFI} = rpc:call(FSLogicNode, veilhelpers, exec, [open, SHInfo, [?TEST_FILE1, #st_fuse_file_info{flags = ?O_RDWR}]]), %% Open is optional, just for preformance boost
     ?assertEqual(0, ErrorCode1),
-    ?assertEqual(?O_RDWR, FFI#st_fuse_file_info.flags),
+    ?assert(FFI#st_fuse_file_info.flags band ?O_RDWR =/= 0),
 
     % Write
     ErrorCode2 = rpc:call(FSLogicNode, veilhelpers, exec, [write, SHInfo, [?TEST_FILE1, <<"file content">>, 0, FFI]]),

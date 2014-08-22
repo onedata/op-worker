@@ -96,7 +96,7 @@ maybe_handle_message(RequestBody, SpaceId) ->
             {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(RerouteToProvider),
             ?info("Reroute to: ~p", [URLs]),
             try
-                provider_proxy:reroute_pull_message({RerouteToProvider, URLs}, fslogic_context:get_access_token(),
+                provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
                     fslogic_context:get_fuse_id(), #remotefilemangement{space_id = SpaceId, input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
             catch
                 Type:Reason ->

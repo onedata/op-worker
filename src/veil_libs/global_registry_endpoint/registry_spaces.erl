@@ -10,7 +10,6 @@
 -author("Rafal Slota").
 
 -include_lib("ctool/include/logging.hrl").
--include("veil_modules/dao/dao_types.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
 
 %% API
@@ -21,6 +20,8 @@
 %% API functions
 %% ====================================================================
 
+get_space_info(SpaceId, undefined) ->
+    get_space_info(SpaceId, {undefined, undefined});
 get_space_info(SpaceId, {UserGID, AccessToken}) ->
     ?info("get_space_info ~p ~p", [SpaceId, {UserGID, AccessToken}]),
     case global_registry:try_user_request(AccessToken, get, <<"spaces/", (vcn_utils:ensure_binary(SpaceId))/binary>>) of

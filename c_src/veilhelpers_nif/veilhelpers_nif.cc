@@ -15,9 +15,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/fsuid.h>
 #include <pwd.h>
 #include <grp.h>
+
+#ifndef __APPLE__
+#include <sys/fsuid.h>
+#endif
 
 #include <cstring>
 #include <memory>
@@ -64,8 +67,10 @@ public:
 
     ~UserCTX()
     {
+#ifndef __APPLE__
         setfsuid(0);
         setfsgid(0);
+#endif
     }
 
     uid_t uid()
@@ -87,13 +92,16 @@ private:
         m_uid = uid;
         m_gid = gid;
 
+#ifndef __APPLE__
         if(uid != 0) {
-            seteuid(-1);
+            setgroups(0, nullptr);
             setegid(-1);
+            seteuid(-1);
         }
 
         setfsuid(m_uid);
         setfsgid(m_gid);
+#endif
     }
 
     uid_t uNameToUID(std::string uname)
@@ -229,6 +237,7 @@ static ERL_NIF_TERM sh_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     INIT;
   
     struct fuse_file_info ffi = get_ffi(env, argv[5]);
+    ffi.flags |= O_NOFOLLOW;
     int ret = sh->sh_open(get_string(env, argv[4]).c_str(), &ffi);
 
     return enif_make_tuple2(env, enif_make_int(env, ret), make_ffi(env, ffi));
