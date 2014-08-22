@@ -29,7 +29,7 @@
 %% Cowboy callbacks
 -export([init/3, handle/2, terminate/3]).
 %% Functions used in external modules (e.g. rest_handlers)
--export([handle_upload_request/1, handle_rest_upload/3]).
+-export([handle_http_upload/1, handle_rest_upload/3]).
 
 
 %% ====================================================================
@@ -52,7 +52,7 @@ init(_Type, Req, _Opts) ->
 -spec handle(term(), term()) -> {ok, term(), term()}.
 %% ====================================================================
 handle(Req, State) ->
-    {ok, NewReq} = handle_upload_request(Req),
+    {ok, NewReq} = handle_http_upload(Req),
     {ok, NewReq, State}.
 
 
@@ -69,15 +69,15 @@ terminate(_Reason, _Req, _State) ->
 %% API functions
 %% ====================================================================
 
-%% handle_upload_request/1
+%% handle_http_upload/1
 %% ====================================================================
 %% @doc Asserts the validity of multipart POST request and proceeds with
 %% parsing or returns an error. Returns list of parsed filed values and
 %% file body.
 %% @end
--spec handle_upload_request(req()) -> {ok, req()}.
+-spec handle_http_upload(req()) -> {ok, req()}.
 %% ====================================================================
-handle_upload_request(Req) ->
+handle_http_upload(Req) ->
     % Try to initialize session handler and retrieve user's session
     InitSession =
         try
@@ -137,25 +137,31 @@ handle_upload_request(Req) ->
 -spec handle_rest_upload(Req :: req(), Path :: string(), Overwrite :: boolean()) -> {ok, req()}.
 %% ====================================================================
 handle_rest_upload(Req, Path, Overwrite) ->
-    case cowboy_req:parse_header(<<"content-length">>, Req) of
-        {ok, Length, NewReq} when is_integer(Length) ->
-            case try_to_create_file(Path, Overwrite) of
-                ok ->
-                    case parse_rest_upload(NewReq, Path) of
-                        {true, NewReq2} ->
-                            {{body, rest_utils:success_reply(?success_file_uploaded)}, NewReq2};
-                        {false, NewReq2} ->
-                            ErrorRec = ?report_error(?error_upload_unprocessable),
-                            {{error, rest_utils:error_reply(ErrorRec)}, NewReq2}
-                    end;
-                {error, _Error} ->
-                    ?error("Cannot upload file due to: ~p", [_Error]),
-                    ErrorRec = ?report_error(?error_upload_cannot_create),
-                    {{error, rest_utils:error_reply(ErrorRec)}, NewReq}
-            end;
-        _ ->
-            ErrorRec = ?report_error(?error_upload_unprocessable),
-            {{error, rest_utils:error_reply(ErrorRec)}, Req}
+    try
+        case cowboy_req:parse_header(<<"content-length">>, Req) of
+            {ok, Length, NewReq} when is_integer(Length) ->
+                case try_to_create_file(Path, Overwrite) of
+                    ok ->
+                        case parse_rest_upload(NewReq, Path) of
+                            {true, NewReq2} ->
+                                {{body, rest_utils:success_reply(?success_file_uploaded)}, NewReq2};
+                            {false, NewReq2} ->
+                                ErrorRec = ?report_error(?error_upload_unprocessable),
+                                {{error, rest_utils:error_reply(ErrorRec)}, NewReq2}
+                        end;
+                    {error, _Error} ->
+                        ?error("Cannot upload file due to: ~p", [_Error]),
+                        ErrorRec = ?report_error(?error_upload_cannot_create),
+                        {{error, rest_utils:error_reply(ErrorRec)}, NewReq}
+                end;
+            _ ->
+                ErrorRec = ?report_error(?error_upload_unprocessable),
+                {{error, rest_utils:error_reply(ErrorRec)}, Req}
+        end
+    catch        Type:Message ->
+        ?error_stacktrace("Cannot upload file - ~p:~p", [Type,Message]),
+        ErrorRec2 = ?report_error(?error_upload_unprocessable),
+        {{error, rest_utils:error_reply(ErrorRec2)}, Req}
     end.
 
 
