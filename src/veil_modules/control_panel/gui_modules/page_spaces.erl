@@ -238,7 +238,7 @@ space_row_collapsed(SpaceId, RowId, Default) ->
                                     }
                                 },
                                 #td{
-                                    style = <<"border-width: 0; padding-left: 0; padding-right: 0;">>,
+                                    style = <<"border-width: 0; padding-left: 0;">>,
                                     body = #label{
                                         id = LabelId,
                                         style = ?LABEL_STYLE,
