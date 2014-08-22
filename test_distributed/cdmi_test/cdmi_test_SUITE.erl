@@ -132,33 +132,34 @@ get_file_test(_Config) ->
 % Tests dir creation (cdmi container PUT), remember that every container URI ends
 % with '/'
 create_dir_test(_Config) ->
-    DirName = "/toCreate/",
-    MissingParentName="/unknown/",
+    DirName = "toCreate/",
+    DirName2 = "toCreate2/",
+    MissingParentName="unknown/",
     DirWithoutParentName = filename:join(MissingParentName,"dir")++"/",
 
-    %%---- missing content type ----
+    %%------ non-cdmi create -------
     ?assert(not object_exists(DirName)),
 
     {Code1, _Headers1, _Response1} = do_request(DirName, put, [], []),
-    ?assertEqual("415",Code1),
+    ?assertEqual("201",Code1),
 
-    ?assert(not object_exists(DirName)),
+    ?assert(object_exists(DirName)),
     %%------------------------------
 
     %%------ basic create ----------
-    ?assert(not object_exists(DirName)),
+    ?assert(not object_exists(DirName2)),
 
     RequestHeaders2 = [{"content-type", "application/cdmi-container"},{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code2, _Headers2, Response2} = do_request(DirName, put, RequestHeaders2, []),
+    {Code2, _Headers2, Response2} = do_request(DirName2, put, RequestHeaders2, []),
     ?assertEqual("201",Code2),
     {struct,CdmiPesponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>,CdmiPesponse2)),
-    ?assertEqual(<<"toCreate/">>, proplists:get_value(<<"objectName">>,CdmiPesponse2)),
+    ?assertEqual(list_to_binary(DirName2), proplists:get_value(<<"objectName">>,CdmiPesponse2)),
     ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiPesponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse2)),
     ?assertEqual([], proplists:get_value(<<"children">>,CdmiPesponse2)),
 
-    ?assert(object_exists(DirName)),
+    ?assert(object_exists(DirName2)),
     %%------------------------------
 
     %%----- creation conflict ------

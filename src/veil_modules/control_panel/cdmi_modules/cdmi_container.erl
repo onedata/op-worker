@@ -16,7 +16,7 @@
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
--export([get_cdmi_container/2, put_cdmi_container/2]).
+-export([get_cdmi_container/2, put_cdmi_container/2, put_binary/2]).
 
 %% allowed_methods/2
 %% ====================================================================
@@ -86,6 +86,10 @@ content_types_provided(Req, State) ->
     ContentType :: binary(),
     Method :: atom().
 %% ====================================================================
+content_types_accepted(Req, #state{cdmi_version = undefined} = State) ->
+    {[
+        {'*', put_binary}
+    ], Req, State};
 content_types_accepted(Req, State) ->
     {[
         {<<"application/cdmi-container">>, put_cdmi_container}
@@ -138,6 +142,27 @@ put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
             Response = rest_utils:encode_to_json({struct, prepare_container_ans(?default_get_dir_opts, State)}),
             Req2 = cowboy_req:set_resp_body(Response, Req),
             {true, Req2, State};
+        {error, dir_exists} ->
+            {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
+            {halt, Req2, State};
+        {logical_file_system_error, "enoent"} ->
+            {ok, Req2} = cowboy_req:reply(?error_not_found_code, Req),
+            {halt, Req2, State};
+        _ ->
+            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+            {halt, Req2, State}
+    end.
+
+%% put_binary/2
+%% ====================================================================
+%% @doc Callback function for cdmi container PUT operation with non-cdmi
+%% body content-type.
+%% @end
+-spec put_binary(req(), #state{}) -> {term(), req(), #state{}}.
+%% ====================================================================
+put_binary(Req, #state{filepath = Filepath} = State) ->
+    case logical_files_manager:mkdir(Filepath) of
+        ok -> {true, Req, State};
         {error, dir_exists} ->
             {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
             {halt, Req2, State};

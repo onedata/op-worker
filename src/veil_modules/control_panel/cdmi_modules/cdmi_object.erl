@@ -95,7 +95,7 @@ content_types_provided(Req, State) ->
 %% ====================================================================
 content_types_accepted(Req, #state{cdmi_version = undefined} = State) ->
     {[
-        {<<"application/binary">>, put_binary}
+        {'*', put_binary}
     ], Req, State};
 content_types_accepted(Req, State) ->
     {[
