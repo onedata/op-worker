@@ -140,7 +140,7 @@ body() ->
                                 },
                                 #th{
                                     style = ?NAVIGATION_COLUMN_STYLE,
-                                    body = spinner()
+                                    body = vcn_gui_utils:spinner()
                                 }
                             ]
                         }
@@ -170,9 +170,9 @@ spaces_table(Expanded, Spaces) ->
                 style = ?NAVIGATION_COLUMN_STYLE,
                 body = case Expanded of
                            true ->
-                               collapse_button(<<"Collapse All">>, {spaces_table_collapse, <<"space_all_option">>});
+                               vcn_gui_utils:collapse_button(<<"Collapse All">>, {spaces_table_collapse, <<"space_all_option">>});
                            false ->
-                               expand_button(<<"Expand All">>, {spaces_table_expand, <<"space_all_option">>})
+                               vcn_gui_utils:expand_button(<<"Expand All">>, {spaces_table_expand, <<"space_all_option">>})
                        end
             }
         ]
@@ -254,13 +254,13 @@ space_row_collapsed(SpaceId, RowId, Default) ->
             #td{
                 id = OptionId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = expand_button({space_row_expand, SpaceId, RowId, OptionId, Default})
+                body = vcn_gui_utils:expand_button({space_row_expand, SpaceId, RowId, OptionId, Default})
             }
         ]
     catch
         _:Reason ->
             ?error("Cannot fetch details of Space with ID: ~p: ~p", [SpaceId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch details of Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch details of Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
             []
     end.
 
@@ -345,13 +345,13 @@ space_row_expanded(SpaceId, RowId, Default) ->
             #td{
                 id = OptionId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = collapse_button({space_row_collapse, SpaceId, RowId, OptionId, Default})
+                body = vcn_gui_utils:collapse_button({space_row_collapse, SpaceId, RowId, OptionId, Default})
             }
         ]
     catch
         _:Reason ->
             ?error("Cannot fetch details of Space with ID: ~p: ~p", [SpaceId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch details of Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch details of Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
             []
     end.
 
@@ -368,131 +368,6 @@ add_space_row(SpaceId, RowId) ->
         cells = space_row_collapsed(SpaceId, RowId, false)
     },
     gui_jq:insert_bottom(<<"spaces">>, Row).
-
-
-%% collapse_button/1
-%% ====================================================================
-%% @doc Renders collapse button.
--spec collapse_button(Postback :: term()) -> Result when
-    Result :: #link{}.
-%% ====================================================================
-collapse_button(Postback) ->
-    collapse_button(<<"Collapse">>, Postback).
-
-
-%% collapse_button/2
-%% ====================================================================
-%% @doc Renders collapse button.
--spec collapse_button(Title :: binary(), Postback :: term()) -> Result when
-    Result :: #link{}.
-%% ====================================================================
-collapse_button(Title, Postback) ->
-    #link{
-        title = Title,
-        class = <<"glyph-link">>,
-        postback = Postback,
-        body = #span{
-            style = <<"font-size: large; vertical-align: top;">>,
-            class = <<"fui-triangle-up">>
-        }
-    }.
-
-
-%% expand_button/1
-%% ====================================================================
-%% @doc Renders expand button.
--spec expand_button(Postback :: term()) -> Result when
-    Result :: #link{}.
-%% ====================================================================
-expand_button(Postback) ->
-    expand_button(<<"Expand">>, Postback).
-
-
-%% expand_button/2
-%% ====================================================================
-%% @doc Renders expand button.
--spec expand_button(Title :: binary(), Postback :: term()) -> Result when
-    Result :: #link{}.
-%% ====================================================================
-expand_button(Title, Postback) ->
-    #link{
-        title = Title,
-        class = <<"glyph-link">>,
-        postback = Postback,
-        body = #span{
-            style = <<"font-size: large;  vertical-align: top;">>,
-            class = <<"fui-triangle-down">>
-        }
-    }.
-
-
-%% message/3
-%% ====================================================================
-%% @doc Renders a message in given element and allows to hide this message.
--spec message(Id :: binary(), Message :: binary()) -> Result when
-    Result :: ok.
-%% ====================================================================
-message(Id, Message) ->
-    Body = [
-        Message,
-        #link{
-            title = <<"Close">>,
-            style = <<"position: absolute; right: 1em; top: 1em;">>,
-            class = <<"glyph-link">>,
-            postback = {close_message, Id},
-            body = #span{
-                class = <<"fui-cross">>
-            }
-        }
-    ],
-    gui_jq:update(Id, Body),
-    gui_jq:fade_in(Id, 300).
-
-
-%% dialog_popup/3
-%% ====================================================================
-%% @doc Displays custom dialog popup.
--spec dialog_popup(Title :: binary(), Message :: binary(), Script :: binary()) -> binary().
-%% ====================================================================
-dialog_popup(Title, Message, Script) ->
-    gui_jq:wire(<<"var box = bootbox.dialog({
-        title: '", Title/binary, "',
-        message: '", Message/binary, "',
-        buttons: {
-            'Cancel': {
-                className: 'cancel'
-            },
-            'OK': {
-                className: 'btn-primary confirm',
-                callback: function() {", Script/binary, "}
-            }
-        }
-    });">>).
-
-
-%% bind_key_to_click/2
-%% ====================================================================
-%% @doc Makes any keypresses of given key to click on selected class.
-%% @end
--spec bind_key_to_click(KeyCode :: binary(), TargetID :: binary()) -> string().
-%% ====================================================================
-bind_key_to_click(KeyCode, TargetID) ->
-    Script = <<"$(document).bind('keydown', function (e){",
-    "if (e.which == ", KeyCode/binary, ") { e.preventDefault(); $('", TargetID/binary, "').click(); } });">>,
-    gui_jq:wire(Script, false).
-
-
-%% spinner/0
-%% ====================================================================
-%% @doc Renders spinner GIF.
--spec spinner() -> Result when
-    Result :: #image{}.
-%% ====================================================================
-spinner() ->
-    #image{
-        image = <<"/images/spinner.gif">>,
-        style = <<"width: 1.5em;">>
-    }.
 
 
 %% get_space_row_id/1
@@ -522,12 +397,12 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                 NewState =
                     case gr_users:create_space({user, vcn_gui_utils:get_access_token()}, [{<<"name">>, Name}]) of
                         {ok, SpaceId} ->
-                            message(<<"ok_message">>, <<"Created Space ID: <b>", SpaceId/binary, "</b>">>),
+                            vcn_gui_utils:message(<<"ok_message">>, <<"Created Space ID: <b>", SpaceId/binary, "</b>">>),
                             RowId = get_space_row_id(Counter + 1),
                             add_space_row(SpaceId, RowId),
                             State#?STATE{counter = Counter + 1, space_rows = SpaceRows ++ [{SpaceId, #?SPACE_ROW{id = RowId, expanded = false, default = false}}]};
                         _ ->
-                            message(<<"error_message">>, <<"Cannot create Space: <b>", Name/binary, "</b>.<br>Please try again later.">>),
+                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot create Space: <b>", Name/binary, "</b>.<br>Please try again later.">>),
                             State
                     end,
                 gui_jq:hide(<<"main_spinner">>),
@@ -540,12 +415,12 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                 NewState =
                     case gr_users:join_space({user, vcn_gui_utils:get_access_token()}, [{<<"token">>, Token}]) of
                         {ok, SpaceId} ->
-                            message(<<"ok_message">>, <<"Joined Space ID: <b>", SpaceId/binary, "</b>">>),
+                            vcn_gui_utils:message(<<"ok_message">>, <<"Joined Space ID: <b>", SpaceId/binary, "</b>">>),
                             RowId = get_space_row_id(Counter + 1),
                             add_space_row(SpaceId, RowId),
                             State#?STATE{counter = Counter + 1, space_rows = SpaceRows ++ [{SpaceId, #?SPACE_ROW{id = RowId, expanded = false, default = false}}]};
                         _ ->
-                            message(<<"error_message">>, <<"Cannot join Space using token: <b>", Token/binary, "</b>.<br>Please try again later.">>),
+                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot join Space using token: <b>", Token/binary, "</b>.<br>Please try again later.">>),
                             State
                     end,
                 gui_jq:hide(<<"main_spinner">>),
@@ -573,7 +448,7 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                             }),
                             State#?STATE{space_rows = NewSpaceRows};
                         _ ->
-                            message(<<"error_message">>, <<"Cannot set Space: <b>", SpaceName/binary, "</b> as a default Space.<br>Please try again later.">>),
+                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot set Space: <b>", SpaceName/binary, "</b> as a default Space.<br>Please try again later.">>),
                             gui_jq:update(OptionId, #span{class = <<"fui-home">>}),
                             State
                     end,
@@ -584,7 +459,7 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                 NewState =
                     case gr_users:leave_space({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                         ok ->
-                            message(<<"ok_message">>, <<"Space: <b>", SpaceName/binary, "</b> left successfully.">>),
+                            vcn_gui_utils:message(<<"ok_message">>, <<"Space: <b>", SpaceName/binary, "</b> left successfully.">>),
                             gui_jq:remove(RowId),
                             case SpaceRows of
                                 [{SpaceId, _}, {NextSpaceId, NextSpaceRow} | RestSpaceRows] ->
@@ -594,7 +469,7 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                                     State#?STATE{space_rows = proplists:delete(SpaceId, SpaceRows)}
                             end;
                         _ ->
-                            message(<<"error_message">>, <<"Cannot leave Space: <b>", SpaceName/binary, "</b>.<br>Please try again later.">>),
+                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot leave Space: <b>", SpaceName/binary, "</b>.<br>Please try again later.">>),
                             gui_jq:update(OptionId, #span{class = <<"fui-exit">>}),
                             State
                     end,
@@ -605,7 +480,7 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                 NewState =
                     case gr_spaces:remove({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                         ok ->
-                            message(<<"ok_message">>, <<"Space: <b>", SpaceName/binary, "</b> deleted successfully.">>),
+                            vcn_gui_utils:message(<<"ok_message">>, <<"Space: <b>", SpaceName/binary, "</b> deleted successfully.">>),
                             gui_jq:remove(RowId),
                             case SpaceRows of
                                 [{SpaceId, _}, {NextSpaceId, NextSpaceRow} | RestSpaceRows] ->
@@ -615,7 +490,7 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                                     State#?STATE{space_rows = proplists:delete(SpaceId, SpaceRows)}
                             end;
                         _ ->
-                            message(<<"error_message">>, <<"Cannot delete Space: <b>", SpaceName/binary, "</b>.<br>Please try again later.">>),
+                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot delete Space: <b>", SpaceName/binary, "</b>.<br>Please try again later.">>),
                             gui_jq:update(OptionId, #span{class = <<"fui-trash">>}),
                             State
                     end,
@@ -663,7 +538,7 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
         end
                         catch Type:Reason ->
                             ?error("Comet process exception: ~p:~p", [Type, Reason]),
-                            message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+                            vcn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
                             gui_comet:flush(),
                             {error, Reason}
                         end,
@@ -682,7 +557,7 @@ event(init) ->
             gui_jq:wire(#api{name = "joinSpace", tag = "joinSpace"}, false),
             gui_jq:wire(#api{name = "leaveSpace", tag = "leaveSpace"}, false),
             gui_jq:wire(#api{name = "deleteSpace", tag = "deleteSpace"}, false),
-            bind_key_to_click(<<"13">>, <<"button.confirm">>),
+            gui_jq:bind_key_to_click(<<"13">>, <<"button.confirm">>),
             SpaceRows = lists:map(fun({SpaceId, Counter}) ->
                 {SpaceId, #?SPACE_ROW{id = get_space_row_id(Counter), expanded = false, default = (Counter == 1)}}
             end, lists:zip(SpaceIds, tl(lists:seq(0, length(SpaceIds))))),
@@ -692,7 +567,7 @@ event(init) ->
             Pid ! render_spaces_table,
             put(?COMET_PID, Pid);
         _ ->
-            message(<<"error_message">>, <<"Cannot fetch supported Spaces.<br>Please try again later.">>)
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch supported Spaces.<br>Please try again later.">>)
     end;
 
 event(create_space) ->
@@ -705,7 +580,7 @@ event(create_space) ->
     "var name = $.trim($(\"#create_space_name\").val());",
     "if(name.length == 0) { alert.html(\"Please provide Space name.\"); alert.fadeIn(300); return false; }",
     "else { createSpace([name]); return true; }">>,
-    dialog_popup(Title, Message, Script),
+    gui_jq:dialog_popup(Title, Message, Script),
     gui_jq:wire(<<"box.on('shown',function(){ $(\"#create_space_name\").focus(); });">>);
 
 event(join_space) ->
@@ -718,7 +593,7 @@ event(join_space) ->
     "var token = $.trim($(\"#join_space_token\").val());",
     "if(token.length == 0) { alert.html(\"Please provide Space token.\"); alert.fadeIn(300); return false; }",
     "else { joinSpace([token]); return true; }">>,
-    dialog_popup(Title, Message, Script),
+    gui_jq:dialog_popup(Title, Message, Script),
     gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_space_token\").focus(); });">>);
 
 event({manage_space, SpaceId}) ->
@@ -726,33 +601,33 @@ event({manage_space, SpaceId}) ->
 
 event({set_default_space, SpaceName, SpaceId, RowId, OptionId}) ->
     get(?COMET_PID) ! {set_default_space, SpaceName, SpaceId, RowId, OptionId},
-    gui_jq:update(OptionId, spinner());
+    gui_jq:update(OptionId, vcn_gui_utils:spinner());
 
 event({leave_space, SpaceName, SpaceId, RowId, OptionId}) ->
     Message = <<"Are you sure you want to leave Space:<br><b>", SpaceName/binary, " ( ", SpaceId/binary, " ) </b>?">>,
     Script = <<"leaveSpace(['", SpaceName/binary, "','", SpaceId/binary, "','", RowId/binary, "','", OptionId/binary, "']);">>,
-    dialog_popup(<<"Leave Space">>, Message, Script);
+    gui_jq:dialog_popup(<<"Leave Space">>, Message, Script);
 
 event({delete_space, SpaceName, SpaceId, RowId, OptionId}) ->
     Message = <<"Are you sure you want to delete Space:<br><b>", SpaceName/binary, " ( ", SpaceId/binary, " ) </b>?">>,
     Script = <<"deleteSpace(['", SpaceName/binary, "','", SpaceId/binary, "','", RowId/binary, "','", OptionId/binary, "']);">>,
-    dialog_popup(<<"Delete Space">>, Message, Script);
+    gui_jq:dialog_popup(<<"Delete Space">>, Message, Script);
 
 event({spaces_table_collapse, OptionId}) ->
     get(?COMET_PID) ! spaces_table_collapse,
-    gui_jq:update(OptionId, spinner());
+    gui_jq:update(OptionId, vcn_gui_utils:spinner());
 
 event({spaces_table_expand, OptionId}) ->
     get(?COMET_PID) ! spaces_table_expand,
-    gui_jq:update(OptionId, spinner());
+    gui_jq:update(OptionId, vcn_gui_utils:spinner());
 
 event({space_row_collapse, SpaceId, RowId, OptionId, Default}) ->
     get(?COMET_PID) ! {space_row_collapse, SpaceId, RowId, Default},
-    gui_jq:update(OptionId, spinner());
+    gui_jq:update(OptionId, vcn_gui_utils:spinner());
 
 event({space_row_expand, SpaceId, RowId, OptionId, Default}) ->
     get(?COMET_PID) ! {space_row_expand, SpaceId, RowId, Default},
-    gui_jq:update(OptionId, spinner());
+    gui_jq:update(OptionId, vcn_gui_utils:spinner());
 
 event({close_message, MessageId}) ->
     gui_jq:hide(MessageId);
@@ -778,9 +653,9 @@ api_event("joinSpace", Args, _) ->
 api_event("leaveSpace", Args, _) ->
     [SpaceName, SpaceId, RowId, OptionId] = mochijson2:decode(Args),
     get(?COMET_PID) ! {leave_space, SpaceName, SpaceId, RowId, OptionId},
-    gui_jq:update(OptionId, spinner());
+    gui_jq:update(OptionId, vcn_gui_utils:spinner());
 
 api_event("deleteSpace", Args, _) ->
     [SpaceName, SpaceId, RowId, OptionId] = mochijson2:decode(Args),
     get(?COMET_PID) ! {delete_space, SpaceName, SpaceId, RowId, OptionId},
-    gui_jq:update(OptionId, spinner()).
+    gui_jq:update(OptionId, vcn_gui_utils:spinner()).

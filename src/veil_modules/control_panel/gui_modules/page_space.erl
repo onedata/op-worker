@@ -167,7 +167,7 @@ space(#space_details{id = SpaceId, name = Name}) ->
                                 },
                                 #th{
                                     style = ?NAVIGATION_COLUMN_STYLE,
-                                    body = spinner()
+                                    body = vcn_gui_utils:spinner()
                                 }
                             ]
                         }
@@ -195,7 +195,7 @@ space(#space_details{id = SpaceId, name = Name}) ->
                                 },
                                 #th{
                                     style = ?NAVIGATION_COLUMN_STYLE,
-                                    body = spinner()
+                                    body = vcn_gui_utils:spinner()
                                 }
                             ]
                         }
@@ -223,7 +223,7 @@ space(#space_details{id = SpaceId, name = Name}) ->
                                 },
                                 #th{
                                     style = ?NAVIGATION_COLUMN_STYLE,
-                                    body = spinner()
+                                    body = vcn_gui_utils:spinner()
                                 }
                             ]
                         }
@@ -265,34 +265,6 @@ space_name(SpaceId, Name) ->
     Result :: list().
 %% ====================================================================
 change_space_name(SpaceId, Name) ->
-%%     [
-%%         #textbox{
-%%             id = <<"new_username_textbox">>,
-%%             class = <<"span">>,
-%%             placeholder = <<"New username">>
-%%         },
-%%         #link{
-%%             id = <<"new_username_submit">>,
-%%             class = <<"glyph-link">>,
-%%             style = <<"margin-left: 1em;">>,
-%%             title = <<"Submit">>,
-%%             actions = gui_jq:form_submit_action(<<"new_username_submit">>, submit_new_username, <<"new_username_textbox">>),
-%%             body = #span{
-%%                 class = <<"fui-check-inverted">>,
-%%                 style = <<"font-size: large;">>
-%%             }
-%%         },
-%%         #link{
-%%             class = <<"glyph-link">>,
-%%             style = <<"margin-left: 10px;">>,
-%%             title = <<"Cancel">>,
-%%             postback = cancel_new_username_submit,
-%%             body = #span{
-%%                 class = <<"fui-cross-inverted">>,
-%%                 style = <<"font-size: large;">>
-%%             }
-%%         }
-%%     ].
     [
         #textbox{
             id = <<"new_space_name_textbox">>,
@@ -340,7 +312,7 @@ providers_table_collapsed(SpaceId) ->
             #th{
                 id = SpinnerId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = expand_button(<<"Expand All">>, {providers_table_expand, SpaceId, SpinnerId})
+                body = vcn_gui_utils:expand_button(<<"Expand All">>, {providers_table_expand, SpaceId, SpinnerId})
             }
         ]
     },
@@ -357,7 +329,7 @@ providers_table_collapsed(SpaceId) ->
     catch
         _:Reason ->
             ?error("Cannot fetch providers of Space with ID: ~p: ~p", [SpaceId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch providers of Space with ID: <b>", SpaceId/binary, "</b>."
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch providers of Space with ID: <b>", SpaceId/binary, "</b>."
             "<br>Please try again later.">>),
             [Header]
     end.
@@ -380,7 +352,7 @@ providers_table_expanded(SpaceId) ->
             #th{
                 id = SpinnerId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = collapse_button(<<"Collapse All">>, {providers_table_collapse, SpaceId, SpinnerId})
+                body = vcn_gui_utils:collapse_button(<<"Collapse All">>, {providers_table_collapse, SpaceId, SpinnerId})
             }
         ]
     },
@@ -397,7 +369,7 @@ providers_table_expanded(SpaceId) ->
     catch
         _:Reason ->
             ?error("Cannot fetch providers of Space with ID: ~p: ~p", [SpaceId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch providers of Space with ID: <b>", SpaceId/binary, "</b>."
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch providers of Space with ID: <b>", SpaceId/binary, "</b>."
             "<br>Please try again later.">>),
             [Header]
     end.
@@ -442,7 +414,7 @@ provider_row_collapsed(SpaceId, ProviderId, RowId) ->
         #td{
             id = SpinnerId,
             style = ?NAVIGATION_COLUMN_STYLE,
-            body = expand_button({provider_row_expand, SpaceId, ProviderId, RowId, SpinnerId})
+            body = vcn_gui_utils:expand_button({provider_row_expand, SpaceId, ProviderId, RowId, SpinnerId})
         }
     ].
 
@@ -534,13 +506,13 @@ provider_row_expanded(SpaceId, ProviderId, RowId) ->
             #td{
                 id = SpinnerId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = collapse_button({provider_row_collapse, SpaceId, ProviderId, RowId, SpinnerId})
+                body = vcn_gui_utils:collapse_button({provider_row_collapse, SpaceId, ProviderId, RowId, SpinnerId})
             }
         ]
     catch
         _:Reason ->
             ?error("Cannot fetch details of provider with ID: ~p: ~p", [ProviderId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch details of provider with ID: <b>", ProviderId/binary, "</b>."
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch details of provider with ID: <b>", ProviderId/binary, "</b>."
             "<br>Please try again later.">>),
             provider_row_collapsed(SpaceId, ProviderId, RowId)
     end.
@@ -563,7 +535,7 @@ users_table_collapsed(SpaceId) ->
             #th{
                 id = SpinnerId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = expand_button(<<"Expand All">>, {users_table_expand, SpaceId, SpinnerId})
+                body = vcn_gui_utils:expand_button(<<"Expand All">>, {users_table_expand, SpaceId, SpinnerId})
             }
         ]
     },
@@ -580,7 +552,7 @@ users_table_collapsed(SpaceId) ->
     catch
         _:Reason ->
             ?error("Cannot fetch users of Space with ID: ~p: ~p", [SpaceId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch users of Space with ID: <b>", SpaceId/binary, "</b>."
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch users of Space with ID: <b>", SpaceId/binary, "</b>."
             "<br>Please try again later.">>),
             [Header]
     end.
@@ -603,7 +575,7 @@ users_table_expanded(SpaceId) ->
             #th{
                 id = SpinnerId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = collapse_button(<<"Collapse All">>, {users_table_collapse, SpaceId, SpinnerId})
+                body = vcn_gui_utils:collapse_button(<<"Collapse All">>, {users_table_collapse, SpaceId, SpinnerId})
             }
         ]
     },
@@ -620,7 +592,7 @@ users_table_expanded(SpaceId) ->
     catch
         _:Reason ->
             ?error("Cannot fetch users of Space with ID: ~p: ~p", [SpaceId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch users of Space with ID: <b>", SpaceId/binary, "</b>."
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch users of Space with ID: <b>", SpaceId/binary, "</b>."
             "<br>Please try again later.">>),
             [Header]
     end.
@@ -667,13 +639,13 @@ user_row_collapsed(SpaceId, UserId, RowId) ->
             #td{
                 id = SpinnerId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = expand_button({user_row_expand, SpaceId, UserId, RowId, SpinnerId})
+                body = vcn_gui_utils:expand_button({user_row_expand, SpaceId, UserId, RowId, SpinnerId})
             }
         ]
     catch
         _:Reason ->
             ?error("Cannot fetch details of users with ID: ~p: ~p", [UserId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch details of user with ID: <b>", UserId/binary, "</b>."
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch details of user with ID: <b>", UserId/binary, "</b>."
             "<br>Please try again later.">>),
             []
     end.
@@ -720,13 +692,13 @@ user_row_expanded(SpaceId, UserId, RowId) ->
             #td{
                 id = SpinnerId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = collapse_button({user_row_collapse, SpaceId, UserId, RowId, SpinnerId})
+                body = vcn_gui_utils:collapse_button({user_row_collapse, SpaceId, UserId, RowId, SpinnerId})
             }
         ]
     catch
         _:Reason ->
             ?error("Cannot fetch details of users with ID: ~p: ~p", [UserId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch details of user with ID: <b>", UserId/binary, "</b>."
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch details of user with ID: <b>", UserId/binary, "</b>."
             "<br>Please try again later.">>),
             []
     end.
@@ -749,7 +721,7 @@ groups_table_collapsed(SpaceId) ->
             #th{
                 id = SpinnerId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = expand_button(<<"Expand All">>, {groups_table_expand, SpaceId, SpinnerId})
+                body = vcn_gui_utils:expand_button(<<"Expand All">>, {groups_table_expand, SpaceId, SpinnerId})
             }
         ]
     },
@@ -766,7 +738,7 @@ groups_table_collapsed(SpaceId) ->
     catch
         _:Reason ->
             ?error("Cannot fetch groups of Space with ID: ~p: ~p", [SpaceId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch groups of Space with ID: <b>", SpaceId/binary, "</b>."
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch groups of Space with ID: <b>", SpaceId/binary, "</b>."
             "<br>Please try again later.">>),
             [Header]
     end.
@@ -789,7 +761,7 @@ groups_table_expanded(SpaceId) ->
             #th{
                 id = SpinnerId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = collapse_button(<<"Collapse All">>, {groups_table_collapse, SpaceId, SpinnerId})
+                body = vcn_gui_utils:collapse_button(<<"Collapse All">>, {groups_table_collapse, SpaceId, SpinnerId})
             }
         ]
     },
@@ -806,7 +778,7 @@ groups_table_expanded(SpaceId) ->
     catch
         _:Reason ->
             ?error("Cannot fetch groups of Space with ID: ~p: ~p", [SpaceId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch groups of Space with ID: <b>", SpaceId/binary, "</b>."
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch groups of Space with ID: <b>", SpaceId/binary, "</b>."
             "<br>Please try again later.">>),
             [Header]
     end.
@@ -853,13 +825,13 @@ group_row_collapsed(SpaceId, GroupId, RowId) ->
             #td{
                 id = SpinnerId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = expand_button({group_row_expand, SpaceId, GroupId, RowId, SpinnerId})
+                body = vcn_gui_utils:expand_button({group_row_expand, SpaceId, GroupId, RowId, SpinnerId})
             }
         ]
     catch
         _:Reason ->
             ?error("Cannot fetch details of group with ID: ~p: ~p", [GroupId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch details of group with ID: <b>", GroupId/binary, "</b>."
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch details of group with ID: <b>", GroupId/binary, "</b>."
             "<br>Please try again later.">>),
             []
     end.
@@ -906,138 +878,16 @@ group_row_expanded(SpaceId, GroupId, RowId) ->
             #td{
                 id = SpinnerId,
                 style = ?NAVIGATION_COLUMN_STYLE,
-                body = collapse_button({group_row_collapse, SpaceId, GroupId, RowId, SpinnerId})
+                body = vcn_gui_utils:collapse_button({group_row_collapse, SpaceId, GroupId, RowId, SpinnerId})
             }
         ]
     catch
         _:Reason ->
             ?error("Cannot fetch details of group with ID: ~p: ~p", [GroupId, Reason]),
-            message(<<"error_message">>, <<"Cannot fetch details of group with ID: <b>", GroupId/binary, "</b>."
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch details of group with ID: <b>", GroupId/binary, "</b>."
             "<br>Please try again later.">>),
             []
     end.
-
-
-%% collapse_button/1
-%% ====================================================================
-%% @doc Renders collapse button.
--spec collapse_button(Postback :: term()) -> Result when
-    Result :: #link{}.
-%% ====================================================================
-collapse_button(Postback) ->
-    collapse_button(<<"Collapse">>, Postback).
-
-
-%% collapse_button/2
-%% ====================================================================
-%% @doc Renders collapse button.
--spec collapse_button(Title :: binary(), Postback :: term()) -> Result when
-    Result :: #link{}.
-%% ====================================================================
-collapse_button(Title, Postback) ->
-    #link{
-        title = Title,
-        class = <<"glyph-link">>,
-        postback = Postback,
-        body = #span{
-            style = <<"font-size: large; vertical-align: top;">>,
-            class = <<"fui-triangle-up">>
-        }
-    }.
-
-
-%% expand_button/1
-%% ====================================================================
-%% @doc Renders expand button.
--spec expand_button(Postback :: term()) -> Result when
-    Result :: #link{}.
-%% ====================================================================
-expand_button(Postback) ->
-    expand_button(<<"Expand">>, Postback).
-
-
-%% expand_button/2
-%% ====================================================================
-%% @doc Renders expand button.
--spec expand_button(Title :: binary(), Postback :: term()) -> Result when
-    Result :: #link{}.
-%% ====================================================================
-expand_button(Title, Postback) ->
-    #link{
-        title = Title,
-        class = <<"glyph-link">>,
-        postback = Postback,
-        body = #span{
-            style = <<"font-size: large;  vertical-align: top;">>,
-            class = <<"fui-triangle-down">>
-        }
-    }.
-
-
-%% message/3
-%% ====================================================================
-%% @doc Renders a message in given element and allows to hide this message.
--spec message(Id :: binary(), Message :: binary()) -> Result when
-    Result :: ok.
-%% ====================================================================
-message(Id, Message) ->
-    Body = [
-        Message,
-        #link{
-            title = <<"Close">>,
-            style = <<"position: absolute; right: 1em; top: 1em;">>,
-            class = <<"glyph-link">>,
-            postback = {close_message, Id},
-            body = #span{
-                class = <<"fui-cross">>
-            }
-        }
-    ],
-    gui_jq:update(Id, Body),
-    gui_jq:fade_in(Id, 300).
-
-
-%% spinner/0
-%% ====================================================================
-%% @doc Renders spinner GIF.
--spec spinner() -> Result when
-    Result :: #image{}.
-%% ====================================================================
-spinner() ->
-    #image{
-        image = <<"/images/spinner.gif">>,
-        style = <<"width: 1.5em;">>
-    }.
-
-
-%% alert_popup/3
-%% ====================================================================
-%% @doc Displays custom alert popup.
--spec alert_popup(Title :: binary(), Message :: binary(), Script :: binary()) -> binary().
-%% ====================================================================
-alert_popup(Title, Message, Script) ->
-    gui_jq:wire(<<"var box = bootbox.dialog({
-        title: '", Title/binary, "',
-        message: '", Message/binary, "',
-        buttons: {
-            'OK': {
-                className: 'btn-primary confirm',
-                callback: function() {", Script/binary, "}
-            }
-        }
-    });">>).
-
-
-%% bind_key_to_click/2
-%% ====================================================================
-%% @doc Makes any keypresses of given key to click on selected class.
-%% @end
--spec bind_key_to_click(KeyCode :: binary(), TargetID :: binary()) -> string().
-%% ====================================================================
-bind_key_to_click(KeyCode, TargetID) ->
-    Script = <<"$(document).bind('keydown', function (e){",
-    "if (e.which == ", KeyCode/binary, ") { e.preventDefault(); $('", TargetID/binary, "').click(); } });">>,
-    gui_jq:wire(Script, false).
 
 
 %% comet_loop/1
@@ -1057,10 +907,10 @@ comet_loop(#?STATE{} = State) ->
                     {ok, Token} ->
                         Message = <<"Give underlying token to any Provider that is willing to support your Space.",
                         "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", Token/binary, "\">">>,
-                        alert_popup(<<"Request support">>, Message, <<"return true;">>),
+                        gui_jq:info_popup(<<"Request support">>, Message, <<"return true;">>),
                         gui_comet:flush();
                     _ ->
-                        message(<<"error_message">>, <<"Cannot get Space support token.<br>Please try again later.">>)
+                        vcn_gui_utils:message(<<"error_message">>, <<"Cannot get Space support token.<br>Please try again later.">>)
                 end,
                 gui_jq:hide(<<"main_spinner">>),
                 gui_comet:flush(),
@@ -1071,10 +921,10 @@ comet_loop(#?STATE{} = State) ->
                     {ok, Token} ->
                         Message = <<"Give underlying token to any User that is willing to join your Space.",
                         "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", Token/binary, "\">">>,
-                        alert_popup(<<"Invite user">>, Message, <<"return true;">>),
+                        gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>),
                         gui_comet:flush();
                     _ ->
-                        message(<<"error_message">>, <<"Cannot get Space invitation token.<br>Please try again later.">>)
+                        vcn_gui_utils:message(<<"error_message">>, <<"Cannot get Space invitation token.<br>Please try again later.">>)
                 end,
                 gui_jq:hide(<<"main_spinner">>),
                 gui_comet:flush(),
@@ -1142,7 +992,7 @@ comet_loop(#?STATE{} = State) ->
         end
                catch Type:Reason ->
                    ?error("Comet process exception: ~p:~p", [Type, Reason]),
-                   message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+                   vcn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
                    {error, Reason}
                end,
     ?MODULE:comet_loop(NewState).
@@ -1157,58 +1007,58 @@ event(init) ->
     SpaceId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
     {ok, Pid} = gui_comet:spawn(fun() -> comet_loop(#?STATE{spaceId = SpaceId}) end),
     put(?COMET_PID, Pid),
-    bind_key_to_click(<<"13">>, <<"button.confirm">>),
+    gui_jq:bind_key_to_click(<<"13">>, <<"button.confirm">>),
     gui_jq:update(<<"providers">>, providers_table_collapsed(SpaceId)),
     gui_jq:update(<<"users">>, users_table_collapsed(SpaceId)),
     gui_jq:update(<<"groups">>, groups_table_collapsed(SpaceId));
 
 event({providers_table_collapse, SpaceId, SpinnerId}) ->
     get(?COMET_PID) ! {providers_table_collapse, SpaceId},
-    gui_jq:update(SpinnerId, spinner());
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner());
 
 event({providers_table_expand, SpaceId, SpinnerId}) ->
     get(?COMET_PID) ! {providers_table_expand, SpaceId},
-    gui_jq:update(SpinnerId, spinner());
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner());
 
 event({provider_row_collapse, SpaceId, ProviderId, RowId, SpinnerId}) ->
     get(?COMET_PID) ! {provider_row_collapse, SpaceId, ProviderId, RowId},
-    gui_jq:update(SpinnerId, spinner());
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner());
 
 event({provider_row_expand, SpaceId, ProviderId, RowId, SpinnerId}) ->
     get(?COMET_PID) ! {provider_row_expand, SpaceId, ProviderId, RowId},
-    gui_jq:update(SpinnerId, spinner());
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner());
 
 event({users_table_collapse, SpaceId, SpinnerId}) ->
     get(?COMET_PID) ! {users_table_collapse, SpaceId},
-    gui_jq:update(SpinnerId, spinner());
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner());
 
 event({users_table_expand, SpaceId, SpinnerId}) ->
     get(?COMET_PID) ! {users_table_expand, SpaceId},
-    gui_jq:update(SpinnerId, spinner());
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner());
 
 event({user_row_collapse, SpaceId, UserId, RowId, SpinnerId}) ->
     get(?COMET_PID) ! {user_row_collapse, SpaceId, UserId, RowId},
-    gui_jq:update(SpinnerId, spinner());
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner());
 
 event({user_row_expand, SpaceId, UserId, RowId, SpinnerId}) ->
     get(?COMET_PID) ! {user_row_expand, SpaceId, UserId, RowId},
-    gui_jq:update(SpinnerId, spinner());
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner());
 
 event({groups_table_collapse, SpaceId, SpinnerId}) ->
     get(?COMET_PID) ! {groups_table_collapse, SpaceId},
-    gui_jq:update(SpinnerId, spinner());
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner());
 
 event({groups_table_expand, SpaceId, SpinnerId}) ->
     get(?COMET_PID) ! {groups_table_expand, SpaceId},
-    gui_jq:update(SpinnerId, spinner());
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner());
 
 event({group_row_collapse, SpaceId, GroupId, RowId, SpinnerId}) ->
     get(?COMET_PID) ! {group_row_collapse, SpaceId, GroupId, RowId},
-    gui_jq:update(SpinnerId, spinner());
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner());
 
 event({group_row_expand, SpaceId, GroupId, RowId, SpinnerId}) ->
     get(?COMET_PID) ! {group_row_expand, SpaceId, GroupId, RowId},
-    gui_jq:update(SpinnerId, spinner());
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner());
 
 event({request_support, SpaceId}) ->
     get(?COMET_PID) ! {request_support, SpaceId},
@@ -1237,11 +1087,11 @@ event({submit_new_space_name, SpaceId, Name}) ->
                     gui_jq:update(<<"space_name">>, space_name(SpaceId, NewSpaceName));
                 Other ->
                     ?error("Cannot change name of Space with ID ~p: ~p", [SpaceId, Other]),
-                    message(<<"error_message">>, <<"Cannot change Space name.">>),
+                    vcn_gui_utils:message(<<"error_message">>, <<"Cannot change Space name.">>),
                     gui_jq:update(<<"space_name">>, space_name(SpaceId, Name))
             end;
         _ ->
-            message(<<"error_message">>, <<"Cannot change Space name.">>),
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot change Space name.">>),
             gui_jq:update(<<"space_name">>, space_name(SpaceId, Name))
     end;
 

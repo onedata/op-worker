@@ -125,7 +125,7 @@ body() ->
                                 },
                                 #th{
                                     style = ?NAVIGATION_COLUMN_STYLE,
-                                    body = spinner()
+                                    body = vcn_gui_utils:spinner()
                                 }
                             ]
                         }
@@ -167,7 +167,7 @@ tokens_table() ->
         [Header | Rows]
     catch
         _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch tokens.<br>Please try again later.">>),
+            vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch tokens.<br>Please try again later.">>),
             [Header]
     end.
 
@@ -234,63 +234,6 @@ remove_token(AccessId, Name, SpinnerId, RowId) ->
     }.
 
 
-%% spinner/0
-%% ====================================================================
-%% @doc Renders spinner GIF.
--spec spinner() -> Result when
-    Result :: #image{}.
-%% ====================================================================
-spinner() ->
-    #image{
-        image = <<"/images/spinner.gif">>,
-        style = <<"width: 1.5em;">>
-    }.
-
-
-%% message/3
-%% ====================================================================
-%% @doc Renders a message in given element and allows to hide this message.
--spec message(Id :: binary(), Message :: binary()) -> Result when
-    Result :: ok.
-%% ====================================================================
-message(Id, Message) ->
-    Body = [
-        Message,
-        #link{
-            title = <<"Close">>,
-            style = <<"position: absolute; right: 1em; top: 1em;">>,
-            class = <<"glyph-link">>,
-            postback = {close_message, Id},
-            body = #span{
-                class = <<"fui-cross">>
-            }
-        }
-    ],
-    gui_jq:update(Id, Body),
-    gui_jq:fade_in(Id, 300).
-
-
-%% dialog_popup/3
-%% ====================================================================
-%% @doc Displays custom dialog popup.
--spec dialog_popup(Title :: binary(), Message :: binary(), Script :: binary()) -> binary().
-%% ====================================================================
-dialog_popup(Title, Message, Script) ->
-    gui_jq:wire(<<"var box = bootbox.dialog({
-        title: '", Title/binary, "',
-        message: '", Message/binary, "',
-        buttons: {
-            'Cancel': {
-                className: 'cancel'
-            },
-            'OK': {
-                className: 'btn-primary confirm',
-                callback: function() {", Script/binary, "}
-            }
-        }
-    });">>).
-
-
 %% comet_loop/1
 %% ====================================================================
 %% @doc Handles spaces management actions.
@@ -308,9 +251,9 @@ comet_loop(#?STATE{} = State) ->
                     {ok, AccessCode} ->
                         Message = <<"Enter underlying access code into FUSE client.",
                         "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", AccessCode/binary, "\">">>,
-                        dialog_popup(<<"Access code">>, Message, <<"return true;">>);
+                        gui_jq:dialog_popup(<<"Access code">>, Message, <<"return true;">>);
                     _ ->
-                        message(<<"error_message">>, <<"Cannot get access code.">>)
+                        vcn_gui_utils:message(<<"error_message">>, <<"Cannot get access code.">>)
                 end,
                 gui_jq:hide(<<"main_spinner">>),
                 gui_comet:flush(),
@@ -320,17 +263,17 @@ comet_loop(#?STATE{} = State) ->
                 case gr_openid:remove_client_token({user, vcn_gui_utils:get_access_token()}, AccessId) of
                     ok ->
                         gui_jq:remove(RowId),
-                        message(<<"ok_message">>, <<"Token: <b>", AccessId/binary, "</b> removed successfully.">>);
+                        vcn_gui_utils:message(<<"ok_message">>, <<"Token: <b>", AccessId/binary, "</b> removed successfully.">>);
                     _ ->
                         gui_jq:update(SpinnerId, remove_token(AccessId, Name, SpinnerId, RowId)),
-                        message(<<"error_message">>, <<"Cannot remove token: <b>", AccessId/binary, "</b>.">>)
+                        vcn_gui_utils:message(<<"error_message">>, <<"Cannot remove token: <b>", AccessId/binary, "</b>.">>)
                 end,
                 gui_comet:flush(),
                 State
         end
                         catch Type:Reason ->
                             ?error("Comet process exception: ~p:~p", [Type, Reason]),
-                            message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+                            vcn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
                             gui_comet:flush(),
                             {error, Reason}
                         end,
@@ -355,7 +298,7 @@ event(get_access_code) ->
 event({remove_token, AccessId, Name, SpinnerId, RowId}) ->
     Message = <<"Are you sure you want to remove token:<br><b>", AccessId/binary, "</b>?">>,
     Script = <<"removeToken(['", AccessId/binary, "','", Name/binary, "','", SpinnerId/binary, "','", RowId/binary, "']);">>,
-    dialog_popup(<<"Remove token">>, Message, Script);
+    gui_jq:dialog_popup(<<"Remove token">>, Message, Script);
 
 event({close_message, MessageId}) ->
     gui_jq:hide(MessageId);
@@ -371,4 +314,4 @@ event(terminate) ->
 api_event("removeToken", Args, _) ->
     [AccessId, Name, SpinnerId, RowId] = mochijson2:decode(Args),
     get(?COMET_PID) ! {remove_token, AccessId, Name, SpinnerId, RowId},
-    gui_jq:update(SpinnerId, spinner()).
+    gui_jq:update(SpinnerId, vcn_gui_utils:spinner()).

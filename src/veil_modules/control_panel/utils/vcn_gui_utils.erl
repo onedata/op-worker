@@ -25,7 +25,8 @@
 -export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/4]).
 
 % Functions to generate page elements
--export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
+-export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0, message/2, message/3,
+    spinner/0, expand_button/2, expand_button/3, collapse_button/2, collapse_button/3]).
 
 
 %% ====================================================================
@@ -379,6 +380,110 @@ logotype_footer(MarginTop) ->
             ]}
         ]}
     ].
+
+
+%% message/2
+%% ====================================================================
+%% @doc Renders a message in given element and allows to hide it with
+%% default postback.
+-spec message(Id :: binary(), Message :: binary()) -> Result when
+    Result :: ok.
+%% ====================================================================
+message(Id, Message) ->
+    message(Id, Message, {close_message, Id}).
+
+
+%% message/3
+%% ====================================================================
+%% @doc Renders a message in given element and allows to hide it with
+%% custom postback.
+-spec message(Id :: binary(), Message :: binary(), Postback :: term()) -> Result when
+    Result :: ok.
+%% ====================================================================
+message(Id, Message, Postback) ->
+    Body = [
+        Message,
+        #link{
+            title = <<"Close">>,
+            style = <<"position: absolute; top: 1em; right: 1em;">>,
+            class = <<"glyph-link">>,
+            postback = Postback,
+            body = #span{
+                class = <<"fui-cross">>
+            }
+        }
+    ],
+    gui_jq:update(Id, Body),
+    gui_jq:fade_in(Id, 300).
+
+
+%% spinner/0
+%% ====================================================================
+%% @doc Renders spinner GIF.
+-spec spinner() -> Result when
+    Result :: #image{}.
+%% ====================================================================
+spinner() ->
+    #image{
+        image = <<"/images/spinner.gif">>,
+        style = <<"width: 1.5em;">>
+    }.
+
+
+%% collapse_button/1
+%% ====================================================================
+%% @doc Renders collapse button.
+-spec collapse_button(Postback :: term()) -> Result when
+    Result :: #link{}.
+%% ====================================================================
+collapse_button(Postback) ->
+    collapse_button(<<"Collapse">>, Postback).
+
+
+%% collapse_button/2
+%% ====================================================================
+%% @doc Renders collapse button.
+-spec collapse_button(Title :: binary(), Postback :: term()) -> Result when
+    Result :: #link{}.
+%% ====================================================================
+collapse_button(Title, Postback) ->
+    #link{
+        title = Title,
+        class = <<"glyph-link">>,
+        postback = Postback,
+        body = #span{
+            style = <<"font-size: large; vertical-align: top;">>,
+            class = <<"fui-triangle-up">>
+        }
+    }.
+
+
+%% expand_button/1
+%% ====================================================================
+%% @doc Renders expand button.
+-spec expand_button(Postback :: term()) -> Result when
+    Result :: #link{}.
+%% ====================================================================
+expand_button(Postback) ->
+    expand_button(<<"Expand">>, Postback).
+
+
+%% expand_button/2
+%% ====================================================================
+%% @doc Renders expand button.
+-spec expand_button(Title :: binary(), Postback :: term()) -> Result when
+    Result :: #link{}.
+%% ====================================================================
+expand_button(Title, Postback) ->
+    #link{
+        title = Title,
+        class = <<"glyph-link">>,
+        postback = Postback,
+        body = #span{
+            style = <<"font-size: large;  vertical-align: top;">>,
+            class = <<"fui-triangle-down">>
+        }
+    }.
 
 
 % Development functions
