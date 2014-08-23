@@ -557,7 +557,7 @@ event(init) ->
             gui_jq:wire(#api{name = "joinSpace", tag = "joinSpace"}, false),
             gui_jq:wire(#api{name = "leaveSpace", tag = "leaveSpace"}, false),
             gui_jq:wire(#api{name = "deleteSpace", tag = "deleteSpace"}, false),
-            gui_jq:bind_key_to_click(<<"13">>, <<"button.confirm">>),
+            gui_jq:bind_key_to_click_on_class(<<"13">>, <<"button.confirm">>),
             SpaceRows = lists:map(fun({SpaceId, Counter}) ->
                 {SpaceId, #?SPACE_ROW{id = get_space_row_id(Counter), expanded = false, default = (Counter == 1)}}
             end, lists:zip(SpaceIds, tl(lists:seq(0, length(SpaceIds))))),

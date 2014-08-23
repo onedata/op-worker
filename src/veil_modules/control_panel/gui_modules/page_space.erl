@@ -1007,7 +1007,7 @@ event(init) ->
     SpaceId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
     {ok, Pid} = gui_comet:spawn(fun() -> comet_loop(#?STATE{spaceId = SpaceId}) end),
     put(?COMET_PID, Pid),
-    gui_jq:bind_key_to_click(<<"13">>, <<"button.confirm">>),
+    gui_jq:bind_key_to_click_on_class(<<"13">>, <<"button.confirm">>),
     gui_jq:update(<<"providers">>, providers_table_collapsed(SpaceId)),
     gui_jq:update(<<"users">>, users_table_collapsed(SpaceId)),
     gui_jq:update(<<"groups">>, groups_table_collapsed(SpaceId));
