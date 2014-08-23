@@ -265,6 +265,34 @@ space_name(SpaceId, Name) ->
     Result :: list().
 %% ====================================================================
 change_space_name(SpaceId, Name) ->
+%%     [
+%%         #textbox{
+%%             id = <<"new_username_textbox">>,
+%%             class = <<"span">>,
+%%             placeholder = <<"New username">>
+%%         },
+%%         #link{
+%%             id = <<"new_username_submit">>,
+%%             class = <<"glyph-link">>,
+%%             style = <<"margin-left: 1em;">>,
+%%             title = <<"Submit">>,
+%%             actions = gui_jq:form_submit_action(<<"new_username_submit">>, submit_new_username, <<"new_username_textbox">>),
+%%             body = #span{
+%%                 class = <<"fui-check-inverted">>,
+%%                 style = <<"font-size: large;">>
+%%             }
+%%         },
+%%         #link{
+%%             class = <<"glyph-link">>,
+%%             style = <<"margin-left: 10px;">>,
+%%             title = <<"Cancel">>,
+%%             postback = cancel_new_username_submit,
+%%             body = #span{
+%%                 class = <<"fui-cross-inverted">>,
+%%                 style = <<"font-size: large;">>
+%%             }
+%%         }
+%%     ].
     [
         #textbox{
             id = <<"new_space_name_textbox">>,
@@ -1195,20 +1223,20 @@ event({change_space_name, SpaceId, Name}) ->
     gui_jq:bind_enter_to_submit_button(<<"new_space_name_textbox">>, <<"new_space_name_submit">>),
     gui_jq:focus(<<"new_space_name_textbox">>);
 
-event({cancel_new_space_name_submit, SpaceId, Name}) ->
-    gui_jq:update(<<"space_name">>, space_name(SpaceId, Name));
-
 event({submit_new_space_name, SpaceId, Name}) ->
     NewSpaceName = gui_ctx:postback_param(<<"new_space_name_textbox">>),
     GRUID = vcn_gui_utils:get_global_user_id(),
     AccessToken = vcn_gui_utils:get_access_token(),
+    ?dump(GRUID),
+    ?dump(AccessToken),
     case user_logic:get_user({global_id, GRUID}) of
         {ok, UserDoc} ->
-            case gr_spaces:modify_details({user, vcn_gui_utils:get_access_token()}, SpaceId, [{<<"name">>, Name}]) of
+            case gr_spaces:modify_details({user, vcn_gui_utils:get_access_token()}, SpaceId, [{<<"name">>, NewSpaceName}]) of
                 ok ->
                     user_logic:synchronize_spaces_info(UserDoc, AccessToken),
                     gui_jq:update(<<"space_name">>, space_name(SpaceId, NewSpaceName));
-                _ ->
+                Other ->
+                    ?error("Cannot change name of Space with ID ~p: ~p", [SpaceId, Other]),
                     message(<<"error_message">>, <<"Cannot change Space name.">>),
                     gui_jq:update(<<"space_name">>, space_name(SpaceId, Name))
             end;
@@ -1216,6 +1244,9 @@ event({submit_new_space_name, SpaceId, Name}) ->
             message(<<"error_message">>, <<"Cannot change Space name.">>),
             gui_jq:update(<<"space_name">>, space_name(SpaceId, Name))
     end;
+
+event({cancel_new_space_name_submit, SpaceId, Name}) ->
+    gui_jq:update(<<"space_name">>, space_name(SpaceId, Name));
 
 event({close_message, MessageId}) ->
     gui_jq:hide(MessageId);

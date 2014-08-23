@@ -114,7 +114,7 @@ function bullet(url) {
             transport.onopen = function() {
                 delay = delayDefault;
 
-                if (transport.heart) { 
+                if (transport.heart) {
                     heartbeat = setInterval(function(){stream.onheartbeat();}, 4000);
                 }
 
@@ -140,14 +140,14 @@ function bullet(url) {
             };
             transport.onerror = transport.onclose;
             transport.onmessage = function(e){
-            stream.onmessage(e);
+                stream.onmessage(e);
             };
         }
 
         init();
 
         this.onopen = function(){};     this.oninit = function(){};
-        this.onmessage = function(){};  this.ondisconnect = function(){};
+        this.onmessage = function(){};  this.ondisconnect = function(){ initialized = false; };
         this.onclose = function(){};    this.onheartbeat = function(){ return this.send('PING'); };
 
         this.setURL = function(newURL) { url = newURL; };
