@@ -905,7 +905,7 @@ comet_loop(#?STATE{} = State) ->
             {request_support, SpaceId} ->
                 case gr_spaces:get_invite_provider_token({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                     {ok, Token} ->
-                        Message = <<"Give underlying token to any Provider that is willing to support your Space.",
+                        Message = <<"Give underlying token to any provider that is willing to support your Space.",
                         "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", Token/binary, "\">">>,
                         gui_jq:info_popup(<<"Request support">>, Message, <<"return true;">>),
                         gui_comet:flush();
@@ -919,7 +919,7 @@ comet_loop(#?STATE{} = State) ->
             {invite_user, SpaceId} ->
                 case gr_spaces:get_invite_user_token({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                     {ok, Token} ->
-                        Message = <<"Give underlying token to any User that is willing to join your Space.",
+                        Message = <<"Give underlying token to any user that is willing to join your Space.",
                         "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", Token/binary, "\">">>,
                         gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>),
                         gui_comet:flush();
@@ -1075,22 +1075,12 @@ event({change_space_name, SpaceId, Name}) ->
 
 event({submit_new_space_name, SpaceId, Name}) ->
     NewSpaceName = gui_ctx:postback_param(<<"new_space_name_textbox">>),
-    GRUID = vcn_gui_utils:get_global_user_id(),
-    AccessToken = vcn_gui_utils:get_access_token(),
-    ?dump(GRUID),
-    ?dump(AccessToken),
-    case user_logic:get_user({global_id, GRUID}) of
-        {ok, UserDoc} ->
-            case gr_spaces:modify_details({user, vcn_gui_utils:get_access_token()}, SpaceId, [{<<"name">>, NewSpaceName}]) of
-                ok ->
-                    user_logic:synchronize_spaces_info(UserDoc, AccessToken),
-                    gui_jq:update(<<"space_name">>, space_name(SpaceId, NewSpaceName));
-                Other ->
-                    ?error("Cannot change name of Space with ID ~p: ~p", [SpaceId, Other]),
-                    vcn_gui_utils:message(<<"error_message">>, <<"Cannot change Space name.">>),
-                    gui_jq:update(<<"space_name">>, space_name(SpaceId, Name))
-            end;
-        _ ->
+    case gr_spaces:modify_details({user, vcn_gui_utils:get_access_token()}, SpaceId, [{<<"name">>, NewSpaceName}]) of
+        ok ->
+            gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}),
+            gui_jq:update(<<"space_name">>, space_name(SpaceId, NewSpaceName));
+        Other ->
+            ?error("Cannot change name of Space with ID ~p: ~p", [SpaceId, Other]),
             vcn_gui_utils:message(<<"error_message">>, <<"Cannot change Space name.">>),
             gui_jq:update(<<"space_name">>, space_name(SpaceId, Name))
     end;

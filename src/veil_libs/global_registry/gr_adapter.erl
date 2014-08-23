@@ -15,7 +15,7 @@
 
 %% API
 -export([verify_client/2]).
--export([set_default_space/2, get_user_spaces/1]).
+-export([set_default_space/2, synchronize_user_spaces/1]).
 -export([get_space_info/2, get_space_providers/2]).
 
 
@@ -36,14 +36,14 @@ set_default_space(SpaceId, {UserGID, _AccessToken}) ->
     end.
 
 
-%% get_user_spaces/1
+%% synchronize_user_spaces/1
 %% ====================================================================
-%% @doc Returns list of IDs of Spaces that user belongs to.
+%% @doc Synchronizes and returns list of IDs of Spaces that user belongs to.
 %% @end
--spec get_user_spaces({UserGID :: string(), AccessToken :: binary()}) -> Result when
+-spec synchronize_user_spaces({UserGID :: string(), AccessToken :: binary()}) -> Result when
     Result :: {ok, SpaceIds :: [binary()]} | {error, Reason :: term()}.
 %% ====================================================================
-get_user_spaces({UserGID, AccessToken}) ->
+synchronize_user_spaces({UserGID, AccessToken}) ->
     case user_logic:get_user({global_id, UserGID}) of
         {ok, UserDoc} ->
             #veil_document{record = #user{spaces = Spaces}} = user_logic:synchronize_spaces_info(UserDoc, AccessToken),

@@ -398,6 +398,7 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                     case gr_users:create_space({user, vcn_gui_utils:get_access_token()}, [{<<"name">>, Name}]) of
                         {ok, SpaceId} ->
                             vcn_gui_utils:message(<<"ok_message">>, <<"Created Space ID: <b>", SpaceId/binary, "</b>">>),
+                            gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}),
                             RowId = get_space_row_id(Counter + 1),
                             add_space_row(SpaceId, RowId),
                             State#?STATE{counter = Counter + 1, space_rows = SpaceRows ++ [{SpaceId, #?SPACE_ROW{id = RowId, expanded = false, default = false}}]};
@@ -416,6 +417,7 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                     case gr_users:join_space({user, vcn_gui_utils:get_access_token()}, [{<<"token">>, Token}]) of
                         {ok, SpaceId} ->
                             vcn_gui_utils:message(<<"ok_message">>, <<"Joined Space ID: <b>", SpaceId/binary, "</b>">>),
+                            gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}),
                             RowId = get_space_row_id(Counter + 1),
                             add_space_row(SpaceId, RowId),
                             State#?STATE{counter = Counter + 1, space_rows = SpaceRows ++ [{SpaceId, #?SPACE_ROW{id = RowId, expanded = false, default = false}}]};
@@ -460,6 +462,7 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                     case gr_users:leave_space({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                         ok ->
                             vcn_gui_utils:message(<<"ok_message">>, <<"Space: <b>", SpaceName/binary, "</b> left successfully.">>),
+                            gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}),
                             gui_jq:remove(RowId),
                             case SpaceRows of
                                 [{SpaceId, _}, {NextSpaceId, NextSpaceRow} | RestSpaceRows] ->
@@ -481,6 +484,7 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                     case gr_spaces:remove({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                         ok ->
                             vcn_gui_utils:message(<<"ok_message">>, <<"Space: <b>", SpaceName/binary, "</b> deleted successfully.">>),
+                            gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}),
                             gui_jq:remove(RowId),
                             case SpaceRows of
                                 [{SpaceId, _}, {NextSpaceId, NextSpaceRow} | RestSpaceRows] ->
@@ -551,7 +555,7 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
 -spec event(Event :: term()) -> no_return().
 %% ====================================================================
 event(init) ->
-    case gr_adapter:get_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}) of
+    case gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}) of
         {ok, SpaceIds} ->
             gui_jq:wire(#api{name = "createSpace", tag = "createSpace"}, false),
             gui_jq:wire(#api{name = "joinSpace", tag = "joinSpace"}, false),

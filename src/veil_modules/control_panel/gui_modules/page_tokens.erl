@@ -251,7 +251,7 @@ comet_loop(#?STATE{} = State) ->
                     {ok, AccessCode} ->
                         Message = <<"Enter underlying access code into FUSE client.",
                         "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", AccessCode/binary, "\">">>,
-                        gui_jq:dialog_popup(<<"Access code">>, Message, <<"return true;">>);
+                        gui_jq:info_popup(<<"Access code">>, Message, <<"return true;">>);
                     _ ->
                         vcn_gui_utils:message(<<"error_message">>, <<"Cannot get access code.">>)
                 end,
