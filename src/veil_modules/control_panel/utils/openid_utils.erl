@@ -36,9 +36,9 @@ validate_login() ->
     try
         AuthorizationCode = gui_ctx:url_param(<<"code">>),
 
-        KeyFile = application:get_env(veil_cluster_node, global_registry_provider_key_file, undefined),
-        CertFile = application:get_env(veil_cluster_node, global_registry_provider_ca_cert_file, undefined),
-        {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
+        KeyFile = application:get_env(veil_cluster_node, global_registry_provider_key_path, undefined),
+        CertFile = application:get_env(veil_cluster_node, global_registry_provider_cert_path, undefined),
+        GlobalRegistryHostname = application:get_env(veil_cluster_node, global_registry_hostname, undefined),
         Opts = case {KeyFile, CertFile} of
                    {KeyF, CertF} when KeyF =:= undefined orelse CertF =:= undefined ->
                        error(no_certs_in_env);

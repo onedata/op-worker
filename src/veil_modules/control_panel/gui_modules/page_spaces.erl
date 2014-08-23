@@ -258,8 +258,9 @@ space_row_collapsed(SpaceId, RowId, Default) ->
             }
         ]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch details for Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch details of Space with ID: ~p: ~p", [SpaceId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch details of Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
             []
     end.
 
@@ -348,8 +349,9 @@ space_row_expanded(SpaceId, RowId, Default) ->
             }
         ]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch details for Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch details of Space with ID: ~p: ~p", [SpaceId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch details of Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
             []
     end.
 

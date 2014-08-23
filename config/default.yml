@@ -293,18 +293,25 @@ veil_cluster_node_env:
 
   # Global Registry interfacing
   - parameter:
-      name: global_registry_provider_ca_cert_file
-      description: Path to .pem file containing the certificate signed by global registry CA, used for authorizing requests to it.
-      value: |
-        "\'certs/grpcert.pem\'"
-      erlang_term: "'certs/grpcert.pem'"
-
-  - parameter:
-      name: global_registry_provider_key_file
+      name: global_registry_provider_key_path
       description: Path to .pem file containing the private key to the grpcert.
       value: |
         "\'certs/grpkey.pem\'"
       erlang_term: "'certs/grpkey.pem'"
+      
+  - parameter:
+      name: global_registry_provider_cert_path
+      description: Path to .pem file containing the certificate signed by Global Registry CA, used for authorizing requests to it.
+      value: |
+        "\'certs/grpcert.pem\'"
+      erlang_term: "'certs/grpcert.pem'"
+      
+  - parameter:
+      name: global_registry_ca_cert_path
+      description: Path to .pem file containing the Global Registry CA certificate.
+      value: |
+        "\'cacerts/grpCA.pem\'"
+      erlang_term: "'cacerts/grpCA.pem'"
 
   - parameter:
       name: global_registry_hostname
@@ -312,6 +319,13 @@ veil_cluster_node_env:
       value: |
         "\'https://onedata.org\'"
       erlang_term: "'https://onedata.org'"
+
+  - parameter:
+      name: global_registry_url
+      description: Global Registry REST API endpoint URL.
+      value: |
+        "\'https://onedata.org:8443\'"
+      erlang_term: "'https://onedata.org:8443'"
 
   # Files management
   - parameter:

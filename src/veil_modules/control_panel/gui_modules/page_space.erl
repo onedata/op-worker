@@ -101,7 +101,7 @@ body() ->
 %% @doc Renders Space settings.
 -spec space(SpaceDetails :: #space_details{}) -> [#panel{}].
 %% ====================================================================
-space(#space_details{space_id = SpaceId, name = Name}) ->
+space(#space_details{id = SpaceId, name = Name}) ->
     [
         #panel{
             id = <<"main_spinner">>,
@@ -327,8 +327,10 @@ providers_table_collapsed(SpaceId) ->
         end, lists:zip(ProviderIds, tl(lists:seq(0, length(ProviderIds))))),
         [Header | Rows]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch Space providers.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch providers of Space with ID: ~p: ~p", [SpaceId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch providers of Space with ID: <b>", SpaceId/binary, "</b>."
+            "<br>Please try again later.">>),
             [Header]
     end.
 
@@ -365,8 +367,10 @@ providers_table_expanded(SpaceId) ->
         end, lists:zip(ProviderIds, tl(lists:seq(0, length(ProviderIds))))),
         [Header | Rows]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch Space providers.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch providers of Space with ID: ~p: ~p", [SpaceId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch providers of Space with ID: <b>", SpaceId/binary, "</b>."
+            "<br>Please try again later.">>),
             [Header]
     end.
 
@@ -506,8 +510,10 @@ provider_row_expanded(SpaceId, ProviderId, RowId) ->
             }
         ]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch Space provider details.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch details of provider with ID: ~p: ~p", [ProviderId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch details of provider with ID: <b>", ProviderId/binary, "</b>."
+            "<br>Please try again later.">>),
             provider_row_collapsed(SpaceId, ProviderId, RowId)
     end.
 
@@ -544,8 +550,10 @@ users_table_collapsed(SpaceId) ->
         end, lists:zip(UserIds, tl(lists:seq(0, length(UserIds))))),
         [Header | Rows]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch Space users.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch users of Space with ID: ~p: ~p", [SpaceId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch users of Space with ID: <b>", SpaceId/binary, "</b>."
+            "<br>Please try again later.">>),
             [Header]
     end.
 
@@ -582,8 +590,10 @@ users_table_expanded(SpaceId) ->
         end, lists:zip(UserIds, tl(lists:seq(0, length(UserIds))))),
         [Header | Rows]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch Space users.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch users of Space with ID: ~p: ~p", [SpaceId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch users of Space with ID: <b>", SpaceId/binary, "</b>."
+            "<br>Please try again later.">>),
             [Header]
     end.
 
@@ -633,8 +643,10 @@ user_row_collapsed(SpaceId, UserId, RowId) ->
             }
         ]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch Space user details.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch details of users with ID: ~p: ~p", [UserId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch details of user with ID: <b>", UserId/binary, "</b>."
+            "<br>Please try again later.">>),
             []
     end.
 
@@ -684,8 +696,10 @@ user_row_expanded(SpaceId, UserId, RowId) ->
             }
         ]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch Space user details.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch details of users with ID: ~p: ~p", [UserId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch details of user with ID: <b>", UserId/binary, "</b>."
+            "<br>Please try again later.">>),
             []
     end.
 
@@ -722,8 +736,10 @@ groups_table_collapsed(SpaceId) ->
         end, lists:zip(GroupIds, tl(lists:seq(0, length(GroupIds))))),
         [Header | Rows]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch Space groups.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch groups of Space with ID: ~p: ~p", [SpaceId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch groups of Space with ID: <b>", SpaceId/binary, "</b>."
+            "<br>Please try again later.">>),
             [Header]
     end.
 
@@ -760,8 +776,10 @@ groups_table_expanded(SpaceId) ->
         end, lists:zip(GroupIds, tl(lists:seq(0, length(GroupIds))))),
         [Header | Rows]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch Space groups.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch groups of Space with ID: ~p: ~p", [SpaceId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch groups of Space with ID: <b>", SpaceId/binary, "</b>."
+            "<br>Please try again later.">>),
             [Header]
     end.
 
@@ -811,8 +829,10 @@ group_row_collapsed(SpaceId, GroupId, RowId) ->
             }
         ]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch Space group details.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch details of group with ID: ~p: ~p", [GroupId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch details of group with ID: <b>", GroupId/binary, "</b>."
+            "<br>Please try again later.">>),
             []
     end.
 
@@ -862,8 +882,10 @@ group_row_expanded(SpaceId, GroupId, RowId) ->
             }
         ]
     catch
-        _:_ ->
-            message(<<"error_message">>, <<"Cannot fetch Space group details.<br>Please try again later.">>),
+        _:Reason ->
+            ?error("Cannot fetch details of group with ID: ~p: ~p", [GroupId, Reason]),
+            message(<<"error_message">>, <<"Cannot fetch details of group with ID: <b>", GroupId/binary, "</b>."
+            "<br>Please try again later.">>),
             []
     end.
 
