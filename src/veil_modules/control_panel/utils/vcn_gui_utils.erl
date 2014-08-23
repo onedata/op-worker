@@ -26,7 +26,7 @@
 
 % Functions to generate page elements
 -export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0, message/2, message/3,
-    spinner/0, expand_button/2, expand_button/3, collapse_button/2, collapse_button/3]).
+    spinner/0, expand_button/1, expand_button/2, collapse_button/1, collapse_button/2]).
 
 
 %% ====================================================================
