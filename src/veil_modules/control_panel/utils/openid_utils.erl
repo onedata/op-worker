@@ -12,6 +12,7 @@
 -module(openid_utils).
 
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_registry/gr_openid.hrl").
 -include_lib("veil_modules/control_panel/common.hrl").
 -include_lib("veil_modules/dao/dao_users.hrl").
 
@@ -35,56 +36,31 @@
 validate_login() ->
     try
         AuthorizationCode = gui_ctx:url_param(<<"code">>),
-
-        KeyFile = application:get_env(veil_cluster_node, global_registry_provider_key_path, undefined),
-        CertFile = application:get_env(veil_cluster_node, global_registry_provider_cert_path, undefined),
-        GlobalRegistryHostname = application:get_env(veil_cluster_node, global_registry_hostname, undefined),
-        Opts = case {KeyFile, CertFile} of
-                   {KeyF, CertF} when KeyF =:= undefined orelse CertF =:= undefined ->
-                       error(no_certs_in_env);
-                   {KeyF, CertF} ->
-                       [{ssl_options, [{keyfile, atom_to_list(KeyF)}, {certfile, atom_to_list(CertF)}]}]
-               end,
-
-        Body = case ibrowse:send_req(atom_to_list(GlobalRegistryHostname) ++ ":8443/openid/provider/tokens", [{"content-type", "application/json"}], post,
-        "{\"code\":\"" ++ binary_to_list(AuthorizationCode) ++ "\", \"grant_type\":\"authorization_code\"}", Opts) of
-                   {ok, "200", _, RespBody} ->
-                       RespBody;
-                   Error ->
-                       ?error("Cannot authorize user login due to: ~p", [Error]),
-                       throw(token_invalid)
-               end,
-
-        {struct, JSONProplist} = mochijson2:decode(Body),
-        IDToken = proplists:get_value(<<"id_token">>, JSONProplist),
-        [_Header, Payload, _Signature] = binary:split(IDToken, <<".">>, [global]),
-        AccessToken = proplists:get_value(<<"access_token">>, JSONProplist),
-
-        {struct, Proplist} = mochijson2:decode(base64decode(Payload)),
-
-        GRUID = gui_str:binary_to_unicode_list(proplists:get_value(<<"sub">>, Proplist)),
-        Name = gui_str:binary_to_unicode_list(proplists:get_value(<<"name">>, Proplist)),
-        EmailsBin = proplists:get_value(<<"email">>, Proplist),
-        Emails = lists:map(fun({struct, [{<<"email">>, Email}]}) -> binary_to_list(Email) end, EmailsBin),
-        Login = get_user_login(GRUID),
-        Teams = [],
+        {ok, #grant_token{
+            access_token = AccessToken,
+            id_token = #id_token{
+                sub = GRUID,
+                name = Name,
+                email = EmailList}
+        }} = gr_openid:get_grant_token(
+            provider,
+            [{<<"code">>, AuthorizationCode}, {<<"grant_type">>, <<"authorization_code">>}]
+        ),
+        Login = get_user_login(gui_str:binary_to_unicode_list(GRUID)),
         LoginProplist = [
-            {global_id, GRUID},
+            {global_id, gui_str:binary_to_unicode_list(GRUID)},
             {login, Login},
-            {name, Name},
-            {teams, Teams},
-            {emails, Emails},
+            {name, gui_str:binary_to_unicode_list(Name)},
+            {teams, []},
+            {emails, lists:map(fun(Email) -> gui_str:binary_to_unicode_list(Email) end, EmailList)},
             {dn_list, []}
         ],
         try
             {Login, UserDoc} = user_logic:sign_in(LoginProplist, AccessToken),
             gui_ctx:create_session(),
             gui_ctx:set_user_id(Login),
-            vcn_gui_utils:set_global_user_id(GRUID),
+            vcn_gui_utils:set_global_user_id(gui_str:binary_to_unicode_list(GRUID)),
             vcn_gui_utils:set_access_token(AccessToken),
-
-            ?info("GUI GRUID: ~p, access token: ~p", [GRUID, AccessToken]),
-
             vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
             vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
             ?debug("User ~p logged in", [Login]),
@@ -113,36 +89,6 @@ validate_login() ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-
-%% base64decode/0
-%% ====================================================================
-%% @doc
-%% Decodes a base64 encoded term.
-%% @end
--spec base64decode(binary() | string()) -> term().
-%% ====================================================================
-base64decode(Bin) when is_binary(Bin) ->
-    Bin2 = case byte_size(Bin) rem 4 of
-               2 -> <<Bin/binary, "==">>;
-               3 -> <<Bin/binary, "=">>;
-               _ -> Bin
-           end,
-    base64:decode(<<<<(urldecode_digit(D))>> || <<D>> <= Bin2>>);
-base64decode(L) when is_list(L) ->
-    base64decode(iolist_to_binary(L)).
-
-
-%% urldecode_digit/0
-%% ====================================================================
-%% @doc
-%% Urlencodes a single char in base64.
-%% @end
--spec urldecode_digit(binary()) -> binary().
-%% ====================================================================
-urldecode_digit($_) -> $/;
-urldecode_digit($-) -> $+;
-urldecode_digit(D) -> D.
-
 
 %% get_user_login/1
 %% ====================================================================

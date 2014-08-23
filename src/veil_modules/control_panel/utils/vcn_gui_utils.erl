@@ -283,6 +283,13 @@ top_menu(ActiveTabID, SubMenuBody) ->
                             _ -> []
                         end,
 
+    AdministrationURL = case CanViewLogs of
+                            true -> "/cluster_logs";
+                            _ -> case CanViewMonitoring of
+                                     true -> "/monitoring";
+                                     _ -> "javascript:void(0);"
+                                 end
+                        end,
 
     MenuCaptions =
         [
@@ -293,14 +300,14 @@ top_menu(ActiveTabID, SubMenuBody) ->
                 ]}
             }},
             {data_tab, #li{body = [
-                #link{style = "padding: 18px;", body = "Data"},
+                #link{style = "padding: 18px;", url = "/file_manager", body = "Data"},
                 #list{style = "top: 37px; width: 120px;", body = [
                     #li{body = #link{url = "/file_manager", body = "File manager"}},
                     #li{body = #link{url = "/shared_files", body = "Shared files"}}
                 ]}
             ]}},
             {spaces_tab, #li{body = [
-                #link{style = "padding: 18px;", body = "Spaces"},
+                #link{style = "padding: 18px;", url = "/spaces", body = "Spaces"},
                 #list{style = "top: 37px; width: 120px;", body = [
                     #li{body = #link{url = "/spaces", body = "Settings"}},
                     #li{body = #link{url = "/tokens", body = "Tokens"}}
@@ -309,7 +316,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
         ] ++ case CanViewLogs orelse CanViewMonitoring of
                  true ->
                      [{administration_tab, #li{body = [
-                         #link{style = "padding: 18px;", body = "Administration"},
+                         #link{style = "padding: 18px;", url = AdministrationURL, body = "Administration"},
                          #list{style = "top: 37px; width: 120px;", body = LogsCaptions ++ MonitoringCaption}
                      ]}}];
                  _ -> []
@@ -320,8 +327,6 @@ top_menu(ActiveTabID, SubMenuBody) ->
             {manage_account_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Manage account">>,
                 url = <<"/manage_account">>, body = [gui_str:unicode_list_to_binary(get_user_fullname()), #span{class = <<"fui-user">>,
                     style = <<"margin-left: 10px;">>}]}}},
-            %{contact_support_tab, #li { body=#link{ style="padding: 18px;", title="Contact & Support",
-            %    url="/contact_support", body=#span{ class="fui-question" } } } },
             {about_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"About">>,
                 url = <<"/about">>, body = #span{class = <<"fui-info">>}}}},
             {logout_button, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Log out">>,
@@ -392,36 +397,3 @@ empty_page() ->
         #br{}, #br{}, #br{}, #br{}, #br{},
         #br{}, #br{}, #br{}, #br{}, #br{}
     ].
-
-
-% old_menu_captions() ->
-% _MenuCaptions =
-%     [
-%         {data_tab, #li { body=[
-%             #link{ style="padding: 18px;", url="/file_manager", body="Data" },
-%             #list { style="top: 37px;", body=[
-%                 #li { body=#link{ url="/file_manager", body="File manager" } },
-%                 #li { body=#link{ url="/shared_files", body="Shared files" } }
-%             ]}
-%         ]}},
-%         {rules_tab, #li { body=[
-%             #link{ style="padding: 18px;", url="/rules_composer", body="Rules" },
-%             #list {  style="top: 37px;", body=[
-%                 #li { body=#link{ url="/rules_composer", body="Rules composer" } },
-%                 #li { body=#link{ url="/rules_viewer", body="Rules viewer" } },
-%                 #li { body=#link{ url="/rules_simulator", body="Rules simulator" } }
-%             ]}
-%         ]}},
-%         {administration_tab, #li { body=[
-%             #link{ style="padding: 18px;", url="/system_state", body="Administration" },
-%             #list {  style="top: 37px;", body=[
-%                 #li { body=#link{ url="/system_state", body="System state" } },
-%                 #li { body=#link{ url="/events", body="Events" } }
-%             ]}
-%         ]}}
-%     ].
-
-
-
-
-

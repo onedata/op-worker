@@ -157,11 +157,11 @@ tokens_table() ->
     },
     try
         {ok, Tokens} = gr_openid:get_client_tokens({user, vcn_gui_utils:get_access_token()}),
-        Rows = lists:map(fun({#client_token_details{id = AccessId, name = Name}, Counter}) ->
+        Rows = lists:map(fun({#client_token{access_id = AccessId, client_name = ClientName}, Counter}) ->
             RowId = <<"token_", (integer_to_binary(Counter))/binary>>,
             #tr{
                 id = RowId,
-                cells = token_row(AccessId, Name, RowId)
+                cells = token_row(AccessId, ClientName, RowId)
             }
         end, lists:zip(Tokens, tl(lists:seq(0, length(Tokens))))),
         [Header | Rows]

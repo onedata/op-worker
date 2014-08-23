@@ -455,7 +455,7 @@ provider_row_collapsed(SpaceId, ProviderId, RowId) ->
 %% ====================================================================
 provider_row_expanded(SpaceId, ProviderId, RowId) ->
     try
-        {ok, #provider_details{urls = URLs, redirectionPoint = RedirectionPoint}} =
+        {ok, #provider_details{urls = URLs, redirection_point = RedirectionPoint}} =
             gr_spaces:get_provider_details({user, vcn_gui_utils:get_access_token()}, SpaceId, ProviderId),
         SpinnerId = <<RowId/binary, "_spinner">>,
         [
