@@ -62,7 +62,7 @@ main_loop(#ppcon_state{msg_id = CurrentMsgId, connections = Connections, inbox =
                 ?info("Send req ~p", [_Req]),
                 NState1 = case maps:find(HostName, Connections) of
                     error ->
-                        case connect(HostName, 5555, [{certfile, global_registry:get_provider_cert_path()}, {keyfile, global_registry:get_provider_key_path()}]) of
+                        case connect(HostName, 5555, [{certfile, gr_plugin:get_cert_path()}, {keyfile, gr_plugin:get_key_path()}]) of
                             {ok, Socket} ->
                                 ?info("Connected to ~p", [HostName]),
                                 State#ppcon_state{connections = maps:put(HostName, Socket, Connections)};

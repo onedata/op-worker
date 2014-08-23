@@ -178,7 +178,7 @@ space(#space_details{id = SpaceId, name = Name}) ->
                     body = #button{
                         id = <<"request_support">>,
                         postback = {request_support, SpaceId},
-                        class = <<"btn btn-primary">>,
+                        class = <<"btn btn-primary btn-small">>,
                         body = <<"Request support">>
                     }
                 },
@@ -206,7 +206,7 @@ space(#space_details{id = SpaceId, name = Name}) ->
                     body = #button{
                         id = <<"invite_user">>,
                         postback = {invite_user, SpaceId},
-                        class = <<"btn btn-primary">>,
+                        class = <<"btn btn-primary btn-small">>,
                         body = <<"Invite user">>
                     }
                 },

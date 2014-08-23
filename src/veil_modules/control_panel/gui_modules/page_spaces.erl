@@ -114,14 +114,14 @@ body() ->
                         #button{
                             id = <<"create_space_button">>,
                             postback = create_space,
-                            class = <<"btn btn-primary">>,
+                            class = <<"btn btn-primary btn-small">>,
                             style = <<"margin-right: 1em;">>,
                             body = <<"Create Space">>
                         },
                         #button{
                             id = <<"join_space_button">>,
                             postback = join_space,
-                            class = <<"btn btn-primary">>,
+                            class = <<"btn btn-primary btn-small">>,
                             style = <<"margin-left: 1em;">>,
                             body = <<"Join Space">>
                         }

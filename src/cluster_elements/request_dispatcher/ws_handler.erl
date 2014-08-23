@@ -259,7 +259,7 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
     %?info("CTX for msg: ~p ~p", [GlobalId, TokenHash]),
 
     {UserGID, AccessToken} =
-        try {SessionUserGID =/= undefined orelse not registry_openid:client_verify(GlobalId, TokenHash), SessionAccessToken} of
+        try {SessionUserGID =/= undefined orelse not gr_adapter:verify_client(GlobalId, TokenHash), SessionAccessToken} of
             {true, undefined} ->
                 auth_handler:get_access_token(SessionUserGID);
             {true, _} ->

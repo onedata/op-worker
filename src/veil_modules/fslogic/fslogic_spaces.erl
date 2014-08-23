@@ -39,7 +39,7 @@ initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
             {error, Reason}
     end;
 initialize(SpaceId) ->
-    case registry_spaces:get_space_info(SpaceId, fslogic_context:get_access_token()) of
+    case gr_adapter:get_space_info(SpaceId, fslogic_context:get_access_token()) of
         {ok, #space_info{} = SpaceInfo} ->
             initialize(SpaceInfo);
         {error, Reason} ->

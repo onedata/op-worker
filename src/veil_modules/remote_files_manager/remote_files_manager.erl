@@ -18,6 +18,7 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_registry/gr_providers.hrl").
 
 %% ====================================================================
 %% API
@@ -93,7 +94,7 @@ maybe_handle_message(RequestBody, SpaceId) ->
             handle_message(RequestBody);
         false ->
             [RerouteToProvider | _] = Providers,
-            {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(RerouteToProvider),
+            {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, RerouteToProvider),
             ?info("Reroute to: ~p", [URLs]),
             try
                 provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
