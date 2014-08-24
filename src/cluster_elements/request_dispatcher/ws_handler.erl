@@ -144,7 +144,7 @@ websocket_handle({Type, Data}, Req, State) ->
 %% Internal websocket_handle method implementation
 %% Handle Handshake request - FUSE ID negotiation
 handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
-    #handshakerequest{hostname = Hostname, variable = Vars, cert_confirmation = CertConfirmation} = HReq, MsgId, Answer_type, AccessToken},
+    #handshakerequest{hostname = Hostname, variable = Vars, cert_confirmation = CertConfirmation} = HReq, MsgId, Answer_type, _AccessToken},
     #hander_state{peer_dn = DnString} = State) ->
     ?debug("Handshake request: ~p", [HReq]),
     NewFuseId = genFuseId(HReq),
@@ -234,7 +234,7 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
     end;
 
 %% Handle other messages
-handle(Req, {push, FuseID, {Msg, MsgId, DecoderName1, MsgType} = CLM}, #hander_state{peer_type = provider} = State) ->
+handle(Req, {push, FuseID, {Msg, MsgId, DecoderName1, MsgType}}, #hander_state{peer_type = provider} = State) ->
     ?info("Got push msg for ~p: ~p ~p ~p", [FuseID, Msg, DecoderName1, MsgType]),
     request_dispatcher:send_to_fuse(vcn_utils:ensure_list(FuseID), Msg, DecoderName1),
     {reply, {binary, encode_answer(ok, MsgId)}, Req, State};
@@ -259,7 +259,7 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
     %?info("CTX for msg: ~p ~p", [GlobalId, TokenHash]),
 
     {UserGID, AccessToken} =
-        try {SessionUserGID =/= undefined orelse not registry_openid:client_verify(GlobalId, TokenHash), SessionAccessToken} of
+        try {SessionUserGID =/= undefined orelse not gr_adapter:verify_client(GlobalId, TokenHash), SessionAccessToken} of
             {true, undefined} ->
                 auth_handler:get_access_token(SessionUserGID);
             {true, _} ->

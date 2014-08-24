@@ -18,13 +18,15 @@
 -export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0, can_view_monitoring/0]).
 
 % Saving and retrieving information that does not change during one session
--export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0]).
+-export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0,
+    set_access_token/1, get_access_token/0, set_global_user_id/1, get_global_user_id/0]).
 
 % Functions to check for user's session
 -export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/4]).
 
 % Functions to generate page elements
--export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
+-export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0, message/2, message/3,
+    spinner/0, expand_button/1, expand_button/2, collapse_button/1, collapse_button/2]).
 
 
 %% ====================================================================
@@ -35,7 +37,7 @@
 %% ====================================================================
 %% @doc Returns user's DN retrieved from his session state.
 %% @end
--spec get_user_dn() -> string().
+-spec get_user_dn() -> string() | undefined.
 %% ====================================================================
 get_user_dn() ->
     try
@@ -50,9 +52,49 @@ get_user_dn() ->
     end.
 
 
+%% set_global_user_id/1
+%% ====================================================================
+%% @doc Sets user's global ID in his session state.
+%% @end
+-spec set_global_user_id(GRUID :: binary()) -> binary().
+%% ====================================================================
+set_global_user_id(GRUID) ->
+    wf:session(gruid, GRUID).
+
+
+%% get_global_user_id/0
+%% ====================================================================
+%% @doc Returns user's global ID from his session state.
+%% @end
+-spec get_global_user_id() -> GRUID :: binary() | undefined.
+%% ====================================================================
+get_global_user_id() ->
+    wf:session(gruid).
+
+
+%% set_access_token/2
+%% ====================================================================
+%% @doc Sets user's access token in his session state.
+%% @end
+-spec set_access_token(AccessToken :: binary()) -> binary().
+%% ====================================================================
+set_access_token(AccessToken) ->
+    wf:session(access_token, AccessToken).
+
+
+%% get_access_token/0
+%% ====================================================================
+%% @doc Returns user's access token from his session state.
+%% @end
+-spec get_access_token() -> AccessToken :: binary() | undefined.
+%% ====================================================================
+get_access_token() ->
+    wf:session(access_token).
+
+
 %% set_user_fullname/1
 %% ====================================================================
-%% @doc Returns user's full name retrieved from his session state.
+%% @doc Sets user's full name in his session state.
 %% @end
 -spec set_user_fullname(Fullname :: string()) -> string().
 %% ====================================================================
@@ -64,7 +106,7 @@ set_user_fullname(Fullname) ->
 %% ====================================================================
 %% @doc Returns user's full name retrieved from his session state.
 %% @end
--spec get_user_fullname() -> string().
+-spec get_user_fullname() -> string() | undefined.
 %% ====================================================================
 get_user_fullname() ->
     wf:session(fullname).
@@ -72,7 +114,7 @@ get_user_fullname() ->
 
 %% set_user_role/1
 %% ====================================================================
-%% @doc Returns user's role retrieved from his session state.
+%% @doc Sets user's role in his session state.
 %% @end
 -spec set_user_role(Role :: atom()) -> atom().
 %% ====================================================================
@@ -84,7 +126,7 @@ set_user_role(Role) ->
 %% ====================================================================
 %% @doc Returns user's role retrieved from his session state.
 %% @end
--spec get_user_role() -> atom().
+-spec get_user_role() -> atom() | undefined.
 %% ====================================================================
 get_user_role() ->
     wf:session(role).
@@ -176,6 +218,7 @@ maybe_redirect(NeedLogin, NeedDN, NeedStorage, SaveSourcePage) ->
 apply_or_redirect(Module, Fun, NeedDN) ->
     apply_or_redirect(Module, Fun, [], NeedDN).
 
+
 %% apply_or_redirect/4
 %% ====================================================================
 %% @doc Checks if the client has right to do the operation (is logged in and possibly 
@@ -216,6 +259,7 @@ apply_or_redirect(Module, Fun, Args, NeedDN) ->
 top_menu(ActiveTabID) ->
     top_menu(ActiveTabID, []).
 
+
 %% top_menu/2
 %% ====================================================================
 %% @doc Convienience function to render top menu in GUI pages.
@@ -225,44 +269,65 @@ top_menu(ActiveTabID) ->
 -spec top_menu(ActiveTabID :: any(), SubMenuBody :: any()) -> list().
 %% ====================================================================
 top_menu(ActiveTabID, SubMenuBody) ->
-    % Tab, that will be displayed optionally
-    PageCaptions =
-        case can_view_monitoring() of
-            false -> [];
-            true -> [{monitoring_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/monitoring">>, body = <<"Monitoring">>}
-            ]}}]
-        end ++
-        case can_view_logs() of
-            false -> [];
-            true -> [
-                {cluster_logs_tab, #li{body = [
-                    #link{style = <<"padding: 18px;">>, url = <<"/cluster_logs">>, body = <<"Cluster logs">>}
-                ]}},
-                {client_logs_tab, #li{body = [
-                    #link{style = <<"padding: 18px;">>, url = <<"/client_logs">>, body = <<"Client logs">>}
-                ]}}
-            ]
-        end,
-    % Define menu items with ids, so that proper tab can be made active via function parameter
-    % see old_menu_captions()
+    CanViewLogs = can_view_logs(),
+    LogsCaptions = case CanViewLogs of
+                       true -> [
+                           #li{body = #link{url = "/cluster_logs", body = "Cluster logs"}},
+                           #li{body = #link{url = "/client_logs", body = "Client logs"}}
+                       ];
+                       _ -> []
+                   end,
+
+    CanViewMonitoring = can_view_monitoring(),
+    MonitoringCaption = case CanViewMonitoring of
+                            true -> [#li{body = #link{url = "/monitoring", body = "Monitoring"}}];
+                            _ -> []
+                        end,
+
+    AdministrationURL = case CanViewLogs of
+                            true -> "/cluster_logs";
+                            _ -> case CanViewMonitoring of
+                                     true -> "/monitoring";
+                                     _ -> "javascript:void(0);"
+                                 end
+                        end,
+
     MenuCaptions =
         [
-            {file_manager_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/file_manager">>, body = <<"File manager">>}
+            {brand_tab, #li{body = #link{style = <<"padding: 18px;">>, url = "/",
+                body = [
+                    #span{style = <<"font-size: xx-large;">>, class = <<"fui-home">>},
+                    #b{style = <<"font-size: x-large;">>, body = <<"OneData">>}
+                ]}
+            }},
+            {data_tab, #li{body = [
+                #link{style = "padding: 18px;", url = "/file_manager", body = "Data"},
+                #list{style = "top: 37px; width: 120px;", body = [
+                    #li{body = #link{url = "/file_manager", body = "File manager"}},
+                    #li{body = #link{url = "/shared_files", body = "Shared files"}}
+                ]}
             ]}},
-            {shared_files_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/shared_files">>, body = <<"Shared files">>}
+            {spaces_tab, #li{body = [
+                #link{style = "padding: 18px;", url = "/spaces", body = "Spaces"},
+                #list{style = "top: 37px; width: 120px;", body = [
+                    #li{body = #link{url = "/spaces", body = "Settings"}},
+                    #li{body = #link{url = "/tokens", body = "Tokens"}}
+                ]}
             ]}}
-        ] ++ PageCaptions,
+        ] ++ case CanViewLogs orelse CanViewMonitoring of
+                 true ->
+                     [{administration_tab, #li{body = [
+                         #link{style = "padding: 18px;", url = AdministrationURL, body = "Administration"},
+                         #list{style = "top: 37px; width: 120px;", body = LogsCaptions ++ MonitoringCaption}
+                     ]}}];
+                 _ -> []
+             end,
 
     MenuIcons =
         [
             {manage_account_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Manage account">>,
                 url = <<"/manage_account">>, body = [gui_str:unicode_list_to_binary(get_user_fullname()), #span{class = <<"fui-user">>,
                     style = <<"margin-left: 10px;">>}]}}},
-            %{contact_support_tab, #li { body=#link{ style="padding: 18px;", title="Contact & Support",
-            %    url="/contact_support", body=#span{ class="fui-question" } } } },
             {about_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"About">>,
                 url = <<"/about">>, body = #span{class = <<"fui-info">>}}}},
             {logout_button, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Log out">>,
@@ -317,6 +382,110 @@ logotype_footer(MarginTop) ->
     ].
 
 
+%% message/2
+%% ====================================================================
+%% @doc Renders a message in given element and allows to hide it with
+%% default postback.
+-spec message(Id :: binary(), Message :: binary()) -> Result when
+    Result :: ok.
+%% ====================================================================
+message(Id, Message) ->
+    message(Id, Message, {close_message, Id}).
+
+
+%% message/3
+%% ====================================================================
+%% @doc Renders a message in given element and allows to hide it with
+%% custom postback.
+-spec message(Id :: binary(), Message :: binary(), Postback :: term()) -> Result when
+    Result :: ok.
+%% ====================================================================
+message(Id, Message, Postback) ->
+    Body = [
+        Message,
+        #link{
+            title = <<"Close">>,
+            style = <<"position: absolute; top: 1em; right: 1em;">>,
+            class = <<"glyph-link">>,
+            postback = Postback,
+            body = #span{
+                class = <<"fui-cross">>
+            }
+        }
+    ],
+    gui_jq:update(Id, Body),
+    gui_jq:fade_in(Id, 300).
+
+
+%% spinner/0
+%% ====================================================================
+%% @doc Renders spinner GIF.
+-spec spinner() -> Result when
+    Result :: #image{}.
+%% ====================================================================
+spinner() ->
+    #image{
+        image = <<"/images/spinner.gif">>,
+        style = <<"width: 1.5em;">>
+    }.
+
+
+%% collapse_button/1
+%% ====================================================================
+%% @doc Renders collapse button.
+-spec collapse_button(Postback :: term()) -> Result when
+    Result :: #link{}.
+%% ====================================================================
+collapse_button(Postback) ->
+    collapse_button(<<"Collapse">>, Postback).
+
+
+%% collapse_button/2
+%% ====================================================================
+%% @doc Renders collapse button.
+-spec collapse_button(Title :: binary(), Postback :: term()) -> Result when
+    Result :: #link{}.
+%% ====================================================================
+collapse_button(Title, Postback) ->
+    #link{
+        title = Title,
+        class = <<"glyph-link">>,
+        postback = Postback,
+        body = #span{
+            style = <<"font-size: large; vertical-align: top;">>,
+            class = <<"fui-triangle-up">>
+        }
+    }.
+
+
+%% expand_button/1
+%% ====================================================================
+%% @doc Renders expand button.
+-spec expand_button(Postback :: term()) -> Result when
+    Result :: #link{}.
+%% ====================================================================
+expand_button(Postback) ->
+    expand_button(<<"Expand">>, Postback).
+
+
+%% expand_button/2
+%% ====================================================================
+%% @doc Renders expand button.
+-spec expand_button(Title :: binary(), Postback :: term()) -> Result when
+    Result :: #link{}.
+%% ====================================================================
+expand_button(Title, Postback) ->
+    #link{
+        title = Title,
+        class = <<"glyph-link">>,
+        postback = Postback,
+        body = #span{
+            style = <<"font-size: large;  vertical-align: top;">>,
+            class = <<"fui-triangle-down">>
+        }
+    }.
+
+
 % Development functions
 empty_page() ->
     [
@@ -333,36 +502,3 @@ empty_page() ->
         #br{}, #br{}, #br{}, #br{}, #br{},
         #br{}, #br{}, #br{}, #br{}, #br{}
     ].
-
-
-% old_menu_captions() ->
-% _MenuCaptions =
-%     [
-%         {data_tab, #li { body=[
-%             #link{ style="padding: 18px;", url="/file_manager", body="Data" },
-%             #list { style="top: 37px;", body=[
-%                 #li { body=#link{ url="/file_manager", body="File manager" } },
-%                 #li { body=#link{ url="/shared_files", body="Shared files" } }
-%             ]}
-%         ]}},
-%         {rules_tab, #li { body=[
-%             #link{ style="padding: 18px;", url="/rules_composer", body="Rules" },
-%             #list {  style="top: 37px;", body=[
-%                 #li { body=#link{ url="/rules_composer", body="Rules composer" } },
-%                 #li { body=#link{ url="/rules_viewer", body="Rules viewer" } },
-%                 #li { body=#link{ url="/rules_simulator", body="Rules simulator" } }
-%             ]}
-%         ]}},
-%         {administration_tab, #li { body=[
-%             #link{ style="padding: 18px;", url="/system_state", body="Administration" },
-%             #list {  style="top: 37px;", body=[
-%                 #li { body=#link{ url="/system_state", body="System state" } },
-%                 #li { body=#link{ url="/events", body="Events" } }
-%             ]}
-%         ]}}
-%     ].
-
-
-
-
-

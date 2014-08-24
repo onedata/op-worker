@@ -58,7 +58,7 @@ body() ->
         #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
         ]},
-        vcn_gui_utils:top_menu(file_manager_tab, manager_submenu()),
+        vcn_gui_utils:top_menu(data_tab, manager_submenu()),
         manager_workspace(),
         footer_popup()
     ],
@@ -210,13 +210,11 @@ event(init) ->
         false ->
             skip;
         true ->
-            UserID = vcn_gui_utils:get_user_dn(),
-            {UserGID, AccessToken} = gui_ctx:get_access_token(),
-
-            ?info("FM set_access_token: ~p ~p", [{UserGID, AccessToken}, gui_ctx:get_access_token()]),
-
+            VCUID = vcn_gui_utils:get_user_dn(),
+            GRUID = vcn_gui_utils:get_global_user_id(),
+            AccessToken = vcn_gui_utils:get_access_token(),
             Hostname = gui_ctx:get_requested_hostname(),
-            {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(UserID, UserGID, AccessToken, Hostname) end),
+            {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(VCUID, GRUID, AccessToken, Hostname) end),
             put(comet_pid, Pid)
     end;
 
@@ -246,10 +244,10 @@ event({action, Fun, Args}) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Comet loop and functions evaluated by comet
-comet_loop_init(UserId, UserGID, UserAccessToken, RequestedHostname) ->
+comet_loop_init(UserId, GRUID, UserAccessToken, RequestedHostname) ->
     % Initialize page state
     fslogic_context:set_user_dn(UserId),
-    fslogic_context:set_access_token(UserGID, UserAccessToken),
+    fslogic_context:set_access_token(GRUID, UserAccessToken),
 
     set_requested_hostname(RequestedHostname),
     set_working_directory(<<"/">>),

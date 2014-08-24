@@ -31,6 +31,7 @@
 -export([get_space_names/1, create_space_dir/1, get_spaces/1]).
 -export([create_dirs_at_storage/3, create_dirs_at_storage/2]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
+-export([synchronize_spaces_info/2]).
 
 
 %% ====================================================================
@@ -178,14 +179,14 @@ get_user(Key) ->
 
 
 synchronize_spaces_info(#veil_document{record = #user{global_id = GlobalId} = UserRec} = UserDoc, AccessToken) ->
-    case global_registry:user_request(AccessToken, get, "user/spaces") of
-        {ok, #{<<"spaces">> := Spaces}} ->
-            ?info("Synchronized spaces: ~p", [Spaces]),
+    case gr_users:get_spaces({user, AccessToken}) of
+        {ok, SpaceIds} ->
+            ?info("Synchronized spaces: ~p", [SpaceIds]),
             NewSpaces =
                 case UserRec#user.spaces of
-                    [] -> Spaces;
+                    [] -> SpaceIds;
                     [MainSpace | _] ->
-                        {MainSpace1, Rest} = lists:partition(fun(Elem) -> Elem =:= MainSpace end, Spaces),
+                        {MainSpace1, Rest} = lists:partition(fun(Elem) -> Elem =:= MainSpace end, SpaceIds),
                         MainSpace1 ++ Rest
                 end,
 
@@ -700,18 +701,18 @@ create_dirs_at_storage(Root, SpacesInfo) ->
     case ListStatus of
         ok ->
             StorageRecords = lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList),
-            CreateDirs = fun(StorageRecord,TmpAns) ->
-                case create_dirs_at_storage(Root,SpacesInfo,StorageRecord) of
+            CreateDirs = fun(StorageRecord, TmpAns) ->
+                case create_dirs_at_storage(Root, SpacesInfo, StorageRecord) of
                     ok -> TmpAns;
                     Error ->
-                      ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, SpacesInfo}, Error]),
-                      Error
+                        ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, SpacesInfo}, Error]),
+                        Error
                 end
             end,
-            lists:foldl(CreateDirs,ok , StorageRecords);
+            lists:foldl(CreateDirs, ok, StorageRecords);
         Error2 ->
-          ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, SpacesInfo}, {storage_listing_error, Error2}]),
-          {error,storage_listing_error}
+            ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, SpacesInfo}, {storage_listing_error, Error2}]),
+            {error, storage_listing_error}
     end.
 
 %% create_dirs_at_storage/3
@@ -772,7 +773,8 @@ get_spaces(#veil_document{record = #user{} = User}) ->
     get_spaces(User);
 get_spaces(#user{spaces = Spaces}) ->
 %    ?info("Spaces: ~p", [lists:map(fun(SpaceId) -> fslogic_objects:get_space({uuid, SpaceId}) end, Spaces)]),
-    [SpaceInfo || {ok, #space_info{} = SpaceInfo}  <- lists:map(fun(SpaceId) -> fslogic_objects:get_space({uuid, SpaceId}) end, Spaces)];
+    [SpaceInfo || {ok, #space_info{} = SpaceInfo} <- lists:map(fun(SpaceId) ->
+        fslogic_objects:get_space({uuid, SpaceId}) end, Spaces)];
 get_spaces(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
     get_spaces(UserDoc).
@@ -788,8 +790,6 @@ get_spaces(UserQuery) ->
 %% ====================================================================
 create_space_dir(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
     CTime = vcn_utils:time(),
-
-    ?info("OMG ~p", [SpaceName]),
 
     SpaceDirName = unicode:characters_to_list(SpaceName),
 

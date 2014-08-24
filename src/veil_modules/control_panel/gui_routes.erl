@@ -28,6 +28,9 @@ route(<<"/login">>) -> page_login;
 route(<<"/logout">>) -> page_logout;
 route(<<"/file_manager">>) -> page_file_manager;
 route(<<"/shared_files">>) -> page_shared_files;
+route(<<"/spaces">>) -> page_spaces;
+route(<<"/space">>) -> page_space;
+route(<<"/tokens">>) -> page_tokens;
 route(<<"/cluster_logs">>) -> page_cluster_logs;
 route(<<"/client_logs">>) -> page_client_logs;
 route(<<"/manage_account">>) -> page_manage_account;
@@ -35,6 +38,6 @@ route(<<"/about">>) -> page_about;
 route(<<"/privacy_policy">>) -> page_privacy_policy;
 route(<<"/openid/login">>) -> page_openid_login;
 route(<<"/error">>) -> page_error;
-route(ConnectionCheck) when ConnectionCheck==<<"/",(?connection_check_path)/binary>> -> page_connection_check;
+route(ConnectionCheck) when ConnectionCheck == <<"/", (?connection_check_path)/binary>> -> page_connection_check;
 route(<<"/monitoring">>) -> page_monitoring;
 route(_) -> page_404.

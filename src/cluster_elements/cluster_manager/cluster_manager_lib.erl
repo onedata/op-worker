@@ -17,7 +17,7 @@
 
 -spec get_provider_id() -> ProviderId :: binary().
 get_provider_id() ->
-    {ok, Bin} = file:read_file(global_registry:get_provider_cert_path()),
+    {ok, Bin} = file:read_file(gr_plugin:get_cert_path()),
     [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
     PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
 

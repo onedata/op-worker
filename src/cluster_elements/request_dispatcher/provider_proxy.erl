@@ -14,12 +14,13 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("remote_file_management_pb.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_registry/gr_providers.hrl").
 
 %% API
 -export([reroute_pull_message/4, reroute_push_message/3]).
 
 reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
-    {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(ProviderId),
+    {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
 
     [URL | _] = URLs,
 
@@ -72,7 +73,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
     end.
 
 reroute_push_message({ProviderId, FuseId}, Message, MessageDecoder) ->
-    {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(ProviderId),
+    {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
     ?info("Reroute push to: ~p", [URLs]),
 
     [URL | _] = URLs,
@@ -93,7 +94,7 @@ reroute_push_message({ProviderId, FuseId}, Message, MessageDecoder) ->
 
 
 %% communicate_bin({ProviderId, URL}, PRMBin) ->
-%%     {ok, Socket} = connect(URL, 5555, [{certfile, global_registry:get_provider_cert_path()}, {keyfile, global_registry:get_provider_key_path()}]),
+%%     {ok, Socket} = connect(URL, 5555, [{certfile, gr_plugin:get_cert_path()}, {keyfile, gr_plugin:get_key_path()}]),
 %%     send(Socket, PRMBin),
 %%     case recv(Socket, 5000) of
 %%         {ok, Data} ->
