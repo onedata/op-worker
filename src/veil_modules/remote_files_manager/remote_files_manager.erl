@@ -116,6 +116,28 @@ maybe_handle_message(RequestBody, SpaceId) ->
 -spec handle_message(Record :: tuple()) -> Result when
   Result :: term().
 %% ====================================================================
+
+handle_message(Record) when is_record(Record, getattr) ->
+    FileId = Record#getattr.file_id,
+    {Storage_helper_info, File} = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
+    {ok, #st_stat{} = Stat} = storage_files_manager:getattr(Storage_helper_info, File),
+    #storageattibutes{
+        answer = ?VOK,
+        st_atime = Stat#st_stat.st_atime,
+        st_blksize = Stat#st_stat.st_blksize,
+        st_blocks = Stat#st_stat.st_blocks,
+        st_ctime = Stat#st_stat.st_ctime,
+        st_dev = Stat#st_stat.st_dev,
+        st_gid = Stat#st_stat.st_gid,
+        st_ino = Stat#st_stat.st_ino,
+        st_mode = Stat#st_stat.st_mode,
+        st_mtime = Stat#st_stat.st_mtime,
+        st_nlink = Stat#st_stat.st_nlink,
+        st_rdev = Stat#st_stat.st_rdev,
+        st_size = Stat#st_stat.st_size,
+        st_uid = Stat#st_stat.st_uid
+    };
+
 handle_message(Record) when is_record(Record, createfile) ->
     FileId = Record#createfile.file_id,
     Mode = Record#createfile.mode,
