@@ -201,11 +201,12 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
 %% @end
 -spec put_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_cdmi_object(Req, #state{filepath = Filepath} = State) -> %todo read body in chunks
+put_cdmi_object(Req, #state{filepath = Filepath} = State) -> %todo read body in chunks, refactor and reuse some code
     {ok, RawBody, _} = cowboy_req:body(Req),
     Body = rest_utils:parse_body(RawBody),
     ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body, <<"utf-8">>),  %todo check given body opts, store given mimetype
     Value = proplists:get_value(<<"value">>, Body, <<>>),
+    Range = proplists:get_value(<<"valuerange">>, Body, undefined),
     RawValue = case ValueTransferEncoding of
                    <<"base64">> -> base64:decode(Value);
                    <<"utf-8">> -> Value
@@ -224,8 +225,31 @@ put_cdmi_object(Req, #state{filepath = Filepath} = State) -> %todo read body in 
                     {halt, Req2, State}
             end;
         {error, file_exists} ->
-            {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
-            {halt, Req2, State};
+            case Range of
+                {From,To} when To-From+1 == byte_size(RawValue) ->
+                    case logical_files_manager:write(Filepath, From, RawValue) of
+                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
+                            {true, Req, State};
+                        Error ->
+                            ?error("Writing to cdmi object end up with error: ~p", [Error]),
+                            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+                            {halt, Req2, State}
+                    end;
+                undefined ->
+                    logical_files_manager:truncate(Filepath,0),
+                    case logical_files_manager:write(Filepath, RawValue) of
+                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
+                            {true, Req, State};
+                        Error ->
+                            ?error("Writing to cdmi object end up with error: ~p", [Error]),
+                            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+                            {halt, Req2, State}
+                    end;
+                _ ->
+                    ?error("Updating cdmi object end up with error"),
+                    {ok, Req2} = cowboy_req:reply(?error_bad_request_code, Req),
+                    {halt, Req2, State}
+            end;
         Error -> %todo handle common errors
             ?error("Creating cdmi object end up with error: ~p", [Error]),
             {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),

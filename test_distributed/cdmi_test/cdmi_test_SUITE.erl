@@ -19,14 +19,15 @@
 -define(SH, "DirectIO").
 -define(Test_dir_name, "dir").
 -define(Test_file_name, "file.txt").
+-define(Test_file_content, <<"test_file_content">>).
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 %% -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1,get_file_test/1 , create_dir_test/1, create_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1]).
+-export([list_dir_test/1,get_file_test/1 , create_dir_test/1, create_file_test/1, update_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1]).
 
-all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, delete_dir_test, delete_file_test, version_test, request_format_check_test].
+all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, update_file_test, delete_dir_test, delete_file_test, version_test, request_format_check_test].
 
 %% ====================================================================
 %% Test functions
@@ -257,6 +258,25 @@ create_file_test(_Config) ->
 
     ?assert(object_exists(ToCreate5)),
     ?assertEqual(FileContent,get_file_content(ToCreate5)).
+    %%------------------------------
+
+% Tests cdmi object PUT requests (updating content)
+update_file_test(_Config) ->
+    FullName = filename:join(["/",?Test_dir_name,?Test_file_name]),
+
+    %%--- value replace, cdmi ------
+    ?assert(object_exists(FullName)),
+    ?assertEqual(?Test_file_content,get_file_content(FullName)),
+
+    NewValue = <<"New Value!">>,
+    RequestHeaders1 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestBody1 = [{<<"value">>, NewValue}],
+    RawRequestBody1 = rest_utils:encode_to_json(RequestBody1),
+    {Code1, _Headers1, _Response1} = do_request(FullName, put, RequestHeaders1, RawRequestBody1),
+    ?assertEqual("204",Code1),
+
+    ?assert(object_exists(FullName)),
+    ?assertEqual(NewValue,get_file_content(FullName)).
     %%------------------------------
 
 % Tests cdmi container DELETE requests
@@ -528,9 +548,11 @@ setup_user_in_db(DN, CCM) ->
     Ans7 = rpc:call(CCM, erlang, apply, [
         fun() ->
             fslogic_context:set_user_dn(DN),
-            logical_files_manager:create(filename:join(["/",?Test_dir_name,?Test_file_name]))
+            FullName = filename:join(["/",?Test_dir_name,?Test_file_name]),
+            logical_files_manager:create(FullName),
+            logical_files_manager:write(FullName, ?Test_file_content)
         end, [] ]),
-    ?assertEqual(ok, Ans7),
+    ?assert(is_integer(Ans7)),
 
     StorageUUID.
 
