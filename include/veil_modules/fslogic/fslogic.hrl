@@ -58,7 +58,7 @@
 % Callbacks management
 -record(callback, {fuse = 0, pid = 0, node = non, action = non}).
 
--define(REMOTE_HELPER_SEPARATOR, "///").
+-define(REMOTE_HELPER_SEPARATOR, "/").
 -define(CLUSTER_USER_ID, "cluster_uid").
 -define(CLUSTER_FUSE_ID, "cluster_fid").
 

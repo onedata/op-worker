@@ -308,21 +308,15 @@ handle_message(Record) when is_record(Record, changepermsatstorage) ->
     _ -> #atom{value = ?VEREMOTEIO}
   end.
 
+get_storage_and_id([$/ | Combined]) ->
+    get_storage_and_id(Combined);
 get_storage_and_id(Combined) ->
-  Pos = string:str(Combined, ?REMOTE_HELPER_SEPARATOR),
-  case Pos of
-    0 -> error;
-    _ ->
-      try
-        Storage = list_to_integer(string:substr(Combined, 1, Pos - 1)),
-        File = string:substr(Combined, Pos + length(?REMOTE_HELPER_SEPARATOR)),
-        case verify_file_name(File) of
-          {error, _} -> error;
-          {ok, VerifiedFile} -> {Storage, VerifiedFile}
-        end
-      catch
-        _:_ -> error
-      end
+  [StorageStr | PathTokens] = filename:split(Combined),
+  Storage = list_to_integer(StorageStr),
+  File = filename:join(PathTokens),
+  case verify_file_name(File) of
+    {error, _} -> error;
+        {ok, VerifiedFile} -> {Storage, VerifiedFile}
   end.
 
 %% get_helper_and_id/2

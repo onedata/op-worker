@@ -52,7 +52,7 @@ get_sh_and_id(FuseID, Storage, File_id, SpaceId, ForceClusterProxy) ->
     case SHName =:= "ClusterProxy" of
         true ->
             {SHI#storage_helper_info{init_args = [binary_to_list(vcn_utils:ensure_binary(SpaceId))]},
-                    integer_to_list(Storage#storage_info.id) ++ ?REMOTE_HELPER_SEPARATOR ++ File_id};
+                fslogic_path:absolute_join([integer_to_list(Storage#storage_info.id) | filename:split(File_id)])};
         false -> {SHI, File_id}
     end.
 

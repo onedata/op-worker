@@ -29,7 +29,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
             #remotefilemangement{}      -> remote_files_manager
         end,
 
-    ?info("Reroute pull (-> ~p): ~p", [URL, Message]),
+    %% ?info("Reroute pull (-> ~p): ~p", [URL, Message]),
 
     {AnswerDecoderName, AnswerType} = records_translator:get_answer_decoder_and_type(Message),
     MsgBytes = encode(Message),
@@ -44,7 +44,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
                     token_hash = TokenHash, global_user_id = GlobalID,
                     message_decoder_name = a2l(get_message_decoder(Message)), message_type = a2l(get_message_type(Message))},
 
-    ?info("1 ~p", [FuseId]),
+    ?info("1 ~p ~p", [FuseId, ClusterMessage#clustermsg{input = <<"">>}]),
 
     CLMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(ClusterMessage)),
 

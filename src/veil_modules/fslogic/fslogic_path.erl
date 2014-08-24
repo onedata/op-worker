@@ -119,7 +119,9 @@ get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
 
 
 absolute_join(Tokens) ->
-    filename:join(["/" | Tokens]).
+    Tokens1 = Tokens -- ["/"],
+    ?info("Tokens FFS: ~p ~p", [Tokens1 ,Tokens]),
+    filename:join(["/" | Tokens1]).
 
 %% verify_file_name/1
 %% ====================================================================

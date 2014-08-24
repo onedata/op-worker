@@ -110,6 +110,10 @@ reroute_to_remote_provider(_, open, _) ->
     {0, #st_fuse_file_info{}};
 reroute_to_remote_provider(_, release, _) ->
     0;
+reroute_to_remote_provider(_, chown_name, _) ->
+    0;
+reroute_to_remote_provider(_, chown, _) ->
+    0;
 reroute_to_remote_provider(_, is_reg, _) ->
     %% @todo: implement this, possibly by emulating getattr call
     true;

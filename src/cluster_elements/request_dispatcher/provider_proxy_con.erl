@@ -59,7 +59,6 @@ main_loop(#ppcon_state{msg_id = CurrentMsgId, connections = Connections, inbox =
                 From ! {self(), CurrentMsgId},
                 State#ppcon_state{msg_id = CurrentMsgId + 1};
             {From, {send, HostName, MsgId, Data} = _Req} ->
-                ?info("Send req ~p", [_Req]),
                 NState1 = case maps:find(HostName, Connections) of
                     error ->
                         case connect(HostName, 5555, [{certfile, global_registry:get_provider_cert_path()}, {keyfile, global_registry:get_provider_key_path()}]) of
