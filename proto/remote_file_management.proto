@@ -6,6 +6,27 @@ message RemoteFileMangement {
     optional string space_id = 3 [default = ""];
 }
 
+message GetAttr {
+    required string file_id = 1;
+}
+
+message StorageAttibutes {
+    optional string answer = 1 [default = "ok"];
+    optional int64 st_dev = 2 [default = 0];
+    optional int64 st_ino = 3 [default = 0];
+    required int64 st_mode = 4;
+    optional int64 st_nlink = 5 [default = 1];
+    required int64 st_uid = 6;
+    required int64 st_gid = 7;
+    optional int64 st_rdev = 8 [default = 0];
+    required int64 st_size = 9;
+    optional int64 st_blksize = 10 [default = 0];
+    optional int64 st_blocks = 11 [default = 0];
+    optional int64 st_atime = 12 [default = 0];
+    optional int64 st_mtime = 13 [default = 0];
+    optional int64 st_ctime = 14 [default = 0];
+}
+
 message CreateFile {
     required string file_id = 1;
     required uint32 mode = 2;
