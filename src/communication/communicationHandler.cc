@@ -159,8 +159,9 @@ void CommunicationHandler::onMessage(const std::string &payload)
     const auto it = m_promises.find(answer->message_id());
     if(it != m_promises.end())
     {
-        it->second.set_value(std::move(answer));
+        auto promise = std::move(it->second);
         m_promises.erase(it);
+        promise.set_value(std::move(answer));
     }
     else
     {
