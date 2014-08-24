@@ -20,7 +20,6 @@
 
 reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
     {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(ProviderId),
-    ?info("Reroute pull to: ~p", [URLs]),
 
     [URL | _] = URLs,
 
@@ -29,6 +28,8 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
             #fusemessage{}              -> fslogic;
             #remotefilemangement{}      -> remote_files_manager
         end,
+
+    ?info("Reroute pull (-> ~p): ~p", [URL, Message]),
 
     {AnswerDecoderName, AnswerType} = records_translator:get_answer_decoder_and_type(Message),
     MsgBytes = encode(Message),

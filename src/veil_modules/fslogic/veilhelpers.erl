@@ -17,6 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include("remote_file_management_pb.hrl").
 -include("communication_protocol_pb.hrl").
+-include("veil_modules/fslogic/fslogic.hrl").
 
 -export([exec/2, exec/3, exec/4, exec/5]).
 %% ===================================================================
@@ -106,11 +107,24 @@ load_veilhelpers() ->
     end.
 
 reroute_to_remote_provider(_, open, _) ->
-    0;
+    {0, #st_fuse_file_info{}};
 reroute_to_remote_provider(_, release, _) ->
     0;
+reroute_to_remote_provider(_, is_reg, _) ->
+    %% @todo: implement this, possibly by emulating getattr call
+    true;
+reroute_to_remote_provider(_, is_dir, _) ->
+    %% @todo: implement this, possibly by emulating getattr call
+    true;
+reroute_to_remote_provider(_, get_flag, [Flag]) ->
+    veilhelpers_nif:get_flag(Flag);
+reroute_to_remote_provider(_, is_reg, _) ->
+    true;
 reroute_to_remote_provider([SpaceId] = _HelperArgs, mknod, [FileId, Mode, _Dev]) ->
     RequestBody = #createfile{file_id = FileId, mode = Mode},
+    do_reroute(SpaceId, RequestBody);
+reroute_to_remote_provider([SpaceId] = _HelperArgs, getattr, [FileId]) ->
+    RequestBody = #getattr{file_id = FileId},
     do_reroute(SpaceId, RequestBody);
 reroute_to_remote_provider([SpaceId] = _HelperArgs, unlink, [FileId]) ->
     RequestBody = #deletefileatstorage{file_id = FileId},
@@ -140,26 +154,47 @@ do_reroute(SpaceId, RequestBody) ->
     try
         Response = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
             fslogic_context:get_fuse_id(), #remotefilemangement{space_id = SpaceId, input = RequestBody, message_type = atom_to_list(element(1, RequestBody))}),
-        cluster_proxy_response_to_internel(Response)
+        cluster_proxy_response_to_internal(Response)
     catch
         Type:Reason ->
             ?error_stacktrace("Unable to process remote files manager request to provider ~p due to: ~p", [RerouteToProvider, {Type, Reason}]),
             throw({unable_to_reroute_message, Reason})
     end.
 
-cluster_proxy_response_to_internel(#atom{value = ErrorStatus}) ->
+cluster_proxy_response_to_internal(#atom{value = ErrorStatus}) ->
     ErrorCode = fslogic_errors:veilerror_to_posix(fslogic_errors:normalize_error_code(ErrorStatus)),
     -ErrorCode;
-cluster_proxy_response_to_internel(#filedata{answer_status = ErrorStatus, data = Data}) ->
+cluster_proxy_response_to_internal(#filedata{answer_status = ErrorStatus, data = Data}) ->
     ErrorCode = fslogic_errors:veilerror_to_posix(fslogic_errors:normalize_error_code(ErrorStatus)),
     case ErrorCode of
         0 -> {size(Data), Data};
         _ -> {-ErrorCode, Data}
     end;
-cluster_proxy_response_to_internel(#writeinfo{answer_status = ErrorStatus, bytes_written = BytesWritten}) ->
+cluster_proxy_response_to_internal(#writeinfo{answer_status = ErrorStatus, bytes_written = BytesWritten}) ->
     ErrorCode = fslogic_errors:veilerror_to_posix(fslogic_errors:normalize_error_code(ErrorStatus)),
     case ErrorCode of
         0 -> BytesWritten;
         _ -> -ErrorCode
-    end.
+    end;
+cluster_proxy_response_to_internal(#storageattibutes{answer = ErrorStatus} = Attrs) ->
+    ErrorCode = fslogic_errors:veilerror_to_posix(fslogic_errors:normalize_error_code(ErrorStatus)),
+    {ErrorCode, #st_stat{
+        st_atime = Attrs#storageattibutes.st_atime,
+        st_blksize = Attrs#storageattibutes.st_blksize,
+        st_blocks = Attrs#storageattibutes.st_blocks,
+        st_ctime = Attrs#storageattibutes.st_ctime,
+        st_dev = Attrs#storageattibutes.st_dev,
+        st_gid = Attrs#storageattibutes.st_gid,
+        st_ino = Attrs#storageattibutes.st_ino,
+        st_mode = Attrs#storageattibutes.st_mode,
+        st_mtime = Attrs#storageattibutes.st_mtime,
+        st_nlink = Attrs#storageattibutes.st_nlink,
+        st_rdev = Attrs#storageattibutes.st_rdev,
+        st_size = Attrs#storageattibutes.st_size,
+        st_uid = Attrs#storageattibutes.st_uid
+    }};
+cluster_proxy_response_to_internal(Response) ->
+    ?error("Received unknown ClusterProxy reponse: ~p", [Response]),
+    throw({unknown_cluster_proxy_response, Response}).
+
 

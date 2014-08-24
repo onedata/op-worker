@@ -578,9 +578,13 @@ proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId,
 %% ====================================================================
 preproccess_msg(Msg) ->
     case Msg of
-      #veil_request{subject = Subj, request = Msg1, fuse_id = FuseID, access_token = {UserID, AccessToken}} ->
+      #veil_request{subject = Subj, request = Msg1, fuse_id = FuseID, access_token = AccessTokenTuple} ->
         fslogic_context:set_user_dn(Subj),
-        fslogic_context:set_access_token(UserID, AccessToken),
+        case AccessTokenTuple of
+            {UserID, AccessToken} ->
+                fslogic_context:set_access_token(UserID, AccessToken);
+            _ -> undefined
+        end,
         put(fuse_id, FuseID),
         Msg1;
       NotWrapped -> NotWrapped

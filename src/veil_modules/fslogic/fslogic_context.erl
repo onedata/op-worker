@@ -28,10 +28,21 @@
 
 
 get_access_token() ->
-    get(access_token).
+    case {get(gruid), get(access_token)} of
+        {undefined, _} ->
+            case get_user_dn() of
+                undefined ->
+                    {undefined, undefined};
+                DN ->
+                    {ok, #veil_document{record = #user{global_id = GRUID, access_token = AccessToken}}} = fslogic_objects:get_user({dn, DN}),
+                    {GRUID, AccessToken}
+            end;
+        CTX -> CTX
+    end.
 
-set_access_token(UserGlobalId, AccessToken) ->
-    put(access_token, {UserGlobalId, AccessToken}).
+set_access_token(GRUID, AccessToken) ->
+    put(access_token, AccessToken),
+    put(gruid, GRUID).
 
 %% get_user_dn/0
 %% ====================================================================

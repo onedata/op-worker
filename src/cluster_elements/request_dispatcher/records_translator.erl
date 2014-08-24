@@ -106,6 +106,8 @@ get_answer_decoder_and_type(#fusemessage{input = #createfileack{}}) ->
 
 get_answer_decoder_and_type(#remotefilemangement{input = #createfile{}}) ->
     {communication_protocol, atom};
+get_answer_decoder_and_type(#remotefilemangement{input = #getattr{}}) ->
+    {remote_file_management, storageattibutes};
 get_answer_decoder_and_type(#remotefilemangement{input = #deletefileatstorage{}}) ->
     {communication_protocol, atom};
 get_answer_decoder_and_type(#remotefilemangement{input = #truncatefile{}}) ->
