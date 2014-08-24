@@ -15,6 +15,8 @@
 -include("veil_modules/dao/dao_vfs.hrl").
 -include_lib("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("remote_file_management_pb.hrl").
+-include("communication_protocol_pb.hrl").
 
 -export([exec/2, exec/3, exec/4, exec/5]).
 %% ===================================================================
@@ -74,11 +76,16 @@ exec(UserName, GroupId, Method, Args) when is_atom(Method), is_list(Args) ->
     ?debug("VeilHelpers Storage CTX ~p ~p", [UserName, GroupId]),
     ?debug("veilhelpers:exec with args: ~p ~p", [Method, Args1]),
 
-    case gsi_handler:call(veilhelpers_nif, Method, Args1) of
-        {error, 'NIF_not_loaded'} ->
-            ok = load_veilhelpers(),
-            gsi_handler:call(veilhelpers_nif, Method, Args1);
-        Other -> Other
+    case Args of
+        ["ClusterProxy", HelperArgs | MethodArgs] ->
+            reroute_to_remote_provider(HelperArgs, Method, MethodArgs);
+        _ ->
+            case gsi_handler:call(veilhelpers_nif, Method, Args1) of
+                {error, 'NIF_not_loaded'} ->
+                    ok = load_veilhelpers(),
+                    gsi_handler:call(veilhelpers_nif, Method, Args1);
+                Other -> Other
+            end
     end.
 
 
@@ -97,3 +104,62 @@ load_veilhelpers() ->
             ?error("Could not load veilhelpers NIF lib due to error: ~p", [Reason]),
             {error, Reason}
     end.
+
+reroute_to_remote_provider(_, open, _) ->
+    0;
+reroute_to_remote_provider(_, release, _) ->
+    0;
+reroute_to_remote_provider([SpaceId] = _HelperArgs, mknod, [FileId, Mode, _Dev]) ->
+    RequestBody = #createfile{file_id = FileId, mode = Mode},
+    do_reroute(SpaceId, RequestBody);
+reroute_to_remote_provider([SpaceId] = _HelperArgs, unlink, [FileId]) ->
+    RequestBody = #deletefileatstorage{file_id = FileId},
+    do_reroute(SpaceId, RequestBody);
+reroute_to_remote_provider([SpaceId] = _HelperArgs, truncate, [FileId, Size]) ->
+    RequestBody = #truncatefile{file_id = FileId, length = Size},
+    do_reroute(SpaceId, RequestBody);
+reroute_to_remote_provider([SpaceId] = _HelperArgs, read, [FileId, Size, Offset, _FFI]) ->
+    RequestBody = #readfile{file_id = FileId, size = Size, offset = Offset},
+    do_reroute(SpaceId, RequestBody);
+reroute_to_remote_provider([SpaceId] = _HelperArgs, write, [FileId, Buf, Offset, _FFI]) ->
+    RequestBody = #writefile{file_id = FileId, data = Buf, offset = Offset},
+    do_reroute(SpaceId, RequestBody);
+reroute_to_remote_provider([SpaceId] = _HelperArgs, chmod, [FileId, Mode]) ->
+    RequestBody = #changepermsatstorage{file_id = FileId, perms = Mode},
+    do_reroute(SpaceId, RequestBody);
+reroute_to_remote_provider([SpaceId] = _HelperArgs, Method, Args) ->
+    ?error("Unsupported local ClusterProxy request ~p(~p) for SpaceId ~p", [Method, Args, SpaceId]),
+    throw(unsupported_local_cluster_proxy_req).
+
+do_reroute(SpaceId, RequestBody) ->
+    {ok, #space_info{providers = Providers}} = fslogic_objects:get_space({uuid, SpaceId}),
+
+    [RerouteToProvider | _] = Providers,
+    {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(RerouteToProvider),
+    ?info("VeilHelper Reroute to: ~p", [URLs]),
+    try
+        Response = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
+            fslogic_context:get_fuse_id(), #remotefilemangement{space_id = SpaceId, input = RequestBody, message_type = atom_to_list(element(1, RequestBody))}),
+        cluster_proxy_response_to_internel(Response)
+    catch
+        Type:Reason ->
+            ?error_stacktrace("Unable to process remote files manager request to provider ~p due to: ~p", [RerouteToProvider, {Type, Reason}]),
+            throw({unable_to_reroute_message, Reason})
+    end.
+
+cluster_proxy_response_to_internel(#atom{value = ErrorStatus}) ->
+    ErrorCode = fslogic_errors:veilerror_to_posix(fslogic_errors:normalize_error_code(ErrorStatus)),
+    -ErrorCode;
+cluster_proxy_response_to_internel(#filedata{answer_status = ErrorStatus, data = Data}) ->
+    ErrorCode = fslogic_errors:veilerror_to_posix(fslogic_errors:normalize_error_code(ErrorStatus)),
+    case ErrorCode of
+        0 -> {size(Data), Data};
+        _ -> {-ErrorCode, Data}
+    end;
+cluster_proxy_response_to_internel(#writeinfo{answer_status = ErrorStatus, bytes_written = BytesWritten}) ->
+    ErrorCode = fslogic_errors:veilerror_to_posix(fslogic_errors:normalize_error_code(ErrorStatus)),
+    case ErrorCode of
+        0 -> BytesWritten;
+        _ -> -ErrorCode
+    end.
+
