@@ -19,6 +19,7 @@
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
 -export([get_binary/2, get_cdmi_object/2, put_binary/2, put_cdmi_object/2]).
+-export([stream_file/6]).
 
 %% allowed_methods/2
 %% ====================================================================
@@ -144,21 +145,30 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
 %% @end
 -spec get_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-get_cdmi_object(Req, #state{opts = Opts} = State) ->
+get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Size}, filepath = Filepath} = State) ->
     DirCdmi = prepare_object_ans(case Opts of [] -> ?default_get_file_opts; _ -> Opts end, State),
     case proplists:get_value(<<"value">>, DirCdmi) of
         {range, Range} ->
-            Encoding = <<"base64">>, %todo send also utf-8 when possible
-            case read_file(State, Range, Encoding) of
-                {ok, Data} ->
-                    DirCdmiWithValue = lists:append(proplists:delete(<<"value">>, DirCdmi), [{<<"value">>, Data}]),
-                    Response = rest_utils:encode_to_json({struct, DirCdmiWithValue}),
-                    {Response, Req, State};
-                Error ->
-                    ?error("Reading cdmi object end up with error: ~p", [Error]),
-                    {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
-                    {halt, Req2, State}
-            end;
+            BodyWithoutValue = proplists:delete(<<"value">>, DirCdmi),
+            JsonBodyWithoutValue = rest_utils:encode_to_json({struct, BodyWithoutValue}),
+
+            JsonBodyPrefix = <<(erlang:binary_part(JsonBodyWithoutValue,0,byte_size(JsonBodyWithoutValue)-1))/binary,",\"value\":\"">>,
+            JsonBodySuffix = <<"\"}">>,
+            Base64EncodedSize = byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4*ceil(Size / 3.0)),
+
+            StreamFun = fun (Socket,Transport) ->
+                try
+                    Transport:send(Socket,JsonBodyPrefix),
+                    {ok,BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
+                    stream_file(Socket, Transport, State, Range, <<"base64">>, BufferSize), %todo send also utf-8 when possible)
+                    Transport:send(Socket,JsonBodySuffix)
+                catch Type:Message ->
+                    % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
+                    ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Filepath, Type, Message])
+                end
+            end,
+
+            {{stream, Base64EncodedSize, StreamFun}, Req, State};
         undefined ->
             Response = rest_utils:encode_to_json({struct, DirCdmi}),
             {Response, Req, State}
@@ -289,27 +299,46 @@ write_body_to_file(Req, #state{filepath = Filepath} = State, Offset) ->
             {true, Req2, State}
     end.
 
-
-%% read_file/3
+%% stream_file/5
 %% ====================================================================
 %% @doc Reads given range of bytes (defaults to whole file) from file (obtained from state filepath), result is
-%% encoded according to 'Encoding' argument
+%% encoded according to 'Encoding' argument and streamed to given Socket.
 %% @end
--spec read_file(State :: #state{}, Range, Encoding) -> Result when
+-spec stream_file(Socket :: term(), Transport :: atom(), State :: #state{}, Range, Encoding :: binary(), BufferSize :: integer()) -> Result when
     Range :: default | {From :: integer(), To :: integer()},
-    Encoding :: binary(),
-    Result :: {ok, Bytes} | {ErrorGeneral, ErrorDetail},
-    Bytes :: binary(),
-    ErrorGeneral :: atom(),
-    ErrorDetail :: term().
+    Result :: ok | no_return().
 %% ====================================================================
-read_file(#state{attributes = Attrs} = State, default, Encoding) ->
-    read_file(State, {0, Attrs#fileattributes.size - 1}, Encoding); %default range shuold remain consistent with parse_object_ans/2 valuerange clause
-read_file(State, Range, <<"base64">>) ->
-    case read_file(State, Range, <<"utf-8">>) of
-        {ok, Data} -> {ok, base64:encode(Data)};
-        Error -> Error
-    end;
-read_file(#state{filepath = Path}, {From, To}, <<"utf-8">>) ->
-    logical_files_manager:read(Path, From, To - From + 1).
+stream_file(Socket, Transport, State, Range, Encoding, BufferSize) when (BufferSize rem 3) =/= 0 ->
+    stream_file(Socket, Transport, State, Range, Encoding, BufferSize - (BufferSize rem 3)); %buffer size is extended, so it's divisible by 3 to allow base64 on the fly conversion
+stream_file(Socket, Transport, #state{attributes = #fileattributes{ size = Size}} = State, default, Encoding, BufferSize) ->
+    stream_file(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize); %default range should remain consistent with parse_object_ans/2 valuerange clause
+stream_file(Socket, Transport, #state{filepath = Path} = State, {From, To}, Encoding, BufferSize) ->
+    ToRead = To - From + 1,
+    case ToRead > BufferSize of
+        true ->
+            {ok,Data} = logical_files_manager:read(Path, From, BufferSize),
+            Transport:send(Socket,encode(Data,Encoding)),
+            stream_file(Socket,Transport,State, {From+BufferSize,To},Encoding,BufferSize);
+        false ->
+            {ok,Data} = logical_files_manager:read(Path, From, ToRead),
+            Transport:send(Socket,encode(Data,Encoding))
+    end.
 
+%% encode/5
+%% ====================================================================
+%% @doc Encodes data according to given ecoding
+%% @end
+-spec encode(Data :: binary(), Encoding :: binary()) -> binary().
+%% ====================================================================
+encode(Data,Encoding) when Encoding =:= <<"base64">> ->
+    base64:encode(Data);
+encode(Data,_) ->
+    Data.
+
+%% ceil/5
+%% ====================================================================
+%% @doc math ceil function (works on positive values)
+-spec ceil(N :: number()) -> integer().
+%% ====================================================================
+ceil(N) when trunc(N) == N -> N;
+ceil(N) -> trunc(N+1).

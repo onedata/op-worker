@@ -408,7 +408,8 @@ init_per_suite(Config) ->
             {db_nodes, [?DB_NODE]},
             {heart_beat, 1},
             {nif_prefix, './'},
-            {ca_dir, './cacerts/'}
+            {ca_dir, './cacerts/'},
+            {control_panel_download_buffer,4}
         ]]),
 
     gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
