@@ -160,11 +160,11 @@ test_rest_files_regulars() ->
     ?assertEqual(Response4, ""),
 
     {Code5, _Headers5, Response5} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", post, [{"content-type", "multipart/form-data"}], []),
-    ?assertEqual(Code5, "422"),
+    ?assertEqual(Code5, "400"),
     ?assertEqual(list_to_binary(Response5), rest_utils:error_reply(?report_error(?error_upload_cannot_create))),
 
     {Code6, _Headers6, Response6} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", put, [{"content-type", "multipart/form-data"}], []),
-    ?assertEqual(Code6, "422"),
+    ?assertEqual(Code6, "400"),
     ?assertEqual(list_to_binary(Response6), rest_utils:error_reply(?report_error(?error_upload_unprocessable))),
 
     {Code7, _Headers7, Response7} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", delete, [], []),
@@ -187,7 +187,7 @@ test_rest_upload() ->
 
     {Header2, Body2} = format_multipart_request(Data1),
     {Code2, _Headers2, Response2} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", post, [Header2], [Body2]),
-    ?assertEqual(Code2, "422"),
+    ?assertEqual(Code2, "400"),
     ?assertEqual(list_to_binary(Response2), rest_utils:error_reply(?report_error(?error_upload_cannot_create))),
 
     Data2 = "00000000",
@@ -200,7 +200,7 @@ test_rest_upload() ->
 
     {Header4, Body4} = format_multipart_request(Data2),
     {Code4, _Headers4, Response4} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt/file1.txt", put, [Header4], [Body4]),
-    ?assertEqual(Code4, "422"),
+    ?assertEqual(Code4, "400"),
     ?assertEqual(list_to_binary(Response4), rest_utils:error_reply(?report_error(?error_upload_cannot_create))).
 
 
@@ -279,7 +279,7 @@ test_rest_shares() ->
     ?assertEqual(list_to_binary(Response7), rest_utils:error_reply(?report_warning(?error_method_unsupported, ["PUT"]))),
 
 {Code8, _Headers8, Response8} = do_request(?REST_SHARE_SUBPATH, post, [{"content-type", "application/json"}], [<<"\"somepath\"">>]),
-    ?assertEqual(Code8, "422"),
+    ?assertEqual(Code8, "400"),
     ?assertEqual(list_to_binary(Response8), rest_utils:error_reply(?report_warning(?error_share_cannot_create, ["somepath"]))).
 
 test_rest_connection_check() ->
@@ -329,7 +329,7 @@ format_multipart_formdata(Boundary, Fields, Files) ->
     FieldParts2 = lists:append(FieldParts),
     FileParts = lists:map(fun({FieldName, FileName, FileContent}) ->
         [lists:concat(["--", Boundary]),
-            lists:concat(["Content-Disposition: format-data; name=\"", atom_to_list(FieldName), "\"; filename=\"", FileName, "\""]),
+            lists:concat(["Content-Disposition: form-data; name=\"", atom_to_list(FieldName), "\"; filename=\"", FileName, "\""]),
             lists:concat(["Content-Type: ", "application/octet-stream"]),
             "",
             FileContent]

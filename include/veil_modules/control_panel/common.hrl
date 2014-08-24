@@ -32,7 +32,10 @@
 -define(file_upload_path, "/upload").
 
 % Relative suffix of GUI address, leading to privacy policy page
--define(privacy_policy_url, <<"/privacy_policy">>).
+-define(privacy_policy_url, "/privacy_policy").
+
+% Name of parameter sent to logout page that verifies user logout
+-define(logout_token, <<"logout_token">>).
 
 % Macros used as ids of errors that can appear on GUI pages
 -define(error_user_content_not_logged_in, uc_not_logged_in).

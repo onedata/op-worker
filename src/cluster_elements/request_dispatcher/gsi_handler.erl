@@ -18,7 +18,7 @@
 
 -deprecated([proxy_subject/1]).
 
--export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3, get_ca_certs/0, strip_self_signed_ca/1, get_ciphers/0]).
+-export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3, get_ca_certs/0, get_ca_certs_from_all_cert_dirs/0, strip_self_signed_ca/1, get_ciphers/0]).
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -75,21 +75,42 @@ init() ->
 
     ok.
 
+%% get_ca_certs_from_all_cert_dirs/0
+%% ====================================================================
+%% @doc Returns all CA certificates (from cacerts dir), extended with ca's from certs dir.
+%% Returns list of DER encoded entities.
+%% @end
+-spec get_ca_certs_from_all_cert_dirs() -> [binary()] | no_return().
+%% ====================================================================
+get_ca_certs_from_all_cert_dirs() ->
+    {ok, CertDir1} = application:get_env(?APP_Name, certs_dir),
+    CertDir = atom_to_list(CertDir1),
+    get_ca_certs() ++ get_ca_certs_from_dir(CertDir).
+
 %% get_ca_certs/0
 %% ====================================================================
-%% @doc Returns all CA certificates as an list of DER encoded entities
+%% @doc Returns all CA certificates (from cacerts dir) as an list of DER encoded entities
 %% @end
 -spec get_ca_certs() -> [binary()] | no_return().
 %% ====================================================================
 get_ca_certs() ->
     {ok, CADir1} = application:get_env(?APP_Name, ca_dir),
     CADir = atom_to_list(CADir1),
+    get_ca_certs_from_dir(CADir).
+
+%% get_ca_certs_from_dir/1
+%% ====================================================================
+%% @doc Returns all CA certificates from given dir as an list of DER encoded entities
+%% @end
+-spec get_ca_certs_from_dir(CADir :: string()) -> [binary()] | no_return().
+%% ====================================================================
+get_ca_certs_from_dir(CADir) ->
     {ok, Files} = file:list_dir(CADir),
 
     %% Get only files with .pem extension
     CA1 = [{strip_filename_ext(Name), file:read_file(filename:join(CADir, Name))} || Name <- Files, lists:suffix(".pem", Name)],
-    CA2 = [ lists:map(fun(Y) -> {Name, Y} end, public_key:pem_decode(X)) || {Name, {ok, X}} <- CA1],
-    _CA2 = [ X || {_Name, {'Certificate', X, not_encrypted}} <- lists:flatten(CA2)].
+    CA2 = [lists:map(fun(Y) -> {Name, Y} end, public_key:pem_decode(X)) || {Name, {ok, X}} <- CA1],
+    _CA2 = [X || {_Name, {'Certificate', X, not_encrypted}} <- lists:flatten(CA2)].
 
 %% strip_self_signed_ca/1
 %% ====================================================================
