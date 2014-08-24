@@ -40,7 +40,7 @@ get_gr_url() ->
 %% ====================================================================
 get_key_path() ->
     {ok, KeyFile} = application:get_env(?APP_Name, global_registry_provider_key_path),
-    KeyFile.
+    atom_to_list(KeyFile).
 
 
 %% get_cert_path/0
