@@ -67,6 +67,7 @@ public:
 
     ~UserCTX()
     {
+// Only to make compilation possible - veilhelpers_nif does NOT support platforms other then Linux
 #ifndef __APPLE__
         setfsuid(0);
         setfsgid(0);
@@ -92,6 +93,7 @@ private:
         m_uid = uid;
         m_gid = gid;
 
+// Only to make compilation possible - veilhelpers_nif does NOT support platforms other then Linux
 #ifndef __APPLE__
         if(uid != 0) {
             setgroups(0, nullptr);

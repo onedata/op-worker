@@ -77,7 +77,7 @@ set_user_dn(UserDN) ->
 -spec clear_user_dn() -> OldValue :: term().
 %% ====================================================================
 clear_user_dn() ->
-    erase(undefined).
+    erase(user_dn).
 
 
 %% get_fuse_id/0
