@@ -827,9 +827,9 @@ setup_ctx(File) ->
         {ok, #veil_document{record = #user{login = UserName} = UserRec}} ->
             fslogic_context:set_fs_user_ctx(UserName),
             case check_access_type(File) of
-                {ok, {group, SpaceName}} ->
+                {ok, {group, SpaceId}} ->
                     UserSpaces = user_logic:get_spaces(UserRec),
-                    SelectedSpace = [SP || #space_info{name = X} = SP <- UserSpaces, vcn_utils:ensure_binary(SpaceName) =:= X],
+                    SelectedSpace = [SP || #space_info{space_id = X} = SP <- UserSpaces, vcn_utils:ensure_binary(SpaceId) =:= X],
                     GIDs =
                         case SelectedSpace of
                             [] ->
