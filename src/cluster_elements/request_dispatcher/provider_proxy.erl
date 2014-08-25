@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @todo: write me !
+%% @doc: This module handles inter-provider message rerouting.
 %% @end
 %% ===================================================================
 -module(provider_proxy).
@@ -21,18 +21,32 @@
 %% API
 -export([reroute_pull_message/4, reroute_push_message/3]).
 
+
+%% ====================================================================
+%% API functions
+%% ====================================================================
+
+
+%% reroute_pull_message/4
+%% ====================================================================
+%% @doc Reroute given pull request (fusemessage or remotefilemangement) to selected Provider.
+%%      This method returns decoded #answer.input or fails with exception.
+%% @end
+-spec reroute_pull_message( ProviderId :: binary(),
+                            {GlobalID :: binary(), AccessToken :: binary()},
+                            FuseId :: binary() | list(),
+                            Message :: #fusemessage{} | #remotefilemangement{}) -> Response :: term() | no_return().
+%% ====================================================================
 reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
     {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
 
-    [URL | _] = URLs,
+    [URL | _] = URLs,   %% Select provider URL for rerouting
 
     TargetModule =
         case Message of
             #fusemessage{}              -> fslogic;
             #remotefilemangement{}      -> remote_files_manager
         end,
-
-    %% ?info("Reroute pull (-> ~p): ~p", [URL, Message]),
 
     {AnswerDecoderName, AnswerType} = records_translator:get_answer_decoder_and_type(Message),
     MsgBytes = encode(Message),
@@ -47,24 +61,19 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
                     token_hash = TokenHash, global_user_id = GlobalID,
                     message_decoder_name = a2l(get_message_decoder(Message)), message_type = a2l(get_message_type(Message))},
 
-    ?info("1 ~p ~p", [FuseId, ClusterMessage#clustermsg{input = <<"">>}]),
-
     CLMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(ClusterMessage)),
 
     ProviderMsg = #providermsg{message_type = "clustermsg", input = CLMBin, fuse_id = vcn_utils:ensure_binary(FuseId)},
     PRMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_providermsg(ProviderMsg)),
 
-    %% AnswerBin = communicate_bin({ProviderId, URL}, PRMBin),
-
     provider_proxy_con:send(URL, MsgId, PRMBin),
 
     receive
         {response, MsgId, AnswerStatus, WorkerAnswer} ->
-            ?info("Answer0: ~p ~p", [AnswerStatus, WorkerAnswer]),
+            ?debug("Answer for inter-provider pull request: ~p ~p", [AnswerStatus, WorkerAnswer]),
             case AnswerStatus of
                 ?VOK ->
                     Answer = erlang:apply(pb_module(AnswerDecoderName), decoder_method(AnswerType), [WorkerAnswer]),
-                    ?info("Answer1: ~p", [Answer]),
                     Answer;
                 InvalidStatus ->
                     ?error("Cannot reroute message ~p due to invalid answer status: ~p", [get_message_type(Message), InvalidStatus]),
@@ -74,9 +83,18 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
         throw(reroute_timeout)
     end.
 
+
+%% reroute_push_message/3
+%% ====================================================================
+%% @doc Reroute given push request to selected Provider.
+%%      This method returns decoded #answer.input or fails with exception.
+%% @end
+-spec reroute_push_message({ProviderId :: binary(), FuseId :: binary() | list()},
+    Message :: term(), MessageDecoder :: list()) -> ok | error | no_return().
+%% ====================================================================
 reroute_push_message({ProviderId, FuseId}, Message, MessageDecoder) ->
     {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
-    ?info("Reroute push to: ~p", [URLs]),
+    ?info("Reroute push ~p -> ~p", [Message, URLs]),
 
     [URL | _] = URLs,
 
@@ -95,38 +113,51 @@ reroute_push_message({ProviderId, FuseId}, Message, MessageDecoder) ->
     provider_proxy_con:send(URL, 0, PRMBin).
 
 
-%% communicate_bin({ProviderId, URL}, PRMBin) ->
-%%     {ok, Socket} = connect(URL, 5555, [{certfile, gr_plugin:get_cert_path()}, {keyfile, gr_plugin:get_key_path()}]),
-%%     send(Socket, PRMBin),
-%%     case recv(Socket, 5000) of
-%%         {ok, Data} ->
-%%             ?info("Received data from ~p: ~p", [ProviderId, Data]),
-%%             Data;
-%%         {error, Reason} ->
-%%             ?error("Could not receive response from provider ~p due to ~p", [ProviderId, Reason]),
-%%             throw(Reason)
-%%     end.
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
 
+
+%% access_token_hash/2
+%% ====================================================================
+%% @doc Returns hash of given AccessToken. Can be used to confirm user's GlobalId using GlobalRegistry.
+%% @end
+-spec access_token_hash(GlobalId :: binary(), AccessToken :: binary()) -> Hash :: binary().
+%% ====================================================================
 access_token_hash(_GlobalId, AccessToken) ->
     base64:encode(crypto:hash(sha512, AccessToken)).
 
 
+%% encode/1
+%% ====================================================================
+%% @doc Encodes given message.
+%% @end
+-spec encode(Message :: #fusemessage{} | #remotefilemangement{}) -> EncodedMessage :: iolist().
+%% ====================================================================
 encode(#fusemessage{input = Input, message_type = MType} = FM) ->
-    ?info("Message o encode0: ~p", [Input]),
     FMBin = erlang:iolist_to_binary(erlang:apply(fuse_messages_pb, encoder_method(MType), [Input])),
-    ?info("Message o encode1: ~p", [FM#fusemessage{input = FMBin}]),
     erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FM#fusemessage{input = FMBin, message_type = a2l(MType)}));
 encode(#remotefilemangement{input = Input, message_type = MType} = RFM) ->
-    ?info("Message o encode0: ~p", [Input]),
     RFMBin = erlang:iolist_to_binary(erlang:apply(remote_file_management_pb, encoder_method(MType), [Input])),
-    ?info("Message o encode1: ~p", [RFM#remotefilemangement{input = RFMBin}]),
     erlang:iolist_to_binary(remote_file_management_pb:encode_remotefilemangement(RFM#remotefilemangement{input = RFMBin, message_type = a2l(MType)})).
 
 
-
+%% get_message_type/1
+%% ====================================================================
+%% @doc Get message type.
+%% @end
+-spec get_message_type(Msg :: tuple()) -> Type :: atom().
+%% ====================================================================
 get_message_type(Msg) when is_tuple(Msg) ->
-    element(1, Msg).
+    vcn_utils:record_type(Msg).
 
+
+%% get_message_decoder/1
+%% ====================================================================
+%% @doc Get decoder name for given message.
+%% @end
+-spec get_message_decoder(Message :: #fusemessage{} | #remotefilemangement{}) -> Decoder :: atom() | no_return().
+%% ====================================================================
 get_message_decoder(#fusemessage{}) ->
     fuse_messages;
 get_message_decoder(#remotefilemangement{}) ->
@@ -136,35 +167,48 @@ get_message_decoder(Msg) ->
     throw(unknown_decoder).
 
 
-
-
-
+%% encoder_method/1
+%% ====================================================================
+%% @doc Get name of protobuf's encoder method for given message type.
+%% @end
+-spec encoder_method(MType :: atom() | list()) -> EncoderName :: atom().
+%% ====================================================================
 encoder_method(MType) when is_atom(MType) ->
     encoder_method(atom_to_list(MType));
 encoder_method(MType) when is_list(MType) ->
     list_to_atom("encode_" ++ MType).
 
+
+%% decoder_method/1
+%% ====================================================================
+%% @doc Get name of protobuf's decoder method for given message type.
+%% @end
+-spec decoder_method(MType :: atom() | list()) -> DecoderName :: atom().
+%% ====================================================================
 decoder_method(MType) when is_atom(MType) ->
     decoder_method(atom_to_list(MType));
 decoder_method(MType) when is_list(MType) ->
     list_to_atom("decode_" ++ MType).
 
 
+%% pb_module/1
+%% ====================================================================
+%% @doc Get protobuf's decoder's module name for given decoder's name.
+%% @end
+-spec method(ModuleName :: atom() | list()) -> PBModule :: atom().
+%% ====================================================================
 pb_module(ModuleName) ->
-    list_to_atom(ensure_list(ModuleName) ++ "_pb").
+    list_to_atom(vcn_utils:ensure_list(ModuleName) ++ "_pb").
 
 
+%% a2l/1
+%% ====================================================================
+%% @doc Converts given list/atom to atom.
+%% @end
+-spec a2l(AtomOrList :: atom() | list()) -> Result :: atom().
+%% ====================================================================
 a2l(Atom) when is_atom(Atom) ->
     atom_to_list(Atom);
 a2l(List) when is_list(List) ->
-    List.
-
-ensure_list(Binary) when is_binary(Binary) ->
-    binary_to_list(Binary);
-ensure_list(Atom) when is_atom(Atom) ->
-    atom_to_list(Atom);
-ensure_list(Num) when is_integer(Num) ->
-    integer_to_list(Num);
-ensure_list(List) when is_list(List) ->
     List.
 

@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @todo: write me !
+%% @doc: Library module for cluster-wide operations.
 %% @end
 %% ===================================================================
 -module(cluster_manager_lib).
@@ -17,6 +17,12 @@
 %% API
 -export([get_provider_id/0]).
 
+%% get_provider_id/0
+%% ====================================================================
+%% @doc Returns Provider ID for current VeilCluster instance.
+%% @end
+-spec get_provider_id() -> ProviderId :: binary() | no_return().
+%% ====================================================================
 -spec get_provider_id() -> ProviderId :: binary().
 get_provider_id() ->
     {ok, Bin} = file:read_file(gr_plugin:get_cert_path()),

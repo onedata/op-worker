@@ -96,6 +96,7 @@
 %% Maximum time (in ms) after which document conflict resolution shall occur
 -define(MAX_SLEEP_TIME_CONFLICT_RESOLUTION, 100).
 
+%% Default permissions for space directory (i.e. /spaces/SpaceName)
 -define(SpaceDirPerm, 8#1770).
 
 -endif.
