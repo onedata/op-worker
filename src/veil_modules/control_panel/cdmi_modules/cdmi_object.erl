@@ -312,7 +312,7 @@ write_body_to_file(Req, #state{filepath = Filepath} = State, Offset) ->
             cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p",[Error])
     end.
 
-%% stream_file/5
+%% stream_file/6
 %% ====================================================================
 %% @doc Reads given range of bytes (defaults to whole file) from file (obtained from state filepath), result is
 %% encoded according to 'Encoding' argument and streamed to given Socket.
@@ -337,7 +337,7 @@ stream_file(Socket, Transport, #state{filepath = Path} = State, {From, To}, Enco
             Transport:send(Socket,encode(Data,Encoding))
     end.
 
-%% encode/5
+%% encode/2
 %% ====================================================================
 %% @doc Encodes data according to given ecoding
 %% @end
@@ -348,7 +348,7 @@ encode(Data,Encoding) when Encoding =:= <<"base64">> ->
 encode(Data,_) ->
     Data.
 
-%% ceil/5
+%% ceil/1
 %% ====================================================================
 %% @doc math ceil function (works on positive values)
 -spec ceil(N :: number()) -> integer().
