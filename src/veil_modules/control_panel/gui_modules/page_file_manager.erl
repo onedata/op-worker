@@ -515,9 +515,12 @@ put_to_clipboard(Type) ->
 
 
 paste_from_clipboard() ->
+    ClipboardItems = get_clipboard_items(),
+    ClipboardType = get_clipboard_type(),
+    clear_clipboard(),
     ErrorMessage = lists:foldl(
         fun({Path, Basename}, Acc) ->
-            case get_clipboard_type() of
+            case ClipboardType of
                 cut ->
                     case fs_mv(Path, get_working_directory()) of
                         ok ->
@@ -536,14 +539,13 @@ paste_from_clipboard() ->
                     fs_copy(Path, get_working_directory()),
                     Acc
             end
-        end, <<"">>, get_clipboard_items()),
+        end, <<"">>, ClipboardItems),
     case ErrorMessage of
         <<"">> ->
             ok;
         _ ->
             gui_jq:wire(#alert{text = ErrorMessage})
     end,
-    clear_clipboard(),
     clear_workspace().
 
 
@@ -818,7 +820,7 @@ path_navigator_body(WorkingDirectory) ->
                         body = gui_str:html_encode(Element)},
                     {Link, {PathToElement, Counter + 1}}
                 end, {<<"">>, 1}, lists:sublist(PathElements, length(PathElements) - 1)),
-            [FirstLink | LinkList] ++ [lists:last(PathElements)]
+            [FirstLink | LinkList] ++ [gui_str:html_encode(lists:last(PathElements))]
     end.
 
 
@@ -1150,14 +1152,14 @@ fs_remove(BinPath) ->
     Path = gui_str:binary_to_unicode_list(BinPath),
     Item = item_new(Path),
     case item_is_dir(Item) of
-        true -> fs_remove_dir(Path);
+        true -> fs_remove_dir(BinPath);
         false -> logical_files_manager:delete(Path)
     end.
 
 
 fs_remove_dir(BinDirPath) ->
     DirPath = gui_str:binary_to_unicode_list(BinDirPath),
-    case is_group_dir(DirPath) of
+    case is_group_dir(BinDirPath) of
         true ->
             skip;
         false ->

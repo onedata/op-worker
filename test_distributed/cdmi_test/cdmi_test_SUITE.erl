@@ -531,12 +531,13 @@ setup_user_in_db(DN, CCM) ->
     Name = "user user",
     Teams = [?TEST_GROUP],
     Email = "user@email.net",
+    GlobalId = "id",
 
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
 
     {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?ARG_TEST_ROOT]),
     ?assertEqual(ok, Ans1),
-    {Ans5, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+    {Ans5, _} = rpc:call(CCM, user_logic, create_user, [GlobalId,Login, Name, Teams, Email, DnList]),
     ?assertEqual(ok, Ans5),
 
     fslogic_context:set_user_dn(DN),

@@ -12,6 +12,7 @@
 
 -module(page_login).
 -include("veil_modules/control_panel/common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % n2o API
 -export([main/0, event/1]).
@@ -36,9 +37,9 @@ body() ->
                     body = <<"No session or session expired. Please log in.">>}},
                 #panel{class = <<"alert alert-success login-page">>, body = [
                     #h3{body = <<"Welcome to VeilFS">>},
-                    #p{class = <<"login-info">>, body = <<"Logging in is handled by <b>PL-Grid OpenID</b>. ",
-                    "You need to have an account and possibly VeilFS service enabled.">>},
-                    #button{postback = login, class = <<"btn btn-primary btn-block">>, body = <<"Log in via PL-Grid OpenID">>}
+                    #p{class = <<"login-info">>, body = <<"THIS IS A NON-PRODUCTION, DEVELOPER-FRIENDLY LOGIN PAGE">>},
+                    #button{postback = plgrid_login, class = <<"btn btn-primary">>, body = <<"Log in via PL-Grid OpenID">>},
+                    #button{postback = globalregistry_login, class = <<"btn btn-warning">>, body = <<"Log in via Global Registry">>}
                 ]},
                 gui_utils:cookie_policy_popup_body(?privacy_policy_url)
             ] ++ vcn_gui_utils:logotype_footer(120)
@@ -48,8 +49,13 @@ body() ->
 
 
 event(init) -> ok;
+
 % Login event handling
-event(login) ->
+event(globalregistry_login) ->
+    {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
+    gui_jq:redirect(atom_to_binary(GlobalRegistryHostname, latin1));
+
+event(plgrid_login) ->
     % Collect redirect param if present
     RedirectParam = case gui_ctx:url_param(<<"x">>) of
                         undefined -> <<"">>;
@@ -63,7 +69,7 @@ event(login) ->
             gui_jq:fade_in(<<"error_message">>, 300);
         Host ->
             % Get redirect URL and redirect to OpenID login
-            case openid_utils:get_login_url(Host, RedirectParam) of
+            case plgrid_openid_utils:get_login_url(Host, RedirectParam) of
                 {error, _} ->
                     gui_jq:update(<<"error_message">>, <<"Unable to reach OpenID Provider. Please try again later.">>),
                     gui_jq:fade_in(<<"error_message">>, 300);

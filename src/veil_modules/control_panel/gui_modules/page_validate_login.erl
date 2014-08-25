@@ -28,10 +28,10 @@ body() ->
     case gui_ctx:user_logged_in() of
         true -> gui_jq:redirect(<<"/">>);
         false ->
-            LoginMessage = case openid_utils:prepare_validation_parameters() of
+            LoginMessage = case plgrid_openid_utils:prepare_validation_parameters() of
                                {error, invalid_request} -> {error, invalid_request};
                                {EndpointURL, RequestBody} ->
-                                   openid_utils:validate_openid_login({EndpointURL, RequestBody})
+                                   plgrid_openid_utils:validate_openid_login({EndpointURL, RequestBody})
                            end,
 
             case LoginMessage of
@@ -46,15 +46,17 @@ body() ->
 
                 ok ->
                     try
-                        case openid_utils:retrieve_user_info() of
+                        case plgrid_openid_utils:retrieve_user_info() of
                             {error, invalid_request} ->
                                 page_error:redirect_with_error(?error_openid_login_error);
                             {ok, Proplist} ->
                                 {Login, UserDoc} = user_logic:sign_in(Proplist),
+                                LogoutToken = vcn_gui_utils:gen_logout_token(),
                                 gui_ctx:create_session(),
                                 gui_ctx:set_user_id(Login),
                                 vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
                                 vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
+                                vcn_gui_utils:set_logout_token(LogoutToken),
                                 gui_jq:redirect_from_login(),
                                 ?debug("User ~p logged in", [Login])
                         end

@@ -53,7 +53,7 @@ init(_Args) ->
     % Get params from env for gui
     {ok, DocRoot} = application:get_env(veil_cluster_node, control_panel_static_files_root),
 
-    {ok, Cert} = application:get_env(veil_cluster_node, ssl_cert_path),
+    {ok, Cert} = application:get_env(veil_cluster_node, web_ssl_cert_path),
     CertString = atom_to_list(Cert),
 
     {ok, GuiPort} = application:get_env(veil_cluster_node, control_panel_port),
@@ -88,7 +88,7 @@ init(_Args) ->
             {port, GuiPort},
             {certfile, CertString},
             {keyfile, CertString},
-            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
+            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs_from_all_cert_dirs())},
             {password, ""},
             {ciphers, gsi_handler:get_ciphers()}
         ],
@@ -135,7 +135,7 @@ init(_Args) ->
             {port, RestPort},
             {certfile, CertString},
             {keyfile, CertString},
-            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
+            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs_from_all_cert_dirs())},
             {password, ""},
             {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}},
             {ciphers, gsi_handler:get_ciphers()}

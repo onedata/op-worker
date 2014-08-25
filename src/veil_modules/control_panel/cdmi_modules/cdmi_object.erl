@@ -55,7 +55,7 @@ malformed_request(Req, State) ->
 %% ====================================================================
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
-resource_exists(Req,State = #state{filepath = Filepath}) ->
+resource_exists(Req, State = #state{filepath = Filepath}) ->
     case logical_files_manager:getfileattr(Filepath) of
         {ok, #fileattributes{type = "REG"} = Attr} -> {true, Req, State#state{attributes = Attr}};
         _ -> {false, Req, State}
@@ -68,7 +68,7 @@ resource_exists(Req,State = #state{filepath = Filepath}) ->
 %% exists in cdmi_handler
 %% @end
 %% ====================================================================
--spec content_types_provided(req(), #state{}) -> {[{ContentType,Method}], req(), #state{}} when
+-spec content_types_provided(req(), #state{}) -> {[{ContentType, Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
 %% ====================================================================
@@ -90,7 +90,7 @@ content_types_provided(Req, State) ->
 %% exists in cdmi_handler
 %% @end
 %% ====================================================================
--spec content_types_accepted(req(), #state{}) -> {[{ContentType,Method}], req(), #state{}} when
+-spec content_types_accepted(req(), #state{}) -> {[{ContentType, Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
 %% ====================================================================
@@ -300,17 +300,16 @@ prepare_object_ans([Other | Tail], State) ->
 -spec write_body_to_file(req(), #state{}, integer()) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 write_body_to_file(Req, #state{filepath = Filepath} = State, Offset) ->
-    case cowboy_req:stream_body(Req) of
-        {ok, Chunk, Req2} ->
-            case logical_files_manager:write(Filepath, Offset, Chunk) of
-                Bytes when is_integer(Bytes) ->
-                    write_body_to_file(Req2, State, Offset + Bytes);
-                Error ->
-                    logical_files_manager:delete(Filepath),
-                    cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p",[Error])
+    {Status, Chunk, Req2} = cowboy_req:body(Req),
+    case logical_files_manager:write(Filepath, Offset, Chunk) of
+        Bytes when is_integer(Bytes) ->
+            case Status of
+                more -> write_body_to_file(Req2, State, Offset + Bytes);
+                ok -> {true, Req2, State}
             end;
-        {done, Req2} ->
-            {true, Req2, State}
+        Error ->
+            logical_files_manager:delete(Filepath),
+            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p",[Error])
     end.
 
 %% stream_file/5

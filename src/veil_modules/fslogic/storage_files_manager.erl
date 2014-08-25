@@ -144,14 +144,24 @@ delete_dir(Storage_helper_info, File) ->
         true ->
           ErrorCode2 = veilhelpers:exec(rmdir, Storage_helper_info, [File]),
           case ErrorCode2 of
-            0 -> ok;
-            {error, 'NIF_not_loaded'} -> ErrorCode2;
-            _ -> {wrong_rmdir_return_code, ErrorCode2}
+            0 -> clear_cache(File);
+            {error, 'NIF_not_loaded'} ->
+              clear_cache(File),
+              ErrorCode2;
+            _ ->
+              clear_cache(File),
+              {wrong_rmdir_return_code, ErrorCode2}
           end;
-        false -> {error, not_directory}
+        false ->
+          clear_cache(File),
+          {error, not_directory}
       end;
-    error -> {ErrorCode, Stat};
-    _ -> {ErrorCode, Stat}
+    error ->
+      clear_cache(File),
+      {ErrorCode, Stat};
+    _ ->
+      clear_cache(File),
+      {ErrorCode, Stat}
   end.
 
 %% chmod/3
@@ -462,14 +472,24 @@ delete(Storage_helper_info, File) ->
         true ->
           ErrorCode2 = veilhelpers:exec(unlink, Storage_helper_info, [File]),
           case ErrorCode2 of
-            0 -> ok;
-            {error, 'NIF_not_loaded'} -> ErrorCode2;
-            _ -> {wrong_unlink_return_code, ErrorCode2}
+            0 -> clear_cache(File);
+            {error, 'NIF_not_loaded'} ->
+              clear_cache(File),
+              ErrorCode2;
+            _ ->
+              clear_cache(File),
+              {wrong_unlink_return_code, ErrorCode2}
           end;
-        false -> {error, not_regular_file}
+        false ->
+          clear_cache(File),
+          {error, not_regular_file}
       end;
-    error -> {ErrorCode, Stat};
-    _ -> {ErrorCode, Stat}
+    error ->
+      clear_cache(File),
+      {ErrorCode, Stat};
+    _ ->
+      clear_cache(File),
+      {ErrorCode, Stat}
   end.
 
 %% ls/0
@@ -570,7 +590,7 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
     case ValType of
       file_stats -> get({File, ValueName});
       flag -> get({Storage_helper_info, ValueName});
-      size -> get(test_key)   %% check if table exists
+      _ -> undefined   %% size
     end,
 
   case CachedValue of
@@ -814,3 +834,17 @@ setup_ctx(File) ->
       end;
     _ -> {error, no_user}
   end.
+
+
+%% clear_cache/1
+%% ====================================================================
+%% @doc Clears caches connected with file.
+%% @end
+-spec clear_cache(File :: string()) -> ok.
+clear_cache(File) ->
+  erase({File, is_reg}),
+  erase({File, grp_wr}),
+  erase({File, is_dir}),
+  erase({File, owner}),
+  erase({File, stats}),
+  ok.

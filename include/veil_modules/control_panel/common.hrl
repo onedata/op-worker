@@ -32,7 +32,10 @@
 -define(file_upload_path, "/upload").
 
 % Relative suffix of GUI address, leading to privacy policy page
--define(privacy_policy_url, <<"/privacy_policy">>).
+-define(privacy_policy_url, "/privacy_policy").
+
+% Name of parameter sent to logout page that verifies user logout
+-define(logout_token, <<"logout_token">>).
 
 % Macros used as ids of errors that can appear on GUI pages
 -define(error_user_content_not_logged_in, uc_not_logged_in).
@@ -46,6 +49,7 @@
 -define(error_openid_login_error, openid_login_error).
 -define(error_login_dir_creation_error, login_dir_creation_error).
 -define(error_login_dir_chown_error, login_dir_chown_error).
+-define(error_authentication, error_authentication).
 
 % Custom upload element
 -record(veil_upload, {?ELEMENT_BASE(veil_upload),
