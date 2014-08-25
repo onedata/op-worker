@@ -16,6 +16,7 @@
 -include("registered_names.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
+-include_lib("ctool/include/global_registry/gr_users.hrl").
 
 
 %% ====================================================================
@@ -180,15 +181,14 @@ get_user(Key) ->
 
 synchronize_spaces_info(#veil_document{record = #user{global_id = GlobalId} = UserRec} = UserDoc, AccessToken) ->
     case gr_users:get_spaces({user, AccessToken}) of
-        {ok, SpaceIds} ->
+        {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} ->
             ?info("Synchronized spaces: ~p", [SpaceIds]),
-            NewSpaces =
-                case UserRec#user.spaces of
-                    [] -> SpaceIds;
-                    [MainSpace | _] ->
-                        {MainSpace1, Rest} = lists:partition(fun(Elem) -> Elem =:= MainSpace end, SpaceIds),
-                        MainSpace1 ++ Rest
-                end,
+            NewSpaces = case DefaultSpaceId of
+                            _ when is_binary(DefaultSpaceId) ->
+                                [DefaultSpaceId | lists:delete(DefaultSpaceId, SpaceIds)];
+                            _ ->
+                                SpaceIds
+                        end,
 
             ?info("New spaces: ~p", [NewSpaces]),
 
