@@ -88,20 +88,20 @@ mkdir(Storage_helper_info, Dir, Mode) ->
                     UserID = fslogic_context:get_user_dn(),
 
                     case UserID of
-                    undefined -> ok;
-                    _ ->
-                        {GetUserAns, User} = user_logic:get_user({dn, UserID}),
-                        case GetUserAns of
-                            ok ->
-                                UserRecord = User#veil_document.record,
-                                Login = UserRecord#user.login,
-                                ChownAns = chown(Storage_helper_info, Dir, Login, ""),
-                                case ChownAns of
-                                    ok -> ok;
-                                    _ ->  {cannot_change_dir_owner, ChownAns}
-                                end;
-                            _ -> {cannot_change_dir_owner, get_user_error}
-                        end
+                        undefined -> ok;
+                        _ ->
+                            {GetUserAns, User} = user_logic:get_user({dn, UserID}),
+                            case GetUserAns of
+                                ok ->
+                                    UserRecord = User#veil_document.record,
+                                    Login = UserRecord#user.login,
+                                    ChownAns = chown(Storage_helper_info, Dir, Login, ""),
+                                    case ChownAns of
+                                        ok -> ok;
+                                        _ ->  {cannot_change_dir_owner, ChownAns}
+                                    end;
+                                _ -> {cannot_change_dir_owner, get_user_error}
+                            end
                     end;
                 {error, 'NIF_not_loaded'} -> ErrorCode2;
                 _ ->

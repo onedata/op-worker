@@ -698,6 +698,7 @@ shortname_to_oid_code(Shortname) ->
 %% ====================================================================
 create_dirs_at_storage(Root, SpacesInfo) ->
     {ListStatus, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], 1),
+    ?info("Creating dirs on storage for ~p / ~p", [SpacesInfo, StorageList]),
     case ListStatus of
         ok ->
             StorageRecords = lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList),
@@ -724,12 +725,12 @@ create_dirs_at_storage(Root, SpacesInfo) ->
 %% ====================================================================
 create_dirs_at_storage(Root, SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
-    fslogic_context:clear_user_dn(),
+    fslogic_context:clear_user_ctx(),
 
     CreateTeamsDirs = fun(#space_info{name = SpaceName} = SpaceInfo, TmpAns) ->
         Dir = unicode:characters_to_list(SpaceName),
-        DirName = filename:join(["", ?SPACES_BASE_DIR_NAME, Dir]),
-        storage_files_manager:mkdir(SHI, filename:join(["", ?SPACES_BASE_DIR_NAME, ?EX_ALL_PERM bor ?RWE_USR_PERM])),
+        DirName = filename:join(["/", ?SPACES_BASE_DIR_NAME, Dir]),
+        _Result = storage_files_manager:mkdir(SHI, filename:join(["", ?SPACES_BASE_DIR_NAME]), ?EX_ALL_PERM bor ?RWE_USR_PERM),
         Ans = storage_files_manager:mkdir(SHI, DirName),
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->

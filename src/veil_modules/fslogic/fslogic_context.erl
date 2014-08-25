@@ -21,6 +21,7 @@
 -export([set_fs_user_ctx/1, get_fs_user_ctx/0, set_fs_group_ctx/1, get_fs_group_ctx/0]).
 -export([get_access_token/0, set_access_token/2]).
 -export([gen_global_fuse_id/2, read_global_fuse_id/1, is_global_fuse_id/1]).
+-export([clear_user_ctx/0, clear_access_token/0]).
 
 %% ====================================================================
 %% API functions
@@ -43,6 +44,14 @@ get_access_token() ->
 set_access_token(GRUID, AccessToken) ->
     put(access_token, AccessToken),
     put(gruid, GRUID).
+
+clear_access_token() ->
+    erase(access_token),
+    erase(gruid).
+
+clear_user_ctx() ->
+    clear_access_token(),
+    clear_user_dn().
 
 %% get_user_dn/0
 %% ====================================================================
@@ -68,7 +77,7 @@ set_user_dn(UserDN) ->
 -spec clear_user_dn() -> OldValue :: term().
 %% ====================================================================
 clear_user_dn() ->
-    set_user_dn(undefined).
+    erase(undefined).
 
 
 %% get_fuse_id/0

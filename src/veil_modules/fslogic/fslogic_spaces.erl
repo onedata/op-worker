@@ -22,9 +22,11 @@ initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
             try user_logic:create_dirs_at_storage(non, [SpaceInfo]) of
                 ok -> {ok, SpaceInfo};
                 {error, Reason} ->
+                    ?error("Filed to create space's (~p) dir on storage due to ~p", [SpaceInfo, Reason]),
                     throw(Reason)
             catch
                 Type:Error ->
+                    ?error_stacktrace("Cannot initialize space on storage due to: ~p:~p", [Type, Error]),
                     dao_lib:apply(dao_vfs, remove_file, [{uuid, SpaceUUID}], 1),
                     {error, {Type, Error}}
             end,
@@ -36,6 +38,7 @@ initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
             {ok, _} = dao_lib:apply(vfs, save_file, [FileDoc#veil_document{record = NewFile}], 1),
             {ok, SpaceInfo};
         {error, Reason} ->
+            ?error("Filed to initialize space (~p) due to ~p", [SpaceInfo, Reason]),
             {error, Reason}
     end;
 initialize(SpaceId) ->
