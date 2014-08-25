@@ -1,13 +1,15 @@
-%%%-------------------------------------------------------------------
-%%% @author krzysztof
-%%% @copyright (C) 2014, <COMPANY>
-%%% @doc
-%%%
-%%% @end
-%%% Created : 29. Jul 2014 12:53 AM
-%%%-------------------------------------------------------------------
+%% ===================================================================
+%% @author Krzysztof Trzepla
+%% @copyright (C): 2014 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This module contains project specific interaction functions
+%% with Global Registry.
+%% @end
+%% ===================================================================
 -module(gr_adapter).
--author("krzysztof").
 
 -include("veil_modules/dao/dao.hrl").
 -include_lib("ctool/include/logging.hrl").
