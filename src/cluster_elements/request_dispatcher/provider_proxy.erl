@@ -195,7 +195,7 @@ decoder_method(MType) when is_list(MType) ->
 %% ====================================================================
 %% @doc Get protobuf's decoder's module name for given decoder's name.
 %% @end
--spec method(ModuleName :: atom() | list()) -> PBModule :: atom().
+-spec pb_module(ModuleName :: atom() | list()) -> PBModule :: atom().
 %% ====================================================================
 pb_module(ModuleName) ->
     list_to_atom(vcn_utils:ensure_list(ModuleName) ++ "_pb").

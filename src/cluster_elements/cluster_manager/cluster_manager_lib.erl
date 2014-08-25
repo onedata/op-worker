@@ -20,10 +20,10 @@
 %% get_provider_id/0
 %% ====================================================================
 %% @doc Returns Provider ID for current VeilCluster instance.
+%%      Fails with undefined exception if the VeilCLuster is not registered as an Provider.
 %% @end
 -spec get_provider_id() -> ProviderId :: binary() | no_return().
 %% ====================================================================
--spec get_provider_id() -> ProviderId :: binary().
 get_provider_id() ->
     {ok, Bin} = file:read_file(gr_plugin:get_cert_path()),
     [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),

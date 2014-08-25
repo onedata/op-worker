@@ -12,22 +12,21 @@
 -module(user_logic).
 
 -include("veil_modules/fslogic/fslogic.hrl").
--include_lib("ctool/include/logging.hrl").
 -include("registered_names.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% ====================================================================
 %% API
 %% ====================================================================
 -export([sign_in/2, create_user/6, get_user/1, remove_user/1, list_all_users/0]).
--export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
+-export([get_login/1, get_name/1, get_teams/1, update_spaces/2]).
 -export([get_email_list/1, update_email_list/2, get_role/1, update_role/2]).
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
--export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_space_names/1, create_space_dir/1, get_spaces/1]).
 -export([create_dirs_at_storage/3, create_dirs_at_storage/2]).
@@ -62,7 +61,7 @@ sign_in(Proplist, AccessToken) ->
     Emails = proplists:get_value(emails, Proplist, []),
     DnList = proplists:get_value(dn_list, Proplist, []),
 
-    ?info("Login with token: ~p", [AccessToken]),
+    ?debug("Login with token: ~p", [AccessToken]),
 
     fslogic_context:set_access_token(GlobalId, AccessToken),
 
@@ -110,10 +109,10 @@ create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken) ->
         global_id = GlobalId,
         login = Login,
         name = Name,
-%%         teams = case Teams of
-%%                     Teams when is_list(Teams) -> Teams;
-%%                     _ -> []
-%%                 end,
+        teams = case Teams of
+                    Teams when is_list(Teams) -> Teams;
+                    _ -> []
+                end,
         email_list = case Email of
                          List when is_list(List) -> List;
                          _ -> []
@@ -179,6 +178,14 @@ get_user(Key) ->
     dao_lib:apply(dao_users, get_user, [Key], 1).
 
 
+
+%% synchronize_spaces_info/2
+%% ====================================================================
+%% @doc Tries to synchronize spaces for given local user with GlobalRegistry. This process involves downloading list of available to user spaces <br/>
+%%      and initializing each of those spaces. This method never fails. On success, user's document is saved to DB.
+%% @end
+-spec synchronize_spaces_info(UserDoc :: #veil_document{}, AccessToken :: binary()) -> UserDoc :: #veil_document{}.
+%% ====================================================================
 synchronize_spaces_info(#veil_document{record = #user{global_id = GlobalId} = UserRec} = UserDoc, AccessToken) ->
     case gr_users:get_spaces({user, AccessToken}) of
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} ->
@@ -200,7 +207,7 @@ synchronize_spaces_info(#veil_document{record = #user{global_id = GlobalId} = Us
                 {ok, _} ->
                     UserDoc1;
                 {error, Reason} ->
-                    ?error("Cannot save user (wile syncing spaces) due to: ~p", [Reason]),
+                    ?error("Cannot save user (while syncing spaces) due to: ~p", [Reason]),
                     UserDoc
             end;
         {error, Reason} ->
@@ -305,17 +312,18 @@ get_teams(User) ->
     User#veil_document.record#user.teams.
 
 
-%% update_teams/2
+%% update_spaces/2
 %% ====================================================================
 %% @doc
-%% Update #veil_document encapsulating #user record with new teams and save it to DB.
+%% Update #veil_document encapsulating #user record with new spaces and save it to DB.
+%% Also if given spaces don't exist locally, all needed directories (both in DB and Storage) are created.
 %% @end
--spec update_teams(User, NewTeams) -> Result when
+-spec update_spaces(User, NewTeams) -> Result when
     User :: user_doc(),
     NewTeams :: string(),
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
-update_teams(#veil_document{record = UserInfo} = UserDoc, NewTeams) ->
+update_spaces(#veil_document{record = UserInfo} = UserDoc, NewTeams) ->
     NewDoc = UserDoc#veil_document{record = UserInfo#user{teams = NewTeams}},
     [create_space_dir(SpaceInfo) || SpaceInfo <- get_spaces(NewDoc)], %% Create team dirs in DB if they dont exist
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
@@ -604,21 +612,19 @@ invert_dn_string(DNString) ->
 %% Internal functions
 %% ====================================================================
 
-%% synchronize_user_info/4
+%% synchronize_user_info/5
 %% ====================================================================
 %% @doc
 %% This function synchronizes data from database with the information
 %% received from OpenID provider.
 %% @end
--spec synchronize_user_info(User, Teams, Emails, DnList) -> Result when
+-spec synchronize_user_info(User, Teams, Emails, DnList, AccessToken :: binary()) -> Result when
     User :: user_doc(),
     Teams :: string(),
     Emails :: [string()],
     DnList :: [string()],
     Result :: user_doc().
 %% ====================================================================
-synchronize_user_info(User, Teams, Emails, DnList) ->
-    synchronize_user_info(User, Teams, Emails, DnList, <<>>).
 synchronize_user_info(User, Teams, Emails, DnList, AccessToken) ->
     %% Actual updates will probably happen so rarely, that there is no need to scoop those 3 DB updates into one.
     User1 = update_access_token(User, AccessToken),
@@ -626,7 +632,7 @@ synchronize_user_info(User, Teams, Emails, DnList, AccessToken) ->
     User2 = case (get_teams(User1) =:= Teams) or (Teams =:= []) of
                 true -> User1;
                 false ->
-                    {ok, NewUser} = update_teams(User1, Teams),
+                    {ok, NewUser} = update_spaces(User1, Teams),
                     NewUser
             end,
 
@@ -656,6 +662,16 @@ synchronize_user_info(User, Teams, Emails, DnList, AccessToken) ->
             end,
     User4.
 
+
+%% update_access_token/2
+%% ====================================================================
+%% @doc
+%% Update #veil_document encapsulating #user record with new access token.
+%% @end
+-spec update_access_token(User, AccessToken :: binary()) -> Result when
+    User :: user_doc(),
+    Result :: {ok, user_doc()} | {error, any()}.
+%% ====================================================================
 update_access_token(#veil_document{record = #user{} = User} = UserDoc, AccessToken) ->
     UserDoc#veil_document{record = User#user{access_token = AccessToken}}.
 
@@ -718,12 +734,12 @@ create_dirs_at_storage(Root, SpacesInfo) ->
 
 %% create_dirs_at_storage/3
 %% ====================================================================
-%% @doc Creates root dir for user and for its teams. Only on selected storage
+%% @doc Creates root dir for user's spaces. Only on selected storage
 %% @end
 -spec create_dirs_at_storage(Root :: string(), SpacesInfo :: [#space_info{}], Storage :: #storage_info{}) -> ok | {error, Error} when
     Error :: atom().
 %% ====================================================================
-create_dirs_at_storage(Root, SpacesInfo, Storage) ->
+create_dirs_at_storage(_Root, SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
     fslogic_context:clear_user_ctx(),
 
@@ -742,8 +758,7 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
                     Error1 ->
                         ?error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure group '~p' is defined in the system.",
                             [Dir, SHI#storage_helper_info.name, Error1, Dir]),
-                        {error, dir_chown_error},
-                        TmpAns
+                        {error, dir_chown_error}
                 end;
             Error ->
                 ?error("Can not create dir ~p using storage ~p due to ~p. Make sure group ~p is defined in the system.",
@@ -754,9 +769,9 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
 
     lists:foldl(CreateTeamsDirs, ok, SpacesInfo).
 
-%% get_team_names/1
+%% get_space_names/1
 %% ====================================================================
-%% @doc Returns list of group/team names for given user. UserQuery shall be either #user{} record
+%% @doc Returns list of spaces' names for given user. UserQuery shall be either #user{} record
 %%      or query compatible with user_logic:get_user/1.
 %%      The method assumes that user exists therefore will fail with exception when it doesnt.
 %% @end
@@ -770,10 +785,18 @@ get_space_names(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
     get_space_names(UserDoc).
 
+
+%% get_spaces/1
+%% ====================================================================
+%% @doc Returns list of spaces (as list of #space_info{}) for given user. UserQuery shall be either #user{} record
+%%      or query compatible with user_logic:get_user/1.
+%%      The method assumes that user exists therefore will fail with exception when it doesnt.
+%% @end
+-spec get_spaces(UserQuery :: term()) -> [string()] | no_return().
+%% ====================================================================
 get_spaces(#veil_document{record = #user{} = User}) ->
     get_spaces(User);
 get_spaces(#user{spaces = Spaces}) ->
-%    ?info("Spaces: ~p", [lists:map(fun(SpaceId) -> fslogic_objects:get_space({uuid, SpaceId}) end, Spaces)]),
     [SpaceInfo || {ok, #space_info{} = SpaceInfo} <- lists:map(fun(SpaceId) ->
         fslogic_objects:get_space({uuid, SpaceId}) end, Spaces)];
 get_spaces(UserQuery) ->
@@ -783,11 +806,11 @@ get_spaces(UserQuery) ->
 
 %% create_space_dir/1
 %% ====================================================================
-%% @doc Creates directory (in DB) for given group/team name. If base group dir (/groups) doesnt exists, its created too.
-%%      Method will fail with exception error only when base group dir cannot be reached nor created.
+%% @doc Creates directory (in DB) for given #space_info{}. If base spaces dir (/spaces) doesnt exists, its created too.
+%%      Method will fail with exception error only when base spaces dir cannot be reached nor created.
 %%      Otherwise standard {ok, ...} and  {error, ...} tuples will be returned.
 %% @end
--spec create_space_dir(Dir :: string()) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
+-spec create_space_dir(SpaceInfo :: #space_info{}) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
 %% ====================================================================
 create_space_dir(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
     CTime = vcn_utils:time(),

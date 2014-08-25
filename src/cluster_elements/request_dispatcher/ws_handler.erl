@@ -101,7 +101,7 @@ websocket_init(TransportName, Req, _Opts) ->
 %% ====================================================================
 %% @doc Setup handler's state with peer info (i.e. peer_type, provider_id | peer_dn).
 %% @end
--spec setup_connection(InitCtx :: #hander_state{}, OtpCert, Certs :: [#'OTPCertificate'{}], IsProvider :: boolean()) ->
+-spec setup_connection(InitCtx :: #hander_state{}, OtpCert :: #'OTPCertificate'{}, Certs :: [#'OTPCertificate'{}], IsProvider :: boolean()) ->
     InitializedCTX :: #hander_state{}.
 %% ====================================================================
 setup_connection(InitCtx, OtpCert, Certs, false) ->
@@ -253,7 +253,7 @@ handle(Req, {push, FuseID, {Msg, MsgId, DecoderName1, MsgType}}, #hander_state{p
 handle(Req, {pull, FuseID, CLM}, #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
     ?debug("Got pull msg: ~p from ~p", [CLM, FuseID]),
     handle(Req, CLM, State#hander_state{fuse_id = vcn_utils:ensure_list( fslogic_context:gen_global_fuse_id(ProviderId, FuseID) )});
-handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = CLM,
+handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = _CLM,
         #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
                       access_token = SessionAccessToken, user_global_id = SessionUserGID} = State) ->
     %% Check if received message requires FuseId

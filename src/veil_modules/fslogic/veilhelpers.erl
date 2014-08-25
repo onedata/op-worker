@@ -122,8 +122,6 @@ reroute_to_remote_provider(_, is_dir, _) ->
     true;
 reroute_to_remote_provider(_, get_flag, [Flag]) ->
     veilhelpers_nif:get_flag(Flag);
-reroute_to_remote_provider(_, is_reg, _) ->
-    true;
 reroute_to_remote_provider([SpaceId] = _HelperArgs, mknod, [FileId, Mode, _Dev]) ->
     RequestBody = #createfile{file_id = FileId, mode = Mode},
     do_reroute(SpaceId, RequestBody);

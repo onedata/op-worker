@@ -42,7 +42,7 @@
 %% ====================================================================
 %% @doc Ensures that inter-provider connection manager is running.
 %% @end
--spec method() -> Result :: any().
+-spec ensure_running() -> ok.
 %% ====================================================================
 ensure_running() ->
     case whereis(ppcon) of
@@ -181,7 +181,7 @@ main_loop(#ppcon_state{msg_id = CurrentMsgId, connections = Connections, inbox =
 %% @doc Synchronously executes given command on inter-cluster communicator service (main_loop/1).
 %%      Returns response or fails with exception.
 %% @end
--spec method(Command :: term()) -> Result :: term() | no_return().
+-spec exec(Command :: term()) -> Result :: term() | no_return().
 %% ====================================================================
 exec(Command) ->
     PPCon = whereis(ppcon),

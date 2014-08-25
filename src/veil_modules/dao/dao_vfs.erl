@@ -39,10 +39,20 @@
 %% Space File Management
 %% ===================================================================
 
+
+%% get_space_file/1
+%% ====================================================================
+%% @doc Retrieves file associated with given by ID or path - space. The only difference
+%%      from get_file is that this function can use cache much more aggressively since root space
+%%      dirs are not changed very frequently.
+%% @end
+%% @todo: cache
+-spec get_space_file(Space :: file()) -> {ok, file_doc()} | {error, any()} | no_return().
+%% ====================================================================
 get_space_file({uuid, UUID}) ->
     get_file({uuid, UUID});
-get_space_file(SpaceName) ->
-    get_file(fslogic_path:absolute_join(filename:split(SpaceName))).
+get_space_file(SpacePath) ->
+    get_file(fslogic_path:absolute_join(filename:split(SpacePath))).
 
 %% ===================================================================
 %% File Descriptors Management
