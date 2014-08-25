@@ -19,7 +19,4 @@
 %% Proxy Certificate Extension ID
 -define(PROXY_CERT_EXT, {1,3,6,1,5,5,7,1,14}).
 
--record(message_reroute, {provider_id = throw(no_provider_id), provider_urls = throw(no_provider_urls),
-                            fuse_id = throw(no_fuse_id)}).
-
 -endif.

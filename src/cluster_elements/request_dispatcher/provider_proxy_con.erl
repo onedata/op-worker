@@ -1,11 +1,13 @@
-%%%-------------------------------------------------------------------
-%%% @author RoXeon
-%%% @copyright (C) 2014, <COMPANY>
-%%% @doc
-%%%
-%%% @end
-%%% Created : 30. Jul 2014 00:12
-%%%-------------------------------------------------------------------
+%% ===================================================================
+%% @author Rafal Slota
+%% @copyright (C): 2014 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: @todo: write me !
+%% @end
+%% ===================================================================
 -module(provider_proxy_con).
 -author("RoXeon").
 
@@ -130,7 +132,8 @@ websocket_info({close, Payload}, _ConnState, State) ->
 websocket_terminate({close, Code, _Payload}, _ConnState, State) ->
     State ! {self(), {closed, Code}},
     ok;
-websocket_terminate({_Code, _Payload}, _ConnState, _State) ->
+websocket_terminate({Code, _Payload}, _ConnState, State) ->
+    State ! {self(), {closed, Code}},
     ok.
 
 
