@@ -89,7 +89,8 @@ body() ->
             case gr_users:get_space_details({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                 {ok, SpaceDetails} ->
                     space(SpaceDetails);
-                _ ->
+                Other ->
+                    ?error("Cannot get details of Space with ID ~p: ~p", [SpaceId, Other]),
                     page_error:redirect_with_error(?error_space_permission_denied),
                     []
             end
@@ -909,7 +910,8 @@ comet_loop(#?STATE{} = State) ->
                         "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", Token/binary, "\">">>,
                         gui_jq:info_popup(<<"Request support">>, Message, <<"return true;">>),
                         gui_comet:flush();
-                    _ ->
+                    Other ->
+                        ?error("Cannot get support token for Space with ID ~p: ~p", [SpaceId, Other]),
                         vcn_gui_utils:message(<<"error_message">>, <<"Cannot get support token for Space with ID: <b>", SpaceId, "</b>."
                         "<br>Please try again later.">>)
                 end,
@@ -924,7 +926,8 @@ comet_loop(#?STATE{} = State) ->
                         "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", Token/binary, "\">">>,
                         gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>),
                         gui_comet:flush();
-                    _ ->
+                    Other ->
+                        ?error("Cannot get invitation token for Space with ID ~p: ~p", [SpaceId, Other]),
                         vcn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."
                         "<br>Please try again later.">>)
                 end,
@@ -942,7 +945,10 @@ comet_loop(#?STATE{} = State) ->
                         vcn_gui_utils:message(<<"error_message">>, <<"Cannot change name of Space with ID:  <b>", SpaceId, "</b>."
                         "<br>Please try again later.">>),
                         gui_jq:update(<<"space_name">>, space_name(SpaceId, CurrentName))
-                end;
+                end,
+                gui_jq:hide(<<"main_spinner">>),
+                gui_comet:flush(),
+                State;
 
             {providers_table_collapse, SpaceId} ->
                 gui_jq:update(<<"providers">>, providers_table_collapsed(SpaceId)),
