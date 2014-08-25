@@ -80,12 +80,11 @@ rest_init(Req, _Opt) ->
 % an {error, Type} tuple. These errors shall be handled here,
 % because cowboy doesn't allow returning errors in rest_init.
 allowed_methods(Req, {error,Error}) ->
-    NewReq = case Error of
-                 {user_unknown, DnString} -> rest_utils:reply_with_error(Req, error, ?error_user_unknown, [DnString], ?error_unauthorized_code);
-                 unsupported_version -> rest_utils:reply_with_error(Req, error, ?error_cdmi_version_unsupported, [], ?error_bad_request_code);
-                 _ -> rest_utils:reply_with_error(Req, error, ?error_bad_request, [],?error_bad_request_code)
-             end,
-    {halt, NewReq, error};
+    case Error of
+        {user_unknown, DnString} -> cdmi_error:error_reply(Req, undefined, ?error_unauthorized_code, "No user found with given DN: ~p",[DnString]);
+        unsupported_version -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "Provided cdmi version is unsupported",[]);
+        Error -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "State init error: ~p",[Error])
+    end;
 allowed_methods(Req, #state{handler_module = Handler} = State) ->
     Handler:allowed_methods(Req,State).
 

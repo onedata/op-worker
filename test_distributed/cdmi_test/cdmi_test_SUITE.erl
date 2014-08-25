@@ -226,18 +226,6 @@ create_file_test(_Config) ->
     ?assertEqual(FileContent,get_file_content(ToCreate2)),
     %%------------------------------
 
-    %%----- create conflict --------
-    ?assert(object_exists(ToCreate)),
-
-    RequestHeaders3 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
-    RequestBody3 = [{<<"value">>, FileContent}],
-    RawRequestBody3 = rest_utils:encode_to_json(RequestBody3),
-    {Code3, _Headers3, _Response3} = do_request(ToCreate, put, RequestHeaders3, RawRequestBody3),
-    ?assertEqual("409",Code3),
-
-    ?assert(object_exists(ToCreate)),
-    %%------------------------------
-
     %%------- create empty ---------
     ?assert(not object_exists(ToCreate4)),
 
@@ -263,12 +251,12 @@ create_file_test(_Config) ->
 % Tests cdmi object PUT requests (updating content)
 update_file_test(_Config) ->
     FullName = filename:join(["/",?Test_dir_name,?Test_file_name]),
+    NewValue = <<"New Value!">>,
 
     %%--- value replace, cdmi ------
     ?assert(object_exists(FullName)),
     ?assertEqual(?Test_file_content,get_file_content(FullName)),
 
-    NewValue = <<"New Value!">>,
     RequestHeaders1 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
     RequestBody1 = [{<<"value">>, NewValue}],
     RawRequestBody1 = rest_utils:encode_to_json(RequestBody1),
@@ -276,7 +264,22 @@ update_file_test(_Config) ->
     ?assertEqual("204",Code1),
 
     ?assert(object_exists(FullName)),
-    ?assertEqual(NewValue,get_file_content(FullName)).
+    ?assertEqual(NewValue,get_file_content(FullName)),
+    %%------------------------------
+
+    %%---- value update, cdmi ------
+    ?assert(object_exists(FullName)),
+    ?assertEqual(NewValue,get_file_content(FullName)),
+
+    UpdateValue = <<"123">>,
+    RequestHeaders2 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestBody2 = [{<<"value">>, UpdateValue}],
+    RawRequestBody2 = rest_utils:encode_to_json(RequestBody2),
+    {Code2, _Headers2, _Response2} = do_request(FullName ++ "?value:0-2", put, RequestHeaders2, RawRequestBody2),
+    ?assertEqual("204",Code2),
+
+    ?assert(object_exists(FullName)),
+    ?assertEqual(<<"123 Value!">>,get_file_content(FullName)).
     %%------------------------------
 
 % Tests cdmi container DELETE requests

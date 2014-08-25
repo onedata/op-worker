@@ -107,9 +107,7 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
         false ->
             fs_remove_dir(Filepath),
             {true, Req, State};
-        true ->
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
-            {halt, Req2, State}
+        true -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Deleting group dir, which is forbidden",[])
     end.
 
 %% ====================================================================
@@ -142,15 +140,9 @@ put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
             Response = rest_utils:encode_to_json({struct, prepare_container_ans(?default_get_dir_opts, State)}),
             Req2 = cowboy_req:set_resp_body(Response, Req),
             {true, Req2, State};
-        {error, dir_exists} ->
-            {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
-            {halt, Req2, State};
-        {logical_file_system_error, "enoent"} ->
-            {ok, Req2} = cowboy_req:reply(?error_not_found_code, Req),
-            {halt, Req2, State};
-        _ ->
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
-            {halt, Req2, State}
+        {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?error_conflict_code, "Dir creation conflict",[]);
+        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?error_not_found_code, "Parent dir not found",[]);
+        Error -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Dir creation error: ~p",[Error])
     end.
 
 %% put_binary/2
@@ -163,15 +155,9 @@ put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
 put_binary(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:mkdir(Filepath) of
         ok -> {true, Req, State};
-        {error, dir_exists} ->
-            {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
-            {halt, Req2, State};
-        {logical_file_system_error, "enoent"} ->
-            {ok, Req2} = cowboy_req:reply(?error_not_found_code, Req),
-            {halt, Req2, State};
-        _ ->
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
-            {halt, Req2, State}
+        {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?error_conflict_code, "Dir creation conflict",[]);
+        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?error_not_found_code, "Parent dir not found",[]);
+        Error -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Dir creation error: ~p",[Error])
     end.
 
 %% ====================================================================
