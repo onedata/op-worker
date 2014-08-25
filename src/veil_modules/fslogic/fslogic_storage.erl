@@ -162,50 +162,14 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
         ok -> ok;
         _ -> ?error("Can not add storage info (~p, ~p) to config file.", [ID + 1, Root])
       end,
-      Ans = storage_files_manager:mkdir(SHI, "users"),
-      Ans3 = case Ans of
-               ok ->
-                 Ans2 = storage_files_manager:chmod(SHI, "users", 8#711),
-                 case Ans2 of
-                   ok ->
-                     ok;
-                   _ ->
-                     ?error("Can not change owner of users dir using storage helper ~p", [SHI#storage_helper_info.name]),
-                     Ans2
-                 end;
-               _ ->
-                 ?error("Can not create users dir using storage helper ~p", [SHI#storage_helper_info.name]),
-                 Ans
-             end,
 
-      Ans4 = storage_files_manager:mkdir(SHI, "groups"),
-      Ans6 = case Ans4 of
-               ok ->
-                 Ans5 = storage_files_manager:chmod(SHI, "groups", 8#711),
-                 case Ans5 of
-                   ok ->
-                     ok;
-                   _ ->
-                     ?error("Can not change owner of groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
-                     Ans5
-                 end;
-               _ ->
-                 ?error("Can not create groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
-                 Ans4
-             end,
-
-      case {Ans3, Ans6} of
-        {ok, ok} ->
-          case add_dirs_for_existing_users(Storage) of
-            ok -> DAO_Ans;
-            Error ->
-              ?error("Can not create dirs for existing users and theirs teams, error: ~p", [Error]),
-              {error, users_dirs_creation_error}
-          end;
-        _ ->
-          ?error("Dirs creation error: {users_dir_status, groups_dir_status} = ~p", [{Ans3, Ans6}]),
-          {error, dirs_creation_error}
+      case add_dirs_for_existing_users(Storage) of
+        ok -> DAO_Ans;
+        Error ->
+          ?error("Can not create dirs for existing users and theirs spaces, error: ~p", [Error]),
+          {error, users_dirs_creation_error}
       end;
+
     _ -> DAO_Ans
   end.
 

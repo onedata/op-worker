@@ -730,7 +730,7 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
     CreateTeamsDirs = fun(#space_info{name = SpaceName} = SpaceInfo, TmpAns) ->
         Dir = unicode:characters_to_list(SpaceName),
         DirName = filename:join(["/", ?SPACES_BASE_DIR_NAME, Dir]),
-        _Result = storage_files_manager:mkdir(SHI, filename:join(["", ?SPACES_BASE_DIR_NAME]), ?EX_ALL_PERM bor ?RWE_USR_PERM),
+        _Result = storage_files_manager:mkdir(SHI, filename:join(["/", ?SPACES_BASE_DIR_NAME]), ?EX_ALL_PERM bor ?RWE_USR_PERM),
         Ans = storage_files_manager:mkdir(SHI, DirName),
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
@@ -740,7 +740,7 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
                     {ok, ok} ->
                         TmpAns;
                     Error1 ->
-                        ?error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure group '~s' is defined in the system.",
+                        ?error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure group '~p' is defined in the system.",
                             [Dir, SHI#storage_helper_info.name, Error1, Dir]),
                         {error, dir_chown_error},
                         TmpAns
