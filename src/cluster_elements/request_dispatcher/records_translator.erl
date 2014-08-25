@@ -69,6 +69,13 @@ translate_to_record(Value) ->
     Value.
 
 
+%% get_answer_decoder_and_type/1
+%% ====================================================================
+%% @doc Returns answer's decoder name and message type for given request message.
+%% @end
+-spec get_answer_decoder_and_type(Message :: #fusemessage{} | #remotefilemangement{}) ->
+    {AnswerDecoderName :: atom(), AnswerType :: atom()} | no_return().
+%% ====================================================================
 get_answer_decoder_and_type(#fusemessage{input = #getfileattr{}}) ->
     {fuse_messages, fileattr};
 get_answer_decoder_and_type(#fusemessage{input = #getfilelocation{}}) ->

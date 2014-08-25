@@ -26,7 +26,11 @@
 -include_lib("public_key/include/public_key.hrl").
 
 %% Holds state of websocket connection. peer_dn field contains DN of certificate of connected peer.
--record(hander_state, {peer_dn, peer_serial, dispatcher_timeout, fuse_id = "", connection_id = "", peer_type = user, provider_id = <<>>, access_token, user_global_id}).
+-record(hander_state, {peer_serial, dispatcher_timeout, fuse_id = "", connection_id = "",
+    peer_type = user, %% user | provider
+    provider_id = <<>>, %% only valid if peer_type = provider
+    peer_dn, access_token, user_global_id %% only valid if peer_type = user
+}).
 
 %% ====================================================================
 %% API
@@ -92,6 +96,14 @@ websocket_init(TransportName, Req, _Opts) ->
             {shutdown, Req}
     end.
 
+
+%% setup_connection/4
+%% ====================================================================
+%% @doc Setup handler's state with peer info (i.e. peer_type, provider_id | peer_dn).
+%% @end
+-spec setup_connection(InitCtx :: #hander_state{}, OtpCert, Certs :: [#'OTPCertificate'{}], IsProvider :: boolean()) ->
+    InitializedCTX :: #hander_state{}.
+%% ====================================================================
 setup_connection(InitCtx, OtpCert, Certs, false) ->
     {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
     ?debug("Peer connected using certificate with subject: ~p ~n", [gsi_handler:proxy_subject(EEC)]),
@@ -121,7 +133,7 @@ websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString, peer_typ
                 user     -> decode_clustermsg_pb(Data, DnString)
             end,
 
-        ?info("Received request: ~p", [Request]),
+        ?debug("Received request: ~p", [Request]),
 
         handle(Req, Request, State) %% Decode ClusterMsg and handle it
     catch
@@ -235,11 +247,11 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
 
 %% Handle other messages
 handle(Req, {push, FuseID, {Msg, MsgId, DecoderName1, MsgType}}, #hander_state{peer_type = provider} = State) ->
-    ?info("Got push msg for ~p: ~p ~p ~p", [FuseID, Msg, DecoderName1, MsgType]),
+    ?debug("Got push msg for ~p: ~p ~p ~p", [FuseID, Msg, DecoderName1, MsgType]),
     request_dispatcher:send_to_fuse(vcn_utils:ensure_list(FuseID), Msg, DecoderName1),
     {reply, {binary, encode_answer(ok, MsgId)}, Req, State};
 handle(Req, {pull, FuseID, CLM}, #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
-    ?info("Got pull msg: ~p from ~p", [CLM, FuseID]),
+    ?debug("Got pull msg: ~p from ~p", [CLM, FuseID]),
     handle(Req, CLM, State#hander_state{fuse_id = vcn_utils:ensure_list( fslogic_context:gen_global_fuse_id(ProviderId, FuseID) )});
 handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = CLM,
         #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
@@ -250,13 +262,10 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                   M1 when is_atom(M1) -> atom                   %% Atom
               end,
     case {FuseID, lists:member(MsgType, ?SessionDependentMessages)} of
-        {[], false} -> ok;                              % Message doesn't require FuseId
+        {[], false} -> ok;                             % Message doesn't require FuseId
         {[], true} -> throw({invalid_fuse_id, MsgId}); % Message requires FuseId which is not present
         {FID, _} when is_list(FID) -> ok                               % FuseId is present
     end,
-
-    %?info("Session: ~p ~p", [SessionUserGID, SessionAccessToken]),
-    %?info("CTX for msg: ~p ~p", [GlobalId, TokenHash]),
 
     {UserGID, AccessToken} =
         try {SessionUserGID =/= undefined orelse not gr_adapter:verify_client(GlobalId, TokenHash), SessionAccessToken} of
@@ -271,8 +280,6 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                 ?error("Cannot verify user (~p) authentication due to: ~p", [GlobalId, Reason]),
                 throw({unable_to_authenticate, MsgId})
         end,
-
-    %?info("CTX1 for msg: ~p ~p", [UserGID, AccessToken]),
 
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->
@@ -391,16 +398,18 @@ encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, MessageIdForClien
             {ok, Req, State}
     end.
 
-%% decode_protocol_buffer/2
+%% decode_clustermsg_pb/2
 %% ====================================================================
-%% @doc Decodes the message using protocol buffers records_translator.
+%% @doc Decodes the clustermsg message using protocol buffers records_translator.
 -spec decode_clustermsg_pb(MsgBytes :: binary(), DN :: string()) -> Result when
-    Result :: {Synch, ModuleName, Msg, MsgId, Answer_type},
+    Result :: {Synch, ModuleName, Msg, MsgId, Answer_type, {GlobalId, TokenHash}},
     Synch :: boolean(),
     ModuleName :: atom(),
     Msg :: term(),
     MsgId :: integer(),
-    Answer_type :: string().
+    Answer_type :: string(),
+    GlobalId :: binary(),
+    TokenHash :: binary().
 %% ====================================================================
 decode_clustermsg_pb(MsgBytes, DN) ->
     DecodedBytes = try
@@ -427,6 +436,16 @@ decode_clustermsg_pb(MsgBytes, DN) ->
     end.
 
 
+%% decode_answer_pb/2
+%% ====================================================================
+%% @doc Decodes the answer message using protocol buffers records_translator.
+-spec decode_answer_pb(MsgBytes :: binary(), DN :: string()) -> Result when
+    Result :: {Msg, MsgId, DecoderName, MsgType},
+    Msg :: term(),
+    MsgId :: integer(),
+    DecoderName :: string(),
+    MsgType :: string().
+%% ====================================================================
 decode_answer_pb(MsgBytes, DN) ->
     DecodedBytes = try
         communication_protocol_pb:decode_answer(MsgBytes)
@@ -454,6 +473,16 @@ decode_answer_pb(MsgBytes, DN) ->
         false -> throw({message_not_supported, MsgId})
     end.
 
+
+%% decode_providermsg_pb/2
+%% ====================================================================
+%% @doc Decodes the providermsg message using protocol buffers records_translator. <br/>
+%%      In case of 'pull' message - InputMessage is decoded with decode_clustermsg_pb/2. <br/>
+%%      In case of 'push' message - InputMessage is decoded with decode_answermsg_pb/2.
+%% @end
+-spec decode_providermsg_pb(MsgBytes :: binary(), DN :: string()) -> Result when
+    Result :: {pull | push, FuseId :: binary(), InputMessage :: term()}.
+%% ====================================================================
 decode_providermsg_pb(MsgBytes, DN) ->
     DecodedBytes = try
         communication_protocol_pb:decode_providermsg(MsgBytes)
@@ -515,7 +544,7 @@ encode_answer(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer
     Result :: binary().
 %% ====================================================================
 encode_answer(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription) ->
-    ?info("Encoding answer ~p ~p ~p ~p ~p ~p", [Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription]),
+    ?debug("Encoding answer ~p ~p ~p ~p ~p ~p", [Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription]),
     Message = encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription),
     erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message)).
 

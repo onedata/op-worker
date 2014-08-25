@@ -23,7 +23,7 @@
 -record(file, {
     type = 1, name = "", uid = "", perms = 0, parent = "", ref_file = "", location = #file_location{},
     locks = [], meta_doc, created = true,
-    extensions = [] %% [{ExtName :: atom(), ExtValue :: term()}]
+    extensions = [] %% General use field for extending #file{} capabilities. Shall have fallowing format: [{ExtName :: atom(), ExtValue :: term()}]
 }).
 
 %% Those record contains meta data for file which UUID match #file_meta.file field
