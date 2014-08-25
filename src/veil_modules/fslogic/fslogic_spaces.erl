@@ -14,7 +14,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([initialize/1, map_to_grp_owner/1]).
+-export([initialize/1, map_to_grp_owner/1, get_storage_space_name/1]).
 
 initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
     case user_logic:create_space_dir(SpaceInfo) of
@@ -36,6 +36,7 @@ initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
             NewExt = lists:keyreplace(?file_space_info_extestion, 1, Ext, {?file_space_info_extestion, SpaceInfo}),
             NewFile = File#file{extensions = NewExt, name = unicode:characters_to_list(SpaceName)},
             {ok, _} = dao_lib:apply(vfs, save_file, [FileDoc#veil_document{record = NewFile}], 1),
+            user_logic:create_dirs_at_storage(non, [SpaceInfo]),
             {ok, SpaceInfo};
         {error, Reason} ->
             ?error("Filed to initialize space (~p) due to ~p", [SpaceInfo, Reason]),
@@ -62,3 +63,6 @@ map_to_grp_owner(#space_info{name = SpaceName, space_id = SpaceId}) ->
         StrGID ->
             list_to_integer(StrGID)
     end.
+
+get_storage_space_name(#space_info{space_id = SpaceId}) ->
+    vcn_utils:ensure_list(SpaceId).

@@ -101,10 +101,12 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
 
     ok = fslogic_perms:check_file_perms(FileBaseName, UserDoc, ParentDoc, write),
 
+    {ok, #space_info{space_id = SpaceId} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FullFileName),
+
     {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], fslogic_context:get_protocol_version()),
     #veil_document{uuid = UUID, record = #storage_info{} = Storage} = fslogic_storage:select_storage(fslogic_context:get_fuse_id(), StorageList),
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
-    FileId = fslogic_storage:get_new_file_id(FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
+    FileId = fslogic_storage:get_new_file_id(SpaceInfo, FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
     FileLocation = #file_location{storage_id = UUID, file_id = FileId},
 
     {ok, UserID} = fslogic_context:get_user_id(),
@@ -117,8 +119,6 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
 
     Validity = ?LOCATION_VALIDITY,
     FCreateStatus = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, FileRecord], fslogic_context:get_protocol_version()),
-
-    {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
 
     case FCreateStatus of
         {ok, {waiting_file, ExistingWFile}} ->

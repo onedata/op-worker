@@ -18,7 +18,7 @@
 -include_lib("files_common.hrl").
 
 %% API
--export([get_sh_for_fuse/2, select_storage/2, insert_storage/2, insert_storage/3, get_new_file_id/4, check_storage_on_node/2]).
+-export([get_sh_for_fuse/2, select_storage/2, insert_storage/2, insert_storage/3, get_new_file_id/5, check_storage_on_node/2]).
 
 -ifdef(TEST).
 -export([create_dirs/4, get_relative_path/2, get_mount_points/0, exist_storage_info_in_config/2]).
@@ -32,17 +32,17 @@
 %% API functions
 %% ====================================================================
 
-%% get_new_file_id/4
+%% get_new_file_id/5
 %% ====================================================================
 %% @doc Returns id for a new file
 %% @end
--spec get_new_file_id(File :: string(), UserDoc :: term(), SHInfo :: term(), ProtocolVersion :: integer()) -> string().
+-spec get_new_file_id(SpaceInfo :: #space_info{}, File :: string(), UserDoc :: term(), SHInfo :: term(), ProtocolVersion :: integer()) -> string().
 %% ====================================================================
-get_new_file_id(File, UserDoc, SHInfo, ProtocolVersion) ->
+get_new_file_id(#space_info{} = SpaceInfo, File, UserDoc, SHInfo, ProtocolVersion) ->
   {Root1, {CountStatus, FilesCount}} =
     case {string:tokens(File, "/"), UserDoc} of
       {[?SPACES_BASE_DIR_NAME, SpaceName | _], _} -> %% Group dir context
-        {filename:join(["/", ?SPACES_BASE_DIR_NAME, SpaceName]), fslogic_utils:get_files_number(group, SpaceName, ProtocolVersion)};
+        {filename:join(["/", ?SPACES_BASE_DIR_NAME, fslogic_spaces:get_storage_space_name(SpaceInfo)]), fslogic_utils:get_files_number(group, SpaceName, ProtocolVersion)};
       {_, #veil_document{uuid = ?CLUSTER_USER_ID}} ->
         {"/", fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)}
     end,

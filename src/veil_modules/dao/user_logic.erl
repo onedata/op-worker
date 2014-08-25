@@ -12,8 +12,9 @@
 -module(user_logic).
 
 -include("veil_modules/fslogic/fslogic.hrl").
--include_lib("ctool/include/logging.hrl").
 -include("registered_names.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 
@@ -180,14 +181,12 @@ get_user(Key) ->
 
 synchronize_spaces_info(#veil_document{record = #user{global_id = GlobalId} = UserRec} = UserDoc, AccessToken) ->
     case gr_users:get_spaces({user, AccessToken}) of
-        {ok, SpaceIds} ->
+        {ok, #user_spaces{ids = SpaceIds, default = DefaultSpace}} ->
             ?info("Synchronized spaces: ~p", [SpaceIds]),
             NewSpaces =
-                case UserRec#user.spaces of
-                    [] -> SpaceIds;
-                    [MainSpace | _] ->
-                        {MainSpace1, Rest} = lists:partition(fun(Elem) -> Elem =:= MainSpace end, SpaceIds),
-                        MainSpace1 ++ Rest
+                case DefaultSpace of
+                    Bin when is_binary(Bin) ->  [DefaultSpace | SpaceIds -- [DefaultSpace]];
+                    _ ->                        SpaceIds
                 end,
 
             ?info("New spaces: ~p", [NewSpaces]),
@@ -727,8 +726,8 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
     fslogic_context:clear_user_ctx(),
 
-    CreateTeamsDirs = fun(#space_info{name = SpaceName} = SpaceInfo, TmpAns) ->
-        Dir = unicode:characters_to_list(SpaceName),
+    CreateTeamsDirs = fun(#space_info{name = _SpaceName} = SpaceInfo, TmpAns) ->
+        Dir = fslogic_spaces:get_storage_space_name(SpaceInfo),
         DirName = filename:join(["/", ?SPACES_BASE_DIR_NAME, Dir]),
         _Result = storage_files_manager:mkdir(SHI, filename:join(["/", ?SPACES_BASE_DIR_NAME]), ?EX_ALL_PERM bor ?RWE_USR_PERM),
         Ans = storage_files_manager:mkdir(SHI, DirName),

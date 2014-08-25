@@ -282,7 +282,7 @@ rename_file(FullFileName, FullNewFileName) ->
                     throw(?VEREMOTEIO)
             end,
             SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage), %% Storage helper for cluster
-            NewFileID = fslogic_storage:get_new_file_id(FullNewFileName, UserDoc, SHInfo, fslogic_context:get_protocol_version()),
+            NewFileID = fslogic_storage:get_new_file_id(TargetSpaceInfo, FullNewFileName, UserDoc, SHInfo, fslogic_context:get_protocol_version()),
 
             %% Change group owner if needed
             case storage_files_manager:chown(SHInfo, FileID, -1, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo)) of
