@@ -240,7 +240,7 @@ prepare_object_ans([<<"mimetype">> | Tail], #state{filepath = Filepath} = State)
     {Type, Subtype, _} = cow_mimetypes:all(gui_str:to_binary(Filepath)),
     [{<<"mimetype">>, <<Type/binary, "/", Subtype/binary>>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->
-    [{<<"metadata">>, prepare_metadata(Attrs)} | prepare_object_ans(Tail, State)];
+    [{<<"metadata">>, rest_utils:prepare_metadata(Attrs)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"valuetransferencoding">> | Tail], State) ->
     [{<<"valuetransferencoding">>, <<"base64">>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"value">> | Tail], State) ->
@@ -256,22 +256,6 @@ prepare_object_ans([<<"valuerange">> | Tail], #state{opts = Opts, attributes = A
     end;
 prepare_object_ans([Other | Tail], State) ->
     [{Other, <<>>} | prepare_object_ans(Tail, State)].
-
-%% prepare_metadata/1
-%% ====================================================================
-%% @doc Prepares cdmi metadata based on file attributes.
-%% @end
--spec prepare_metadata(#fileattributes{}) -> [{CdmiName :: binary(), Value :: binary()}].
-%% ====================================================================
-prepare_metadata(Attrs) ->
-    [
-        %todo add cdmi_acl metadata
-        {<<"cdmi_size">>, integer_to_binary(Attrs#fileattributes.size)},
-        {<<"cdmi_ctime">>, integer_to_binary(Attrs#fileattributes.ctime)},
-        {<<"cdmi_atime">>, integer_to_binary(Attrs#fileattributes.atime)},
-        {<<"cdmi_mtime">>, integer_to_binary(Attrs#fileattributes.mtime)},
-        {<<"cdmi_owner">>, list_to_binary(Attrs#fileattributes.uname)}
-    ].
 
 %% write_body_to_file/3
 %% ====================================================================

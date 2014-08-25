@@ -35,6 +35,7 @@ all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, delet
 % Tests cdmi container GET request (also refered as LIST)
 list_dir_test(_Config) ->
     %%------ list basic dir --------
+    Now = now_in_secs(),
 
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code1, Headers1, Response1} = do_request(?Test_dir_name++"/", get, RequestHeaders1, []),
@@ -45,6 +46,16 @@ list_dir_test(_Config) ->
     ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiPesponse1)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse1)),
     ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiPesponse1)),
+    {struct, Metadata1} = proplists:get_value(<<"metadata">>,CdmiPesponse1),
+    ?assertEqual(<<"0">>, proplists:get_value(<<"cdmi_size">>, Metadata1)),
+    CTime1 = binary_to_integer(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
+    ATime1 = binary_to_integer(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
+    MTime1 = binary_to_integer(proplists:get_value(<<"cdmi_mtime">>, Metadata1)),
+    ?assert(CTime1 =< Now),
+    ?assert(CTime1 =< ATime1),
+    ?assert(CTime1 =< MTime1),
+    ?assertEqual(<<"veilfstestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
+
     %%------------------------------
 
     %%------ list root dir ---------
@@ -102,13 +113,13 @@ get_file_test(_Config) ->
     ?assertEqual(<<"0-14">>, proplists:get_value(<<"valuerange">>,CdmiPesponse1)),
     {struct, Metadata1} = proplists:get_value(<<"metadata">>,CdmiPesponse1),
     ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata1)),
-    CTime = binary_to_integer(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
-    ATime = binary_to_integer(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
-    MTime = binary_to_integer(proplists:get_value(<<"cdmi_mtime">>, Metadata1)),
-    ?assert(Before =< CTime),
-    ?assert(CTime =< After),
-    ?assert(CTime =< ATime),
-    ?assert(CTime =< MTime),
+    CTime1 = binary_to_integer(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
+    ATime1 = binary_to_integer(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
+    MTime1 = binary_to_integer(proplists:get_value(<<"cdmi_mtime">>, Metadata1)),
+    ?assert(Before =< CTime1),
+    ?assert(CTime1 =< After),
+    ?assert(CTime1 =< ATime1),
+    ?assert(CTime1 =< MTime1),
     ?assertEqual(<<"veilfstestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
     ?assertEqual(FileContent, base64:decode(proplists:get_value(<<"value">>,CdmiPesponse1))),
     %%------------------------------
@@ -161,7 +172,9 @@ create_dir_test(_Config) ->
     ?assert(not object_exists(DirName)),
 
     RequestHeaders2 = [{"content-type", "application/cdmi-container"},{"X-CDMI-Specification-Version", "1.0.2"}],
+    Before2 = now_in_secs(),
     {Code2, _Headers2, Response2} = do_request(DirName, put, RequestHeaders2, []),
+    After2 = now_in_secs(),
     ?assertEqual("201",Code2),
     {struct,CdmiPesponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>,CdmiPesponse2)),
@@ -169,6 +182,16 @@ create_dir_test(_Config) ->
     ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiPesponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse2)),
     ?assertEqual([], proplists:get_value(<<"children">>,CdmiPesponse2)),
+    {struct, Metadata2} = proplists:get_value(<<"metadata">>,CdmiPesponse2),
+    ?assertEqual(<<"0">>, proplists:get_value(<<"cdmi_size">>, Metadata2)),
+    CTime2 = binary_to_integer(proplists:get_value(<<"cdmi_ctime">>, Metadata2)),
+    ATime2 = binary_to_integer(proplists:get_value(<<"cdmi_atime">>, Metadata2)),
+    MTime2 = binary_to_integer(proplists:get_value(<<"cdmi_mtime">>, Metadata2)),
+    ?assert(Before2 =< CTime2),
+    ?assert(CTime2 =< After2),
+    ?assert(CTime2 =< ATime2),
+    ?assert(CTime2 =< MTime2),
+    ?assertEqual(<<"veilfstestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata2)),
 
     ?assert(object_exists(DirName)),
     %%------------------------------
