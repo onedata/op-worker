@@ -43,9 +43,6 @@
 -define(error_share_cannot_retrieve, {"ShareCannotRetrieve", "cannot retrieve share info based on uuid: ~s"}).
 -define(error_share_cannot_delete, {"ShareCannotDelete", "cannot delete share by uuid: ~s"}).
 
--define(error_bad_request, {"BadRequest", "the request could not bo processed"}).
--define(error_cdmi_version_unsupported, {"CdmiVersionNotSupported", "None of given cdmi version is supported"}).
-
 % ?report_xxx macros should be used with one of above as second argument.
 % ?report_xxx/3 is used when no formatting args are needed, ?report_xxx/4 otherwise.
 % It returns an error_rec, representing the error.
