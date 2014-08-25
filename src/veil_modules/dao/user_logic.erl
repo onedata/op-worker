@@ -184,10 +184,10 @@ synchronize_spaces_info(#veil_document{record = #user{global_id = GlobalId} = Us
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} ->
             ?info("Synchronized spaces: ~p", [SpaceIds]),
             NewSpaces = case DefaultSpaceId of
-                            _ when is_binary(DefaultSpaceId) ->
-                                [DefaultSpaceId | lists:delete(DefaultSpaceId, SpaceIds)];
+                            <<"undefined">> ->
+                                SpaceIds;
                             _ ->
-                                SpaceIds
+                                [DefaultSpaceId | lists:delete(DefaultSpaceId, SpaceIds)]
                         end,
 
             ?info("New spaces: ~p", [NewSpaces]),

@@ -910,7 +910,8 @@ comet_loop(#?STATE{} = State) ->
                         gui_jq:info_popup(<<"Request support">>, Message, <<"return true;">>),
                         gui_comet:flush();
                     _ ->
-                        vcn_gui_utils:message(<<"error_message">>, <<"Cannot get Space support token.<br>Please try again later.">>)
+                        vcn_gui_utils:message(<<"error_message">>, <<"Cannot get support token for Space with ID: <b>", SpaceId, "</b>."
+                        "<br>Please try again later.">>)
                 end,
                 gui_jq:hide(<<"main_spinner">>),
                 gui_comet:flush(),
@@ -924,11 +925,24 @@ comet_loop(#?STATE{} = State) ->
                         gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>),
                         gui_comet:flush();
                     _ ->
-                        vcn_gui_utils:message(<<"error_message">>, <<"Cannot get Space invitation token.<br>Please try again later.">>)
+                        vcn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."
+                        "<br>Please try again later.">>)
                 end,
                 gui_jq:hide(<<"main_spinner">>),
                 gui_comet:flush(),
                 State;
+
+            {change_space_name, SpaceId, CurrentName, NewName} ->
+                case gr_spaces:modify_details({user, vcn_gui_utils:get_access_token()}, SpaceId, [{<<"name">>, NewName}]) of
+                    ok ->
+                        gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}),
+                        gui_jq:update(<<"space_name">>, space_name(SpaceId, NewName));
+                    Other ->
+                        ?error("Cannot change name of Space with ID ~p: ~p", [SpaceId, Other]),
+                        vcn_gui_utils:message(<<"error_message">>, <<"Cannot change name of Space with ID:  <b>", SpaceId, "</b>."
+                        "<br>Please try again later.">>),
+                        gui_jq:update(<<"space_name">>, space_name(SpaceId, CurrentName))
+                end;
 
             {providers_table_collapse, SpaceId} ->
                 gui_jq:update(<<"providers">>, providers_table_collapsed(SpaceId)),
@@ -1075,15 +1089,8 @@ event({change_space_name, SpaceId, Name}) ->
 
 event({submit_new_space_name, SpaceId, Name}) ->
     NewSpaceName = gui_ctx:postback_param(<<"new_space_name_textbox">>),
-    case gr_spaces:modify_details({user, vcn_gui_utils:get_access_token()}, SpaceId, [{<<"name">>, NewSpaceName}]) of
-        ok ->
-            gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}),
-            gui_jq:update(<<"space_name">>, space_name(SpaceId, NewSpaceName));
-        Other ->
-            ?error("Cannot change name of Space with ID ~p: ~p", [SpaceId, Other]),
-            vcn_gui_utils:message(<<"error_message">>, <<"Cannot change Space name.">>),
-            gui_jq:update(<<"space_name">>, space_name(SpaceId, Name))
-    end;
+    get(?COMET_PID) ! {change_space_name, SpaceId, Name, NewSpaceName},
+    gui_jq:show(<<"main_spinner">>);
 
 event({cancel_new_space_name_submit, SpaceId, Name}) ->
     gui_jq:update(<<"space_name">>, space_name(SpaceId, Name));
