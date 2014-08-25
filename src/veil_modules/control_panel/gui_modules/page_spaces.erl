@@ -302,7 +302,7 @@ space_row_expanded(SpaceId, RowId, Default) ->
             {true, DefaultSpaceOptionId, <<"Delete Space">>, {delete_space, Name, SpaceId, RowId, DeleteSpaceOptionId}, <<"fui-trash">>},
             {true, LeaveSpaceOptionId, <<"Leave Space">>, {leave_space, Name, SpaceId, RowId, LeaveSpaceOptionId}, <<"fui-exit">>},
             {true, ManageSpaceOptionId, <<"Manage Space">>, {manage_space, SpaceId}, <<"fui-gear">>},
-            {not Default, DeleteSpaceOptionId, <<"Set as default Space">>, {set_default_space, Name, SpaceId, RowId, DefaultSpaceOptionId}, <<"fui-home">>}
+            {not Default, DeleteSpaceOptionId, <<"Set as a default Space">>, {set_default_space, SpaceId, DefaultSpaceOptionId}, <<"fui-home">>}
         ]),
         DefaultLabel = #label{
             id = LabelId,
@@ -402,7 +402,8 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                             RowId = get_space_row_id(Counter + 1),
                             add_space_row(SpaceId, RowId),
                             State#?STATE{counter = Counter + 1, space_rows = SpaceRows ++ [{SpaceId, #?SPACE_ROW{id = RowId, expanded = false, default = false}}]};
-                        _ ->
+                        Other ->
+                            ?error("Cannot create Space ~p: ~p", [Name, Other]),
                             vcn_gui_utils:message(<<"error_message">>, <<"Cannot create Space: <b>", Name/binary, "</b>.<br>Please try again later.">>),
                             State
                     end,
@@ -421,7 +422,8 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                             RowId = get_space_row_id(Counter + 1),
                             add_space_row(SpaceId, RowId),
                             State#?STATE{counter = Counter + 1, space_rows = SpaceRows ++ [{SpaceId, #?SPACE_ROW{id = RowId, expanded = false, default = false}}]};
-                        _ ->
+                        Other ->
+                            ?error("Cannot join Space using token ~p: ~p", [Token, Other]),
                             vcn_gui_utils:message(<<"error_message">>, <<"Cannot join Space using token: <b>", Token/binary, "</b>.<br>Please try again later.">>),
                             State
                     end,
@@ -430,16 +432,18 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                 gui_comet:flush(),
                 NewState;
 
-            {set_default_space, SpaceName, SpaceId, RowId, OptionId} ->
+            {set_default_space, SpaceId, OptionId} ->
                 NewState =
-                    case gr_adapter:set_default_space(SpaceId, {vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}) of
-                        {ok, _} ->
-                            [{DefaultSpaceId, DefaultSpaceRow} | RestSpaceRows] = SpaceRows,
-                            NewDefaultSpaceRow = proplists:get_value(SpaceId, RestSpaceRows),
+                    case gr_users:set_default_space({user, vcn_gui_utils:get_access_token()}, [{<<"spaceId">>, SpaceId}]) of
+                        ok ->
+                            gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}),
+                            [{DefaultSpaceId, DefaultSpaceRow} | _] = SpaceRows,
+                            NewDefaultSpaceRow = proplists:get_value(SpaceId, SpaceRows),
                             NewSpaceRows = [
-                                {SpaceId, NewDefaultSpaceRow#?SPACE_ROW{default = true}},
-                                {DefaultSpaceId, DefaultSpaceRow#?SPACE_ROW{default = false}} |
-                                proplists:delete(SpaceId, RestSpaceRows)
+                                {SpaceId, NewDefaultSpaceRow#?SPACE_ROW{default = true}} |
+                                lists:map(fun({Id, Row}) ->
+                                    {Id, Row#?SPACE_ROW{default = false}}
+                                end, proplists:delete(SpaceId, SpaceRows))
                             ],
                             gui_jq:update(DefaultSpaceRow#?SPACE_ROW.id, space_row(DefaultSpaceId, DefaultSpaceRow#?SPACE_ROW.id, false, DefaultSpaceRow#?SPACE_ROW.expanded)),
                             gui_jq:remove(NewDefaultSpaceRow#?SPACE_ROW.id),
@@ -449,52 +453,43 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                                 cells = gui_jq:update(NewDefaultSpaceRow#?SPACE_ROW.id, space_row(SpaceId, NewDefaultSpaceRow#?SPACE_ROW.id, true, NewDefaultSpaceRow#?SPACE_ROW.expanded))
                             }),
                             State#?STATE{space_rows = NewSpaceRows};
-                        _ ->
-                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot set Space: <b>", SpaceName/binary, "</b> as a default Space.<br>Please try again later.">>),
+                        Other ->
+                            ?error("Cannot set Space with ID ~p as a default Space: ~p", [SpaceId, Other]),
+                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot set Space with ID: <b>", SpaceId/binary, "</b> as a default Space.<br>Please try again later.">>),
                             gui_jq:update(OptionId, #span{class = <<"fui-home">>}),
                             State
                     end,
                 gui_comet:flush(),
                 NewState;
 
-            {leave_space, SpaceName, SpaceId, RowId, OptionId} ->
+            {leave_space, SpaceId, RowId, OptionId} ->
                 NewState =
                     case gr_users:leave_space({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                         ok ->
-                            vcn_gui_utils:message(<<"ok_message">>, <<"Space: <b>", SpaceName/binary, "</b> left successfully.">>),
+                            vcn_gui_utils:message(<<"ok_message">>, <<"Space with ID: <b>", SpaceId/binary, "</b> left successfully.">>),
                             gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}),
                             gui_jq:remove(RowId),
-                            case SpaceRows of
-                                [{SpaceId, _}, {NextSpaceId, NextSpaceRow} | RestSpaceRows] ->
-                                    gui_jq:update(NextSpaceRow#?SPACE_ROW.id, space_row(NextSpaceId, NextSpaceRow#?SPACE_ROW.id, true, NextSpaceRow#?SPACE_ROW.expanded)),
-                                    State#?STATE{space_rows = [{NextSpaceId, NextSpaceRow#?SPACE_ROW{default = true}} | RestSpaceRows]};
-                                _ ->
-                                    State#?STATE{space_rows = proplists:delete(SpaceId, SpaceRows)}
-                            end;
-                        _ ->
-                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot leave Space: <b>", SpaceName/binary, "</b>.<br>Please try again later.">>),
+                            State#?STATE{space_rows = proplists:delete(SpaceId, SpaceRows)};
+                        Other ->
+                            ?error("Cannot leave Space with ID ~p: ~p", [SpaceId, Other]),
+                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot leave Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
                             gui_jq:update(OptionId, #span{class = <<"fui-exit">>}),
                             State
                     end,
                 gui_comet:flush(),
                 NewState;
 
-            {delete_space, SpaceName, SpaceId, RowId, OptionId} ->
+            {delete_space, SpaceId, RowId, OptionId} ->
                 NewState =
                     case gr_spaces:remove({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                         ok ->
-                            vcn_gui_utils:message(<<"ok_message">>, <<"Space: <b>", SpaceName/binary, "</b> deleted successfully.">>),
+                            vcn_gui_utils:message(<<"ok_message">>, <<"Space with ID: <b>", SpaceId/binary, "</b> deleted successfully.">>),
                             gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}),
                             gui_jq:remove(RowId),
-                            case SpaceRows of
-                                [{SpaceId, _}, {NextSpaceId, NextSpaceRow} | RestSpaceRows] ->
-                                    gui_jq:update(NextSpaceRow#?SPACE_ROW.id, space_row(NextSpaceId, NextSpaceRow#?SPACE_ROW.id, true, NextSpaceRow#?SPACE_ROW.expanded)),
-                                    State#?STATE{space_rows = [{NextSpaceId, NextSpaceRow#?SPACE_ROW{default = true}} | RestSpaceRows]};
-                                _ ->
-                                    State#?STATE{space_rows = proplists:delete(SpaceId, SpaceRows)}
-                            end;
-                        _ ->
-                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot delete Space: <b>", SpaceName/binary, "</b>.<br>Please try again later.">>),
+                            State#?STATE{space_rows = proplists:delete(SpaceId, SpaceRows)};
+                        Other ->
+                            ?error("Cannot delete Space with ID ~p: ~p", [SpaceId, Other]),
+                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot delete Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
                             gui_jq:update(OptionId, #span{class = <<"fui-trash">>}),
                             State
                     end,
@@ -555,22 +550,25 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
 -spec event(Event :: term()) -> no_return().
 %% ====================================================================
 event(init) ->
-    case gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}) of
-        {ok, SpaceIds} ->
-            gui_jq:wire(#api{name = "createSpace", tag = "createSpace"}, false),
-            gui_jq:wire(#api{name = "joinSpace", tag = "joinSpace"}, false),
-            gui_jq:wire(#api{name = "leaveSpace", tag = "leaveSpace"}, false),
-            gui_jq:wire(#api{name = "deleteSpace", tag = "deleteSpace"}, false),
-            gui_jq:bind_key_to_click_on_class(<<"13">>, <<"button.confirm">>),
-            SpaceRows = lists:map(fun({SpaceId, Counter}) ->
-                {SpaceId, #?SPACE_ROW{id = get_space_row_id(Counter), expanded = false, default = (Counter == 1)}}
-            end, lists:zip(SpaceIds, tl(lists:seq(0, length(SpaceIds))))),
-            {ok, Pid} = gui_comet:spawn(fun() ->
-                comet_loop(#?STATE{counter = length(SpaceIds) + 1, space_rows = SpaceRows})
-            end),
-            Pid ! render_spaces_table,
-            put(?COMET_PID, Pid);
-        _ ->
+    try
+        {ok, SpaceIds} = gr_adapter:synchronize_user_spaces({vcn_gui_utils:get_global_user_id(), vcn_gui_utils:get_access_token()}),
+        {ok, DefaultSpaceId} = gr_users:get_default_space({user, vcn_gui_utils:get_access_token()}),
+        gui_jq:wire(#api{name = "createSpace", tag = "createSpace"}, false),
+        gui_jq:wire(#api{name = "joinSpace", tag = "joinSpace"}, false),
+        gui_jq:wire(#api{name = "leaveSpace", tag = "leaveSpace"}, false),
+        gui_jq:wire(#api{name = "deleteSpace", tag = "deleteSpace"}, false),
+        gui_jq:bind_key_to_click_on_class(<<"13">>, <<"button.confirm">>),
+        SpaceRows = lists:map(fun({SpaceId, Counter}) ->
+            {SpaceId, #?SPACE_ROW{id = get_space_row_id(Counter), expanded = false, default = (SpaceId =:= DefaultSpaceId)}}
+        end, lists:zip(SpaceIds, tl(lists:seq(0, length(SpaceIds))))),
+        {ok, Pid} = gui_comet:spawn(fun() ->
+            comet_loop(#?STATE{counter = length(SpaceIds) + 1, space_rows = SpaceRows})
+        end),
+        Pid ! render_spaces_table,
+        put(?COMET_PID, Pid)
+    catch
+        _:Reason ->
+            ?error("Cannot fetch supported Spaces: ~p", [Reason]),
             vcn_gui_utils:message(<<"error_message">>, <<"Cannot fetch supported Spaces.<br>Please try again later.">>)
     end;
 
@@ -603,18 +601,18 @@ event(join_space) ->
 event({manage_space, SpaceId}) ->
     gui_jq:redirect(<<"space?id=", SpaceId/binary>>);
 
-event({set_default_space, SpaceName, SpaceId, RowId, OptionId}) ->
-    get(?COMET_PID) ! {set_default_space, SpaceName, SpaceId, RowId, OptionId},
+event({set_default_space, SpaceId, OptionId}) ->
+    get(?COMET_PID) ! {set_default_space, SpaceId, OptionId},
     gui_jq:update(OptionId, vcn_gui_utils:spinner());
 
 event({leave_space, SpaceName, SpaceId, RowId, OptionId}) ->
     Message = <<"Are you sure you want to leave Space:<br><b>", SpaceName/binary, " ( ", SpaceId/binary, " ) </b>?">>,
-    Script = <<"leaveSpace(['", SpaceName/binary, "','", SpaceId/binary, "','", RowId/binary, "','", OptionId/binary, "']);">>,
+    Script = <<"leaveSpace(['", SpaceId/binary, "','", RowId/binary, "','", OptionId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Leave Space">>, Message, Script);
 
 event({delete_space, SpaceName, SpaceId, RowId, OptionId}) ->
     Message = <<"Are you sure you want to delete Space:<br><b>", SpaceName/binary, " ( ", SpaceId/binary, " ) </b>?">>,
-    Script = <<"deleteSpace(['", SpaceName/binary, "','", SpaceId/binary, "','", RowId/binary, "','", OptionId/binary, "']);">>,
+    Script = <<"deleteSpace(['", SpaceId/binary, "','", RowId/binary, "','", OptionId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Delete Space">>, Message, Script);
 
 event({spaces_table_collapse, OptionId}) ->
@@ -655,11 +653,11 @@ api_event("joinSpace", Args, _) ->
     gui_jq:prop(<<"join_space_button">>, <<"disabled">>, <<"disabled">>);
 
 api_event("leaveSpace", Args, _) ->
-    [SpaceName, SpaceId, RowId, OptionId] = mochijson2:decode(Args),
-    get(?COMET_PID) ! {leave_space, SpaceName, SpaceId, RowId, OptionId},
+    [SpaceId, RowId, OptionId] = mochijson2:decode(Args),
+    get(?COMET_PID) ! {leave_space, SpaceId, RowId, OptionId},
     gui_jq:update(OptionId, vcn_gui_utils:spinner());
 
 api_event("deleteSpace", Args, _) ->
-    [SpaceName, SpaceId, RowId, OptionId] = mochijson2:decode(Args),
-    get(?COMET_PID) ! {delete_space, SpaceName, SpaceId, RowId, OptionId},
+    [SpaceId, RowId, OptionId] = mochijson2:decode(Args),
+    get(?COMET_PID) ! {delete_space, SpaceId, RowId, OptionId},
     gui_jq:update(OptionId, vcn_gui_utils:spinner()).
