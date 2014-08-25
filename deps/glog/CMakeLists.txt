@@ -39,7 +39,6 @@ if(${GLOG_FIND_LIBRARY} MATCHES GLOG_FIND_LIBRARY-NOTFOUND)
     set(GLOG_LIBRARIES ${GLOG_LIBRARIES} PARENT_SCOPE)
 
     add_custom_command(OUTPUT ${GLOG_LIBRARIES} DEPENDS glogBuild)
-    add_custom_target(glog DEPENDS ${GLOG_LIBRARIES})
 
 else()
 
@@ -49,3 +48,5 @@ else()
     set(GLOG_LIBRARIES ${GLOG_FIND_LIBRARY} PARENT_SCOPE)
 
 endif()
+
+add_custom_target(glog DEPENDS ${GLOG_LIBRARIES})
