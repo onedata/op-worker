@@ -150,9 +150,16 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
             BodyWithoutValue = proplists:delete(<<"value">>, DirCdmi),
             JsonBodyWithoutValue = rest_utils:encode_to_json({struct, BodyWithoutValue}),
 
-            JsonBodyPrefix = <<(erlang:binary_part(JsonBodyWithoutValue,0,byte_size(JsonBodyWithoutValue)-1))/binary,",\"value\":\"">>,
+            JsonBodyPrefix = case BodyWithoutValue of
+                                 [] -> <<"{\"value\":\"">>;
+                                 _ -> <<(erlang:binary_part(JsonBodyWithoutValue,0,byte_size(JsonBodyWithoutValue)-1))/binary,",\"value\":\"">>
+                             end,
             JsonBodySuffix = <<"\"}">>,
-            Base64EncodedSize = byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4*ceil(Size / 3.0)),
+            DataSize = case Range of
+                           {From,To} when To >= From -> To - From +1;
+                           default -> Size
+                       end,
+            Base64EncodedSize = byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4*ceil(DataSize / 3.0)),
 
             StreamFun = fun (Socket,Transport) ->
                 try

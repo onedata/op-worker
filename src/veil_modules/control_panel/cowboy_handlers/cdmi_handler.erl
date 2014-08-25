@@ -206,17 +206,16 @@ parse_opts(RawOpts) ->
 %% @end
 -spec get_supported_version(binary() | list() | undefined ) -> binary() | undefined | no_return().
 %% ====================================================================
+get_supported_version(undefined) -> undefined;
 get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
     VersionList = lists:map(fun trim_spaces/1, binary:split(VersionBinary,<<",">>,[global])),
     get_supported_version(VersionList);
-get_supported_version(VersionList) when is_list(VersionList) ->
-    case lists:member(<<"1.0.2">>,VersionList) of
-        true -> <<"1.0.2">>;
-        false ->
-            ?error("Request with unsupported cdmi version list: ~p",[VersionList]),
-            throw(unsupported_version)
-    end;
-get_supported_version(undefined) -> undefined.
+get_supported_version([]) ->
+    ?error("Request with unsupported cdmi version list"),
+    throw(unsupported_version);
+get_supported_version([<<"1.0.2">> | _Rest]) -> <<"1.0.2">>;
+get_supported_version([<<"1.0.1">> | _Rest]) -> <<"1.0.1">>;
+get_supported_version([_Version | Rest]) -> get_supported_version(Rest).
 
 %% trim_spaces/1
 %% ====================================================================
