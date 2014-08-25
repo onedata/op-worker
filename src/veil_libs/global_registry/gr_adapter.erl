@@ -17,25 +17,11 @@
 
 %% API
 -export([verify_client/2]).
--export([set_default_space/2, synchronize_user_spaces/1]).
--export([get_space_info/2, get_space_providers/2]).
+-export([synchronize_user_spaces/1, get_space_info/2, get_space_providers/2]).
 
-
-%% set_default_space/2
 %% ====================================================================
-%% @doc Sets default user's Space.
-%% @end
--spec set_default_space(SpaceId :: binary(), {UserGID :: string(), AccessToken :: binary()}) -> Result when
-    Result :: ok | {error, Reason :: term()}.
+%% API functions
 %% ====================================================================
-set_default_space(SpaceId, {UserGID, _AccessToken}) ->
-    case user_logic:get_user({global_id, UserGID}) of
-        {ok, #veil_document{record = #user{spaces = SpaceIds} = UserRec} = UserDoc} ->
-            NewSpaces = [SpaceId | lists:delete(SpaceId, SpaceIds)],
-            dao_lib:apply(dao_users, save_user, [UserDoc#veil_document{record = UserRec#user{spaces = NewSpaces}}], 1);
-        {error, Reason} ->
-            {error, Reason}
-    end.
 
 
 %% synchronize_user_spaces/1
