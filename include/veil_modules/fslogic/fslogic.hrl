@@ -58,7 +58,6 @@
 % Callbacks management
 -record(callback, {fuse = 0, pid = 0, node = non, action = non}).
 
--define(REMOTE_HELPER_SEPARATOR, "/").
 -define(CLUSTER_USER_ID, "cluster_uid").
 -define(CLUSTER_FUSE_ID, "cluster_fid").
 
@@ -97,7 +96,6 @@
 %% Maximum time (in ms) after which document conflict resolution shall occur
 -define(MAX_SLEEP_TIME_CONFLICT_RESOLUTION, 100).
 
--define(UserRootPerms, 8#600).
 -define(SpaceDirPerm, 8#1770).
 
 -endif.

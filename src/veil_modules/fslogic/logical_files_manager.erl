@@ -205,7 +205,7 @@ getfileattr(Message, Value) ->
   {Status, TmpAns} = contact_fslogic(Message, Value),
   case Status of
     ok ->
-        ?info("getfileattr: ~p", [TmpAns]),
+      ?debug("getfileattr: ~p", [TmpAns]),
       Response = TmpAns#fileattr.answer,
       case Response of
         ?VOK -> {ok, #fileattributes{

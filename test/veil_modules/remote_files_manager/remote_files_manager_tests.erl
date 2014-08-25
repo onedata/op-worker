@@ -24,7 +24,7 @@
 get_helper_and_id_test() ->
   Storage = 1,
   Id = "id1",
-  Ans1 = remote_files_manager:get_storage_and_id(integer_to_list(Storage) ++ ?REMOTE_HELPER_SEPARATOR ++ Id),
+  Ans1 = remote_files_manager:get_storage_and_id(filename:join(["/", integer_to_list(Storage), Id])),
   ?assertEqual({Storage, Id}, Ans1).
 
 get_helper_and_id_wrong_args_test() ->
@@ -34,7 +34,7 @@ get_helper_and_id_wrong_args_test() ->
   ?assertEqual(error, Ans1),
 
   Storage2 = "qqq",
-  Ans2 = remote_files_manager:get_storage_and_id(Storage2 ++ ?REMOTE_HELPER_SEPARATOR ++ Id),
+  Ans2 = remote_files_manager:get_storage_and_id(filename:join(["/", Storage2, Id])),
   ?assertEqual(error, Ans2).
 
 verify_file_name_test() ->

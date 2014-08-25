@@ -1,11 +1,13 @@
-%%%-------------------------------------------------------------------
-%%% @author Rafal Slota
-%%% @copyright (C) 2014, <COMPANY>
-%%% @doc
-%%%
-%%% @end
-%%% Created : 25. Jul 2014 15:36
-%%%-------------------------------------------------------------------
+%% ===================================================================
+%% @author Rafal Slota
+%% @copyright (C): 2014 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: @todo: write me !
+%% @end
+%% ===================================================================
 -module(cluster_manager_lib).
 -author("Rafal Slota").
 

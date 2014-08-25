@@ -292,8 +292,6 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                 case Ans of
                     ok ->
                         receive
-                            {worker_answer, MsgId, #message_reroute{} = RerouteInfo} ->
-                                provider_proxy:communicate(RerouteInfo, CLM);
                             {worker_answer, MsgId, Ans2} ->
                                 {reply, {binary, encode_answer(Ans, MsgId, Answer_type, Answer_decoder_name, Ans2)}, Req, State}
                         after DispatcherTimeout ->
