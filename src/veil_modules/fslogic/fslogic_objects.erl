@@ -38,7 +38,13 @@
 %%      space does not exists or there was an error during its initialization.
 %% @end
 -spec get_space(Query) -> {ok, SpaceInfo :: #space_info{}} | {error, {unknown_space_error | initialize_error, Reason :: any()}}
-    when Query :: #veil_document{} | #file{} | #space_info{} | {uuid, SpaceId :: uuid()} | SpaceName :: binary().
+    when Query :: #veil_document{}
+                | #file{}
+                | #space_info{}
+                | {uuid, SpaceId}
+                | SpaceName,
+         SpaceName :: binary(),
+         SpaceId :: uuid().
 %% ====================================================================
 get_space(#veil_document{record = Record}) ->
     get_space(Record);
