@@ -23,10 +23,8 @@ add_subdirectory(${DEPS_DIR}/glog)
 add_subdirectory(${DEPS_DIR}/websocketpp)
 
 # Include paths
-include_directories(${PROJECT_SOURCE_DIR}/include)
-include_directories(${PROJECT_BINARY_DIR})
-include_directories(${GLOG_INCLUDE_DIR})
-include_directories(${WSPP_INCLUDE_DIR})
+include_directories(${PROJECT_SOURCE_DIR}/include ${PROJECT_BINARY_DIR})
+include_directories(SYSTEM ${GLOG_INCLUDE_DIR} ${WSPP_INCLUDE_DIR})
 
 # Setup git
 message(STATUS "Checking for Git...")
@@ -42,7 +40,7 @@ else()
     set(PROTOBUF_LIBS ${PROTOBUF_LIBRARY})
 endif()
 
-include_directories(${PROTOBUF_INCLUDE_DIR})
+include_directories(SYSTEM ${PROTOBUF_INCLUDE_DIR})
 
 
 # Setup OpenSSL
@@ -63,7 +61,7 @@ if(${PREFER_STATIC_LINK})
 
 endif()
 
-include_directories(${OPENSSL_INCLUDE_DIR})
+include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
 
 # Setup pthreads
 message(STATUS "Checking for pthreads...")
@@ -72,7 +70,7 @@ find_package(Threads REQUIRED)
 # Setup fuse
 message(STATUS "Checking for FUSE...")
 find_package(FUSE REQUIRED)
-include_directories(${FUSE_INCLUDE_DIRS})
+include_directories(SYSTEM ${FUSE_INCLUDE_DIRS})
 
 
 # Setup Boost
@@ -86,7 +84,7 @@ set(Boost_USE_STATIC_RUNTIME    OFF)
 find_package(Boost COMPONENTS thread filesystem system random REQUIRED)
 
 link_directories(${Boost_LIBRARY_DIRS})
-include_directories(${Boost_INCLUDE_DIRS})
+include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
 
 # Utility libs
@@ -195,8 +193,7 @@ message(STATUS ${GLOG_INCLUDE_DIR})
 ###########################
 
 enable_testing()
-include_directories(${GTEST_INCLUDE_DIR})
-include_directories(${GMOCK_INCLUDE_DIR})
+include_directories(SYSTEM ${GTEST_INCLUDE_DIR} ${GMOCK_INCLUDE_DIR})
 
 set(TEST_SOURCES_DIR "test")
 include_directories(${TEST_SOURCES_DIR}/include)
