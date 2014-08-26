@@ -101,10 +101,7 @@ malformed_request(Req, #state{handler_module = Handler} = State) ->
     try
         Handler:malformed_request(Req,State)
     catch
-        _Type:Error  ->
-            ?error("Malformatted request error: ~p",[Error]),
-            NewReq = rest_utils:reply_with_error(Req, error, ?error_bad_request, [],?error_bad_request_code),
-            {true,NewReq,State}
+        _Type:Error  -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "Malformed request error: ~p",[Error])
     end.
 
 %% resource_exists/2
@@ -124,7 +121,7 @@ resource_exists(Req, #state{handler_module = Handler} = State) ->
 %% @end
 -spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
-content_types_provided(Req, #state{handler_module = Handler} = State) -> %todo handle non-cdmi types
+content_types_provided(Req, #state{handler_module = Handler} = State) ->
     Handler:content_types_provided(Req,State).
 
 %% content_types_accepted/2
@@ -135,7 +132,7 @@ content_types_provided(Req, #state{handler_module = Handler} = State) -> %todo h
 %% @end
 -spec content_types_accepted(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-content_types_accepted(Req, #state{handler_module = Handler} = State) -> %todo handle noncdmi dir put
+content_types_accepted(Req, #state{handler_module = Handler} = State) ->
     Handler:content_types_accepted(Req,State).
 
 %% delete_resource/2
