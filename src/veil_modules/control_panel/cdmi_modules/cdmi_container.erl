@@ -137,9 +137,16 @@ get_cdmi_container(Req, #state{opts = Opts} = State) ->
 put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:mkdir(Filepath) of
         ok -> %todo check given body
-            Response = rest_utils:encode_to_json({struct, prepare_container_ans(?default_get_dir_opts, State)}),
-            Req2 = cowboy_req:set_resp_body(Response, Req),
-            {true, Req2, State};
+            case logical_files_manager:getfileattr(Filepath) of
+                {ok, Attr} ->
+                    Response = rest_utils:encode_to_json(
+                        {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr})}),
+                    Req2 = cowboy_req:set_resp_body(Response, Req),
+                    {true, Req2, State};
+                Error ->
+                    logical_files_manager:rmdir(Filepath),
+                    cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Cannot get dir attrs: ~p",[Error])
+            end;
         {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?error_conflict_code, "Dir creation conflict",[]);
         {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?error_not_found_code, "Parent dir not found",[]);
         Error -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Dir creation error: ~p",[Error])
@@ -182,8 +189,8 @@ prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = St
     [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(Tail, State)];
-prepare_container_ans([<<"metadata">> | Tail], State) -> %todo extract metadata
-    [{<<"metadata">>, <<>>} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->
+    [{<<"metadata">>, rest_utils:prepare_metadata(Attrs)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(Tail, State)];
 prepare_container_ans([_Other | Tail], State) ->

@@ -220,9 +220,15 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
         ok ->
             case logical_files_manager:write(Filepath, RawValue) of
                 Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                    Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_post_file_opts, State)}),
-                    Req2 = cowboy_req:set_resp_body(Response, Req),
-                    {true, Req2, State};
+                    case logical_files_manager:getfileattr(Filepath) of
+                        {ok,Attrs} ->
+                            Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_post_file_opts, State#state{attributes = Attrs})}),
+                            Req2 = cowboy_req:set_resp_body(Response, Req),
+                            {true, Req2, State};
+                        Error -> 
+                            logical_files_manager:delete(Filepath),
+                            cdmi_error:error_reply(Req,State,?error_forbidden_code,"Getting attributes end up with error: ~p",Error)
+                    end;
                 Error ->
                     logical_files_manager:delete(Filepath),
                     cdmi_error:error_reply(Req,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
@@ -273,8 +279,8 @@ prepare_object_ans([<<"completionStatus">> | Tail], State) ->
 prepare_object_ans([<<"mimetype">> | Tail], #state{filepath = Filepath} = State) ->
     {Type, Subtype, _} = cow_mimetypes:all(gui_str:to_binary(Filepath)),
     [{<<"mimetype">>, <<Type/binary, "/", Subtype/binary>>} | prepare_object_ans(Tail, State)];
-prepare_object_ans([<<"metadata">> | Tail], State) -> %todo extract metadata
-    [{<<"metadata">>, <<>>} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->
+    [{<<"metadata">>, rest_utils:prepare_metadata(Attrs)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"valuetransferencoding">> | Tail], State) ->
     [{<<"valuetransferencoding">>, <<"base64">>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"value">> | Tail], State) ->
@@ -290,7 +296,6 @@ prepare_object_ans([<<"valuerange">> | Tail], #state{opts = Opts, attributes = A
     end;
 prepare_object_ans([Other | Tail], State) ->
     [{Other, <<>>} | prepare_object_ans(Tail, State)].
-
 
 %% write_body_to_file/3
 %% ====================================================================
