@@ -106,6 +106,13 @@ load_veilhelpers() ->
             {error, Reason}
     end.
 
+
+%% reroute_to_remote_provider/3
+%% ====================================================================
+%% @doc Based on given helpers arguments, method and its arguments, constructs request to remote_files_manager and sends it to other provider.
+%% @end
+-spec reroute_to_remote_provider(HelperArgs :: list(), Method :: atom(), Args :: [term()]) -> Answer :: term() | no_return().
+%% ====================================================================
 reroute_to_remote_provider(_, open, _) ->
     {0, #st_fuse_file_info{}};
 reroute_to_remote_provider(_, release, _) ->
@@ -147,12 +154,19 @@ reroute_to_remote_provider([SpaceId] = _HelperArgs, Method, Args) ->
     ?error("Unsupported local ClusterProxy request ~p(~p) for SpaceId ~p", [Method, Args, SpaceId]),
     throw(unsupported_local_cluster_proxy_req).
 
+
+%% do_reroute/2
+%% ====================================================================
+%% @doc Reroute given remote_files_manager's request to other provider.
+%% @end
+-spec do_reroute(SpaceId :: binary(), RequestBody :: term()) -> Response :: term() | no_return().
+%% ====================================================================
 do_reroute(SpaceId, RequestBody) ->
     {ok, #space_info{providers = Providers}} = fslogic_objects:get_space({uuid, SpaceId}),
 
     [RerouteToProvider | _] = Providers,
     {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(RerouteToProvider),
-    ?info("VeilHelper Reroute to: ~p", [URLs]),
+    ?debug("VeilHelper Reroute to: ~p", [URLs]),
     try
         Response = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
             fslogic_context:get_fuse_id(), #remotefilemangement{space_id = SpaceId, input = RequestBody, message_type = atom_to_list(element(1, RequestBody))}),
@@ -163,6 +177,13 @@ do_reroute(SpaceId, RequestBody) ->
             throw({unable_to_reroute_message, Reason})
     end.
 
+
+%% cluster_proxy_response_to_internal/1
+%% ====================================================================
+%% @doc Translates response from remote_files_manager to format expected by storage_files_manager.
+%% @end
+-spec cluster_proxy_response_to_internal(Response :: term()) -> InternalReponse :: term() | no_return().
+%% ====================================================================
 cluster_proxy_response_to_internal(#atom{value = ErrorStatus}) ->
     ErrorCode = fslogic_errors:veilerror_to_posix(fslogic_errors:normalize_error_code(ErrorStatus)),
     -ErrorCode;

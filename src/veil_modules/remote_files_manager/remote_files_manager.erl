@@ -84,6 +84,12 @@ cleanup() ->
   ok.
 
 
+%% maybe_handle_message/1
+%% ====================================================================
+%% @doc Tries to handle message locally (i.e. handle_message/1) or delegate request to 'provider_proxy' module.
+%% @end
+-spec maybe_handle_message(RequestBody :: tuple(), SpaceId :: binary()) -> Result :: term().
+%% ====================================================================
 maybe_handle_message(RequestBody, SpaceId) ->
     {ok, #space_info{providers = Providers}} = fslogic_objects:get_space({uuid, SpaceId}),
 

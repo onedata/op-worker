@@ -54,6 +54,14 @@
 %% the user does not see results of these operations)
 %% ====================================================================
 
+
+%% getattr/2
+%% ====================================================================
+%% @doc Gets attributes of the file.
+%% @end
+-spec getattr(Storage_helper_info :: record(), FileId :: string()) -> Result when
+    Result :: {ok, #st_stat{}} | {error, Reason :: fslogic_error()}.
+%% ====================================================================
 getattr(Storage_helper_info, FileId) ->
     case veilhelpers:exec(getattr, Storage_helper_info, [FileId]) of
         {0, #st_stat{} = Attrs} ->
