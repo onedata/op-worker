@@ -94,14 +94,14 @@ random_ascii_lowercase_sequence(Length) ->
     lists:foldl(fun(_, Acc) -> [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, Length)).
 
 
-%% get_space_owner/1
+%% get_space_info_for_path/1
 %% ====================================================================
-%% @doc Convinience method that returns list of group name(s) that are considered as default owner of file
-%%      created with given path. E.g. when path like "/groups/gname/file1" is passed, the method will
-%%      return ["gname"].
+%% @doc Returns #space_info{} associated with given file path.
 %% @end
--spec get_space_info_for_path(FileBasePath :: string()) -> [string()].
+-spec get_space_info_for_path(FileBasePath :: string()) -> {ok, #space_info{}} | {error, Reason :: term()}.
 %% ====================================================================
+get_space_info_for_path([$/ | FileBasePath]) ->
+    get_space_info_for_path(FileBasePath);
 get_space_info_for_path(FileBasePath) ->
     case filename:split(FileBasePath) of
         [?SPACES_BASE_DIR_NAME, SpaceName | _] ->

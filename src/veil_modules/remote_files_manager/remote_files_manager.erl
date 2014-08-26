@@ -323,7 +323,7 @@ get_storage_and_id(Combined) ->
   File = filename:join(PathTokens),
   case verify_file_name(File) of
     {error, _} -> error;
-        {ok, VerifiedFile} -> {Storage, VerifiedFile}
+    {ok, VerifiedFile} -> {Storage, VerifiedFile}
   end.
 
 %% get_helper_and_id/2

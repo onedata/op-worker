@@ -24,11 +24,6 @@ check_file_perms_test() ->
     FileDoc = #veil_document{record = #file{uid = "123", perms = ?WR_ALL_PERM}},
     NonWriteableFileDoc = #veil_document{record = #file{uid = "123", perms = ?WR_USR_PERM}},
 
-    %% Non group access
-    ?assertMatch(ok, fslogic_perms:check_file_perms("/dir", UserDoc, FileDoc)),
-    ?assertMatch(ok, fslogic_perms:check_file_perms("/", UserDoc, FileDoc)),
-    ?assertMatch(ok, fslogic_perms:check_file_perms("/dir/file", UserDoc, FileDoc)),
-
     GroupPath = "/" ++ ?SPACES_BASE_DIR_NAME ++ "/some/path",
     ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, OwnerUserDoc, FileDoc, owner)),
     ?assertMatch({error, {permission_denied, _}}, fslogic_perms:check_file_perms(GroupPath, UserDoc, FileDoc, owner)),

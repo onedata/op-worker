@@ -23,7 +23,7 @@
 %% API
 %% ====================================================================
 -export([sign_in/2, create_user/6, get_user/1, remove_user/1, list_all_users/0]).
--export([get_login/1, get_name/1, get_teams/1, update_spaces/2]).
+-export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
 -export([get_email_list/1, update_email_list/2, get_role/1, update_role/2]).
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
@@ -75,11 +75,10 @@ sign_in(Proplist, AccessToken) ->
                            synchronize_spaces_info(NewUser, AccessToken);
                        {error, Error} ->
                            ?error("Sign in error: ~p", [Error]),
-                           throw(Error)
+                           throw({0, Error})
                    end;
-    %% Code below is only for development purposes (connection to DB is not required)
                Error ->
-                   throw(Error)
+                   throw({1, Error})
            end,
     {Login, User}.
 
@@ -189,7 +188,7 @@ get_user(Key) ->
 synchronize_spaces_info(#veil_document{record = #user{global_id = GlobalId} = UserRec} = UserDoc, AccessToken) ->
     case gr_users:get_spaces({user, AccessToken}) of
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} ->
-            ?info("Synchronized spaces: ~p", [SpaceIds]),
+            ?info("Synchronized spaces for user ~p: ~p", [GlobalId, SpaceIds]),
             NewSpaces = case DefaultSpaceId of
                             <<"undefined">> ->
                                 SpaceIds;
@@ -197,7 +196,7 @@ synchronize_spaces_info(#veil_document{record = #user{global_id = GlobalId} = Us
                                 [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]]
                         end,
 
-            ?info("New spaces: ~p", [NewSpaces]),
+            ?debug("New spaces: ~p", [NewSpaces]),
 
             fslogic_context:set_access_token(GlobalId, AccessToken),
             [fslogic_spaces:initialize(SpaceId) || SpaceId <- NewSpaces],
@@ -312,23 +311,20 @@ get_teams(User) ->
     User#veil_document.record#user.teams.
 
 
-%% update_spaces/2
+%% update_teams/2
 %% ====================================================================
 %% @doc
-%% Update #veil_document encapsulating #user record with new spaces and save it to DB.
-%% Also if given spaces don't exist locally, all needed directories (both in DB and Storage) are created.
+%% Update #veil_document encapsulating #user record with new teams and save it to DB.
 %% @end
--spec update_spaces(User, NewTeams) -> Result when
+-spec update_teams(User, NewTeams) -> Result when
     User :: user_doc(),
     NewTeams :: string(),
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
-update_spaces(#veil_document{record = UserInfo} = UserDoc, NewTeams) ->
+update_teams(#veil_document{record = UserInfo} = UserDoc, NewTeams) ->
     NewDoc = UserDoc#veil_document{record = UserInfo#user{teams = NewTeams}},
-    [create_space_dir(SpaceInfo) || SpaceInfo <- get_spaces(NewDoc)], %% Create team dirs in DB if they dont exist
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} ->
-            create_dirs_at_storage(non, get_spaces(NewDoc)),
             dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
         {error, Reason} ->
             ?error("Cannot update user ~p teams: ~p", [UserInfo, Reason]),
@@ -628,14 +624,12 @@ invert_dn_string(DNString) ->
 synchronize_user_info(User, Teams, Emails, DnList, AccessToken) ->
     %% Actual updates will probably happen so rarely, that there is no need to scoop those 3 DB updates into one.
     User1 = update_access_token(User, AccessToken),
-
     User2 = case (get_teams(User1) =:= Teams) or (Teams =:= []) of
                 true -> User1;
                 false ->
-                    {ok, NewUser} = update_spaces(User1, Teams),
+                    {ok, NewUser} = update_teams(User1, Teams),
                     NewUser
             end,
-
     User3 =
         lists:foldl(fun(Email, UserDoc) ->
             case lists:member(Email, get_email_list(UserDoc)) or (Email =:= "") of
@@ -646,7 +640,6 @@ synchronize_user_info(User, Teams, Emails, DnList, AccessToken) ->
                     NewUser2
             end
         end, User2, Emails),
-
     NewDns = lists:filter(
         fun(X) ->
             not lists:member(X, get_dn_list(User3))

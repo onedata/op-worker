@@ -368,10 +368,11 @@ save_new_not_reg_file(FilePath, #file{type = Type} = File) when Type > ?REG_TYPE
 %% ====================================================================
 save_file(#file{} = File) ->
     save_file(#veil_document{record = File});
-save_file(#veil_document{record = #file{name = FName} = FileRec} = FileDoc) ->
-    ?info("============> FileRec: ~p", [FileRec]),
+save_file(#veil_document{record = #file{name = {unicode_string, _FName}} = FileRec} = FileDoc) ->
     dao_external:set_db(?FILES_DB_NAME),
-    dao_records:save_record(FileDoc#veil_document{record = FileRec#file{name = {unicode_string, FName}}}).
+    dao_records:save_record(FileDoc#veil_document{record = FileRec});
+save_file(#veil_document{record = #file{name = FName} = FileRec} = FileDoc) when is_list(FName) ->
+    save_file(FileDoc#veil_document{record = FileRec#file{name = {unicode_string, FName}}}).
 
 %% remove_file/1
 %% ====================================================================

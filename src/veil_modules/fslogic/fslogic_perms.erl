@@ -25,17 +25,6 @@
 %% API functions
 %% ====================================================================
 
-%% check_file_perms/3
-%% ====================================================================
-%% @doc Checks if the user has permission to modify file (e,g. change owner).
-%% @end
--spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term()) -> Result when
-    Result :: {ok, boolean()} | {error, ErrorDetail},
-    ErrorDetail :: term().
-%% ====================================================================
-check_file_perms(FileName, UserDoc, FileDoc) ->
-    check_file_perms(FileName, UserDoc, FileDoc, perms).
-
 %% check_file_perms/4
 %% ====================================================================
 %% @doc Checks if the user has permission to modify file (e,g. change owner).

@@ -115,6 +115,8 @@ signing_in_test_() ->
         [
             {"new user -> create_user",
                 fun() ->
+                    AccessToken = <<"test_token">>,
+
                     % Possible info gathered from OpenID provider
                     NewUserInfoProplist =
                         [
@@ -133,7 +135,8 @@ signing_in_test_() ->
                         teams = ["New team(team desc)", "Another team(another desc)"],
                         email_list = ["new@email.com"],
                         dn_list = ["new_user", "O=new-dn"],
-                        quota_doc = "quota_uuid"
+                        quota_doc = "quota_uuid",
+                        access_token = AccessToken
                     },
                     % #veil_document encapsulating user record
                     NewUserRecord = #veil_document{record = NewUser},
@@ -166,13 +169,14 @@ signing_in_test_() ->
                     Tim = 12345677,
                     meck:expect(vcn_utils, time, fun() -> Tim end),
                     meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {Tim2, Tim2, Tim2}) -> File end),
-
-                    ?assertEqual({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist)),
+                    ?assertEqual({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist, AccessToken)),
                     ?assert(meck:validate(dao_lib))
                 end},
 
             {"existing user -> synchronize + update functions",
                 fun() ->
+                    AccessToken = <<"test_token">>,
+
                     % Existing record in database
                     ExistingUser = #veil_document{record = #user{
                         global_id = "global_id",
@@ -180,7 +184,8 @@ signing_in_test_() ->
                         name = "Existing User",
                         teams = ["Existing team"],
                         email_list = ["existing@email.com"],
-                        dn_list = ["existing_user", "O=existing-dn"]
+                        dn_list = ["existing_user", "O=existing-dn"],
+                        access_token = AccessToken
                     }},
                     % Possible info gathered from OpenID provider
                     ExistingUserInfoProplist =
@@ -199,7 +204,8 @@ signing_in_test_() ->
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com"],
-                        dn_list = ["existing_user", "O=existing-dn"]
+                        dn_list = ["existing_user", "O=existing-dn"],
+                        access_token = AccessToken
                     }},
                     % User record after updating emails
                     UserWithUpdatedEmailList = #veil_document{record = #user{
@@ -208,7 +214,8 @@ signing_in_test_() ->
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
-                        dn_list = ["existing_user", "O=existing-dn"]
+                        dn_list = ["existing_user", "O=existing-dn"],
+                        access_token = AccessToken
                     }},
                     % How should user end up after synchronization
                     SynchronizedUser = #veil_document{record = #user{
@@ -217,7 +224,8 @@ signing_in_test_() ->
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
-                        dn_list = ["existing_user", "O=existing-dn", "O=new-dn"]
+                        dn_list = ["existing_user", "O=existing-dn", "O=new-dn"],
+                        access_token = AccessToken
                     }},
 
                     % These uuids should be the same, but this way we can simulate DB updates of the record
@@ -249,7 +257,7 @@ signing_in_test_() ->
                     meck:expect(vcn_utils, time, fun() -> Tim end),
                     meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {Tim2, Tim2, Tim2}) -> File end),
 
-                    ?assertEqual({"existing_user", SynchronizedUser}, user_logic:sign_in(ExistingUserInfoProplist)),
+                    ?assertEqual({"existing_user", SynchronizedUser}, user_logic:sign_in(ExistingUserInfoProplist, AccessToken)),
                     ?assert(meck:validate(dao_lib))
                 end}
         ]}.
