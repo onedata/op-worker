@@ -326,12 +326,11 @@ function start_client {
 
 # $1 - target host
 function start_global_registry_db {
-    ssh $1 -tt "sed -i -e \"s/name .*/name db@\"`hostname -f`\"/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/vm.args" || error "Cannot change Global Registry DB hostname on $1."
+    ssh $1 -tt "sed -i -e \"s/^-name .*/-name db@\"`node_name $1`\"/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/vm.args" || error "Cannot change Global Registry DB hostname on $1."
     ssh $1 -tt "sed -i -e \"s/setcookie .*/setcookie globalregistry/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/vm.args" || error "Cannot change Global Registry DB cookie on $1."
     ssh $1 -tt "sed -i -e \"s/bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/default.ini" || error "Cannot change Global Registry DB bind address on $1."
-    ssh $1 -tt "sed -i '$d' /var/lib/globalregistry/bigcouchdb/database_node/etc/local.ini" || error "Cannot delete admin user from Global Registry DB on $1."
-    ssh $1 -tt "sed -i '$d' /var/lib/globalregistry/bigcouchdb/database_node/etc/local.ini" || error "Cannot delete admin user from Global Registry DB on $1."
-    ssh $1 -tt "nohup /opt/veil/nodes/db/bin/bigcouch start &"
+    ssh $1 -tt "sed -i -e \"s/^admin =.*//\" /var/lib/globalregistry/bigcouchdb/database_node/etc/local.ini" || error "Cannot delete admin user from Global Registry DB on $1."
+    ssh $1 -tt "nohup /var/lib/globalregistry/bigcouchdb/database_node/bin/bigcouch start &" || error "Cannot start Global Registry DB on $1."
 }
 
 # $1 - target host
