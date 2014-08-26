@@ -122,9 +122,17 @@ get_cdmi_container(Req, #state{opts = Opts} = State) ->
 put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:mkdir(Filepath) of
         ok -> %todo check given body
-            Response = rest_utils:encode_to_json({struct, prepare_container_ans(?default_post_dir_opts, State)}),
-            Req2 = cowboy_req:set_resp_body(Response, Req),
-            {true, Req2, State};
+            case logical_files_manager:getfileattr(Filepath) of
+                {ok, Attr} ->
+                    Response = rest_utils:encode_to_json(
+                        {struct, prepare_container_ans(?default_post_dir_opts, State#state{attributes = Attr})}),
+                    Req2 = cowboy_req:set_resp_body(Response, Req),
+                    {true, Req2, State};
+                _ ->
+                    logical_files_manager:rmdir(Filepath),
+                    {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+                    {halt, Req2, State}
+            end;
         {error, dir_exists} ->
             {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
             {halt, Req2, State};
@@ -158,8 +166,8 @@ prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = St
     [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(Tail, State)];
-prepare_container_ans([<<"metadata">> | Tail], State) -> %todo extract metadata
-    [{<<"metadata">>, <<>>} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->
+    [{<<"metadata">>, rest_utils:prepare_metadata(Attrs)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(Tail, State)];
 prepare_container_ans([Other | Tail], State) ->
