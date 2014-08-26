@@ -34,10 +34,12 @@
 
 %% This test checks if dispatcher uses protocol buffer correctly.
 protocol_buffers_test() ->
+  veil_cluster_node_app:activate_white_lists(),
+
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
 
-  Message = #clustermsg{module_name = "module", message_type = "atom",
+  Message = #clustermsg{module_name = "dao", message_type = "atom",
   message_decoder_name = "communication_protocol", answer_type = "atom",
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
@@ -45,7 +47,7 @@ protocol_buffers_test() ->
   {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
   ?assert(Synch),
   ?assert(Msg =:= ping),
-  ?assert(Task =:= module),
+  ?assert(Task =:= dao),
   ?assert(Answer_decoder_name =:= "communication_protocol"),
   ?assert(ProtocolVersion == 1),
   ?assert(MsgId == 22),
@@ -60,12 +62,84 @@ protocol_buffers_test() ->
   EncodedPong = ws_handler:encode_answer(ok, 0, "atom", "communication_protocol", pong),
   ?assert(EncodedPong =:= MessageBytes2).
 
+%% This test checks if decoding of nested message works
+recursive_decoding_test() ->
+  InternalMessage1 = #getfilelocation{file_logic_name = "filename"},
+  InternalMessage1Bytes = erlang:iolist_to_binary(fuse_messages_pb:encode_getfilelocation(InternalMessage1)),
+
+  InternalMessage2 = #fusemessage{message_type = "getfilelocation", input = InternalMessage1Bytes},
+  InternalMessage2Bytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(InternalMessage2)),
+
+  Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+  message_decoder_name = "fuse_messages", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = InternalMessage2Bytes},
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
+  ?assert(Synch),
+  ?assert(Task =:= fslogic),
+  ?assert(Answer_decoder_name =:= "communication_protocol"),
+  ?assert(ProtocolVersion == 1),
+  ?assert(MsgId == 22),
+  ?assert(Answer_type =:= "atom"),
+
+  ?assert(is_record(Msg, fusemessage)),
+  ?assertEqual(getfilelocation, Msg#fusemessage.message_type),
+  IntMessage = Msg#fusemessage.input,
+  ?assert(is_record(IntMessage, getfilelocation)),
+  ?assertEqual("filename", IntMessage#getfilelocation.file_logic_name).
+
+%% This test checks if decoding of nested message works when an error in internal message appear
+recursive_decoding_error_test() ->
+  WrongInput = erlang:iolist_to_binary("wrong_input"),
+  InternalMessage = #fusemessage{message_type = "getfilelocation", input = WrongInput},
+  InternalMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(InternalMessage)),
+
+  Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+  message_decoder_name = "fuse_messages", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = InternalMessageBytes},
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
+  ?assert(Synch),
+  ?assert(Task =:= fslogic),
+  ?assert(Answer_decoder_name =:= "communication_protocol"),
+  ?assert(ProtocolVersion == 1),
+  ?assert(MsgId == 22),
+  ?assert(Answer_type =:= "atom"),
+
+  ?assert(is_record(Msg, fusemessage)),
+  ?assertEqual("getfilelocation", Msg#fusemessage.message_type),
+  ?assertEqual(WrongInput, Msg#fusemessage.input).
+
+%% This test checks handling of errors during decoding of nested message
+recursive_not_supported_message_decoding_test() ->
+  InternalMessage1 = #getfilelocation{file_logic_name = "filename"},
+  InternalMessage1Bytes = erlang:iolist_to_binary(fuse_messages_pb:encode_getfilelocation(InternalMessage1)),
+
+  InternalMessage2 = #fusemessage{message_type = "wrong_type", input = InternalMessage1Bytes},
+  InternalMessage2Bytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(InternalMessage2)),
+
+  Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+  message_decoder_name = "fuse_messages", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = InternalMessage2Bytes},
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
+  ?assert(Synch),
+  ?assert(Task =:= fslogic),
+  ?assert(Answer_decoder_name =:= "communication_protocol"),
+  ?assert(ProtocolVersion == 1),
+  ?assert(MsgId == 22),
+  ?assert(Answer_type =:= "atom"),
+
+  ?assert(is_record(Msg, fusemessage)),
+  ?assertEqual("wrong_type", Msg#fusemessage.message_type),
+  ?assertEqual(InternalMessage1Bytes, Msg#fusemessage.input).
+
 %% This test checks what happens when wrong request appears
-protocol_buffers_wrong_request_test() ->
-  Ping = #atom{value = "ping"},
-  PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
-  NotExistingAtom = #atom{value = "not_existing_atom"},
-  NotExistingAtomBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(NotExistingAtom)),
+protocol_buffers_wrong_request_structure_test() ->
+  veil_cluster_node_app:activate_white_lists(),
 
   Ans = try
     ws_handler:decode_protocol_buffer(some_atom),
@@ -74,7 +148,16 @@ protocol_buffers_wrong_request_test() ->
     wrong_message_format -> wrong_message_format;
     E1:E2 -> {unknown_error, E1, E2}
   end,
-  ?assertEqual(Ans, wrong_message_format),
+  ?assertEqual(Ans, wrong_message_format).
+
+%% This test checks what happens when wrong request appears
+protocol_buffers_wrong_request_message_test() ->
+  veil_cluster_node_app:activate_white_lists(),
+
+  Ping = #atom{value = "ping"},
+  PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
+  NotExistingAtom = #atom{value = "not_existing_atom"},
+  NotExistingAtomBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(NotExistingAtom)),
 
   Message = #clustermsg{module_name = "dao", message_type = "strange_message",
   message_decoder_name = "communication_protocol", answer_type = "atom",
@@ -100,10 +183,67 @@ protocol_buffers_wrong_request_test() ->
            {message_not_supported, 44} -> message_not_supported;
            E5:E6 -> {unknown_error, E5, E6}
          end,
-  ?assertEqual(Ans3, message_not_supported).
+  ?assertEqual(Ans3, message_not_supported),
+
+  Message3 = #clustermsg{module_name = "dao", message_type = "atom",
+  message_decoder_name = "communication_protocol", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 55, input = "wrong_input"},
+  MessageBytes3 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message3)),
+  Ans4 = try
+    ws_handler:decode_protocol_buffer(MessageBytes3),
+    ok
+         catch
+           {wrong_internal_message_type, 55} -> wrong_internal_message_type;
+           E7:E8  -> {unknown_error, E7, E8}
+         end,
+  ?assertEqual(Ans4, wrong_internal_message_type).
+
+%% This test checks what happens when wrong request appears
+protocol_buffers_wrong_request_decoder_test() ->
+  veil_cluster_node_app:activate_white_lists(),
+
+  Ping = #atom{value = "ping"},
+  PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
+
+  Message = #clustermsg{module_name = "dao", message_type = "atom",
+  message_decoder_name = "not_existing_decoder", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 66, input = PingBytes},
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  Ans = try
+    ws_handler:decode_protocol_buffer(MessageBytes),
+    ok
+         catch
+           {message_not_supported, 66} -> message_not_supported;
+           E1:E2  -> {unknown_error, E1, E2}
+         end,
+  ?assertEqual(Ans, message_not_supported).
+
+%% This test checks what happens when wrong request appears
+protocol_buffers_wrong_request_module_test() ->
+  veil_cluster_node_app:activate_white_lists(),
+
+  Ping = #atom{value = "ping"},
+  PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
+
+  Message = #clustermsg{module_name = "strange_module", message_type = "atom",
+  message_decoder_name = "communication_protocol", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 77, input = PingBytes},
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  Ans = try
+    ws_handler:decode_protocol_buffer(MessageBytes),
+    ok
+        catch
+          {message_not_supported, 77} -> message_not_supported;
+          E1:E2  -> {unknown_error, E1, E2}
+        end,
+  ?assertEqual(Ans, message_not_supported).
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_wrong_answer_test() ->
+  veil_cluster_node_app:activate_white_lists(),
+
   EncodedPong = ws_handler:encode_answer("wrong_main_answer", 0, "atom", "communication_protocol", pong),
   Pong = communication_protocol_pb:decode_answer(EncodedPong),
   ?assertEqual(Pong#answer.answer_status, "main_answer_encoding_error"),
@@ -111,6 +251,18 @@ protocol_buffers_wrong_answer_test() ->
   EncodedPong2 = ws_handler:encode_answer(ok, 0, "atom", "communication_protocol", "wrong_worker_answer"),
   Pong2 = communication_protocol_pb:decode_answer(EncodedPong2),
   ?assertEqual(Pong2#answer.answer_status, "worker_answer_encoding_error").
+
+%% This test checks what happens when wrong request appears
+protocol_buffers_answer_encoding_error_test() ->
+  veil_cluster_node_app:activate_white_lists(),
+
+  EncodedAnswer = ws_handler:encode_answer(ok, 0, "atom", "not_existing_decoder", pong),
+  Answer = communication_protocol_pb:decode_answer(EncodedAnswer),
+  ?assertEqual(Answer#answer.answer_status, "not_supported_answer_decoder"),
+
+  EncodedAnswer2 = ws_handler:encode_answer(ok, 0, "strange_message_type", "communication_protocol", pong),
+  Answer2 = communication_protocol_pb:decode_answer(EncodedAnswer2),
+  ?assertEqual(Answer2#answer.answer_status, "not_supported_answer_decoder").
 
 %% This test checks if dispatcher returns nodes where modules are running correctly
 get_worker_node_test() ->

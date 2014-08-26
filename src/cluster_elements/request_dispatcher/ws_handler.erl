@@ -446,17 +446,25 @@ encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker
                                    non -> #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId};
                                    _Type ->
                                        try
-                                           WAns = erlang:apply(list_to_existing_atom(Answer_decoder_name ++ "_pb"), list_to_existing_atom("encode_" ++ AnswerType), [records_translator:translate_to_record(Worker_Answer)]),
-                                           case Main_Answer2 of
-                                               push ->
-                                                   #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, message_type = AnswerType, worker_answer = WAns};
-                                               _ ->
-                                                   #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, worker_answer = WAns}
-                                           end
+                                         DecoderName = list_to_existing_atom(Answer_decoder_name ++ "_pb"),
+                                         EncodingFun = list_to_existing_atom("encode_" ++ AnswerType),
+                                         try
+                                             WAns = erlang:apply(DecoderName, EncodingFun, [records_translator:translate_to_record(Worker_Answer)]),
+                                             case Main_Answer2 of
+                                                 push ->
+                                                     #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, message_type = AnswerType, worker_answer = WAns};
+                                                 _ ->
+                                                     #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, worker_answer = WAns}
+                                             end
+                                         catch
+                                             Type:Error ->
+                                                 ?error("Ranch handler error during encoding worker answer: ~p:~p, answer type: ~p, decoder ~p, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
+                                                 #answer{answer_status = "worker_answer_encoding_error", message_id = MsgId}
+                                         end
                                        catch
-                                           Type:Error ->
-                                               ?error("Ranch handler error during encoding worker answer: ~p:~p, answer type: ~p, decoder ~p, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
-                                               #answer{answer_status = "worker_answer_encoding_error", message_id = MsgId}
+                                         _:_ ->
+                                           ?error("Wrong decoder ~p or encoding function ~p", [Answer_decoder_name, AnswerType]),
+                                           #answer{answer_status = "not_supported_answer_decoder", message_id = MsgId}
                                        end
                                end;
                        false ->

@@ -21,7 +21,7 @@
 -export([start/2, stop/1]).
 
 -ifdef(TEST).
--export([ports_ok/0]).
+-export([ports_ok/0, activate_white_lists/0]).
 -endif.
 
 %% ===================================================================
@@ -40,11 +40,7 @@
                 | term().
 %% ====================================================================
 start(_StartType, _StartArgs) ->
-  %% Activate white lists
-  ?MessagesWhiteList,
-  ?AtomsWhiteList,
-  ?VisibleModules,
-  ?DecodersList,
+  activate_white_lists(),
 
 	Ans = case its_ccm() orelse ports_ok() of
 		true ->
@@ -149,3 +145,10 @@ ports_are_free(Port)->
 			io:format(standard_error, "Port ~w is in use. Starting aborted.~n", [Port]),
 			false
 	end.
+
+activate_white_lists() ->
+  ?AtomsWhiteList,
+  ?VisibleModules,
+
+  lists:foreach(fun(Decoder) -> list_to_atom(atom_to_list(Decoder) ++ "_pb") end, ?DecodersList),
+  lists:foreach(fun(Message) -> {list_to_atom("decode_" ++ atom_to_list(Message)), list_to_atom("encode_" ++ atom_to_list(Message))} end, ?MessagesWhiteList).
