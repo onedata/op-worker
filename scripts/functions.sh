@@ -115,7 +115,7 @@ function node_name {
 
 
 function start_cluster {
-    info "Starting veilcluster..."
+    info "Starting VeilCluster..."
  
     dbs=`echo $CLUSTER_DB_NODES | tr ";" "\n"`
     idb_nodes=""
@@ -173,11 +173,11 @@ function install_rpm {
     scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
     
     info "Installing $2 package on $1..."
-    ssh $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 on $1"
+    ssh $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
 }
 
 function remove_cluster {
-    info "Removing veilcluster..."
+    info "Removing VeilCluster..."
     
     ssh $1 "echo \"
         {what_to_do, manage_veil}.
@@ -192,11 +192,13 @@ function remove_cluster {
     fi
     
     ssh $1 "rpm -e veil 2> /dev/null"
+    ssh $1 "[ -z $CLUSTER_DIO_ROOT ] || rm -rf $CLUSTER_DIO_ROOT/users $CLUSTER_DIO_ROOT/groups"
+    ssh $1 "rm -rf /opt/veil"
 }
 
 # $1 - target host
-function remove_db {
-    info "Removing veildb..." 
+function remove_cluster_db {
+    info "Removing VeilCluster DB..."
     
     ssh $1 "echo \"
         {what_to_do, manage_db}.
@@ -217,13 +219,15 @@ function remove_db {
         done 
         screen -XS veil_setup quit
     fi
+
+    ssh $1 "rm -rf /opt/bigcouch"
 }
 
 # $1 - target host
 # $2 - db node numer
 # $3 - total db node count
-function start_db {
-    info "Starting DB..."
+function start_cluster_db {
+    info "Starting VeilCluster DB..."
 
     ssh $1 -tt "sed -i -e \"s/bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/veil/files/database_node/etc/default.ini" || error "Cannot change db bind address on $1."
 
@@ -255,7 +259,7 @@ function start_db {
 # $1 - target host
 # $2 - target mountpoint
 function remove_client {
-    info "Removing veilclient from $1..."
+    info "Removing VeilClient..."
 
     RUID=`ssh $1 "echo \\\$UID"`
     ssh $1 "killall -9 veilFuse 2> /dev/null"
@@ -321,13 +325,27 @@ function start_client {
 }
 
 # $1 - target host
+function start_global_registry_db {
+    ssh $1 -tt "sed -i -e \"s/name .*/name db@\"`hostname -f`\"/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/vm.args" || error "Cannot change Global Registry DB hostname on $1."
+    ssh $1 -tt "sed -i -e \"s/setcookie .*/setcookie globalregistry/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/vm.args" || error "Cannot change Global Registry DB cookie on $1."
+    ssh $1 -tt "sed -i -e \"s/bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/default.ini" || error "Cannot change Global Registry DB bind address on $1."
+    ssh $1 -tt "sed -i '$d' /var/lib/globalregistry/bigcouchdb/database_node/etc/local.ini" || error "Cannot delete admin user from Global Registry DB on $1."
+    ssh $1 -tt "sed -i '$d' /var/lib/globalregistry/bigcouchdb/database_node/etc/local.ini" || error "Cannot delete admin user from Global Registry DB on $1."
+    ssh $1 -tt "nohup /opt/veil/nodes/db/bin/bigcouch start &"
+}
+
+# $1 - target host
+function remove_global_registry_db {
+    ssh $1 -tt "rm -rf /var/lib/globalregistry" || error "Cannot remove Global Registry DB on $1."
+}
+
+# $1 - target host
 function remove_global_registry {
-    info "Removing Global Registry from $1..."
+    info "Removing Global Registry..."
 
     ssh $1 'yum remove globalregistry -y 2> /dev/null'
 
     ssh $1 "rm -rf /usr/lib64/globalregistry"
-    ssh $1 "rm -rf /var/lib/globalregistry"
     ssh $1 "rm -rf /etc/globalregistry"
     ssh $1 "rm -rf /etc/init.d/globalregistry"
 }

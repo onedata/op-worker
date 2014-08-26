@@ -41,19 +41,18 @@ for node in $ALL_NODES; do
 
     ssh $node "mkdir -p $SETUP_DIR"
 
-    remove_db              "$node"
-    remove_cluster         "$node"
-    remove_global_registry "$node"
+    remove_cluster            "$node"
+    remove_cluster_db         "$node"
+    remove_global_registry    "$node"
+    remove_global_registry_db "$node"
 
-    ssh $node "[ -z $CLUSTER_DIO_ROOT ] || rm -rf $CLUSTER_DIO_ROOT/users $CLUSTER_DIO_ROOT/groups"
     ssh $node "rm -rf $SETUP_DIR"
-    ssh $node "rm -rf /opt/veil"
     ssh $node "killall -KILL beam 2> /dev/null"
     ssh $node "killall -KILL beam.smp 2> /dev/null"
 done
 
 
-########## Install Script Start ############
+########## Install Global Registry RPM ############
 ALL_NODES="$GLOBAL_REGISTRY_NODES ; $GLOBAL_REGISTRY_DB_NODES"
 ALL_NODES=`echo $ALL_NODES | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
 
@@ -64,4 +63,18 @@ for node in $ALL_NODES; do
     ]] || continue
 
     install_rpm $node globalregistry.rpm
+done
+
+
+########## Start Global Registry DB nodes ############
+n_count=`len "$GLOBAL_REGISTRY_DB_NODES"`
+for i in `seq 1 $n_count`; do
+    node=`nth "$GLOBAL_REGISTRY_DB_NODES" $i`
+
+    [[
+        "$node" != ""
+    ]] || error "Invalid node configuration !"
+
+    start_global_registry_db "$node" $i $n_count
+    deploy_stamp "$node"
 done
