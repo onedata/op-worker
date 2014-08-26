@@ -47,12 +47,23 @@
 %%      dirs are not changed very frequently.
 %% @end
 %% @todo: cache
--spec get_space_file(Space :: file()) -> {ok, file_doc()} | {error, any()} | no_return().
+-spec get_space_file(Space :: file()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
 %% ====================================================================
 get_space_file({uuid, UUID}) ->
-    get_file({uuid, UUID});
+    get_space_file1({uuid, UUID});
 get_space_file(SpacePath) ->
-    get_file(fslogic_path:absolute_join(filename:split(SpacePath))).
+    get_space_file1(fslogic_path:absolute_join(filename:split(SpacePath))).
+
+-spec get_space_file1(Space :: file()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
+get_space_file1(InitArg) ->
+    case get_file(InitArg) of
+        {ok, #veil_document{record = #file{extensions = Ext}} = Doc} ->
+            case lists:keyfind(?file_space_info_extestion, 1, Ext) of
+                false -> {error, invalid_space_file};
+                _     -> {ok, Doc}
+            end;
+        {error, Reason} -> {error, Reason}
+    end.
 
 %% ===================================================================
 %% File Descriptors Management

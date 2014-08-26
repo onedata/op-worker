@@ -166,6 +166,12 @@ handle(_ProtocolVersion, _Msg) ->
   wrong_request.
 
 
+%% maybe_handle_fuse_message/1
+%% ====================================================================
+%% @doc Tries to handle fuse message locally (i.e. handle_fuse_message/1) or delegate request to 'provider_proxy' module.
+%% @end
+-spec maybe_handle_fuse_message(RequestBody :: tuple()) -> Result :: term().
+%% ====================================================================
 maybe_handle_fuse_message(RequestBody) ->
     PathCtx = extract_logical_path(RequestBody),
     {ok, AbsolutePathCtx} = fslogic_path:get_full_file_name(PathCtx),

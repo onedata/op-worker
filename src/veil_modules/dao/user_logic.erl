@@ -743,8 +743,8 @@ create_dirs_at_storage(_Root, SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
     fslogic_context:clear_user_ctx(),
 
-    CreateTeamsDirs = fun(#space_info{name = SpaceName} = SpaceInfo, TmpAns) ->
-        Dir = unicode:characters_to_list(SpaceName),
+    CreateTeamsDirs = fun(#space_info{name = _SpaceName} = SpaceInfo, TmpAns) ->
+        Dir = fslogic_spaces:get_storage_space_name(SpaceInfo),
         DirName = filename:join(["/", ?SPACES_BASE_DIR_NAME, Dir]),
         _Result = storage_files_manager:mkdir(SHI, filename:join(["/", ?SPACES_BASE_DIR_NAME]), ?EX_ALL_PERM bor ?RWE_USR_PERM),
         Ans = storage_files_manager:mkdir(SHI, DirName),

@@ -29,6 +29,17 @@
 %% API functions
 %% ====================================================================
 
+
+%% get_space/1
+%% ====================================================================
+%% @doc Convenience wrapper for dao_vfs:get_space_file that accepts wider range of arguments
+%%      and returns errors compatible with fslogic's error handler. Also if requested space does not
+%%      exist, this method tries to initialize one using GlobarRegistry thus error is returned only if
+%%      space does not exists or there was an error during its initialization.
+%% @end
+-spec get_space(Query) -> {ok, SpaceInfo :: #space_info{}} | {error, {unknown_space_error | initialize_error, Reason :: any()}}
+    when Query :: #veil_document{} | #file{} | #space_info{} | {uuid, SpaceId :: uuid()} | SpaceName :: binary().
+%% ====================================================================
 get_space(#veil_document{record = Record}) ->
     get_space(Record);
 get_space(#file{extensions = Ext}) ->
@@ -41,7 +52,15 @@ get_space({uuid, SpaceId}) ->
         {ok, #veil_document{record = #file{} = File}} ->
             get_space(File);
         {error, file_not_found} ->
-            fslogic_spaces:initialize(SpaceId);
+            try fslogic_spaces:initialize(SpaceId) of
+                {ok, #space_info{} = SpaceInfo} ->
+                    {ok, SpaceInfo};
+                {error, InitReason} ->
+                    {error, {initialize_error, InitReason}}
+            catch
+                _Type:Except ->
+                    {error, {initialize_error, Except}}
+            end;
         {error, Reason} ->
             ?warning("Unknown space ~p", [SpaceId]),
             {error, {unknown_space_error, Reason}}
