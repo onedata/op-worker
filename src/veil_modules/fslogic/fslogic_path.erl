@@ -1,13 +1,3 @@
-%% ===================================================================
-%% @author Rafal Slota
-%% @copyright (C): 2013, ACK CYFRONET AGH
-%% This software is released under the MIT license 
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: This module provides set of path processing methods.
-%% @end
-%% ===================================================================
 -module(fslogic_path).
 -author("Rafal Slota").
 
@@ -118,10 +108,16 @@ get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
     end.
 
 
+%% absolute_join/1
+%% ====================================================================
+%% @doc Same as filename:join but also ensures that returned path is absolute.
+%% @end
+-spec absolute_join(Tokens :: [string()]) -> AbsolutePath :: string().
+%% ====================================================================
 absolute_join(Tokens) ->
     Tokens1 = Tokens -- ["/"],
-    ?info("Tokens FFS: ~p ~p", [Tokens1 ,Tokens]),
     filename:join(["/" | Tokens1]).
+
 
 %% verify_file_name/1
 %% ====================================================================
@@ -201,7 +197,7 @@ get_user_root(#user{spaces = []}) ->
     throw(no_spaces);
 get_user_root(#user{spaces = [PrimarySpaceId | _]}) ->
     {ok, #space_info{name = SpaceName}} = fslogic_objects:get_space({uuid, PrimarySpaceId}),
-    ?info("get user root: ~p ~p ~p", [PrimarySpaceId, SpaceName, unicode:characters_to_list(SpaceName)]),
+    ?debug("get user root: ~p ~p ~p", [PrimarySpaceId, SpaceName, unicode:characters_to_list(SpaceName)]),
     unicode:characters_to_list(SpaceName).
 
 

@@ -40,6 +40,7 @@
 reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
     {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
 
+    %% @todo: use all URLs for redundancy
     [URL | _] = URLs,   %% Select provider URL for rerouting
 
     TargetModule =

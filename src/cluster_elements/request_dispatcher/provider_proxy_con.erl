@@ -28,7 +28,7 @@
 ]).
 
 %% API
--export([ensure_running/0, get_msg_id/0, send/3]).
+-export([ensure_running/0, get_msg_id/0, send/3, main_loop/1]).
 
 %% Connection master's state record
 -record(ppcon_state, {msg_id = 0, connections = #{}, inbox = #{}}).
@@ -173,7 +173,7 @@ main_loop(#ppcon_state{msg_id = CurrentMsgId, connections = Connections, inbox =
         after 10000 ->
             State
         end,
-    main_loop(NewState).
+    ?MODULE:main_loop(NewState).
 
 
 %% exec/1
@@ -204,14 +204,12 @@ connect(Host, Port, Opts) when is_atom(Host) ->
 connect(Host, Port, Opts) ->
     erlang:process_flag(trap_exit, true),
     flush_errors(),
-    crypto:start(),
-    ssl:start(),
     Opts1 = Opts -- [auto_handshake],
     Monitored =
         case websocket_client:start_link("wss://" ++ vcn_utils:ensure_list(Host) ++ ":" ++ integer_to_list(Port) ++ "/veilclient" , ?MODULE, [self()], Opts1 ++ [{reuse_sessions, false}]) of
             {ok, Proc}      -> erlang:monitor(process, Proc), Proc;
-            {error, Error}  -> self() ! {error, Error}, ok;
-            Error1          -> self() ! {error, Error1}, ok
+            {error, Error}  -> self() ! {error, Error}, undefined;
+            Error1          -> self() ! {error, Error1}, undefined
         end,
     Return =
         receive

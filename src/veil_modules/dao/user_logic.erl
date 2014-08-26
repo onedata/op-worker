@@ -757,7 +757,7 @@ create_dirs_at_storage(_Root, SpacesInfo, Storage) ->
                         TmpAns;
                     Error1 ->
                         ?error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure group '~p' is defined in the system.",
-                            [Dir, SHI#storage_helper_info.name, Error1, Dir]),
+                            [Dir, SHI#storage_helper_info.name, Error1, fslogic_spaces:map_to_grp_owner(SpaceInfo)]),
                         {error, dir_chown_error}
                 end;
             Error ->
