@@ -1,3 +1,5 @@
+#!/bin/bash
+
 #####################################################################
 #  @author Rafal Slota
 #  @copyright (C): 2014 ACK CYFRONET AGH
@@ -115,7 +117,7 @@ function node_name {
 function start_cluster {
     info "Starting veilcluster..."
  
-    dbs=`echo $DB_NODES | tr ";" "\n"`
+    dbs=`echo $CLUSTER_DB_NODES | tr ";" "\n"`
     idb_nodes=""
     for db in $dbs; do
         idb_nodes="$idb_nodes,db@`node_name $db`"
@@ -164,13 +166,14 @@ function start_cluster {
 }
 
 # $1 - target host
-function install {
+# $2 - rpm name
+function install_rpm {
     info "Moving install files to $1..."
     ssh $1 "mkdir -p $SETUP_DIR" || error "Cannot create tmp setup dir '$SETUP_DIR' on $1"
-    scp *.rpm $1:$SETUP_DIR/veilcluster.rpm || error "Moving .rpm file failed on $1"
+    scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
     
-    info "Installing cluster's rpm package on $1..."
-    ssh $1 "rpm -Uvh $SETUP_DIR/veilcluster.rpm --nodeps --force" || error "Cannot install veilcluster on $1"
+    info "Installing $2 package on $1..."
+    ssh $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 on $1"
 }
 
 function remove_cluster {
@@ -234,7 +237,7 @@ function start_db {
             {settings_ok_db, ok}.
         \" >> $SETUP_DIR/start_db.batch"
     else 
-        master_db=$(node_name $DB_NODES 1)
+        master_db=$(node_name $CLUSTER_DB_NODES 1)
         ssh $1 "echo \"
             {what_to_do_db, extend_cluster}.
             {define_node_to_extend, \\\"$master_db\\\"}.
@@ -315,4 +318,16 @@ function start_client {
     else
         ssh $1 "CLUSTER_HOSTNAME=\"$cl_host\" $mount_cmd" || error "Cannot mount VeilFS on $1 (using cluster_hostname: $cl_host, mount_cmd: 'CLUSTER_HOSTNAME=\"$cl_host\" $mount_cmd')"
     fi
+}
+
+# $1 - target host
+function remove_global_registry {
+    info "Removing Global Registry from $1..."
+
+    ssh $1 'yum remove globalregistry -y 2> /dev/null'
+
+    ssh $1 "rm -rf /usr/lib64/globalregistry"
+    ssh $1 "rm -rf /var/lib/globalregistry"
+    ssh $1 "rm -rf /etc/globalregistry"
+    ssh $1 "rm -rf /etc/init.d/globalregistry"
 }

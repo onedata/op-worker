@@ -1,3 +1,5 @@
+#!/bin/bash
+
 #####################################################################
 #  @author Rafal Slota
 #  @copyright (C): 2014 ACK CYFRONET AGH
@@ -20,9 +22,10 @@ fi
 # Load funcion defs
 source ./functions.sh || exit 1
 
-########## Load Platform Config ############
-scp $MASTER:$CONFIG_PATH conf || error "Cannot fetch platform config file."
-source ./conf || error "Cannot find platform config file. Please try again (redeploy)."
+########## Load Platform config ############
+info "Fetching platform configuration from $MASTER:$CONFIG_PATH ..."
+scp $MASTER:$CONFIG_PATH ./conf.sh || error "Cannot fetch platform config file."
+source ./conf.sh || error "Cannot find platform config file. Please try again (redeploy)."
 
 n_count=`len "$CLIENT_NODES"`
 for i in `seq 1 $n_count`; do
