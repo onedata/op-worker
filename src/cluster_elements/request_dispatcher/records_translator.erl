@@ -31,7 +31,7 @@
   Result ::  term().
 %% ====================================================================
 translate(Record, _DecoderName) when is_record(Record, atom) ->
-  list_to_atom(Record#atom.value);
+  list_to_existing_atom(Record#atom.value);
 
 translate(Record, DecoderName) when is_tuple(Record) ->
   RecordList = lists:reverse(tuple_to_list(Record)),
@@ -40,8 +40,8 @@ translate(Record, DecoderName) when is_tuple(Record) ->
     true ->
       try
         [Type | Rest2] = Rest,
-        DecodedEnd = erlang:apply(list_to_atom(DecoderName ++ "_pb"), list_to_atom("decode_" ++ Type), [End]),
-        [DecodedEnd | [list_to_atom(Type) | Rest2]]
+        DecodedEnd = erlang:apply(list_to_existing_atom(DecoderName ++ "_pb"), list_to_existing_atom("decode_" ++ Type), [End]),
+        [DecodedEnd | [list_to_existing_atom(Type) | Rest2]]
       catch
         _:_ ->
           ?warning("Can not translate record: ~p, using decoder: ~p", [Record, DecoderName]),

@@ -15,6 +15,7 @@
 
 -include("registered_names.hrl").
 -include("logging.hrl").
+-include("messages_white_list.hrl").
 
 %% Application callbacks
 -export([start/2, stop/1]).
@@ -39,6 +40,12 @@
                 | term().
 %% ====================================================================
 start(_StartType, _StartArgs) ->
+  %% Activate white lists
+  ?MessagesWhiteList,
+  ?AtomsWhiteList,
+  ?VisibleModules,
+  ?DecodersList,
+
 	Ans = case its_ccm() orelse ports_ok() of
 		true ->
 			{ok, NodeType} = application:get_env(?APP_Name, node_type),

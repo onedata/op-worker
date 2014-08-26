@@ -201,18 +201,6 @@ request_forward_test() ->
   worker_host:stop(Module),
   request_dispatcher:stop().
 
-%% This test checks if dispatcher is able to check which messages should be discarded
-white_list_test() ->
-  ?assert(ws_handler:checkMessage(#fusemessage{message_type = "type", input = <<>>}, "User")),
-  ?assert(ws_handler:checkMessage(#remotefilemangement{message_type = "type", input = <<>>}, "User")),
-  ?assertEqual(false, ws_handler:checkMessage(#test_record{xyz = [x], abc = "a"}, "User")),
-
-  ?assert(ws_handler:checkMessage(ping, "User")),
-  ?assertEqual(false, ws_handler:checkMessage(pong, "User")),
-
-  ?assertEqual(ws_handler:checkMessage("string", "User"), false).
-
-
 %% ====================================================================
 %% Helper functions
 %% ====================================================================

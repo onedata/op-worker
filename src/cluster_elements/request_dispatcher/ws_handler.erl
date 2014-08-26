@@ -15,7 +15,6 @@
 
 -module(ws_handler).
 -include("registered_names.hrl").
--include("messages_white_list.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
@@ -38,7 +37,7 @@
 -export([websocket_terminate/3]).
 
 -ifdef(TEST).
--export([decode_protocol_buffer/2, encode_answer/2, encode_answer/3, encode_answer/5, encode_answer/6, checkMessage/2]).
+-export([decode_protocol_buffer/2, encode_answer/2, encode_answer/3, encode_answer/5, encode_answer/6]).
 -endif.
 
 %% ====================================================================
@@ -364,16 +363,13 @@ decode_protocol_buffer(MsgBytes, DN) ->
         answer_decoder_name = Answer_decoder_name, synch = Synch, protocol_version = Prot_version, message_id = MsgId, input = Bytes} = DecodedBytes,
 
     Msg = try
-        erlang:apply(list_to_atom(Message_decoder_name ++ "_pb"), list_to_atom("decode_" ++ Message_type), [Bytes])
+        erlang:apply(list_to_existing_atom(Message_decoder_name ++ "_pb"), list_to_existing_atom("decode_" ++ Message_type), [Bytes])
           catch
               _:_ -> throw({wrong_internal_message_type, MsgId})
           end,
 
     TranslatedMsg = records_translator:translate(Msg, Message_decoder_name),
-    case checkMessage(TranslatedMsg, DN) of
-        true -> {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type};
-        false -> throw({message_not_supported, MsgId})
-    end.
+    {Synch, list_to_existing_atom(ModuleName), Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type}.
 
 
 %% encode_answer/1
@@ -439,7 +435,7 @@ encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker
                                    non -> #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId};
                                    _Type ->
                                        try
-                                           WAns = erlang:apply(list_to_atom(Answer_decoder_name ++ "_pb"), list_to_atom("encode_" ++ AnswerType), [records_translator:translate_to_record(Worker_Answer)]),
+                                           WAns = erlang:apply(list_to_existing_atom(Answer_decoder_name ++ "_pb"), list_to_existing_atom("encode_" ++ AnswerType), [records_translator:translate_to_record(Worker_Answer)]),
                                            case Main_Answer2 of
                                                push ->
                                                    #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, message_type = AnswerType, worker_answer = WAns};
@@ -465,33 +461,6 @@ encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker
         [] -> AnswerRecord;
         _ -> AnswerRecord#answer{error_description = ErrorDescription}
     end.
-
-%% map_dn_to_client_type/1
-%% ====================================================================
-%% @doc Checks if message can be processed by cluster.
--spec map_dn_to_client_type(DN :: string()) -> UserType when
-    UserType :: atom().
-%% ====================================================================
-map_dn_to_client_type(_DN) ->
-    standard_user.
-
-%% checkMessage/2
-%% ====================================================================
-%% @doc Checks if message can be processed by cluster.
--spec checkMessage(Msg :: term(), DN :: string()) -> Result when
-    Result :: boolean().
-%% ====================================================================
-checkMessage(Msg, DN) when is_atom(Msg) ->
-    lists:member(Msg, proplists:get_value(map_dn_to_client_type(DN), ?AtomsWhiteList, []));
-
-checkMessage(Msg, DN) when is_tuple(Msg) ->
-    [Record_Type | _] = tuple_to_list(Msg),
-    lists:member(Record_Type, proplists:get_value(map_dn_to_client_type(DN), ?MessagesWhiteList, []));
-
-checkMessage(Msg, DN) ->
-  ?warning("Wrong type of message ~p for user ~p", [Msg, DN]),
-  false.
-
 
 %% genFuseId/1
 %% ====================================================================
