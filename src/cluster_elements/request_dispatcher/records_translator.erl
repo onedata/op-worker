@@ -31,7 +31,13 @@
   Result ::  term().
 %% ====================================================================
 translate(Record, _DecoderName) when is_record(Record, atom) ->
-  list_to_existing_atom(Record#atom.value);
+  try
+    list_to_existing_atom(Record#atom.value)
+  catch
+    _:_ ->
+      ?warning("Unsupported atom: ~p", [Record#atom.value]),
+      throw(message_not_supported)
+  end;
 
 translate(Record, DecoderName) when is_tuple(Record) ->
   RecordList = lists:reverse(tuple_to_list(Record)),

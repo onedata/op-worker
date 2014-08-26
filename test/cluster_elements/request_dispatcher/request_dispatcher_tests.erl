@@ -28,8 +28,6 @@
 
 -ifdef(TEST).
 
--record(test_record, {xyz = [], abc = ""}).
-
 %% ====================================================================
 %% Test functions
 %% ====================================================================
@@ -44,7 +42,7 @@ protocol_buffers_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes, standard_user),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
   ?assert(Synch),
   ?assert(Msg =:= ping),
   ?assert(Task =:= module),
@@ -66,41 +64,41 @@ protocol_buffers_test() ->
 protocol_buffers_wrong_request_test() ->
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
-  Pong = #atom{value = "pong"},
-  PongBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Pong)),
+  NotExistingAtom = #atom{value = "not_existing_atom"},
+  NotExistingAtomBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(NotExistingAtom)),
 
   Ans = try
-    ws_handler:decode_protocol_buffer(some_atom, standard_user),
+    ws_handler:decode_protocol_buffer(some_atom),
     ok
   catch
     wrong_message_format -> wrong_message_format;
-    _:_ -> unknown_error
+    E1:E2 -> {unknown_error, E1, E2}
   end,
   ?assertEqual(Ans, wrong_message_format),
 
-  Message = #clustermsg{module_name = "module", message_type = "strange_message",
+  Message = #clustermsg{module_name = "dao", message_type = "strange_message",
   message_decoder_name = "communication_protocol", answer_type = "atom",
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 33, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
   Ans2 = try
-    ws_handler:decode_protocol_buffer(MessageBytes, standard_user),
+    ws_handler:decode_protocol_buffer(MessageBytes),
     ok
   catch
-    {wrong_internal_message_type, 33} -> wrong_internal_message_type;
-    _:_ -> unknown_error
+    {message_not_supported, 33} -> message_not_supported;
+    E3:E4  -> {unknown_error, E3, E4}
   end,
-  ?assertEqual(Ans2, wrong_internal_message_type),
+  ?assertEqual(Ans2, message_not_supported),
 
-  Message2 = #clustermsg{module_name = "module", message_type = "atom",
+  Message2 = #clustermsg{module_name = "dao", message_type = "atom",
   message_decoder_name = "communication_protocol", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 44, input = PongBytes},
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 44, input = NotExistingAtomBytes},
   MessageBytes2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
   Ans3 = try
-    ws_handler:decode_protocol_buffer(MessageBytes2, standard_user),
+    ws_handler:decode_protocol_buffer(MessageBytes2),
     ok
          catch
            {message_not_supported, 44} -> message_not_supported;
-           _:_ -> unknown_error
+           E5:E6 -> {unknown_error, E5, E6}
          end,
   ?assertEqual(Ans3, message_not_supported).
 
