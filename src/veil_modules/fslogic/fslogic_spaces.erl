@@ -1,11 +1,13 @@
-%%%-------------------------------------------------------------------
-%%% @author Rafal Slota
-%%% @copyright (C) 2014, <COMPANY>
-%%% @doc
-%%%
-%%% @end
-%%% Created : 15. Jul 2014 13:46
-%%%-------------------------------------------------------------------
+%% ===================================================================
+%% @author Rafal Slota
+%% @copyright (C): 2014 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This module provides spaces-oriented helper methods for fslogic.
+%% @end
+%% ===================================================================
 -module(fslogic_spaces).
 -author("Rafal Slota").
 

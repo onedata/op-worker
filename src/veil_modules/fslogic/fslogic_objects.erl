@@ -62,13 +62,15 @@ get_space({uuid, SpaceId}) ->
                 {ok, #space_info{} = SpaceInfo} ->
                     {ok, SpaceInfo};
                 {error, InitReason} ->
+                    ?error("Cannot initialize space ~p due to: ~p", [SpaceId, InitReason]),
                     {error, {initialize_error, InitReason}}
             catch
                 _Type:Except ->
+                    ?error_stacktrace("Cannot initialize space ~p due to: ~p", [SpaceId, Except]),
                     {error, {initialize_error, Except}}
             end;
         {error, Reason} ->
-            ?warning("Unknown space ~p", [SpaceId]),
+            ?error("Unknown space ~p", [SpaceId]),
             {error, {unknown_space_error, Reason}}
     end;
 get_space(SpaceName) ->
