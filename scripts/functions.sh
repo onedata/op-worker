@@ -358,7 +358,7 @@ function start_global_registry {
     dbs=`echo $GLOBAL_REGISTRY_DB_NODES | tr ";" "\n"`
     idb_nodes=""
     for db in $dbs; do
-        idb_nodes="$idb_nodes,'db@`node_name $db`'"
+        idb_nodes="'db@`node_name $db`',$idb_nodes"
     done
     idb_nodes=`echo $idb_nodes | sed -e 's/.$//'`
 
