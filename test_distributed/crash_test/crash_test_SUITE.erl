@@ -165,25 +165,13 @@ callbacks_test(Config) ->
   test_utils:wait_for_cluster_init(),
   ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
+  ?ENABLE_PROVIDER(Config),
+
   PeerCert = ?COMMON_FILE("peer.pem"),
 
   %% Add test users since cluster wont generate FuseId without full authentication
-  {ReadFileAns, PemBin} = file:read_file(PeerCert),
-  ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(Worker1, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(Worker1, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-  ?assertEqual(ok, ConvertAns),
-  DnList = [DN],
-
-  Login = "user1",
-  Name = "user1 user1",
-  TeamName = "user1 team",
-  Teams = [TeamName],
-  Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(Worker1, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
-  ?assertEqual(ok, CreateUserAns),
-  %% END Add user
+  UserDoc = test_utils:add_user(Config, ?TEST_USER, PeerCert, [?TEST_GROUP]),
+  [DN | _] = UserDoc#veil_document.record#user.dn_list,
 
   {ok, Socket0} = wss:connect('localhost', 7777, [{certfile, PeerCert}, {cacertfile, PeerCert}]),
   FuseId1 = wss:handshakeInit(Socket0, "hostname", []), %% Get first fuseId
@@ -355,8 +343,8 @@ callbacks_test(Config) ->
   lists:foldl(CheckCallbacks, DispatcherCorrectAns4, lists:zip(Worker2, FuseInfo4)),
 
   %% Cleanup
-  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ TeamName], ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_GROUP], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion])),
 
   ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{dn, DN}])).
 

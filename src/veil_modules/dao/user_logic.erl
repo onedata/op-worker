@@ -29,7 +29,7 @@
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_space_names/1, create_space_dir/1, get_spaces/1]).
--export([create_dirs_at_storage/3, create_dirs_at_storage/2]).
+-export([create_dirs_at_storage/2, create_dirs_at_storage/1]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
 -export([synchronize_spaces_info/2]).
 
@@ -698,41 +698,41 @@ shortname_to_oid_code(Shortname) ->
         throw({unknown_shortname, Shortname})
     end.
 
-%% create_dirs_at_storage/2
+%% create_dirs_at_storage/1
 %% ====================================================================
 %% @doc Creates root dir for user and for its teams, on all storages
 %% @end
--spec create_dirs_at_storage(Root :: string(), SpacesInfo :: [#space_info{}]) -> ok | {error, Error} when
+-spec create_dirs_at_storage(SpacesInfo :: [#space_info{}]) -> ok | {error, Error} when
     Error :: atom().
 %% ====================================================================
-create_dirs_at_storage(Root, SpacesInfo) ->
+create_dirs_at_storage(SpacesInfo) ->
     {ListStatus, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], 1),
     ?info("Creating dirs on storage for ~p / ~p", [SpacesInfo, StorageList]),
     case ListStatus of
         ok ->
             StorageRecords = lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList),
             CreateDirs = fun(StorageRecord, TmpAns) ->
-                case create_dirs_at_storage(Root, SpacesInfo, StorageRecord) of
+                case create_dirs_at_storage(SpacesInfo, StorageRecord) of
                     ok -> TmpAns;
                     Error ->
-                        ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, SpacesInfo}, Error]),
+                        ?error("Cannot create dirs ~p at storage, error: ~p", [SpacesInfo, Error]),
                         Error
                 end
             end,
             lists:foldl(CreateDirs, ok, StorageRecords);
         Error2 ->
-            ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, SpacesInfo}, {storage_listing_error, Error2}]),
+            ?error("Cannot create dirs ~p at storage, error: ~p", [SpacesInfo, {storage_listing_error, Error2}]),
             {error, storage_listing_error}
     end.
 
-%% create_dirs_at_storage/3
+%% create_dirs_at_storage/2
 %% ====================================================================
 %% @doc Creates root dir for user's spaces. Only on selected storage
 %% @end
--spec create_dirs_at_storage(Root :: string(), SpacesInfo :: [#space_info{}], Storage :: #storage_info{}) -> ok | {error, Error} when
+-spec create_dirs_at_storage(SpacesInfo :: [#space_info{}], Storage :: #storage_info{}) -> ok | {error, Error} when
     Error :: atom().
 %% ====================================================================
-create_dirs_at_storage(_Root, SpacesInfo, Storage) ->
+create_dirs_at_storage(SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
     fslogic_context:clear_user_ctx(),
 

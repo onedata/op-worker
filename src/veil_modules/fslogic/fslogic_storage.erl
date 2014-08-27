@@ -213,7 +213,7 @@ add_dirs_for_existing_users(Storage) ->
       LoginsAndSpaces = lists:map(fun(X) -> {user_logic:get_login(X), user_logic:get_spaces(X)} end, Users),
       CreateDirs =
         fun({Login, Spaces}, TmpAns) ->
-          case user_logic:create_dirs_at_storage(Login, Spaces, Storage) of
+          case user_logic:create_dirs_at_storage(Spaces, Storage) of
             ok ->
               TmpAns;
             Error ->

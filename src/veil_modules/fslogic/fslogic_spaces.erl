@@ -27,7 +27,7 @@
 initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
     case user_logic:create_space_dir(SpaceInfo) of
         {ok, SpaceUUID} ->
-            try user_logic:create_dirs_at_storage(non, [SpaceInfo]) of
+            try user_logic:create_dirs_at_storage([SpaceInfo]) of
                 ok -> {ok, SpaceInfo};
                 {error, Reason} ->
                     ?error("Filed to create space's (~p) dir on storage due to ~p", [SpaceInfo, Reason]),
@@ -44,7 +44,7 @@ initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
             NewExt = lists:keyreplace(?file_space_info_extestion, 1, Ext, {?file_space_info_extestion, SpaceInfo}),
             NewFile = File#file{extensions = NewExt, name = unicode:characters_to_list(SpaceName)},
             {ok, _} = dao_lib:apply(vfs, save_file, [FileDoc#veil_document{record = NewFile}], 1),
-            ok = user_logic:create_dirs_at_storage(non, [SpaceInfo]),
+            ok = user_logic:create_dirs_at_storage([SpaceInfo]),
 
             {ok, SpaceInfo};
         {error, Reason} ->
