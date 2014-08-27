@@ -1,13 +1,13 @@
 #!/bin/bash
 
 #####################################################################
-#  @author Rafal Slota
-#  @copyright (C): 2014 ACK CYFRONET AGH
-#  This software is released under the MIT license
-#  cited in 'LICENSE.txt'.
+# @author Rafal Slota
+# @copyright (C): 2014 ACK CYFRONET AGH
+# This software is released under the MIT license
+# cited in 'LICENSE.txt'.
 #####################################################################
-#  This script contains utility function used by Bamboo agents to
-#  build and deploy VeilFS project's components. 
+# This script contains utility function used by Bamboo agents to
+# build and deploy VeilFS project's components.
 #####################################################################
 
 ## Check configuration and set defaults...
@@ -23,7 +23,9 @@ if [[ -z "$STAMP_DIR" ]]; then
     export STAMP_DIR="${SETUP_DIR}-stamp"
 fi
 
-###############################################   Utility Functions   ###############################################
+#####################################################################
+# Utility Functions
+#####################################################################
 
 # $1 - list of items seperated with ';'
 # $2 - which element has to be returned, starting with 1
@@ -121,7 +123,9 @@ function node_name {
     echo `ssh $1 "hostname -f"`
 }
 
-###############################################   VeilCluster Functions   ###############################################
+#####################################################################
+# VeilCluster Functions
+#####################################################################
 
 # $1 - target host
 # $2 - rpm name
@@ -131,8 +135,8 @@ function install_veilcluster_package {
     scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
 
     info "Installing $2 package on $1..."
-    export ONEPANEL_MULTICAST_ADDRESS=`echo $MASTER | sed 's/^[^@]*@//'`
-    ssh -o SendEnv=ONEPANEL_MULTICAST_ADDRESS $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
+    multicast_address=`echo $MASTER | sed 's/^[^@]*@//'`
+    ssh $1 "ONEPANEL_MULTICAST_ADDRESS=$multicast_address ; rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
 }
 
 function start_cluster {
@@ -264,7 +268,9 @@ function start_cluster_db {
     ssh -tt -q $1 "ulimit -n 65535 ; ulimit -u 65535 ; nohup /opt/bigcouch/bin/bigcouch >/dev/null 2>&1 & ; sleep 5" 2> /dev/null
 }
 
-###############################################   VeilClient Functions   ###############################################
+#####################################################################
+# VeilClient Functions
+#####################################################################
 
 # $1 - target host
 # $2 - target mountpoint
@@ -338,7 +344,9 @@ function remove_client {
     fi
 }
 
-###############################################   Global Registry Functions   ###############################################
+#####################################################################
+# Global Registry Functions
+#####################################################################
 
 # $1 - target host
 # $2 - rpm name

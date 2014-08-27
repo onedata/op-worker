@@ -1,16 +1,19 @@
 #!/bin/bash
 
 #####################################################################
-#  @author Rafal Slota
-#  @copyright (C): 2014 ACK CYFRONET AGH
-#  This software is released under the MIT license
-#  cited in 'LICENSE.txt'.
+# @author Rafal Slota
+# @copyright (C): 2014 ACK CYFRONET AGH
+# This software is released under the MIT license
+# cited in 'LICENSE.txt'.
 #####################################################################
-#  This script is used by Bamboo agent to set up VeilCluster nodes
-#  during deployment.
+# This script is used by Bamboo agent to set up VeilCluster nodes
+# during deployment.
 #####################################################################
 
-## Check configuration and set defaults...
+#####################################################################
+# Check configuration and set defaults
+#####################################################################
+
 if [[ -z "$CONFIG_PATH" ]]; then
     export CONFIG_PATH="/etc/onedata_platform.conf"
 fi
@@ -19,6 +22,17 @@ if [[ -z "$SETUP_DIR" ]]; then
     export SETUP_DIR="/tmp/onedata"
 fi
 
+# Load funcion defs
+source ./functions.sh || exit 1
+
+#####################################################################
+# Load platform configuration
+#####################################################################
+
+info "Fetching platform configuration from $MASTER:$CONFIG_PATH ..."
+scp $MASTER:$CONFIG_PATH ./conf.sh || error "Cannot fetch platform config file."
+source ./conf.sh || error "Cannot find platform config file. Please try again (redeploy)."
+
 if [[ -z "$CREATE_USER_IN_DB" ]]; then
     echo "Create user in DB not exported."
     export CREATE_USER_IN_DB="true"
@@ -26,17 +40,10 @@ else
     echo "Create user in DB exported: $CREATE_USER_IN_DB."
 fi
 
-# Load funcion defs
-source ./functions.sh || exit 1
+#####################################################################
+# Install VeilCluster package
+#####################################################################
 
-
-########## Load Platform config ############
-info "Fetching platform configuration from $MASTER:$CONFIG_PATH ..."
-scp $MASTER:$CONFIG_PATH ./conf.sh || error "Cannot fetch platform config file."
-source ./conf.sh || error "Cannot find platform config file. Please try again (redeploy)."
-
-
-########## Install VeilCluster RPM ############
 ALL_NODES="$CLUSTER_NODES ; $CLUSTER_DB_NODES"
 ALL_NODES=`echo $ALL_NODES | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
 n_count=`len "$ALL_NODES"`
@@ -158,8 +165,5 @@ done
 #    fi
 #
 #done
-#
-#exit 0
-#
-#
-#
+
+exit 0
