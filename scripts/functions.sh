@@ -141,7 +141,7 @@ function install_veilcluster_package {
 
     info "Installing $2 package on $1..."
     multicast_address=`strip_login $MASTER`
-    ssh $1 "export ONEPANEL_MULTICAST_ADDRESS=$multicast_address ; rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
+    ssh $1 "export ONEPANEL_MULTICAST_ADDRESS=$multicast_address ; rpm -Uvh $SETUP_DIR/$2 --nodeps --force ; sleep 5" || error "Cannot install $2 package on $1"
 }
 
 function start_cluster {

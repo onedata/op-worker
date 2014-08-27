@@ -54,14 +54,13 @@ fi
 #####################################################################
 
 ALL_NODES="$CLUSTER_NODES ; $CLUSTER_DB_NODES"
-ALL_NODES=`echo $ALL_NODES | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
-for node in $ALL_NODES; do
+ALL_NODES=`echo ${ALL_NODES} | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
+for node in ${ALL_NODES}; do
     [[
         "$node" != ""
     ]] || error "Invalid VeilCluster node!"
 
-    install_veilcluster_package $node veilcluster.rpm
-    sleep 10
+    install_veilcluster_package ${node} veilcluster.rpm
 done
 
 #####################################################################
@@ -69,13 +68,13 @@ done
 #####################################################################
 
 node=`nth "$CLUSTER_NODES" 1`
-start_cluster node
+start_cluster ${node}
 
 n_count=`len "$CLUSTER_NODES"`
-for i in `seq 1 $n_count`; do
-    node=`nth "$CLUSTER_NODES" $i`
+for i in `seq 1 ${n_count}`; do
+    node=`nth "$CLUSTER_NODES" ${i}`
 
-    deploy_stamp "$node"
+    deploy_stamp ${node}
 done
 sleep 120
 
@@ -86,12 +85,12 @@ sleep 120
 info "Validating VeilCluster nodes start..."
 
 n_count=`len "$CLUSTER_NODES"`
-for i in `seq 1 $n_count`; do
-    node=`nth "$CLUSTER_NODES" $i`
-    pcount=`ssh $node "ps aux | grep beam | wc -l"`
+for i in `seq 1 ${n_count}`; do
+    node=`nth "$CLUSTER_NODES" ${i}`
+    pcount=`ssh ${node} "ps aux | grep beam | wc -l"`
 
     [[
-        $pcount -ge 2
+        ${pcount} -ge 2
     ]] || error "Could not find VeilCluster processes on $node!"
 done
 
@@ -104,7 +103,7 @@ info "Nagios health check..."
 cluster=`nth "$CLUSTER_NODES" 1`
 cluster=${cluster#*@}
 
-curl -k -X GET https://$cluster/nagios > hc.xml || error "Cannot get Nagios status from node '$cluster'"
+curl -k -X GET https://${cluster}/nagios > hc.xml || error "Cannot get Nagios status from node '$cluster'"
 stat=`cat hc.xml | sed -e 's/>/>\n/g' | grep -v "status=\"ok\"" | grep status`
 [[ "$stat" == "" ]] || error "Cluster HealthCheck failed: \n$stat"
 
@@ -113,16 +112,16 @@ stat=`cat hc.xml | sed -e 's/>/>\n/g' | grep -v "status=\"ok\"" | grep status`
 #####################################################################
 
 cnode=`nth "$CLUSTER_NODES" 1`
-scp reg_user.erl $cnode:/tmp
-escript_bin=`ssh $cnode "find /opt/veil/files/veil_cluster_node/ -name escript | head -1"`
+scp reg_user.erl ${cnode}:/tmp
+escript_bin=`ssh ${cnode} "find /opt/veil/files/veil_cluster_node/ -name escript | head -1"`
 reg_run="$escript_bin /tmp/reg_user.erl"
 
 n_count=`len "$CLIENT_NODES"`
-for i in `seq 1 $n_count`; do
+for i in `seq 1 ${n_count}`; do
 
-    node=`nth "$CLIENT_NODES" $i`
-    node_name=`node_name $cnode`
-    cert=`nth "$CLIENT_CERTS" $i`
+    node=`nth "$CLIENT_NODES" ${i}`
+    node_name=`node_name ${cnode}`
+    cert=`nth "$CLIENT_CERTS" ${i}`
 
     [[
         "$node" != ""
@@ -139,9 +138,9 @@ for i in `seq 1 $n_count`; do
 
     ## Add user to all cluster nodes
     n_count=`len "$CLUSTER_NODES"`
-    for ci in `seq 1 $n_count`; do
-        lcnode=`nth "$CLUSTER_NODES" $ci`
-	ssh $lcnode "useradd $user_name 2> /dev/null || exit 0"
+    for ci in `seq 1 ${n_count}`; do
+        lcnode=`nth "$CLUSTER_NODES" ${ci}`
+	ssh ${lcnode} "useradd $user_name 2> /dev/null || exit 0"
     done
 
     if [[ "$CLUSTER_CREATE_USER_IN_DB" == "true" ]]; then
@@ -149,10 +148,10 @@ for i in `seq 1 $n_count`; do
 
         info "Trying to register $user_name using cluster node $cnode (command: $cmm)"
 
-        scp $cert tmp_cert.pem
-        scp tmp_cert.pem $cnode:/tmp/
+        scp ${cert} tmp_cert.pem
+        scp tmp_cert.pem ${cnode}:/tmp/
 
-        ssh $cnode "$cmm"
+        ssh ${cnode} "$cmm"
     fi
 done
 
