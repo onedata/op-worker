@@ -12,9 +12,10 @@
 -module(cdmi_object).
 
 -include("veil_modules/control_panel/cdmi.hrl").
+-include("veil_modules/control_panel/cdmi_capabilities.hrl").
 
--define(default_get_file_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>, <<"valuerange">>, <<"value">>]).
--define(default_post_file_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
+-define(default_get_file_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>, <<"valuerange">>, <<"value">>]).
+-define(default_post_file_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
@@ -263,10 +264,20 @@ prepare_object_ans([<<"objectID">> | Tail], #state{filepath = Filepath} = State)
     [{<<"objectID">>, cdmi_id:uuid_to_objectid(logical_files_manager:get_uuid_by_filepath(Filepath))} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"objectName">>, list_to_binary(filename:basename(Filepath))} | prepare_object_ans(Tail, State)];
-prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = <<"/">>} = State) ->
+prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = "/"} = State) ->
     [{<<"parentURI">>, <<>>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_object_ans(Tail, State)];
+    ParentURI = case fslogic_path:strip_path_leaf(Filepath) of
+                    "/" -> <<"/">>;
+                    Other -> <<(list_to_binary(Other))/binary,"/">>
+                end,
+    [{<<"parentURI">>, ParentURI} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"parentID">> | Tail], #state{filepath = "/"} = State) ->
+    [{<<"parentID">>, <<>>} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"parentID">> | Tail], #state{filepath = Filepath} = State) ->
+    [{<<"parentID">>, cdmi_id:uuid_to_objectid(logical_files_manager:get_uuid_by_filepath(fslogic_path:strip_path_leaf(Filepath)))} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"capabilitiesURI">> | Tail], State) ->
+    [{<<"capabilitiesURI">>, list_to_binary(?dataobject_capability_path)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"mimetype">> | Tail], #state{filepath = Filepath} = State) ->

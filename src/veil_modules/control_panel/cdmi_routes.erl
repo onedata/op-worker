@@ -23,7 +23,7 @@
 %% @end
 -spec route([binary()],binary()) -> atom().
 %% ====================================================================
-%% route([<<"cdmi_capabilities">>| _Rest], _FullPath) -> todo
+route([<<"cdmi_capabilities">>| _Rest], _FullPath) -> cdmi_capabilities;
 route([<<"cdmi_objectid">>| _Rest], _FullPath) -> cdmi_objectid;
 route(_PathList, FullPath) ->
     case binary:last(FullPath) =:= $/ of

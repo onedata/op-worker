@@ -11,8 +11,9 @@
 -module(cdmi_container).
 
 -include("veil_modules/control_panel/cdmi.hrl").
+-include("veil_modules/control_panel/cdmi_capabilities.hrl").
 
--define(default_get_dir_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
+-define(default_get_dir_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
@@ -175,10 +176,20 @@ prepare_container_ans([<<"objectID">> | Tail], #state{filepath = Filepath} = Sta
     [{<<"objectID">>, cdmi_id:uuid_to_objectid(logical_files_manager:get_uuid_by_filepath(Filepath))} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"objectName">>, list_to_binary([filename:basename(Filepath), "/"])} | prepare_container_ans(Tail, State)];
-prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = <<"/">>} = State) ->
-    [{<<"parentURI">>, <<>>} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = "/"} = State) ->
+    prepare_container_ans(Tail, State);
 prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_container_ans(Tail, State)];
+    ParentURI = case fslogic_path:strip_path_leaf(Filepath) of
+                    "/" -> <<"/">>;
+                    Other -> list_to_binary(Other)
+                end,
+    [{<<"parentURI">>, ParentURI} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"parentID">> | Tail], #state{filepath = "/"} = State) ->
+    prepare_container_ans(Tail, State);
+prepare_container_ans([<<"parentID">> | Tail], #state{filepath = Filepath} = State) ->
+    [{<<"parentID">>, cdmi_id:uuid_to_objectid(logical_files_manager:get_uuid_by_filepath(fslogic_path:strip_path_leaf(Filepath)))} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"capabilitiesURI">> | Tail], State) ->
+    [{<<"capabilitiesURI">>, list_to_binary(?container_capability_path)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->

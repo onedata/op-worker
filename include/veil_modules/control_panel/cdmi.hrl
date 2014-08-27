@@ -21,7 +21,8 @@
     objectid = undefined :: binary(),
     attributes = undefined :: #fileattributes{},
     cdmi_version = undefined :: binary(),
-    opts = [] :: [binary()]
+    opts = [] :: [binary()],
+    capability = undefined :: atom()
 }).
 
 -define(error_bad_request_code, 400).

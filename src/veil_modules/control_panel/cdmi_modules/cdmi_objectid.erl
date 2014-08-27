@@ -12,6 +12,7 @@
 -module(cdmi_objectid).
 
 -include("veil_modules/control_panel/cdmi.hrl").
+-include("veil_modules/control_panel/cdmi_capabilities.hrl").
 
 %% API
 -export([allowed_methods/2, malformed_request/2]).
@@ -25,7 +26,10 @@
 -spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
 allowed_methods(Req, State) ->
-    {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
+    case is_capability_object(Req) of
+        true -> {[<<"GET">>], Req, State};
+        false -> {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}
+    end.
 
 %% malformed_request/2
 %% ====================================================================
@@ -49,19 +53,32 @@ malformed_request(Req, State = #state{filepath = Filepath}) ->
                end,
 
         % get path of object with that uuid
-        BaseName = case logical_files_manager:get_file_name_by_uuid(Uuid) of
-                       {ok, Name} when is_list(Name) -> Name;
-                       _ -> throw(cdmi_error:error_reply(Req2,State,?error_not_found_code,"Could not find full file for uuid: ~p",[Uuid]))
+        BaseName = case is_capability_object(Req) of
+                       true -> proplists:get_value(Id,?CapabilityPathById);
+                       false ->
+                           case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
+                               {ok, Name} when is_list(Name) ->Name,
+                                   [_Username | Path] = string:tokens(Name,"/"), % todo here we strip username from path, what if objectid points to someone's else file?
+                                   case Path of
+                                       [] -> "";
+                                       List -> filename:join(List)
+                                   end;
+                               _ -> throw(cdmi_error:error_reply(Req2,State,?error_not_found_code,"Could not find file name for uuid: ~p",[Uuid]))
+                           end
                    end,
 
         % join base name with the rest of filepath
         ["cdmi_objectid", _Id | Rest] = string:tokens(Filepath, "/"),
         FullFileName = filename:join([BaseName | Rest]),
 
-        % delegate request to cdmi_container or cdmi_object (depending on filepath)
+        % delegate request to cdmi_container/cdmi_object/cdmi_capability (depending on filepath)
         {Url, Req3} = cowboy_req:path(Req2),
         case binary:last(Url) =:= $/ of
-            true -> cdmi_container:malformed_request(Req3,State#state{filepath = FullFileName ++ "/", handler_module = cdmi_container});
+            true ->
+                case is_capability_object(Req) of
+                    false -> cdmi_container:malformed_request(Req3,State#state{filepath = FullFileName ++ "/", handler_module = cdmi_container});
+                    true -> cdmi_capabilities:malformed_request(Req3,State#state{filepath = FullFileName ++ "/", handler_module = cdmi_capabilities})
+                end;
             false -> cdmi_object:malformed_request(Req3,State#state{filepath = FullFileName, handler_module = cdmi_object})
         end
     catch
@@ -74,3 +91,19 @@ malformed_request(Req, State = #state{filepath = Filepath}) ->
 %% cowboy flow continues in cdmi_container/cdmi_object.
 %% ====================================================================
 
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
+%% is_capability_object/1
+%% ====================================================================
+%% @doc Checks if this objectid request points to capability object
+%% ====================================================================
+-spec is_capability_object(req()) -> boolean().
+%% ====================================================================
+is_capability_object(#http_req{path_info = PathInfo}) ->
+    case PathInfo of
+        [<<"cdmi_objectid">>, Id | _Rest] ->
+            proplists:is_defined(Id,?CapabilityPathById);
+        _ -> false
+    end.
