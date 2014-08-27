@@ -60,7 +60,7 @@ for node in $ALL_NODES; do
         "$node" != ""
     ]] || continue
 
-    install_rpm $node globalregistry.rpm
+    install_global_registry_package $node globalregistry.rpm
 done
 
 
@@ -85,3 +85,5 @@ if [[ "$node" == "" ]]; then
 else
     start_global_registry "$node"
 fi
+
+exit 0

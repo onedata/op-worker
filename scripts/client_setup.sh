@@ -65,4 +65,5 @@ for i in `seq 1 $n_count`; do
     deploy_stamp "$node"
 done
 
+exit 0
 

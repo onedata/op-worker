@@ -121,18 +121,19 @@ function node_name {
     echo `ssh $1 "hostname -f"`
 }
 
+###############################################   VeilCluster Functions   ###############################################
+
 # $1 - target host
 # $2 - rpm name
-function install_rpm {
+function install_veilcluster_package {
     info "Moving $2 package to $1..."
     ssh $1 "mkdir -p $SETUP_DIR" || error "Cannot create tmp setup dir '$SETUP_DIR' on $1"
     scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
-    
-    info "Installing $2 package on $1..."
-    ssh $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
-}
 
-###############################################   VeilCluster Functions   ###############################################
+    info "Installing $2 package on $1..."
+    export ONEPANEL_MULTICAST_ADDRESS=`echo $MASTER | sed 's/^[^@]*@//'`
+    ssh -o SendEnv=ONEPANEL_MULTICAST_ADDRESS $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
+}
 
 function start_cluster {
     info "Starting VeilCluster..."
@@ -338,6 +339,17 @@ function remove_client {
 }
 
 ###############################################   Global Registry Functions   ###############################################
+
+# $1 - target host
+# $2 - rpm name
+function install_global_registry_package {
+    info "Moving $2 package to $1..."
+    ssh $1 "mkdir -p $SETUP_DIR" || error "Cannot create tmp setup dir '$SETUP_DIR' on $1"
+    scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
+
+    info "Installing $2 package on $1..."
+    ssh $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
+}
 
 # $1 - target host
 # $2 - db node numer
