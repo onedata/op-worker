@@ -62,7 +62,7 @@ function set_version {
         export V_MAJOR=$3
         export V_MINOR=$4
         export V_PATCH=$2
-	      export V_PATCH_ORIG=$V_PATCH
+	      export V_PATCH_ORIG=${V_PATCH}
     else
         export V_MAJOR=0
         export V_MINOR=0
@@ -73,7 +73,7 @@ function set_version {
 
 # $1 - node hostname
 function deploy_stamp {
-    [[ 
+    [[
         "$PROJECT" == ""
     ]] || ssh $1 "mkdir -p $STAMP_DIR && echo '$VERSION' > '$STAMP_DIR/`get_project_name`.stamp'"
 }
@@ -86,7 +86,7 @@ function info {
 # $1 - platform master's hostname
 function get_platform_config {
     info "Fetching platform configuration from $1:$CONFIG_PATH ..."
-    scp $1:$CONFIG_PATH ./conf.sh || error "Cannot fetch platform config file."
+    scp $1:${CONFIG_PATH} ./conf.sh || error "Cannot fetch platform config file."
     source ./conf.sh || error "Cannot find platform config file."
 }
 
@@ -115,7 +115,7 @@ function screen_wait {
 # $2 - name of which node has to be returned, starting with 1
 function nth_node_name {
     local node=$(nth "$1" $2)
-    echo $(ssh $node "hostname -f")
+    echo $(ssh ${node} "hostname -f")
 }
 
 # $1 - target host
@@ -137,10 +137,10 @@ function strip_login {
 function install_veilcluster_package {
     info "Moving $2 package to $1..."
     ssh $1 "mkdir -p $SETUP_DIR" || error "Cannot create tmp setup dir '$SETUP_DIR' on $1"
-    scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
+    scp *.rpm $1:${SETUP_DIR}/$2 || error "Moving $2 file failed on $1"
 
     info "Installing $2 package on $1..."
-    multicast_address=`strip_login $MASTER`
+    multicast_address="239.255.0."`echo ${MASTER##*.}`
     ssh $1 "export ONEPANEL_MULTICAST_ADDRESS=$multicast_address ; rpm -Uvh $SETUP_DIR/$2 --nodeps --force ; sleep 5" || error "Cannot install $2 package on $1"
 }
 
@@ -160,7 +160,7 @@ function start_cluster {
     worker_hosts=""
     cluster_types=`echo "$CLUSTER_TYPES" | tr ";" "\n"`
     for cluster_type in ${cluster_types}; do
-        cluster_node=`nth "$CLUSTER_NODES" $i`
+        cluster_node=`nth "$CLUSTER_NODES" ${i}`
         if [[ ${cluster_type} == "ccm_plus_worker" ]]; then
             ccm_hosts="\\\"`node_name "$cluster_node"`\\\",$ccm_hosts"
             worker_hosts="\\\"`node_name "$cluster_node"`\\\",$worker_hosts"
@@ -194,7 +194,7 @@ function start_cluster {
         {\\\"Storage paths\\\",       [$storage_paths]}.
     \" > $SETUP_DIR/install.cfg"
 
-    ssh -tt -q $1 "onepanel_setup --install $SETUP_DIR/install.cfg" || error "Cannot setup and start VeilCluster."
+    ssh -tt -q $1 "onepanel_setup --install $SETUP_DIR/install.cfg 2>&1" 2>/dev/null || error "Cannot setup and start VeilCluster."
 }
 
 function remove_cluster {
@@ -233,9 +233,9 @@ function install_client {
     ssh $1 "mkdir -p $S_DIR" || error "Cannot create tmp setup dir '$S_DIR' on $1"
     ssh $1 "mkdir -p $2" || error "Cannot create mountpoint dir '$2' on $1"
 
-    scp VeilClient-Linux.rpm $1:$S_DIR/veilclient.rpm || error "Moving .rpm file failed"
+    scp VeilClient-Linux.rpm $1:${S_DIR}/veilclient.rpm || error "Moving .rpm file failed"
     scp veilFuse $1:~/veilFuse || error "Moving veilFuse binary file failed"
-    ( scp $3 tmp.pem && scp tmp.pem $1:$S_DIR/peer.pem ) || error "Moving $3 file failed"
+    ( scp $3 tmp.pem && scp tmp.pem $1:${S_DIR}/peer.pem ) || error "Moving $3 file failed"
     ssh $1 "chmod 600 $S_DIR/peer.pem"
     ssh $1 "chmod +x ~/veilFuse"
 
@@ -300,7 +300,7 @@ function remove_client {
 function install_global_registry_package {
     info "Moving $2 package to $1..."
     ssh $1 "mkdir -p $SETUP_DIR" || error "Cannot create tmp setup dir '$SETUP_DIR' on $1"
-    scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
+    scp *.rpm $1:${SETUP_DIR}/$2 || error "Moving $2 file failed on $1"
 
     info "Installing $2 package on $1..."
     ssh $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
@@ -338,12 +338,12 @@ function remove_global_registry_db {
 function start_global_registry {
     info "Starting Global Registry..."
 
-    dbs=`echo $GLOBAL_REGISTRY_DB_NODES | tr ";" "\n"`
+    dbs=`echo ${GLOBAL_REGISTRY_DB_NODES} | tr ";" "\n"`
     db_nodes=""
-    for db in $dbs; do
-        db_nodes="'db@`node_name $db`',$db_nodes"
+    for db in ${dbs}; do
+        db_nodes="'db@`node_name ${db}`',$db_nodes"
     done
-    db_nodes=`echo $db_nodes | sed -e 's/.$//'`
+    db_nodes=`echo ${db_nodes} | sed -e 's/.$//'`
 
     ssh $1 "sed -i -e \"s/db_nodes, .*/db_nodes, [$db_nodes] },/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry DB nodes on $1."
     ssh $1 "sed -i -e \"s/rest_cert_domain, .*/rest_cert_domain, \\\"$GLOBAL_REGISTRY_REST_CERT_DOMAIN\\\" }/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry REST certificate domain on $1."

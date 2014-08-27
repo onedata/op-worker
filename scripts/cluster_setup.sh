@@ -30,7 +30,7 @@ source ./functions.sh || exit 1
 #####################################################################
 
 info "Fetching platform configuration from $MASTER:$CONFIG_PATH ..."
-scp $MASTER:$CONFIG_PATH ./conf.sh || error "Cannot fetch platform config file."
+scp ${MASTER}:${CONFIG_PATH} ./conf.sh || error "Cannot fetch platform config file."
 source ./conf.sh || error "Cannot find platform config file. Please try again (redeploy)."
 
 if [[ -z "$CLUSTER_CREATE_USER_IN_DB" ]]; then
@@ -76,6 +76,8 @@ for i in `seq 1 ${n_count}`; do
 
     deploy_stamp ${node}
 done
+
+info "Waiting for VeilCluster initialization..."
 sleep 120
 
 #####################################################################

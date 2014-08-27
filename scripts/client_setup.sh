@@ -30,7 +30,7 @@ source ./functions.sh || exit 1
 #####################################################################
 
 info "Fetching platform configuration from $MASTER:$CONFIG_PATH ..."
-scp $MASTER:$CONFIG_PATH ./conf.sh || error "Cannot fetch platform config file."
+scp ${MASTER}:${CONFIG_PATH} ./conf.sh || error "Cannot fetch platform config file."
 source ./conf.sh || error "Cannot find platform config file. Please try again (redeploy)."
 
 #####################################################################
@@ -54,10 +54,10 @@ fi
 #####################################################################
 
 n_count=`len "$CLIENT_NODES"`
-for i in `seq 1 $n_count`; do
-    node=`nth "$CLIENT_NODES" $i`
-    mount=`nth "$CLIENT_MOUNTS" $i`
-    cert=`nth "$CLIENT_CERTS" $i`
+for i in `seq 1 ${n_count}`; do
+    node=`nth "$CLIENT_NODES" ${i}`
+    mount=`nth "$CLIENT_MOUNTS" ${i}`
+    cert=`nth "$CLIENT_CERTS" ${i}`
 
     [[
         "$node" != "" &&
@@ -76,10 +76,10 @@ done
 #####################################################################
 
 n_count=`len "$CLIENT_NODES"`
-for i in `seq 1 $n_count`; do
-    node=`nth "$CLIENT_NODES" $i`
-    mount=`nth "$CLIENT_MOUNTS" $i`
-    cert=`nth "$CLIENT_CERTS" $i`
+for i in `seq 1 ${n_count}`; do
+    node=`nth "$CLIENT_NODES" ${i}`
+    mount=`nth "$CLIENT_MOUNTS" ${i}`
+    cert=`nth "$CLIENT_CERTS" ${i}`
   
     start_client "$node" "$mount" "$cert" "$i"
     deploy_stamp "$node"
