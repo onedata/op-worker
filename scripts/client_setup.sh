@@ -33,7 +33,7 @@ for i in `seq 1 $n_count`; do
     mount=`nth "$CLIENT_MOUNTS" $i`
     cert=`nth "$CLIENT_CERTS" $i`
     
-    echo "Processing veilclient on node '$node' with mountpoint '$mount' and certificate '$cert'..."
+    echo "Processing VeilClient on node '$node' with mountpoint '$mount' and certificate '$cert'..."
     
     [[ 
         "$node" != "" &&  

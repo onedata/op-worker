@@ -296,12 +296,12 @@ function install_client {
     info "Installing VeilClient for user with UID: $RUID"
 
     if [[ "$RUID" == "0" ]]; then 
-        ssh $1 "yum install $S_DIR/veilclient.rpm -y" || error "Cannot install veilclient on $1"
+        ssh $1 "yum install $S_DIR/veilclient.rpm -y" || error "Cannot install VeilClient on $1"
     fi
 }
 
 function start_client {
-    info "Starting veilclient on $1..."
+    info "Starting VeilClient on $1..."
     
     RUID=`ssh $1 "echo \\\$UID"`
     S_DIR="${SETUP_DIR}_${RUID}"
@@ -326,15 +326,19 @@ function start_client {
 
 # $1 - target host
 function start_global_registry_db {
+    info "Starting Global Registry DB..."
+
     ssh $1 -tt "sed -i -e \"s/^-name .*/-name db@\"`node_name $1`\"/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/vm.args" || error "Cannot change Global Registry DB hostname on $1."
     ssh $1 -tt "sed -i -e \"s/setcookie .*/setcookie globalregistry/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/vm.args" || error "Cannot change Global Registry DB cookie on $1."
     ssh $1 -tt "sed -i -e \"s/bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/default.ini" || error "Cannot change Global Registry DB bind address on $1."
     ssh $1 -tt "sed -i -e \"s/^admin =.*//\" /var/lib/globalregistry/bigcouchdb/database_node/etc/local.ini" || error "Cannot delete admin user from Global Registry DB on $1."
-    ssh $1 -tt "nohup /var/lib/globalregistry/bigcouchdb/database_node/bin/bigcouch start &" || error "Cannot start Global Registry DB on $1."
+    ssh $1 -tt "nohup /var/lib/globalregistry/bigcouchdb/database_node/bin/bigcouch start & ; sleep 5" || error "Cannot start Global Registry DB on $1."
 }
 
 # $1 - target host
 function remove_global_registry_db {
+    info "Removing Global Registry DB..."
+
     ssh $1 -tt "rm -rf /var/lib/globalregistry" || error "Cannot remove Global Registry DB on $1."
 }
 
@@ -342,7 +346,7 @@ function remove_global_registry_db {
 function remove_global_registry {
     info "Removing Global Registry..."
 
-    ssh $1 "yum remove -y globalregistry 2> /dev/null"
+    ssh $1 "rpm -e globalregistry 2> /dev/null"
 
     ssh $1 "rm -rf /usr/lib64/globalregistry"
     ssh $1 "rm -rf /etc/globalregistry"
