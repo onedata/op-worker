@@ -269,10 +269,27 @@ validate_body(Body) ->
 %% ====================================================================
 prepare_metadata(Attrs) ->
     prepare_metadata(<<"">>, Attrs).
+
+%% prepare_metadata/2
+%% ====================================================================
+%% @doc Prepares cdmi metadata with given prefix based on file attributes.
+%% @end
+-spec prepare_metadata(Prefix :: binary(), #fileattributes{}) -> [{CdmiName :: binary(), Value :: binary()}].
+%% ====================================================================
 prepare_metadata(Prefix, Attrs) ->
     WithPrefix = lists:filter(fun(X) -> metadata_with_prefix(X, Prefix) end, ?default_storage_system_metadata),
     lists:map(fun(X) -> cdmi_metadata_to_attrs(X,Attrs) end, WithPrefix).
 
+%% ====================================================================
+%% Internal Functions
+%% ====================================================================
+
+%% metadata_with_prefix/2
+%% ====================================================================
+%% @doc Predicate that tells whether a binary starts with given prefix.
+%% @end
+-spec metadata_with_prefix(Name :: binary(), Prefix :: binary()) -> true | false.
+%% ====================================================================
 metadata_with_prefix(Name, Prefix) ->
     N = size(Prefix),
     case size(Name) >= N of
@@ -283,6 +300,12 @@ metadata_with_prefix(Name, Prefix) ->
             false
     end.
 
+%% prepare_metadata/2
+%% ====================================================================
+%% @doc Extracts cdmi metadata from file attributes.
+%% @end
+-spec cdmi_metadata_to_attrs(CdmiName :: binary(), #fileattributes{}) -> {CdmiName :: binary(), Value :: binary()}.
+%% ====================================================================
 %todo add cdmi_acl metadata
 cdmi_metadata_to_attrs(<<"cdmi_size">>, Attrs) ->
     {<<"cdmi_size">>, integer_to_binary(Attrs#fileattributes.size)};
