@@ -37,6 +37,7 @@ synchronize_user_spaces({UserGID, AccessToken}) ->
             #veil_document{record = #user{spaces = Spaces}} = user_logic:synchronize_spaces_info(UserDoc, AccessToken),
             {ok, Spaces};
         {error, Reason} ->
+            ?error("Cannot synchronize Spaces of user with ID ~p: ~p", [UserGID, Reason]),
             {error, Reason}
     end.
 
