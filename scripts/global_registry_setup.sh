@@ -75,6 +75,6 @@ for i in `seq 1 $n_count`; do
         "$node" != ""
     ]] || error "Invalid node configuration !"
 
-    start_global_registry_db "$node" $i $n_count
+    start_global_registry_db "$node" $i
     deploy_stamp "$node"
 done
