@@ -56,7 +56,7 @@ get_file_location(FileDoc,FullFileName,OpenMode) ->
     end,
 
     {ok, UserDoc} = fslogic_objects:get_user(),
-    ok = fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,list_to_atom(OpenMode)),
+    ok = fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,list_to_existing_atom(OpenMode)),
 
     {ok,_} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#veil_document.uuid, fslogic_context:get_fuse_id(), Validity),
 

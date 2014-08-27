@@ -9,20 +9,34 @@
 %% @end
 %% ===================================================================
 
-%% white lists defined as lists of pairs {user_type, white_list_for_user_type}
+%% white lists of messages that can be processed by VeilCluster
 -define(MessagesWhiteList, [
-  {standard_user, [
-      fusemessage, remotefilemangement, channelregistration, channelclose, atom,
-      handshakerequest, handshakeack, eventmessage, logmessage]},
-  {developer, [
-      fusemessage, remotefilemangement, channelregistration, channelclose, atom,
-      handshakerequest, handshakeack, eventmessage, logmessage]}
-]).
--define(AtomsWhiteList, [
-  {standard_user, [ping, event_producer_config_request, is_write_enabled, ack]},
-  {developer, [ping, event_producer_config_request, is_write_enabled, ack]}
+  clustermsg, answer, atom, channelregistration, channelclose, fusemessage, getfilelocation,
+  getnewfilelocation, getfileattr, fileattr, filelocation, createfileack, filenotused, renewfilelocation,
+  filelocationvalidity, getfilechildren, filechildren, createdir, deletefile, createlink, getlink,
+  linkinfo, renamefile, changefileowner, changefilegroup, changefileperms, updatetimes, testchannel,
+  testchannelanswer, handshakerequest, handshakerequest_envvariable, handshakerequest_certconfirmation, handshakeresponse, handshakeack,
+  createstoragetestfilerequest, createstoragetestfileresponse, storagetestfilemodifiedrequest, storagetestfilemodifiedresponse,
+  clientstorageinfo, clientstorageinfo_storageinfo, getstatfs, statfsinfo, eventfilterconfig, eventaggregatorconfig, eventtransformerconfig,
+  eventstreamconfig, eventproducerconfig, eventmessage, changeremoteloglevel, logmessage, remotefilemangement, createfile,
+  deletefileatstorage, truncatefile, readfile, filedata, writefile, writeinfo, changepermsatstorage
 ]).
 
+%% white lists of atoms that located inside mssags
+-define(AtomsWhiteList, [
+  ping, event_producer_config_request, is_write_enabled, ack
+]).
+
+%% list of modules that can process messages
+-define(VisibleModules, [
+  central_logger, cluster_rengine, control_panel, dao, fslogic, gateway,
+  rtransfer, rule_manager, dns_worker, remote_files_manager
+]).
+
+%% list of messages decoders that can be used
+-define(DecodersList, [
+  communication_protocol, fuse_messages, logging, remote_file_management
+]).
 
 %% List of messages that needs FuseId to be present in connection state prior to process them.
 %% If FuseId is not set and one of those messages arrive, cluster will immediately send error.
