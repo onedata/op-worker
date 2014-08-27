@@ -334,7 +334,7 @@ function start_global_registry_db {
     ssh $1 -tt "sed -i -e \"s/^-name .*/-name db@\"`node_name $1`\"/\" /opt/bigcouch/etc/vm.args" || error "Cannot set Global Registry DB hostname on $1."
     ssh $1 -tt "sed -i -e \"s/^-setcookie .*/-setcookie globalregistry/\" /opt/bigcouch/etc/vm.args" || error "Cannot set Global Registry DB cookie on $1."
     ssh $1 -tt "sed -i -e \"s/^bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/bigcouch/etc/default.ini" || error "Cannot set Global Registry DB bind address on $1."
-    ssh $1 -tt "sh -c \"ulimit -n 65535 ; ulimit -u 65535 ; nohup /opt/bigcouch/bin/bigcouch start &\"" || error "Cannot start Global Registry DB on $1."
+    ssh $1 -tt "ulimit -n 65535 ; ulimit -u 65535 ; nohup /opt/bigcouch/bin/bigcouch start & ; sleep 5" || error "Cannot start Global Registry DB on $1."
 
     if [[ $2 != 1 ]]; then
         master_db=`nth_node_name "$GLOBAL_REGISTRY_DB_NODES" 1`
@@ -358,14 +358,14 @@ function start_global_registry {
     dbs=`echo $GLOBAL_REGISTRY_DB_NODES | tr ";" "\n"`
     idb_nodes=""
     for db in $dbs; do
-        idb_nodes="$idb_nodes,db@`node_name $db`"
+        idb_nodes="$idb_nodes,'db@`node_name $db`'"
     done
-    idb_nodes=`echo $idb_nodes | sed -e 's/,//'`
+    idb_nodes=`echo $idb_nodes | sed -e 's/.$//'`
 
     ssh $1 -tt "sed -i -e \"s/db_nodes, .*/db_nodes, [$idb_nodes] },/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry DB nodes on $1."
-    ssh $1 -tt "sed -i -e \"s/rest_cert_domain, .*/rest_cert_domain, \"onedata.org\" }/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry REST certificate domain on $1."
+    ssh $1 -tt "sed -i -e \"s/rest_cert_domain, .*/rest_cert_domain, \\\"onedata.org\\\" }/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry REST certificate domain on $1."
     ssh $1 -tt "sed -i -e \"s/^-name .*/-name globalregistry@\"`node_name $1`\"/\" /etc/globalregistry/vm.args" || error "Cannot set Global Registry hostname on $1."
-    ssh $1 -tt "sh -c \"ulimit -n 65535 ; ulimit -u 65535 ; /etc/init.d/globalregistry start\"" || error "Cannot start Global Registry on $1."
+    ssh $1 -tt "ulimit -n 65535 ; ulimit -u 65535 ; /etc/init.d/globalregistry start" || error "Cannot start Global Registry on $1."
 }
 
 # $1 - target host
