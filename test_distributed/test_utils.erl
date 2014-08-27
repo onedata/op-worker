@@ -22,7 +22,24 @@
 -define(REQUEST_HANDLING_TIME, 1000).
 
 %% Functions to use instead of timer
--export([wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0, wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
+-export([ct_mock/4, wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0,
+         wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
+
+
+%% ct_mock/4
+%% ====================================================================
+%% @doc Evaluates meck:new(Module, [passthrough]) and meck:expect(Module, Method, Fun) on all
+%%      cluster nodes from given test Config.
+%%      For return value spac please see rpc:multicall/4.
+%% @end
+-spec ct_mock(Config :: term(), Module :: atom(), Method :: atom(), Fun :: [term()]) ->
+    {[term()], [term()]}.
+%% ====================================================================
+ct_mock(Config, Module, Method, Fun) ->
+    NodesUp = ?config(nodes, Config),
+    {_, []} = rpc:multicall(NodesUp, meck, new, [Module, [passthrough, non_strict, unstick, no_link]]),
+    {_, []} = rpc:multicall(NodesUp, meck, expect, [Module, Method, Fun]).
+
 
 %% wait_for_cluster_cast/0
 %% ====================================================================

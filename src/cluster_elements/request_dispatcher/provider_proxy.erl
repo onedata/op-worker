@@ -80,7 +80,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
                     ?error("Cannot reroute message ~p due to invalid answer status: ~p", [get_message_type(Message), InvalidStatus]),
                     throw({invalid_status, InvalidStatus})
             end
-    after 5000 ->
+    after 1000 ->
         throw(reroute_timeout)
     end.
 

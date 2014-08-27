@@ -12,11 +12,11 @@
       <sourceFolder url="file://$MODULE_DIR$/deps" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/stress_test" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/test" isTestSource="true" />
-      <sourceFolder url="file://$MODULE_DIR$/test_distributed" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/include" type="erlang-include" />
       <sourceFolder url="file://$MODULE_DIR$/certs" type="java-resource" />
       <sourceFolder url="file://$MODULE_DIR$/cacerts" type="java-resource" />
       <sourceFolder url="file://$MODULE_DIR$/config" type="java-resource" />
+      <sourceFolder url="file://$MODULE_DIR$/test_distributed" type="erlang-include" />
       <excludeFolder url="file://$MODULE_DIR$/.idea" />
       <excludeFolder url="file://$MODULE_DIR$/bigcouchdb" />
       <excludeFolder url="file://$MODULE_DIR$/doc" />

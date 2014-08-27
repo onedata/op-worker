@@ -22,7 +22,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([sign_in/2, create_user/6, get_user/1, remove_user/1, list_all_users/0]).
+-export([sign_in/2, create_user/6, create_user/7, get_user/1, remove_user/1, list_all_users/0]).
 -export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
 -export([get_email_list/1, update_email_list/2, get_role/1, update_role/2]).
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
@@ -83,7 +83,7 @@ sign_in(Proplist, AccessToken) ->
     {Login, User}.
 
 
-%% create_user/5
+%% create_user/6
 %% ====================================================================
 %% @doc
 %% Creates a user in the DB.
@@ -740,7 +740,7 @@ create_dirs_at_storage(_Root, SpacesInfo, Storage) ->
         Dir = fslogic_spaces:get_storage_space_name(SpaceInfo),
         DirName = filename:join(["/", ?SPACES_BASE_DIR_NAME, Dir]),
         _Result = storage_files_manager:mkdir(SHI, filename:join(["/", ?SPACES_BASE_DIR_NAME]), ?EX_ALL_PERM bor ?RWE_USR_PERM),
-        Ans = storage_files_manager:mkdir(SHI, DirName),
+        Ans = storage_files_manager:mkdir(SHI, DirName, ?EX_ALL_PERM bor ?RWE_USR_PERM bor ?RWE_GRP_PERM),
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
                 Ans2 = storage_files_manager:chown(SHI, DirName, -1, fslogic_spaces:map_to_grp_owner(SpaceInfo)),
