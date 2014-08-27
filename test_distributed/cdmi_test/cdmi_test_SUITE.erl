@@ -45,6 +45,8 @@ list_dir_test(_Config) ->
     ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiPesponse1)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse1)),
     ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiPesponse1)),
+    ?assert(proplists:get_value(<<"metadata">>,CdmiPesponse1) =/= <<>>),
+
     %%------------------------------
 
     %%------ list root dir ---------
@@ -80,11 +82,13 @@ list_dir_test(_Config) ->
 get_file_test(_Config) ->
     FileName = "/toRead.txt",
     FileContent = <<"Some content...">>,
+    Before = now_in_secs(),
 
     create_file(FileName),
     ?assert(object_exists(FileName)),
     write_to_file(FileName,FileContent),
     ?assertEqual(FileContent,get_file_content(FileName)),
+    After = now_in_secs(),
 
     %%-------- basic read ----------
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
@@ -98,6 +102,16 @@ get_file_test(_Config) ->
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse1)),
     ?assertEqual(<<"base64">>, proplists:get_value(<<"valuetransferencoding">>,CdmiPesponse1)),
     ?assertEqual(<<"0-14">>, proplists:get_value(<<"valuerange">>,CdmiPesponse1)),
+    {struct, Metadata1} = proplists:get_value(<<"metadata">>,CdmiPesponse1),
+    ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata1)),
+    CTime1 = binary_to_integer(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
+    ATime1 = binary_to_integer(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
+    MTime1 = binary_to_integer(proplists:get_value(<<"cdmi_mtime">>, Metadata1)),
+    ?assert(Before =< CTime1),
+    ?assert(CTime1 =< After),
+    ?assert(CTime1 =< ATime1),
+    ?assert(CTime1 =< MTime1),
+    ?assertEqual(<<"veilfstestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
     ?assertEqual(FileContent, base64:decode(proplists:get_value(<<"value">>,CdmiPesponse1))),
     %%------------------------------
 
@@ -157,6 +171,7 @@ create_dir_test(_Config) ->
     ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiPesponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse2)),
     ?assertEqual([], proplists:get_value(<<"children">>,CdmiPesponse2)),
+    ?assert(proplists:get_value(<<"metadata">>,CdmiPesponse2) =/= <<>>),
 
     ?assert(object_exists(DirName)),
     %%------------------------------
@@ -195,12 +210,14 @@ create_file_test(_Config) ->
     RequestBody1 = [{<<"value">>, FileContent}],
     RawRequestBody1 = rest_utils:encode_to_json(RequestBody1),
     {Code1, _Headers1, Response1} = do_request(ToCreate, put, RequestHeaders1, RawRequestBody1),
+
     ?assertEqual("201",Code1),
     {struct,CdmiPesponse1} = mochijson2:decode(Response1),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>,CdmiPesponse1)),
     ?assertEqual(<<"file.txt">>, proplists:get_value(<<"objectName">>,CdmiPesponse1)),
     ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiPesponse1)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse1)),
+    ?assert(proplists:get_value(<<"metadata">>,CdmiPesponse1) =/= <<>>),
 
     ?assert(object_exists(ToCreate)),
     ?assertEqual(FileContent,get_file_content(ToCreate)),
@@ -213,12 +230,14 @@ create_file_test(_Config) ->
     RequestBody2 = [{<<"valuetransferencoding">>,<<"base64">>},{<<"value">>, base64:encode(FileContent)}],
     RawRequestBody2 = rest_utils:encode_to_json(RequestBody2),
     {Code2, _Headers2, Response2} = do_request(ToCreate2, put, RequestHeaders2, RawRequestBody2),
+
     ?assertEqual("201",Code2),
     {struct,CdmiPesponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>,CdmiPesponse2)),
     ?assertEqual(<<"file1.txt">>, proplists:get_value(<<"objectName">>,CdmiPesponse2)),
     ?assertEqual(<<"/spaces/veilfstestgroup">>, proplists:get_value(<<"parentURI">>,CdmiPesponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse2)),
+    ?assert(proplists:get_value(<<"metadata">>,CdmiPesponse2) =/= <<>>),
 
     ?assert(object_exists(ToCreate2)),
     ?assertEqual(FileContent,get_file_content(ToCreate2)),
@@ -510,3 +529,8 @@ do_request(RestSubpath, Method, Headers, Body) ->
             [{ssl_options, [{certfile, Cert}, {reuse_sessions, false}]}]
         ),
     {Code, RespHeaders, Response}.
+
+% Returns current time in seconds
+now_in_secs() ->
+    {MegaSecs, Secs, _MicroSecs} = erlang:now(),
+    MegaSecs * 1000000 + Secs.

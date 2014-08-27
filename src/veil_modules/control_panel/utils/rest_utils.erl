@@ -15,10 +15,11 @@
 -include_lib("public_key/include/public_key.hrl").
 -include("err.hrl").
 -include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/fslogic/fslogic.hrl").
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
--export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1]).
+-export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, prepare_metadata/1]).
 
 %% ====================================================================
 %% API functions
@@ -226,3 +227,20 @@ list_dir(Path, Offset, Count, Result) ->
         _ ->
             {error, not_a_dir}
     end.
+
+%% prepare_metadata/1
+%% ====================================================================
+%% @doc Prepares cdmi metadata based on file attributes.
+%% @end
+-spec prepare_metadata(#fileattributes{}) -> [{CdmiName :: binary(), Value :: binary()}].
+%% ====================================================================
+prepare_metadata(Attrs) ->
+    [
+        %todo add cdmi_acl metadata
+        {<<"cdmi_size">>, integer_to_binary(Attrs#fileattributes.size)},
+        %todo format times into yyyy-mm-ddThh-mm-ss.ssssssZ
+        {<<"cdmi_ctime">>, integer_to_binary(Attrs#fileattributes.ctime)},
+        {<<"cdmi_atime">>, integer_to_binary(Attrs#fileattributes.atime)},
+        {<<"cdmi_mtime">>, integer_to_binary(Attrs#fileattributes.mtime)},
+        {<<"cdmi_owner">>, list_to_binary(Attrs#fileattributes.uname)}
+    ].
