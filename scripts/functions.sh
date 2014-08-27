@@ -177,6 +177,11 @@ function start_cluster {
     cluster_storage_paths=`echo "$CLUSTER_STORAGE_PATHS" | tr ";" "\n"`
     for storage_path in ${cluster_storage_paths}; do
         storage_paths="\\\"$storage_path\\\",$storage_paths"
+        # Add storage paths on all cluster nodes
+        cluster_nodes=`echo "$CLUSTER_NODES" | tr ";" "\n"`
+        for cluster_node in ${cluster_nodes}; do
+            ssh ${cluster_node} "mkdir -p $storage_path"
+        done
     done
     storage_paths=`echo "$storage_paths" | sed -e 's/.$//'`
 
