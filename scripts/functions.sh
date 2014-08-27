@@ -187,11 +187,11 @@ function start_cluster {
     storage_paths=`echo "$storage_paths" | sed -e 's/.$//'`
 
     ssh $1 "echo \"
-        {\"Main CCM host\",       \\\"$main_ccm_host\\\"}.
-        {\"CCM hosts\",           [$ccm_hosts]}.
-        {\"Worker hosts\",        [$worker_hosts]}.
-        {\"Database hosts\",      [$db_hosts]}.
-        {\"Storage paths\",       [$storage_paths]}.
+        {\\\"Main CCM host\\\",       \\\"$main_ccm_host\\\"}.
+        {\\\"CCM hosts\\\",           [$ccm_hosts]}.
+        {\\\"Worker hosts\\\",        [$worker_hosts]}.
+        {\\\"Database hosts\\\",      [$db_hosts]}.
+        {\\\"Storage paths\\\",       [$storage_paths]}.
     \" > $SETUP_DIR/install.cfg"
 
     ssh -tt -q $1 "onepanel_setup --install $SETUP_DIR/install.cfg" || error "Cannot setup and start VeilCluster."
