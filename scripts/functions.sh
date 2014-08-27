@@ -171,7 +171,7 @@ function start_cluster {
     ccm_hosts=`echo "$ccm_hosts" | sed -e 's/.$//'`
     worker_hosts=`echo "$worker_hosts" | sed -e 's/.$//'`
 
-    main_ccm_host=`echo "$ccm_hosts" | awk -F ',' "{print $1}" | xargs`
+    main_ccm_host=`echo "$ccm_hosts" | awk -F ',' '{print $1}' | xargs`
 
     storage_paths=""
     cluster_storage_paths=`echo "$CLUSTER_STORAGE_PATHS" | tr ";" "\n"`
