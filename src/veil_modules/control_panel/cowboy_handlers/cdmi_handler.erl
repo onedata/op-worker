@@ -94,14 +94,13 @@ allowed_methods(Req, #state{handler_module = Handler} = State) ->
 %% Checks if request contains all mandatory fields and their values are set properly
 %% depending on requested operation
 %% @end
-%% ====================================================================
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 malformed_request(Req, #state{handler_module = Handler} = State) ->
     try
         Handler:malformed_request(Req,State)
     catch
-        _Type:Error  -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "Malformed request error: ~p",[Error])
+        _Type:Error -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "Malformed request error: ~p",[Error])
     end.
 
 %% resource_exists/2

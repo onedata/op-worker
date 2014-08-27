@@ -141,7 +141,24 @@ get_file_test(_Config) ->
     {Code4, _Headers4, Response4} = do_request(FileName, get, [], []),
     ?assertEqual("200",Code4),
 
-    ?assertEqual(binary_to_list(FileContent), Response4).
+    ?assertEqual(binary_to_list(FileContent), Response4),
+    %%------------------------------
+
+    %%------- objectid read --------
+    RequestHeaders5 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code5, _Headers5, Response5} = do_request(FileName ++ "?objectID", get, RequestHeaders5, []),
+    ?assertEqual("200",Code5),
+    {struct,CdmiPesponse5} = mochijson2:decode(Response5),
+    ObjectID = proplists:get_value(<<"objectID">>,CdmiPesponse5),
+    ?assert(is_binary(ObjectID)),
+    %%------------------------------
+
+    %%-------- read by id ----------
+    RequestHeaders6 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code6, _Headers6, Response6} = do_request("cdmi_objectid/"++binary_to_list(ObjectID), get, RequestHeaders6, []),
+    ?assertEqual("200",Code6),
+    {struct,CdmiPesponse6} = mochijson2:decode(Response6),
+    ?assertEqual(FileContent,base64:decode(proplists:get_value(<<"value">>,CdmiPesponse6))).
     %%------------------------------
 
 % Tests dir creation (cdmi container PUT), remember that every container URI ends

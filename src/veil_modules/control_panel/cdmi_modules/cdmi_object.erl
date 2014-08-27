@@ -13,8 +13,8 @@
 
 -include("veil_modules/control_panel/cdmi.hrl").
 
--define(default_get_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>, <<"valuerange">>, <<"value">>]).
--define(default_post_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
+-define(default_get_file_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>, <<"valuerange">>, <<"value">>]).
+-define(default_post_file_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
@@ -23,10 +23,7 @@
 
 %% allowed_methods/2
 %% ====================================================================
-%% @doc
-%% Returns binary list of methods that are allowed (i.e GET, PUT, DELETE).
-%% @end
-%% ====================================================================
+%% @doc Returns binary list of methods that are allowed (i.e GET, PUT, DELETE).
 -spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
 allowed_methods(Req, State) ->
@@ -38,7 +35,6 @@ allowed_methods(Req, State) ->
 %% Checks if request contains all mandatory fields and their values are set properly
 %% depending on requested operation
 %% @end
-%% ====================================================================
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
 malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version } = State) when is_binary(Version) -> % put cdmi
@@ -50,9 +46,7 @@ malformed_request(Req, State) ->
 
 %% resource_exists/2
 %% ====================================================================
-%% Determines if resource, that can be obtained from state, exists.
-%% @end
-%% ====================================================================
+%% @doc Determines if resource, that can be obtained from state, exists.
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 resource_exists(Req, State = #state{filepath = Filepath}) ->
@@ -63,11 +57,11 @@ resource_exists(Req, State = #state{filepath = Filepath}) ->
 
 %% content_types_provided/2
 %% ====================================================================
+%% @doc
 %% Returns content types that can be provided and what functions should be used to process the request.
 %% Before adding new content type make sure that adequate routing function
 %% exists in cdmi_handler
 %% @end
-%% ====================================================================
 -spec content_types_provided(req(), #state{}) -> {[{ContentType, Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
@@ -89,7 +83,6 @@ content_types_provided(Req, State) ->
 %% Before adding new content type make sure that adequate routing function
 %% exists in cdmi_handler
 %% @end
-%% ====================================================================
 -spec content_types_accepted(req(), #state{}) -> {[{ContentType, Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
@@ -106,8 +99,6 @@ content_types_accepted(Req, State) ->
 %% delete_resource/3
 %% ====================================================================
 %% @doc Deletes the resource. Returns whether the deletion was successful.
-%% @end
-%% ====================================================================
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 delete_resource(Req, #state{filepath = Filepath} = State) ->
@@ -268,6 +259,8 @@ prepare_object_ans([], _State) ->
     [];
 prepare_object_ans([<<"objectType">> | Tail], State) ->
     [{<<"objectType">>, <<"application/cdmi-object">>} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"objectID">> | Tail], #state{filepath = Filepath} = State) ->
+    [{<<"objectID">>, cdmi_id:uuid_to_objectid(logical_files_manager:get_uuid_by_filepath(Filepath))} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"objectName">>, list_to_binary(filename:basename(Filepath))} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = <<"/">>} = State) ->
