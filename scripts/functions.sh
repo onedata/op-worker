@@ -140,8 +140,8 @@ function install_veilcluster_package {
     scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
 
     info "Installing $2 package on $1..."
-    export ONEPANEL_MULTICAST_ADDRESS=`strip_login $MASTER`
-    ssh -o SendEnv=ONEPANEL_MULTICAST_ADDRESS $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
+    multicast_address=`strip_login $MASTER`
+    ssh $1 "export ONEPANEL_MULTICAST_ADDRESS=$multicast_address ; echo \"MA: $ONEPANEL_MULTICAST_ADDRESS\" ; rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
 }
 
 function start_cluster {
@@ -150,7 +150,7 @@ function start_cluster {
     db_hosts=""
     db_nodes=`echo "$CLUSTER_DB_NODES" | tr ";" "\n"`
     for db_node in ${db_nodes}; do
-        db_hosts="\"`strip_login "$db_node"`\",$db_hosts"
+        db_hosts="\\\"`strip_login "$db_node"`\\\",$db_hosts"
     done
     db_hosts=`echo "$db_hosts" | sed -e 's/.$//'`
 
@@ -161,10 +161,10 @@ function start_cluster {
     for cluster_type in ${cluster_types}; do
         cluster_node=`nth "$CLUSTER_NODES" $i`
         if [[ ${cluster_type} == "ccm_plus_worker" ]]; then
-            ccm_hosts="\"`strip_login "$cluster_node"`\",$ccm_hosts"
-            worker_hosts="\"`strip_login "$cluster_node"`\",$worker_hosts"
+            ccm_hosts="\\\"`strip_login "$cluster_node"`\\\",$ccm_hosts"
+            worker_hosts="\\\"`strip_login "$cluster_node"`\\\",$worker_hosts"
         else
-            worker_hosts="\"`strip_login "$cluster_node"`\",$worker_hosts"
+            worker_hosts="\\\"`strip_login "$cluster_node"`\\\",$worker_hosts"
         fi
         i=$(( i+1 ))
     done
@@ -176,12 +176,12 @@ function start_cluster {
     storage_paths=""
     cluster_storage_paths=`echo "$CLUSTER_STORAGE_PATHS" | tr ";" "\n"`
     for storage_path in ${cluster_storage_paths}; do
-        storage_paths="\"$storage_path\",$storage_paths"
+        storage_paths="\\\"$storage_path\\\",$storage_paths"
     done
     storage_paths=`echo "$storage_paths" | sed -e 's/.$//'`
 
     ssh $1 "echo \"
-        {\"Main CCM host\",       \"$main_ccm_host\"}.
+        {\"Main CCM host\",       \\\"$main_ccm_host\\\"}.
         {\"CCM hosts\",           [$ccm_hosts]}.
         {\"Worker hosts\",        [$worker_hosts]}.
         {\"Database hosts\",      [$db_hosts]}.
