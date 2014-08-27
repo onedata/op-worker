@@ -150,7 +150,7 @@ function start_cluster {
     db_hosts=""
     db_nodes=`echo "$CLUSTER_DB_NODES" | tr ";" "\n"`
     for db_node in ${db_nodes}; do
-        db_hosts="\\\"`strip_login "$db_node"`\\\",$db_hosts"
+        db_hosts="\\\"`node_name "$db_node"`\\\",$db_hosts"
         ssh ${db_node} "sed -i -e \"s/^bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/veil/files/database_node/etc/default.ini" || error "Cannot set VeilCluster DB bind address on $db_node."
     done
     db_hosts=`echo "$db_hosts" | sed -e 's/.$//'`
@@ -162,10 +162,10 @@ function start_cluster {
     for cluster_type in ${cluster_types}; do
         cluster_node=`nth "$CLUSTER_NODES" $i`
         if [[ ${cluster_type} == "ccm_plus_worker" ]]; then
-            ccm_hosts="\\\"`strip_login "$cluster_node"`\\\",$ccm_hosts"
-            worker_hosts="\\\"`strip_login "$cluster_node"`\\\",$worker_hosts"
+            ccm_hosts="\\\"`node_name "$cluster_node"`\\\",$ccm_hosts"
+            worker_hosts="\\\"`node_name "$cluster_node"`\\\",$worker_hosts"
         else
-            worker_hosts="\\\"`strip_login "$cluster_node"`\\\",$worker_hosts"
+            worker_hosts="\\\"`node_name "$cluster_node"`\\\",$worker_hosts"
         fi
         i=$(( i+1 ))
     done
