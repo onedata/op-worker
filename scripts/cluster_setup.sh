@@ -34,7 +34,7 @@ scp ${MASTER}:${CONFIG_PATH} ./conf.sh || error "Cannot fetch platform config fi
 source ./conf.sh || error "Cannot find platform config file. Please try again (redeploy)."
 
 if [[ -z "$CLUSTER_CREATE_USER_IN_DB" ]]; then
-    export CLUSTER_CREATE_USER_IN_DB="true"
+    export CLUSTER_CREATE_USER_IN_DB="yes"
 fi
 
 #####################################################################
@@ -145,7 +145,7 @@ for i in `seq 1 ${n_count}`; do
 	ssh ${lcnode} "useradd $user_name 2> /dev/null || exit 0"
     done
 
-    if [[ "$CLUSTER_CREATE_USER_IN_DB" == "true" ]]; then
+    if [[ "$CLUSTER_CREATE_USER_IN_DB" == "yes" ]]; then
         cmm="$reg_run $node_name $user_name '$user_name@test.com' /tmp/tmp_cert.pem"
 
         info "Trying to register $user_name using cluster node $cnode (command: $cmm)"
@@ -161,7 +161,7 @@ done
 # Register in Global Registry
 #####################################################################
 
-if [[ "$CLUSTER_REGISTER_IN_GLOBAL_REGISTRY" == "true" ]]; then
+if [[ "$CLUSTER_REGISTER_IN_GLOBAL_REGISTRY" == "yes" ]]; then
 
     if [[ `len "$GLOBAL_REGISTRY_NODES"` == 0 ]]; then
         error "Global Registry nodes are not configured!"
