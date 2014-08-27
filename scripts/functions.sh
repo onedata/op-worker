@@ -222,18 +222,6 @@ function remove_cluster {
     ssh $1 "rm -rf /opt/veil" || error "Cannot remove VeilCluster directory."
 }
 
-# $1 - VeilCluster host
-# $2 - Global Registry host
-function register_in_global_registry {
-    info "Registering VeilCluster in Global Registry..."
-
-    # Add mappings in /etc/hosts
-    global_registry_ip=`strip_login $2`
-    ssh $1 "sed -i -e '/onedata.*/d' /etc/hosts" || error "Cannot remove old mappings from /etc/hosts for onedata domain on $cluster_node"
-    ssh $1 "echo \"$global_registry_ip     onedata.org
-    149.156.10.253          onedata.com\" >> /etc/hosts"
-}
-
 #####################################################################
 # VeilClient Functions
 #####################################################################
