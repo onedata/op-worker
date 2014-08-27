@@ -175,10 +175,11 @@ put_cdmi_object(Req,State = #state{handler_module = Handler}) ->
 %% parse_opts/1
 %% ====================================================================
 %% @doc Parses given cowboy 'qs' opts (all that appears after '?' in url), splitting
-%% them by ';' separator and handling range values,
-%% i. e. input: binary("aaa;bbb:1-2;ccc") will return [binary(aaa),{binary(bbb),1,2},binary(ccc)]
+%% them by ';' separator and handling simple and range values,
+%% i. e. input: binary("aaa;bbb:1-2;ccc;ddd:fff") will return
+%% [binary(aaa),{binary(bbb),1,2},binary(ccc),{binary(ddd),binary(fff)}]
 %% @end
--spec parse_opts(binary()) -> [binary() | {binary(), From :: integer(), To :: integer()}].
+-spec parse_opts(binary()) -> [binary() | {binary(), binary()} | {binary(), From :: integer(), To :: integer()}].
 %% ====================================================================
 parse_opts(<<>>) ->
     [];
@@ -189,8 +190,11 @@ parse_opts(RawOpts) ->
             case binary:split(Opt, <<":">>) of
                 [SimpleOpt] -> SimpleOpt;
                 [SimpleOpt, Range] ->
-                    [From, To] = binary:split(Range, <<"-">>),
-                    {SimpleOpt, binary_to_integer(From), binary_to_integer(To)}
+                    case binary:split(Range, <<"-">>) of
+                        [SimpleVal] -> {SimpleOpt, SimpleVal};
+                        [From, To] ->
+                            {SimpleOpt, binary_to_integer(From), binary_to_integer(To)}
+                    end
             end
         end,
         Opts
