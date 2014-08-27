@@ -53,7 +53,7 @@ list_dir_test(_Config) ->
     ?assertEqual("200", Code2),
     {struct,CdmiPesponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiPesponse2)),
-    ?assertEqual([<<"dir">>,<<"groups">>], proplists:get_value(<<"children">>,CdmiPesponse2)),
+    ?assertEqual([<<"dir">>,<<"spaces">>], proplists:get_value(<<"children">>,CdmiPesponse2)),
     %%------------------------------
 
     %%--- list nonexisting dir -----
@@ -183,7 +183,7 @@ create_dir_test(_Config) ->
 % json string), or without (when we treat request body as new file content)
 create_file_test(_Config) ->
     ToCreate = "file.txt",
-    ToCreate2 = filename:join(["groups",?TEST_GROUP,"file1.txt"]),
+    ToCreate2 = filename:join(["spaces",?TEST_GROUP,"file1.txt"]),
     ToCreate4 = "file2",
     ToCreate5 = "file3",
     FileContent = <<"File content!">>,
@@ -217,7 +217,7 @@ create_file_test(_Config) ->
     {struct,CdmiPesponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>,CdmiPesponse2)),
     ?assertEqual(<<"file1.txt">>, proplists:get_value(<<"objectName">>,CdmiPesponse2)),
-    ?assertEqual(<<"/groups/veilfstestgroup">>, proplists:get_value(<<"parentURI">>,CdmiPesponse2)),
+    ?assertEqual(<<"/spaces/veilfstestgroup">>, proplists:get_value(<<"parentURI">>,CdmiPesponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse2)),
 
     ?assert(object_exists(ToCreate2)),
@@ -262,7 +262,7 @@ create_file_test(_Config) ->
 delete_dir_test(_Config) ->
     DirName = "/toDelete/",
     ChildDirName = "/toDelete/child/",
-    GroupsDirName = "/groups/",
+    SpacesDirName = "/spaces/",
 
     %%----- basic delete -----------
     create_dir(DirName),
@@ -290,19 +290,19 @@ delete_dir_test(_Config) ->
     %%------------------------------
 
     %%----- delete group dir -------
-    ?assert(object_exists(GroupsDirName)),
+    ?assert(object_exists(SpacesDirName)),
 
     RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code3, _Headers3, _Response3} = do_request(GroupsDirName, delete, RequestHeaders3, []),
+    {Code3, _Headers3, _Response3} = do_request(SpacesDirName, delete, RequestHeaders3, []),
     ?assertEqual("403",Code3),
 
-    ?assert(object_exists(GroupsDirName)).
+    ?assert(object_exists(SpacesDirName)).
     %%------------------------------
 
 % Tests cdmi object DELETE requests
 delete_file_test(_Config) ->
     FileName = "/toDelete",
-    GroupFileName = "/groups/veilfstestgroup/groupFile",
+    GroupFileName = "/spaces/veilfstestgroup/groupFile",
 
     %%----- basic delete -----------
     create_file(FileName),
@@ -377,9 +377,14 @@ init_per_suite(Config) ->
     ibrowse:start(),
     Cert = ?COMMON_FILE("peer.pem"),
     DN = get_dn_from_cert(Cert,CCM),
-    StorageUUID = setup_user_in_db(DN,CCM),
 
-    lists:append([{nodes, Nodes},{dn,DN},{cert,Cert},{storage_uuid, StorageUUID}], Config).
+    Config1 = lists:append([{nodes, Nodes}], Config),
+
+    ?ENABLE_PROVIDER(Config1),
+
+    StorageUUID = setup_user_in_db(Cert, Config1),
+
+    lists:append([{dn,DN}, {cert,Cert}, {storage_uuid, StorageUUID}], Config1).
 
 end_per_suite(Config) ->
     Nodes = ?config(nodes, Config),
@@ -458,20 +463,14 @@ get_dn_from_cert(Cert,CCM) ->
     DN.
 
 % Populates the database with one user and some files
-setup_user_in_db(DN, CCM) ->
-    DnList = [DN],
-    Login = ?TEST_USER,
-    Name = "user user",
-    Teams = [?TEST_GROUP],
-    Email = "user@email.net",
-    GlobalId = "id",
+setup_user_in_db(Cert, Config) ->
+    [CCM | _] = ?config(nodes, Config),
 
-    rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
+    UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_GROUP]),
+    [DN | _] = UserDoc#veil_document.record#user.dn_list,
 
     {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?ARG_TEST_ROOT]),
     ?assertEqual(ok, Ans1),
-    {Ans5, _} = rpc:call(CCM, user_logic, create_user, [GlobalId,Login, Name, Teams, Email, DnList]),
-    ?assertEqual(ok, Ans5),
 
     fslogic_context:set_user_dn(DN),
     Ans6 = rpc:call(CCM, erlang, apply, [

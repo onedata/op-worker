@@ -25,6 +25,40 @@
 -export([ct_mock/4, wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0,
          wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
 
+-export([add_user/4, add_user/5]).
+
+
+add_user(Config, Login, Cert, Spaces) ->
+    add_user(Config, Login, Cert, Spaces, <<"access_token">>).
+add_user(Config, Login, Cert, Spaces, AccessToken) ->
+
+    [CCM | _] = ?config(nodes, Config),
+
+    SpacesBinary = [vcn_utils:ensure_binary(Space) || Space <- Spaces],
+    SpacesList = [vcn_utils:ensure_list(Space) || Space <- Spaces],
+
+    {ReadFileAns, PemBin} = file:read_file(Cert),
+    ?assertMatch({ok, _}, {ReadFileAns, PemBin}),
+    {ExtractAns, RDNSequence} = rpc:call(CCM, user_logic, extract_dn_from_cert, [PemBin]),
+    ?assertMatch({rdnSequence, _}, {ExtractAns, RDNSequence}),
+    {ConvertAns, DN} = rpc:call(CCM, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+    ?assertMatch({ok, _}, {ConvertAns, DN}),
+
+    DnList = [DN],
+    Name = Login ++ " " ++ Login,
+    Teams = SpacesList,
+    Email = Login ++ "@email.net",
+
+    rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
+
+    {CreateUserAns, NewUserDoc} = rpc:call(CCM, user_logic, create_user, ["global_id_for_" ++ Login, Login, Name, Teams, Email, DnList, AccessToken]),
+    ?assertMatch({ok, _}, {CreateUserAns, NewUserDoc}),
+
+    test_utils:ct_mock(Config, gr_users, get_spaces, fun(_) -> {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
+    test_utils:ct_mock(Config, gr_adapter, get_space_info, fun(SpaceId, _) -> {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [?LOCAL_PROVIDER_ID]}} end),
+
+    _UserDoc = rpc:call(CCM, user_logic, synchronize_spaces_info, [NewUserDoc, AccessToken]).
+
 
 %% ct_mock/4
 %% ====================================================================

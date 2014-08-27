@@ -90,7 +90,7 @@ fuse_ack_routing_test(Config) ->
   PeerCert = ?COMMON_FILE("peer.pem"),
 
   %% Add test users since cluster wont generate FuseId without full authentication
-  UserDoc = ?ADD_USER("user1", PeerCert, ["space1"]),
+  UserDoc = test_utils:add_user(Config, "user1", PeerCert, ["space1"]),
 
   {ConAns0, Socket0} = wss:connect('localhost', 6666, [{certfile, PeerCert}, {cacertfile, PeerCert}]),
   ?assertEqual(ok, ConAns0),
@@ -300,7 +300,7 @@ fuse_session_cleanup_test(Config) ->
     _Cert2 = ?COMMON_FILE("peer2.pem"),
 
     %% Add test users since cluster wont generate FuseId without full authentication
-    ?ADD_USER("user1", Cert1, [SpaceName]),
+    test_utils:add_user(Config, "user1", Cert1, [SpaceName]),
 
     %% Open connections for the user as session #1
     {ConAns11, Socket11} = wss:connect(Host, 6666, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #1
@@ -489,7 +489,7 @@ callbacks_test(Config) ->
   PeerCert = ?COMMON_FILE("peer.pem"),
 
   %% Add test users since cluster wont generate FuseId without full authentication
-  UserDoc = ?ADD_USER("user1", PeerCert, ["space1"]),
+  UserDoc = test_utils:add_user(Config, "user1", PeerCert, ["space1"]),
 
   {ConAns0, Socket0} = wss:connect('localhost', 6666, [{certfile, PeerCert}, {cacertfile, PeerCert}]),
   ?assertEqual(ok, ConAns0),

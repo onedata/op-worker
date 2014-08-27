@@ -16,6 +16,8 @@
 
 -include("veil_modules/dao/dao_spaces.hrl").
 
+-include("veil_modules/dao/dao_users.hrl").
+-include_lib("dao/include/common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
@@ -60,33 +62,10 @@
 
 -define(LOCAL_PROVIDER_ID, <<"providerId">>).
 -define(ENABLE_PROVIDER(Config), ?ENABLE_PROVIDER(Config, ?LOCAL_PROVIDER_ID)).
--define(ENABLE_PROVIDER(Config, ProviderId), test_utils:ct_mock(Config, cluster_manager_lib, get_provider_id, fun() -> ProviderId end)).
-
--define(ADD_USER(Login, Cert, Spaces), ?ADD_USER(Login, Cert, Spaces, <<"access_token">>)).
--define(ADD_USER(Login, Cert, Spaces, AccessToken),
+-define(ENABLE_PROVIDER(Config, ProviderId),
     begin
-        SpacesBinary = [vcn_utils:ensure_binary(Space) || Space <- Spaces],
-        SpacesList = [vcn_utils:ensure_list(Space) || Space <- Spaces],
-
-        {ReadFileAns, PemBin} = file:read_file(Cert),
-        ?assertEqual(ok, ReadFileAns),
-        {ExtractAns, RDNSequence} = rpc:call(CCM, user_logic, extract_dn_from_cert, [PemBin]),
-        ?assertEqual(rdnSequence, ExtractAns),
-        {ConvertAns, DN} = rpc:call(CCM, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-        ?assertEqual(ok, ConvertAns),
-        DnList = [DN],
-
-        Name = Login ++ " " ++ Login,
-        Teams = SpacesList,
-        Email = Login ++ "@email.net",
-        {CreateUserAns, NewUserDoc} = rpc:call(CCM, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList, AccessToken]),
-        ?assertMatch({ok, _}, {CreateUserAns, NewUserDoc}),
-
-
-        test_utils:ct_mock(Config, gr_users, get_spaces, fun(_) -> {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
-        test_utils:ct_mock(Config, gr_adapter, get_space_info, fun(SpaceId, _) -> {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [?LOCAL_PROVIDER_ID]}} end),
-
-        _UserDoc = rpc:call(CCM, user_logic, synchronize_spaces_info, [NewUserDoc, AccessToken])
+        test_utils:ct_mock(Config, cluster_manager_lib, get_provider_id, fun() -> ProviderId end),
+        Config
     end).
 
 -endif.
