@@ -200,17 +200,17 @@ function start_cluster {
     {\\\"Storage paths\\\",               [$storage_paths]}.
     {\\\"Register in Global Registry\\\", $register}\" > $SETUP_DIR/install.cfg"
 
-    ssh -tt -q $1 "onepanel_setup --install $SETUP_DIR/install.cfg 2>&1" 2>/dev/null || error "Cannot setup and start VeilCluster."
+    ssh -tt -q $1 "onepanel_admin --install $SETUP_DIR/install.cfg 2>&1" 2>/dev/null || error "Cannot setup and start VeilCluster."
 }
 
 # $1 - target host
 function remove_cluster {
     info "Removing VeilCluster..."
 
-    local onepanel_setup
-    onepanel_setup=$(ssh $1 "which onepanel_setup 2> /dev/null")
+    local onepanel_admin
+    onepanel_admin=$(ssh $1 "which onepanel_admin 2> /dev/null")
     if [[ $? == 0 ]]; then
-        ssh -tt -q $1 "onepanel_setup --uninstall 2>&1" 2>/dev/null
+        ssh -tt -q $1 "onepanel_admin --uninstall 2>&1" 2>/dev/null
     fi
 
     cluster_storage_paths=`echo "$CLUSTER_STORAGE_PATHS" | tr ";" "\n"`
