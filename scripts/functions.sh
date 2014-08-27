@@ -211,7 +211,7 @@ function remove_cluster {
         ssh $1 "[ -z $storage_path ] || rm -rf $storage_path/users $storage_path/groups $storage_path/vfs_storage.info"
     done
     
-    ssh $1 "rpm -e veil 2> /dev/null" || error "Cannot uninstall VeilCluster."
+    ssh $1 "rpm -e veil 2> /dev/null"
     ssh $1 "rm -rf /opt/veil" || error "Cannot remove VeilCluster directory."
 }
 
