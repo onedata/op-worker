@@ -22,7 +22,8 @@
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
--export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, parse_body/1, validate_body/1, prepare_metadata/1]).
+-export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, parse_body/1,
+         validate_body/1, prepare_metadata/1, prepare_metadata/2]).
 
 %% ====================================================================
 %% API functions
@@ -267,7 +268,20 @@ validate_body(Body) ->
 -spec prepare_metadata(#fileattributes{}) -> [{CdmiName :: binary(), Value :: binary()}].
 %% ====================================================================
 prepare_metadata(Attrs) ->
-    lists:map(fun(X) -> cdmi_metadata_to_attrs(X,Attrs) end, ?default_storage_system_metadata).
+    prepare_metadata(<<"">>, Attrs).
+prepare_metadata(Prefix, Attrs) ->
+    WithPrefix = lists:filter(fun(X) -> metadata_with_prefix(X, Prefix) end, ?default_storage_system_metadata),
+    lists:map(fun(X) -> cdmi_metadata_to_attrs(X,Attrs) end, WithPrefix).
+
+metadata_with_prefix(Name, Prefix) ->
+    N = size(Prefix),
+    case size(Name) >= N of
+        true ->
+            <<ActualPrefix:N/binary,_Rest/binary>> = Name,
+            ActualPrefix == Prefix;
+        false ->
+            false
+    end.
 
 %todo add cdmi_acl metadata
 cdmi_metadata_to_attrs(<<"cdmi_size">>, Attrs) ->
@@ -281,5 +295,5 @@ cdmi_metadata_to_attrs(<<"cdmi_mtime">>, Attrs) ->
     {<<"cdmi_mtime">>, integer_to_binary(Attrs#fileattributes.mtime)};
 cdmi_metadata_to_attrs(<<"cdmi_owner">>, Attrs) ->
     {<<"cdmi_owner">>, list_to_binary(Attrs#fileattributes.uname)};
-cdmi_metadata_to_attrs(_,_) ->
+cdmi_metadata_to_attrs(_,_Attrs) ->
     {}.

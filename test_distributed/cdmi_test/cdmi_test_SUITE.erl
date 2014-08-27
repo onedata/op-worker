@@ -127,21 +127,46 @@ get_file_test(_Config) ->
     ?assertEqual(2, length(CdmiPesponse2)),
     %%------------------------------
 
-    %%--- selective value read -----
+    %%-- selective metadata read -----
     RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code3, _Headers3, Response3} = do_request(FileName++"?value:1-3;valuerange", get, RequestHeaders3, []),
+    {Code3, _Headers3, Response3} = do_request(
+        FileName++"?metadata:cdmi_owner", get, RequestHeaders3, []),
     ?assertEqual("200",Code3),
     {struct,CdmiPesponse3} = mochijson2:decode(Response3),
+    ?assertEqual(1, length(CdmiPesponse3)),
+    {struct, Metadata3} = proplists:get_value(<<"metadata">>,CdmiPesponse3),
+    ?assertEqual(<<"veilfstestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata3)),
+    ?assertEqual(1, length(Metadata3)),
 
-    ?assertEqual(<<"1-3">>, proplists:get_value(<<"valuerange">>,CdmiPesponse3)),
-    ?assertEqual(<<"ome">>, base64:decode(proplists:get_value(<<"value">>,CdmiPesponse3))), % 1-3 from FileContent = <<"Some content...">>
+    {_Code4, _Headers4, Response4} = do_request(
+        FileName++"?metadata:cdmi_", get, RequestHeaders3, []),
+    {struct,CdmiPesponse4} = mochijson2:decode(Response4),
+    ?assertEqual(1, length(CdmiPesponse4)),
+    {struct, Metadata4} = proplists:get_value(<<"metadata">>,CdmiPesponse4),
+    ?assertEqual(5, length(Metadata4)),
+
+    {_Code5, _Headers5, Response5} = do_request(
+        FileName++"?metadata:cdmi_no_such_metadata", get, RequestHeaders3, []),
+    {struct,CdmiPesponse5} = mochijson2:decode(Response5),
+    ?assertEqual(1, length(CdmiPesponse5)),
+    ?assertEqual([], proplists:get_value(<<"metadata">>,CdmiPesponse5)),
+    %%------------------------------
+
+    %%--- selective value read -----
+    RequestHeaders6 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code6, _Headers6, Response6} = do_request(FileName++"?value:1-3;valuerange", get, RequestHeaders6, []),
+    ?assertEqual("200",Code6),
+    {struct,CdmiPesponse6} = mochijson2:decode(Response6),
+
+    ?assertEqual(<<"1-3">>, proplists:get_value(<<"valuerange">>,CdmiPesponse6)),
+    ?assertEqual(<<"ome">>, base64:decode(proplists:get_value(<<"value">>,CdmiPesponse6))), % 1-3 from FileContent = <<"Some content...">>
     %%------------------------------
 
     %%------- noncdmi read --------
-    {Code4, _Headers4, Response4} = do_request(FileName, get, [], []),
-    ?assertEqual("200",Code4),
+    {Code7, _Headers7, Response7} = do_request(FileName, get, [], []),
+    ?assertEqual("200",Code7),
 
-    ?assertEqual(binary_to_list(FileContent), Response4).
+    ?assertEqual(binary_to_list(FileContent), Response7).
     %%------------------------------
 
 % Tests dir creation (cdmi container PUT), remember that every container URI ends

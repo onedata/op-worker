@@ -281,6 +281,8 @@ prepare_object_ans([<<"mimetype">> | Tail], #state{filepath = Filepath} = State)
     [{<<"mimetype">>, <<Type/binary, "/", Subtype/binary>>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->
     [{<<"metadata">>, rest_utils:prepare_metadata(Attrs)} | prepare_object_ans(Tail, State)];
+prepare_object_ans([{<<"metadata">>, Prefix} | Tail], #state{attributes = Attrs} = State) ->
+    [{<<"metadata">>, rest_utils:prepare_metadata(Prefix, Attrs)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"valuetransferencoding">> | Tail], State) ->
     [{<<"valuetransferencoding">>, <<"base64">>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"value">> | Tail], State) ->
