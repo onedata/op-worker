@@ -198,7 +198,7 @@ function start_cluster {
     {\\\"Worker hosts\\\",                [$worker_hosts]}.
     {\\\"Database hosts\\\",              [$db_hosts]}.
     {\\\"Storage paths\\\",               [$storage_paths]}.
-    {\\\"Register in Global Registry\\\", $register}\" > $SETUP_DIR/install.cfg"
+    {\\\"Register in Global Registry\\\", $register}.\" > $SETUP_DIR/install.cfg"
 
     ssh -tt -q $1 "onepanel_admin --install $SETUP_DIR/install.cfg 2>&1" 2>/dev/null || error "Cannot setup and start VeilCluster."
 }
