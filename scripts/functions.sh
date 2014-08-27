@@ -348,8 +348,8 @@ function start_global_registry_db {
 function remove_global_registry_db {
     info "Removing Global Registry DB..."
 
-    ssh $1 -tt "rm -rf /opt/bigcouch" || error "Cannot remove Global Registry DB copy on $1."
-    ssh $1 -tt "rm -rf /var/lib/globalregistry" || error "Cannot remove Global Registry DB on $1."
+    ssh $1 -tt "rm -rf /opt/bigcouch 2>&1" 2> /dev/null || error "Cannot remove Global Registry DB copy on $1."
+    ssh $1 -tt "rm -rf /var/lib/globalregistry 2>&1" 2> /dev/null || error "Cannot remove Global Registry DB on $1."
 }
 
 function start_global_registry {
@@ -362,19 +362,19 @@ function start_global_registry {
     done
     idb_nodes=`echo $idb_nodes | sed -e 's/.$//'`
 
-    ssh $1 -tt "sed -i -e \"s/db_nodes, .*/db_nodes, [$idb_nodes] },/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry DB nodes on $1."
-    ssh $1 -tt "sed -i -e \"s/rest_cert_domain, .*/rest_cert_domain, \\\"onedata.org\\\" }/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry REST certificate domain on $1."
-    ssh $1 -tt "sed -i -e \"s/^-name .*/-name globalregistry@\"`node_name $1`\"/\" /etc/globalregistry/vm.args" || error "Cannot set Global Registry hostname on $1."
-    ssh $1 -tt "ulimit -n 65535 ; ulimit -u 65535 ; /etc/init.d/globalregistry start" || error "Cannot start Global Registry on $1."
+    ssh $1 -tt "sed -i -e \"s/db_nodes, .*/db_nodes, [$idb_nodes] },/\" /etc/globalregistry/app.config 2>&1" 2> /dev/null || error "Cannot set Global Registry DB nodes on $1."
+    ssh $1 -tt "sed -i -e \"s/rest_cert_domain, .*/rest_cert_domain, \\\"onedata.org\\\" }/\" /etc/globalregistry/app.config 2>&1" 2> /dev/null || error "Cannot set Global Registry REST certificate domain on $1."
+    ssh $1 -tt "sed -i -e \"s/^-name .*/-name globalregistry@\"`node_name $1`\"/\" /etc/globalregistry/vm.args 2>&1" 2> /dev/null || error "Cannot set Global Registry hostname on $1."
+    ssh $1 -tt "ulimit -n 65535 ; ulimit -u 65535 ; /etc/init.d/globalregistry start 2>&1" 2> /dev/null || error "Cannot start Global Registry on $1."
 }
 
 # $1 - target host
 function remove_global_registry {
     info "Removing Global Registry..."
 
-    ssh $1 "rpm -e globalregistry 2> /dev/null"
+    ssh $1 "rpm -e globalregistry 2> /dev/null" 2> /dev/null
 
-    ssh $1 "rm -rf /usr/lib64/globalregistry"
-    ssh $1 "rm -rf /etc/globalregistry"
-    ssh $1 "rm -rf /etc/init.d/globalregistry"
+    ssh $1 "rm -rf /usr/lib64/globalregistry 2>&1" 2> /dev/null
+    ssh $1 "rm -rf /etc/globalregistry 2>&1" 2> /dev/null
+    ssh $1 "rm -rf /etc/init.d/globalregistry 2>&1" 2> /dev/null
 }
