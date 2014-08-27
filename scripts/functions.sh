@@ -199,11 +199,11 @@ function start_cluster {
 # $1 - target host
 function remove_cluster {
     info "Removing VeilCluster..."
-    
-    if [[ $(ssh $1 "which onepanel_setup 2> /dev/null") == 0 ]]; then
-        screen -dmS onepanel_setup ssh $1 "onepanel_setup --uninstall"
-        screen_wait onepanel_setup 2
-        screen -XS onepanel_setup quit
+
+    local onepanel_setup
+    onepanel_setup=$(ssh $1 "which onepanel_setup 2> /dev/null")
+    if [[ $? == 0 ]]; then
+        ssh -tt -q $1 "onepanel_setup --uninstall 2>&1" 2>/dev/null
     fi
 
     cluster_storage_paths=`echo "$CLUSTER_STORAGE_PATHS" | tr ";" "\n"`
@@ -223,8 +223,9 @@ function register_in_global_registry {
     # Add mappings in /etc/hosts
     global_registry_ip=`strip_login $2`
     ssh $1 "sed -i -e '/onedata.*/d' /etc/hosts" || error "Cannot remove old mappings from /etc/hosts for onedata domain on $cluster_node"
-    ssh $1 "echo \"$global_registry_ip          onedata.org
-    149.156.10.253          onedata.com\" > /etc/hosts"
+    ssh $1 "echo \"
+    $global_registry_ip     onedata.org
+    149.156.10.253          onedata.com\" >> /etc/hosts"
 }
 
 #####################################################################
