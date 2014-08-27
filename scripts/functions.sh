@@ -334,7 +334,7 @@ function start_global_registry_db {
     ssh $1 "sed -i -e \"s/^-name .*/-name db@\"`node_name $1`\"/\" /opt/bigcouch/etc/vm.args" || error "Cannot set Global Registry DB hostname on $1."
     ssh $1 "sed -i -e \"s/^-setcookie .*/-setcookie globalregistry/\" /opt/bigcouch/etc/vm.args" || error "Cannot set Global Registry DB cookie on $1."
     ssh $1 "sed -i -e \"s/^bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/bigcouch/etc/default.ini" || error "Cannot set Global Registry DB bind address on $1."
-    ssh $1 "ulimit -n 65535 ; ulimit -u 65535 ; nohup /opt/bigcouch/bin/bigcouch start & ; sleep 5" || error "Cannot start Global Registry DB on $1."
+    ssh -tt -q $1 "ulimit -n 65535 ; ulimit -u 65535 ; nohup /opt/bigcouch/bin/bigcouch > /dev/null & ; sleep 5 2>&1" 2> /dev/null || error "Cannot start Global Registry DB on $1."
 
     if [[ $2 != 1 ]]; then
         master_db=`nth_node_name "$GLOBAL_REGISTRY_DB_NODES" 1`
