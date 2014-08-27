@@ -140,8 +140,8 @@ function install_veilcluster_package {
     scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
 
     info "Installing $2 package on $1..."
-    multicast_address=`strip_login $MASTER`
-    ssh $1 "ONEPANEL_MULTICAST_ADDRESS=$multicast_address ; rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
+    export ONEPANEL_MULTICAST_ADDRESS=`strip_login $MASTER`
+    ssh -o SendEnv=ONEPANEL_MULTICAST_ADDRESS $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
 }
 
 function start_cluster {
@@ -171,7 +171,7 @@ function start_cluster {
     ccm_hosts=`echo "$ccm_hosts" | sed -e 's/.$//'`
     worker_hosts=`echo "$worker_hosts" | sed -e 's/.$//'`
 
-    main_ccm_host=`echo "$ccm_hosts" | awk -F ',' "{print \$1}" | xargs`
+    main_ccm_host=`echo "$ccm_hosts" | awk -F ',' "{print $1}" | xargs`
 
     storage_paths=""
     cluster_storage_paths=`echo "$CLUSTER_STORAGE_PATHS" | tr ";" "\n"`
