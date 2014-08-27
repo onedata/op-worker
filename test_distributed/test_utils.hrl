@@ -61,11 +61,11 @@
 -define(TEST_GROUP3_EXTENDED, "veilfstestgroup3(Grp3)").
 
 -define(LOCAL_PROVIDER_ID, <<"providerId">>).
--define(ENABLE_PROVIDER(Config), ?ENABLE_PROVIDER(Config, ?LOCAL_PROVIDER_ID)).
--define(ENABLE_PROVIDER(Config, ProviderId),
+-define(ENABLE_PROVIDER(__CONFIG), ?ENABLE_PROVIDER(__CONFIG, ?LOCAL_PROVIDER_ID)).
+-define(ENABLE_PROVIDER(__CONFIG, __PROVIDER_ID),
     begin
-        test_utils:ct_mock(Config, cluster_manager_lib, get_provider_id, fun() -> ProviderId end),
-        Config
+        test_utils:ct_mock(__CONFIG, cluster_manager_lib, get_provider_id, fun() -> __PROVIDER_ID end),
+        __CONFIG
     end).
 
 -endif.

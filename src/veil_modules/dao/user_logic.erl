@@ -734,17 +734,21 @@ create_dirs_at_storage(SpacesInfo) ->
 %% ====================================================================
 create_dirs_at_storage(SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+
+    DN_CTX = fslogic_context:get_user_dn(),
+    {AT_CTX1, AT_CTX2} = fslogic_context:get_access_token(),
+
     fslogic_context:clear_user_ctx(),
 
     CreateTeamsDirs = fun(#space_info{name = _SpaceName} = SpaceInfo, TmpAns) ->
         Dir = fslogic_spaces:get_storage_space_name(SpaceInfo),
         DirName = filename:join(["/", ?SPACES_BASE_DIR_NAME, Dir]),
         _Result = storage_files_manager:mkdir(SHI, filename:join(["/", ?SPACES_BASE_DIR_NAME]), ?EX_ALL_PERM bor ?RWE_USR_PERM),
-        Ans = storage_files_manager:mkdir(SHI, DirName, ?EX_ALL_PERM bor ?RWE_USR_PERM bor ?RWE_GRP_PERM),
+        Ans = storage_files_manager:mkdir(SHI, DirName),
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
                 Ans2 = storage_files_manager:chown(SHI, DirName, -1, fslogic_spaces:map_to_grp_owner(SpaceInfo)),
-                Ans3 = storage_files_manager:chmod(SHI, DirName, 8#1730),
+                Ans3 = storage_files_manager:chmod(SHI, DirName, 8#1731),
                 case {Ans2, Ans3} of
                     {ok, ok} ->
                         TmpAns;
@@ -760,7 +764,11 @@ create_dirs_at_storage(SpacesInfo, Storage) ->
         end
     end,
 
-    lists:foldl(CreateTeamsDirs, ok, SpacesInfo).
+    Result = lists:foldl(CreateTeamsDirs, ok, SpacesInfo),
+    fslogic_context:set_user_dn(DN_CTX),
+    fslogic_context:set_access_token(AT_CTX1, AT_CTX2),
+
+    Result.
 
 %% get_space_names/1
 %% ====================================================================

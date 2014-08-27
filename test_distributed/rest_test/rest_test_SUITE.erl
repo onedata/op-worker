@@ -53,13 +53,13 @@ main_test(Config) ->
     gen_server:cast({global, ?CCM}, init_cluster),
     test_utils:wait_for_cluster_init(),
 
+    ?ENABLE_PROVIDER(Config),
+
     ibrowse:start(),
-    DN = get_dn_from_cert(),
-    put(dn, DN),
     rest_test_user_unknown(),
 
     % Create a user in db with some files
-    StorageUUID = setup_user_in_db(DN),
+    {DN, StorageUUID} = setup_user_in_db(Config),
 
     % Test if REST requests return what is expected
     test_rest_error_messages(),
@@ -340,39 +340,16 @@ format_multipart_formdata(Boundary, Fields, Files) ->
     string:join(Parts, "\r\n").
 
 
-get_dn_from_cert() ->
-    CCM = get(ccm),
-
-    Cert = ?COMMON_FILE("peer.pem"),
-    {Ans2, PemBin} = file:read_file(Cert),
-    ?assertEqual(ok, Ans2),
-
-    {Ans3, RDNSequence} = rpc:call(CCM, user_logic, extract_dn_from_cert, [PemBin]),
-    ?assertEqual(rdnSequence, Ans3),
-
-    {Ans4, DN} = rpc:call(CCM, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-    ?assertEqual(ok, Ans4),
-    DN.
-
-
 % Populates the database with one user and some files
-setup_user_in_db(DN) ->
-    CCM = get(ccm),
-
-    DnList = [DN],
-    Login = ?TEST_USER,
-    Name = "user user",
-    Teams = [?TEST_GROUP],
-    Email = "user@email.net",
-
-    % Cleanup data from other tests
-    % TODO Usunac jak wreszcie baza bedzie czyszczona miedzy testami
-    rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
+setup_user_in_db(Config) ->
+    [CCM | _] = ?config(nodes, Config),
 
     {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?ARG_TEST_ROOT]),
     ?assertEqual(ok, Ans1),
-    {Ans5, _} = rpc:call(CCM, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
-    ?assertEqual(ok, Ans5),
+
+    Cert = ?COMMON_FILE("peer.pem"),
+    UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+    [DN | _] = user_logic:get_dn_list(UserDoc),
 
     fslogic_context:set_user_dn(DN),
     Ans6 = rpc:call(CCM, erlang, apply, [
@@ -390,7 +367,7 @@ setup_user_in_db(DN) ->
         end, [] ]),
     ?assertEqual(ok, Ans7),
 
-    StorageUUID.
+    {DN, StorageUUID}.
 
 
 %% ====================================================================

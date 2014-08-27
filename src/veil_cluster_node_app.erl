@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% Application callbacks
--export([start/2, stop/1]).
+-export([start/2, stop/1, get_env/1]).
 
 -ifdef(TEST).
 -export([ports_ok/0]).
@@ -60,27 +60,27 @@ start(_StartType, _StartArgs) ->
 stop(_State) ->
   ok.
 
-%% ===================================================================
-%% Internal functions
-%% ===================================================================
-
 %% get_env/1
 %% ====================================================================
 %% @doc Gets environment variable, prints error logs if it's udefined
 -spec get_env(Name :: atom()) -> Result when
-	Result :: {Status, Value :: term()},
-	Status :: ok | error.
+    Result :: {Status, Value :: term()},
+    Status :: ok | error.
 %% ====================================================================
 get_env(Name) ->
-	GetEnvResult = application:get_env(?APP_Name,Name),
-	case GetEnvResult of
-		{ok,Value} ->
-			{ok,Value};
-		undefined ->
-			?error("Could not get '~p' environment variable.",[Name]),
-			io:format(standard_error, "Could not get '~p' environment variable.~n",[Name]),
-			{error,undefined}
-	end.
+    GetEnvResult = application:get_env(?APP_Name,Name),
+    case GetEnvResult of
+        {ok,Value} ->
+            {ok,Value};
+        undefined ->
+            ?error("Could not get '~p' environment variable.",[Name]),
+            io:format(standard_error, "Could not get '~p' environment variable.~n",[Name]),
+            {error,undefined}
+    end.
+
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
 
 %% its_ccm/0
 %% ====================================================================

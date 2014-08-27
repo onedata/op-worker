@@ -367,6 +367,11 @@ veil_cluster_node_env:
       description: Default mode for new directory at storage system (8#1330)
       value: 728
 
+  - parameter:
+      name: lowest_generated_storage_gid
+      description: Lowest GID used for files that shall belong to group that doesn't exist in OS.
+      value: 70000
+
 
   # DNS
   - parameter:

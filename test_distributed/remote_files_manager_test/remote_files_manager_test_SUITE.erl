@@ -154,7 +154,7 @@ permissions_test(Config) ->
 
   {PermStatus, PermAnswer} = change_perm_on_storage(Host, Cert, Port, Id0, 8#521),
   ?assertEqual("ok", PermStatus),
-  ?assertEqual(list_to_atom(?VEACCES), PermAnswer),
+  ?assertEqual(list_to_atom(?VEPERM), PermAnswer),
 
 
 
@@ -266,8 +266,10 @@ permissions_test(Config) ->
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team1], ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ Team1], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_USER], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_USER2], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion])),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
   ?assertEqual(ok, RemoveUserAns),
@@ -364,6 +366,8 @@ helper_requests_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   test_utils:wait_for_cluster_init(),
 
+  ?ENABLE_PROVIDER(Config),
+
   Fuse_groups = [#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ?ARG_TEST_ROOT}}],
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, [], Fuse_groups]),
   ?assertEqual(ok, InsertStorageAns),
@@ -397,15 +401,15 @@ helper_requests_test(Config) ->
   [MainDir | Path2] = Path,
   [Dir | NameEnding] = Path2,
   ?assert(is_integer(list_to_integer(StorageNum))),
-  ?assertEqual("users", MainDir),
+  ?assertEqual("spaces", MainDir),
   ?assertEqual(Login, Dir),
 
   {Status2, Answer2} = create_file_on_storage(Host, Cert, Port, Id),
   ?assertEqual("ok", Status2),
   ?assertEqual(list_to_atom(?VOK), Answer2),
 
-  ?assert(files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Dir ++ "/" ++ NameEnding)),
-  {OwnStatus, User, Group} = files_tester:get_owner(?TEST_ROOT ++ "/users/" ++ Dir ++ "/" ++ NameEnding),
+  ?assert(files_tester:file_exists_storage(?TEST_ROOT ++ "/spaces/" ++ Dir ++ "/" ++ NameEnding)),
+  {OwnStatus, User, Group} = files_tester:get_owner(?TEST_ROOT ++ "/spaces/" ++ Dir ++ "/" ++ NameEnding),
   ?assertEqual(ok, OwnStatus),
   ?assert(User /= 0),
 
@@ -464,7 +468,7 @@ helper_requests_test(Config) ->
   ?assertEqual(ok, RemoveStorageAns),
 
   ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_USER], ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_USER], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_GROUP], ?ProtocolVersion])),
   ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion])),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),

@@ -65,7 +65,7 @@ handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
 handle(ProtocolVersion, #remotefilemangement{input = RequestBody, space_id = SpaceId}) ->
-    ?info("RFM space ctx ~p", [SpaceId]),
+    ?debug("RFM space ctx ~p", [SpaceId]),
     RequestType = element(1, RequestBody),
 
     fslogic_context:set_protocol_version(ProtocolVersion),

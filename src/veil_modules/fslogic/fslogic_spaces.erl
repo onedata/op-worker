@@ -77,6 +77,7 @@ map_to_grp_owner(#space_info{name = SpaceName, space_id = SpaceId}) ->
     case os:cmd("getent group \"" ++ unicode:characters_to_list(SpaceName) ++ "\" | cut -d: -f3") -- [10, 13] of
         "" ->
             <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, SpaceId),
+            {ok, LowestGID} = veil_cluster_node_app:get_env(lowest_generated_storage_gid),
             70000 + GID0 rem 1000000;
         StrGID ->
             list_to_integer(StrGID)

@@ -28,8 +28,27 @@
 -export([add_user/4, add_user/5]).
 
 
+%% add_user/4
+%% ====================================================================
+%% @doc Creates user with given Login, Cert path (for DN identification) and list of Spaces.
+%%      First space on Spaces will be used as user's default space.
+%%      Config shall be a proplist with at least {nodes, Nodes :: list()} entry.
+%%      Returns #veil_document with #user record that was just created or fails with exception.
+%% @end
+-spec add_user(Config :: list(), Login :: string(), Cert :: string(), Spaces :: [string() | binary()]) ->
+    #veil_document{} | no_return().
+%% ====================================================================
 add_user(Config, Login, Cert, Spaces) ->
     add_user(Config, Login, Cert, Spaces, <<"access_token">>).
+
+
+%% add_user/5
+%% ====================================================================
+%% @doc Same as add_user/4 but also allows to explicitly set AccessToken for created user.
+%% @end
+-spec add_user(Config :: list(), Login :: string(), Cert :: string(), Spaces :: [string() | binary()], AccessToken :: binary()) ->
+    #veil_document{} | no_return().
+%% ====================================================================
 add_user(Config, Login, Cert, Spaces, AccessToken) ->
 
     [CCM | _] = ?config(nodes, Config),
@@ -65,8 +84,9 @@ add_user(Config, Login, Cert, Spaces, AccessToken) ->
 %% @doc Evaluates meck:new(Module, [passthrough]) and meck:expect(Module, Method, Fun) on all
 %%      cluster nodes from given test Config.
 %%      For return value spac please see rpc:multicall/4.
+%%      Config shall be a proplist with at least {nodes, Nodes :: list()} entry.
 %% @end
--spec ct_mock(Config :: term(), Module :: atom(), Method :: atom(), Fun :: [term()]) ->
+-spec ct_mock(Config :: list(), Module :: atom(), Method :: atom(), Fun :: [term()]) ->
     {[term()], [term()]}.
 %% ====================================================================
 ct_mock(Config, Module, Method, Fun) ->
