@@ -157,4 +157,20 @@ for i in `seq 1 ${n_count}`; do
     fi
 done
 
+#####################################################################
+# Register in Global Registry
+#####################################################################
+
+if [[ "$CLUSTER_REGISTER_IN_GLOBAL_REGISTRY" == "true" ]]; then
+
+    if [[ `len "$GLOBAL_REGISTRY_NODES"` == 0 ]]; then
+        error "Global Registry nodes are not configured!"
+    fi
+
+    cluster_node=`nth "$CLUSTER_NODES" 1`
+    global_registry_node=`nth "$GLOBAL_REGISTRY_NODES" 1`
+
+    register_in_global_registry ${cluster_node} ${global_registry_node}
+fi
+
 exit 0
