@@ -173,7 +173,7 @@ function install_rpm {
     scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
     
     info "Installing $2 package on $1..."
-    ssh $1 "yum localinstall -y  $SETUP_DIR/$2" || error "Cannot install $2 package on $1"
+    ssh $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
 }
 
 function remove_cluster {
@@ -328,11 +328,13 @@ function start_client {
 function start_global_registry_db {
     info "Starting Global Registry DB..."
 
-    ssh $1 -tt "sed -i -e \"s/^-name .*/-name db@\"`node_name $1`\"/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/vm.args" || error "Cannot change Global Registry DB hostname on $1."
-    ssh $1 -tt "sed -i -e \"s/setcookie .*/setcookie globalregistry/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/vm.args" || error "Cannot change Global Registry DB cookie on $1."
-    ssh $1 -tt "sed -i -e \"s/bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /var/lib/globalregistry/bigcouchdb/database_node/etc/default.ini" || error "Cannot change Global Registry DB bind address on $1."
-    ssh $1 -tt "sed -i -e \"s/^admin =.*//\" /var/lib/globalregistry/bigcouchdb/database_node/etc/local.ini" || error "Cannot delete admin user from Global Registry DB on $1."
-    ssh $1 -tt "nohup /var/lib/globalregistry/bigcouchdb/database_node/bin/bigcouch start & ; sleep 5" || error "Cannot start Global Registry DB on $1."
+    ssh $1 -tt "mkdir -p /opt/bigcouch" || error "Cannot create directory for Global Registry DB on $1."
+    ssh $1 -tt "cp -R /var/lib/globalregistry/bigcouchdb/database_node/* /opt/bigcouch" || error "Cannot copy Global Registry DB files on $1."
+    ssh $1 -tt "sed -i -e \"s/^-name .*/-name db@\"`node_name $1`\"/\" /opt/bigcouch/etc/vm.args" || error "Cannot change Global Registry DB hostname on $1."
+    ssh $1 -tt "sed -i -e \"s/setcookie .*/setcookie globalregistry/\" /opt/bigcouch/etc/vm.args" || error "Cannot change Global Registry DB cookie on $1."
+    ssh $1 -tt "sed -i -e \"s/bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/bigcouch/etc/default.ini" || error "Cannot change Global Registry DB bind address on $1."
+    ssh $1 -tt "sed -i -e \"s/^admin =.*//\" /opt/bigcouch/etc/local.ini" || error "Cannot delete admin user from Global Registry DB on $1."
+    ssh $1 -tt "nohup /opt/bigcouch/bin/bigcouch start & ; sleep 5" || error "Cannot start Global Registry DB on $1."
 }
 
 # $1 - target host
