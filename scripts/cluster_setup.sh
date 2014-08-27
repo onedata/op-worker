@@ -33,11 +33,20 @@ info "Fetching platform configuration from $MASTER:$CONFIG_PATH ..."
 scp $MASTER:$CONFIG_PATH ./conf.sh || error "Cannot fetch platform config file."
 source ./conf.sh || error "Cannot find platform config file. Please try again (redeploy)."
 
-if [[ -z "$CREATE_USER_IN_DB" ]]; then
-    echo "Create user in DB not exported."
-    export CREATE_USER_IN_DB="true"
-else
-    echo "Create user in DB exported: $CREATE_USER_IN_DB."
+if [[ -z "$CLUSTER_CREATE_USER_IN_DB" ]]; then
+    export CLUSTER_CREATE_USER_IN_DB="true"
+fi
+
+#####################################################################
+# Validate platform configuration
+#####################################################################
+
+if [[ `len "$CLUSTER_NODES"` == 0 ]]; then
+    error "VeilCluster nodes are not configured!"
+fi
+
+if [[ `len "$CLUSTER_DB_NODES"` == 0 ]]; then
+    error "VeilCluster DB nodes are not configured!"
 fi
 
 #####################################################################
@@ -46,125 +55,105 @@ fi
 
 ALL_NODES="$CLUSTER_NODES ; $CLUSTER_DB_NODES"
 ALL_NODES=`echo $ALL_NODES | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
-n_count=`len "$ALL_NODES"`
 for node in $ALL_NODES; do
     [[
         "$node" != ""
-    ]] || continue
+    ]] || error "Invalid VeilCluster node!"
 
     install_veilcluster_package $node veilcluster.rpm
+    sleep 10
 done
 
 #####################################################################
 # Start VeilCluster nodes
 #####################################################################
 
+node=`nth "$CLUSTER_NODES" 1`
+start_cluster node
+
 n_count=`len "$CLUSTER_NODES"`
 for i in `seq 1 $n_count`; do
     node=`nth "$CLUSTER_NODES" $i`
 
-    [[
-        "$node" != ""
-    ]] || error "Invalid node configuration!"
-
-    start_cluster "$node"
     deploy_stamp "$node"
 done
+sleep 120
 
-########### SetupCluster Script Start ############
-#if [[ `len "$CLUSTER_DB_NODES"` == 0 ]]; then
-#    error "There are no configured DB Nodes !"
-#fi
-#
-#n_count=`len "$CLUSTER_NODES"`
-#for i in `seq 1 $n_count`; do
-#    node=`nth "$CLUSTER_NODES" $i`
-#
-#    [[
-#        "$node" != ""
-#    ]] || error "Invalid node configuration!"
-#
-#    start_cluster "$node" $i $n_count
-#    deploy_stamp "$node"
-#    sleep 10
-#done
-#sleep 120
-#
-#
-########### SetupValidation Script Start ############
-#info "Setup Validation starts ..."
-#
-#n_count=`len "$CLUSTER_NODES"`
-#for i in `seq 1 $n_count`; do
-#
-#    node=`nth "$CLUSTER_NODES" $i`
-#
-#    [[
-#        "$node" != ""
-#    ]] || error "Invalid node configuration!"
-#
-#    pcount=`ssh $node "ps aux | grep beam | wc -l"`
-#
-#    [[
-#        $pcount -ge 2
-#    ]] || error "Could not find cluster processes on the node !"
-#
-#done
-#
-#
-########### Nagios health check ############
-#cluster=`nth "$CLUSTER_NODES" 1`
-#cluster=${cluster#*@}
-#
-#curl -k -X GET https://$cluster/nagios > hc.xml || error "Cannot get Nagios status from node '$cluster'"
-#stat=`cat hc.xml | sed -e 's/>/>\n/g' | grep -v "status=\"ok\"" | grep status`
-#[[ "$stat" == "" ]] || error "Cluster HealthCheck failed: \n$stat"
-#
-#
-########### RegisterUsers Script Start ############
-#cnode=`nth "$CLUSTER_NODES" 1`
-#scp reg_user.erl $cnode:/tmp
-#escript_bin=`ssh $cnode "find /opt/veil/files/veil_cluster_node/ -name escript | head -1"`
-#reg_run="$escript_bin /tmp/reg_user.erl"
-#
-#n_count=`len "$CLIENT_NODES"`
-#for i in `seq 1 $n_count`; do
-#
-#    node=`nth "$CLIENT_NODES" $i`
-#    node_name=`node_name $cnode`
-#    cert=`nth "$CLIENT_CERTS" $i`
-#
-#    [[
-#        "$node" != ""
-#    ]] || error "Invalid node configuration!"
-#
-#    [[
-#        "$cert" != ""
-#    ]] || continue
-#
-#    user_name=${node%%@*}
-#    if [[ "$user_name" == "" ]]; then
-#        user_name="root"
-#    fi
-#
-#    ## Add user to all cluster nodes
-#    n_count=`len "$CLUSTER_NODES"`
-#    for ci in `seq 1 $n_count`; do
-#        lcnode=`nth "$CLUSTER_NODES" $ci`
-#	ssh $lcnode "useradd $user_name 2> /dev/null || exit 0"
-#    done
-#
-#    if [[ "$CREATE_USER_IN_DB" == "true" ]]; then
-#        cmm="$reg_run $node_name $user_name '$user_name@test.com' /tmp/tmp_cert.pem"
-#
-#        info "Trying to register $user_name using cluster node $cnode (command: $cmm)"
-#
-#        scp $cert tmp_cert.pem
-#        scp tmp_cert.pem $cnode:/tmp/
-#
-#        ssh $cnode "$cmm"
-#    fi
-#
-#done
+#####################################################################
+# Validate VeilCluster nodes start
+#####################################################################
+
+info "Validating VeilCluster nodes start..."
+
+n_count=`len "$CLUSTER_NODES"`
+for i in `seq 1 $n_count`; do
+    node=`nth "$CLUSTER_NODES" $i`
+    pcount=`ssh $node "ps aux | grep beam | wc -l"`
+
+    [[
+        $pcount -ge 2
+    ]] || error "Could not find VeilCluster processes on $node!"
+done
+
+#####################################################################
+# Nagios health check
+#####################################################################
+
+info "Nagios health check..."
+
+cluster=`nth "$CLUSTER_NODES" 1`
+cluster=${cluster#*@}
+
+curl -k -X GET https://$cluster/nagios > hc.xml || error "Cannot get Nagios status from node '$cluster'"
+stat=`cat hc.xml | sed -e 's/>/>\n/g' | grep -v "status=\"ok\"" | grep status`
+[[ "$stat" == "" ]] || error "Cluster HealthCheck failed: \n$stat"
+
+#####################################################################
+# Register user in DB
+#####################################################################
+
+cnode=`nth "$CLUSTER_NODES" 1`
+scp reg_user.erl $cnode:/tmp
+escript_bin=`ssh $cnode "find /opt/veil/files/veil_cluster_node/ -name escript | head -1"`
+reg_run="$escript_bin /tmp/reg_user.erl"
+
+n_count=`len "$CLIENT_NODES"`
+for i in `seq 1 $n_count`; do
+
+    node=`nth "$CLIENT_NODES" $i`
+    node_name=`node_name $cnode`
+    cert=`nth "$CLIENT_CERTS" $i`
+
+    [[
+        "$node" != ""
+    ]] || error "Invalid VeilClient node!"
+
+    [[
+        "$cert" != ""
+    ]] || error "Invalid VeilClient certificate!"
+
+    user_name=${node%%@*}
+    if [[ "$user_name" == "" ]]; then
+        user_name="root"
+    fi
+
+    ## Add user to all cluster nodes
+    n_count=`len "$CLUSTER_NODES"`
+    for ci in `seq 1 $n_count`; do
+        lcnode=`nth "$CLUSTER_NODES" $ci`
+	ssh $lcnode "useradd $user_name 2> /dev/null || exit 0"
+    done
+
+    if [[ "$CLUSTER_CREATE_USER_IN_DB" == "true" ]]; then
+        cmm="$reg_run $node_name $user_name '$user_name@test.com' /tmp/tmp_cert.pem"
+
+        info "Trying to register $user_name using cluster node $cnode (command: $cmm)"
+
+        scp $cert tmp_cert.pem
+        scp tmp_cert.pem $cnode:/tmp/
+
+        ssh $cnode "$cmm"
+    fi
+done
 
 exit 0

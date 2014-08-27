@@ -39,7 +39,6 @@ source ./conf.sh || error "Cannot find platform config file. Please try again (r
 
 ALL_NODES="$CLUSTER_NODES ; $CLUSTER_DB_NODES ; $GLOBAL_REGISTRY_NODES ; $GLOBAL_REGISTRY_DB_NODES ; $CLIENT_NODES"
 ALL_NODES=`echo $ALL_NODES | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
-n_count=`len "$ALL_NODES"`
 for node in $ALL_NODES; do
 
     [[
@@ -49,7 +48,6 @@ for node in $ALL_NODES; do
     ssh $node "mkdir -p $SETUP_DIR"
 
     remove_cluster            "$node"
-    remove_cluster_db         "$node"
     remove_global_registry    "$node"
     remove_global_registry_db "$node"
 
@@ -59,16 +57,27 @@ for node in $ALL_NODES; do
 done
 
 #####################################################################
+# Validate platform configuration
+#####################################################################
+
+if [[ `len "$GLOBAL_REGISTRY_NODES"` == 0 ]]; then
+    error "Global Registry nodes are not configured!"
+fi
+
+if [[ `len "$GLOBAL_REGISTRY_DB_NODES"` == 0 ]]; then
+    error "Global Registry DB nodes are not configured!"
+fi
+
+#####################################################################
 # Install Global Registry package
 #####################################################################
 
 ALL_NODES="$GLOBAL_REGISTRY_NODES ; $GLOBAL_REGISTRY_DB_NODES"
 ALL_NODES=`echo $ALL_NODES | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
-n_count=`len "$ALL_NODES"`
 for node in $ALL_NODES; do
     [[
         "$node" != ""
-    ]] || continue
+    ]] || error "Invalid Global Registry node!"
 
     install_global_registry_package $node globalregistry.rpm
 done
@@ -81,10 +90,6 @@ n_count=`len "$GLOBAL_REGISTRY_DB_NODES"`
 for i in `seq 1 $n_count`; do
     node=`nth "$GLOBAL_REGISTRY_DB_NODES" $i`
 
-    [[
-        "$node" != ""
-    ]] || error "Invalid node configuration!"
-
     start_global_registry_db "$node" $i
     deploy_stamp "$node"
 done
@@ -93,11 +98,7 @@ done
 # Start Global Registry nodes
 #####################################################################
 
-node=`nth "$GLOBAL_REGISTRY_DB_NODES" 1`
-if [[ "$node" == "" ]]; then
-    error "Invalid node configuration!"
-else
-    start_global_registry "$node"
-fi
+node=`nth "$GLOBAL_REGISTRY_NODES" 1`
+start_global_registry "$node"
 
 exit 0

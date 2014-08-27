@@ -141,7 +141,7 @@ function install_veilcluster_package {
 
     info "Installing $2 package on $1..."
     multicast_address=`strip_login $MASTER`
-    ssh $1 "export ONEPANEL_MULTICAST_ADDRESS=$multicast_address ; echo \"MA: \$ONEPANEL_MULTICAST_ADDRESS\" ; rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
+    ssh $1 "export ONEPANEL_MULTICAST_ADDRESS=$multicast_address ; rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
 }
 
 function start_cluster {
@@ -187,26 +187,26 @@ function start_cluster {
         {\"Database hosts\",      [$db_hosts]}.
         {\"Storage paths\",       [$storage_paths]}.
     \" > $SETUP_DIR/install.cfg"
+
+    ssh -tt -q $1 "onepanel_setup --install $SETUP_DIR/install.cfg" || error "Cannot setup and start VeilCluster."
 }
 
 function remove_cluster {
     info "Removing VeilCluster..."
     
-    ssh $1 "echo \"
-        {what_to_do, manage_veil}.
-        {what_to_do_veil, remove_nodes}.
-        {confirm_veil_nodes_deletion, yes}.
-    \" > $SETUP_DIR/remove_cluster.batch" 
-    
-    if [[ $(ssh $1 "which veil_setup 2> /dev/null") == 0 ]]; then 
-        screen -dmS veil_setup ssh $1 "veil_setup -batch $SETUP_DIR/remove_cluster.batch"
-        screen_wait veil_setup 2 
-        screen -XS veil_setup quit
+    if [[ $(ssh $1 "which onepanel_setup 2> /dev/null") == 0 ]]; then
+        screen -dmS onepanel_setup ssh $1 "onepanel_setup --uninstall"
+        screen_wait onepanel_setup 2
+        screen -XS onepanel_setup quit
     fi
+
+    cluster_storage_paths=`echo "$CLUSTER_STORAGE_PATHS" | tr ";" "\n"`
+    for storage_path in ${cluster_storage_paths}; do
+        ssh $1 "[ -z $storage_path ] || rm -rf $storage_path/users $storage_path/groups"
+    done
     
-    ssh $1 "rpm -e veil 2> /dev/null"
-    ssh $1 "[ -z $CLUSTER_DIO_ROOT ] || rm -rf $CLUSTER_DIO_ROOT/users $CLUSTER_DIO_ROOT/groups"
-    ssh $1 "rm -rf /opt/veil"
+    ssh $1 "rpm -e veil 2> /dev/null" || error "Cannot uninstall VeilCluster."
+    ssh $1 "rm -rf /opt/veil" || error "Cannot remove VeilCluster directory."
 }
 
 #####################################################################
@@ -313,10 +313,10 @@ function start_global_registry_db {
     ssh -tt -q $1 "ulimit -n 65535 ; ulimit -u 65535 ; nohup /opt/bigcouch/bin/bigcouch >/dev/null 2>&1 & ; sleep 5" 2> /dev/null || error "Cannot start Global Registry DB on $1."
 
     if [[ $2 != 1 ]]; then
-        master_db=`nth_node_name "$GLOBAL_REGISTRY_DB_NODES" 1`
+        first_db=`nth_node_name "$GLOBAL_REGISTRY_DB_NODES" 1`
         current_db_host=`nth_node_name "$GLOBAL_REGISTRY_DB_NODES" "$2"`
-        ssh $1 "curl -u admin:password --connect-timeout 5 -s -X GET http://$master_db:5986/nodes/_all_docs" || error "Cannot establish connection to primary Global Registry DB on $1."
-        ssh $1 "curl -u admin:password --connect-timeout 5 -s -X PUT http://$master_db:5986/nodes/db@$current_db_host -d '{}'" || error "Cannot extend Global Registry DB with node db@$current_db_host on $1."
+        ssh $1 "curl -u admin:password --connect-timeout 5 -s -X GET http://$first_db:5986/nodes/_all_docs" || error "Cannot establish connection to primary Global Registry DB on $1."
+        ssh $1 "curl -u admin:password --connect-timeout 5 -s -X PUT http://$first_db:5986/nodes/db@$current_db_host -d '{}'" || error "Cannot extend Global Registry DB with node db@$current_db_host on $1."
     fi
 }
 
