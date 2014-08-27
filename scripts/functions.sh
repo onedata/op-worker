@@ -123,6 +123,11 @@ function node_name {
     echo `ssh $1 "hostname -f"`
 }
 
+# $1 - target host
+function strip_login {
+    echo $1 | sed 's/^[^@]*@//'
+}
+
 #####################################################################
 # VeilCluster Functions
 #####################################################################
@@ -135,59 +140,53 @@ function install_veilcluster_package {
     scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
 
     info "Installing $2 package on $1..."
-    multicast_address=`echo $MASTER | sed 's/^[^@]*@//'`
+    multicast_address=`strip_login $MASTER`
     ssh $1 "ONEPANEL_MULTICAST_ADDRESS=$multicast_address ; rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
 }
 
 function start_cluster {
     info "Starting VeilCluster..."
 
-    dbs=`echo $CLUSTER_DB_NODES | tr ";" "\n"`
-    idb_nodes=""
-    for db in $dbs; do
-        idb_nodes="$idb_nodes,db@`node_name $db`"
+    db_hosts=""
+    db_nodes=`echo "$CLUSTER_DB_NODES" | tr ";" "\n"`
+    for db_node in ${db_nodes}; do
+        db_hosts="\"`strip_login "$db_node"`\",$db_hosts"
     done
-    idb_nodes=`echo $idb_nodes | sed -e 's/,//'`
-    cluser_type=$(nth "$CLUSTER_TYPES" $2)
+    db_hosts=`echo "$db_hosts" | sed -e 's/.$//'`
+
+    i=1
+    ccm_hosts=""
+    worker_hosts=""
+    cluster_types=`echo "$CLUSTER_TYPES" | tr ";" "\n"`
+    for cluster_type in ${cluster_types}; do
+        cluster_node=`nth "$CLUSTER_NODES" $i`
+        if [[ ${cluster_type} == "ccm_plus_worker" ]]; then
+            ccm_hosts="\"`strip_login "$cluster_node"`\",$ccm_hosts"
+            worker_hosts="\"`strip_login "$cluster_node"`\",$worker_hosts"
+        else
+            worker_hosts="\"`strip_login "$cluster_node"`\",$worker_hosts"
+        fi
+        i=$(( i+1 ))
+    done
+    ccm_hosts=`echo "$ccm_hosts" | sed -e 's/.$//'`
+    worker_hosts=`echo "$worker_hosts" | sed -e 's/.$//'`
+
+    main_ccm_host=`echo "$ccm_hosts" | awk -F ',' "{print \$1}" | xargs`
+
+    storage_paths=""
+    cluster_storage_paths=`echo "$CLUSTER_STORAGE_PATHS" | tr ";" "\n"`
+    for storage_path in ${cluster_storage_paths}; do
+        storage_paths="\"$storage_path\",$storage_paths"
+    done
+    storage_paths=`echo "$storage_paths" | sed -e 's/.$//'`
+
     ssh $1 "echo \"
-        {what_to_do, manage_veil}.
-        {db_nodes_installed, yes}.
-        {retry, no}.
-        {define_db_nodes, \\\"$idb_nodes\\\"}.
-        {settings_ok_db, ok}.
-        {settings_ok, ok}.
-        {new_node_type, $cluser_type}.
-    \" > $SETUP_DIR/start_cluster.batch"
-
-    if [[ $2 == 1 ]]; then
-        n_count=`len "$STORAGE_GROUP_NAMES"`
-
-        ssh $1 "echo \"
-            {what_to_do_veil, new_cluster}.
-            {veilfs_storage_root, \\\"$CLUSTER_DIO_ROOT\\\"}.
-            {want_to_create_storage$((n_count+1)), no}.
-            {accept_created_storage, yes}.
-        \" >> $SETUP_DIR/start_cluster.batch"
-
-        for i in `seq 1 $n_count`; do
-            name=`nth "$STORAGE_GROUP_NAMES" $i`
-            dir=`nth "$STORAGE_GROUP_DIRS" $i`
-            ssh $1 "echo \"
-                {want_to_create_storage${i}, yes}.
-                {storage_group_name${i}, \\\"$name\\\"}.
-                {storage_group_directory${i}, \\\"$dir\\\"}.
-            \" >> $SETUP_DIR/start_cluster.batch"
-        done
-    else
-        master_hostname=`nth_node_name "$CLUSTER_NODES" 1`
-        ssh $1 "echo \"
-            {what_to_do_veil, extend_cluster}.
-            {ip_or_hostname, \\\"$master_hostname\\\"}.
-        \" >> $SETUP_DIR/start_cluster.batch"
-    fi
-    ssh -tt $1 "veil_setup -batch $SETUP_DIR/start_cluster.batch" || error "Cannot setup/start cluster"
-    ssh -tt $1 "/etc/init.d/veil start" || error "Cannot setup/start cluster"
-
+        {\"Main CCM host\",       \"$main_ccm_host\"}.
+        {\"CCM hosts\",           [$ccm_hosts]}.
+        {\"Worker hosts\",        [$worker_hosts]}.
+        {\"Database hosts\",      [$db_hosts]}.
+        {\"Storage paths\",       [$storage_paths]}.
+    \" > $SETUP_DIR/install.cfg"
 }
 
 function remove_cluster {
@@ -208,64 +207,6 @@ function remove_cluster {
     ssh $1 "rpm -e veil 2> /dev/null"
     ssh $1 "[ -z $CLUSTER_DIO_ROOT ] || rm -rf $CLUSTER_DIO_ROOT/users $CLUSTER_DIO_ROOT/groups"
     ssh $1 "rm -rf /opt/veil"
-}
-
-# $1 - target host
-function remove_cluster_db {
-    info "Removing VeilCluster DB..."
-    
-    ssh $1 "echo \"
-        {what_to_do, manage_db}.
-        {what_to_do_db, remove_node}.
-    \" > $SETUP_DIR/remove_db.batch" 
-    
-    if [[ $(ssh $1 "which veil_setup 2> /dev/null") == 0 ]]; then 
-        screen -dmS veil_setup ssh $1 "veil_setup -batch $SETUP_DIR/remove_db.batch"
-        i=5
-        while i; do
-            if screen -list | grep "veil_setup"; then
-                sleep 1
-            else 
-                break
-            fi
-            
-            i=$(( i-1 ))
-        done 
-        screen -XS veil_setup quit
-    fi
-
-    ssh $1 "rm -rf /opt/bigcouch"
-}
-
-# $1 - target host
-# $2 - db node numer
-# $3 - total db node count
-function start_cluster_db {
-    info "Starting VeilCluster DB..."
-
-    ssh $1 "sed -i -e \"s/bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/veil/files/database_node/etc/default.ini" || error "Cannot change db bind address on $1."
-
-    ssh $1 "echo \"
-        {what_to_do, manage_db}.
-    \" > $SETUP_DIR/start_db.batch"
-
-    if [[ $2 == 1 ]]; then
-        ssh $1 "echo \"
-            {what_to_do_db, new_cluster}.
-            {settings_ok_db, ok}.
-        \" >> $SETUP_DIR/start_db.batch"
-    else
-        master_db=$(node_name $CLUSTER_DB_NODES 1)
-        ssh $1 "echo \"
-            {what_to_do_db, extend_cluster}.
-            {define_node_to_extend, \\\"$master_db\\\"}.
-            {settings_ok_extend_db, ok}.
-        \" >> $SETUP_DIR/start_db.batch"
-    fi
-
-    ssh $1 "veil_setup -batch $SETUP_DIR/start_db.batch" || error "Cannot setup/start DB"
-    sleep 5
-    ssh -tt -q $1 "ulimit -n 65535 ; ulimit -u 65535 ; nohup /opt/bigcouch/bin/bigcouch >/dev/null 2>&1 & ; sleep 5" 2> /dev/null
 }
 
 #####################################################################
@@ -392,13 +333,13 @@ function start_global_registry {
     info "Starting Global Registry..."
 
     dbs=`echo $GLOBAL_REGISTRY_DB_NODES | tr ";" "\n"`
-    idb_nodes=""
+    db_nodes=""
     for db in $dbs; do
-        idb_nodes="'db@`node_name $db`',$idb_nodes"
+        db_nodes="'db@`node_name $db`',$db_nodes"
     done
-    idb_nodes=`echo $idb_nodes | sed -e 's/.$//'`
+    db_nodes=`echo $db_nodes | sed -e 's/.$//'`
 
-    ssh $1 "sed -i -e \"s/db_nodes, .*/db_nodes, [$idb_nodes] },/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry DB nodes on $1."
+    ssh $1 "sed -i -e \"s/db_nodes, .*/db_nodes, [$db_nodes] },/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry DB nodes on $1."
     ssh $1 "sed -i -e \"s/rest_cert_domain, .*/rest_cert_domain, \\\"$GLOBAL_REGISTRY_REST_CERT_DOMAIN\\\" }/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry REST certificate domain on $1."
     ssh $1 "sed -i -e \"s/^-name .*/-name globalregistry@\"`node_name $1`\"/\" /etc/globalregistry/vm.args" || error "Cannot set Global Registry hostname on $1."
     ssh -tt -q $1 "ulimit -n 65535 ; ulimit -u 65535 ; /etc/init.d/globalregistry start 2>&1" 2> /dev/null || error "Cannot start Global Registry on $1."

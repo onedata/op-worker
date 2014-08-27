@@ -55,21 +55,22 @@ for node in $ALL_NODES; do
     install_veilcluster_package $node veilcluster.rpm
 done
 
+#####################################################################
+# Start VeilCluster nodes
+#####################################################################
 
-########### SetupDB Script Start ############
-#n_count=`len "$CLUSTER_DB_NODES"`
-#for i in `seq 1 $n_count`; do
-#    node=`nth "$CLUSTER_DB_NODES" $i`
-#
-#    [[
-#        "$node" != ""
-#    ]] || error "Invalid node configuration!"
-#
-#    start_db "$node" $i $n_count
-#    deploy_stamp "$node"
-#done
-#
-#
+n_count=`len "$CLUSTER_NODES"`
+for i in `seq 1 $n_count`; do
+    node=`nth "$CLUSTER_NODES" $i`
+
+    [[
+        "$node" != ""
+    ]] || error "Invalid node configuration!"
+
+    start_cluster "$node"
+    deploy_stamp "$node"
+done
+
 ########### SetupCluster Script Start ############
 #if [[ `len "$CLUSTER_DB_NODES"` == 0 ]]; then
 #    error "There are no configured DB Nodes !"
