@@ -151,7 +151,8 @@ function start_cluster {
     db_nodes=`echo "$CLUSTER_DB_NODES" | tr ";" "\n"`
     for db_node in ${db_nodes}; do
         db_hosts="\\\"`strip_login "$db_node"`\\\",$db_hosts"
-        ssh $db_node "sed -i -e \"s/^bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/veil/files/database_node/etc/default.ini" || error "Cannot set VeilCluster DB bind address on $db_node."
+        echo "DB node: $db_node"
+        ssh ${db_node} "sed -i -e \"s/^bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/veil/files/database_node/etc/default.ini" || error "Cannot set VeilCluster DB bind address on $db_node."
     done
     db_hosts=`echo "$db_hosts" | sed -e 's/.$//'`
 
