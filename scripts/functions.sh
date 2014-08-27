@@ -23,12 +23,15 @@ if [[ -z "$STAMP_DIR" ]]; then
     export STAMP_DIR="${SETUP_DIR}-stamp"
 fi
 
+###############################################   Utility Functions   ###############################################
+
 # $1 - list of items seperated with ';'
 # $2 - which element has to be returned, starting with 1
 function nth {
     echo "$1" | awk -F ';' "{print \$$2}" | xargs
 }
 
+# $1 - list of items seperated with ';'
 function len {
     echo "$1" | awk -F ';' '{print NF}'    
 }
@@ -78,19 +81,21 @@ function info {
     echo "---> [Node: $node] $1"
 }
 
-# $1 platform master's hostname
+# $1 - platform master's hostname
 function get_platform_config {
     info "Fetching platform configuration from $1:$CONFIG_PATH ..."
     scp $1:$CONFIG_PATH ./conf.sh || error "Cannot fetch platform config file."
     source ./conf.sh || error "Cannot find platform config file."
 }
 
-# $1 node
-# $2 relative path
+# $1 - node
+# $2 - relative path
 function absolute_path_on_node {
     ssh $1 "cd $2 && pwd"
 }
 
+# $1 - process name
+# $2 - number of seconds
 function screen_wait {
     i=$2
     while i; do
@@ -104,19 +109,34 @@ function screen_wait {
     done
 }
 
+# $1 - list of hosts seperated with ';'
+# $2 - name of which node has to be returned, starting with 1
 function nth_node_name {
     local node=$(nth "$1" $2)
     echo $(ssh $node "hostname -f")
 }
 
+# $1 - target host
 function node_name {
     echo `ssh $1 "hostname -f"`
 }
 
+# $1 - target host
+# $2 - rpm name
+function install_rpm {
+    info "Moving $2 package to $1..."
+    ssh $1 "mkdir -p $SETUP_DIR" || error "Cannot create tmp setup dir '$SETUP_DIR' on $1"
+    scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
+    
+    info "Installing $2 package on $1..."
+    ssh $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
+}
+
+###############################################   VeilCluster Functions   ###############################################
 
 function start_cluster {
     info "Starting VeilCluster..."
- 
+
     dbs=`echo $CLUSTER_DB_NODES | tr ";" "\n"`
     idb_nodes=""
     for db in $dbs; do
@@ -133,7 +153,7 @@ function start_cluster {
         {settings_ok, ok}.
         {new_node_type, $cluser_type}.
     \" > $SETUP_DIR/start_cluster.batch"
-    
+
     if [[ $2 == 1 ]]; then
         n_count=`len "$STORAGE_GROUP_NAMES"`
 
@@ -143,7 +163,7 @@ function start_cluster {
             {want_to_create_storage$((n_count+1)), no}.
             {accept_created_storage, yes}.
         \" >> $SETUP_DIR/start_cluster.batch"
-        
+
         for i in `seq 1 $n_count`; do
             name=`nth "$STORAGE_GROUP_NAMES" $i`
             dir=`nth "$STORAGE_GROUP_DIRS" $i`
@@ -153,27 +173,16 @@ function start_cluster {
                 {storage_group_directory${i}, \\\"$dir\\\"}.
             \" >> $SETUP_DIR/start_cluster.batch"
         done
-    else 
+    else
         master_hostname=`nth_node_name "$CLUSTER_NODES" 1`
         ssh $1 "echo \"
             {what_to_do_veil, extend_cluster}.
             {ip_or_hostname, \\\"$master_hostname\\\"}.
         \" >> $SETUP_DIR/start_cluster.batch"
-    fi 
+    fi
     ssh -tt $1 "veil_setup -batch $SETUP_DIR/start_cluster.batch" || error "Cannot setup/start cluster"
     ssh -tt $1 "/etc/init.d/veil start" || error "Cannot setup/start cluster"
-    
-}
 
-# $1 - target host
-# $2 - rpm name
-function install_rpm {
-    info "Moving $2 package to $1..."
-    ssh $1 "mkdir -p $SETUP_DIR" || error "Cannot create tmp setup dir '$SETUP_DIR' on $1"
-    scp *.rpm $1:$SETUP_DIR/$2 || error "Moving $2 file failed on $1"
-    
-    info "Installing $2 package on $1..."
-    ssh $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
 }
 
 function remove_cluster {
@@ -251,27 +260,10 @@ function start_cluster_db {
 
     ssh $1 "veil_setup -batch $SETUP_DIR/start_db.batch" || error "Cannot setup/start DB"
     sleep 5
-    ssh $1 -tt -q "ulimit -n 65535 ; ulimit -u 65535 ; nohup /opt/bigcouch/bin/bigcouch start & ; sleep 5"
+    ssh -tt -q $1 "ulimit -n 65535 ; ulimit -u 65535 ; nohup /opt/bigcouch/bin/bigcouch >/dev/null 2>&1 & ; sleep 5" 2> /dev/null
 }
 
-
-
-# $1 - target host
-# $2 - target mountpoint
-function remove_client {
-    info "Removing VeilClient..."
-
-    RUID=`ssh $1 "echo \\\$UID"`
-    ssh $1 "killall -9 veilFuse 2> /dev/null"
-    ssh $1 "fusermount -u $2 2> /dev/null"
-    ssh $1 "rm -rf $2"
-    ssh $1 "rm -rf ${SETUP_DIR}_${RUID}"
-
-    ssh $1 'rm -rf ~/veilFuse'
-    if [[ "$RUID" == "0" ]]; then
-        ssh $1 'yum remove veilclient -y 2> /dev/null'
-    fi
-}
+###############################################   VeilClient Functions   ###############################################
 
 # $1 - target host
 # $2 - target mountpoint
@@ -300,6 +292,10 @@ function install_client {
     fi
 }
 
+# $1 - target host
+# $2 - target mountpoint
+# $3 - peer certificate path
+# $4 - client node number
 function start_client {
     info "Starting VeilClient on $1..."
 
@@ -325,6 +321,25 @@ function start_client {
 }
 
 # $1 - target host
+# $2 - target mountpoint
+function remove_client {
+    info "Removing VeilClient..."
+
+    RUID=`ssh $1 "echo \\\$UID"`
+    ssh $1 "killall -9 veilFuse 2> /dev/null"
+    ssh $1 "fusermount -u $2 2> /dev/null"
+    ssh $1 "rm -rf $2"
+    ssh $1 "rm -rf ${SETUP_DIR}_${RUID}"
+
+    ssh $1 'rm -rf ~/veilFuse'
+    if [[ "$RUID" == "0" ]]; then
+        ssh $1 'yum remove veilclient -y 2> /dev/null'
+    fi
+}
+
+###############################################   Global Registry Functions   ###############################################
+
+# $1 - target host
 # $2 - db node numer
 function start_global_registry_db {
     info "Starting Global Registry DB..."
@@ -334,7 +349,7 @@ function start_global_registry_db {
     ssh $1 "sed -i -e \"s/^-name .*/-name db@\"`node_name $1`\"/\" /opt/bigcouch/etc/vm.args" || error "Cannot set Global Registry DB hostname on $1."
     ssh $1 "sed -i -e \"s/^-setcookie .*/-setcookie globalregistry/\" /opt/bigcouch/etc/vm.args" || error "Cannot set Global Registry DB cookie on $1."
     ssh $1 "sed -i -e \"s/^bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/bigcouch/etc/default.ini" || error "Cannot set Global Registry DB bind address on $1."
-    ssh -tt -q $1 "ulimit -n 65535 ; ulimit -u 65535 ; nohup /opt/bigcouch/bin/bigcouch > /dev/null 2>&1 & ; sleep 5" 2> /dev/null || error "Cannot start Global Registry DB on $1."
+    ssh -tt -q $1 "ulimit -n 65535 ; ulimit -u 65535 ; nohup /opt/bigcouch/bin/bigcouch >/dev/null 2>&1 & ; sleep 5" 2> /dev/null || error "Cannot start Global Registry DB on $1."
 
     if [[ $2 != 1 ]]; then
         master_db=`nth_node_name "$GLOBAL_REGISTRY_DB_NODES" 1`
@@ -352,6 +367,7 @@ function remove_global_registry_db {
     ssh $1 "rm -rf /var/lib/globalregistry" || error "Cannot remove Global Registry DB on $1."
 }
 
+# $1 - target host
 function start_global_registry {
     info "Starting Global Registry..."
 
@@ -363,7 +379,7 @@ function start_global_registry {
     idb_nodes=`echo $idb_nodes | sed -e 's/.$//'`
 
     ssh $1 "sed -i -e \"s/db_nodes, .*/db_nodes, [$idb_nodes] },/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry DB nodes on $1."
-    ssh $1 "sed -i -e \"s/rest_cert_domain, .*/rest_cert_domain, \\\"onedata.org\\\" }/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry REST certificate domain on $1."
+    ssh $1 "sed -i -e \"s/rest_cert_domain, .*/rest_cert_domain, \\\"$GLOBAL_REGISTRY_REST_CERT_DOMAIN\\\" }/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry REST certificate domain on $1."
     ssh $1 "sed -i -e \"s/^-name .*/-name globalregistry@\"`node_name $1`\"/\" /etc/globalregistry/vm.args" || error "Cannot set Global Registry hostname on $1."
     ssh -tt -q $1 "ulimit -n 65535 ; ulimit -u 65535 ; /etc/init.d/globalregistry start 2>&1" 2> /dev/null || error "Cannot start Global Registry on $1."
 }

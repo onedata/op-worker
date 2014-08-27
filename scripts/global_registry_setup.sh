@@ -31,7 +31,6 @@ source ./conf.sh || error "Cannot find platform config file. Please try again (r
 ########## CleanUp Script Start ############
 ALL_NODES="$CLUSTER_NODES ; $CLUSTER_DB_NODES ; $GLOBAL_REGISTRY_NODES ; $GLOBAL_REGISTRY_DB_NODES ; $CLIENT_NODES"
 ALL_NODES=`echo $ALL_NODES | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
-
 n_count=`len "$ALL_NODES"`
 for node in $ALL_NODES; do
 
@@ -55,7 +54,6 @@ done
 ########## Install Global Registry RPM ############
 ALL_NODES="$GLOBAL_REGISTRY_NODES ; $GLOBAL_REGISTRY_DB_NODES"
 ALL_NODES=`echo $ALL_NODES | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
-
 n_count=`len "$ALL_NODES"`
 for node in $ALL_NODES; do
     [[

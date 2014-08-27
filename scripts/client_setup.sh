@@ -22,11 +22,14 @@ fi
 # Load funcion defs
 source ./functions.sh || exit 1
 
+
 ########## Load Platform config ############
 info "Fetching platform configuration from $MASTER:$CONFIG_PATH ..."
 scp $MASTER:$CONFIG_PATH ./conf.sh || error "Cannot fetch platform config file."
 source ./conf.sh || error "Cannot find platform config file. Please try again (redeploy)."
 
+
+########## Setup VeilClient nodes ############
 n_count=`len "$CLIENT_NODES"`
 for i in `seq 1 $n_count`; do
     node=`nth "$CLIENT_NODES" $i`
@@ -45,6 +48,8 @@ for i in `seq 1 $n_count`; do
     install_client "$node" "$mount" "$cert"
 done
 
+
+########## Start VeilClient nodes ############
 for i in `seq 1 $n_count`; do
     node=`nth "$CLIENT_NODES" $i`
     mount=`nth "$CLIENT_MOUNTS" $i`
