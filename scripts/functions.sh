@@ -333,14 +333,14 @@ function start_global_registry_db {
     ssh $1 -tt "cp -R /var/lib/globalregistry/bigcouchdb/database_node/* /opt/bigcouch" || error "Cannot copy Global Registry DB files on $1."
     ssh $1 -tt "sed -i -e \"s/^-name .*/-name db@\"`node_name $1`\"/\" /opt/bigcouch/etc/vm.args" || error "Cannot change Global Registry DB hostname on $1."
     ssh $1 -tt "sed -i -e \"s/^-setcookie .*/-setcookie globalregistry/\" /opt/bigcouch/etc/vm.args" || error "Cannot change Global Registry DB cookie on $1."
-    ssh $1 -tt "sed -i -e \"s/^admin =.*//\" /opt/bigcouch/etc/local.ini" || error "Cannot delete admin user from Global Registry DB on $1."
+    ssh $1 -tt "sed -i -e \"s/^bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/bigcouch/etc/default.ini" || error "Cannot change Global Registry DB bind address on $1."
     ssh $1 -tt "nohup /opt/bigcouch/bin/bigcouch start & ; sleep 5" || error "Cannot start Global Registry DB on $1."
 
     if [[ $2 != 1 ]]; then
-        primary_db=`nth "$GLOBAL_REGISTRY_DB_NODES" 1`
-        current_db_host=`nth "$GLOBAL_REGISTRY_DB_NODES" "$2"`
-        ssh $1 "curl -u admin:password --connect-timeout 5 -s -X GET http://$primary_db:5986/nodes/_all_docs" || error "Cannot establish connection to primary Global Registry DB on $1."
-        ssh $1 "curl -u admin:password --connect-timeout 5 -s -X PUT http://$primary_db:5986/nodes/db@$current_db_host -d '{}'" || error "Cannot extend Global Registry DB with node db@$current_db_host on $1."
+        master_db=`nth_node_name "$GLOBAL_REGISTRY_DB_NODES" 1`
+        current_db_host=`nth_node_name "$GLOBAL_REGISTRY_DB_NODES" "$2"`
+        ssh $1 "curl -u admin:password --connect-timeout 5 -s -X GET http://$master_db:5986/nodes/_all_docs" || error "Cannot establish connection to primary Global Registry DB on $1."
+        ssh $1 "curl -u admin:password --connect-timeout 5 -s -X PUT http://$master_db:5986/nodes/db@$current_db_host -d '{}'" || error "Cannot extend Global Registry DB with node db@$current_db_host on $1."
     fi
 }
 
