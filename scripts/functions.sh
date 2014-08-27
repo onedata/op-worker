@@ -187,11 +187,18 @@ function start_cluster {
     done
     storage_paths=`echo "$storage_paths" | sed -e 's/.$//'`
 
+    if [[ "$CLUSTER_REGISTER_IN_GLOBAL_REGISTRY" == "yes" ]]; then
+        register="yes"
+    else
+        register="no"
+    fi
+
     ssh $1 "echo \"{\\\"Main CCM host\\\",       \\\"$main_ccm_host\\\"}.
-    {\\\"CCM hosts\\\",           [$ccm_hosts]}.
-    {\\\"Worker hosts\\\",        [$worker_hosts]}.
-    {\\\"Database hosts\\\",      [$db_hosts]}.
-    {\\\"Storage paths\\\",       [$storage_paths]}.\" > $SETUP_DIR/install.cfg"
+    {\\\"CCM hosts\\\",                   [$ccm_hosts]}.
+    {\\\"Worker hosts\\\",                [$worker_hosts]}.
+    {\\\"Database hosts\\\",              [$db_hosts]}.
+    {\\\"Storage paths\\\",               [$storage_paths]}.
+    {\\\"Register in Global Registry\\\", $register}\" > $SETUP_DIR/install.cfg"
 
     ssh -tt -q $1 "onepanel_setup --install $SETUP_DIR/install.cfg 2>&1" 2>/dev/null || error "Cannot setup and start VeilCluster."
 }
@@ -223,8 +230,7 @@ function register_in_global_registry {
     # Add mappings in /etc/hosts
     global_registry_ip=`strip_login $2`
     ssh $1 "sed -i -e '/onedata.*/d' /etc/hosts" || error "Cannot remove old mappings from /etc/hosts for onedata domain on $cluster_node"
-    ssh $1 "echo \"
-    $global_registry_ip     onedata.org
+    ssh $1 "echo \"$global_registry_ip     onedata.org
     149.156.10.253          onedata.com\" >> /etc/hosts"
 }
 
