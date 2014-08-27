@@ -73,8 +73,17 @@ for i in `seq 1 $n_count`; do
 
     [[
         "$node" != ""
-    ]] || error "Invalid node configuration !"
+    ]] || error "Invalid node configuration!"
 
     start_global_registry_db "$node" $i
     deploy_stamp "$node"
 done
+
+
+########## Start Global Registry nodes ############
+node=`nth "$GLOBAL_REGISTRY_DB_NODES" 1`
+if [[ "$node" == "" ]]; then
+    error "Invalid node configuration!"
+else
+    start_global_registry "$node"
+fi

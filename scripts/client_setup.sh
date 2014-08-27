@@ -39,7 +39,7 @@ for i in `seq 1 $n_count`; do
         "$node" != "" &&  
         "$mount" != "" &&  
         "$cert" != "" 
-    ]] || error "Invalid node configuration !"
+    ]] || error "Invalid node configuration!"
     
     remove_client "$node" "$mount"
     install_client "$node" "$mount" "$cert"

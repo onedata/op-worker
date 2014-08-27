@@ -54,7 +54,7 @@ for i in `seq 1 $n_count`; do
     
     [[ 
         "$node" != ""
-    ]] || error "Invalid node configuration !"
+    ]] || error "Invalid node configuration!"
     
     start_db "$node" $i $n_count
     deploy_stamp "$node"
@@ -72,7 +72,7 @@ for i in `seq 1 $n_count`; do
 
     [[ 
         "$node" != ""
-    ]] || error "Invalid node configuration !"
+    ]] || error "Invalid node configuration!"
     
     start_cluster "$node" $i $n_count
     deploy_stamp "$node"
@@ -91,7 +91,7 @@ for i in `seq 1 $n_count`; do
 
     [[ 
         "$node" != ""
-    ]] || error "Invalid node configuration !"
+    ]] || error "Invalid node configuration!"
 
     pcount=`ssh $node "ps aux | grep beam | wc -l"`
 
@@ -126,7 +126,7 @@ for i in `seq 1 $n_count`; do
 
     [[ 
         "$node" != ""
-    ]] || error "Invalid node configuration !"
+    ]] || error "Invalid node configuration!"
 
     [[ 
         "$cert" != ""
