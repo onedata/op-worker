@@ -201,19 +201,19 @@ cluster_proxy_response_to_internal(#writeinfo{answer_status = ErrorStatus, bytes
 cluster_proxy_response_to_internal(#storageattibutes{answer = ErrorStatus} = Attrs) ->
     ErrorCode = fslogic_errors:veilerror_to_posix(fslogic_errors:normalize_error_code(ErrorStatus)),
     {ErrorCode, #st_stat{
-        st_atime = Attrs#storageattibutes.st_atime,
-        st_blksize = Attrs#storageattibutes.st_blksize,
-        st_blocks = Attrs#storageattibutes.st_blocks,
-        st_ctime = Attrs#storageattibutes.st_ctime,
-        st_dev = Attrs#storageattibutes.st_dev,
-        st_gid = Attrs#storageattibutes.st_gid,
-        st_ino = Attrs#storageattibutes.st_ino,
-        st_mode = Attrs#storageattibutes.st_mode,
-        st_mtime = Attrs#storageattibutes.st_mtime,
-        st_nlink = Attrs#storageattibutes.st_nlink,
-        st_rdev = Attrs#storageattibutes.st_rdev,
-        st_size = Attrs#storageattibutes.st_size,
-        st_uid = Attrs#storageattibutes.st_uid
+        st_atime = Attrs#storageattibutes.atime,
+        st_blksize = Attrs#storageattibutes.blksize,
+        st_blocks = Attrs#storageattibutes.blocks,
+        st_ctime = Attrs#storageattibutes.ctime,
+        st_dev = Attrs#storageattibutes.dev,
+        st_gid = Attrs#storageattibutes.gid,
+        st_ino = Attrs#storageattibutes.ino,
+        st_mode = Attrs#storageattibutes.mode,
+        st_mtime = Attrs#storageattibutes.mtime,
+        st_nlink = Attrs#storageattibutes.nlink,
+        st_rdev = Attrs#storageattibutes.rdev,
+        st_size = Attrs#storageattibutes.size,
+        st_uid = Attrs#storageattibutes.uid
     }};
 cluster_proxy_response_to_internal(Response) ->
     ?error("Received unknown ClusterProxy reponse: ~p", [Response]),

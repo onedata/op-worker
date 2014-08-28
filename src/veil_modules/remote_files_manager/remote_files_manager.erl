@@ -130,19 +130,19 @@ handle_message(Record) when is_record(Record, getattr) ->
     {ok, #st_stat{} = Stat} = storage_files_manager:getattr(Storage_helper_info, File),
     #storageattibutes{
         answer = ?VOK,
-        st_atime = Stat#st_stat.st_atime,
-        st_blksize = Stat#st_stat.st_blksize,
-        st_blocks = Stat#st_stat.st_blocks,
-        st_ctime = Stat#st_stat.st_ctime,
-        st_dev = Stat#st_stat.st_dev,
-        st_gid = Stat#st_stat.st_gid,
-        st_ino = Stat#st_stat.st_ino,
-        st_mode = Stat#st_stat.st_mode,
-        st_mtime = Stat#st_stat.st_mtime,
-        st_nlink = Stat#st_stat.st_nlink,
-        st_rdev = Stat#st_stat.st_rdev,
-        st_size = Stat#st_stat.st_size,
-        st_uid = Stat#st_stat.st_uid
+        atime = Stat#st_stat.st_atime,
+        blksize = Stat#st_stat.st_blksize,
+        blocks = Stat#st_stat.st_blocks,
+        ctime = Stat#st_stat.st_ctime,
+        dev = Stat#st_stat.st_dev,
+        gid = Stat#st_stat.st_gid,
+        ino = Stat#st_stat.st_ino,
+        mode = Stat#st_stat.st_mode,
+        mtime = Stat#st_stat.st_mtime,
+        nlink = Stat#st_stat.st_nlink,
+        rdev = Stat#st_stat.st_rdev,
+        size = Stat#st_stat.st_size,
+        uid = Stat#st_stat.st_uid
     };
 
 handle_message(Record) when is_record(Record, createfile) ->
