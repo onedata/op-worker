@@ -165,8 +165,7 @@ do_reroute(SpaceId, RequestBody) ->
     {ok, #space_info{providers = Providers}} = fslogic_objects:get_space({uuid, SpaceId}),
 
     [RerouteToProvider | _] = Providers,
-    {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(RerouteToProvider),
-    ?debug("VeilHelper Reroute to: ~p", [URLs]),
+    ?debug("VeilHelper Reroute to: ~p", [RerouteToProvider]),
     try
         Response = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
             fslogic_context:get_fuse_id(), #remotefilemangement{space_id = SpaceId, input = RequestBody, message_type = atom_to_list(element(1, RequestBody))}),

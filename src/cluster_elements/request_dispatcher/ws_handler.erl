@@ -491,7 +491,6 @@ decode_providermsg_pb(MsgBytes, DN) ->
                    end,
 
     #providermsg{message_type = MsgType, input = Input, fuse_id = FuseID} = DecodedBytes,
-    ?info("FuseID from providermsg: ~p", [FuseID]),
     FuseID1 = case FuseID of undefined -> "cluster_fid"; _ -> FuseID end,
     case MsgType of
         "clustermsg" ->
