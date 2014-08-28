@@ -17,8 +17,9 @@
 -define(default_post_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
 
 %% API
--export([allowed_methods/2, resource_exists/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
+-export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
 -export([get_binary/2, get_cdmi_object/2, put_binary/2, put_cdmi_object/2]).
+-export([stream_file/6]).
 
 %% allowed_methods/2
 %% ====================================================================
@@ -30,6 +31,22 @@
 %% ====================================================================
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
+
+%% malformed_request/2
+%% ====================================================================
+%% @doc
+%% Checks if request contains all mandatory fields and their values are set properly
+%% depending on requested operation
+%% @end
+%% ====================================================================
+-spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
+%% ====================================================================
+malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version } = State) when is_binary(Version) -> % put cdmi
+    {<<"application/cdmi-object">>, _} = cowboy_req:header(<<"content-type">>, Req),
+    {false,Req,State};
+malformed_request(Req, State) ->
+    {false, Req, State}.
+
 
 %% resource_exists/2
 %% ====================================================================
@@ -79,7 +96,7 @@ content_types_provided(Req, State) ->
 %% ====================================================================
 content_types_accepted(Req, #state{cdmi_version = undefined} = State) ->
     {[
-        {<<"application/binary">>, put_binary}
+        {'*', put_binary}
     ], Req, State};
 content_types_accepted(Req, State) ->
     {[
@@ -96,9 +113,7 @@ content_types_accepted(Req, State) ->
 delete_resource(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:delete(Filepath) of
         ok -> {true, Req, State};
-        _ ->
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
-            {halt, Req2, State}
+        Error -> cdmi_error:error_reply(Req, State, ?error_bad_request_code, "Deleting cdmi object end up with error: ~p",[Error])
     end.
 
 %% ====================================================================
@@ -128,21 +143,37 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
 %% @end
 -spec get_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-get_cdmi_object(Req, #state{opts = Opts} = State) ->
+get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Size}, filepath = Filepath} = State) ->
     DirCdmi = prepare_object_ans(case Opts of [] -> ?default_get_file_opts; _ -> Opts end, State),
     case proplists:get_value(<<"value">>, DirCdmi) of
         {range, Range} ->
-            Encoding = <<"base64">>, %todo send also utf-8 when possible
-            case read_file(State, Range, Encoding) of
-                {ok, Data} ->
-                    DirCdmiWithValue = lists:append(proplists:delete(<<"value">>, DirCdmi), [{<<"value">>, Data}]),
-                    Response = rest_utils:encode_to_json({struct, DirCdmiWithValue}),
-                    {Response, Req, State};
-                Error ->
-                    ?error("Reading cdmi object end up with error: ~p", [Error]),
-                    {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
-                    {halt, Req2, State}
-            end;
+            BodyWithoutValue = proplists:delete(<<"value">>, DirCdmi),
+            JsonBodyWithoutValue = rest_utils:encode_to_json({struct, BodyWithoutValue}),
+
+            JsonBodyPrefix = case BodyWithoutValue of
+                                 [] -> <<"{\"value\":\"">>;
+                                 _ -> <<(erlang:binary_part(JsonBodyWithoutValue,0,byte_size(JsonBodyWithoutValue)-1))/binary,",\"value\":\"">>
+                             end,
+            JsonBodySuffix = <<"\"}">>,
+            DataSize = case Range of
+                           {From,To} when To >= From -> To - From +1;
+                           default -> Size
+                       end,
+            Base64EncodedSize = byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4*ceil(DataSize / 3.0)),
+
+            StreamFun = fun (Socket,Transport) ->
+                try
+                    Transport:send(Socket,JsonBodyPrefix),
+                    {ok,BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
+                    stream_file(Socket, Transport, State, Range, <<"base64">>, BufferSize), %todo send also utf-8 when possible)
+                    Transport:send(Socket,JsonBodySuffix)
+                catch Type:Message ->
+                    % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
+                    ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Filepath, Type, Message])
+                end
+            end,
+
+            {{stream, Base64EncodedSize, StreamFun}, Req, State};
         undefined ->
             Response = rest_utils:encode_to_json({struct, DirCdmi}),
             {Response, Req, State}
@@ -156,16 +187,13 @@ get_cdmi_object(Req, #state{opts = Opts} = State) ->
 -spec put_binary(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 put_binary(Req, #state{filepath = Filepath} = State) ->
-    case logical_files_manager:create(Filepath) of %todo can be potentially refactored and combined with put_cdmi_file (some code is duplicated)
+    case logical_files_manager:create(Filepath) of
         ok ->
             write_body_to_file(Req, State, 0);
-        {error, file_exists} ->
+        {error, file_exists} -> %todo update
             {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
             {halt, Req2, State};
-        Error ->
-            ?error("Creating cdmi object end up with error: ~p", [Error]),
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
-            {halt, Req2, State}
+        Error -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Creating cdmi object end up with error: ~p",[Error])
     end.
 
 %% put_cdmi_object/2
@@ -175,43 +203,55 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
 %% @end
 -spec put_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_cdmi_object(Req, #state{filepath = Filepath} = State) ->
+put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo read body in chunks
     {ok, RawBody, _} = cowboy_req:body(Req),
-    Body = parse_body(RawBody),
+    Body = rest_utils:parse_body(RawBody),
     ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body, <<"utf-8">>),  %todo check given body opts, store given mimetype
     Value = proplists:get_value(<<"value">>, Body, <<>>),
+    Range = case lists:keyfind(<<"value">>, 1, Opts) of
+        {<<"value">>, From_, To_} -> {From_,To_};
+        false -> undefined
+    end,
     RawValue = case ValueTransferEncoding of
                    <<"base64">> -> base64:decode(Value);
                    <<"utf-8">> -> Value
                end,
     case logical_files_manager:create(Filepath) of
         ok ->
-            WriteAns = logical_files_manager:write(Filepath, RawValue),
-            AttrAns = logical_files_manager:getfileattr(Filepath),
-            case {WriteAns, AttrAns} of
-                {Bytes, {ok, Attr}} when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                    Response = rest_utils:encode_to_json(
-                        {struct, prepare_object_ans(?default_post_file_opts, State#state{attributes = Attr})}),
-                    Req2 = cowboy_req:set_resp_body(Response, Req),
-                    {true, Req2, State};
-                _ ->
-                    case AttrAns of
-                        {ok, _} ->
-                            ?error("Writing to cdmi object end up with error: ~p", [WriteAns]);
-                        _ ->
-                            ?error("Getting cdmi object attributes end up with error: ~p", [AttrAns])
-                    end,
+            case logical_files_manager:write(Filepath, RawValue) of
+                Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
+                    case logical_files_manager:getfileattr(Filepath) of
+                        {ok,Attrs} ->
+                            Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_post_file_opts, State#state{attributes = Attrs})}),
+                            Req2 = cowboy_req:set_resp_body(Response, Req),
+                            {true, Req2, State};
+                        Error -> 
+                            logical_files_manager:delete(Filepath),
+                            cdmi_error:error_reply(Req,State,?error_forbidden_code,"Getting attributes end up with error: ~p",Error)
+                    end;
+                Error ->
                     logical_files_manager:delete(Filepath),
-                    {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
-                    {halt, Req2, State}
+                    cdmi_error:error_reply(Req,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
             end;
         {error, file_exists} ->
-            {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
-            {halt, Req2, State};
-        Error -> %todo handle common errors
-            ?error("Creating cdmi object end up with error: ~p", [Error]),
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
-            {halt, Req2, State}
+            case Range of
+                {From, To} when is_binary(Value) andalso To-From+1 == byte_size(RawValue) ->
+                    case logical_files_manager:write(Filepath, From, RawValue) of
+                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
+                            {true, Req, State};
+                        Error -> cdmi_error:error_reply(Req,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
+                    end;
+                undefined when is_binary(Value) ->
+                    logical_files_manager:truncate(Filepath,0),
+                    case logical_files_manager:write(Filepath, RawValue) of
+                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
+                            {true, Req, State};
+                        Error -> cdmi_error:error_reply(Req,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p", Error)
+                    end;
+                undefined -> {true, Req, State};
+                _ -> cdmi_error:error_reply(Req, State, ?error_bad_request_code, "Updating cdmi object end up with error",[])
+            end;
+        Error -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Creating cdmi object end up with error: ~p",[Error])
     end.
 
 %% ====================================================================
@@ -273,46 +313,50 @@ write_body_to_file(Req, #state{filepath = Filepath} = State, Offset) ->
                 ok -> {true, Req2, State}
             end;
         Error ->
-            ?error("Writing to cdmi object end up with error: ~p", [Error]),
             logical_files_manager:delete(Filepath),
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
-            {halt, Req2, State}
+            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p",[Error])
     end.
 
-
-%% read_file/3
+%% stream_file/6
 %% ====================================================================
 %% @doc Reads given range of bytes (defaults to whole file) from file (obtained from state filepath), result is
-%% encoded according to 'Encoding' argument
+%% encoded according to 'Encoding' argument and streamed to given Socket.
 %% @end
--spec read_file(State :: #state{}, Range, Encoding) -> Result when
+-spec stream_file(Socket :: term(), Transport :: atom(), State :: #state{}, Range, Encoding :: binary(), BufferSize :: integer()) -> Result when
     Range :: default | {From :: integer(), To :: integer()},
-    Encoding :: binary(),
-    Result :: {ok, Bytes} | {ErrorGeneral, ErrorDetail},
-    Bytes :: binary(),
-    ErrorGeneral :: atom(),
-    ErrorDetail :: term().
+    Result :: ok | no_return().
 %% ====================================================================
-read_file(#state{attributes = Attrs} = State, default, Encoding) ->
-    read_file(State, {0, Attrs#fileattributes.size - 1}, Encoding); %default range shuold remain consistent with parse_object_ans/2 valuerange clause
-read_file(State, Range, <<"base64">>) ->
-    case read_file(State, Range, <<"utf-8">>) of
-        {ok, Data} -> {ok, base64:encode(Data)};
-        Error -> Error
-    end;
-read_file(#state{filepath = Path}, {From, To}, <<"utf-8">>) ->
-    logical_files_manager:read(Path, From, To - From + 1).
-
-%% parse_body/1
-%% ====================================================================
-%% @doc Parses json request body to erlang proplist format.
-%% @end
--spec parse_body(binary()) -> list().
-%% ====================================================================
-parse_body(RawBody) ->
-    case gui_str:binary_to_unicode_list(RawBody) of
-        "" -> [];
-        NonEmptyBody ->
-            {struct, Ans} = rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody)),
-            Ans
+stream_file(Socket, Transport, State, Range, Encoding, BufferSize) when (BufferSize rem 3) =/= 0 ->
+    stream_file(Socket, Transport, State, Range, Encoding, BufferSize - (BufferSize rem 3)); %buffer size is extended, so it's divisible by 3 to allow base64 on the fly conversion
+stream_file(Socket, Transport, #state{attributes = #fileattributes{ size = Size}} = State, default, Encoding, BufferSize) ->
+    stream_file(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize); %default range should remain consistent with parse_object_ans/2 valuerange clause
+stream_file(Socket, Transport, #state{filepath = Path} = State, {From, To}, Encoding, BufferSize) ->
+    ToRead = To - From + 1,
+    case ToRead > BufferSize of
+        true ->
+            {ok,Data} = logical_files_manager:read(Path, From, BufferSize),
+            Transport:send(Socket,encode(Data,Encoding)),
+            stream_file(Socket,Transport,State, {From+BufferSize,To},Encoding,BufferSize);
+        false ->
+            {ok,Data} = logical_files_manager:read(Path, From, ToRead),
+            Transport:send(Socket,encode(Data,Encoding))
     end.
+
+%% encode/2
+%% ====================================================================
+%% @doc Encodes data according to given ecoding
+%% @end
+-spec encode(Data :: binary(), Encoding :: binary()) -> binary().
+%% ====================================================================
+encode(Data,Encoding) when Encoding =:= <<"base64">> ->
+    base64:encode(Data);
+encode(Data,_) ->
+    Data.
+
+%% ceil/1
+%% ====================================================================
+%% @doc math ceil function (works on positive values)
+-spec ceil(N :: number()) -> integer().
+%% ====================================================================
+ceil(N) when trunc(N) == N -> N;
+ceil(N) -> trunc(N+1).

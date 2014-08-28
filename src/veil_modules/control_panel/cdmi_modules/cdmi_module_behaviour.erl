@@ -27,7 +27,6 @@
 %% Another argument passed to every callback is #state defined in cdmi header file.
 %% It is State record containg context of current request
 
-
 %% allowed_methods/2
 %% ====================================================================
 %% @doc
@@ -35,6 +34,14 @@
 %% @end
 %% ====================================================================
 -callback allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
+
+%% malformed_request/2
+%% ====================================================================
+%% @doc Checks if request contains all mandatory fields and their values are set properly
+%% depending on requested operation
+%% @end
+%% ====================================================================
+-callback malformed_request(req(), #state{}) -> {boolean(), req(), #state{}}.
 
 %% resource_exists/2
 %% ====================================================================

@@ -19,7 +19,7 @@
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
--export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, prepare_metadata/1]).
+-export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, parse_body/1, validate_body/1, prepare_metadata/1]).
 
 %% ====================================================================
 %% API functions
@@ -226,6 +226,35 @@ list_dir(Path, Offset, Count, Result) ->
             end;
         _ ->
             {error, not_a_dir}
+    end.
+
+%% parse_body/1
+%% ====================================================================
+%% @doc Parses json request body to erlang proplist format.
+%% @end
+-spec parse_body(binary()) -> list().
+%% ====================================================================
+parse_body(RawBody) ->
+    case gui_str:binary_to_unicode_list(RawBody) of
+        "" -> [];
+        NonEmptyBody ->
+            {struct, Ans} = rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody)),
+            Ans
+    end.
+
+%% validate_body/1
+%% ====================================================================
+%% @doc Checks if body contains unique opts.
+%% @end
+-spec validate_body(Body :: list()) -> ok | no_return().
+%% ====================================================================
+validate_body(Body) ->
+    Keys = proplists:get_keys(Body),
+    case length(Keys) =:= length(Body) of
+        true -> ok;
+        false ->
+            ?error("Request body contains duplicated fields."),
+            throw(duplicated_body_fields)
     end.
 
 %% prepare_metadata/1
