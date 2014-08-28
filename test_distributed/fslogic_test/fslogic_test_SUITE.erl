@@ -70,7 +70,7 @@ spaces_permissions_test(Config) ->
   ?assertEqual(ok, InsertStorageAns),
 
   UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, Team]),
-  UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, Team, Team2]),
+  UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, Team, Team2, Team3]),
 
   [DN1 | _] = user_logic:get_dn_list(UserDoc1),
   [DN2 | _] = user_logic:get_dn_list(UserDoc2),
@@ -338,6 +338,7 @@ concurrent_file_creation_test(Config) ->
 
 %%   ct:print("ans1,2: ~p~n", [{Ans1, Ans2}]),
   CreateAns = [Ans1, Ans2],
+    ?dump(CreateAns),
   ?assert(lists:member(ok, CreateAns)),
   ?assert(lists:member({error, file_exists}, CreateAns)),
   ?assert(rpc:call(Node1, files_tester, file_exists, [TestFile])),
@@ -2271,7 +2272,7 @@ init_per_testcase(_, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1, true),
   [FSLogicNode | _] = NodesUp,
 
   DB_Node = ?DB_NODE,

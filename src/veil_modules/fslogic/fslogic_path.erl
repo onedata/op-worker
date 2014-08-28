@@ -103,13 +103,13 @@ get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
         ok ->
             case fslogic_perms:assert_group_access(UserDoc, Request, VerifiedFileName) of
                 ok ->
-                    case Tokens of %% Map all /groups/* requests to root of the file system (i.e. dont add any prefix)
+                    case Tokens of
                         [?SPACES_BASE_DIR_NAME | SpaceTokens] ->
-                            {ok, filename:join([?SPACES_BASE_DIR_NAME | SpaceTokens])};
+                            {ok, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME | SpaceTokens])};
                         _ ->
                             Root = get_user_root(UserDoc),
-                            ?info("UserRoot: ~p", [Root]),
-                            {ok, filename:join([?SPACES_BASE_DIR_NAME, Root] ++ Tokens)}
+                            ?debug("UserRoot: ~p", [Root]),
+                            {ok, fslogic_path:absolute_join(filename:split(Root) ++ Tokens)}
                     end;
                 _ -> {error, invalid_group_access}
             end;
@@ -208,7 +208,7 @@ get_user_root(#user{spaces = []}) ->
 get_user_root(#user{spaces = [PrimarySpaceId | _]}) ->
     {ok, #space_info{name = SpaceName}} = fslogic_objects:get_space({uuid, PrimarySpaceId}),
     ?debug("get user root: ~p ~p ~p", [PrimarySpaceId, SpaceName, unicode:characters_to_list(SpaceName)]),
-    unicode:characters_to_list(SpaceName).
+    fslogic_path:absolute_join(?SPACES_BASE_DIR_NAME, unicode:characters_to_list(SpaceName)).
 
 
 %% get_user_root/2

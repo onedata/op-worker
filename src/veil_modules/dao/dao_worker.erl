@@ -289,7 +289,7 @@ init_storage() ->
         end
     catch
         Type:Error ->
-            ?error("Error during storage init: ~p:~p", [Type, Error]),
+            ?error_stacktrace("Error during storage init: ~p:~p", [Type, Error]),
             {error, Error}
     end.
 
