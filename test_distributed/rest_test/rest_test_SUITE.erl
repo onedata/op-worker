@@ -56,9 +56,12 @@ main_test(Config) ->
     ?ENABLE_PROVIDER(Config),
 
     put(dn, get_dn_from_cert(Config)),
+    ?dump(get(dn)),
+
+    ?dump(get_dn_from_cert(Config)),
 
     ibrowse:start(),
-    rest_test_user_unknown(),
+    rest_test_user_unknown(get_dn_from_cert(Config)),
 
     % Create a user in db with some files
     {DN, StorageUUID} = setup_user_in_db(Config),
@@ -89,11 +92,11 @@ main_test(Config) ->
 %% ====================================================================
 
 % Tests if proper error message is returned when user doesn't exist in the database
-rest_test_user_unknown() ->
+rest_test_user_unknown(DN) ->
     {Code1, Headers1, Response1} = do_request(?REST_FILES_SUBPATH, get, [], []),
     ?assertEqual(Code1, "500"),
     ?assertEqual(proplists:get_value("content-type", Headers1), "application/json"),
-    ?assertEqual(list_to_binary(Response1), rest_utils:error_reply(?report_error(?error_user_unknown, [get(dn)]))).
+    ?assertEqual(list_to_binary(Response1), rest_utils:error_reply(?report_error(?error_user_unknown, [DN]))).
 
 
 % Tests if version matching mechanism works correctly and if proper errors are returned
