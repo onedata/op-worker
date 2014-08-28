@@ -127,10 +127,10 @@ get_file_test(_Config) ->
     %%------------------------------
 
     %%------- noncdmi read --------
-    {Code7, _Headers7, Response7} = do_request(FileName, get, [], []),
-    ?assertEqual("200",Code7),
+    {Code4, _Headers4, Response4} = do_request(FileName, get, [], []),
+    ?assertEqual("200",Code4),
 
-    ?assertEqual(binary_to_list(FileContent), Response7).
+    ?assertEqual(binary_to_list(FileContent), Response4).
     %%------------------------------
 
 % Tests cdmi metadata read on object GET request.
