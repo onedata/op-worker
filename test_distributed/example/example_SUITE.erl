@@ -73,7 +73,7 @@ node2_code() ->
 %% should use slaves (even when only one node is needed).
 %% ====================================================================
 
-local_test(Config) ->
+local_test(_Config) ->
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   test_utils:wait_for_cluster_cast(),

@@ -340,7 +340,6 @@ concurrent_file_creation_test(Config) ->
 
 %%   ct:print("ans1,2: ~p~n", [{Ans1, Ans2}]),
   CreateAns = [Ans1, Ans2],
-    ?dump(CreateAns),
   ?assert(lists:member(ok, CreateAns)),
   ?assert(lists:member({error, file_exists}, CreateAns)),
   ?assert(rpc:call(Node1, files_tester, file_exists, [TestFile])),

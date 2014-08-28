@@ -355,7 +355,7 @@ helper_requests_test(Config) ->
   TestFile2 = "../helper_requests_test_file2",
 
   Cert = ?COMMON_FILE("peer.pem"),
-  Cert2 = ?COMMON_FILE("peer2.pem"),
+  _Cert2 = ?COMMON_FILE("peer2.pem"),
   Host = "localhost",
   Port = ?config(port, Config),
   [FSLogicNode | _] = NodesUp,
@@ -409,7 +409,7 @@ helper_requests_test(Config) ->
   ?assertEqual(list_to_atom(?VOK), Answer2),
 
   ?assert(files_tester:file_exists_storage(?TEST_ROOT ++ "/spaces/" ++ Dir ++ "/" ++ NameEnding)),
-  {OwnStatus, User, Group} = files_tester:get_owner(?TEST_ROOT ++ "/spaces/" ++ Dir ++ "/" ++ NameEnding),
+  {OwnStatus, User, _Group} = files_tester:get_owner(?TEST_ROOT ++ "/spaces/" ++ Dir ++ "/" ++ NameEnding),
   ?assertEqual(ok, OwnStatus),
   ?assert(User /= 0),
 
