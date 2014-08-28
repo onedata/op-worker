@@ -185,7 +185,7 @@ test_rest_upload() ->
     {Code1, _Headers1, Response1} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", post, [Header1], [Body1]),
     ?assertEqual(Code1, "200"),
     ?assertEqual(list_to_binary(Response1), rest_utils:success_reply(?success_file_uploaded)),
-    File1 = rpc:call(get(ccm), logical_files_manager, read, [?TEST_USER ++ "/dir/file.txt", 0, 9]),
+    File1 = rpc:call(get(ccm), logical_files_manager, read, ["/spaces/" ++ ?TEST_USER ++ "/dir/file.txt", 0, 9]),
     ?assertEqual(File1, {ok, list_to_binary(Data1)}),
 
     {Header2, Body2} = format_multipart_request(Data1),
@@ -198,7 +198,7 @@ test_rest_upload() ->
     {Code3, _Headers3, Response3} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", put, [Header3], [Body3]),
     ?assertEqual(Code3, "200"),
     ?assertEqual(list_to_binary(Response3), rest_utils:success_reply(?success_file_uploaded)),
-    File3 = rpc:call(get(ccm), logical_files_manager, read, [?TEST_USER ++ "/dir/file.txt", 0, 9]),
+    File3 = rpc:call(get(ccm), logical_files_manager, read, ["/spaces/" ++ ?TEST_USER ++ "/dir/file.txt", 0, 9]),
     ?assertEqual(File3, {ok, list_to_binary(Data2)}),
 
     {Header4, Body4} = format_multipart_request(Data2),
