@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API - cluster state
--export([save_cookie/1, get_cookie/1, remove_cookie/1]).
+-export([save_cookie/1, get_cookie/1, remove_cookie/1, list_expired_cookies/2]).
 
 
 %% ===================================================================
@@ -77,6 +77,21 @@ remove_cookie(UUID) ->
     dao_records:remove_record(UUID).
 
 
-
-
-
+%% list_expired_cookies/2
+%% ====================================================================
+%% @doc Lists all session cookies that have expired based on current time.
+%% @end
+-spec list_expired_cookies(Limit :: integer(), Offset::integer()) -> {ok, [cookie()]} | no_return().
+%% ====================================================================
+list_expired_cookies(Limit, Offset) ->
+    StartKey = 0,
+    {Megaseconds, Seconds, _} = now(),
+    EndKey = Megaseconds * 1000000 + Seconds,
+    QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = Limit, skip = Offset},
+    case dao_records:list_records(?COOKIES_BY_EXPIRED_BEFORE_VIEW, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+            {ok, [UUID || #view_row{doc = #veil_document{uuid = UUID}} <- Rows]};
+        Data ->
+            ?error("Invalid session cookies view response: ~p", [Data]),
+            throw({inavlid_data, Data})
+    end.

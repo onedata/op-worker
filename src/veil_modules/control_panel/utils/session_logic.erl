@@ -23,6 +23,9 @@
 % ETS name for cookies
 -define(SESSION_ETS, cookies).
 
+% Max number of old session cookies retrieved from view at once
+-define(cookie_lookup_limit, 100).
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -111,7 +114,6 @@ save_session(SessionID, Props, TillArg) ->
 %% ====================================================================
 %% @doc Lookups a session by given SessionID key. On success, returns a proplist -
 %% session data, or undefined if given session does not exist.
-%% Always deletes the looked up session.
 %% NOTE! If SessionID exists, but has expired, it should be automatically
 %% removed and undefined should be returned.
 %% @end
@@ -164,15 +166,26 @@ delete_session(SessionID) ->
 -spec clear_expired_sessions() -> ok.
 %% ====================================================================
 clear_expired_sessions() ->
-    0.
-%%     {Megaseconds, Seconds, _} = now(),
-%%     Now = Megaseconds * 1000000 + Seconds,
-%%     ExpiredSessions = ets:select(?SESSION_ETS, [{{'$1', '$2', '$3'}, [{'<', '$3', Now}], ['$_']}]),
-%%     lists:foreach(
-%%         fun({SessionID, _, _}) ->
-%%             delete_session(SessionID)
-%%         end, ExpiredSessions),
-%%     length(ExpiredSessions).
+    clear_expired_sessions(0).
+
+clear_expired_sessions(TotalDeleted) ->
+    case dao_lib:apply(dao_cookies, list_expired_cookies, [?cookie_lookup_limit, 0], 1) of
+        {ok, UUIDList} ->
+            NumberOfCookies = lists:foldl(
+                fun(UUID, Counter) ->
+                    dao_lib:apply(dao_cookies, remove_cookie, [UUID], 1),
+                    Counter + 1
+                end, 0, UUIDList),
+            case NumberOfCookies of
+                ?cookie_lookup_limit ->
+                    clear_expired_sessions(TotalDeleted + NumberOfCookies);
+                _ ->
+                    TotalDeleted + NumberOfCookies
+            end;
+        Other ->
+            ?error("Cannot clear expired sessions - view query returned ~p", [Other]),
+            TotalDeleted
+    end.
 
 
 %% get_cookie_ttl/0
@@ -188,3 +201,6 @@ get_cookie_ttl() ->
         _ ->
             throw("No cookie TTL specified in env")
     end.
+
+
+

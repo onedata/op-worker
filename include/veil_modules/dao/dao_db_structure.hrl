@@ -59,6 +59,8 @@
 -define(USER_FILES_SIZE_VIEW, #view_info{name = "user_files_size", db_name = ?FILES_DB_NAME, version = 1}).
 -define(GROUP_FILES_NUMBER_VIEW, #view_info{name = "group_files_number", db_name = ?FILES_DB_NAME, version = 1}).
 
+-define(COOKIES_BY_EXPIRED_BEFORE_VIEW, #view_info{name = "cookies_by_expired_before", db_name = ?COOKIES_DB_NAME, version = 1}).
+
 %% FUSE Sessions
 -define(FUSE_CONNECTIONS_VIEW, #view_info{name = "fuse_connections", db_name = ?SYSTEM_DB_NAME, version = 1}).
 -define(EXPIRED_FUSE_SESSIONS_VIEW, #view_info{name = "expired_fuse_sessions", db_name = ?SYSTEM_DB_NAME, version = 1}).
@@ -73,7 +75,7 @@
     ?FILES_BY_UID_AND_FILENAME, ?FILE_META_BY_TIMES, ?FILES_BY_META_DOC,
     ?USER_BY_GLOBAL_ID_VIEW, ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UNVERIFIED_DN_VIEW, ?USER_BY_UID_VIEW,
     ?STORAGE_BY_ID_VIEW, ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?USER_FILES_SIZE_VIEW, ?GROUP_FILES_NUMBER_VIEW,
-    ?FUSE_CONNECTIONS_VIEW, ?EXPIRED_FUSE_SESSIONS_VIEW, ?FUSE_SESSIONS_BY_USER_ID_VIEW]).
+    ?COOKIES_BY_EXPIRED_BEFORE_VIEW, ?FUSE_CONNECTIONS_VIEW, ?EXPIRED_FUSE_SESSIONS_VIEW, ?FUSE_SESSIONS_BY_USER_ID_VIEW]).
 
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
