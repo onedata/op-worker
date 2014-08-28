@@ -55,11 +55,11 @@ rest_init(Req, _Opts) when Req#http_req.path_info =:= [?connection_check_path] -
     % when checking connection, continue without cert verification
     init_state(Req);
 rest_init(Req, _Opts) ->
-    {ok,DnString} = rest_utils:verify_peer_cert(Req),
+    {ok, DnString} = rest_utils:verify_peer_cert(Req),
     Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req),
     case rest_utils:prepare_context(DnString) of
         ok -> init_state(Req2);
-        Error -> {ok,Req2,Error}
+        Error -> {ok, Req2, Error}
     end.
 
 
@@ -69,7 +69,7 @@ rest_init(Req, _Opts) ->
 %% Returns methods that are allowed, based on version specified in URI.
 %% Will call methods_and_version_info/1 from rest_module_behaviour.
 %% @end
--spec allowed_methods(req(), #state{} | {error, term()}) -> {[binary()], req(), #state{}}.
+-spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
 allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
     {MethodsVersionInfo, Req2} = Mod:methods_and_versions_info(Req),
@@ -91,7 +91,7 @@ allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
             case lists:member(Method, AllowedMethods) of
                 false ->
                     ErrorRec = ?report_warning(?error_method_unsupported, [binary_to_list(Method)]),
-                    NewReq = cowboy_req:set_resp_body(rest_utils:error_reply(ErrorRec), Req2),
+                    NewReq = veil_cowboy_bridge:apply(cowboy_req, set_resp_body, [rest_utils:error_reply(ErrorRec), Req2]),
                     {AllowedMethods, NewReq, State};
                 true ->
                     % Check if content-type is acceptable (for PUT or POST)
@@ -151,8 +151,7 @@ resource_exists(Req, #state{version = Version, handler_module = Mod, resource_id
             {false, Req2, State};
         true ->
             {true, NewReq, State}
-    end
-.
+    end.
 
 
 %% get_resource/2
@@ -175,11 +174,11 @@ get_resource(Req, #state{version = Version, handler_module = Mod, resource_id = 
                              Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, ContentType, Req2),
                              {{stream, Size, Fun}, Req3};
                          error ->
-                             {ok, Req3} = cowboy_req:reply(500, Req2),
+                             {ok, Req3} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, Req2]),
                              {halt, Req3};
                          {error, ErrorDesc} ->
                              Req3 = cowboy_req:set_resp_body(ErrorDesc, Req2),
-                             {ok, Req4} = cowboy_req:reply(500, Req3),
+                             {ok, Req4} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, Req3]),
                              {halt, Req4}
                      end,
     {Resp, NewReq, State}.
@@ -220,7 +219,7 @@ handle_urlencoded_data(Req, #state{handler_module = Mod, version = Version, reso
 -spec handle_json_data(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 handle_json_data(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) ->
-    {ok, Binary, Req2} = cowboy_req:body(Req),
+    {ok, Binary, Req2} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Data = case Binary of
                <<"">> ->
                    <<"">>;
@@ -274,8 +273,8 @@ init_state(Req) ->
     {PathInfo, _} = cowboy_req:path_info(Req),
     case rest_routes:route(PathInfo) of
         {error, Error} ->
-            {ok, Req, {error,Error}};
-        {Module,Id} ->
+            {ok, Req, {error, Error}};
+        {Module, Id} ->
             {ok, Req, #state{version = Version, handler_module = Module, method = Method, resource_id = Id}}
     end.
 

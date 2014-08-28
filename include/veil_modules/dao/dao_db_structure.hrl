@@ -24,11 +24,13 @@
 -define(FILES_DB_NAME, "files_test").
 -define(DESCRIPTORS_DB_NAME, "file_descriptors_test").
 -define(USERS_DB_NAME, "users_test").
+-define(COOKIES_DB_NAME, "cookies_test").
 -else.
 -define(SYSTEM_DB_NAME, "system_data").
 -define(FILES_DB_NAME, "files").
 -define(DESCRIPTORS_DB_NAME, "file_descriptors").
 -define(USERS_DB_NAME, "users").
+-define(COOKIES_DB_NAME, "cookies").
 -endif.
 
 %% Views
@@ -64,7 +66,7 @@
 
 
 %% List of all used databases :: [string()]
--define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME, ?USERS_DB_NAME]).
+-define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME, ?USERS_DB_NAME, ?COOKIES_DB_NAME]).
 
 %% List of all used views :: [#view_info]
 -define(VIEW_LIST, [?FILE_TREE_VIEW, ?WAITING_FILES_TREE_VIEW, ?FILE_SUBDIRS_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW,

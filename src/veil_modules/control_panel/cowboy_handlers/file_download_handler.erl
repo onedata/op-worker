@@ -24,7 +24,7 @@
 %% Cowboy callbacks
 -export([init/3, handle/2, terminate/3]).
 %% Functions used in external modules (e.g. rest_handlers)
--export([cowboy_file_stream_fun/2, content_disposition_attachment_headers/2]).
+-export([cowboy_file_stream_fun/3, content_disposition_attachment_headers/2]).
 
 
 %% ====================================================================
@@ -72,17 +72,18 @@ terminate(_Reason, _Req, _State) ->
 %% API functions
 %% ====================================================================
 
-%% cowboy_file_stream_fun/2
+%% cowboy_file_stream_fun/3
 %% ====================================================================
 %% @doc Returns a cowboy-compliant streaming function, that will be evealuated
 %% by cowboy to send data (file content) to receiving socket.
 %% NOTE! FilePathOrUUID must be a unicode string (not utf8)
 %% @end
--spec cowboy_file_stream_fun(FilePathOrUUID :: string() | {uuid, string()}, Size :: integer()) -> function().
+-spec cowboy_file_stream_fun(UserDN :: string(), FilePathOrUUID :: string() | {uuid, string()}, Size :: integer()) -> function().
 %% ====================================================================
-cowboy_file_stream_fun(FilePathOrUUID, Size) ->
+cowboy_file_stream_fun(UserDN, FilePathOrUUID, Size) ->
     fun(Socket, Transport) ->
         try
+            fslogic_context:set_user_dn(UserDN),
             stream_file(Socket, Transport, FilePathOrUUID, Size, get_download_buffer_size())
         catch Type:Message ->
             % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
@@ -185,7 +186,7 @@ handle_user_content_request(Req, Path) ->
                     catch Type:Message ->
                         ?error_stacktrace("Error while preparing to send file ~p to user ~p - ~p:~p",
                             [Filepath, UserLogin, Type, Message]),
-                        {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
+                        {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, Req#http_req{connection = close}])
                     end
             end
     end.
@@ -229,7 +230,7 @@ handle_shared_files_request(Req, ShareID) ->
             catch Type:Message ->
                 ?error_stacktrace("Error while preparing to send shared file ~p - ~p:~p",
                     [FileID, Type, Message]),
-                {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
+                {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, Req#http_req{connection = close}])
             end
     end.
 
@@ -244,10 +245,10 @@ handle_shared_files_request(Req, ShareID) ->
 -spec send_file(Req :: req(), FilePathOrUUID :: string() | {uuid, string()}, FileName :: string(), Size :: integer()) -> {ok, req()}.
 %% ====================================================================
 send_file(Req, FilePathOrUUID, FileName, Size) ->
-    StreamFun = cowboy_file_stream_fun(FilePathOrUUID, Size),
+    StreamFun = cowboy_file_stream_fun(fslogic_context:get_user_dn(), FilePathOrUUID, Size),
     Req2 = content_disposition_attachment_headers(Req, FileName),
     Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
-    {ok, _FinReq} = cowboy_req:reply(200, Req3#http_req{connection = close}).
+    {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [200, Req3#http_req{connection = close}]).
 
 
 %% stream_file/5

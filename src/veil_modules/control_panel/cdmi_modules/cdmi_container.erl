@@ -16,7 +16,7 @@
 -define(default_post_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
 
 %% API
--export([allowed_methods/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
+-export([allowed_methods/2, resource_exists/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 -export([get_cdmi_container/2, put_cdmi_container/2]).
 
 
@@ -38,7 +38,7 @@ allowed_methods(Req, State) ->
 %% ====================================================================
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
-resource_exists(Req,State = #state{filepath = Filepath}) ->
+resource_exists(Req, State = #state{filepath = Filepath}) ->
     case logical_files_manager:getfileattr(Filepath) of
         {ok, #fileattributes{type = "DIR"} = Attr} -> {true, Req, State#state{attributes = Attr}};
         _ -> {false, Req, State}
@@ -51,7 +51,7 @@ resource_exists(Req,State = #state{filepath = Filepath}) ->
 %% exists in cdmi_handler
 %% @end
 %% ====================================================================
--spec content_types_provided(req(), #state{}) -> {[{ContentType,Method}], req(), #state{}} when
+-spec content_types_provided(req(), #state{}) -> {[{ContentType, Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
 %% ====================================================================
@@ -69,7 +69,7 @@ content_types_provided(Req, State) ->
 %% exists in cdmi_handler
 %% @end
 %% ====================================================================
--spec content_types_accepted(req(), #state{}) -> {[{ContentType,Method}], req(), #state{}} when
+-spec content_types_accepted(req(), #state{}) -> {[{ContentType, Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
 %% ====================================================================
@@ -91,7 +91,7 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
             fs_remove_dir(Filepath),
             {true, Req, State};
         true ->
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_forbidden_code, Req]),
             {halt, Req2, State}
     end.
 
@@ -126,13 +126,13 @@ put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
             Req2 = cowboy_req:set_resp_body(Response, Req),
             {true, Req2, State};
         {error, dir_exists} ->
-            {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
+            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_conflict_code, Req]),
             {halt, Req2, State};
         {logical_file_system_error, "enoent"} ->
-            {ok, Req2} = cowboy_req:reply(?error_not_found_code, Req),
+            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_not_found_code, Req]),
             {halt, Req2, State};
         _ ->
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_forbidden_code, Req]),
             {halt, Req2, State}
     end.
 
@@ -227,8 +227,8 @@ fs_list_dir(Path, Offset, Count, Result) ->
 -spec is_group_dir(Path :: string()) -> boolean().
 %% ====================================================================
 is_group_dir(Path) ->
-    case string:tokens(Path,"/") of
+    case string:tokens(Path, "/") of
         [?GROUPS_BASE_DIR_NAME] -> true;
-        [?GROUPS_BASE_DIR_NAME , _GroupName] ->  true;
+        [?GROUPS_BASE_DIR_NAME, _GroupName] -> true;
         _ -> false
     end.

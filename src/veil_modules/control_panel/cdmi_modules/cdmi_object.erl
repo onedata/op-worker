@@ -97,7 +97,7 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:delete(Filepath) of
         ok -> {true, Req, State};
         _ ->
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_forbidden_code, Req]),
             {halt, Req2, State}
     end.
 
@@ -114,7 +114,7 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
 -spec get_binary(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = Size}} = State) ->
-    StreamFun = file_download_handler:cowboy_file_stream_fun(Filepath, Size),
+    StreamFun = file_download_handler:cowboy_file_stream_fun(fslogic_context:get_user_dn(), Filepath, Size),
     NewReq = file_download_handler:content_disposition_attachment_headers(Req, filename:basename(Filepath)),
     {Type, Subtype, _} = cow_mimetypes:all(list_to_binary(Filepath)),
     ContentType = <<Type/binary, "/", Subtype/binary>>,
@@ -140,7 +140,7 @@ get_cdmi_object(Req, #state{opts = Opts} = State) ->
                     {Response, Req, State};
                 Error ->
                     ?error("Reading cdmi object end up with error: ~p", [Error]),
-                    {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+                    {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_forbidden_code, Req]),
                     {halt, Req2, State}
             end;
         undefined ->
@@ -160,11 +160,11 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
         ok ->
             write_body_to_file(Req, State, 0);
         {error, file_exists} ->
-            {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
+            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_conflict_code, Req]),
             {halt, Req2, State};
         Error ->
             ?error("Creating cdmi object end up with error: ~p", [Error]),
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_forbidden_code, Req]),
             {halt, Req2, State}
     end.
 
@@ -176,7 +176,7 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
 -spec put_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 put_cdmi_object(Req, #state{filepath = Filepath} = State) ->
-    {ok, RawBody, _} = cowboy_req:body(Req),
+    {ok, RawBody, _} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Body = parse_body(RawBody),
     ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body, <<"utf-8">>),  %todo check given body opts, store given mimetype
     Value = proplists:get_value(<<"value">>, Body, <<>>),
@@ -194,15 +194,15 @@ put_cdmi_object(Req, #state{filepath = Filepath} = State) ->
                 Error ->
                     ?error("Writing to cdmi object end up with error: ~p", [Error]),
                     logical_files_manager:delete(Filepath),
-                    {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+                    {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_forbidden_code, Req]),
                     {halt, Req2, State}
             end;
         {error, file_exists} ->
-            {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
+            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_conflict_code, Req]),
             {halt, Req2, State};
         Error -> %todo handle common errors
             ?error("Creating cdmi object end up with error: ~p", [Error]),
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_forbidden_code, Req]),
             {halt, Req2, State}
     end.
 
@@ -258,7 +258,7 @@ prepare_object_ans([Other | Tail], State) ->
 -spec write_body_to_file(req(), #state{}, integer()) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 write_body_to_file(Req, #state{filepath = Filepath} = State, Offset) ->
-    {Status, Chunk, Req2} = cowboy_req:body(Req),
+    {Status, Chunk, Req2} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     case logical_files_manager:write(Filepath, Offset, Chunk) of
         Bytes when is_integer(Bytes) ->
             case Status of
@@ -268,7 +268,7 @@ write_body_to_file(Req, #state{filepath = Filepath} = State, Offset) ->
         Error ->
             ?error("Writing to cdmi object end up with error: ~p", [Error]),
             logical_files_manager:delete(Filepath),
-            {ok, Req2} = cowboy_req:reply(?error_forbidden_code, Req),
+            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_forbidden_code, Req]),
             {halt, Req2, State}
     end.
 

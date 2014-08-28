@@ -117,6 +117,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
         [
           {env, [{dispatch, Dispatch}]}
         ]),
+        control_panel:init_gui(),
       {ok, MonitoringInitialization} = application:get_env(?APP_Name, node_monitoring_initialization),
       erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_node_monitoring});
     false -> ok

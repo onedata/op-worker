@@ -10,10 +10,9 @@
 %% @end
 %% ===================================================================
 
--module(session_logic).
+-module(session_logic_old).
 -behaviour(session_logic_behaviour).
 -include("veil_modules/control_panel/common.hrl").
--include("veil_modules/dao/dao_cookies.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% session_logic_behaviour API
@@ -35,8 +34,8 @@
 -spec init() -> ok.
 %% ====================================================================
 init() ->
-%%     % Ets table needed for session storing.
-%%     ets:new(?SESSION_ETS, [named_table, public, bag, {read_concurrency, true}]),
+    % Ets table needed for session storing.
+    ets:new(?SESSION_ETS, [named_table, public, bag, {read_concurrency, true}]),
     ok.
 
 
@@ -47,7 +46,7 @@ init() ->
 -spec cleanup() -> ok.
 %% ====================================================================
 cleanup() ->
-%%     ets:delete(?SESSION_ETS),
+    ets:delete(?SESSION_ETS),
     ok.
 
 
@@ -61,31 +60,20 @@ cleanup() ->
 -spec save_session(SessionID :: binary(), Props :: [tuple()], ValidTill :: integer() | undefined) -> ok | no_return().
 %% ====================================================================
 save_session(SessionID, Props, TillArg) ->
-    ?dump({save_session, SessionID, Props, TillArg}),
-    CookieDoc = case TillArg of
-                    undefined ->
-                        case dao_lib:apply(dao_cookies, get_cookie, [SessionID], 1) of
-                            {ok, #veil_document{record = #session_cookie{valid_till = ValidTill}} = Doc} ->
-                                Doc#veil_document{
-                                    record = #session_cookie{
-                                        session_memory = Props,
-                                        valid_till = ValidTill
-                                    }
-                                };
-                            _ ->
-                                throw("session expiration not specified")
-                        end;
-                    _ ->
-                        #veil_document{
-                            uuid = SessionID,
-                            record = #session_cookie{
-                                session_memory = Props,
-                                valid_till = TillArg
-                            }
-                        }
-                end,
+    Till = case TillArg of
+               undefined ->
+                   case ets:lookup(?SESSION_ETS, SessionID) of
+                       [{SessionID, _, CurrentTill}] ->
+                           CurrentTill;
+                       _ ->
+                           throw("session expiration not specified")
+                   end;
+               _ ->
+                   TillArg
+           end,
 
-    dao_lib:apply(dao_cookies, save_cookie, [CookieDoc], 1),
+    delete_session(SessionID),
+    ets:insert(?SESSION_ETS, {SessionID, Props, Till}),
     ok.
 
 
@@ -93,20 +81,18 @@ save_session(SessionID, Props, TillArg) ->
 %% ====================================================================
 %% @doc Lookups a session by given SessionID key. On success, returns a proplist -
 %% session data, or undefined if given session does not exist.
-%% Always deletes the looked up session.
 %% NOTE! If SessionID exists, but has expired, it should be automatically
 %% removed and undefined should be returned.
 %% @end
 -spec lookup_session(SessionID :: binary()) -> Props :: [tuple()] | undefined.
 %% ====================================================================
 lookup_session(SessionID) ->
-    ?dump({lookup_session, SessionID}),
     case SessionID of
         undefined ->
             undefined;
         _ ->
-            case dao_lib:apply(dao_cookies, get_cookie, [SessionID], 1) of
-                {ok, #veil_document{record = #session_cookie{valid_till = Till, session_memory = Props}}} ->
+            case ets:lookup(?SESSION_ETS, SessionID) of
+                [{SessionID, Props, Till}] ->
                     % Check if the session isn't outdated
                     {Megaseconds, Seconds, _} = now(),
                     Now = Megaseconds * 1000000 + Seconds,
@@ -130,12 +116,12 @@ lookup_session(SessionID) ->
 -spec delete_session(SessionID :: binary()) -> ok.
 %% ====================================================================
 delete_session(SessionID) ->
-    ?dump({delete_session, SessionID}),
     case SessionID of
         undefined ->
             ok;
         _ ->
-            dao_lib:apply(dao_cookies, remove_cookie, [SessionID], 1)
+            ets:delete(?SESSION_ETS, SessionID),
+            ok
     end.
 
 
@@ -148,15 +134,14 @@ delete_session(SessionID) ->
 -spec clear_expired_sessions() -> ok.
 %% ====================================================================
 clear_expired_sessions() ->
-    0.
-%%     {Megaseconds, Seconds, _} = now(),
-%%     Now = Megaseconds * 1000000 + Seconds,
-%%     ExpiredSessions = ets:select(?SESSION_ETS, [{{'$1', '$2', '$3'}, [{'<', '$3', Now}], ['$_']}]),
-%%     lists:foreach(
-%%         fun({SessionID, _, _}) ->
-%%             delete_session(SessionID)
-%%         end, ExpiredSessions),
-%%     length(ExpiredSessions).
+    {Megaseconds, Seconds, _} = now(),
+    Now = Megaseconds * 1000000 + Seconds,
+    ExpiredSessions = ets:select(?SESSION_ETS, [{{'$1', '$2', '$3'}, [{'<', '$3', Now}], ['$_']}]),
+    lists:foreach(
+        fun({SessionID, _, _}) ->
+            delete_session(SessionID)
+        end, ExpiredSessions),
+    length(ExpiredSessions).
 
 
 %% get_cookie_ttl/0
@@ -167,7 +152,7 @@ clear_expired_sessions() ->
 %% ====================================================================
 get_cookie_ttl() ->
     case application:get_env(veil_cluster_node, control_panel_sessions_cookie_ttl) of
-        {ok, Val} when is_integer(Val) ->
+        {ok, Val} when is_integer(Val)->
             Val;
         _ ->
             throw("No cookie TTL specified in env")
