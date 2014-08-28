@@ -55,6 +55,8 @@ main_test(Config) ->
 
     ?ENABLE_PROVIDER(Config),
 
+    put(dn, get_dn_from_cert(Config)),
+
     ibrowse:start(),
     rest_test_user_unknown(),
 
@@ -75,8 +77,9 @@ main_test(Config) ->
     RemoveStorageAns = rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
     ?assertEqual(ok, RemoveStorageAns),
 
-    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ ?TEST_GROUP], ?ProtocolVersion])),
-    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups"], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_GROUP], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_USER], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces"], ?ProtocolVersion])),
 
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]).
 
@@ -340,6 +343,21 @@ format_multipart_formdata(Boundary, Fields, Files) ->
     string:join(Parts, "\r\n").
 
 
+get_dn_from_cert(Config) ->
+    [CCM | _] = ?config(nodes, Config),
+    Cert = ?config(cert, Config),
+
+    {Ans2, PemBin} = file:read_file(Cert),
+    ?assertEqual(ok, Ans2),
+
+    {Ans3, RDNSequence} = rpc:call(CCM, user_logic, extract_dn_from_cert, [PemBin]),
+    ?assertEqual(rdnSequence, Ans3),
+
+    {Ans4, DN} = rpc:call(CCM, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+    ?assertEqual(ok, Ans4),
+    DN.
+
+
 % Populates the database with one user and some files
 setup_user_in_db(Config) ->
     [CCM | _] = ?config(nodes, Config),
@@ -347,11 +365,9 @@ setup_user_in_db(Config) ->
     {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?ARG_TEST_ROOT]),
     ?assertEqual(ok, Ans1),
 
-    Cert = ?COMMON_FILE("peer.pem"),
+    Cert = ?config(cert, Config),
     UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
     [DN | _] = user_logic:get_dn_list(UserDoc),
-
-    put(dn, DN),
 
     fslogic_context:set_user_dn(DN),
     Ans6 = rpc:call(CCM, erlang, apply, [
@@ -396,7 +412,7 @@ init_per_testcase(main_test, Config) ->
             {ca_dir, './cacerts/'}
         ]]),
 
-    lists:append([{nodes, Nodes}], Config).
+    lists:append([{nodes, Nodes}, {cert, ?COMMON_FILE("peer.pem")}], Config).
 
 
 end_per_testcase(main_test, Config) ->
