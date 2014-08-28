@@ -146,7 +146,7 @@ function install_veilcluster_package {
 
 # $1 - target host
 function start_cluster {
-    info "Starting VeilCluster..."
+    info "Starting VeilCluster nodes..."
 
     db_hosts=""
     db_nodes=`echo "$CLUSTER_DB_NODES" | tr ";" "\n"`
@@ -205,7 +205,7 @@ function start_cluster {
 
 # $1 - target host
 function remove_cluster {
-    info "Removing VeilCluster..."
+    info "Removing VeilCluster nodes..."
 
     local onepanel_admin
     onepanel_admin=$(ssh $1 "which onepanel_admin 2> /dev/null")
@@ -231,7 +231,7 @@ function remove_cluster {
 # $3 - peer certificate path
 # $4 - target cluster's hostname
 function install_client {
-    info "Moving files to $1..."
+    info "Moving VeilClient files to $1..."
 
     RUID=`ssh $1 "echo \\\$UID"`
     S_DIR="${SETUP_DIR}_${RUID}"
@@ -316,7 +316,7 @@ function install_global_registry_package {
 # $1 - target host
 # $2 - db node numer
 function start_global_registry_db {
-    info "Starting Global Registry DB..."
+    info "Starting Global Registry DB nodes..."
 
     ssh $1 "mkdir -p /opt/bigcouch" || error "Cannot create directory for Global Registry DB on $1."
     ssh $1 "cp -R /var/lib/globalregistry/bigcouchdb/database_node/* /opt/bigcouch" || error "Cannot copy Global Registry DB files on $1."
@@ -335,7 +335,7 @@ function start_global_registry_db {
 
 # $1 - target host
 function remove_global_registry_db {
-    info "Removing Global Registry DB..."
+    info "Removing Global Registry DB nodes..."
 
     ssh $1 "rm -rf /opt/bigcouch" || error "Cannot remove Global Registry DB copy on $1."
     ssh $1 "rm -rf /var/lib/globalregistry" || error "Cannot remove Global Registry DB on $1."
@@ -343,7 +343,7 @@ function remove_global_registry_db {
 
 # $1 - target host
 function start_global_registry {
-    info "Starting Global Registry..."
+    info "Starting Global Registry nodes..."
 
     dbs=`echo ${GLOBAL_REGISTRY_DB_NODES} | tr ";" "\n"`
     db_nodes=""
@@ -360,7 +360,7 @@ function start_global_registry {
 
 # $1 - target host
 function remove_global_registry {
-    info "Removing Global Registry..."
+    info "Removing Global Registry nodes..."
 
     ssh $1 "rpm -e globalregistry 2> /dev/null" 2> /dev/null
 

@@ -96,7 +96,7 @@ for i in `seq 1 ${n_count}`; do
     deploy_stamp ${node}
 done
 
-info "Waiting for VeilCluster initialization..."
+info "Waiting for VeilCluster nodes initialization..."
 sleep 120
 
 #####################################################################
@@ -116,10 +116,10 @@ for i in `seq 1 ${n_count}`; do
 done
 
 #####################################################################
-# Nagios health check
+# Nagios VeilCluster nodes health check
 #####################################################################
 
-info "Nagios health check..."
+info "Nagios VeilCluster nodes health check..."
 
 cluster=`nth "$CLUSTER_NODES" 1`
 cluster=${cluster#*@}
@@ -167,7 +167,7 @@ for i in `seq 1 ${n_count}`; do
     if [[ "$CLUSTER_CREATE_USER_IN_DB" == "yes" ]]; then
         cmm="$reg_run $node_name $user_name '$user_name@test.com' /tmp/tmp_cert.pem"
 
-        info "Trying to register $user_name using cluster node $cnode (command: $cmm)"
+        info "Trying to register $user_name using VeilCluster node $cnode (command: $cmm)"
 
         scp ${cert} tmp_cert.pem
         scp tmp_cert.pem ${cnode}:/tmp/
