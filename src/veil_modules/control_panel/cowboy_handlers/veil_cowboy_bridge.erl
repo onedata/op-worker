@@ -5,7 +5,13 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module BLABLABLA
+%% @doc: This module introduces a new abstraction layer over standard cowboy
+%% handlers. It allows delegating tasks to control_panel instances on other
+%% nodes. Delegation can be switched on and off for different handlers.
+%% Nomenclature:
+%% socket process - process, that has been spawned by cowboy to handle a request
+%% handling process - process that has been spawned by control_panel to process
+%% the request and send the answer to socket process.
 %% @end
 %% ===================================================================
 -module(veil_cowboy_bridge).
@@ -16,7 +22,7 @@
 -include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% Communication between socket process and handling process
+%% Interaction between socket process and handling process
 -export([apply/3, request_processing_loop/0, set_socket_pid/1, get_socket_pid/0]).
 
 %% Cowboy handler API
@@ -41,6 +47,8 @@
 %% ====================================================================
 %% @doc Used to interact with the socket process - issues application of
 %% some code on the socket process, which then sends back the result.
+%% This is needed when some data is cached at socket process - for example
+%% cowboy_req:reply or :body can be evaluated only on socket process.
 %% @end
 -spec apply(Module :: atom(), Fun :: function(), Args :: [term()]) -> term().
 %% ====================================================================
@@ -59,6 +67,56 @@ apply(Module, Fun, Args) ->
                     Result
             end
     end.
+
+
+%% request_processing_loop/0
+%% ====================================================================
+%% @doc A loop that gets evaluated while handling process is processing
+%% a request.
+%% @end
+-spec request_processing_loop() -> ok().
+%% ====================================================================
+request_processing_loop() ->
+    SocketProcessPid = get_socket_pid(),
+    receive
+        {apply, Module, Fun, Args} ->
+            try
+                SocketProcessPid ! {result, erlang:apply(Module, Fun, Args)},
+                ?MODULE:request_processing_loop()
+            catch
+                T:M ->
+                    ?error_stacktrace("Error in request processing loop - ~p:~p", [T, M]),
+                    ok
+            end;
+        {flush, Actions} ->
+            SocketProcessPid ! {flush, Actions},
+            ?MODULE:request_processing_loop();
+        terminate ->
+            ok;
+        Unknown ->
+            ?warning("Unknown message in request processing loop: ~p", [Unknown]),
+            ok
+    end.
+
+
+%% set_socket_pid/1
+%% ====================================================================
+%% @doc Convenience function that stores the reference to socket pid in process dict.
+%% @end
+-spec set_socket_pid(Pid :: pid()) -> ok().
+%% ====================================================================
+set_socket_pid(Pid) ->
+    erlang:put(socket_pid, Pid).
+
+
+%% get_socket_pid/0
+%% ====================================================================
+%% @doc Convenience function that retrieves the reference to socket pid from process dict.
+%% @end
+-spec get_socket_pid() -> ok().
+%% ====================================================================
+get_socket_pid() ->
+    erlang:get(socket_pid).
 
 
 %% ====================================================================
@@ -332,29 +390,7 @@ delegation_loop(HandlerPid) ->
             Result;
         {apply, Module, Fun, Args} ->
             HandlerPid ! {result, erlang:apply(Module, Fun, Args)},
-            delegation_loop(HandlerPid)
-    end.
-
-
-request_processing_loop() ->
-    SocketProcessPid = get_socket_pid(),
-    receive
-        {apply, Module, Fun, Args} ->
-            try
-                io:format("RPL: ~p:~p/~p~n", [Module, Fun, length(Args)]),
-                SocketProcessPid ! {result, erlang:apply(Module, Fun, Args)}
-            catch
-                T:M ->
-                    ?error_stacktrace("Error in RPL - ~p:~p", [T, M])
-            end,
-            request_processing_loop();
-        {flush, Actions} ->
-            SocketProcessPid ! {flush, Actions},
-            request_processing_loop();
-        terminate ->
-            ok;
-        Unknown ->
-            ?warning("Unknown message in request processing loop: ~p", [Unknown])
+            ?MODULE:delegation_loop(HandlerPid)
     end.
 
 
@@ -374,14 +410,9 @@ get_handler_pid() ->
     erlang:get(handler_pid).
 
 
-set_socket_pid(Pid) ->
-    erlang:put(socket_pid, Pid).
-
-get_socket_pid() ->
-    erlang:get(socket_pid).
-
 set_delegation(Delegation) ->
     erlang:put(delegation, Delegation).
+
 
 get_delegation() ->
     erlang:get(delegation).

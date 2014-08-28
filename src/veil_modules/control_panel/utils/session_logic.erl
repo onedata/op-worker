@@ -38,8 +38,6 @@
 -spec init() -> ok.
 %% ====================================================================
 init() ->
-%%     % Ets table needed for session storing.
-%%     ets:new(?SESSION_ETS, [named_table, public, bag, {read_concurrency, true}]),
     ok.
 
 
@@ -50,7 +48,6 @@ init() ->
 -spec cleanup() -> ok.
 %% ====================================================================
 cleanup() ->
-%%     ets:delete(?SESSION_ETS),
     ok.
 
 
