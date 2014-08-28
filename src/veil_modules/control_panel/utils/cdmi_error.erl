@@ -22,6 +22,6 @@
 -spec error_reply(req(), #state{}, integer(), string(), list()) -> {halt, req(), #state{}}.
 %% ====================================================================
 error_reply(Req,State,ErrorCode,ErrorDescription,DescriptionArgs) ->
-    ?error(ErrorDescription, DescriptionArgs),
+    ?error_stacktrace(ErrorDescription, DescriptionArgs),
     {ok, Req2} = cowboy_req:reply(ErrorCode, Req),
     {halt, Req2, State}.

@@ -68,6 +68,8 @@ gen_error_code(UnknownReason) ->
 %% ====================================================================
 gen_error_message(getfileattr, Error) ->
     #fileattr{answer = Error, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""};
+gen_error_message(getfileuuid, Error) ->
+    #fileuuid{answer = Error, uuid = ""};
 gen_error_message(getfilelocation, Error) ->
     #filelocation{answer = Error, storage_id = -1, file_id = "", validity = 0};
 gen_error_message(getnewfilelocation, Error) ->
