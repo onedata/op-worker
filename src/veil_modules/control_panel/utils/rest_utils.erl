@@ -14,11 +14,9 @@
 
 -include_lib("public_key/include/public_key.hrl").
 -include("err.hrl").
+-include("veil_modules/control_panel/cdmi_metadata.hrl").
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
-
--define(default_storage_system_metadata,
-        [<<"cdmi_size">>, <<"cdmi_ctime">>, <<"cdmi_atime">>, <<"cdmi_mtime">>, <<"cdmi_owner">>]).
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
