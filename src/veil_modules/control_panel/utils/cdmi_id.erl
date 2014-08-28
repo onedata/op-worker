@@ -5,7 +5,9 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc (see https://github.com/jeastman/crime)
+%% @doc Support for CDMI Object ID (taken from https://github.com/jeastman/crime)
+%%
+%% Orginal description:
 %% Object IDs are used to identify objects in CDMI. Object IDs are intended
 %% to be globally unique values that have a specific structure. The native
 %% format of an object ID is a variable length byte sequence with a maximum
