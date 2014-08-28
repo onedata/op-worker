@@ -31,7 +31,7 @@
 -export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1, change_file_perm/2]).
 
 %% File sharing
--export([get_file_by_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
+-export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
 -export([create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
 
 %% ====================================================================
@@ -640,6 +640,27 @@ contact_fslogic(Message, Value) ->
 %% ====================================================================
 get_file_by_uuid(UUID) ->
   dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], 1).
+
+%% get_file_uuid/1
+%% ====================================================================
+%% @doc Gets uuid on the basis of filepath.
+%% @end
+-spec get_file_uuid(Filepath :: string()) -> Result when
+  Result :: {ok, Uuid} | {ErrorGeneral, ErrorDetail},
+  Uuid :: uuid(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+get_file_uuid(FileName) ->
+    {Status, TmpAns} = contact_fslogic(#getfileuuid{file_logic_name = FileName}),
+    case Status of
+        ok ->
+            case TmpAns#fileuuid.answer of
+                ?VOK -> {ok, TmpAns#fileuuid.uuid};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
 
 %% get_file_user_dependent_name_by_uuid/1
 %% ====================================================================
