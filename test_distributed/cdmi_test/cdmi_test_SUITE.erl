@@ -117,13 +117,13 @@ get_file_test(_Config) ->
     %%------------------------------
 
     %%--- selective value read -----
-    RequestHeaders6 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code6, _Headers6, Response6} = do_request(FileName++"?value:1-3;valuerange", get, RequestHeaders6, []),
-    ?assertEqual("200",Code6),
-    {struct,CdmiPesponse6} = mochijson2:decode(Response6),
+    RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code3, _Headers3, Response3} = do_request(FileName++"?value:1-3;valuerange", get, RequestHeaders3, []),
+    ?assertEqual("200",Code3),
+    {struct,CdmiPesponse3} = mochijson2:decode(Response3),
 
-    ?assertEqual(<<"1-3">>, proplists:get_value(<<"valuerange">>,CdmiPesponse6)),
-    ?assertEqual(<<"ome">>, base64:decode(proplists:get_value(<<"value">>,CdmiPesponse6))), % 1-3 from FileContent = <<"Some content...">>
+    ?assertEqual(<<"1-3">>, proplists:get_value(<<"valuerange">>,CdmiPesponse3)),
+    ?assertEqual(<<"ome">>, base64:decode(proplists:get_value(<<"value">>,CdmiPesponse3))), % 1-3 from FileContent = <<"Some content...">>
     %%------------------------------
 
     %%------- noncdmi read --------
