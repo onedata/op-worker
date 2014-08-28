@@ -15,7 +15,7 @@
 -include("veil_modules/control_panel/cdmi.hrl").
 
 %% Callbacks
--export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
+-export([init/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 %% Content type routing functions
 -export([get_cdmi_container/2, get_cdmi_object/2, get_binary/2]).
 -export([put_cdmi_container/2, put_cdmi_object/2, put_binary/2]).
@@ -44,21 +44,29 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
 rest_init(Req, _Opt) ->
-    {ok, DnString} = rest_utils:verify_peer_cert(Req),
-    case rest_utils:prepare_context(DnString) of %todo check all required request header/body fields, and return badrequest error if something is missing
-        ok ->
-            {Method, _} = cowboy_req:method(Req),
-            {PathInfo, _} = cowboy_req:path_info(Req),
-            {Url, _} = cowboy_req:path(Req),
-            {RawOpts, _} = cowboy_req:qs(Req),
-            {CdmiVersion, _} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
-            Path = case PathInfo == [] of
-                       true -> "/";
-                       false -> gui_str:binary_to_unicode_list(rest_utils:join_to_path(PathInfo))
-                   end,
-            HandlerModule = cdmi_routes:route(PathInfo, Url),
-            {ok, Req, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts), cdmi_version = CdmiVersion, handler_module = HandlerModule}};
-        Error -> {ok, Req, Error}
+    try
+        {ok, DnString} = rest_utils:verify_peer_cert(Req),
+        ok = rest_utils:prepare_context(DnString),
+        {Method, _} = cowboy_req:method(Req),
+        {PathInfo, _} = cowboy_req:path_info(Req),
+        {Url, _} = cowboy_req:path(Req),
+        {RawOpts, _} = cowboy_req:qs(Req),
+        {CdmiVersionList, _} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
+        CdmiVersion = get_supported_version(CdmiVersionList),
+        Req2 = case CdmiVersion of
+                   undefined -> Req;
+                   Version -> cowboy_req:set_resp_header(<<"x-cdmi-specification-version">>,Version,Req)
+               end,
+        Path = case PathInfo == [] of
+                   true -> "/";
+                   false -> gui_str:binary_to_unicode_list(rest_utils:join_to_path(PathInfo))
+               end,
+        HandlerModule = cdmi_routes:route(PathInfo, Url),
+        {ok, Req2, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts), cdmi_version = CdmiVersion, handler_module = HandlerModule}}
+    catch
+        _Type:{badmatch,{error, Error}} -> {ok, Req, {error, Error}};
+        _Type:{badmatch,Error} -> {ok, Req, {error,Error}};
+        _Type:Error -> {ok, Req, {error,Error}}
     end.
 
 %% allowed_methods/2
@@ -71,14 +79,30 @@ rest_init(Req, _Opt) ->
 % Some errors could have been detected in do_init/2. If so, State contains
 % an {error, Type} tuple. These errors shall be handled here,
 % because cowboy doesn't allow returning errors in rest_init.
-allowed_methods(Req, {error, Type}) ->
-    NewReq = case Type of
-                 path_invalid -> rest_utils:reply_with_error(Req, warning, ?error_path_invalid, []);
-                 {user_unknown, DnString} -> rest_utils:reply_with_error(Req, error, ?error_user_unknown, [DnString])
-             end,
-    {halt, NewReq, error};
+allowed_methods(Req, {error,Error}) ->
+    case Error of
+        {user_unknown, DnString} -> cdmi_error:error_reply(Req, undefined, ?error_unauthorized_code, "No user found with given DN: ~p",[DnString]);
+        unsupported_version -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "Provided cdmi version is unsupported",[]);
+        Error -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "State init error: ~p",[Error])
+    end;
 allowed_methods(Req, #state{handler_module = Handler} = State) ->
     Handler:allowed_methods(Req,State).
+
+%% malformed_request/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Checks if request contains all mandatory fields and their values are set properly
+%% depending on requested operation
+%% @end
+%% ====================================================================
+-spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}}.
+%% ====================================================================
+malformed_request(Req, #state{handler_module = Handler} = State) ->
+    try
+        Handler:malformed_request(Req,State)
+    catch
+        _Type:Error  -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "Malformed request error: ~p",[Error])
+    end.
 
 %% resource_exists/2
 %% ====================================================================
@@ -97,7 +121,7 @@ resource_exists(Req, #state{handler_module = Handler} = State) ->
 %% @end
 -spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
-content_types_provided(Req, #state{handler_module = Handler} = State) -> %todo handle non-cdmi types
+content_types_provided(Req, #state{handler_module = Handler} = State) ->
     Handler:content_types_provided(Req,State).
 
 %% content_types_accepted/2
@@ -108,7 +132,7 @@ content_types_provided(Req, #state{handler_module = Handler} = State) -> %todo h
 %% @end
 -spec content_types_accepted(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-content_types_accepted(Req, #state{handler_module = Handler} = State) -> %todo handle noncdmi dir put
+content_types_accepted(Req, #state{handler_module = Handler} = State) ->
     Handler:content_types_accepted(Req,State).
 
 %% delete_resource/2
@@ -171,3 +195,29 @@ parse_opts(RawOpts) ->
         end,
         Opts
     ).
+
+%% get_supported_version/1
+%% ====================================================================
+%% @doc Finds supported version in coma-separated binary of client versions,
+%% throws exception when no version is supported
+%% @end
+-spec get_supported_version(binary() | list() | undefined ) -> binary() | undefined | no_return().
+%% ====================================================================
+get_supported_version(undefined) -> undefined;
+get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
+    VersionList = lists:map(fun trim_spaces/1, binary:split(VersionBinary,<<",">>,[global])),
+    get_supported_version(VersionList);
+get_supported_version([]) ->
+    ?error("Request with unsupported cdmi version list"),
+    throw(unsupported_version);
+get_supported_version([<<"1.0.2">> | _Rest]) -> <<"1.0.2">>;
+get_supported_version([<<"1.0.1">> | _Rest]) -> <<"1.0.1">>;
+get_supported_version([_Version | Rest]) -> get_supported_version(Rest).
+
+%% trim_spaces/1
+%% ====================================================================
+%% @doc trims spaces from front and end of given binary
+-spec trim_spaces(binary()) -> binary().
+%% ====================================================================
+trim_spaces(Binary) when is_binary(Binary) ->
+    list_to_binary(string:strip(binary_to_list(Binary), both, $ )).

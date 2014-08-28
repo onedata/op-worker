@@ -19,14 +19,15 @@
 -define(SH, "DirectIO").
 -define(Test_dir_name, "dir").
 -define(Test_file_name, "file.txt").
+-define(Test_file_content, <<"test_file_content">>).
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 %% -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1,get_file_test/1 , create_dir_test/1, create_file_test/1, delete_dir_test/1, delete_file_test/1]).
+-export([list_dir_test/1,get_file_test/1 , create_dir_test/1, create_file_test/1, update_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1]).
 
-all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, delete_dir_test, delete_file_test].
+all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, update_file_test, delete_dir_test, delete_file_test, version_test, request_format_check_test].
 
 %% ====================================================================
 %% Test functions
@@ -146,34 +147,35 @@ get_file_test(_Config) ->
 % Tests dir creation (cdmi container PUT), remember that every container URI ends
 % with '/'
 create_dir_test(_Config) ->
-    DirName = "/toCreate/",
-    MissingParentName="/unknown/",
+    DirName = "toCreate/",
+    DirName2 = "toCreate2/",
+    MissingParentName="unknown/",
     DirWithoutParentName = filename:join(MissingParentName,"dir")++"/",
 
-    %%---- missing content type ----
+    %%------ non-cdmi create -------
     ?assert(not object_exists(DirName)),
 
     {Code1, _Headers1, _Response1} = do_request(DirName, put, [], []),
-    ?assertEqual("415",Code1),
+    ?assertEqual("201",Code1),
 
-    ?assert(not object_exists(DirName)),
+    ?assert(object_exists(DirName)),
     %%------------------------------
 
     %%------ basic create ----------
-    ?assert(not object_exists(DirName)),
+    ?assert(not object_exists(DirName2)),
 
     RequestHeaders2 = [{"content-type", "application/cdmi-container"},{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code2, _Headers2, Response2} = do_request(DirName, put, RequestHeaders2, []),
+    {Code2, _Headers2, Response2} = do_request(DirName2, put, RequestHeaders2, []),
     ?assertEqual("201",Code2),
     {struct,CdmiPesponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>,CdmiPesponse2)),
-    ?assertEqual(<<"toCreate/">>, proplists:get_value(<<"objectName">>,CdmiPesponse2)),
+    ?assertEqual(list_to_binary(DirName2), proplists:get_value(<<"objectName">>,CdmiPesponse2)),
     ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiPesponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse2)),
     ?assertEqual([], proplists:get_value(<<"children">>,CdmiPesponse2)),
     ?assert(proplists:get_value(<<"metadata">>,CdmiPesponse2) =/= <<>>),
 
-    ?assert(object_exists(DirName)),
+    ?assert(object_exists(DirName2)),
     %%------------------------------
 
     %%----- creation conflict ------
@@ -243,18 +245,6 @@ create_file_test(_Config) ->
     ?assertEqual(FileContent,get_file_content(ToCreate2)),
     %%------------------------------
 
-    %%----- create conflict --------
-    ?assert(object_exists(ToCreate)),
-
-    RequestHeaders3 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
-    RequestBody3 = [{<<"value">>, FileContent}],
-    RawRequestBody3 = rest_utils:encode_to_json(RequestBody3),
-    {Code3, _Headers3, _Response3} = do_request(ToCreate, put, RequestHeaders3, RawRequestBody3),
-    ?assertEqual("409",Code3),
-
-    ?assert(object_exists(ToCreate)),
-    %%------------------------------
-
     %%------- create empty ---------
     ?assert(not object_exists(ToCreate4)),
 
@@ -275,6 +265,40 @@ create_file_test(_Config) ->
 
     ?assert(object_exists(ToCreate5)),
     ?assertEqual(FileContent,get_file_content(ToCreate5)).
+    %%------------------------------
+
+% Tests cdmi object PUT requests (updating content)
+update_file_test(_Config) ->
+    FullName = filename:join(["/",?Test_dir_name,?Test_file_name]),
+    NewValue = <<"New Value!">>,
+
+    %%--- value replace, cdmi ------
+    ?assert(object_exists(FullName)),
+    ?assertEqual(?Test_file_content,get_file_content(FullName)),
+
+    RequestHeaders1 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestBody1 = [{<<"value">>, NewValue}],
+    RawRequestBody1 = rest_utils:encode_to_json(RequestBody1),
+    {Code1, _Headers1, _Response1} = do_request(FullName, put, RequestHeaders1, RawRequestBody1),
+    ?assertEqual("204",Code1),
+
+    ?assert(object_exists(FullName)),
+    ?assertEqual(NewValue,get_file_content(FullName)),
+    %%------------------------------
+
+    %%---- value update, cdmi ------
+    ?assert(object_exists(FullName)),
+    ?assertEqual(NewValue,get_file_content(FullName)),
+
+    UpdateValue = <<"123">>,
+    RequestHeaders2 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestBody2 = [{<<"value">>, UpdateValue}],
+    RawRequestBody2 = rest_utils:encode_to_json(RequestBody2),
+    {Code2, _Headers2, _Response2} = do_request(FullName ++ "?value:0-2", put, RequestHeaders2, RawRequestBody2),
+    ?assertEqual("204",Code2),
+
+    ?assert(object_exists(FullName)),
+    ?assertEqual(<<"123 Value!">>,get_file_content(FullName)).
     %%------------------------------
 
 % Tests cdmi container DELETE requests
@@ -345,7 +369,49 @@ delete_file_test(_Config) ->
     ?assert(not object_exists(GroupFileName)).
     %%------------------------------
 
+% tests version checking (X-CDMI-Specification-Version header)
+version_test(_Config) ->
+    %%----- version supported ------
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2, 1.0.1, 1.0.0"}],
+    {Code1, Headers1, _Response1} = do_request([], get, RequestHeaders1, []),
+    ?assertEqual("200",Code1),
+    ?assertEqual(proplists:get_value("x-cdmi-specification-version", Headers1), "1.0.2"),
+    %%------------------------------
 
+    %%--- version not supported ----
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.0, 2.0.1"}],
+    {Code2, Headers2, _Response2} = do_request([], get, RequestHeaders2, []),
+    ?assertEqual("400",Code2),
+    ?assertEqual(proplists:get_value("x-cdmi-specification-version", Headers2), undefined),
+    %%------------------------------
+
+    %%--------- non cdmi -----------
+    {Code3, Headers3, _Response3} = do_request(filename:join(?Test_dir_name,?Test_file_name), get, [], []),
+    ?assertEqual("200",Code3),
+    ?assertEqual(proplists:get_value("x-cdmi-specification-version", Headers3), undefined).
+    %%------------------------------
+
+% tests req format checking
+request_format_check_test(_Config) ->
+    FileToCreate = "file.txt",
+    DirToCreate = "dir/",
+    FileContent = <<"File content!">>,
+
+    %%-- obj missing content-type --
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestBody1 = [{<<"value">>, FileContent}],
+    RawRequestBody1 = rest_utils:encode_to_json(RequestBody1),
+    {Code1, _Headers1, _Response1} = do_request(FileToCreate, put, RequestHeaders1, RawRequestBody1),
+    ?assertEqual("400",Code1),
+    %%------------------------------
+
+    %%-- dir missing content-type --
+    RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestBody3 = [{<<"metadata">>, <<"">>}],
+    RawRequestBody3 = rest_utils:encode_to_json(RequestBody3),
+    {Code3, _Headers3, _Response3} = do_request(DirToCreate, put, RequestHeaders3, RawRequestBody3),
+    ?assertEqual("400",Code3).
+    %%------------------------------
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -384,7 +450,8 @@ init_per_suite(Config) ->
             {db_nodes, [?DB_NODE]},
             {heart_beat, 1},
             {nif_prefix, './'},
-            {ca_dir, './cacerts/'}
+            {ca_dir, './cacerts/'},
+            {control_panel_download_buffer,4}
         ]]),
 
     gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
@@ -503,9 +570,11 @@ setup_user_in_db(Cert, Config) ->
     Ans7 = rpc:call(CCM, erlang, apply, [
         fun() ->
             fslogic_context:set_user_dn(DN),
-            logical_files_manager:create(filename:join(["/",?Test_dir_name,?Test_file_name]))
+            FullName = filename:join(["/",?Test_dir_name,?Test_file_name]),
+            logical_files_manager:create(FullName),
+            logical_files_manager:write(FullName, ?Test_file_content)
         end, [] ]),
-    ?assertEqual(ok, Ans7),
+    ?assert(is_integer(Ans7)),
 
     StorageUUID.
 
