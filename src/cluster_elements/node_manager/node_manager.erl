@@ -1397,6 +1397,6 @@ start_rest_listener() ->
 %% ====================================================================
 static_dispatches(DocRoot, StaticPaths) ->
     _StaticDispatches = lists:map(fun(Dir) ->
-        {Dir ++ "[...]", cowboy_static, [{dir, DocRoot ++ Dir}]}
+        {Dir ++ "[...]", cowboy_static, {dir, DocRoot ++ Dir}}
     end, StaticPaths).
 
