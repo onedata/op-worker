@@ -67,33 +67,41 @@ init(_Proto, _Req, _Opts) ->
 %% ====================================================================
 websocket_init(TransportName, Req, _Opts) ->
     ?debug("WebSocket connection received. Transport: ~p", [TransportName]),
-    {ok, PeerCert} = ssl:peercert(cowboy_req:get(socket, Req)),
-    {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
-    {ok, DispatcherTimeout} = application:get_env(veil_cluster_node, dispatcher_timeout),
 
-    case ets:lookup(gsi_state, {Serial, Issuer}) of
-        [{_, [OtpCert | Certs], _}] ->
-            case gsi_handler:call(gsi_nif, verify_cert_c,
-                [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate
-                    [public_key:pkix_encode('OTPCertificate', Cert, otp) || Cert <- Certs], %% peer CA chain
-                    [DER || [DER] <- ets:match(gsi_state, {{ca, '_'}, '$1', '_'})],         %% cluster CA store
-                    [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
-                {ok, 1} ->
-                    InitCtx = #hander_state{peer_serial = Serial, dispatcher_timeout = DispatcherTimeout},
-                    {ok, Req, setup_connection(InitCtx, OtpCert, Certs, auth_handler:is_provider(OtpCert))};
-                {ok, 0, Errno} ->
-                    ?info("Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
-                    {shutdown, Req};
-                {error, Reason} ->
-                    ?error("GSI peer verification callback error: ~p", [Reason]),
-                    {shutdown, Req};
-                Other ->
-                    ?error("GSI verification callback returned unknown response ~p", [Other]),
+    {ok, DispatcherTimeout} = application:get_env(veil_cluster_node, dispatcher_timeout),
+    InitCtx = #hander_state{dispatcher_timeout = DispatcherTimeout},
+
+    case ssl:peercert(cowboy_req:get(socket, Req)) of
+        {ok, PeerCert} ->
+            {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
+
+            case ets:lookup(gsi_state, {Serial, Issuer}) of
+                [{_, [OtpCert | Certs], _}] ->
+                    case gsi_handler:call(gsi_nif, verify_cert_c,
+                        [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate
+                            [public_key:pkix_encode('OTPCertificate', Cert, otp) || Cert <- Certs], %% peer CA chain
+                            [DER || [DER] <- ets:match(gsi_state, {{ca, '_'}, '$1', '_'})],         %% cluster CA store
+                            [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
+                        {ok, 1} ->
+                            InitCtx2 = InitCtx#hander_state{peer_serial = Serial},
+                            {ok, Req, setup_connection(InitCtx2, OtpCert, Certs, auth_handler:is_provider(OtpCert))};
+                        {ok, 0, Errno} ->
+                            ?info("Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
+                            {shutdown, Req};
+                        {error, Reason} ->
+                            ?error("GSI peer verification callback error: ~p", [Reason]),
+                            {shutdown, Req};
+                        Other ->
+                            ?error("GSI verification callback returned unknown response ~p", [Other]),
+                            {shutdown, Req}
+                    end;
+                _ ->
+                    ?error("Peer was conected but cerificate chain was not found. Please check if GSI validation is enabled."),
                     {shutdown, Req}
             end;
-        _ ->
-            ?error("Peer was conected but cerificate chain was not found. Please check if GSI validation is enabled."),
-            {shutdown, Req}
+
+        {error, no_peercert} ->
+            {ok, Req, InitCtx#hander_state{peer_type = user}}
     end.
 
 
@@ -117,7 +125,7 @@ setup_connection(InitCtx, OtpCert, _Certs, true) ->
 
 %% websocket_handle/3
 %% ====================================================================
-%% @doc Cowboy's webscoket_handle callback. Binary data was received on socket. <br/>
+%% @doc Cowboy's websocket_handle callback. Binary data was received on socket. <br/>
 %%      For more information please refer Cowboy's user manual.
 -spec websocket_handle({Type :: atom(), Data :: term()}, Req, State) ->
     {reply, {Type :: atom(), Data :: term()}, Req, State} | {ok, Req, State} | {shutdown, Req, State}
@@ -157,7 +165,25 @@ websocket_handle({Type, Data}, Req, State) ->
 %% Handle Handshake request - FUSE ID negotiation
 handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     #handshakerequest{hostname = Hostname, variable = Vars, cert_confirmation = CertConfirmation} = HReq, MsgId, Answer_type, _AccessToken},
-    #hander_state{peer_dn = DnString} = State) ->
+    #hander_state{peer_dn = DnString} = OriginalState) ->
+
+    State = case DnString of
+        undefined ->
+            #handshakerequest{identity = Identity} = HReq,
+            #handshakerequest_identity{gruid = GlobalId, secret = Secret} = Identity,
+
+            case gr_adapter:verify_client(GlobalId, Secret) of
+                true ->
+                    AccessToken = auth_handler:get_access_token(GlobalId),
+                    OriginalState#hander_state{user_global_id = GlobalId, access_token = AccessToken};
+                false ->
+                    throw({unable_to_authenticate, MsgId})
+            end;
+
+        _ ->
+            OriginalState
+    end,
+
     ?debug("Handshake request: ~p", [HReq]),
     NewFuseId = genFuseId(HReq),
     UID = %% Fetch user's ID
