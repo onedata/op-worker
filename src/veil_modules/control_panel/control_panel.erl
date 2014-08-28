@@ -73,7 +73,6 @@ handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
 
 handle(_ProtocolVersion, {spawn_handler, SocketPid}) ->
-    io:format("Spawning handler at ~p~n", [node()]),
     Pid = spawn(
         fun() ->
             veil_cowboy_bridge:set_socket_pid(SocketPid),
@@ -138,31 +137,37 @@ init_gui() ->
         {'_', static_dispatches(atom_to_list(DocRoot), ?static_paths) ++ [
             {"/nagios/[...]", veil_cowboy_bridge,
                 [
+                    {delegation, true},
                     {handler_module, nagios_handler},
                     {handler_opts, []}
                 ]},
             {?user_content_download_path ++ "/:path", veil_cowboy_bridge,
                 [
+                    {delegation, false},
                     {handler_module, file_download_handler},
                     {handler_opts, [{type, ?user_content_request_type}]}
                 ]},
             {?shared_files_download_path ++ "/:path", veil_cowboy_bridge,
                 [
+                    {delegation, false},
                     {handler_module, file_download_handler},
                     {handler_opts, [{type, ?shared_files_request_type}]}
                 ]},
             {?file_upload_path, veil_cowboy_bridge,
                 [
+                    {delegation, false},
                     {handler_module, file_upload_handler},
                     {handler_opts, []}
                 ]},
             {"/ws/[...]", veil_cowboy_bridge,
                 [
+                    {delegation, true},
                     {handler_module, veil_bullet_handler},
                     {handler_opts, [{handler, n2o_bullet}]}
                 ]},
             {'_', veil_cowboy_bridge,
                 [
+                    {delegation, true},
                     {handler_module, n2o_handler},
                     {handler_opts, []}
                 ]}
@@ -198,7 +203,8 @@ init_gui() ->
         {'_', [
             {'_', veil_cowboy_bridge,
                 [
-                    {handler_module, redirect_handler},
+                    {delegation, true},
+                    {handler_module, vcn_redirect_handler},
                     {handler_opts, []}
                 ]}
         ]}
@@ -221,11 +227,13 @@ init_gui() ->
         {'_', [
             {"/rest/:version/[...]", veil_cowboy_bridge,
                 [
+                    {delegation, false},
                     {handler_module, rest_handler},
                     {handler_opts, []}
                 ]},
             {"/cdmi/[...]", veil_cowboy_bridge,
                 [
+                    {delegation, false},
                     {handler_module, cdmi_handler},
                     {handler_opts, []}
                 ]}

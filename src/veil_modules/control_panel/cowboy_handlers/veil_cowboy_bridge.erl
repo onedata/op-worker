@@ -45,11 +45,19 @@
 -spec apply(Module :: atom(), Fun :: function(), Args :: [term()]) -> term().
 %% ====================================================================
 apply(Module, Fun, Args) ->
-    io:format(user, "apply ~p:~p/~p~n", [Module, Fun, length(Args)]),
-    get_socket_pid() ! {apply, Module, Fun, Args},
-    receive
-        {result, Result} ->
-            Result
+    case get_delegation() of
+        false ->
+            % This is the socket process (delegation flag is set)
+            % so it can just evaluate code
+            erlang:apply(Module, Fun, Args);
+        _ ->
+            % This is a spawned process, it must call the socket process to apply the fun
+            io:format(user, "apply ~p:~p/~p~n", [Module, Fun, length(Args)]),
+            get_socket_pid() ! {apply, Module, Fun, Args},
+            receive
+                {result, Result} ->
+                    Result
+            end
     end.
 
 
@@ -65,11 +73,17 @@ apply(Module, Fun, Args) ->
 %% ====================================================================
 init(Type, Req, Opts) ->
     io:format("Got request at ~p~n", [node()]),
-    spawn_handling_process(),
-    ?debug("veil_cowboy_bridge: ~p", [Opts]),
     HandlerModule = proplists:get_value(handler_module, Opts),
     HandlerOpts = proplists:get_value(handler_opts, Opts, []),
+    Delegation = proplists:get_value(delegation, Opts, true),
     set_handler_module(HandlerModule),
+    set_delegation(Delegation),
+    case Delegation of
+        true ->
+            spawn_handling_process();
+        false ->
+            ok
+    end,
     delegate(init, [Type, Req, HandlerOpts]).
 
 
@@ -300,10 +314,16 @@ terminate_handling_process() ->
 
 delegate(Fun, Args) ->
     HandlerModule = get_handler_module(),
-    io:format("~p:~p/~p~n", [HandlerModule, Fun, length(Args)]),
-    HandlerPid = get_handler_pid(),
-    HandlerPid ! {apply, HandlerModule, Fun, Args},
-    delegation_loop(HandlerPid).
+    case get_delegation() of
+        true ->
+            io:format("delegated ~p:~p/~p~n", [HandlerModule, Fun, length(Args)]),
+            HandlerPid = get_handler_pid(),
+            HandlerPid ! {apply, HandlerModule, Fun, Args},
+            delegation_loop(HandlerPid);
+        false ->
+            io:format("local ~p:~p/~p~n", [HandlerModule, Fun, length(Args)]),
+            erlang:apply(HandlerModule, Fun, Args)
+    end.
 
 
 delegation_loop(HandlerPid) ->
@@ -357,6 +377,11 @@ get_handler_pid() ->
 set_socket_pid(Pid) ->
     erlang:put(socket_pid, Pid).
 
-
 get_socket_pid() ->
     erlang:get(socket_pid).
+
+set_delegation(Delegation) ->
+    erlang:put(delegation, Delegation).
+
+get_delegation() ->
+    erlang:get(delegation).

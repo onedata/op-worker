@@ -61,28 +61,46 @@ cleanup() ->
 -spec save_session(SessionID :: binary(), Props :: [tuple()], ValidTill :: integer() | undefined) -> ok | no_return().
 %% ====================================================================
 save_session(SessionID, Props, TillArg) ->
-    ?dump({save_session, SessionID, Props, TillArg}),
+    ExistingCookieDoc = case dao_lib:apply(dao_cookies, get_cookie, [SessionID], 1) of
+                            {ok, Doc} -> Doc;
+                            _ -> undefined
+                        end,
+
     CookieDoc = case TillArg of
                     undefined ->
-                        case dao_lib:apply(dao_cookies, get_cookie, [SessionID], 1) of
-                            {ok, #veil_document{record = #session_cookie{valid_till = ValidTill}} = Doc} ->
-                                Doc#veil_document{
-                                    record = #session_cookie{
-                                        session_memory = Props,
-                                        valid_till = ValidTill
+                        case ExistingCookieDoc of
+                            undefined ->
+                                % New SessionID, but no expiration time specified
+                                throw("session expiration not specified");
+                            #veil_document{record = #session_cookie{} = CookieInfo} ->
+                                % Existing SessionID, use the same record
+                                % Props are updated, but expiration time stays the same
+                                ExistingCookieDoc#veil_document{
+                                    record = CookieInfo#session_cookie{
+                                        session_memory = Props
                                     }
-                                };
-                            _ ->
-                                throw("session expiration not specified")
+                                }
                         end;
                     _ ->
-                        #veil_document{
-                            uuid = SessionID,
-                            record = #session_cookie{
-                                session_memory = Props,
-                                valid_till = TillArg
-                            }
-                        }
+                        case ExistingCookieDoc of
+                            undefined ->
+                                % New SessionID, expiration time was specified
+                                #veil_document{
+                                    uuid = SessionID,
+                                    record = #session_cookie{
+                                        session_memory = Props,
+                                        valid_till = TillArg
+                                    }
+                                };
+                            #veil_document{record = CookieInfo} = CDoc ->
+                                % Existing SessionID, expiration time was specified and replaces the old one
+                                CDoc#veil_document{
+                                    record = CookieInfo#session_cookie{
+                                        session_memory = Props,
+                                        valid_till = TillArg
+                                    }
+                                }
+                        end
                 end,
 
     dao_lib:apply(dao_cookies, save_cookie, [CookieDoc], 1),
@@ -100,7 +118,6 @@ save_session(SessionID, Props, TillArg) ->
 -spec lookup_session(SessionID :: binary()) -> Props :: [tuple()] | undefined.
 %% ====================================================================
 lookup_session(SessionID) ->
-    ?dump({lookup_session, SessionID}),
     case SessionID of
         undefined ->
             undefined;
@@ -130,7 +147,6 @@ lookup_session(SessionID) ->
 -spec delete_session(SessionID :: binary()) -> ok.
 %% ====================================================================
 delete_session(SessionID) ->
-    ?dump({delete_session, SessionID}),
     case SessionID of
         undefined ->
             ok;
