@@ -50,7 +50,7 @@ message GetFileUuid {
 
 message FileUuid {
   optional string answer = 1 [default = "ok"];
-  required string uuid = 1;
+  required string uuid = 2;
 }
 
 message FileLocation {
