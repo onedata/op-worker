@@ -10,7 +10,10 @@
 # build and deploy VeilFS project's components.
 #####################################################################
 
-## Check configuration and set defaults...
+#####################################################################
+# Check configuration and set defaults
+#####################################################################
+
 if [[ -z "$CONFIG_PATH" ]]; then
     export CONFIG_PATH="/etc/onedata_platform.conf"
 fi
@@ -22,6 +25,8 @@ fi
 if [[ -z "$STAMP_DIR" ]]; then
     export STAMP_DIR="${SETUP_DIR}-stamp"
 fi
+
+ONEPANEL_MULTICAST_ADDRESS="239.255.`echo ${MASTER} | awk -F '.' '{print $3}'`.`echo ${MASTER} | awk -F '.' '{print $4}'`"
 
 #####################################################################
 # Utility Functions
@@ -140,8 +145,7 @@ function install_veilcluster_package {
     scp *.rpm $1:${SETUP_DIR}/$2 || error "Moving $2 file failed on $1"
 
     info "Installing $2 package on $1..."
-    multicast_address="239.255.0."`echo ${MASTER##*.}`
-    ssh $1 "export ONEPANEL_MULTICAST_ADDRESS=$multicast_address ; rpm -Uvh $SETUP_DIR/$2 --nodeps --force ; sleep 5" || error "Cannot install $2 package on $1"
+    ssh $1 "export ONEPANEL_MULTICAST_ADDRESS=$ONEPANEL_MULTICAST_ADDRESS ; rpm -Uvh $SETUP_DIR/$2 --nodeps --force ; sleep 5" || error "Cannot install $2 package on $1"
 }
 
 # $1 - target host
