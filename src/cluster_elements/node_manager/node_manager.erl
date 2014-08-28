@@ -115,9 +115,8 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
                 _:_ -> ok
             end,
             start_dispatcher_listener(),
-            start_gui_listener(),
-            start_rest_listener(),
-            start_redirector_listener(),
+            {ok, Interval} = application:get_env(?APP_Name, initialization_time),
+            erlang:send_after(Interval * 1000, self(), {timer, init_listeners}),
             {ok, MonitoringInitialization} = application:get_env(?APP_Name, node_monitoring_initialization),
             erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_node_monitoring});
         false -> ok
@@ -249,6 +248,16 @@ handle_cast(stop, State) ->
 
 handle_cast(start_node_monitoring, State) ->
     spawn(fun() -> create_node_stats_rrd(State) end),
+    {noreply, State};
+
+handle_cast(init_listeners, State) ->
+    try
+        start_gui_listener(),
+        start_rest_listener(),
+        start_redirector_listener()
+    catch T:M ->
+        ?error_stacktrace("Error while initializing cowboy listeners - ~p:~p", [T, M])
+    end,
     {noreply, State};
 
 handle_cast(monitor_node, State) ->
@@ -1388,5 +1397,6 @@ start_rest_listener() ->
 %% ====================================================================
 static_dispatches(DocRoot, StaticPaths) ->
     _StaticDispatches = lists:map(fun(Dir) ->
-        {Dir ++ "[...]", cowboy_static, {dir, DocRoot ++ Dir}}
+        {Dir ++ "[...]", cowboy_static, [{dir, DocRoot ++ Dir}]}
     end, StaticPaths).
+

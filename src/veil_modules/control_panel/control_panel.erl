@@ -66,6 +66,7 @@ handle(_ProtocolVersion, get_version) ->
 handle(_ProtocolVersion, {spawn_handler, SocketPid}) ->
     Pid = spawn(
         fun() ->
+            erlang:monitor(process, SocketPid),
             veil_cowboy_bridge:set_socket_pid(SocketPid),
             veil_cowboy_bridge:request_processing_loop()
         end),

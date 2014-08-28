@@ -99,6 +99,9 @@ request_processing_loop() ->
             ?MODULE:request_processing_loop();
         terminate ->
             ok;
+        {'DOWN', _, _, _, _} ->
+            ?debug("Socket process died, handler process is terminating"),
+            ok;
         Unknown ->
             ?warning("Unknown message in request processing loop: ~p", [Unknown]),
             ok
