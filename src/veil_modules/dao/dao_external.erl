@@ -14,7 +14,7 @@
 
 -include_lib("veil_modules/dao/dao.hrl").
 %% API
--export([set_db/1, get_db/0, record_info/1, is_valid_record/1, sequential_synch_call/3]).
+-export([set_db/1, get_db/0, record_info/1, is_valid_record/1, sequential_synch_call/3, view_def_location/0]).
 
 %% set_db/1
 %% ====================================================================
@@ -84,3 +84,12 @@ sequential_synch_call(Module,Function,Args) ->
     after 1000 ->
         {error, timeout}
     end.
+
+%% view_def_location/0
+%% ====================================================================
+%% @doc Returns location of database views definitions
+-spec view_def_location() -> Location :: string().
+%% ====================================================================
+view_def_location() ->
+    {ok, Location} = application:get_env(veil_cluster_node, view_def_location),
+    atom_to_list(Location).
