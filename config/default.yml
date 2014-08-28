@@ -425,8 +425,15 @@ veil_cluster_node_env:
   - parameter:
       name: io_bytes_threshold
       description: |
-           Defines how often io event is generated in terms of read or written bytes
+           Defines how often io event is generated in terms of read or written bytes.
       value: 1048576 # 1MB
+
+  - parameter:
+      name: view_def_location
+      description: Location of database views definitions.
+      value: |
+        "\'views/\'"
+      erlang_term: "'views/'"
 
   # Quota management
   - parameter:
