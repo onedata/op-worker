@@ -52,19 +52,13 @@ Veil service - allows installation of veil cluster nodes.
 ./install_rpm $RPM_BUILD_ROOT %{_prefix}
 
 %post
-mkdir -p %{_prefix}/nodes
-cp -r %{_prefix}/files/onepanel_node %{_prefix}/nodes/onepanel
-sed -i s/"-name .*"/"-name onepanel@"`hostname -f`/g `find %{_prefix}/nodes/onepanel/releases -name vm.args`
-if [[ -n "$ONEPANEL_MULTICAST_ADDRESS" ]]
-then
-    sed -i s/"-onepanel multicast_address .*"/"-onepanel multicast_address \"\\\{`echo $ONEPANEL_MULTICAST_ADDRESS | sed s/"\."/", "/g`\\\}\""/g `find %{_prefix}/nodes/onepanel/releases -name vm.args`
-fi
+sh %{_prefix}/onepanel_setup %{_prefix}
 chkconfig --add veil
 chkconfig --add onepanel
 service onepanel start
 ln -sf %{_prefix}/setup /usr/bin/veil_setup
 ln -sf %{_prefix}/addusers /usr/bin/veil_addusers
-ln -sf %{_prefix}/onepanel_setup /usr/bin/onepanel_setup
+ln -sf %{_prefix}/onepanel_admin /usr/bin/onepanel_admin
 
 %preun
 service veil stop
@@ -73,7 +67,7 @@ chkconfig --del veil
 chkconfig --del onepanel
 rm -f /usr/bin/veil_setup
 rm -f /usr/bin/veil_addusers
-rm -f /usr/bin/onepanel_setup
+rm -f /usr/bin/onepanel_admin
 rm -rf %{_prefix}
 
 %clean
