@@ -174,7 +174,7 @@ handle(_ProtocolVersion, _Msg) ->
 %% ====================================================================
 maybe_handle_fuse_message(RequestBody) ->
     PathCtx = extract_logical_path(RequestBody),
-    {ok, AbsolutePathCtx} = fslogic_path:get_full_file_name(PathCtx),
+    {ok, AbsolutePathCtx} = fslogic_path:get_full_file_name(PathCtx, vcn_utils:record_type(RequestBody)),
     {ok, #space_info{name = SpaceName, providers = Providers} = SpaceInfo} = fslogic_utils:get_space_info_for_path(AbsolutePathCtx),
 
     Self = cluster_manager_lib:get_provider_id(),
@@ -257,7 +257,7 @@ fslogic_runner(Method, RequestType, RequestBody, ErrorHandler) when is_function(
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went wrong, but it could be expected.
             ?warning("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            ?warning_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:{case_clause, {error, Reason}} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),

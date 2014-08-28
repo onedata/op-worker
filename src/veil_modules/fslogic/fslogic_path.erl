@@ -208,7 +208,7 @@ get_user_root(#user{spaces = []}) ->
 get_user_root(#user{spaces = [PrimarySpaceId | _]}) ->
     {ok, #space_info{name = SpaceName}} = fslogic_objects:get_space({uuid, PrimarySpaceId}),
     ?debug("get user root: ~p ~p ~p", [PrimarySpaceId, SpaceName, unicode:characters_to_list(SpaceName)]),
-    fslogic_path:absolute_join(?SPACES_BASE_DIR_NAME, unicode:characters_to_list(SpaceName)).
+    fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, unicode:characters_to_list(SpaceName)]).
 
 
 %% get_user_root/2

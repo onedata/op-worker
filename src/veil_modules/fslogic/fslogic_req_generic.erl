@@ -183,13 +183,13 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
             end,
 
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-        type = Type, size = Size, uname = UName, gname = SpaceName, uid = UID, gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links};
+        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = UID, gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links};
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
     case fslogic_objects:get_file(FullFileName) of
         {ok, FileDoc} ->            %% Throw VENOENT in order not to trigger error-log
             get_file_attr(FileDoc); %% which would be unnecessary since get_file_attr is also used to check
-        {error, file_not_found} ->  %% if file exists
+        {error, file_not_found} ->  %% if the file exists
             throw(?VENOENT)
     end.
 
