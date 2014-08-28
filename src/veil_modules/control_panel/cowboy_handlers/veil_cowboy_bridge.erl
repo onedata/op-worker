@@ -22,6 +22,9 @@
 -include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+% Max time (ms) to wait for worker_host to reply
+-define(handling_process_spawn_timeout, 5000).
+
 %% Interaction between socket process and handling process
 -export([apply/3, request_processing_loop/0, set_socket_pid/1, get_socket_pid/0]).
 
@@ -142,7 +145,7 @@ init(Type, Req, Opts) ->
                 ok ->
                     delegate(init, [Type, Req, HandlerOpts]);
                 _ ->
-                    {shutdown, Req, Opts}
+                    {shutdown, Req}
             end;
         false ->
             delegate(init, [Type, Req, HandlerOpts])
@@ -365,6 +368,7 @@ put_cdmi_container(Req, State) ->
 %% @end
 -spec spawn_handling_process() -> ok | {error, timeout}.
 %% ====================================================================
+
 spawn_handling_process() ->
     SocketPid = self(),
     MsgID = 0, %% This can be 0 as one socket process sends only one request
@@ -373,7 +377,7 @@ spawn_handling_process() ->
         {worker_answer, MsgID, Resp} ->
             set_handler_pid(Resp),
             ok
-    after 5000 ->
+    after ?handling_process_spawn_timeout ->
         ?error("Cannot spawn handling process, timeout"),
         {error, timeout}
     end.
