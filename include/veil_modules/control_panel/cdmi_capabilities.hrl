@@ -40,9 +40,9 @@
     {<<"cdmi_delete_container">>,<<"true">>}
 ]).
 
--define(root_capability_path,"/cdmi_capabilities/").
--define(container_capability_path,"/cdmi_capabilities/container/").
--define(dataobject_capability_path,"/cdmi_capabilities/dataobject/").
+-define(root_capability_path,"cdmi_capabilities/").
+-define(container_capability_path,"cdmi_capabilities/container/").
+-define(dataobject_capability_path,"cdmi_capabilities/dataobject/").
 
 % these are fake uuids, necessary for objectid generation
 -define(root_capability_uuid,"0000000000000001").

@@ -60,7 +60,7 @@ malformed_request(Req, State = #state{filepath = Filepath}) ->
                                {ok, Name} when is_list(Name) ->Name,
                                    [_Username | Path] = string:tokens(Name,"/"), % todo here we strip username from path, what if objectid points to someone's else file?
                                    case Path of
-                                       [] -> "";
+                                       [] -> "/";
                                        List -> filename:join(List)
                                    end;
                                _ -> throw(cdmi_error:error_reply(Req2,State,?error_not_found_code,"Could not find file name for uuid: ~p",[Uuid]))
@@ -76,8 +76,8 @@ malformed_request(Req, State = #state{filepath = Filepath}) ->
         case binary:last(Url) =:= $/ of
             true ->
                 case is_capability_object(Req) of
-                    false -> cdmi_container:malformed_request(Req3,State#state{filepath = FullFileName ++ "/", handler_module = cdmi_container});
-                    true -> cdmi_capabilities:malformed_request(Req3,State#state{filepath = FullFileName ++ "/", handler_module = cdmi_capabilities})
+                    false -> cdmi_container:malformed_request(Req3,State#state{filepath = FullFileName, handler_module = cdmi_container});
+                    true -> cdmi_capabilities:malformed_request(Req3,State#state{filepath = FullFileName, handler_module = cdmi_capabilities})
                 end;
             false -> cdmi_object:malformed_request(Req3,State#state{filepath = FullFileName, handler_module = cdmi_object})
         end

@@ -15,6 +15,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("veil_modules/control_panel/cdmi_capabilities.hrl").
 
 -define(SH, "DirectIO").
 -define(Test_dir_name, "dir").
@@ -25,9 +26,9 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 %% -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1,get_file_test/1 , create_dir_test/1, create_file_test/1, update_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_test/1]).
+-export([list_dir_test/1,get_file_test/1 , create_dir_test/1, create_file_test/1, update_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1]).
 
-all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, update_file_test, delete_dir_test, delete_file_test, version_test, request_format_check_test,objectid_test].
+all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, update_file_test, delete_dir_test, delete_file_test, version_test, request_format_check_test,objectid_and_capabilities_test].
 
 %% ====================================================================
 %% Test functions
@@ -429,7 +430,7 @@ request_format_check_test(_Config) ->
     ?assertEqual("400",Code3).
     %%------------------------------
 
-objectid_test(_Config) ->
+objectid_and_capabilities_test(_Config) ->
     %%-------- / objectid ----------
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code1, _Headers1, Response1} = do_request("", get, RequestHeaders1, []),
@@ -442,9 +443,7 @@ objectid_test(_Config) ->
     ?assert(is_binary(RootId)),
     ?assertEqual(undefined, proplists:get_value(<<"parentURI">>,CdmiResponse1)),
     ?assertEqual(undefined, proplists:get_value(<<"parentID">>,CdmiResponse1)),
-    RootCapabilitiesURI = proplists:get_value(<<"capabilitiesURI">>,CdmiResponse1),
-    ?assertNotEqual(RootCapabilitiesURI,undefined),
-    ?assert(is_binary(RootCapabilitiesURI)),
+    ?assertEqual(<<"cdmi_capabilities/container/">>,proplists:get_value(<<"capabilitiesURI">>,CdmiResponse1)),
     %%------------------------------
 
     %%------ /dir objectid ---------
@@ -459,10 +458,7 @@ objectid_test(_Config) ->
     ?assert(is_binary(DirId)),
     ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiResponse2)),
     ?assertEqual(RootId, proplists:get_value(<<"parentID">>,CdmiResponse2)),
-    DirCapabilitiesURI = proplists:get_value(<<"capabilitiesURI">>,CdmiResponse2),
-    ?assertEqual(RootCapabilitiesURI,DirCapabilitiesURI),
-    ?assertNotEqual(DirCapabilitiesURI,undefined),
-    ?assert(is_binary(DirCapabilitiesURI)),
+    ?assertEqual(<<"cdmi_capabilities/container/">>,proplists:get_value(<<"capabilitiesURI">>,CdmiResponse2)),
     %%------------------------------
 
     %%--- /dir/file.txt objectid ---
@@ -477,9 +473,7 @@ objectid_test(_Config) ->
     ?assert(is_binary(FileId)),
     ?assertEqual(<<"/dir/">>, proplists:get_value(<<"parentURI">>,CdmiResponse3)),
     ?assertEqual(DirId, proplists:get_value(<<"parentID">>,CdmiResponse3)),
-    FileCapabilitiesURI = proplists:get_value(<<"capabilitiesURI">>,CdmiResponse3),
-    ?assertNotEqual(FileCapabilitiesURI,undefined),
-    ?assert(is_binary(FileCapabilitiesURI)),
+    ?assertEqual(<<"cdmi_capabilities/dataobject/">>,proplists:get_value(<<"capabilitiesURI">>,CdmiResponse3)),
     %%------------------------------
 
     %%---- get / by objectid -------
@@ -500,7 +494,6 @@ objectid_test(_Config) ->
     ?assertEqual(proplists:delete(<<"metadata">>,CdmiResponse2), proplists:delete(<<"metadata">>,CdmiResponse5)), %should be the same as in 2 (except metadata)
     %%------------------------------
 
-
     %% get /dir/file.txt by objectid
     RequestHeaders6 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code6, _Headers6, Response6} = do_request("cdmi_objectid/"++binary_to_list(DirId)++"/file.txt", get, RequestHeaders6, []),
@@ -513,8 +506,56 @@ objectid_test(_Config) ->
     ?assertEqual("200",Code7),
 
     {struct,CdmiResponse7} = mochijson2:decode(Response7),
-    ?assertEqual(proplists:delete(<<"metadata">>,CdmiResponse7), proplists:delete(<<"metadata">>,CdmiResponse6)). %should be the same as in 3 (except metadata)
+    ?assertEqual(proplists:delete(<<"metadata">>,CdmiResponse7), proplists:delete(<<"metadata">>,CdmiResponse6)), %should be the same as in 3 (except metadata)
     %%------------------------------
+
+    %%--- system capabilities ------
+    RequestHeaders8 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code8, _Headers8, Response8} = do_request("cdmi_capabilities/", get, RequestHeaders8, []),
+    ?assertEqual("200",Code8),
+
+    {struct,CdmiResponse8} = mochijson2:decode(Response8),
+    ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse8)),
+    ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"objectName">>,CdmiResponse8)),
+    ?assertEqual(<<"0-1">>, proplists:get_value(<<"childrenrange">>,CdmiResponse8)),
+    ?assertEqual([list_to_binary(?container_capability_path),list_to_binary(?dataobject_capability_path)], proplists:get_value(<<"children">>,CdmiResponse8)),
+    ?assertMatch({struct,_}, proplists:get_value(<<"capabilities">>,CdmiResponse8)),
+    {struct,Capabilities} = proplists:get_value(<<"capabilities">>,CdmiResponse8),
+    ?assertEqual(?root_capability_list,Capabilities),
+    %%------------------------------
+
+    %%-- container capabilities ----
+    RequestHeaders9 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code9, _Headers9, Response9} = do_request("cdmi_capabilities/container/", get, RequestHeaders9, []),
+    ?assertEqual("200",Code9),
+    ?assertMatch({Code9, _, Response9},do_request("cdmi_objectid/"++binary_to_list(?container_capability_id)++"/", get, RequestHeaders9, [])),
+
+    {struct,CdmiResponse9} = mochijson2:decode(Response9),
+    ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"parentURI">>,CdmiResponse9)),
+    ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse9)),
+    ?assertEqual(?container_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse9)),
+    ?assertEqual(list_to_binary(?container_capability_path), proplists:get_value(<<"objectName">>,CdmiResponse9)),
+    ?assertMatch({struct,_}, proplists:get_value(<<"capabilities">>,CdmiResponse9)),
+    {struct,Capabilities2} = proplists:get_value(<<"capabilities">>,CdmiResponse9),
+    ?assertEqual(?container_capability_list,Capabilities2),
+    %%------------------------------
+
+    %%-- dataobject capabilities ---
+    RequestHeaders10 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code10, _Headers10, Response10} = do_request("cdmi_capabilities/dataobject/", get, RequestHeaders10, []),
+    ?assertEqual("200",Code10),
+    ?assertMatch({Code10, _, Response10},do_request("cdmi_objectid/"++binary_to_list(?dataobject_capability_id)++"/", get, RequestHeaders10, [])),
+
+    {struct,CdmiResponse10} = mochijson2:decode(Response10),
+    ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"parentURI">>,CdmiResponse10)),
+    ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse10)),
+    ?assertEqual(?dataobject_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse10)),
+    ?assertEqual(list_to_binary(?dataobject_capability_path), proplists:get_value(<<"objectName">>,CdmiResponse10)),
+    ?assertMatch({struct,_}, proplists:get_value(<<"capabilities">>,CdmiResponse10)),
+    {struct,Capabilities3} = proplists:get_value(<<"capabilities">>,CdmiResponse10),
+    ?assertEqual(?dataobject_capability_list,Capabilities3).
+    %%------------------------------
+
 
 
 %% ====================================================================
