@@ -298,8 +298,8 @@ prepare_object_ans([<<"valuerange">> | Tail], #state{opts = Opts, attributes = A
         _ ->
             [{<<"valuerange">>, iolist_to_binary([<<"0-">>, integer_to_binary(Attrs#fileattributes.size - 1)])} | prepare_object_ans(Tail, State)]
     end;
-prepare_object_ans([Other | Tail], State) ->
-    [{Other, <<>>} | prepare_object_ans(Tail, State)].
+prepare_object_ans([_Other | Tail], State) ->
+    prepare_object_ans(Tail, State).
 
 %% write_body_to_file/3
 %% ====================================================================

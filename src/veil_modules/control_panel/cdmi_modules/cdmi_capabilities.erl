@@ -146,4 +146,6 @@ prepare_capability_ans([<<"capabilities">> | Tail], State = #state{capability = 
 prepare_capability_ans([<<"childrenrange">> | Tail], State = #state{capability = dataobject}) ->
     prepare_capability_ans(Tail, State);
 prepare_capability_ans([<<"children">> | Tail], State = #state{capability = dataobject}) ->
-    [{<<"children">>, []} | prepare_capability_ans(Tail, State)].
+    [{<<"children">>, []} | prepare_capability_ans(Tail, State)];
+prepare_capability_ans([_Other | Tail], State) ->
+   prepare_capability_ans(Tail, State).
