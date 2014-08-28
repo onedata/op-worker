@@ -651,7 +651,7 @@ get_file_by_uuid(UUID) ->
   ErrorDetail :: term().
 %% ====================================================================
 get_file_uuid(FileName) ->
-    {Status, TmpAns} = contact_fslogic(internal_call, #getfileuuid{file_logic_name = FileName}),
+    {Status, TmpAns} = contact_fslogic(#getfileuuid{file_logic_name = FileName}),
     case Status of
         ok ->
             case TmpAns#fileuuid.answer of
