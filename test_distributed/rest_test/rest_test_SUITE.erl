@@ -265,7 +265,7 @@ test_rest_shares() ->
                    false -> "https://localhost:" ++ integer_to_list(Port)
                end,
     DlPath = Hostname ++ ?shared_files_download_path ++ ShareID,
-    ?assertEqual(Response4, "{\"file_path\":\"dir/file.txt\",\"download_path\":\"" ++ DlPath ++ "\"}"),
+    ?assertEqual(Response4, "{\"file_path\":\"spaces/" ++ ?TEST_USER ++ "/dir/file.txt\",\"download_path\":\"" ++ DlPath ++ "\"}"),
 
     {Code5, Headers5, Response5} = do_request(?REST_SHARE_SUBPATH ++ ShareID, delete, [], []),
     ?assertEqual(Code5, "200"),
