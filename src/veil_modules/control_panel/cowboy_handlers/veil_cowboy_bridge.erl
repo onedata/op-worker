@@ -42,6 +42,9 @@
 %% CDMI handler specific funs
 -export([get_cdmi_container/2, put_cdmi_container/2]).
 
+%% This is an internal function, but must be exported to user ?MODULE: in recursion.
+-export([delegation_loop/1]).
+
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -170,7 +173,12 @@ handle(Req, State) ->
 %% ====================================================================
 terminate(Reason, Req, State) ->
     delegate(terminate, [Reason, Req, State]),
-    terminate_handling_process().
+    case get_delegation() of
+        true ->
+            terminate_handling_process();
+        false ->
+            ok
+    end.
 
 
 %% ====================================================================
