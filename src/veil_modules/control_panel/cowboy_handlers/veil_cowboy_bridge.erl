@@ -74,7 +74,7 @@ apply(Module, Fun, Args) ->
 %% @doc A loop that gets evaluated while handling process is processing
 %% a request.
 %% @end
--spec request_processing_loop() -> ok().
+-spec request_processing_loop() -> ok.
 %% ====================================================================
 request_processing_loop() ->
     SocketProcessPid = get_socket_pid(),
@@ -103,7 +103,7 @@ request_processing_loop() ->
 %% ====================================================================
 %% @doc Convenience function that stores the reference to socket pid in process dict.
 %% @end
--spec set_socket_pid(Pid :: pid()) -> ok().
+-spec set_socket_pid(Pid :: pid()) -> term().
 %% ====================================================================
 set_socket_pid(Pid) ->
     erlang:put(socket_pid, Pid).
@@ -113,7 +113,7 @@ set_socket_pid(Pid) ->
 %% ====================================================================
 %% @doc Convenience function that retrieves the reference to socket pid from process dict.
 %% @end
--spec get_socket_pid() -> ok().
+-spec get_socket_pid() -> pid().
 %% ====================================================================
 get_socket_pid() ->
     erlang:get(socket_pid).
@@ -138,11 +138,15 @@ init(Type, Req, Opts) ->
     set_delegation(Delegation),
     case Delegation of
         true ->
-            spawn_handling_process();
+            case spawn_handling_process() of
+                ok ->
+                    delegate(init, [Type, Req, HandlerOpts]);
+                _ ->
+                    {shutdown, Req, Opts}
+            end;
         false ->
-            ok
-    end,
-    delegate(init, [Type, Req, HandlerOpts]).
+            delegate(init, [Type, Req, HandlerOpts])
+    end.
 
 
 %% handle/2
@@ -353,23 +357,46 @@ put_cdmi_container(Req, State) ->
 %% Internal functions
 %% ====================================================================
 
+%% spawn_handling_process/0
+%% ====================================================================
+%% @doc Contacts a control_panel instance via dispatcher to spawn a handling
+%% process there, whoose pid will be reported back to socket process for
+%% later communication.
+%% @end
+-spec spawn_handling_process() -> ok | {error, timeout}.
+%% ====================================================================
 spawn_handling_process() ->
     SocketPid = self(),
     MsgID = 0, %% This can be 0 as one socket process sends only one request
     gen_server:call(?Dispatcher_Name, {node_chosen, {control_panel, 1, SocketPid, MsgID, {spawn_handler, SocketPid}}}),
     receive
         {worker_answer, MsgID, Resp} ->
-            set_handler_pid(Resp)
+            set_handler_pid(Resp),
+            ok
     after 5000 ->
         ?error("Cannot spawn handling process, timeout"),
         {error, timeout}
     end.
 
 
+%% terminate_handling_process/0
+%% ====================================================================
+%% @doc Orders the handling process to terminate.
+%% @end
+-spec terminate_handling_process() -> terminate.
+%% ====================================================================
 terminate_handling_process() ->
     get_handler_pid() ! terminate.
 
 
+%% delegate/2
+%% ====================================================================
+%% @doc Function used to delegate a cowboy callback. Depending on if the
+%% delegation flag was set to true, this will contact a handling process
+%% or cause the socket process to evaluate the callback.
+%% @end
+-spec delegate(Fun :: function(), Args :: [term()]) -> term().
+%% ====================================================================
 delegate(Fun, Args) ->
     HandlerModule = get_handler_module(),
     case get_delegation() of
@@ -384,6 +411,13 @@ delegate(Fun, Args) ->
     end.
 
 
+%% delegation_loop/1
+%% ====================================================================
+%% @doc Loop that is evaluated by socket process while it has spawned a handling process
+%% and is delegating tasks.
+%% @end
+-spec delegation_loop(HandlerPid :: pid()) -> term().
+%% ====================================================================
 delegation_loop(HandlerPid) ->
     receive
         {result, Result} ->
@@ -394,25 +428,61 @@ delegation_loop(HandlerPid) ->
     end.
 
 
+%% set_handler_module/1
+%% ====================================================================
+%% @doc Convenience function that stores the reference to handler module in process dict.
+%% @end
+-spec set_handler_module(Module :: atom()) -> term().
+%% ====================================================================
 set_handler_module(Module) ->
     erlang:put(handler_module, Module).
 
 
+%% get_handler_module/0
+%% ====================================================================
+%% @doc Convenience function that retrieves the reference to handler module from process dict.
+%% @end
+-spec get_handler_module() -> atom().
+%% ====================================================================
 get_handler_module() ->
     erlang:get(handler_module).
 
 
+%% set_handler_pid/1
+%% ====================================================================
+%% @doc Convenience function that stores the reference to handler pid in process dict.
+%% @end
+-spec set_handler_pid(Pid :: pid()) -> term().
+%% ====================================================================
 set_handler_pid(Pid) ->
     erlang:put(handler_pid, Pid).
 
 
+%% get_handler_pid/0
+%% ====================================================================
+%% @doc Convenience function that retrieves the reference to handler pid from process dict.
+%% @end
+-spec get_handler_pid() -> pid().
+%% ====================================================================
 get_handler_pid() ->
     erlang:get(handler_pid).
 
 
+%% set_delegation/1
+%% ====================================================================
+%% @doc Convenience function that stores the delegation flag in process dict.
+%% @end
+-spec set_delegation(Delegation :: boolean()) -> term().
+%% ====================================================================
 set_delegation(Delegation) ->
     erlang:put(delegation, Delegation).
 
 
+%% get_delegation/0
+%% ====================================================================
+%% @doc Convenience function that retrieves the delegation flag from process dict.
+%% @end
+-spec get_delegation() -> boolean().
+%% ====================================================================
 get_delegation() ->
     erlang:get(delegation).
