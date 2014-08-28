@@ -44,6 +44,15 @@ message FileAttr {
     optional int32 links = 13 [default = 1];
 }
 
+message GetFileUuid {
+  required string file_logic_name = 1;
+}
+
+message FileUuid {
+  optional string answer = 1 [default = "ok"];
+  required string uuid = 1;
+}
+
 message FileLocation {
     optional string answer = 1 [default = "ok"];
     required int32 storage_id = 2;
