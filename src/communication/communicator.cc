@@ -203,8 +203,8 @@ CommunicationHandler::Pool Communicator::poolType(const google::protobuf::Messag
 std::shared_ptr<Communicator> createWebsocketCommunicator(unsigned int dataPoolSize,
                                                           unsigned int metaPoolSize,
                                                           std::string uri,
-                                                          std::shared_ptr<const CertificateData> certificateData,
-                                                          const bool verifyServerCertificate)
+                                                          const bool verifyServerCertificate,
+                                                          std::shared_ptr<const CertificateData> certificateData)
 {
     LOG(INFO) << "Creating a WebSocket++ based Communicator instance with " <<
                  dataPoolSize << " data pool connections, " << metaPoolSize <<
@@ -213,10 +213,10 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(unsigned int dataPoolS
                  (verifyServerCertificate ? "enabled" : "disabled") << ".";
 
     auto dataPool = std::make_unique<WebsocketConnectionPool>(
-                dataPoolSize, uri, certificateData, verifyServerCertificate);
+                dataPoolSize, uri, verifyServerCertificate, certificateData);
 
     auto metaPool = std::make_unique<WebsocketConnectionPool>(
-                metaPoolSize, uri, certificateData, verifyServerCertificate);
+                metaPoolSize, uri, verifyServerCertificate, certificateData);
 
     auto communicationHandler = std::make_unique<CommunicationHandler>(
                 std::move(dataPool), std::move(metaPool));

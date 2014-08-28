@@ -222,8 +222,8 @@ private:
  */
 std::shared_ptr<Communicator> createWebsocketCommunicator(
         unsigned int dataPoolSize, unsigned int metaPoolSize, std::string uri,
-        std::shared_ptr<const CertificateData> certificateData,
-        const bool verifyServerCertificate);
+        const bool verifyServerCertificate,
+        std::shared_ptr<const CertificateData> certificateData = nullptr);
 
 } // namespace communication
 } // namespace veil

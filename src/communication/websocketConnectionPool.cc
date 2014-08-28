@@ -28,8 +28,8 @@ class CertificateData;
 
 WebsocketConnectionPool::WebsocketConnectionPool(const unsigned int connectionsNumber,
                                                  std::string uri,
-                                                 std::shared_ptr<const CertificateData> certificateData,
-                                                 const bool verifyServerCertificate)
+                                                 const bool verifyServerCertificate,
+                                                 std::shared_ptr<const CertificateData> certificateData)
     : ConnectionPool{connectionsNumber, std::move(uri)}
     , m_certificateData{std::move(certificateData)}
     , m_verifyServerCertificate{verifyServerCertificate}
@@ -81,8 +81,7 @@ WebsocketConnectionPool::context_ptr WebsocketConnectionPool::onTLSInit()
         mode |= SSL_SESS_CACHE_CLIENT;
         SSL_CTX_set_session_cache_mode(ssl_ctx, mode);
 
-        return m_certificateData->initContext(ctx);
-
+        return m_certificateData ? m_certificateData->initContext(ctx) : ctx;
     }
     catch(boost::system::system_error &e)
     {

@@ -54,8 +54,8 @@ public:
     WebsocketConnectionPool(
             const unsigned int connectionsNumber,
             std::string uri,
-            std::shared_ptr<const CertificateData> certificateData,
-            const bool verifyServerCertificate);
+            const bool verifyServerCertificate,
+            std::shared_ptr<const CertificateData> certificateData);
 
     /**
      * Destructor.
