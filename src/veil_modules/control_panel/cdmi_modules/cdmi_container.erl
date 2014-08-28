@@ -191,6 +191,8 @@ prepare_container_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->
     [{<<"metadata">>, rest_utils:prepare_metadata(Attrs)} | prepare_container_ans(Tail, State)];
+prepare_container_ans([{<<"metadata">>, Prefix} | Tail], #state{attributes = Attrs} = State) ->
+    [{<<"metadata">>, rest_utils:prepare_metadata(Prefix, Attrs)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(Tail, State)];
 prepare_container_ans([_Other | Tail], State) ->
