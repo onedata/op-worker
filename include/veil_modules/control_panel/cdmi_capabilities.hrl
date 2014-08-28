@@ -5,11 +5,13 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc This is a cdmi handler module providing acess to cdmi_capabilities
-%% which is used to discover capabilities of objects (operation that can be perfored)
+%% @doc This header provides common definitions for cdmi_capabilities,
+%% such as lists of capabilities, ids and paths of main capability containers:
+%% "cdmi_capabilities/", "cdmi_capabilities/container/", "cdmi_capabilities/dataobject/"
 %% @end
 %% ===================================================================
 
+%% the default json response for capability object will contain this entities, they can be choosed selectively by appending '?name1;name2' list to the requested url
 -define(default_get_capability_opts,[<<"objectType">>,<<"objectID">>,<<"objectName">>,<<"parentURI">>,<<"parentID">>,<<"capabilities">>,<<"childrenrange">>,<<"children">>]).
 
 -define(root_capability_list,[

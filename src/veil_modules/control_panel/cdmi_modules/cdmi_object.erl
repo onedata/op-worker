@@ -13,9 +13,7 @@
 
 -include("veil_modules/control_panel/cdmi.hrl").
 -include("veil_modules/control_panel/cdmi_capabilities.hrl").
-
--define(default_get_file_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>, <<"valuerange">>, <<"value">>]).
--define(default_post_file_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
+-include("veil_modules/control_panel/cdmi_object.hrl").
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
@@ -214,7 +212,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
                 Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                     case logical_files_manager:getfileattr(Filepath) of
                         {ok,Attrs} ->
-                            Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_post_file_opts, State#state{attributes = Attrs})}),
+                            Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
                             Req2 = cowboy_req:set_resp_body(Response, Req),
                             {true, Req2, State};
                         Error -> 
