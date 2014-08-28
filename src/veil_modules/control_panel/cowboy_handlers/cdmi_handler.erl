@@ -17,7 +17,7 @@
 %% Callbacks
 -export([init/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 %% Content type routing functions
--export([get_cdmi_container/2, get_cdmi_object/2, get_binary/2]).
+-export([get_cdmi_container/2, get_cdmi_object/2, get_binary/2, get_cdmi_capability/2]).
 -export([put_cdmi_container/2, put_cdmi_object/2, put_binary/2]).
 
 %% ====================================================================
@@ -94,14 +94,13 @@ allowed_methods(Req, #state{handler_module = Handler} = State) ->
 %% Checks if request contains all mandatory fields and their values are set properly
 %% depending on requested operation
 %% @end
-%% ====================================================================
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 malformed_request(Req, #state{handler_module = Handler} = State) ->
     try
         Handler:malformed_request(Req,State)
     catch
-        _Type:Error  -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "Malformed request error: ~p",[Error])
+        _Type:Error -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "Malformed request error: ~p",[Error])
     end.
 
 %% resource_exists/2
@@ -161,6 +160,8 @@ get_binary(Req,State = #state{handler_module = Handler}) ->
     Handler:get_binary(Req,State).
 get_cdmi_object(Req,State = #state{handler_module = Handler}) ->
     Handler:get_cdmi_object(Req,State).
+get_cdmi_capability(Req,State = #state{handler_module = Handler}) ->
+    Handler:get_cdmi_capability(Req,State).
 put_cdmi_container(Req,State = #state{handler_module = Handler}) ->
     Handler:put_cdmi_container(Req,State).
 put_binary(Req,State = #state{handler_module = Handler}) ->

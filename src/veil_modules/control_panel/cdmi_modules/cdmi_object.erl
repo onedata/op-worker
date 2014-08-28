@@ -12,9 +12,8 @@
 -module(cdmi_object).
 
 -include("veil_modules/control_panel/cdmi.hrl").
-
--define(default_get_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>, <<"valuerange">>, <<"value">>]).
--define(default_post_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
+-include("veil_modules/control_panel/cdmi_capabilities.hrl").
+-include("veil_modules/control_panel/cdmi_object.hrl").
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
@@ -23,10 +22,7 @@
 
 %% allowed_methods/2
 %% ====================================================================
-%% @doc
-%% Returns binary list of methods that are allowed (i.e GET, PUT, DELETE).
-%% @end
-%% ====================================================================
+%% @doc Returns binary list of methods that are allowed (i.e GET, PUT, DELETE).
 -spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
 allowed_methods(Req, State) ->
@@ -38,7 +34,6 @@ allowed_methods(Req, State) ->
 %% Checks if request contains all mandatory fields and their values are set properly
 %% depending on requested operation
 %% @end
-%% ====================================================================
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
 malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version } = State) when is_binary(Version) -> % put cdmi
@@ -50,9 +45,7 @@ malformed_request(Req, State) ->
 
 %% resource_exists/2
 %% ====================================================================
-%% Determines if resource, that can be obtained from state, exists.
-%% @end
-%% ====================================================================
+%% @doc Determines if resource, that can be obtained from state, exists.
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 resource_exists(Req, State = #state{filepath = Filepath}) ->
@@ -63,11 +56,11 @@ resource_exists(Req, State = #state{filepath = Filepath}) ->
 
 %% content_types_provided/2
 %% ====================================================================
+%% @doc
 %% Returns content types that can be provided and what functions should be used to process the request.
 %% Before adding new content type make sure that adequate routing function
 %% exists in cdmi_handler
 %% @end
-%% ====================================================================
 -spec content_types_provided(req(), #state{}) -> {[{ContentType, Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
@@ -89,7 +82,6 @@ content_types_provided(Req, State) ->
 %% Before adding new content type make sure that adequate routing function
 %% exists in cdmi_handler
 %% @end
-%% ====================================================================
 -spec content_types_accepted(req(), #state{}) -> {[{ContentType, Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
@@ -106,8 +98,6 @@ content_types_accepted(Req, State) ->
 %% delete_resource/3
 %% ====================================================================
 %% @doc Deletes the resource. Returns whether the deletion was successful.
-%% @end
-%% ====================================================================
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 delete_resource(Req, #state{filepath = Filepath} = State) ->
@@ -222,7 +212,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
                 Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                     case logical_files_manager:getfileattr(Filepath) of
                         {ok,Attrs} ->
-                            Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_post_file_opts, State#state{attributes = Attrs})}),
+                            Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
                             Req2 = cowboy_req:set_resp_body(Response, Req),
                             {true, Req2, State};
                         Error -> 
@@ -268,12 +258,26 @@ prepare_object_ans([], _State) ->
     [];
 prepare_object_ans([<<"objectType">> | Tail], State) ->
     [{<<"objectType">>, <<"application/cdmi-object">>} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"objectID">> | Tail], #state{filepath = Filepath} = State) ->
+    {ok, Uuid} = logical_files_manager:get_file_uuid(Filepath),
+    [{<<"objectID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"objectName">>, list_to_binary(filename:basename(Filepath))} | prepare_object_ans(Tail, State)];
-prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = <<"/">>} = State) ->
+prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = "/"} = State) ->
     [{<<"parentURI">>, <<>>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_object_ans(Tail, State)];
+    ParentURI = case fslogic_path:strip_path_leaf(Filepath) of
+                    "/" -> <<"/">>;
+                    Other -> <<(list_to_binary(Other))/binary,"/">>
+                end,
+    [{<<"parentURI">>, ParentURI} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"parentID">> | Tail], #state{filepath = "/"} = State) ->
+    [{<<"parentID">>, <<>>} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"parentID">> | Tail], #state{filepath = Filepath} = State) ->
+    {ok, Uuid} = logical_files_manager:get_file_uuid(fslogic_path:strip_path_leaf(Filepath)),
+    [{<<"parentID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"capabilitiesURI">> | Tail], State) ->
+    [{<<"capabilitiesURI">>, list_to_binary(?dataobject_capability_path)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"mimetype">> | Tail], #state{filepath = Filepath} = State) ->
@@ -296,8 +300,8 @@ prepare_object_ans([<<"valuerange">> | Tail], #state{opts = Opts, attributes = A
         _ ->
             [{<<"valuerange">>, iolist_to_binary([<<"0-">>, integer_to_binary(Attrs#fileattributes.size - 1)])} | prepare_object_ans(Tail, State)]
     end;
-prepare_object_ans([Other | Tail], State) ->
-    [{Other, <<>>} | prepare_object_ans(Tail, State)].
+prepare_object_ans([_Other | Tail], State) ->
+    prepare_object_ans(Tail, State).
 
 %% write_body_to_file/3
 %% ====================================================================

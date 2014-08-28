@@ -11,8 +11,8 @@
 -module(cdmi_container).
 
 -include("veil_modules/control_panel/cdmi.hrl").
-
--define(default_get_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
+-include("veil_modules/control_panel/cdmi_capabilities.hrl").
+-include("veil_modules/control_panel/cdmi_container.hrl").
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
@@ -23,7 +23,6 @@
 %% @doc
 %% Returns binary list of methods that are allowed (i.e GET, PUT, DELETE).
 %% @end
-%% ====================================================================
 -spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
 allowed_methods(Req, State) ->
@@ -35,7 +34,6 @@ allowed_methods(Req, State) ->
 %% Checks if request contains all mandatory fields and their values are set properly
 %% depending on requested operation
 %% @end
-%% ====================================================================
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
 malformed_request(Req, #state{cdmi_version = Version, method = <<"PUT">>} = State) when is_binary(Version) ->
@@ -46,9 +44,7 @@ malformed_request(Req, State) ->
 
 %% resource_exists/2
 %% ====================================================================
-%% Determines if resource, that can be obtained from state, exists.
-%% @end
-%% ====================================================================
+%% @doc Determines if resource, that can be obtained from state, exists.
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 resource_exists(Req,State = #state{filepath = Filepath}) ->
@@ -59,11 +55,11 @@ resource_exists(Req,State = #state{filepath = Filepath}) ->
 
 %% content_types_provided/2
 %% ====================================================================
+%% @doc
 %% Returns content types that can be provided and what functions should be used to process the request.
 %% Before adding new content type make sure that adequate routing function
 %% exists in cdmi_handler
 %% @end
-%% ====================================================================
 -spec content_types_provided(req(), #state{}) -> {[{ContentType,Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
@@ -81,7 +77,6 @@ content_types_provided(Req, State) ->
 %% Before adding new content type make sure that adequate routing function
 %% exists in cdmi_handler
 %% @end
-%% ====================================================================
 -spec content_types_accepted(req(), #state{}) -> {[{ContentType,Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
@@ -98,8 +93,6 @@ content_types_accepted(Req, State) ->
 %% delete_resource/3
 %% ====================================================================
 %% @doc Deletes the resource. Returns whether the deletion was successful.
-%% @end
-%% ====================================================================
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 delete_resource(Req, #state{filepath = Filepath} = State) ->
@@ -120,7 +113,6 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
 %% get_cdmi_container/2
 %% ====================================================================
 %% @doc Callback function for cdmi container GET operation (list dir)
-%% @end
 -spec get_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_cdmi_container(Req, #state{opts = Opts} = State) ->
@@ -131,7 +123,6 @@ get_cdmi_container(Req, #state{opts = Opts} = State) ->
 %% put_cdmi_container/2
 %% ====================================================================
 %% @doc Callback function for cdmi container PUT operation (create dir)
-%% @end
 -spec put_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
@@ -174,19 +165,32 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
 %% prepare_container_ans/2
 %% ====================================================================
 %% @doc Prepares proplist formatted answer with field names from given list of binaries
-%% @end
 -spec prepare_container_ans([FieldName :: binary()], #state{}) -> [{FieldName :: binary(), Value :: term()}].
 %% ====================================================================
 prepare_container_ans([], _State) ->
     [];
 prepare_container_ans([<<"objectType">> | Tail], State) ->
     [{<<"objectType">>, <<"application/cdmi-container">>} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"objectID">> | Tail], #state{filepath = Filepath} = State) ->
+    {ok, Uuid} = logical_files_manager:get_file_uuid(Filepath),
+    [{<<"objectID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"objectName">>, list_to_binary([filename:basename(Filepath), "/"])} | prepare_container_ans(Tail, State)];
-prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = <<"/">>} = State) ->
-    [{<<"parentURI">>, <<>>} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = "/"} = State) ->
+    prepare_container_ans(Tail, State);
 prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_container_ans(Tail, State)];
+    ParentURI = case fslogic_path:strip_path_leaf(Filepath) of
+                    "/" -> <<"/">>;
+                    Other -> list_to_binary(Other)
+                end,
+    [{<<"parentURI">>, ParentURI} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"parentID">> | Tail], #state{filepath = "/"} = State) ->
+    prepare_container_ans(Tail, State);
+prepare_container_ans([<<"parentID">> | Tail], #state{filepath = Filepath} = State) ->
+    {ok,Uuid} = logical_files_manager:get_file_uuid(fslogic_path:strip_path_leaf(Filepath)),
+    [{<<"parentID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"capabilitiesURI">> | Tail], State) ->
+    [{<<"capabilitiesURI">>, list_to_binary(?container_capability_path)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->
