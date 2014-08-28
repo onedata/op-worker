@@ -291,16 +291,9 @@ prepare_metadata(Prefix, Attrs) ->
 -spec metadata_with_prefix(Name :: binary(), Prefix :: binary()) -> true | false.
 %% ====================================================================
 metadata_with_prefix(Name, Prefix) ->
-    N = size(Prefix),
-    case size(Name) >= N of
-        true ->
-            <<ActualPrefix:N/binary,_Rest/binary>> = Name,
-            ActualPrefix == Prefix;
-        false ->
-            false
-    end.
+    binary:longest_common_prefix([Name, Prefix]) =:= size(Prefix).
 
-%% prepare_metadata/2
+%% cdmi_metadata_to_attrs/2
 %% ====================================================================
 %% @doc Extracts cdmi metadata from file attributes.
 %% @end
