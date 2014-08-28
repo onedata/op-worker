@@ -490,7 +490,7 @@ spaces_test(Config) ->
     {"ok", A11} = delete_file(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP2])),
     ?assertEqual(eacces, A11),
 
-    {"ok", A4} = rename_file(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP2, "test"])),
+    {"ok", A4} = rename_file(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP2]), "/test"),
     ?assertEqual(eacces, A4),
 
     {"ok", A5} = rename_file(Socket1, ?SPACES_BASE_DIR_NAME, "/test"),

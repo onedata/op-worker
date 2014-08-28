@@ -351,6 +351,8 @@ setup_user_in_db(Config) ->
     UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
     [DN | _] = user_logic:get_dn_list(UserDoc),
 
+    put(dn, DN),
+
     fslogic_context:set_user_dn(DN),
     Ans6 = rpc:call(CCM, erlang, apply, [
         fun() ->
