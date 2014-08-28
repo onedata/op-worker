@@ -298,6 +298,7 @@ metadata_with_prefix(Name, Prefix) ->
 -spec cdmi_metadata_to_attrs(CdmiName :: binary(), #fileattributes{}) -> {CdmiName :: binary(), Value :: binary()}.
 %% ====================================================================
 %todo add cdmi_acl metadata
+%todo clarify what should be written to cdmi_size for directories
 cdmi_metadata_to_attrs(<<"cdmi_size">>, Attrs) ->
     {<<"cdmi_size">>, integer_to_binary(Attrs#fileattributes.size)};
 %todo format times into yyyy-mm-ddThh-mm-ss.ssssssZ
