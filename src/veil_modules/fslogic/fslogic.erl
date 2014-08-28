@@ -263,6 +263,10 @@ handle_fuse_message(Req = #getfileattr{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:get_file_attr(FullFileName);
 
+handle_fuse_message(Req = #getfileuuid{file_logic_name = FName}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_utility:get_file_uuid(FullFileName);
+
 handle_fuse_message(Req = #getfilelocation{file_logic_name = FName, open_mode = OpenMode}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_regular:get_file_location(FullFileName,OpenMode);

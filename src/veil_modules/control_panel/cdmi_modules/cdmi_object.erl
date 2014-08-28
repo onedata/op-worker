@@ -259,7 +259,8 @@ prepare_object_ans([], _State) ->
 prepare_object_ans([<<"objectType">> | Tail], State) ->
     [{<<"objectType">>, <<"application/cdmi-object">>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"objectID">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"objectID">>, cdmi_id:uuid_to_objectid(logical_files_manager:get_uuid_by_filepath(Filepath))} | prepare_object_ans(Tail, State)];
+    {ok, Uuid} = logical_files_manager:get_file_uuid(Filepath),
+    [{<<"objectID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"objectName">>, list_to_binary(filename:basename(Filepath))} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = "/"} = State) ->
@@ -273,7 +274,8 @@ prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State
 prepare_object_ans([<<"parentID">> | Tail], #state{filepath = "/"} = State) ->
     [{<<"parentID">>, <<>>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentID">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"parentID">>, cdmi_id:uuid_to_objectid(logical_files_manager:get_uuid_by_filepath(fslogic_path:strip_path_leaf(Filepath)))} | prepare_object_ans(Tail, State)];
+    {ok, Uuid} = logical_files_manager:get_file_uuid(fslogic_path:strip_path_leaf(Filepath)),
+    [{<<"parentID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"capabilitiesURI">> | Tail], State) ->
     [{<<"capabilitiesURI">>, list_to_binary(?dataobject_capability_path)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"completionStatus">> | Tail], State) ->
