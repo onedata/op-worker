@@ -18,8 +18,9 @@
 -define(default_ccm_name, "ccm").
 -define(default_worker_name, "worker").
 
+-export([main/1]).
 
-main([HostName, UserName, UserMail, PemFile] = Args) ->
+main([HostName, UserName, UserMail, PemFile]) ->
     set_up_net_kernel(),
     NodeName = list_to_atom(?default_worker_name ++ "@" ++ HostName),
 
