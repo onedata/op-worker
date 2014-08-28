@@ -91,7 +91,7 @@ allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
             case lists:member(Method, AllowedMethods) of
                 false ->
                     ErrorRec = ?report_warning(?error_method_unsupported, [binary_to_list(Method)]),
-                    NewReq = veil_cowboy_bridge:apply(cowboy_req, set_resp_body, [rest_utils:error_reply(ErrorRec), Req2]),
+                    NewReq = cowboy_req:set_resp_body(rest_utils:error_reply(ErrorRec), Req2),
                     {AllowedMethods, NewReq, State};
                 true ->
                     % Check if content-type is acceptable (for PUT or POST)
@@ -104,6 +104,7 @@ allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
                     end
             end
     end;
+
 
 % Some errors could have been detected in do_init/2. If so, State contains
 % an {error, Type} tuple. These errors shall be handled here,
