@@ -170,7 +170,9 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     State = case DnString of
         undefined ->
             #handshakerequest{identity = Identity} = HReq,
-            #handshakerequest_identity{gruid = GlobalId, secret = Secret} = Identity,
+            #handshakerequest_identity{gruid = GlobalIdL, secret = SecretL} = Identity,
+            GlobalId = vcn_utils:ensure_binary(GlobalIdL),
+            Secret = vcn_utils:ensure_binary(SecretL),
 
             case gr_adapter:verify_client(GlobalId, Secret) of
                 true ->
