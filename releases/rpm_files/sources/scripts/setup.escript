@@ -5,9 +5,9 @@
 -define(default_port, "5986").
 
 % Default storage paths
--define(default_main_directio_storage, "/mnt/vfs").
+-define(default_main_directio_storage, filename:join([filename:absname("/"), "mnt", "vfs"])).
 -define(default_group_name_prefix, "grp").
--define(default_group_storage_prefix, "/mnt/" ++ ?default_group_name_prefix).
+-define(default_group_storage_prefix, filename:join([filename:absname("/"), "mnt", ?default_group_name_prefix])).
 
 %Ports that needs to be free
 -define(ports_to_check, [53, 80, 443, 5555, 8443]).
@@ -16,37 +16,37 @@
 -define(curl_opts, "-u admin:password --connect-timeout 5 -s").
 
 % Installation directory of veil RPM
--define(prefix, "/opt/veil/").
+-define(prefix, filename:join([filename:absname("/"), "opt", "veil"])).
 
 % Location of configured_nodes.cfg
--define(configured_nodes_path, ?prefix ++ "scripts/configured_nodes.cfg").
+-define(configured_nodes_path, filename:join([?prefix, "scripts", "configured_nodes.cfg"])).
 
 % System limit values
--define(ulimits_config_path, ?prefix ++ "scripts/ulimits.cfg").
+-define(ulimits_config_path, filename:join([?prefix, "scripts", "ulimits.cfg"])).
 -define(default_open_files, "65535").
 -define(default_processes, "65535").
 
 % Location of init.d script
--define(init_d_script_path, "/etc/init.d/veil").
+-define(init_d_script_path, filename:join([filename:absname("/"), "etc", "init.d", "veil"])).
 
 % Location of release packages
--define(veil_release, ?prefix ++ "files/veil_cluster_node").
--define(db_release, ?prefix ++ "files/database_node").
+-define(veil_release, filename:join([?prefix, "files", "veil_cluster_node"])).
+-define(db_release, filename:join([?prefix, "files", "database_node"])).
 
 % Location of erl_launcher
--define(erl_launcher_script_path, ?prefix ++ "scripts/erl_launcher").
+-define(erl_launcher_script_path, filename:join([?prefix, "scripts", "erl_launcher"])).
 
 % Install path for nodes
--define(default_nodes_install_path, ?prefix ++ "nodes/").
--define(default_bigcouch_install_path, "/opt/bigcouch"). %should not be changed, unless you've configured bigcouch realease properly (the one from files/database_node)
+-define(default_nodes_install_path, filename:join([?prefix, "nodes"])).
+-define(default_bigcouch_install_path, filename:join([filename:absname("/"), "opt", "bigcouch"])). %should not be changed, unless you've configured bigcouch realease properly (the one from files/database_node)
 -define(default_ccm_name, "ccm").
 -define(default_worker_name, "worker").
 -define(default_db_name, "db").
 
 % Paths relative to veil_cluster_node release
--define(config_args_path, "bin/config.args").
--define(veil_cluster_script_path, "bin/veil_cluster").
--define(storage_config_path, "bin/storage_info.cfg").
+-define(config_args_path, filename:join(["bin", "config.args"])).
+-define(veil_cluster_script_path, filename:join(["bin", "veil_cluster"])).
+-define(storage_config_path, filename:join(["bin", "storage_info.cfg"])).
 
 % Print error message with formatting and finish
 -define(error(Fmt, Args),
@@ -295,8 +295,8 @@ setup_new_ccm_plus_worker(IsThisMainCCM, FuseGroups) ->
         false ->
           put(opt_ccms, get(opt_ccms) ++ [list_to_atom(LongName)])
       end,
-      install_veil_node(ccm, CCMName, CCMPath),
-      install_veil_node(worker, WorkerName, WorkerPath),
+            install_veil_node(ccm_node, CCMName, CCMPath),
+            install_veil_node(worker_node, WorkerName, WorkerPath),
       case IsThisMainCCM of
         true ->
           save_storage_in_config(FuseGroups);
@@ -365,7 +365,7 @@ setup_new_worker() ->
     back ->
       setup_manage_veil();
     ok ->
-      install_veil_node(worker, WorkerName, WorkerPath),
+            install_veil_node(worker_node, WorkerName, WorkerPath),
       info("Starting node(s)..."),
       os:cmd(?init_d_script_path ++ " start_veil 1>/dev/null")
   end.
@@ -374,22 +374,24 @@ setup_new_worker() ->
 % Install a generic veil node
 install_veil_node(Type, Name, Path) ->
   LongName = Name ++ get(hostname),
+    VeilNodePath = filename:join([Path, Name]),
   info("Installing " ++ LongName ++ "..."),
-  os:cmd("mkdir -p " ++ Path ++ Name),
-  os:cmd("cp -R " ++ ?veil_release ++ "/* " ++ Path ++ Name),
+    os:cmd("mkdir -p " ++ VeilNodePath),
+    os:cmd("cp -R " ++ filename:join([?veil_release, "* "]) ++ VeilNodePath),
 
   MainCCM = get(main_ccm),
   OptCCMs = get(opt_ccms),
   DBNodes = get(db_nodes),
-  StorageConfigPath = Path ++ Name ++ "/" ++ ?storage_config_path,
+    StorageConfigPath = filename:join([Path, Name, ?storage_config_path]),
+    ConfigArgsPath = filename:join([Path, Name, ?config_args_path]),
 
-  overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "name", LongName),
-  overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "main_ccm", atom_to_list(MainCCM)),
-  overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "opt_ccms", to_space_delimited_list(OptCCMs)),
-  overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "db_nodes", to_space_delimited_list(DBNodes)),
-  overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "storage_config_path", StorageConfigPath),
+    overwrite_config_args(ConfigArgsPath, "name", LongName),
+    overwrite_config_args(ConfigArgsPath, "main_ccm", atom_to_list(MainCCM)),
+    overwrite_config_args(ConfigArgsPath, "opt_ccms", to_space_delimited_list(OptCCMs)),
+    overwrite_config_args(ConfigArgsPath, "db_nodes", to_space_delimited_list(DBNodes)),
+    overwrite_config_args(ConfigArgsPath, "storage_config_path", StorageConfigPath),
 
-  os:cmd(Path ++ Name ++ "/" ++ ?veil_cluster_script_path),
+    os:cmd(filename:join([Path, Name, ?veil_cluster_script_path])),
   add_node_to_config(Type, list_to_atom(Name), Path).
 
 
@@ -407,10 +409,10 @@ setup_remove_veil_nodes() ->
     {none, []} ->
       warn("There are no nodes configured on this machine"),
       setup_manage_veil();
-    {worker, {worker, WorkerName, _}} ->
+        {worker, {worker_node, WorkerName, _}} ->
       info("Nodes currently configured on this machine:"),
       li(atom_to_list(WorkerName) ++ get(hostname));
-    {ccm_plus_worker, {{ccm, CCMName, _}, {worker, WorkerName, _}}} ->
+        {ccm_plus_worker, {{ccm_node, CCMName, _}, {worker_node, WorkerName, _}}} ->
       info("Currently configured on this machine:"),
       li(atom_to_list(CCMName) ++ get(hostname)),
       li(atom_to_list(WorkerName) ++ get(hostname))
@@ -432,16 +434,16 @@ do_remove_veil_nodes() ->
   info("Stopping node(s)..."),
   os:cmd(?init_d_script_path ++ " stop_veil"),
   case get_nodes_from_config(veil) of
-    {worker, {worker, Name, Path}} ->
+        {worker, {worker_node, Name, Path}} ->
       info("Removing " ++ atom_to_list(Name) ++ get(hostname)),
-      os:cmd("rm -rf " ++ Path ++ atom_to_list(Name)),
+            os:cmd("rm -rf " ++ filename:join([Path, atom_to_list(Name)])),
       remove_node_from_config(Name);
-    {ccm_plus_worker, {{ccm, CCMName, CCMPath}, {worker, WorkerName, WorkerPath}}} ->
+        {ccm_plus_worker, {{ccm_node, CCMName, CCMPath}, {worker_node, WorkerName, WorkerPath}}} ->
       info("Removing " ++ atom_to_list(CCMName)),
-      os:cmd("rm -rf " ++ CCMPath ++ atom_to_list(CCMName)),
+            os:cmd("rm -rf " ++ filename:join([CCMPath, atom_to_list(CCMName)])),
       remove_node_from_config(CCMName),
       info("Removing " ++ atom_to_list(WorkerName)),
-      os:cmd("rm -rf " ++ WorkerPath ++ atom_to_list(WorkerName)),
+            os:cmd("rm -rf " ++ filename:join([WorkerPath, atom_to_list(WorkerName)])),
       remove_node_from_config(WorkerName)
   end.
 
@@ -528,7 +530,7 @@ install_db_node(Name, Path) ->
 
   info("Installing " ++ LongName ++ "..."),
   os:cmd("mkdir -p " ++ Path),
-  os:cmd("cp -R " ++ ?db_release ++ "/* " ++ Path),
+    os:cmd("cp -R " ++ filename:join([?db_release, "* "]) ++ Path),
   add_node_to_config(db_node, list_to_atom(Name), Path),
   info("installation complete"),
 
@@ -690,10 +692,10 @@ get_database_node_from_config(Entries) ->
 
 % Do not use directly
 get_veil_nodes_from_config(Entries) ->
-  case lists:keyfind(worker, 1, Entries) of
+    case lists:keyfind(worker_node, 1, Entries) of
     false -> {none, []};
     Worker ->
-      case lists:keyfind(ccm, 1, Entries) of
+            case lists:keyfind(ccm_node, 1, Entries) of
         false -> {worker, Worker};
         CCM -> {ccm_plus_worker, {CCM, Worker}}
       end
@@ -738,7 +740,7 @@ save_nodes_in_config(NodeList) ->
   end.
 
 save_storage_in_config(Storage) ->
-  StorageFilePath = ?default_nodes_install_path ++ ?default_worker_name ++ "/" ++ ?storage_config_path,
+    StorageFilePath = filename:join([?default_nodes_install_path, ?default_worker_name, ?storage_config_path]),
   file:write_file(StorageFilePath, io_lib:fwrite("~p.\n", [Storage])).
 
 

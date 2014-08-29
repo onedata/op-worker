@@ -56,48 +56,47 @@ generate_redirect_request(Req, ErrorID) ->
 
 
 get_reason_and_description() ->
-    IDBinary = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
-    id_to_reason_and_message(binary_to_atom(IDBinary, latin1)).
+    id_to_reason_and_message(gui_ctx:url_param(<<"id">>)).
 
 
-id_to_reason_and_message(?error_user_content_not_logged_in) ->
+id_to_reason_and_message(<<?error_user_content_not_logged_in>>) ->
     {<<"No active session">>, <<"You need to log in to download your files.">>};
 
-id_to_reason_and_message(?error_user_content_file_not_found) ->
+id_to_reason_and_message(<<?error_user_content_file_not_found>>) ->
     {<<"Invalid URL">>, <<"This URL doesn't point to any file.">>};
 
-id_to_reason_and_message(?error_user_permission_denied) ->
+id_to_reason_and_message(<<?error_user_permission_denied>>) ->
     {<<"Permission denied">>, <<"You don't have permission to read this file.">>};
 
-id_to_reason_and_message(?error_shared_file_not_found) ->
+id_to_reason_and_message(<<?error_shared_file_not_found>>) ->
     {<<"Invalid link">>,
         <<"Invalid link", "This link doesn't point to any shared file. This is because the file is no longer shared or the share has never existed.">>};
 
-id_to_reason_and_message(?error_internal_server_error) ->
+id_to_reason_and_message(<<?error_internal_server_error>>) ->
     {<<"Internal server error">>,
         <<"Server encountered an unexpected error. Please contact the site administrator if the problem persists.">>};
 
-id_to_reason_and_message(?error_openid_invalid_request) ->
+id_to_reason_and_message(<<?error_openid_invalid_request>>) ->
     {<<"Invalid request">>,
         <<"Error occured while processing this authentication request.">>};
 
-id_to_reason_and_message(?error_openid_auth_invalid) ->
+id_to_reason_and_message(<<?error_openid_auth_invalid>>) ->
     {<<"Invalid request">>,
         <<"OpenID Provider denied the authenticity of this login request.">>};
 
-id_to_reason_and_message(?error_openid_no_connection) ->
+id_to_reason_and_message(<<?error_openid_no_connection>>) ->
     {<<"Connection problem">>,
         <<"Unable to reach OpenID Provider.">>};
 
-id_to_reason_and_message(?error_openid_login_error) ->
+id_to_reason_and_message(<<?error_openid_login_error>>) ->
     {<<"Login error">>,
         <<"Could not process OpenID response. Please contact the site administrator if the problem persists.">>};
 
-id_to_reason_and_message(?error_login_dir_creation_error) ->
+id_to_reason_and_message(<<?error_login_dir_creation_error>>) ->
     {<<"User creation error">>,
         <<"Server could not create user directories. Please contact the site administrator if the problem persists.">>};
 
-id_to_reason_and_message(?error_login_dir_chown_error) -> {<<"User creation error">>,
+id_to_reason_and_message(<<?error_login_dir_chown_error>>) -> {<<"User creation error">>,
     <<"Server could not change owner of user directories. Please contact the site administrator if the problem persists.">>};
 
 id_to_reason_and_message(_) ->

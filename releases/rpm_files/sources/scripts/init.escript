@@ -4,25 +4,28 @@
 -define(default_cookie, veil_cluster_node).
 
 % Installation directory of veil RPM
--define(prefix, "/opt/veil/").
+-define(prefix, filename:join([filename:absname("/"), "opt", "veil"])).
 
 % Location of error_dump.txt
--define(error_dump_file, ?prefix ++ "error_dump.txt").
+-define(error_dump_file, filename:join([?prefix, "error_dump.txt"])).
 
 % Location of configured_nodes.cfg
--define(configured_nodes_path, ?prefix ++ "scripts/configured_nodes.cfg").
+-define(configured_nodes_path, filename:join([?prefix, "scripts", "configured_nodes.cfg"])).
 
 % Location of erl_launcher
--define(erl_launcher_script_path, ?prefix ++ "scripts/erl_launcher").
+-define(erl_launcher_script_path, filename:join([?prefix, "scripts", "erl_launcher"])).
 
 % Paths relative to veil_cluster_node release
--define(config_args_path, "bin/config.args").
--define(veil_cluster_script_path, "bin/veil_cluster").
--define(start_command_suffix, "bin/veil_cluster_node start").
+-define(config_args_path, filename:join(["bin", "config.args"])).
+-define(veil_cluster_script_path, filename:join(["bin", "veil_cluster"])).
+-define(start_command_suffix, filename:join(["bin", "veil_cluster_node"]) ++ " start").
 
 %Paths relative to database_node release
--define(db_start_command_suffix,"bin/bigcouch").
--define (nohup_output,"var/log/nohup.out").
+-define(db_start_command_suffix, filename:join(["bin", "bigcouch"])).
+-define(nohup_output, filename:join(["var", "log", "nohup.out"])).
+
+% System limit values
+-define(ulimits_config_path, filename:join([?prefix, "scripts", "ulimits.cfg"])).
 
 % Print error message to ?error_dump_file with formatting and halt
 -define(error(Fmt, Args), 
@@ -34,9 +37,6 @@
 
 % Convinience macro to print to screen (debug etc.)
 -define(dump(Term), io:format("~p~n", [Term])).
-
-% System limit values
--define(ulimits_config_path,?prefix ++ "scripts/ulimits.cfg").
 
 main(Args) ->
 	{{Year,Month,Day},{Hour,Min,Sec}} = erlang:localtime(),
@@ -82,7 +82,7 @@ status(NodeType) when is_atom(NodeType) ->
 	case get_nodes_from_config(NodeType) of
 		{none, []} ->
 			4;
-		{db_node, Db} ->
+        {db, Db} ->
 			status(Db);
 		{worker, Worker} ->
 			status(Worker);
@@ -105,7 +105,7 @@ start_db_node() ->
 		{none, []} ->
 			nothing_to_start;
 
-		{db_node, Db} ->
+        {db, Db} ->
 			start_db(Db)
 	end.
 
@@ -114,13 +114,13 @@ stop_db_node() ->
 		{none, []} ->
 			nothing_to_stop;
 
-		{db_node, Db} ->
+        {db, Db} ->
 			stop_db(Db)
 	end.
 
 start_db({db_node, _Name, Path}) ->
-	BigcouchStartScript = Path++"/"++?db_start_command_suffix,
-	NohupOut = Path++"/"++?nohup_output,
+    BigcouchStartScript = filename:join([Path, ?db_start_command_suffix]),
+    NohupOut = filename:join([Path, ?nohup_output]),
 	open_port({spawn, "sh -c \"" ++ get(set_ulimits_cmd) ++" ; "++"nohup "++BigcouchStartScript++" > "++NohupOut++" 2>&1 &" ++ "\" 2>&1 &"}, [out]).
 
 stop_db({db_node, _Name, Path}) ->
@@ -153,17 +153,18 @@ stop_veil_nodes() ->
 
 
 % Connect to one of CCMs specified in config.args, get ccm and dbnode list from it, recofigure the release and start it.
-start_worker({worker, Name, Path}) -> 
-	OldMainCCM = read_config_args(Path ++ atom_to_list(Name) ++ "/" ++ ?config_args_path, "main_ccm", false),
-	OldOptCCMs = read_config_args(Path ++ atom_to_list(Name) ++ "/" ++ ?config_args_path, "opt_ccms", true),
+start_worker({worker_node, Name, Path}) ->
+    ConfigArgsPath = filename:join([Path, atom_to_list(Name), ?config_args_path]),
+    OldMainCCM = read_config_args(ConfigArgsPath, "main_ccm", false),
+    OldOptCCMs = read_config_args(ConfigArgsPath, "opt_ccms", true),
 	{[MainCCM|OptCCMs], DBNodes, _WorkerList} = discover_cluster([OldMainCCM|OldOptCCMs]),
 
 	reconfigure_node(Name, Path, MainCCM, OptCCMs, DBNodes),
-	os:cmd(get(set_ulimits_cmd) ++" ; "++Path ++ atom_to_list(Name) ++ "/" ++ ?start_command_suffix).
+    os:cmd(get(set_ulimits_cmd) ++ " ; " ++ filename:join([Path, atom_to_list(Name), ?start_command_suffix])).
 
 
 % Stop a worker running on this machine, right after saving latest configuration
-stop_worker({worker, Name, Path}) -> 
+stop_worker({worker_node, Name, Path}) ->
 	LongName = atom_to_list(Name) ++ get(hostname),
 	{[MainCCM|OptCCMs], DBNodes, _WorkerList} = discover_node(LongName),
 
@@ -173,15 +174,16 @@ stop_worker({worker, Name, Path}) ->
 
 % If this is an only CCM, assume cluster is empty - simply start CCM and worker.
 % If not, connect to one of CCMs specified in config.args, get ccm and dbnode list from it, recofigure the releases and start them.
-start_ccm_plus_worker({ccm, CCMName, CCMPath}, {worker, WorkerName, WorkerPath}) -> 
-	OldMainCCM = read_config_args(CCMPath ++ atom_to_list(CCMName) ++ "/" ++ ?config_args_path, "main_ccm", false),
-	OldOptCCMs = read_config_args(CCMPath ++ atom_to_list(CCMName) ++ "/" ++ ?config_args_path, "opt_ccms", true),
+start_ccm_plus_worker({ccm_node, CCMName, CCMPath}, {worker_node, WorkerName, WorkerPath}) ->
+    ConfigArgsPath = filename:join([CCMPath, atom_to_list(CCMName), ?config_args_path]),
+    OldMainCCM = read_config_args(ConfigArgsPath, "main_ccm", false),
+    OldOptCCMs = read_config_args(ConfigArgsPath, "opt_ccms", true),
 
 	LongCCMName = atom_to_list(CCMName) ++ get(hostname),
 	case OldMainCCM =:= LongCCMName andalso length(OldOptCCMs) =:= 0 of
 		true -> 
-			os:cmd(get(set_ulimits_cmd) ++" ; "++CCMPath ++ atom_to_list(CCMName) ++ "/" ++ ?start_command_suffix),
-			os:cmd(get(set_ulimits_cmd) ++" ; "++WorkerPath ++ atom_to_list(WorkerName) ++ "/" ++ ?start_command_suffix);
+            os:cmd(get(set_ulimits_cmd) ++ " ; " ++ filename:join([CCMPath, atom_to_list(CCMName), ?start_command_suffix])),
+            os:cmd(get(set_ulimits_cmd) ++ " ; " ++ filename:join([WorkerPath, atom_to_list(WorkerName), ?start_command_suffix]));
 
 		false -> 	
 			{[MainCCM|OptCCMs], DBNodes, WorkerList} = discover_cluster([OldMainCCM|OldOptCCMs]),
@@ -199,16 +201,16 @@ start_ccm_plus_worker({ccm, CCMName, CCMPath}, {worker, WorkerName, WorkerPath})
 
 
 			reconfigure_node(CCMName, CCMPath, MainCCM, NewOptCCMs, DBNodes),
-			os:cmd(get(set_ulimits_cmd) ++" ; "++CCMPath ++ atom_to_list(CCMName) ++ "/" ++ ?start_command_suffix),
+            os:cmd(get(set_ulimits_cmd) ++ " ; " ++ filename:join([CCMPath, atom_to_list(CCMName), ?start_command_suffix])),
 
 			reconfigure_node(WorkerName, WorkerPath, MainCCM, NewOptCCMs, DBNodes),
-			os:cmd(get(set_ulimits_cmd) ++" ; " ++WorkerPath ++ atom_to_list(WorkerName) ++ "/" ++ ?start_command_suffix)
+            os:cmd(get(set_ulimits_cmd) ++ " ; " ++ filename:join([WorkerPath, atom_to_list(WorkerName), ?start_command_suffix]))
 	end.
 
 
 % Reconfigure cluster appropriately and stop ccm and worker
-stop_ccm_plus_worker({ccm, CCMName, CCMPath}, {worker, WorkerName, WorkerPath}) -> 
-	stop_worker({worker, WorkerName, WorkerPath}),
+stop_ccm_plus_worker({ccm_node, CCMName, CCMPath}, {worker_node, WorkerName, WorkerPath}) ->
+    stop_worker({worker_node, WorkerName, WorkerPath}),
 
 	LongName = atom_to_list(CCMName) ++ get(hostname),
 	{[MainCCM|OptCCMs], DBNodes, WorkerList} = discover_node(LongName),
@@ -243,10 +245,11 @@ stop_ccm_plus_worker({ccm, CCMName, CCMPath}, {worker, WorkerName, WorkerPath}) 
 
 % Change the configuration in config.args
 reconfigure_node(Name, Path, MainCCM, OptCCMs, DBNodes) ->
-	overwrite_config_args(Path ++ atom_to_list(Name) ++ "/" ++ ?config_args_path, "main_ccm", atom_to_list(MainCCM)),
-	overwrite_config_args(Path ++ atom_to_list(Name) ++ "/" ++ ?config_args_path, "opt_ccms", to_space_delimited_list(OptCCMs)),
-	overwrite_config_args(Path ++ atom_to_list(Name) ++ "/" ++ ?config_args_path, "db_nodes", to_space_delimited_list(DBNodes)),
-	os:cmd(Path ++ atom_to_list(Name) ++ "/" ++ ?veil_cluster_script_path).
+    ConfigArgsPath = filename:join([Path, atom_to_list(Name), ?config_args_path]),
+    overwrite_config_args(ConfigArgsPath, "main_ccm", atom_to_list(MainCCM)),
+    overwrite_config_args(ConfigArgsPath, "opt_ccms", to_space_delimited_list(OptCCMs)),
+    overwrite_config_args(ConfigArgsPath, "db_nodes", to_space_delimited_list(DBNodes)),
+    os:cmd(filename:join([Path, atom_to_list(Name), ?veil_cluster_script_path])).
 
 
 % Reconfigure remote worker's ccm and/or db_node list
@@ -356,16 +359,16 @@ get_nodes_from_config(WhichCluster) ->
 get_database_node_from_config(Entries) ->
 	case lists:keyfind(db_node, 1, Entries) of
 		false -> {none, []};
-		Node -> {db_node, Node}
+        Node -> {db, Node}
 	end.
 
 
 % Do not use directly
 get_veil_nodes_from_config(Entries) ->
-	case lists:keyfind(worker, 1, Entries) of
+    case lists:keyfind(worker_node, 1, Entries) of
 		false -> {none, []};
 		Worker -> 
-			case lists:keyfind(ccm, 1, Entries) of
+            case lists:keyfind(ccm_node, 1, Entries) of
 				false -> {worker, Worker};
 				CCM -> {ccm_plus_worker, {CCM, Worker}}			
 			end
