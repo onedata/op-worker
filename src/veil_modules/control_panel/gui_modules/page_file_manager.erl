@@ -58,7 +58,7 @@ body() ->
         #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
         ]},
-        vcn_gui_utils:top_menu(file_manager_tab, manager_submenu()),
+        vcn_gui_utils:top_menu(data_tab, manager_submenu()),
         manager_workspace(),
         footer_popup()
     ],
@@ -210,9 +210,11 @@ event(init) ->
         false ->
             skip;
         true ->
-            UserID = vcn_gui_utils:get_user_dn(),
+            VCUID = vcn_gui_utils:get_user_dn(),
+            GRUID = vcn_gui_utils:get_global_user_id(),
+            AccessToken = vcn_gui_utils:get_access_token(),
             Hostname = gui_ctx:get_requested_hostname(),
-            {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(UserID, Hostname) end),
+            {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(VCUID, GRUID, AccessToken, Hostname) end),
             put(comet_pid, Pid)
     end;
 
@@ -242,9 +244,11 @@ event({action, Fun, Args}) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Comet loop and functions evaluated by comet
-comet_loop_init(UserId, RequestedHostname) ->
+comet_loop_init(UserId, GRUID, UserAccessToken, RequestedHostname) ->
     % Initialize page state
     fslogic_context:set_user_dn(UserId),
+    fslogic_context:set_access_token(GRUID, UserAccessToken),
+
     set_requested_hostname(RequestedHostname),
     set_working_directory(<<"/">>),
     set_selected_items([]),
@@ -1231,13 +1235,14 @@ fs_get_share_uuid_by_filepath(Filepath) ->
     end.
 
 fs_has_perms(Path, CheckType) ->
-    {ok, FullFilePath} = fslogic_path:get_full_file_name(gui_str:binary_to_unicode_list(Path)),
-    {ok, FileDoc} = fslogic_objects:get_file(FullFilePath),
-    {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
-    case fslogic_perms:check_file_perms(FullFilePath, UserDoc, FileDoc, CheckType) of
-        ok -> true;
-        _ -> false
-    end.
+    true.
+%%     {ok, FullFilePath} = fslogic_path:get_full_file_name(gui_str:binary_to_unicode_list(Path)),
+%%     {ok, FileDoc} = fslogic_objects:get_file(FullFilePath),
+%%     {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+%%     case fslogic_perms:check_file_perms(FullFilePath, UserDoc, FileDoc, CheckType) of
+%%         ok -> true;
+%%         _ -> false
+%%     end.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

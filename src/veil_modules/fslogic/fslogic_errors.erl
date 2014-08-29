@@ -17,7 +17,7 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 
 %% API
--export([gen_error_message/2, normalize_error_code/1, gen_error_code/1, posix_to_veilerror/1]).
+-export([gen_error_message/2, normalize_error_code/1, gen_error_code/1, posix_to_veilerror/1, veilerror_to_posix/1]).
 
 %% ====================================================================
 %% API functions
@@ -150,6 +150,32 @@ posix_to_veilerror(95) ->
     ?VENOTSUP;
 posix_to_veilerror(_Unkwn) ->
     ?VEREMOTEIO.
+
+%% veilerror_to_posix/1
+%% ====================================================================
+%% @doc Translates internal fslogic_error() to POSIX error code.
+-spec veilerror_to_posix(ErrorCode :: fslogic_error()) -> POSIXErrorCode :: non_neg_integer().
+%% ====================================================================
+veilerror_to_posix(?VOK) ->
+    0;
+veilerror_to_posix(?VEPERM) ->
+    1;
+veilerror_to_posix(?VENOENT) ->
+    2;
+veilerror_to_posix(?VEEXIST) ->
+    17;
+veilerror_to_posix(?VEACCES) ->
+    13;
+veilerror_to_posix(?VEDQUOT) ->
+    122;
+veilerror_to_posix(?VEINVAL) ->
+    22;
+veilerror_to_posix(?VENOTEMPTY) ->
+    39;
+veilerror_to_posix(?VENOTSUP) ->
+    95;
+veilerror_to_posix(_Unkwn) ->
+    121.
 
 
 %% ====================================================================

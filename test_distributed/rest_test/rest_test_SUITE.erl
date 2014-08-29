@@ -53,13 +53,15 @@ main_test(Config) ->
     gen_server:cast({global, ?CCM}, init_cluster),
     test_utils:wait_for_cluster_init(),
 
+    ?ENABLE_PROVIDER(Config),
+
+    put(dn, get_dn_from_cert(Config)),
+
     ibrowse:start(),
-    DN = get_dn_from_cert(),
-    put(dn, DN),
-    rest_test_user_unknown(),
+    rest_test_user_unknown(get_dn_from_cert(Config)),
 
     % Create a user in db with some files
-    StorageUUID = setup_user_in_db(DN),
+    {DN, StorageUUID} = setup_user_in_db(Config),
 
     % Test if REST requests return what is expected
     test_rest_error_messages(),
@@ -75,8 +77,9 @@ main_test(Config) ->
     RemoveStorageAns = rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
     ?assertEqual(ok, RemoveStorageAns),
 
-    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ ?TEST_GROUP], ?ProtocolVersion])),
-    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups"], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_GROUP], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_USER], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces"], ?ProtocolVersion])),
 
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]).
 
@@ -86,11 +89,11 @@ main_test(Config) ->
 %% ====================================================================
 
 % Tests if proper error message is returned when user doesn't exist in the database
-rest_test_user_unknown() ->
+rest_test_user_unknown(DN) ->
     {Code1, Headers1, Response1} = do_request(?REST_FILES_SUBPATH, get, [], []),
-    ?assertEqual(Code1, "500"),
-    ?assertEqual(proplists:get_value("content-type", Headers1), "application/json"),
-    ?assertEqual(list_to_binary(Response1), rest_utils:error_reply(?report_error(?error_user_unknown, [get(dn)]))).
+    ?assertEqual("500", Code1),
+    ?assertEqual("application/json", proplists:get_value("content-type", Headers1)),
+    ?assertEqual(rest_utils:error_reply(?report_error(?error_user_unknown, [DN])), list_to_binary(Response1)).
 
 
 % Tests if version matching mechanism works correctly and if proper errors are returned
@@ -104,7 +107,7 @@ test_rest_error_messages() ->
     {Code2, Headers2, Response2} = do_request("latest", ?REST_FILES_SUBPATH, get, [], []),
     ?assertEqual(Code2, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers2), "application/json"),
-    ?assertEqual(Response2, "[\"dir\",\"groups\"]"),
+    ?assertEqual(Response2, "[\"dir\",\"spaces\"]"),
 
     {Code3, Headers3, Response3} = do_request("asdfgadrfg", get, [], []),
     ?assertEqual(Code3, "500"),
@@ -122,7 +125,7 @@ test_rest_files_dirs() ->
     {Code1, Headers1, Response1} = do_request(?REST_FILES_SUBPATH, get, [], []),
     ?assertEqual(Code1, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers1), "application/json"),
-    ?assertEqual(Response1, "[\"dir\",\"groups\"]"),
+    ?assertEqual(Response1, "[\"dir\",\"spaces\"]"),
 
     {Code2, Headers2, Response2} = do_request(?REST_FILES_SUBPATH ++ "dir", get, [], []),
     ?assertEqual(Code2, "200"),
@@ -182,7 +185,7 @@ test_rest_upload() ->
     {Code1, _Headers1, Response1} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", post, [Header1], [Body1]),
     ?assertEqual(Code1, "200"),
     ?assertEqual(list_to_binary(Response1), rest_utils:success_reply(?success_file_uploaded)),
-    File1 = rpc:call(get(ccm), logical_files_manager, read, [?TEST_USER ++ "/dir/file.txt", 0, 9]),
+    File1 = rpc:call(get(ccm), logical_files_manager, read, ["/spaces/" ++ ?TEST_USER ++ "/dir/file.txt", 0, 9]),
     ?assertEqual(File1, {ok, list_to_binary(Data1)}),
 
     {Header2, Body2} = format_multipart_request(Data1),
@@ -195,7 +198,7 @@ test_rest_upload() ->
     {Code3, _Headers3, Response3} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", put, [Header3], [Body3]),
     ?assertEqual(Code3, "200"),
     ?assertEqual(list_to_binary(Response3), rest_utils:success_reply(?success_file_uploaded)),
-    File3 = rpc:call(get(ccm), logical_files_manager, read, [?TEST_USER ++ "/dir/file.txt", 0, 9]),
+    File3 = rpc:call(get(ccm), logical_files_manager, read, ["/spaces/" ++ ?TEST_USER ++ "/dir/file.txt", 0, 9]),
     ?assertEqual(File3, {ok, list_to_binary(Data2)}),
 
     {Header4, Body4} = format_multipart_request(Data2),
@@ -262,7 +265,7 @@ test_rest_shares() ->
                    false -> "https://localhost:" ++ integer_to_list(Port)
                end,
     DlPath = Hostname ++ ?shared_files_download_path ++ ShareID,
-    ?assertEqual(Response4, "{\"file_path\":\"dir/file.txt\",\"download_path\":\"" ++ DlPath ++ "\"}"),
+    ?assertEqual(Response4, "{\"file_path\":\"spaces/" ++ ?TEST_USER ++ "/dir/file.txt\",\"download_path\":\"" ++ DlPath ++ "\"}"),
 
     {Code5, Headers5, Response5} = do_request(?REST_SHARE_SUBPATH ++ ShareID, delete, [], []),
     ?assertEqual(Code5, "200"),
@@ -340,10 +343,10 @@ format_multipart_formdata(Boundary, Fields, Files) ->
     string:join(Parts, "\r\n").
 
 
-get_dn_from_cert() ->
-    CCM = get(ccm),
+get_dn_from_cert(Config) ->
+    [CCM | _] = ?config(nodes, Config),
+    Cert = ?config(cert, Config),
 
-    Cert = ?COMMON_FILE("peer.pem"),
     {Ans2, PemBin} = file:read_file(Cert),
     ?assertEqual(ok, Ans2),
 
@@ -356,23 +359,15 @@ get_dn_from_cert() ->
 
 
 % Populates the database with one user and some files
-setup_user_in_db(DN) ->
-    CCM = get(ccm),
-
-    DnList = [DN],
-    Login = ?TEST_USER,
-    Name = "user user",
-    Teams = [?TEST_GROUP],
-    Email = "user@email.net",
-
-    % Cleanup data from other tests
-    % TODO Usunac jak wreszcie baza bedzie czyszczona miedzy testami
-    rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
+setup_user_in_db(Config) ->
+    [CCM | _] = ?config(nodes, Config),
 
     {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?ARG_TEST_ROOT]),
     ?assertEqual(ok, Ans1),
-    {Ans5, _} = rpc:call(CCM, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
-    ?assertEqual(ok, Ans5),
+
+    Cert = ?config(cert, Config),
+    UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+    [DN | _] = user_logic:get_dn_list(UserDoc),
 
     fslogic_context:set_user_dn(DN),
     Ans6 = rpc:call(CCM, erlang, apply, [
@@ -390,7 +385,7 @@ setup_user_in_db(DN) ->
         end, [] ]),
     ?assertEqual(ok, Ans7),
 
-    StorageUUID.
+    {DN, StorageUUID}.
 
 
 %% ====================================================================
@@ -417,7 +412,7 @@ init_per_testcase(main_test, Config) ->
             {ca_dir, './cacerts/'}
         ]]),
 
-    lists:append([{nodes, Nodes}], Config).
+    lists:append([{nodes, Nodes}, {cert, ?COMMON_FILE("peer.pem")}], Config).
 
 
 end_per_testcase(main_test, Config) ->

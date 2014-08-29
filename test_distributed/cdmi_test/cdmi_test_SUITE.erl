@@ -56,7 +56,7 @@ list_dir_test(_Config) ->
     ?assertEqual("200", Code2),
     {struct,CdmiResponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiResponse2)),
-    ?assertEqual([<<"dir">>,<<"groups">>], proplists:get_value(<<"children">>,CdmiResponse2)),
+    ?assertEqual([<<"dir">>,<<"spaces">>], proplists:get_value(<<"children">>,CdmiResponse2)),
     %%------------------------------
 
     %%--- list nonexisting dir -----
@@ -165,8 +165,8 @@ metadata_test(_Config) ->
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code1, _Headers1, Response1} = do_request(FileName, get, RequestHeaders1, []),
     ?assertEqual("200",Code1),
-    {struct,CdmiPesponse1} = mochijson2:decode(Response1),
-    {struct, Metadata1} = proplists:get_value(<<"metadata">>,CdmiPesponse1),
+    {struct,CdmiResponse1} = mochijson2:decode(Response1),
+    {struct, Metadata1} = proplists:get_value(<<"metadata">>,CdmiResponse1),
     ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata1)),
     CTime1 = binary_to_integer(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
     ATime1 = binary_to_integer(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
@@ -179,37 +179,37 @@ metadata_test(_Config) ->
 
     %%-- selective metadata read -----
     {_Code2, _Headers2, Response2} = do_request(FileName++"?metadata:", get, RequestHeaders1, []),
-    {struct,CdmiPesponse2} = mochijson2:decode(Response2),
-    ?assertEqual(1, length(CdmiPesponse2)),
-    {struct, Metadata2} = proplists:get_value(<<"metadata">>,CdmiPesponse2),
+    {struct,CdmiResponse2} = mochijson2:decode(Response2),
+    ?assertEqual(1, length(CdmiResponse2)),
+    {struct, Metadata2} = proplists:get_value(<<"metadata">>,CdmiResponse2),
     ?assertEqual(5, length(Metadata2)),
 
     %%-- selective metadata read with prefix -----
     {Code3, _Headers3, Response3} = do_request(FileName++"?metadata:cdmi_", get, RequestHeaders1, []),
     ?assertEqual("200",Code3),
-    {struct,CdmiPesponse3} = mochijson2:decode(Response3),
-    ?assertEqual(1, length(CdmiPesponse3)),
-    {struct, Metadata3} = proplists:get_value(<<"metadata">>,CdmiPesponse3),
+    {struct,CdmiResponse3} = mochijson2:decode(Response3),
+    ?assertEqual(1, length(CdmiResponse3)),
+    {struct, Metadata3} = proplists:get_value(<<"metadata">>,CdmiResponse3),
     ?assertEqual(5, length(Metadata3)),
 
     {_Code4, _Headers4, Response4} = do_request(FileName++"?metadata:cdmi_o", get, RequestHeaders1, []),
-    {struct,CdmiPesponse4} = mochijson2:decode(Response4),
-    ?assertEqual(1, length(CdmiPesponse4)),
-    {struct, Metadata4} = proplists:get_value(<<"metadata">>,CdmiPesponse4),
+    {struct,CdmiResponse4} = mochijson2:decode(Response4),
+    ?assertEqual(1, length(CdmiResponse4)),
+    {struct, Metadata4} = proplists:get_value(<<"metadata">>,CdmiResponse4),
     ?assertEqual(<<"veilfstestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
     ?assertEqual(1, length(Metadata4)),
 
     {_Code5, _Headers5, Response5} = do_request(FileName++"?metadata:cdmi_size", get, RequestHeaders1, []),
-    {struct,CdmiPesponse5} = mochijson2:decode(Response5),
-    ?assertEqual(1, length(CdmiPesponse5)),
-    {struct, Metadata5} = proplists:get_value(<<"metadata">>,CdmiPesponse5),
+    {struct,CdmiResponse5} = mochijson2:decode(Response5),
+    ?assertEqual(1, length(CdmiResponse5)),
+    {struct, Metadata5} = proplists:get_value(<<"metadata">>,CdmiResponse5),
     ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata5)),
     ?assertEqual(1, length(Metadata5)),
 
     {_Code6, _Headers6, Response6} = do_request(FileName++"?metadata:cdmi_no_such_metadata", get, RequestHeaders1, []),
-    {struct,CdmiPesponse6} = mochijson2:decode(Response6),
-    ?assertEqual(1, length(CdmiPesponse6)),
-    ?assertEqual([], proplists:get_value(<<"metadata">>,CdmiPesponse6)).
+    {struct,CdmiResponse6} = mochijson2:decode(Response6),
+    ?assertEqual(1, length(CdmiResponse6)),
+    ?assertEqual([], proplists:get_value(<<"metadata">>,CdmiResponse6)).
     %%------------------------------
 
 % Tests dir creation (cdmi container PUT), remember that every container URI ends
@@ -268,7 +268,7 @@ create_dir_test(_Config) ->
 % json string), or without (when we treat request body as new file content)
 create_file_test(_Config) ->
     ToCreate = "file.txt",
-    ToCreate2 = filename:join(["groups",?TEST_GROUP,"file1.txt"]),
+    ToCreate2 = filename:join(["spaces",?TEST_GROUP,"file1.txt"]),
     ToCreate4 = "file2",
     ToCreate5 = "file3",
     FileContent = <<"File content!">>,
@@ -305,7 +305,7 @@ create_file_test(_Config) ->
     {struct,CdmiResponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>,CdmiResponse2)),
     ?assertEqual(<<"file1.txt">>, proplists:get_value(<<"objectName">>,CdmiResponse2)),
-    ?assertEqual(<<"/groups/veilfstestgroup/">>, proplists:get_value(<<"parentURI">>,CdmiResponse2)),
+    ?assertEqual(<<"/spaces/veilfstestgroup/">>, proplists:get_value(<<"parentURI">>,CdmiResponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiResponse2)),
     ?assert(proplists:get_value(<<"metadata">>,CdmiResponse2) =/= <<>>),
 
@@ -373,7 +373,7 @@ update_file_test(_Config) ->
 delete_dir_test(_Config) ->
     DirName = "/toDelete/",
     ChildDirName = "/toDelete/child/",
-    GroupsDirName = "/groups/",
+    SpacesDirName = "/spaces/",
 
     %%----- basic delete -----------
     create_dir(DirName),
@@ -401,19 +401,19 @@ delete_dir_test(_Config) ->
     %%------------------------------
 
     %%----- delete group dir -------
-    ?assert(object_exists(GroupsDirName)),
+    ?assert(object_exists(SpacesDirName)),
 
     RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code3, _Headers3, _Response3} = do_request(GroupsDirName, delete, RequestHeaders3, []),
+    {Code3, _Headers3, _Response3} = do_request(SpacesDirName, delete, RequestHeaders3, []),
     ?assertEqual("403",Code3),
 
-    ?assert(object_exists(GroupsDirName)).
+    ?assert(object_exists(SpacesDirName)).
     %%------------------------------
 
 % Tests cdmi object DELETE requests
 delete_file_test(_Config) ->
     FileName = "/toDelete",
-    GroupFileName = "/groups/veilfstestgroup/groupFile",
+    GroupFileName = "/spaces/veilfstestgroup/groupFile",
 
     %%----- basic delete -----------
     create_file(FileName),
@@ -549,8 +549,8 @@ objectid_and_capabilities_test(_Config) ->
     RequestHeaders6 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code6, _Headers6, Response6} = do_request("cdmi_objectid/"++binary_to_list(DirId)++"/file.txt", get, RequestHeaders6, []),
     ?assertEqual("200",Code6),
-
     {struct,CdmiResponse6} = mochijson2:decode(Response6),
+
     ?assertEqual(proplists:delete(<<"metadata">>,CdmiResponse3), proplists:delete(<<"metadata">>,CdmiResponse6)), %should be the same as in 3 (except metadata)
 
     {Code7, _Headers7, Response7} = do_request("cdmi_objectid/"++binary_to_list(FileId), get, RequestHeaders6, []),
@@ -657,9 +657,14 @@ init_per_suite(Config) ->
     ibrowse:start(),
     Cert = ?COMMON_FILE("peer.pem"),
     DN = get_dn_from_cert(Cert,CCM),
-    StorageUUID = setup_user_in_db(DN,CCM),
 
-    lists:append([{nodes, Nodes},{dn,DN},{cert,Cert},{storage_uuid, StorageUUID}], Config).
+    Config1 = lists:append([{nodes, Nodes}], Config),
+
+    ?ENABLE_PROVIDER(Config1),
+
+    StorageUUID = setup_user_in_db(Cert, Config1),
+
+    lists:append([{dn,DN}, {cert,Cert}, {storage_uuid, StorageUUID}], Config1).
 
 end_per_suite(Config) ->
     Nodes = ?config(nodes, Config),
@@ -738,20 +743,14 @@ get_dn_from_cert(Cert,CCM) ->
     DN.
 
 % Populates the database with one user and some files
-setup_user_in_db(DN, CCM) ->
-    DnList = [DN],
-    Login = ?TEST_USER,
-    Name = "user user",
-    Teams = [?TEST_GROUP],
-    Email = "user@email.net",
-    GlobalId = "id",
+setup_user_in_db(Cert, Config) ->
+    [CCM | _] = ?config(nodes, Config),
 
-    rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
+    UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_GROUP]),
+    [DN | _] = UserDoc#veil_document.record#user.dn_list,
 
     {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?ARG_TEST_ROOT]),
     ?assertEqual(ok, Ans1),
-    {Ans5, _} = rpc:call(CCM, user_logic, create_user, [GlobalId,Login, Name, Teams, Email, DnList]),
-    ?assertEqual(ok, Ans5),
 
     fslogic_context:set_user_dn(DN),
     Ans6 = rpc:call(CCM, erlang, apply, [

@@ -157,11 +157,8 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     %% Get owner
     {UName, UID} = fslogic_file:get_file_owner(File),
 
-    GName = %% Get group name
-        case File#file.gids of
-            [GNam | _] -> GNam; %% Select first one as main group
-            [] -> UName
-        end,
+    {ok, FilePath} = logical_files_manager:get_file_full_name_by_uuid(FileUUID),
+    {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
 
     %% Get attributes
     {CTime, MTime, ATime, _SizeFromDB} =
@@ -175,24 +172,24 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
 
     %% Get file links
     Links = case Type of
-                "DIR" -> case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
-                             {ok, Sum} -> Sum + 2;
-                             _Other ->
-                                 ?error("Error: can not get number of links for file: ~s", [File]),
-                                 -1
-                         end;
-                "REG" -> 1;
-                _ -> -1
+                "DIR" ->
+                    case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
+                         {ok, Sum} -> Sum + 2;
+                         _Other ->
+                             ?error("Error: can not get number of links for file: ~s", [File]),
+                             0
+                     end;
+                _ -> 1
             end,
 
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-        type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID, links = Links};
+        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = UID, gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links};
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
     case fslogic_objects:get_file(FullFileName) of
         {ok, FileDoc} ->            %% Throw VENOENT in order not to trigger error-log
             get_file_attr(FileDoc); %% which would be unnecessary since get_file_attr is also used to check
-        {error, file_not_found} ->  %% if file exists
+        {error, file_not_found} ->  %% if the file exists
             throw(?VENOENT)
     end.
 
@@ -270,6 +267,8 @@ rename_file(FullFileName, FullNewFileName) ->
 
     ok = fslogic_perms:check_file_perms(NewDir, UserDoc, NewParentDoc, write),
 
+    {ok, TargetSpaceInfo} = fslogic_utils:get_space_info_for_path(FullNewFileName),
+
     MoveOnStorage =
         fun(#file{type = ?REG_TYPE}) -> %% Returns new file record with updated file_id field or throws excpetion
             %% Get storage info
@@ -283,18 +282,14 @@ rename_file(FullFileName, FullNewFileName) ->
                     throw(?VEREMOTEIO)
             end,
             SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage), %% Storage helper for cluster
-            NewFileID = fslogic_storage:get_new_file_id(FullNewFileName, UserDoc, SHInfo, fslogic_context:get_protocol_version()),
+            NewFileID = fslogic_storage:get_new_file_id(TargetSpaceInfo, FullNewFileName, UserDoc, SHInfo, fslogic_context:get_protocol_version()),
 
             %% Change group owner if needed
-            case fslogic_utils:get_group_owner(FullNewFileName) of
-                [] -> ok; %% Dont change group owner
-                [NewGroup | _] -> %% We are moving file to group folder -> change owner
-                    case storage_files_manager:chown(SHInfo, FileID, "", NewGroup) of
-                        ok -> ok;
-                        MReason1 ->
-                            ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [FileID, NewGroup, MReason1]),
-                            throw(?VEREMOTEIO)
-                    end
+            case storage_files_manager:chown(SHInfo, FileID, -1, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo)) of
+                ok -> ok;
+                MReason1 ->
+                    ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [FileID, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo), MReason1]),
+                    throw(?VEREMOTEIO)
             end,
 
             %% Move file to new location on storage
@@ -312,22 +307,22 @@ rename_file(FullFileName, FullNewFileName) ->
     %% Check if we need to move file on storage and do it when we do need it
     NewFile =
         case {string:tokens(fslogic_path:get_user_file_name(FullFileName), "/"), string:tokens(fslogic_path:get_user_file_name(FullNewFileName), "/")} of
-            {_, [?GROUPS_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
+            {_, [?SPACES_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
                 ?info("Attempt to move file to base group directory. Query: ~p", [stub]),
                 throw(?VEACCES);
-            {[?GROUPS_BASE_DIR_NAME, _InvalidSource], _} -> %% Moving from ?GROUPS_BASE_DIR_NAME dir is not allowed
+            {[?SPACES_BASE_DIR_NAME, _InvalidSource], _} -> %% Moving from ?GROUPS_BASE_DIR_NAME dir is not allowed
                 ?info("Attemt to move base group directory. Query: ~p", [stub]),
                 throw(?VEACCES);
 
-            {[?GROUPS_BASE_DIR_NAME, X | _FromF0], [?GROUPS_BASE_DIR_NAME, X | _ToF0]} -> %% Local (group dir) move, no storage actions are required
+            {[?SPACES_BASE_DIR_NAME, X | _FromF0], [?SPACES_BASE_DIR_NAME, X | _ToF0]} -> %% Local (group dir) move, no storage actions are required
                 OldFile;
 
-            {[?GROUPS_BASE_DIR_NAME, _FromGrp0 | _FromF0], [?GROUPS_BASE_DIR_NAME, _ToGrp0 | _ToF0]} -> %% From group X to Y
+            {[?SPACES_BASE_DIR_NAME, _FromGrp0 | _FromF0], [?SPACES_BASE_DIR_NAME, _ToGrp0 | _ToF0]} -> %% From group X to Y
                 MoveOnStorage(OldFile);
-            {[?GROUPS_BASE_DIR_NAME, _FromGrp1 | _FromF1], _} ->
+            {[?SPACES_BASE_DIR_NAME, _FromGrp1 | _FromF1], _} ->
                 %% From group X user dir
                 MoveOnStorage(OldFile);
-            {_, [?GROUPS_BASE_DIR_NAME, _ToGrp2 | _ToF2]} ->
+            {_, [?SPACES_BASE_DIR_NAME, _ToGrp2 | _ToF2]} ->
                 %% From user dir to group X
                 MoveOnStorage(OldFile);
 
@@ -336,11 +331,8 @@ rename_file(FullFileName, FullNewFileName) ->
         end,
 
     RenamedFileInit =
-        case fslogic_utils:get_group_owner(FullNewFileName) of %% Do we need to update group owner?
-            [] -> NewFile#file{parent = NewParent, name = fslogic_path:basename(FullNewFileName)}; %% Dont change group owner
-            [_NewGroup | _] = GIDs -> %% We are moving file to group folder -> change owner
-                NewFile#file{parent = NewParent, name = fslogic_path:basename(FullNewFileName), gids = GIDs}
-        end,
+        NewFile#file{parent = NewParent, name = fslogic_path:basename(FullNewFileName)},
+
     RenamedFile = fslogic_meta:update_meta_attr(RenamedFileInit, ctime, vcn_utils:time()),
     Renamed = OldDoc#veil_document{record = RenamedFile},
 

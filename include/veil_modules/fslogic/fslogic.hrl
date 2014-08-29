@@ -58,12 +58,11 @@
 % Callbacks management
 -record(callback, {fuse = 0, pid = 0, node = non, action = non}).
 
--define(REMOTE_HELPER_SEPARATOR, "///").
 -define(CLUSTER_USER_ID, "cluster_uid").
 -define(CLUSTER_FUSE_ID, "cluster_fid").
 
 %% Name of direcotry that contains all group dirs
--define(GROUPS_BASE_DIR_NAME, "groups").
+-define(SPACES_BASE_DIR_NAME, "spaces").
 
 %% burst size for listing
 -define(DAO_LIST_BURST_SIZE,100).
@@ -96,5 +95,8 @@
 
 %% Maximum time (in ms) after which document conflict resolution shall occur
 -define(MAX_SLEEP_TIME_CONFLICT_RESOLUTION, 100).
+
+%% Default permissions for space directory (i.e. /spaces/SpaceName)
+-define(SpaceDirPerm, 8#1770).
 
 -endif.

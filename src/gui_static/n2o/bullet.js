@@ -114,7 +114,7 @@ function bullet(url) {
             transport.onopen = function() {
                 delay = delayDefault;
 
-                if (transport.heart) { 
+                if (transport.heart) {
                     heartbeat = setInterval(function(){stream.onheartbeat();}, 4000);
                 }
 
@@ -140,7 +140,7 @@ function bullet(url) {
             };
             transport.onerror = transport.onclose;
             transport.onmessage = function(e){
-            stream.onmessage(e);
+                stream.onmessage(e);
             };
         }
 

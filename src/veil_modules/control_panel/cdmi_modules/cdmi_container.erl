@@ -265,7 +265,7 @@ fs_list_dir(Path, Offset, Count, Result) ->
 %% ====================================================================
 is_group_dir(Path) ->
     case string:tokens(Path,"/") of
-        [?GROUPS_BASE_DIR_NAME] -> true;
-        [?GROUPS_BASE_DIR_NAME , _GroupName] ->  true;
+        [?SPACES_BASE_DIR_NAME] -> true;
+        [?SPACES_BASE_DIR_NAME , _GroupName] ->  true;
         _ -> false
     end.

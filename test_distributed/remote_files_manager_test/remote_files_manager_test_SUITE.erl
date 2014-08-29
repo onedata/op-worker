@@ -40,7 +40,7 @@ permissions_test(Config) ->
   ST_Helper = "ClusterProxy",
   Team1 = ?TEST_GROUP,
   TestFile = "permissions_test_file",
-  TestFile2 = "groups/" ++ Team1 ++ "/permissions_test_file",
+  TestFile2 = filename:join([?SPACES_BASE_DIR_NAME, Team1, "permissions_test_file"]),
 
   Cert = ?COMMON_FILE("peer.pem"),
   Cert2 = ?COMMON_FILE("peer2.pem"),
@@ -54,39 +54,20 @@ permissions_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   test_utils:wait_for_cluster_init(),
 
+  ?ENABLE_PROVIDER(Config),
+
   Fuse_groups = [#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ?ARG_TEST_ROOT}}],
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, [], Fuse_groups]),
   ?assertEqual(ok, InsertStorageAns),
 
-  {ReadFileAns, PemBin} = file:read_file(Cert),
-  ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-  ?assertEqual(ok, ConvertAns),
-  DnList = [DN],
+  UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, Team1]),
+  UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, Team1]),
 
-  Login = ?TEST_USER,
-  Name = "user1 user1",
-  Teams1 = [Team1],
-  Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams1, Email, DnList]),
-  ?assertEqual(ok, CreateUserAns),
+  Login = UserDoc1#veil_document.record#user.login,
+  Login2 = UserDoc2#veil_document.record#user.login,
 
-  {ReadFileAns2, PemBin2} = file:read_file(Cert2),
-  ?assertEqual(ok, ReadFileAns2),
-  {ExtractAns2, RDNSequence2} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin2]),
-  ?assertEqual(rdnSequence, ExtractAns2),
-  {ConvertAns2, DN2} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence2]),
-  ?assertEqual(ok, ConvertAns2),
-  DnList2 = [DN2],
-
-  Login2 = ?TEST_USER2,
-  Name2 = "user2 user2",
-  Teams2 = [Team1],
-  Email2 = "user2@email.net",
-  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id2", Login2, Name2, Teams2, Email2, DnList2]),
-  ?assertEqual(ok, CreateUserAns2),
+  [DN | _] = UserDoc1#veil_document.record#user.dn_list,
+  [DN2 | _] = UserDoc2#veil_document.record#user.dn_list,
 
   %% Get FuseId
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -173,7 +154,7 @@ permissions_test(Config) ->
 
   {PermStatus, PermAnswer} = change_perm_on_storage(Host, Cert, Port, Id0, 8#521),
   ?assertEqual("ok", PermStatus),
-  ?assertEqual(list_to_atom(?VEACCES), PermAnswer),
+  ?assertEqual(list_to_atom(?VEPERM), PermAnswer),
 
 
 
@@ -285,8 +266,10 @@ permissions_test(Config) ->
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team1], ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ Team1], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_USER], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_USER2], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion])),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
   ?assertEqual(ok, RemoveUserAns),
@@ -312,21 +295,10 @@ storage_helpers_management_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   test_utils:wait_for_cluster_init(),
 
-  {ReadFileAns, PemBin} = file:read_file(Cert),
-  ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-  ?assertEqual(ok, ConvertAns),
-  DnList = [DN],
+  ?ENABLE_PROVIDER(Config),
 
-  Login = ?TEST_USER,
-  Name = "user1 user1",
-  Team1 = ?TEST_GROUP,
-  Teams = [Team1],
-  Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
-  ?assertEqual(ok, CreateUserAns),
+  UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_GROUP]),
+  [DN | _] = UserDoc#veil_document.record#user.dn_list,
 
   {ok, Socket1} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -368,8 +340,8 @@ storage_helpers_management_test(Config) ->
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team1], ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_GROUP], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion])),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
   ?assertEqual(ok, RemoveUserAns).
@@ -383,7 +355,7 @@ helper_requests_test(Config) ->
   TestFile2 = "../helper_requests_test_file2",
 
   Cert = ?COMMON_FILE("peer.pem"),
-  Cert2 = ?COMMON_FILE("peer2.pem"),
+  _Cert2 = ?COMMON_FILE("peer2.pem"),
   Host = "localhost",
   Port = ?config(port, Config),
   [FSLogicNode | _] = NodesUp,
@@ -394,42 +366,16 @@ helper_requests_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   test_utils:wait_for_cluster_init(),
 
+  ?ENABLE_PROVIDER(Config),
+
   Fuse_groups = [#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ?ARG_TEST_ROOT}}],
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, [], Fuse_groups]),
   ?assertEqual(ok, InsertStorageAns),
 
-  {ReadFileAns, PemBin} = file:read_file(Cert),
-  ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-  ?assertEqual(ok, ConvertAns),
-  DnList = [DN],
+  UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
 
-  Login = ?TEST_USER,
-  Name = "user1 user1",
-  Team1 = ?TEST_GROUP,
-  Teams1 = [Team1],
-  Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams1, Email, DnList]),
-  ?assertEqual(ok, CreateUserAns),
-
-  {ReadFileAns2, PemBin2} = file:read_file(Cert2),
-  ?assertEqual(ok, ReadFileAns2),
-  {ExtractAns2, RDNSequence2} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin2]),
-  ?assertEqual(rdnSequence, ExtractAns2),
-  {ConvertAns2, DN2} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence2]),
-  ?assertEqual(ok, ConvertAns2),
-  DnList2 = [DN2],
-
-%% 	try to create user who is not present in system (it should fail during dirs chown)
-  Login2 = "user2",
-  Name2 = "user2 user2",
-  Team2 = "user2 team",
-  Teams2 = [Team2],
-  Email2 = "user2@email.net",
-  CreateUserAns2 = rpc:call(FSLogicNode, user_logic, create_user, ["global_id2", Login2, Name2, Teams2, Email2, DnList2]),
-  ?assertEqual({error,dir_chown_error}, CreateUserAns2),
+  [DN | _] = user_logic:get_dn_list(UserDoc),
+  Login = user_logic:get_login(UserDoc),
 
   %% Get FuseId
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -455,15 +401,15 @@ helper_requests_test(Config) ->
   [MainDir | Path2] = Path,
   [Dir | NameEnding] = Path2,
   ?assert(is_integer(list_to_integer(StorageNum))),
-  ?assertEqual("users", MainDir),
+  ?assertEqual("spaces", MainDir),
   ?assertEqual(Login, Dir),
 
   {Status2, Answer2} = create_file_on_storage(Host, Cert, Port, Id),
   ?assertEqual("ok", Status2),
   ?assertEqual(list_to_atom(?VOK), Answer2),
 
-  ?assert(files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Dir ++ "/" ++ NameEnding)),
-  {OwnStatus, User, Group} = files_tester:get_owner(?TEST_ROOT ++ "/users/" ++ Dir ++ "/" ++ NameEnding),
+  ?assert(files_tester:file_exists_storage(?TEST_ROOT ++ "/spaces/" ++ Dir ++ "/" ++ NameEnding)),
+  {OwnStatus, User, _Group} = files_tester:get_owner(?TEST_ROOT ++ "/spaces/" ++ Dir ++ "/" ++ NameEnding),
   ?assertEqual(ok, OwnStatus),
   ?assert(User /= 0),
 
@@ -521,8 +467,9 @@ helper_requests_test(Config) ->
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team1], ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_USER], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_GROUP], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion])),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
   ?assertEqual(ok, RemoveUserAns).

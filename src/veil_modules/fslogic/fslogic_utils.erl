@@ -17,8 +17,8 @@
 
 %% API
 -export([create_children_list/1, create_children_list/2, get_user_id_from_system/1]).
--export([get_sh_and_id/3, get_files_number/3]).
--export([get_group_owner/1, get_user_groups/2]).
+-export([get_sh_and_id/3, get_sh_and_id/4, get_sh_and_id/5, get_files_number/3]).
+-export([get_space_info_for_path/1, get_user_groups/2]).
 -export([random_ascii_lowercase_sequence/1]).
 
 
@@ -37,11 +37,22 @@
     NewFileId :: string().
 %% ====================================================================
 get_sh_and_id(FuseID, Storage, File_id) ->
-    SHI = fslogic_storage:get_sh_for_fuse(FuseID, Storage),
+    get_sh_and_id(FuseID, Storage, File_id, <<>>).
+get_sh_and_id(FuseID, Storage, File_id, SpaceId) ->
+    get_sh_and_id(FuseID, Storage, File_id, SpaceId, false).
+get_sh_and_id(FuseID, Storage, File_id, SpaceId, ForceClusterProxy) ->
+    SHI =
+        case ForceClusterProxy orelse fslogic_context:is_global_fuse_id(FuseID) of
+            true ->
+                #storage_helper_info{name = "ClusterProxy", init_args = []};
+            false ->
+                fslogic_storage:get_sh_for_fuse(FuseID, Storage)
+        end,
     #storage_helper_info{name = SHName, init_args = _SHArgs} = SHI,
     case SHName =:= "ClusterProxy" of
         true ->
-            {SHI, integer_to_list(Storage#storage_info.id) ++ ?REMOTE_HELPER_SEPARATOR ++ File_id};
+            {SHI#storage_helper_info{init_args = [binary_to_list(vcn_utils:ensure_binary(SpaceId))]},
+                fslogic_path:absolute_join([integer_to_list(Storage#storage_info.id) | filename:split(File_id)])};
         false -> {SHI, File_id}
     end.
 
@@ -83,18 +94,24 @@ random_ascii_lowercase_sequence(Length) ->
     lists:foldl(fun(_, Acc) -> [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, Length)).
 
 
-%% get_group_owner/1
+%% get_space_info_for_path/1
 %% ====================================================================
-%% @doc Convinience method that returns list of group name(s) that are considered as default owner of file
-%%      created with given path. E.g. when path like "/groups/gname/file1" is passed, the method will
-%%      return ["gname"].
+%% @doc Returns #space_info{} associated with given file path.
 %% @end
--spec get_group_owner(FileBasePath :: string()) -> [string()].
+-spec get_space_info_for_path(FileBasePath :: string()) -> {ok, #space_info{}} | {error, Reason :: term()}.
 %% ====================================================================
-get_group_owner(FileBasePath) ->
-    case string:tokens(FileBasePath, "/") of
-        [?GROUPS_BASE_DIR_NAME, GroupName | _] -> [GroupName];
-        _ -> []
+get_space_info_for_path([$/ | FileBasePath]) ->
+    get_space_info_for_path(FileBasePath);
+get_space_info_for_path(FileBasePath) ->
+    case filename:split(FileBasePath) of
+        [?SPACES_BASE_DIR_NAME, SpaceName | _] ->
+            ?debug("Attempting to fetch space ~p while resolving file path ~p", [SpaceName, FileBasePath]),
+            case fslogic_objects:get_space(SpaceName) of
+                {ok, #space_info{} = SP} -> {ok, SP};
+                {error, Reason} ->
+                    {error, {invalid_space_path, Reason}}
+            end;
+        _ -> {ok, #space_info{name = "root", space_id = "", providers = [cluster_manager_lib:get_provider_id()]}}
     end.
 
 
@@ -127,7 +144,7 @@ get_files_number(Type, GroupName, ProtocolVersion) ->
 get_user_groups(UserDocStatus, UserDoc) ->
     case UserDocStatus of
         ok ->
-            {ok, user_logic:get_team_names(UserDoc)};
+            {ok, user_logic:get_space_names(UserDoc)};
         _ ->
             {error, UserDoc}
     end.

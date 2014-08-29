@@ -205,6 +205,7 @@ getfileattr(Message, Value) ->
   {Status, TmpAns} = contact_fslogic(Message, Value),
   case Status of
     ok ->
+      ?debug("getfileattr: ~p", [TmpAns]),
       Response = TmpAns#fileattr.answer,
       case Response of
         ?VOK -> {ok, #fileattributes{
@@ -414,6 +415,8 @@ create(File) ->
                       end;
                     _ -> {Status2, TmpAns2}
                   end;
+                {wrong_mknod_return_code, -17} ->
+                  {error, file_exists};
                 StorageBadAns ->
                   StorageBadAns
               end;
@@ -604,7 +607,7 @@ contact_fslogic(Message, Value) ->
                   case UserID of
                     undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Value}});
                     _ ->
-                      gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Value}}})
+                      gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{access_token = fslogic_context:get_access_token(), subject = UserID, request = {internal_call, Value}}})
                   end;
                 _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {Message, Value}})
               end,
@@ -1050,7 +1053,7 @@ generateRandomData(Size) -> [random:uniform(255) | generateRandomData(Size - 1)]
 %% ====================================================================
 get_mode(FileName) ->
   TmpAns = case string:tokens(FileName, "/") of
-             [?GROUPS_BASE_DIR_NAME | _] ->
+             [?SPACES_BASE_DIR_NAME | _] ->
                application:get_env(?APP_Name, new_group_file_logic_mode);
              _ ->
                application:get_env(?APP_Name, new_file_logic_mode)

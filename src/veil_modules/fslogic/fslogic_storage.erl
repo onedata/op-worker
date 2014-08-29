@@ -18,7 +18,7 @@
 -include_lib("files_common.hrl").
 
 %% API
--export([get_sh_for_fuse/2, select_storage/2, insert_storage/2, insert_storage/3, get_new_file_id/4, check_storage_on_node/2]).
+-export([get_sh_for_fuse/2, select_storage/2, insert_storage/2, insert_storage/3, get_new_file_id/5, check_storage_on_node/2]).
 
 -ifdef(TEST).
 -export([create_dirs/4, get_relative_path/2, get_mount_points/0, exist_storage_info_in_config/2]).
@@ -32,21 +32,19 @@
 %% API functions
 %% ====================================================================
 
-%% get_new_file_id/4
+%% get_new_file_id/5
 %% ====================================================================
 %% @doc Returns id for a new file
 %% @end
--spec get_new_file_id(File :: string(), UserDoc :: term(), SHInfo :: term(), ProtocolVersion :: integer()) -> string().
+-spec get_new_file_id(SpaceInfo :: #space_info{}, File :: string(), UserDoc :: term(), SHInfo :: term(), ProtocolVersion :: integer()) -> string().
 %% ====================================================================
-get_new_file_id(File, UserDoc, SHInfo, ProtocolVersion) ->
+get_new_file_id(#space_info{} = SpaceInfo, File, UserDoc, SHInfo, ProtocolVersion) ->
   {Root1, {CountStatus, FilesCount}} =
     case {string:tokens(File, "/"), UserDoc} of
-      {[?GROUPS_BASE_DIR_NAME, GroupName | _], _} -> %% Group dir context
-        {"/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ GroupName, fslogic_utils:get_files_number(group, GroupName, ProtocolVersion)};
+      {[?SPACES_BASE_DIR_NAME, SpaceName | _], _} -> %% Group dir context
+        {filename:join(["/", ?SPACES_BASE_DIR_NAME, fslogic_spaces:get_storage_space_name(SpaceInfo)]), fslogic_utils:get_files_number(group, SpaceName, ProtocolVersion)};
       {_, #veil_document{uuid = ?CLUSTER_USER_ID}} ->
-        {"/", fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)};
-      _ ->
-        {"/users/" ++ fslogic_path:get_user_root(UserDoc), fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)}
+        {"/", fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)}
     end,
   File_id_beg =
     case CountStatus of
@@ -164,50 +162,14 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
         ok -> ok;
         _ -> ?error("Can not add storage info (~p, ~p) to config file.", [ID + 1, Root])
       end,
-      Ans = storage_files_manager:mkdir(SHI, "users"),
-      Ans3 = case Ans of
-               ok ->
-                 Ans2 = storage_files_manager:chmod(SHI, "users", 8#711),
-                 case Ans2 of
-                   ok ->
-                     ok;
-                   _ ->
-                     ?error("Can not change owner of users dir using storage helper ~p", [SHI#storage_helper_info.name]),
-                     Ans2
-                 end;
-               _ ->
-                 ?error("Can not create users dir using storage helper ~p", [SHI#storage_helper_info.name]),
-                 Ans
-             end,
 
-      Ans4 = storage_files_manager:mkdir(SHI, "groups"),
-      Ans6 = case Ans4 of
-               ok ->
-                 Ans5 = storage_files_manager:chmod(SHI, "groups", 8#711),
-                 case Ans5 of
-                   ok ->
-                     ok;
-                   _ ->
-                     ?error("Can not change owner of groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
-                     Ans5
-                 end;
-               _ ->
-                 ?error("Can not create groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
-                 Ans4
-             end,
-
-      case {Ans3, Ans6} of
-        {ok, ok} ->
-          case add_dirs_for_existing_users(Storage) of
-            ok -> DAO_Ans;
-            Error ->
-              ?error("Can not create dirs for existing users and theirs teams, error: ~p", [Error]),
-              {error, users_dirs_creation_error}
-          end;
-        _ ->
-          ?error("Dirs creation error: {users_dir_status, groups_dir_status} = ~p", [{Ans3, Ans6}]),
-          {error, dirs_creation_error}
+      case add_dirs_for_existing_users(Storage) of
+        ok -> DAO_Ans;
+        Error ->
+          ?error("Can not create dirs for existing users and theirs spaces, error: ~p", [Error]),
+          {error, users_dirs_creation_error}
       end;
+
     _ -> DAO_Ans
   end.
 
@@ -248,10 +210,10 @@ get_fuse_group(FuseID) ->
 add_dirs_for_existing_users(Storage) ->
   case user_logic:list_all_users() of
     {ok, Users} ->
-      LoginsAndTeams = lists:map(fun(X) -> {user_logic:get_login(X), user_logic:get_team_names(X)} end, Users),
+      LoginsAndSpaces = lists:map(fun(X) -> {user_logic:get_login(X), user_logic:get_spaces(X)} end, Users),
       CreateDirs =
-        fun({Login, Teams}, TmpAns) ->
-          case user_logic:create_dirs_at_storage(Login, Teams, Storage) of
+        fun({Login, Spaces}, TmpAns) ->
+          case user_logic:create_dirs_at_storage(Spaces, Storage) of
             ok ->
               TmpAns;
             Error ->
@@ -259,7 +221,7 @@ add_dirs_for_existing_users(Storage) ->
               Error
           end
         end,
-      lists:foldl(CreateDirs, ok, LoginsAndTeams);
+      lists:foldl(CreateDirs, ok, LoginsAndSpaces);
     {error, Error} ->
       ?error("Can not list all users, error: ~p", [Error]),
       {error, Error}

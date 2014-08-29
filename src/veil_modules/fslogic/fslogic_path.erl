@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
-%% @copyright (C): 2013, ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% @copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -17,8 +17,8 @@
 
 %% API
 -export([get_user_file_name/1, get_user_file_name/2]).
--export([get_full_file_name/1, get_full_file_name/2, get_full_file_name/4]).
--export([verify_file_name/1]).
+-export([get_full_file_name/1, get_full_file_name/2, get_full_file_name/4, get_short_file_name/1]).
+-export([verify_file_name/1, absolute_join/1]).
 -export([strip_path_leaf/1, basename/1]).
 -export([get_parent_and_name_from_path/2]).
 -export([get_user_root/0, get_user_root/2, get_user_root/1]).
@@ -52,14 +52,44 @@ get_user_file_name(FullFileName) ->
 %% ====================================================================
 get_user_file_name(FullFileName, UserDoc) ->
     {ok, Tokens} = verify_file_name(FullFileName),
-
-    UserRec = dao_lib:strip_wrappers(UserDoc),
-    UserName = UserRec#user.login,
-
     case Tokens of
-        [UserName | UserTokens] -> "/" ++ string:join(UserTokens, "/");
-        _ -> "/" ++ string:join(Tokens, "/")
+        [] -> "";
+        _ ->
+            filename:join(Tokens)
     end.
+
+
+%% get_short_file_name/1
+%% ====================================================================
+%% @doc Strips "/spaces/SpaceName" form given path if SpaceName is default spaces of current user.
+%% @end
+-spec get_short_file_name(FullFileName :: string()) -> Result when
+    Result :: UserFileName :: string() | no_return().
+%% ====================================================================
+get_short_file_name(FullFileName) ->
+    {_, UserDoc} = fslogic_objects:get_user(),
+    get_short_file_name(FullFileName, UserDoc).
+
+
+%% get_short_file_name/2
+%% ====================================================================
+%% @doc Strips "/spaces/SpaceName" form given path if SpaceName is default spaces of selected user.
+%% @end
+-spec get_short_file_name(FullFileName :: string(), UserDoc :: #veil_document{}) -> Result when
+    Result :: UserFileName :: string() | no_return().
+%% ====================================================================
+get_short_file_name(FullFileName, UserDoc) ->
+    get_short_file_name1(filename:split(FullFileName), UserDoc).
+get_short_file_name1([?SPACES_BASE_DIR_NAME, SpaceName | Tokens], #veil_document{record = #user{spaces = [DefaultSpaceId | _]}}) ->
+    {ok, #space_info{name = DefaultSpaceName}} = fslogic_objects:get_space({uuid, DefaultSpaceId}),
+    case unicode:characters_to_list(DefaultSpaceName) of
+        SpaceName -> absolute_join(Tokens);
+        _         -> absolute_join([?SPACES_BASE_DIR_NAME, SpaceName] ++ Tokens)
+    end;
+get_short_file_name1(Tokens, _UserDoc) ->
+    absolute_join(Tokens).
+
+
 
 
 %% get_full_file_name/1
@@ -106,18 +136,30 @@ get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
         ok ->
             case fslogic_perms:assert_group_access(UserDoc, Request, VerifiedFileName) of
                 ok ->
-                    case Tokens of %% Map all /groups/* requests to root of the file system (i.e. dont add any prefix)
-                        [?GROUPS_BASE_DIR_NAME | _] ->
-                            {ok, VerifiedFileName};
+                    case Tokens of
+                        [?SPACES_BASE_DIR_NAME | SpaceTokens] ->
+                            {ok, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME | SpaceTokens])};
                         _ ->
                             Root = get_user_root(UserDoc),
-                            {ok, Root ++ "/" ++ VerifiedFileName}
+                            ?debug("UserRoot: ~p", [Root]),
+                            {ok, fslogic_path:absolute_join(filename:split(Root) ++ Tokens)}
                     end;
                 _ -> {error, invalid_group_access}
             end;
         _ ->
             {error, {user_doc_not_found, UserDoc}}
     end.
+
+
+%% absolute_join/1
+%% ====================================================================
+%% @doc Same as filename:join but also ensures that returned path is absolute.
+%% @end
+-spec absolute_join(Tokens :: [string()]) -> AbsolutePath :: string().
+%% ====================================================================
+absolute_join(Tokens) ->
+    Tokens1 = Tokens -- ["/"],
+    filename:join(["/" | Tokens1]).
 
 
 %% verify_file_name/1
@@ -194,8 +236,12 @@ get_user_root(#veil_document{uuid = ?CLUSTER_USER_ID}) ->
     "";
 get_user_root(#veil_document{record = UserRec}) ->
     get_user_root(UserRec);
-get_user_root(#user{login = Login}) ->
-    "/" ++ Login.
+get_user_root(#user{spaces = []}) ->
+    throw(no_spaces);
+get_user_root(#user{spaces = [PrimarySpaceId | _]}) ->
+    {ok, #space_info{name = SpaceName}} = fslogic_objects:get_space({uuid, PrimarySpaceId}),
+    ?debug("get user root: ~p ~p ~p", [PrimarySpaceId, SpaceName, unicode:characters_to_list(SpaceName)]),
+    fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, unicode:characters_to_list(SpaceName)]).
 
 
 %% get_user_root/2

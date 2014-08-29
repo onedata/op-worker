@@ -131,11 +131,12 @@ list_descriptors() ->
 
 
 save_file() ->
-    Doc = #veil_document{record = #file{}},
+    File = #file{name = "Name"},
+    Doc = #veil_document{record = File},
     ?assertMatch({ok, "uuid"}, dao_vfs:save_file(Doc)),
-    ?assertMatch({ok, "uuid"}, dao_vfs:save_file(#file{})),
+    ?assertMatch({ok, "uuid"}, dao_vfs:save_file(File)),
 
-    ?assertEqual(2, meck:num_calls(dao_records, save_record, [Doc])),
+    ?assertEqual(2, meck:num_calls(dao_records, save_record, [Doc#veil_document{record = #file{name = {unicode_string, "Name"}}}])),
     ?assert(meck:validate([dao_records, dao_helper])).
 
 
@@ -215,7 +216,7 @@ rename_file() ->
 
     ?assertMatch({ok, "uuid"}, dao_vfs:rename_file({uuid, "file"}, "name")),
 
-    ?assert(meck:called(dao_records, save_record, [#veil_document{uuid = "uuid", record = #file{name = "name"}}])),
+    ?assert(meck:called(dao_records, save_record, [#veil_document{uuid = "uuid", record = #file{name = {unicode_string, "name"}}}])),
     ?assert(meck:validate([dao_records, dao_helper])).
 
 

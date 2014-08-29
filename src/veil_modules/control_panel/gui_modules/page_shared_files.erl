@@ -35,7 +35,7 @@ title() -> <<"Shared files">>.
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
     [
-        vcn_gui_utils:top_menu(shared_files_tab),
+        vcn_gui_utils:top_menu(data_tab),
         #panel{style = <<"margin-top: 59px;">>, body = main_panel()},
         footer_popup()
     ].
