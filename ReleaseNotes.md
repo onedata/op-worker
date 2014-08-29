@@ -1,3 +1,13 @@
+VeilHelpers 1.6
+===========
+
+VeilHelpers 1.6 is a part of VeilFS 1.6. This is mainly a bug-fix release. See further details below.
+
+Fixed Bugs
+-----
+
+* RPATH fixed
+
 VeilHelpers 1.0
 ===========
 
