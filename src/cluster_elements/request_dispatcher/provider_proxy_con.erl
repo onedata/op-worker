@@ -66,14 +66,34 @@ get_msg_id() ->
     exec(get_msg_id).
 
 
+%% reset_connection/1
+%% ====================================================================
+%% @doc Resets connection to selected HostName.
+%% @end
+-spec reset_connection(HostName :: string()) -> ok.
+%% ====================================================================
 reset_connection(HostName) ->
     ensure_running(),
     exec({reset_connection, HostName}).
 
+
+%% report_timeout/1
+%% ====================================================================
+%% @doc Report that answer message wasn't successfully delivered. Connection manager will increment its error counter for this HostName.
+%% @end
+-spec report_timeout(HostName :: string()) -> ok.
+%% ====================================================================
 report_timeout(HostName) ->
     ensure_running(),
     exec({report_timeout, HostName}).
 
+
+%% report_ack/1
+%% ====================================================================
+%% @doc Report that answer message was successfully delivered. Connection manager will reset its error counter for this HostName.
+%% @end
+-spec report_ack(HostName :: string()) -> ok.
+%% ====================================================================
 report_ack(HostName) ->
     ensure_running(),
     exec({report_ack, HostName}).
