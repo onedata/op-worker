@@ -12,6 +12,22 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+%% ===================================================================
+%% @author Lukasz Opiola
+%% @copyright (C): 2014 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: Copy of n2o_bullet.erl from n2o.
+%% This is a cowboy handler module for handling websocket connections for n2o.
+%% Compared to original, this module has slight changes in the following functions:
+%% - init/3
+%% - handle/2
+%% - info/3
+%% @end
+%% ===================================================================
+
 -module(veil_bullet_handler).
 -behaviour(cowboy_http_handler).
 -behaviour(cowboy_websocket_handler).

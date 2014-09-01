@@ -5,8 +5,11 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This is a cowboy handler module for handling HTTP request with n2o engine.
-%% It's basically copied from n2o, with several changes.
+%% @doc: Copy of n2o_cowboy.erl from n2o.
+%% This is a cowboy handler module for handling HTTP request with n2o engine.
+%% Compared to original, this module has slight changes in the following functions:
+%% - request_body/1
+%% - reply/2
 %% @end
 %% ===================================================================
 
@@ -30,33 +33,13 @@
 %% cowboy_http_handler API
 %% ====================================================================
 
-%% init/3
-%% ====================================================================
-%% @doc Cowboy handler callback, called to initialize request handling flow.
-%% @end
--spec init(Type :: any(), Req :: req(), Opts :: [term()]) -> {ok, NewReq :: term(), State :: term()}.
-%% ====================================================================
 init(_Transport, Req, _Opts) ->
     {ok, Req, #state{}}.
 
-
-%% handle/2
-%% ====================================================================
-%% @doc Cowboy handler callback, called to process a HTTP request.
-%% @end
--spec handle(Req :: term(), State :: term()) -> {ok, NewReq :: term(), State :: term()}.
-%% ====================================================================
 handle(Req, State) ->
     {ok, NewReq} = wf_core:run(Req),
     {ok, NewReq, State}.
 
-
-%% terminate/3
-%% ====================================================================
-%% @doc Cowboy handler callback, called after a request is processed.
-%% @end
--spec terminate(Reason :: term(), Req :: term(), State :: term()) -> ok.
-%% ====================================================================
 terminate(_Reason, _Req, _State) ->
     ok.
 

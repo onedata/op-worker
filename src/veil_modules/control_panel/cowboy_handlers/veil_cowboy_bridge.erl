@@ -41,6 +41,8 @@
 -export([get_resource/2, handle_urlencoded_data/2, handle_json_data/2, handle_multipart_data/2]).
 %% CDMI handler specific funs
 -export([get_cdmi_container/2, put_cdmi_container/2]).
+%% Static file handler specific funs
+-export([get_file/2]).
 
 %% This is an internal function, but must be exported to user ?MODULE: in recursion.
 -export([delegation_loop/1]).
@@ -365,6 +367,15 @@ get_cdmi_container(Req, State) ->
 %% ====================================================================
 put_cdmi_container(Req, State) ->
     delegate(put_cdmi_container, [Req, State]).
+
+%% get_file/2
+%% ====================================================================
+%% @doc Callback function for static file handler.
+%% @end
+-spec get_file(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+%% ====================================================================
+get_file(Req, State) ->
+    delegate(get_file, [Req, State]).
 
 
 %% ====================================================================

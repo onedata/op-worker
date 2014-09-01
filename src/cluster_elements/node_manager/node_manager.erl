@@ -1231,7 +1231,7 @@ start_gui_listener() ->
     {ok, MaxKeepAlive} = application:get_env(veil_cluster_node, control_panel_max_keepalive),
     {ok, Timeout} = application:get_env(veil_cluster_node, control_panel_socket_timeout),
 
-
+    % Set custom n2o bridge
     application:set_env(n2o, bridge, n2o_handler),
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
@@ -1239,7 +1239,13 @@ start_gui_listener() ->
         % Cowboy does not have a mechanism to match every hostname starting with 'www.'
         % This will match hostnames with up to 6 segments
         % e. g. www.seg2.seg3.seg4.seg5.com
-        {"www.:_[.:_[.:_[.:_[.:_]]]]", [{'_', redirect_handler, []}]},
+        {"www.:_[.:_[.:_[.:_[.:_]]]]", [{'_', veil_cowboy_bridge,
+            [
+                {delegation, true},
+                {handler_module, redirect_handler},
+                {handler_opts, []}
+            ]}
+        ]},
         % Proper requests are routed to handler modules
         {'_', static_dispatches(atom_to_list(DocRoot), ?static_paths) ++ [
             {"/nagios/[...]", veil_cowboy_bridge,
@@ -1250,19 +1256,19 @@ start_gui_listener() ->
                 ]},
             {?user_content_download_path ++ "/:path", veil_cowboy_bridge,
                 [
-                    {delegation, false},
+                    {delegation, true},
                     {handler_module, file_download_handler},
                     {handler_opts, [{type, ?user_content_request_type}]}
                 ]},
             {?shared_files_download_path ++ "/:path", veil_cowboy_bridge,
                 [
-                    {delegation, false},
+                    {delegation, true},
                     {handler_module, file_download_handler},
                     {handler_opts, [{type, ?shared_files_request_type}]}
                 ]},
             {?file_upload_path, veil_cowboy_bridge,
                 [
-                    {delegation, false},
+                    {delegation, true},
                     {handler_module, file_upload_handler},
                     {handler_opts, []}
                 ]},
@@ -1356,13 +1362,13 @@ start_rest_listener() ->
         {'_', [
             {"/rest/:version/[...]", veil_cowboy_bridge,
                 [
-                    {delegation, false},
+                    {delegation, true},
                     {handler_module, rest_handler},
                     {handler_opts, []}
                 ]},
             {"/cdmi/[...]", veil_cowboy_bridge,
                 [
-                    {delegation, false},
+                    {delegation, true},
                     {handler_module, cdmi_handler},
                     {handler_opts, []}
                 ]}
@@ -1397,6 +1403,10 @@ start_rest_listener() ->
 %% ====================================================================
 static_dispatches(DocRoot, StaticPaths) ->
     _StaticDispatches = lists:map(fun(Dir) ->
-        {Dir ++ "[...]", cowboy_static, {dir, DocRoot ++ Dir}}
+        {Dir ++ "[...]", veil_cowboy_bridge,
+            [
+                {delegation, true},
+                {handler_module, static_file_handler},
+                {handler_opts, {dir, DocRoot ++ Dir}}
+            ]}
     end, StaticPaths).
-
