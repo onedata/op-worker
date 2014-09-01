@@ -36,11 +36,11 @@ allowed_methods(Req, State) ->
 %% @end
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
-malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version } = State) when is_binary(Version) -> % put cdmi
+malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version, filepath = Filepath } = State) when is_binary(Version) -> % put cdmi
     {<<"application/cdmi-object">>, _} = cowboy_req:header(<<"content-type">>, Req),
-    {false,Req,State};
-malformed_request(Req, State) ->
-    {false, Req, State}.
+    {false,Req,State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
+malformed_request(Req, #state{filepath = Filepath} = State) ->
+    {false, Req, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}}.
 
 
 %% resource_exists/2
@@ -266,8 +266,7 @@ prepare_object_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = Stat
 prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = "/"} = State) ->
     [{<<"parentURI">>, <<>>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
-    ParentStringURI = fslogic_path:strip_path_leaf(fslogic_path:get_short_file_name(Filepath)),
-    ParentURI = list_to_binary(rest_utils:ensure_path_ends_with_slash(ParentStringURI)),
+    ParentURI = list_to_binary(rest_utils:ensure_path_ends_with_slash(fslogic_path:strip_path_leaf(Filepath))),
     [{<<"parentURI">>, ParentURI} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentID">> | Tail], #state{filepath = "/"} = State) ->
     [{<<"parentID">>, <<>>} | prepare_object_ans(Tail, State)];

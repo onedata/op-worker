@@ -492,7 +492,7 @@ objectid_and_capabilities_test(_Config) ->
     RootId = proplists:get_value(<<"objectID">>,CdmiResponse1),
     ?assertNotEqual(RootId,undefined),
     ?assert(is_binary(RootId)),
-    ?assertEqual(undefined, proplists:get_value(<<"parentURI">>,CdmiResponse1)),
+    ?assertEqual(<<>>, proplists:get_value(<<"parentURI">>,CdmiResponse1)),
     ?assertEqual(undefined, proplists:get_value(<<"parentID">>,CdmiResponse1)),
     ?assertEqual(<<"cdmi_capabilities/container/">>,proplists:get_value(<<"capabilitiesURI">>,CdmiResponse1)),
     %%------------------------------
