@@ -181,8 +181,6 @@ should_fetch_data() ->
 
   ?assertEqual(ok, FetchAnswer),
   ?assertEqual([<<"first">>, <<"second">>, <<"third">>, <<"fourth">>], FetchHeader),
-  io:format(user, "~n~n~p~n~n", [Data]),
-  io:format(user, "~n~n~p~n~n", [FetchData]),
   lists:zipwith(fun
     ({_, [Value | _]}, {_, [FetchValue | _]}) -> ?assertEqual(Value, round(FetchValue))
   end, Data, FetchData).
