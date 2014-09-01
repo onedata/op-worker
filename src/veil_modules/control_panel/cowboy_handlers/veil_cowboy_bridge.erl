@@ -68,7 +68,6 @@ apply(Module, Fun, Args) ->
             erlang:apply(Module, Fun, Args);
         _ ->
             % This is a spawned process, it must call the socket process to apply the fun
-            io:format(user, "apply ~p:~p/~p~n", [Module, Fun, length(Args)]),
             get_socket_pid() ! {apply, Module, Fun, Args},
             receive
                 {result, Result} ->
@@ -141,7 +140,6 @@ get_socket_pid() ->
 -spec init(Type :: any(), Req :: req(), Opts :: [term()]) -> {ok, NewReq :: term(), State :: term()}.
 %% ====================================================================
 init(Type, Req, Opts) ->
-    io:format("Got request at ~p~n", [node()]),
     HandlerModule = proplists:get_value(handler_module, Opts),
     HandlerOpts = proplists:get_value(handler_opts, Opts, []),
     Delegation = proplists:get_value(delegation, Opts, true),
@@ -427,12 +425,10 @@ delegate(Fun, Args) ->
     HandlerModule = get_handler_module(),
     case get_delegation() of
         true ->
-            io:format("delegated ~p:~p/~p~n", [HandlerModule, Fun, length(Args)]),
             HandlerPid = get_handler_pid(),
             HandlerPid ! {apply, HandlerModule, Fun, Args},
             delegation_loop(HandlerPid);
         false ->
-            io:format("local ~p:~p/~p~n", [HandlerModule, Fun, length(Args)]),
             erlang:apply(HandlerModule, Fun, Args)
     end.
 

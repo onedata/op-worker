@@ -33,6 +33,9 @@
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
 -export([synchronize_spaces_info/2]).
 
+% For development only
+-export([mock_spaces/1]).
+
 
 %% ====================================================================
 %% API functions
@@ -177,7 +180,6 @@ get_user(Key) ->
     dao_lib:apply(dao_users, get_user, [Key], 1).
 
 
-
 %% synchronize_spaces_info/2
 %% ====================================================================
 %% @doc Tries to synchronize spaces for given local user with GlobalRegistry. This process involves downloading list of available to user spaces <br/>
@@ -185,6 +187,10 @@ get_user(Key) ->
 %% @end
 -spec synchronize_spaces_info(UserDoc :: #veil_document{}, AccessToken :: binary()) -> UserDoc :: #veil_document{}.
 %% ====================================================================
+synchronize_spaces_info(#veil_document{record = #user{role = developer}} = UserDoc, _) ->
+    % Mock user's spaces for develoment purposes
+    mock_spaces(UserDoc);
+
 synchronize_spaces_info(#veil_document{record = #user{global_id = GlobalId} = UserRec} = UserDoc, AccessToken) ->
     case gr_users:get_spaces({user, AccessToken}) of
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} ->
@@ -890,4 +896,34 @@ quota_exceeded(UserQuery, ProtocolVersion) ->
             end;
         Error ->
             throw({cannot_fetch_user, Error})
+    end.
+
+
+%% mock_spaces/1
+%% ====================================================================
+%% @doc This allows mocking space synchronization, so no GR is required.
+%% @end
+-spec mock_spaces(UserDoc :: #veil_document{}) -> UserDoc :: #veil_document{}.
+%% ====================================================================
+mock_spaces(#veil_document{record = #user{} = UserRec} = UserDoc) ->
+    SpaceIds = [<<"space1">>],
+    DefaultSpaceId = <<"space1">>,
+    NewSpaces = case DefaultSpaceId of
+                    <<"undefined">> ->
+                        SpaceIds;
+                    _ ->
+                        [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]]
+                end,
+
+    ?debug("New spaces: ~p", [NewSpaces]),
+
+    [fslogic_spaces:initialize(SpaceId) || SpaceId <- NewSpaces],
+
+    UserDoc1 = UserDoc#veil_document{record = UserRec#user{spaces = NewSpaces}},
+    case dao_lib:apply(dao_users, save_user, [UserDoc1], 1) of
+        {ok, _} ->
+            UserDoc1;
+        {error, Reason} ->
+            ?error("Cannot save user (while syncing spaces) due to: ~p", [Reason]),
+            UserDoc
     end.
