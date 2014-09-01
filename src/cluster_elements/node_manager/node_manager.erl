@@ -37,6 +37,9 @@
 % GUI routing module
 -define(gui_routing_module, gui_routes).
 
+% Custom cowboy bridge module
+-define(cowboy_bridge_module, n2o_handler).
+
 % Cowboy listener references
 -define(dispatcher_listener, dispatcher).
 -define(https_listener, https).
@@ -1231,8 +1234,6 @@ start_gui_listener() ->
     {ok, MaxKeepAlive} = application:get_env(veil_cluster_node, control_panel_max_keepalive),
     {ok, Timeout} = application:get_env(veil_cluster_node, control_panel_socket_timeout),
 
-    % Set custom n2o bridge
-    application:set_env(n2o, bridge, n2o_handler),
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
         % Matching requests will be redirected to the same address without leading 'www.'
@@ -1288,7 +1289,7 @@ start_gui_listener() ->
     ],
 
     % Create ets tables and set envs needed by n2o
-    gui_utils:init_n2o_ets_and_envs(GuiPort, ?gui_routing_module, ?session_logic_module),
+    gui_utils:init_n2o_ets_and_envs(GuiPort, ?gui_routing_module, ?session_logic_module, ?cowboy_bridge_module),
 
     % Start the listener for web gui and nagios handler
     {ok, _} = cowboy:start_https(?https_listener, GuiNbAcceptors,
