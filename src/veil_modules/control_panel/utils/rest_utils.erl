@@ -21,7 +21,7 @@
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
 -export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, parse_body/1,
-         validate_body/1, prepare_metadata/1, prepare_metadata/2]).
+         validate_body/1, prepare_metadata/1, prepare_metadata/2, ensure_path_ends_with_slash/1]).
 
 %% ====================================================================
 %% API functions
@@ -312,3 +312,16 @@ cdmi_metadata_to_attrs(<<"cdmi_owner">>, Attrs) ->
     {<<"cdmi_owner">>, list_to_binary(Attrs#fileattributes.uname)};
 cdmi_metadata_to_attrs(_,_Attrs) ->
     {}.
+
+%% ensure_path_ends_with_slash/1
+%% ====================================================================
+%% @doc Appends '/' to the end of filepath if last character is different
+-spec ensure_path_ends_with_slash(string()) -> string().
+%% ====================================================================
+ensure_path_ends_with_slash([]) ->
+    "/";
+ensure_path_ends_with_slash(Path) ->
+    case lists:last(Path) of
+        $/ -> Path;
+        _ -> Path ++ "/"
+    end.

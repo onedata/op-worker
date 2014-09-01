@@ -177,12 +177,10 @@ prepare_container_ans([<<"objectID">> | Tail], #state{filepath = Filepath} = Sta
 prepare_container_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"objectName">>, list_to_binary([filename:basename(Filepath), "/"])} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = "/"} = State) ->
-    prepare_container_ans(Tail, State);
+    [{<<"parentURI">>,""} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
-    ParentURI = case fslogic_path:strip_path_leaf(Filepath) of
-                    "/" -> <<"/">>;
-                    Other -> list_to_binary(Other)
-                end,
+    ParentStringURI = fslogic_path:strip_path_leaf(fslogic_path:get_short_file_name(Filepath)),
+    ParentURI = list_to_binary(rest_utils:ensure_path_ends_with_slash(ParentStringURI)),
     [{<<"parentURI">>, ParentURI} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"parentID">> | Tail], #state{filepath = "/"} = State) ->
     prepare_container_ans(Tail, State);

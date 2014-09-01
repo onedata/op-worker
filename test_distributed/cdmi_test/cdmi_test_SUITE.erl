@@ -305,7 +305,7 @@ create_file_test(_Config) ->
     {struct,CdmiResponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>,CdmiResponse2)),
     ?assertEqual(<<"file1.txt">>, proplists:get_value(<<"objectName">>,CdmiResponse2)),
-    ?assertEqual(<<"/spaces/veilfstestgroup/">>, proplists:get_value(<<"parentURI">>,CdmiResponse2)),
+    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiResponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiResponse2)),
     ?assert(proplists:get_value(<<"metadata">>,CdmiResponse2) =/= <<>>),
 
