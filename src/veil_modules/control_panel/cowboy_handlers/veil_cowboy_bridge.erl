@@ -57,8 +57,9 @@
 %% some code on the socket process, which then sends back the result.
 %% This is needed when some data is cached at socket process - for example
 %% cowboy_req:reply or :body can be evaluated only on socket process.
+%% If applied fun ends with an exception, it will be rethrown in the handling process.
 %% @end
--spec apply(Module :: atom(), Fun :: function(), Args :: [term()]) -> term().
+-spec apply(Module :: atom(), Fun :: function(), Args :: [term()]) -> term() | no_return().
 %% ====================================================================
 apply(Module, Fun, Args) ->
     case get_delegation() of
@@ -71,7 +72,9 @@ apply(Module, Fun, Args) ->
             get_socket_pid() ! {apply, Module, Fun, Args},
             receive
                 {result, Result} ->
-                    Result
+                    Result;
+                {except, Except} ->
+                    throw(Except)
             end
     end.
 
@@ -442,10 +445,15 @@ delegate(Fun, Args) ->
 %% ====================================================================
 delegation_loop(HandlerPid) ->
     receive
-        {result, Result} ->
-            Result;
+        {result, Res} ->
+            Res;
         {apply, Module, Fun, Args} ->
-            HandlerPid ! {result, erlang:apply(Module, Fun, Args)},
+            Result = try
+                {result, erlang:apply(Module, Fun, Args)}
+                     catch T:M ->
+                         {except, {T, M}}
+                     end,
+            HandlerPid ! Result,
             ?MODULE:delegation_loop(HandlerPid)
     end.
 
