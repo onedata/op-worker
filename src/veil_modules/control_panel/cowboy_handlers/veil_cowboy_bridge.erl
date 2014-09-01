@@ -40,7 +40,8 @@
 %% REST handler specific funs
 -export([get_resource/2, handle_urlencoded_data/2, handle_json_data/2, handle_multipart_data/2]).
 %% CDMI handler specific funs
--export([get_cdmi_container/2, put_cdmi_container/2]).
+-export([get_cdmi_container/2, get_cdmi_object/2, get_binary/2, get_cdmi_capability/2]).
+-export([put_cdmi_container/2, put_cdmi_object/2, put_binary/2]).
 %% Static file handler specific funs
 -export([get_file/2]).
 
@@ -353,21 +354,77 @@ delete_resource(Req, State) ->
 
 %% get_cdmi_container/2
 %% ====================================================================
-%% @doc Callback function for cdmi container GET operation (create dir).
+%% @doc Callback function for cdmi.
 %% @end
 -spec get_cdmi_container(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), term()}.
 %% ====================================================================
 get_cdmi_container(Req, State) ->
     delegate(get_cdmi_container, [Req, State]).
 
+
+%% get_cdmi_object/2
+%% ====================================================================
+%% @doc Callback function for cdmi.
+%% @end
+-spec get_cdmi_object(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+%% ====================================================================
+get_cdmi_object(Req, State) ->
+    delegate(get_cdmi_object, [Req, State]).
+
+
+%% get_binary/2
+%% ====================================================================
+%% @doc Callback function for cdmi.
+%% @end
+-spec get_binary(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+%% ====================================================================
+get_binary(Req, State) ->
+    delegate(get_binary, [Req, State]).
+
+
 %% put_cdmi_container/2
 %% ====================================================================
-%% @doc Callback function for cdmi container PUT operation (create dir).
+%% @doc Callback function for cdmi.
 %% @end
 -spec put_cdmi_container(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
 %% ====================================================================
 put_cdmi_container(Req, State) ->
     delegate(put_cdmi_container, [Req, State]).
+
+
+%% put_cdmi_object/2
+%% ====================================================================
+%% @doc Callback function for cdmi.
+%% @end
+-spec put_cdmi_object(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+%% ====================================================================
+put_cdmi_object(Req, State) ->
+    delegate(put_cdmi_object, [Req, State]).
+
+
+%% put_binary/2
+%% ====================================================================
+%% @doc Callback function for cdmi.
+%% @end
+-spec put_binary(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+%% ====================================================================
+put_binary(Req, State) ->
+    delegate(put_binary, [Req, State]).
+
+
+%% get_cdmi_capability/2
+%% ====================================================================
+%% @doc Callback function for cdmi.
+%% @end
+-spec get_cdmi_capability(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+%% ====================================================================
+get_cdmi_capability(Req, State) ->
+    delegate(get_cdmi_capability, [Req, State]).
+
+
+%% ====================================================================
+%% Static file handler callbacks
+%% ====================================================================
 
 %% get_file/2
 %% ====================================================================
