@@ -58,7 +58,7 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
 check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms}}, CheckType) -> %check read/write/execute perms
     UserUid = UserDoc#veil_document.uuid,
     FileGroup = get_group(FileName),
-    UserGroups = user_logic:get_team_names(UserDoc#veil_document.record),
+    UserGroups = user_logic:get_space_names(UserDoc#veil_document.record),
 
     UserOwnsFile = UserUid=:=FileOwnerUid,
     UserGroupOwnsFile = lists:member(FileGroup,UserGroups),
@@ -86,12 +86,12 @@ assert_group_access(UserDoc, Request, LogicalPath) ->
 %% @end
 -spec assert_grp_access(UserDoc :: tuple(), Request :: atom(), Path :: list()) -> ok | error.
 %% ====================================================================
-assert_grp_access(_UserDoc, Request, [?GROUPS_BASE_DIR_NAME]) ->
+assert_grp_access(_UserDoc, Request, [?SPACES_BASE_DIR_NAME]) ->
     case lists:member(Request, ?GROUPS_BASE_ALLOWED_ACTIONS) of
         false   -> error;
         true    -> ok
     end;
-assert_grp_access(UserDoc, Request, [?GROUPS_BASE_DIR_NAME | Tail]) ->
+assert_grp_access(UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail]) ->
     TailCheck = case Tail of
                     [_GroupName] ->
                         case lists:member(Request, ?GROUPS_ALLOWED_ACTIONS) of
@@ -101,10 +101,9 @@ assert_grp_access(UserDoc, Request, [?GROUPS_BASE_DIR_NAME | Tail]) ->
                     _ ->
                         ok
                 end,
-
     case TailCheck of
         ok ->
-            UserTeams = user_logic:get_team_names(UserDoc),
+            UserTeams = user_logic:get_space_names(UserDoc),
             [GroupName2 | _] = Tail,
             case lists:member(GroupName2, UserTeams) of
                 true    -> ok;
@@ -157,7 +156,7 @@ has_permission(execute, FilePerms, _, _) ->
 get_group(File) ->
     FileTokens = string:tokens(File, "/"),
     case lists:nth(1, FileTokens) of
-        "groups" ->
+        ?SPACES_BASE_DIR_NAME ->
             lists:nth(2, FileTokens);
         _ ->
             none

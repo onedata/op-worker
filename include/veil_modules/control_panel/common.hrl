@@ -50,6 +50,8 @@
 -define(error_login_dir_creation_error, login_dir_creation_error).
 -define(error_login_dir_chown_error, login_dir_chown_error).
 -define(error_authentication, error_authentication).
+-define(error_space_permission_denied, space_permission_denied).
+-define(error_space_not_found, space_not_found).
 
 % Custom upload element
 -record(veil_upload, {?ELEMENT_BASE(veil_upload),

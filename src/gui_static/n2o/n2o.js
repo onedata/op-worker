@@ -37,14 +37,14 @@ function addStatus(text){
 utf8.toByteArray = function(str) {
     var byteArray = [];
     if (str !== undefined && str !== null)
-    for (var i = 0; i < str.length; i++)
-        if (str.charCodeAt(i) <= 0x7F)
-            byteArray.push(str.charCodeAt(i));
-        else {
-            var h = encodeURIComponent(str.charAt(i)).substr(1).split('%');
-            for (var j = 0; j < h.length; j++)
-                byteArray.push(parseInt(h[j], 16));
-        }
+        for (var i = 0; i < str.length; i++)
+            if (str.charCodeAt(i) <= 0x7F)
+                byteArray.push(str.charCodeAt(i));
+            else {
+                var h = encodeURIComponent(str.charAt(i)).substr(1).split('%');
+                for (var j = 0; j < h.length; j++)
+                    byteArray.push(parseInt(h[j], 16));
+            }
     return byteArray;
 };
 
@@ -63,9 +63,9 @@ function WebSocketsInit(){
     if ("WebSocket" in window) {
         var protocol = window.location.protocol == 'https:' ? "wss://" : "ws://";
         ws = new bullet(protocol +
-          (null == transition.host ? window.location.hostname : transition.host)
-               + ":"+ (null == transition.port ? window.location.port : transition.port)
-             + "/ws" + window.location.pathname + window.location.search);
+            (null == transition.host ? window.location.hostname : transition.host)
+            + ":"+ (null == transition.port ? window.location.port : transition.port)
+            + "/ws" + window.location.pathname + window.location.search);
         initialized = false;
         ws.onmessage = function (evt) {
 
@@ -84,20 +84,20 @@ function WebSocketsInit(){
                 }
 
             } catch (ex) { // try to parse known binary formats
-                
+
                 var HEAD_SIZE = 36;
 
                 // console.log("JSON parsing failed: " + ex);
                 // console.log("MessageEvent: ");
                 // console.log(evt.data);
-                
+
                 var header_reader = new FileReader();
                 header_reader.addEventListener("loadend", function() {
 
                     if(header_reader.result.byteLength > 0) {
                         var header_view = new DataView(header_reader.result);
                         var head_char = header_view.getUint8(0);
-                    
+
                         try { // BERT encoding
 
                             if (head_char !== 131) { throw ("Not a valid BERT header."); }
@@ -142,7 +142,7 @@ function WebSocketsInit(){
                                 meta_reader.readAsArrayBuffer(evt.data.slice(HEAD_SIZE, data_offset));
                             }
                             else { // Unknown Binaries
-                            
+
                                 if (typeof handle_web_socket_blob == 'function')
                                     handle_web_socket_blob(evt.data);
                                 else {
@@ -175,4 +175,3 @@ function WebSocketsInit(){
 }
 
 WebSocketsInit();
-

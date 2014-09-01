@@ -43,6 +43,8 @@ gen_error_message(truncatefile, Error) ->
     #atom{value = Error};
 gen_error_message(deletefileatstorage, Error) ->
     #atom{value = Error};
+gen_error_message(getattr, Error) ->
+    #storageattibutes{answer = Error};
 gen_error_message(RecordName, _Error) ->
     ?error("Unsupported record: ~p", [RecordName]),
     throw({unsupported_record, RecordName}).

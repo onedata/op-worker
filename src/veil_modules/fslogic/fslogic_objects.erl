@@ -23,10 +23,61 @@
 -export([save_file_descriptor/3, save_file_descriptor/4, save_new_file_descriptor/4, update_file_descriptor/2, delete_old_descriptors/2]).
 -export([get_user/0, get_user/1]).
 -export([save_file/1, get_storage/1]).
+-export([get_space/1]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+
+%% get_space/1
+%% ====================================================================
+%% @doc Convenience wrapper for dao_vfs:get_space_file that accepts wider range of arguments
+%%      and returns errors compatible with fslogic's error handler. Also if requested space does not
+%%      exist, this method tries to initialize one using GlobarRegistry thus error is returned only if
+%%      space does not exists or there was an error during its initialization.
+%% @end
+-spec get_space(Query) -> {ok, SpaceInfo :: #space_info{}} | {error, {unknown_space_error | initialize_error, Reason :: any()}}
+    when Query :: #veil_document{}
+                | #file{}
+                | #space_info{}
+                | {uuid, SpaceId}
+                | SpaceName,
+         SpaceName :: binary(),
+         SpaceId :: uuid().
+%% ====================================================================
+get_space(#veil_document{record = Record}) ->
+    get_space(Record);
+get_space(#file{extensions = Ext}) ->
+    {_, #space_info{} = SpaceInfo} = lists:keyfind(?file_space_info_extestion, 1, Ext),
+    get_space(SpaceInfo);
+get_space(#space_info{} = SpaceInfo) ->
+    {ok, SpaceInfo};
+get_space({uuid, SpaceId}) ->
+    case dao_lib:apply(vfs, get_space_file, [{uuid, SpaceId}], 1) of
+        {ok, #veil_document{record = #file{} = File}} ->
+            get_space(File);
+        {error, file_not_found} ->
+            try fslogic_spaces:initialize(SpaceId) of
+                {ok, #space_info{} = SpaceInfo} ->
+                    {ok, SpaceInfo};
+                {error, InitReason} ->
+                    ?error("Cannot initialize space ~p due to: ~p", [SpaceId, InitReason]),
+                    {error, {initialize_error, InitReason}}
+            catch
+                _Type:Except ->
+                    ?error_stacktrace("Cannot initialize space ~p due to: ~p", [SpaceId, Except]),
+                    {error, {initialize_error, Except}}
+            end;
+        {error, Reason} ->
+            ?error("Unknown space ~p", [SpaceId]),
+            {error, {unknown_space_error, Reason}}
+    end;
+get_space(SpaceName) ->
+    {ok, FileDoc} = dao_lib:apply(vfs, get_space_file, [filename:join(?SPACES_BASE_DIR_NAME, unicode:characters_to_list(SpaceName))], 1),
+    get_space(FileDoc).
+
+
 
 
 %% save_file/1
@@ -70,11 +121,11 @@ get_storage({Type, StorageID}) ->
 %% ====================================================================
 get_user(#veil_document{record = #user{}} = UserDoc) ->
     {ok, UserDoc};
-get_user({dn, UserDN}) ->
-    case UserDN of
+get_user({Key, UserGID}) ->
+    case UserGID of
         undefined -> {ok, #veil_document{uuid = ?CLUSTER_USER_ID, record = #user{login = "root", role = admin}}};
         DN ->
-            case user_logic:get_user({dn, DN}) of
+            case user_logic:get_user({Key, DN}) of
                 {ok, #veil_document{}} = OKRet -> OKRet;
                 {error, Reason} ->
                     {error, {get_user_error, {Reason, {dn, DN}}}}
@@ -90,7 +141,12 @@ get_user({dn, UserDN}) ->
 -spec get_user() -> {ok, UserDoc :: user_doc()} | {error, any()}.
 %% ====================================================================
 get_user() ->
-    get_user({dn, fslogic_context:get_user_dn()}).
+    case fslogic_context:get_access_token() of
+        {UserGID, _} when UserGID =/= undefined ->
+            get_user({global_id, UserGID});
+        {_, _} ->
+            get_user({dn, fslogic_context:get_user_dn()})
+    end.
 
 
 %% get_file/1
@@ -145,11 +201,11 @@ get_file_helper(File, Fun) ->
 get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
     ?debug("get_file(File: ~p, FuseID: ~p)", [File, FuseID]),
     case string:tokens(File, "/") of
-        [?GROUPS_BASE_DIR_NAME, GroupName | _] -> %% Check if group that user is tring to access is avaliable to him
+        [?SPACES_BASE_DIR_NAME, GroupName | _] -> %% Check if group that user is tring to access is avaliable to him
             case fslogic_context:get_user_dn() of %% Internal call, allow all group access
                 undefined   -> dao_lib:apply(dao_vfs, Fun, [File], ProtocolVersion);
                 UserDN      -> %% Check if user has access to this group
-                    Teams = user_logic:get_team_names({dn, UserDN}),
+                    Teams = user_logic:get_space_names({dn, UserDN}),
                     case lists:member(GroupName, Teams) of %% Does the user belong to the group?
                         true  -> dao_lib:apply(dao_vfs, Fun, [File], ProtocolVersion);
                         false -> {error, file_not_found} %% Assume that this file does not exists

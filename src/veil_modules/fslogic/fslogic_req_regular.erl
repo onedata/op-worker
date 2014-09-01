@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file_location/2, get_new_file_location/2, create_file_ack/1, file_not_used/1, renew_file_location/1]).
+-export([get_file_location/2, get_file_location/3, get_new_file_location/3, create_file_ack/1, file_not_used/1, renew_file_location/1]).
 
 %% ====================================================================
 %% API functions
@@ -33,20 +33,30 @@
 -spec get_file_location(File :: string() | file_doc(), OpenMode :: string()) ->
     #filelocation{} | no_return().
 %% ====================================================================
-get_file_location(FileDoc = #veil_document{record = #file{}},?UNSPECIFIED_MODE) ->
-    get_file_location(FileDoc,none,?UNSPECIFIED_MODE);
-get_file_location(FullFileName,OpenMode) when is_list(FullFileName) ->
-    {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
-    get_file_location(FileDoc,FullFileName,OpenMode).
+get_file_location(FileDoc = #veil_document{record = #file{}}, ?UNSPECIFIED_MODE) ->
+    get_file_location(FileDoc, none, ?UNSPECIFIED_MODE, false).
+
 
 %% get_file_location/3
 %% ====================================================================
-%% @doc Gets file location (implicit file open operation).
+%% @doc Gets file location (implicit file open operation). Allows to force-select ClusterProxy helper.
 %% @end
--spec get_file_location(FileDoc :: file_doc(), FullFileName :: string(), OpenMode :: string()) ->
+-spec get_file_location(File :: string() | file_doc(), OpenMode :: string(), ForceClusterProxy :: boolean()) ->
     #filelocation{} | no_return().
 %% ====================================================================
-get_file_location(FileDoc,FullFileName,OpenMode) ->
+get_file_location(FullFileName, OpenMode, ForceClusterProxy) when is_list(FullFileName) ->
+    {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
+    get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy).
+
+%% get_file_location/4
+%% ====================================================================
+%% @doc Gets file location (implicit file open operation).
+%% @end
+-spec get_file_location(FileDoc :: file_doc(), FullFileName :: string(), OpenMode :: string(), ForceClusterProxy :: boolean()) ->
+    #filelocation{} | no_return().
+%% ====================================================================
+get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
+    ?info("get_file_location(~p, ~p, ~p, ~p)", [FileDoc, FullFileName, OpenMode, ForceClusterProxy]),
     Validity = ?LOCATION_VALIDITY,
     case FileDoc#veil_document.record#file.type of
         ?REG_TYPE -> ok;
@@ -63,22 +73,24 @@ get_file_location(FileDoc,FullFileName,OpenMode) ->
     FileDesc = FileDoc#veil_document.record,
     FileLoc = fslogic_file:get_file_local_location(FileDesc),
 
+    {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
+
     {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
 
-    {SH, File_id} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.file_id),
+    {SH, File_id} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.file_id, SpaceId, ForceClusterProxy),
     #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
         storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args}.
 
 
-%% get_new_file_location/2
+%% get_new_file_location/3
 %% ====================================================================
 %% @doc Gets new file location (implicit mknod operation).
 %% @end
--spec get_new_file_location(FullFileName :: string(), Mode :: non_neg_integer()) ->
+-spec get_new_file_location(FullFileName :: string(), Mode :: non_neg_integer(), ForceClusterProxy :: boolean()) ->
     #filelocation{} | no_return().
 %% ====================================================================
-get_new_file_location(FullFileName, Mode) ->
-    ?debug("get_new_file_location(FullFileName ~p, Mode: ~p)", [FullFileName, Mode]),
+get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
+    ?info("get_new_file_location(FullFileName ~p, Mode: ~p, ForceClusterProxy: ~p)", [FullFileName, Mode, ForceClusterProxy]),
 
     NewFileName = fslogic_path:basename(FullFileName),
     ParentFileName = fslogic_path:strip_path_leaf(FullFileName),
@@ -89,19 +101,19 @@ get_new_file_location(FullFileName, Mode) ->
 
     ok = fslogic_perms:check_file_perms(FileBaseName, UserDoc, ParentDoc, write),
 
+    {ok, #space_info{space_id = SpaceId} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FullFileName),
+
     {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], fslogic_context:get_protocol_version()),
     #veil_document{uuid = UUID, record = #storage_info{} = Storage} = fslogic_storage:select_storage(fslogic_context:get_fuse_id(), StorageList),
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
-    FileId = fslogic_storage:get_new_file_id(FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
+    FileId = fslogic_storage:get_new_file_id(SpaceInfo, FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
     FileLocation = #file_location{storage_id = UUID, file_id = FileId},
 
     {ok, UserID} = fslogic_context:get_user_id(),
 
     CTime = vcn_utils:time(),
 
-    Groups = fslogic_utils:get_group_owner(FileBaseName), %% Get owner group name based on file access path
-
-    FileRecordInit = #file{type = ?REG_TYPE, name = NewFileName, uid = UserID, gids = Groups, parent = ParentDoc#veil_document.uuid, perms = Mode, location = FileLocation, created = false},
+    FileRecordInit = #file{type = ?REG_TYPE, name = NewFileName, uid = UserID, parent = ParentDoc#veil_document.uuid, perms = Mode, location = FileLocation, created = false},
     %% Async *times update
     FileRecord = fslogic_meta:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
 
@@ -118,14 +130,14 @@ get_new_file_location(FullFileName, Mode) ->
             ExistingWFileLocation= ExistingWFileRecord#file.location,
 
             {ok, #veil_document{record = ExistingWFileStorage}} = fslogic_objects:get_storage({uuid, ExistingWFileLocation#file_location.storage_id}),
-            {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), ExistingWFileStorage, ExistingWFileLocation#file_location.file_id),
+            {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), ExistingWFileStorage, ExistingWFileLocation#file_location.file_id, SpaceId, ForceClusterProxy),
             #storage_helper_info{name = ExistingWFileStorageSHName, init_args = ExistingWFileStorageSHArgs} = SH,
             #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs};
         {ok, FileUUID} ->
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
             {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), Validity),
 
-            {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileId),
+            {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileId, SpaceId, ForceClusterProxy),
             #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
             #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs}
     end.

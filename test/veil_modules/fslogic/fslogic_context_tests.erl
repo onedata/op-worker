@@ -37,20 +37,9 @@ protocol_version_test() ->
     ?assertMatch("abc", fslogic_context:get_protocol_version()).
 
 user_id_test() ->
-    fslogic_context:clear_user_dn(),
+    fslogic_context:clear_user_ctx(),
 
-    ?assertMatch({ok, ?CLUSTER_USER_ID}, fslogic_context:get_user_id()),
-
-    fslogic_context:set_user_dn("dn"),
-    meck:new(fslogic_objects),
-    meck:expect(fslogic_objects, get_user,
-        fun({dn, "dn"}) ->
-            {ok, #veil_document{record = #user{}, uuid = "uuid"}}
-        end),
-
-    ?assertMatch({ok, "uuid"}, fslogic_context:get_user_id()),
-    ?assert(meck:validate(fslogic_objects)),
-    meck:unload().
+    ?assertMatch({ok, ?CLUSTER_USER_ID}, fslogic_context:get_user_id()).
 
 
 -endif.

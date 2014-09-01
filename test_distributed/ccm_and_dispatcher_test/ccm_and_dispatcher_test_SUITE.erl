@@ -165,34 +165,19 @@ veil_handshake_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   test_utils:wait_for_cluster_init(),
 
+  ?ENABLE_PROVIDER(Config),
+
   NodesUp = ?config(nodes, Config),
 
   Port = ?config(port, Config),
   Host = "localhost",
-  TeamName = "user1 team",
+  SpaceName = "space1",
 
   Cert1 = ?COMMON_FILE("peer.pem"),
   Cert2 = ?COMMON_FILE("peer2.pem"),
 
   %% Add test users since cluster wont generate FuseId without full authentication
-  AddUser = fun(Login, Cert) ->
-    {ReadFileAns, PemBin} = file:read_file(Cert),
-    ?assertEqual(ok, ReadFileAns),
-    {ExtractAns, RDNSequence} = rpc:call(CCM, user_logic, extract_dn_from_cert, [PemBin]),
-    ?assertEqual(rdnSequence, ExtractAns),
-    {ConvertAns, DN} = rpc:call(CCM, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-    ?assertEqual(ok, ConvertAns),
-    DnList = [DN],
-
-    Name = "user1 user1",
-    Teams = [TeamName],
-    Email = "user1@email.net",
-    {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
-    ?assertEqual(ok, CreateUserAns)
-  end,
-  %% END Add user
-
-  AddUser("user1", Cert1),
+  test_utils:add_user(Config, "user1", Cert1, [SpaceName]),
 
   %% Open two connections for first user
   {ok, Socket11} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}]),
@@ -211,7 +196,7 @@ veil_handshake_test(Config) ->
 
 
   %% Add user2 and renegotiate FuseId
-  AddUser("user2", Cert2),
+  test_utils:add_user(Config, "user2", Cert2, [SpaceName]),
   FuseId21 = wss:handshakeInit(Socket21, "hostname2", []),
   ?assert(is_list(FuseId21)),
 
@@ -313,8 +298,8 @@ veil_handshake_test(Config) ->
   wss:close(Socket12),
   wss:close(Socket21),
   wss:close(Socket22),
-  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ TeamName], ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ SpaceName], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion])),
 
   ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user1"}])),
   ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user2"}])).

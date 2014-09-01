@@ -58,12 +58,11 @@
 % Callbacks management
 -record(callback, {fuse = 0, pid = 0, node = non, action = non}).
 
--define(REMOTE_HELPER_SEPARATOR, "///").
 -define(CLUSTER_USER_ID, "cluster_uid").
 -define(CLUSTER_FUSE_ID, "cluster_fid").
 
 %% Name of direcotry that contains all group dirs
--define(GROUPS_BASE_DIR_NAME, "groups").
+-define(SPACES_BASE_DIR_NAME, "spaces").
 
 %% burst size for listing
 -define(DAO_LIST_BURST_SIZE,100).
@@ -74,10 +73,10 @@
 -define(FILE_COUNTING_BASE, 256).
 
 %% Which fuse operations (messages) are allowed to operate on base group directory ("/groups")
--define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, updatetimes, getfilechildren]).
+-define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, getfileuuid, updatetimes, getfilechildren]).
 
 %% Which fuse operations (messages) are allowed to operate on second level group directory (e.g. "/groups/grpName")
--define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren]).
+-define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getfileuuid, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren]).
 
 
 %% File types used in protocol. Use fslogic_file:normalize_file_type to translate types from/to normal macros like ?REG_TYPE.
@@ -96,5 +95,8 @@
 
 %% Maximum time (in ms) after which document conflict resolution shall occur
 -define(MAX_SLEEP_TIME_CONFLICT_RESOLUTION, 100).
+
+%% Default permissions for space directory (i.e. /spaces/SpaceName)
+-define(SpaceDirPerm, 8#1770).
 
 -endif.

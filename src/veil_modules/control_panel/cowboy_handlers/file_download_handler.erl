@@ -154,19 +154,10 @@ handle_user_content_request(Req, Path) ->
             FileInfo =
                 try
                     UserFilePath = gui_str:binary_to_unicode_list(Path),
-                    {ok, FullFilePath} = fslogic_path:get_full_file_name(UserFilePath),
-                    {ok, FileDoc} = fslogic_objects:get_file(FullFilePath),
-                    case fslogic_perms:check_file_perms(FullFilePath, UserDoc, FileDoc, read) of
-                        ok ->
-                            {ok, Fileattr} = logical_files_manager:getfileattr(UserFilePath),
-                            "REG" = Fileattr#fileattributes.type,
-                            TrySize = Fileattr#fileattributes.size,
-                            {UserFilePath, TrySize};
-                        _ ->
-                            error_perms
-                    end
+                    {ok, #fileattributes{size = TrySize}} = logical_files_manager:getfileattr(UserFilePath),
+                    {UserFilePath, TrySize}
                 catch T2:M2 ->
-                    ?warning("Cannot resolve fileattributes for user content request - ~p:~p", [T2, M2]),
+                    ?warning_stacktrace("Cannot resolve fileattributes for user content request - ~p:~p", [T2, M2]),
                     error
                 end,
 

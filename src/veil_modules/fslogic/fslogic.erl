@@ -19,6 +19,7 @@
 -include("fuse_messages_pb.hrl").
 -include("communication_protocol_pb.hrl").
 -include("registered_names.hrl").
+-include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
@@ -131,7 +132,7 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
     fslogic_context:set_fuse_id(get(fuse_id)),
     fslogic_context:set_protocol_version(ProtocolVersion),
 
-    fslogic_runner(fun handle_fuse_message/1, RequestType, RequestBody);
+    fslogic_runner(fun maybe_handle_fuse_message/1, RequestType, RequestBody);
 
 handle(ProtocolVersion, {internal_call, Record}) ->
     fslogic_context:set_fuse_id(?CLUSTER_FUSE_ID),
@@ -164,6 +165,40 @@ handle(_ProtocolVersion, _Msg) ->
   ?warning("Wrong request: ~p", [_Msg]),
   wrong_request.
 
+
+%% maybe_handle_fuse_message/1
+%% ====================================================================
+%% @doc Tries to handle fuse message locally (i.e. handle_fuse_message/1) or delegate request to 'provider_proxy' module.
+%% @end
+-spec maybe_handle_fuse_message(RequestBody :: tuple()) -> Result :: term().
+%% ====================================================================
+maybe_handle_fuse_message(RequestBody) ->
+    PathCtx = extract_logical_path(RequestBody),
+    {ok, AbsolutePathCtx} = fslogic_path:get_full_file_name(PathCtx, vcn_utils:record_type(RequestBody)),
+    {ok, #space_info{name = SpaceName, providers = Providers} = SpaceInfo} = fslogic_utils:get_space_info_for_path(AbsolutePathCtx),
+
+    Self = cluster_manager_lib:get_provider_id(),
+
+    ?debug("Space for request: ~p, providers: ~p (current ~p). AccessToken: ~p, ~p, FullName: ~p / ~p",
+        [SpaceName, Providers, Self, fslogic_context:get_access_token(), RequestBody, PathCtx, AbsolutePathCtx]),
+
+    case lists:member(Self, Providers) of
+        true ->
+            handle_fuse_message(RequestBody);
+        false ->
+            [RerouteToProvider | _] = Providers,
+            try
+                provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
+                    fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
+            catch
+                Type:Reason ->
+                    ?error_stacktrace("Unable to process remote fslogic request to provider ~p due to: ~p", [RerouteToProvider, {Type, Reason}]),
+                    case fslogic_remote:local_clean_postprocess(SpaceInfo, Reason, RequestBody) of
+                        undefined -> throw({unable_to_reroute_message, Reason});
+                        LocalResponse -> LocalResponse
+                    end
+            end
+    end.
 
 %% handle_test/2
 %% ====================================================================
@@ -263,13 +298,17 @@ handle_fuse_message(Req = #getfileattr{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:get_file_attr(FullFileName);
 
-handle_fuse_message(Req = #getfilelocation{file_logic_name = FName, open_mode = OpenMode}) ->
+handle_fuse_message(Req = #getfileuuid{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_req_regular:get_file_location(FullFileName,OpenMode);
+    fslogic_req_utility:get_file_uuid(FullFileName);
 
-handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mode}) ->
+handle_fuse_message(Req = #getfilelocation{file_logic_name = FName, open_mode = OpenMode, force_cluster_proxy = ForceClusterProxy}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_req_regular:get_new_file_location(FullFileName, Mode);
+    fslogic_req_regular:get_file_location(FullFileName, OpenMode, ForceClusterProxy);
+
+handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mode, force_cluster_proxy = ForceClusterProxy}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_regular:get_new_file_location(FullFileName, Mode, ForceClusterProxy);
 
 handle_fuse_message(Req = #createfileack{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
@@ -289,7 +328,8 @@ handle_fuse_message(Req = #createdir{dir_logic_name = FName, mode = Mode}) ->
 
 handle_fuse_message(Req = #getfilechildren{dir_logic_name = FName, offset = Offset, children_num = Count}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_req_special:get_file_children(FullFileName, Offset, Count);
+    {ok, UserPathTokens} = fslogic_path:verify_file_name(FName),
+    fslogic_req_special:get_file_children(FullFileName, UserPathTokens, Offset, Count);
 
 handle_fuse_message(Req = #deletefile{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
@@ -328,7 +368,6 @@ handle_fuse_message(_Req = #testchannel{answer_delay_in_ms = Interval, answer_me
     timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, fslogic_context:get_protocol_version(), {answer_test_message, fslogic_context:get_fuse_id(), Answer}}]),
     #atom{value = "ok"}.
 
-
 %% Custom internal request handlers
 handle_custom_request({getfileattr, UUID}) ->
     {ok, FileDoc} = fslogic_objects:get_file({uuid, UUID}),
@@ -336,5 +375,48 @@ handle_custom_request({getfileattr, UUID}) ->
 
 handle_custom_request({getfilelocation, UUID}) ->
     {ok, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], fslogic_context:get_protocol_version()),
-    fslogic_req_regular:get_file_location(FileDoc,?UNSPECIFIED_MODE).
+    fslogic_req_regular:get_file_location(FileDoc, ?UNSPECIFIED_MODE).
 
+
+%% %% extract_logical_path/1
+%% %% ====================================================================
+%% %% @doc Convinience method that returns logical file path for the operation.
+%% %% @end
+%% -spec extract_logical_path(Record :: tuple()) -> string() | no_return().
+%% %% ====================================================================
+extract_logical_path(#getfileattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getfilelocation{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#deletefile{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#renamefile{from_file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getnewfilelocation{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#filenotused{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#renewfilelocation{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getfilechildren{dir_logic_name = Path}) ->
+    Path;
+extract_logical_path(#createdir{dir_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getlink{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#createlink{from_file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#changefileowner{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#changefilegroup{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#changefileperms{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#updatetimes{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#createfileack{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getfileuuid{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(_) ->
+    "/".

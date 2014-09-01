@@ -24,6 +24,7 @@
 -export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
+-export([get_space_file/1]).
 
 
 -ifdef(TEST).
@@ -33,6 +34,36 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
+
+%% ===================================================================
+%% Space File Management
+%% ===================================================================
+
+
+%% get_space_file/1
+%% ====================================================================
+%% @doc Retrieves file associated with given by ID or path - space. The only difference
+%%      from get_file is that this function can use cache much more aggressively since root space
+%%      dirs are not changed very frequently.
+%% @end
+%% @todo: cache
+-spec get_space_file(Space :: file()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
+%% ====================================================================
+get_space_file({uuid, UUID}) ->
+    get_space_file1({uuid, UUID});
+get_space_file(SpacePath) ->
+    get_space_file1(fslogic_path:absolute_join(filename:split(SpacePath))).
+
+-spec get_space_file1(Space :: file()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
+get_space_file1(InitArg) ->
+    case get_file(InitArg) of
+        {ok, #veil_document{record = #file{extensions = Ext}} = Doc} ->
+            case lists:keyfind(?file_space_info_extestion, 1, Ext) of
+                false -> {error, invalid_space_file};
+                _     -> {ok, Doc}
+            end;
+        {error, Reason} -> {error, Reason}
+    end.
 
 %% ===================================================================
 %% File Descriptors Management
@@ -128,7 +159,8 @@ list_descriptors({by_file_n_owner, {File, Owner}}, N, Offset) when N > 0, Offset
     list_descriptors({by_uuid_n_owner, {FileId, Owner}}, N, Offset);
 list_descriptors({by_uuid_n_owner, {FileId, Owner}}, N, Offset) when N > 0, Offset >= 0 ->
     StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
-    EndKey = case Owner of "" -> [dao_helper:name(uca_increment(FileId)), dao_helper:name("")]; _ -> [dao_helper:name((FileId)), dao_helper:name(uca_increment(Owner))] end,
+    EndKey = case Owner of "" -> [dao_helper:name(uca_increment(FileId)), dao_helper:name("")]; _ ->
+        [dao_helper:name((FileId)), dao_helper:name(uca_increment(Owner))] end,
     QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
     case dao_records:list_records(?FD_BY_FILE_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} ->
@@ -222,17 +254,17 @@ get_file_meta(FMetaUUID) ->
 -spec save_new_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
 save_new_file(FilePath, #file{} = File) ->
-  try
-    case File#file.type of
-      ?REG_TYPE ->
-        save_new_reg_file(FilePath, File);
-      _ ->
-        save_new_not_reg_file(FilePath, File)
-    end
-  catch
-    _:Error3 ->
-      {error, Error3}
-  end.
+    try
+        case File#file.type of
+            ?REG_TYPE ->
+                save_new_reg_file(FilePath, File);
+            _ ->
+                save_new_not_reg_file(FilePath, File)
+        end
+    catch
+        _:Error3 ->
+            {error, Error3}
+    end.
 
 %% save_new_reg_file/2
 %% ====================================================================
@@ -243,54 +275,54 @@ save_new_file(FilePath, #file{} = File) ->
 -spec save_new_reg_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
 save_new_reg_file(FilePath, #file{type = Type} = File) when Type == ?REG_TYPE ->
-  AnalyzedPath = file_path_analyze(FilePath),
-  case exist_waiting_file(AnalyzedPath) of
-    {ok, false} ->
-      case exist_file(AnalyzedPath) of
+    AnalyzedPath = file_path_analyze(FilePath),
+    case exist_waiting_file(AnalyzedPath) of
         {ok, false} ->
-          SaveAns = save_file(File),
-          case SaveAns of
-            {ok, UUID} ->
-              %% check if file was not created by disconnected node in parallel
-              try
-                get_waiting_file(AnalyzedPath, true),
-                case exist_file(AnalyzedPath) of
-                  {ok, false} ->
-                    {ok, UUID};
-                  {ok, true} ->
-                    dao_records:remove_record(UUID),
-                    {error, file_exists}
-                end
-              catch
-                _:file_duplicated ->
-                  dao_records:remove_record(UUID),
-                  {error, file_exists};
-                _:Error2 ->
-                  {error, Error2}
-              end;
-            _ ->
-              SaveAns
-          end;
+            case exist_file(AnalyzedPath) of
+                {ok, false} ->
+                    SaveAns = save_file(File),
+                    case SaveAns of
+                        {ok, UUID} ->
+                            %% check if file was not created by disconnected node in parallel
+                            try
+                                get_waiting_file(AnalyzedPath, true),
+                                case exist_file(AnalyzedPath) of
+                                    {ok, false} ->
+                                        {ok, UUID};
+                                    {ok, true} ->
+                                        dao_records:remove_record(UUID),
+                                        {error, file_exists}
+                                end
+                            catch
+                                _:file_duplicated ->
+                                    dao_records:remove_record(UUID),
+                                    {error, file_exists};
+                                _:Error2 ->
+                                    {error, Error2}
+                            end;
+                        _ ->
+                            SaveAns
+                    end;
+                {ok, true} ->
+                    {error, file_exists};
+                Other -> Other
+            end;
         {ok, true} ->
-          {error, file_exists};
-        Other -> Other
-      end;
-    {ok, true} ->
-      try
-        {GetAns, ExistingWFile} = get_waiting_file(AnalyzedPath),
-        case GetAns of
-          ok ->
-            {ok, {waiting_file, ExistingWFile}};
-          _ ->
-            {error, file_exists}
-        end
-      catch
-        _:_ ->
-          {error, file_exists}
-      end;
-    Other ->
-      Other
-  end.
+            try
+                {GetAns, ExistingWFile} = get_waiting_file(AnalyzedPath),
+                case GetAns of
+                    ok ->
+                        {ok, {waiting_file, ExistingWFile}};
+                    _ ->
+                        {error, file_exists}
+                end
+            catch
+                _:_ ->
+                    {error, file_exists}
+            end;
+        Other ->
+            Other
+    end.
 
 %% save_new_not_reg_file/2
 %% ====================================================================
@@ -301,28 +333,28 @@ save_new_reg_file(FilePath, #file{type = Type} = File) when Type == ?REG_TYPE ->
 -spec save_new_not_reg_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
 save_new_not_reg_file(FilePath, #file{type = Type} = File) when Type > ?REG_TYPE ->
-  AnalyzedPath = file_path_analyze(FilePath),
-  case exist_file(AnalyzedPath) of
-    {ok, false} ->
-      SaveAns = save_file(File),
-      case SaveAns of
-        {ok, UUID} ->
-          try
-            get_file(AnalyzedPath, true),
-            {ok, UUID}
-          catch
-            _:file_duplicated ->
-              dao_records:remove_record(UUID),
-              {error, file_exists};
-            _:Error2 ->
-              {error, Error2}
-          end;
-        _ -> SaveAns
-      end;
-    {ok, true} ->
-      {error, file_exists};
-    Other -> Other
-  end.
+    AnalyzedPath = file_path_analyze(FilePath),
+    case exist_file(AnalyzedPath) of
+        {ok, false} ->
+            SaveAns = save_file(File),
+            case SaveAns of
+                {ok, UUID} ->
+                    try
+                        get_file(AnalyzedPath, true),
+                        {ok, UUID}
+                    catch
+                        _:file_duplicated ->
+                            dao_records:remove_record(UUID),
+                            {error, file_exists};
+                        _:Error2 ->
+                            {error, Error2}
+                    end;
+                _ -> SaveAns
+            end;
+        {ok, true} ->
+            {error, file_exists};
+        Other -> Other
+    end.
 
 %% save_file/1
 %% ====================================================================
@@ -336,9 +368,11 @@ save_new_not_reg_file(FilePath, #file{type = Type} = File) when Type > ?REG_TYPE
 %% ====================================================================
 save_file(#file{} = File) ->
     save_file(#veil_document{record = File});
-save_file(#veil_document{record = #file{}} = FileDoc) ->
+save_file(#veil_document{record = #file{name = {unicode_string, _FName}} = FileRec} = FileDoc) ->
     dao_external:set_db(?FILES_DB_NAME),
-    dao_records:save_record(FileDoc).
+    dao_records:save_record(FileDoc#veil_document{record = FileRec});
+save_file(#veil_document{record = #file{name = FName} = FileRec} = FileDoc) when is_list(FName) ->
+    save_file(FileDoc#veil_document{record = FileRec#file{name = {unicode_string, FName}}}).
 
 %% remove_file/1
 %% ====================================================================
@@ -352,9 +386,9 @@ remove_file(File) ->
     {ok, FData} = get_file(File),
 
     %% Remove file meta
-    case FData of 
+    case FData of
         #veil_document{record = #file{meta_doc = FMeta}} when is_list(FMeta) ->
-            case remove_file_meta(FMeta) of 
+            case remove_file_meta(FMeta) of
                 ok -> ok;
                 {error, Reason} ->
                     ?warning("Cannot remove file_meta ~p due to error: ~p", [FMeta, Reason])
@@ -390,7 +424,7 @@ remove_file(File) ->
 -spec exist_file(File :: file()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_file(Args) ->
-  exist_file_helper(Args, ?FILE_TREE_VIEW).
+    exist_file_helper(Args, ?FILE_TREE_VIEW).
 
 %% exist_waiting_file/1
 %% ====================================================================
@@ -400,7 +434,7 @@ exist_file(Args) ->
 -spec exist_waiting_file(File :: file()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_waiting_file(Args) ->
-  exist_file_helper(Args, ?WAITING_FILES_TREE_VIEW).
+    exist_file_helper(Args, ?WAITING_FILES_TREE_VIEW).
 
 %% exist_file_helper/2
 %% ====================================================================
@@ -414,7 +448,7 @@ exist_file_helper({internal_path, [], []}, _View) ->
 exist_file_helper({internal_path, [Dir | Path], Root}, View) ->
     QueryArgs =
         #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
-        include_docs = case Path of [] -> true; _ -> false end},
+            include_docs = case Path of [] -> true; _ -> false end},
     case dao_records:list_records(View, QueryArgs) of
         {ok, #view_result{rows = [#view_row{id = Id, doc = _Doc} | _Tail]}} ->
             case Path of
@@ -428,7 +462,7 @@ exist_file_helper({uuid, UUID}, _View) ->
     dao_external:set_db(?FILES_DB_NAME),
     dao_records:exist_record(UUID);
 exist_file_helper(Path, View) ->
-  exist_file_helper(file_path_analyze(Path), View).
+    exist_file_helper(file_path_analyze(Path), View).
 
 %% get_file/1
 %% ====================================================================
@@ -438,7 +472,7 @@ exist_file_helper(Path, View) ->
 -spec get_file(File :: file()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
 get_file(Args) ->
-  get_file_helper(Args, ?FILE_TREE_VIEW).
+    get_file_helper(Args, ?FILE_TREE_VIEW).
 
 %% get_file/2
 %% ====================================================================
@@ -448,7 +482,7 @@ get_file(Args) ->
 -spec get_file(File :: term(), MultiError :: boolean()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
 get_file({internal_path, [Dir | Path], Root}, MultiError) ->
-  get_file_helper({internal_path, [Dir | Path], Root}, MultiError, ?FILE_TREE_VIEW).
+    get_file_helper({internal_path, [Dir | Path], Root}, MultiError, ?FILE_TREE_VIEW).
 
 %% get_waiting_file/1
 %% ====================================================================
@@ -458,7 +492,7 @@ get_file({internal_path, [Dir | Path], Root}, MultiError) ->
 -spec get_waiting_file(File :: file()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
 get_waiting_file(Args) ->
-  get_file_helper(Args, ?WAITING_FILES_TREE_VIEW).
+    get_file_helper(Args, ?WAITING_FILES_TREE_VIEW).
 
 %% get_waiting_file/2
 %% ====================================================================
@@ -468,7 +502,7 @@ get_waiting_file(Args) ->
 -spec get_waiting_file(File :: term(), MultiError :: boolean()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
 get_waiting_file({internal_path, [Dir | Path], Root}, MultiError) ->
-  get_file_helper({internal_path, [Dir | Path], Root}, MultiError, ?WAITING_FILES_TREE_VIEW).
+    get_file_helper({internal_path, [Dir | Path], Root}, MultiError, ?WAITING_FILES_TREE_VIEW).
 
 %% get_file_helper/2
 %% ====================================================================
@@ -480,7 +514,7 @@ get_waiting_file({internal_path, [Dir | Path], Root}, MultiError) ->
 get_file_helper({internal_path, [], []}, _View) -> %% Root dir query
     {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = ?RD_ALL_PERM bor ?WR_ALL_PERM bor ?EX_ALL_PERM}}};
 get_file_helper({internal_path, [Dir | Path], Root}, View) ->
-  get_file_helper({internal_path, [Dir | Path], Root}, false, View);
+    get_file_helper({internal_path, [Dir | Path], Root}, false, View);
 get_file_helper({uuid, UUID}, _View) ->
     dao_external:set_db(?FILES_DB_NAME),
     case dao_records:get_record(UUID) of
@@ -488,11 +522,13 @@ get_file_helper({uuid, UUID}, _View) ->
             {ok, Doc};
         {ok, #veil_document{}} ->
             {error, invalid_file_record};
+        {error, {not_found, _}} ->
+            throw(file_not_found);
         Other ->
-            Other
+            {error, Other}
     end;
 get_file_helper(Path, View) ->
-  get_file_helper(file_path_analyze(Path), View).
+    get_file_helper(file_path_analyze(Path), View).
 
 %% get_file_helper/3
 %% ====================================================================
@@ -502,31 +538,31 @@ get_file_helper(Path, View) ->
 -spec get_file_helper(File :: term(), MultiError :: boolean(), View :: term()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
 get_file_helper({internal_path, [Dir | Path], Root}, MultiError, View) ->
-  QueryArgs =
-    #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
-    include_docs = case Path of [] -> true; _ -> false end}, %% Include doc representing leaf of our file path
-  {NewRoot, FileDoc} =
-    case dao_records:list_records(View, QueryArgs) of
-      {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc}]}} ->
-        {Id, FDoc};
-      {ok, #view_result{rows = []}} ->
+    QueryArgs =
+        #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
+            include_docs = case Path of [] -> true; _ -> false end}, %% Include doc representing leaf of our file path
+    {NewRoot, FileDoc} =
+        case dao_records:list_records(View, QueryArgs) of
+            {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc}]}} ->
+                {Id, FDoc};
+            {ok, #view_result{rows = []}} ->
 %%         ?error("File ~p not found (root = ~p)", [Dir, Root]),
-        throw(file_not_found);
-      {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc} | _Tail]}} ->
-        case MultiError of
-          true -> throw(file_duplicated);
-          false ->
-            ?warning("File ~p (root = ~p) is duplicated. Returning first copy. Others: ~p", [Dir, Root, _Tail]),
-            {Id, FDoc}
-        end;
-      _Other ->
-        ?error("Invalid view response: ~p", [_Other]),
-        throw(invalid_data)
-    end,
-  case Path of
-    [] -> {ok, FileDoc};
-    _ -> get_file_helper({internal_path, Path, NewRoot}, MultiError, View)
-  end.
+                throw(file_not_found);
+            {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc} | _Tail]}} ->
+                case MultiError of
+                    true -> throw(file_duplicated);
+                    false ->
+                        ?warning("File ~p (root = ~p) is duplicated. Returning first copy. Others: ~p", [Dir, Root, _Tail]),
+                        {Id, FDoc}
+                end;
+            _Other ->
+                ?error("Invalid view response: ~p", [_Other]),
+                throw(invalid_data)
+        end,
+    case Path of
+        [] -> {ok, FileDoc};
+        _ -> get_file_helper({internal_path, Path, NewRoot}, MultiError, View)
+    end.
 
 %% get_path_info/1
 %% ====================================================================
@@ -576,14 +612,14 @@ list_dir(Dir, N, Offset) ->
 %%                 ?error("Directory ~p not found. Error: ~p", [Dir, R]),
                 throw({dir_not_found, R})
         end,
-    NextId =  uca_increment(Id), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
+    NextId = uca_increment(Id), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
     QueryArgs =
         #view_query_args{start_key = [dao_helper:name(Id), dao_helper:name("")], end_key = [dao_helper:name(NextId), dao_helper:name("")],
             limit = N, include_docs = true, skip = Offset, inclusive_end = false}, %% Inclusive end does not work, disable to be sure
     case dao_records:list_records(?FILE_TREE_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} -> %% We need to strip results that don't match search criteria (tail of last query possibly), because
-                                           %% `end_key` seems to behave strange combined with `limit` option. TODO: get rid of it after DBMS switch
-            {ok, [FileDoc || #view_row{doc = #veil_document{record = #file{parent = Parent} } = FileDoc } <- Rows, Parent == Id]};
+            %% `end_key` seems to behave strange combined with `limit` option. TODO: get rid of it after DBMS switch
+            {ok, [FileDoc || #view_row{doc = #veil_document{record = #file{parent = Parent}} = FileDoc} <- Rows, Parent == Id]};
         _Other ->
             ?error("Invalid view response: ~p", [_Other]),
             throw(inavlid_data)
@@ -653,7 +689,7 @@ unlock_file(_UserID, _FileID, _Mode) ->
 save_storage(#storage_info{} = Storage) ->
     save_storage(#veil_document{record = Storage}, false);
 save_storage(StorageDoc) ->
-  save_storage(StorageDoc, true).
+    save_storage(StorageDoc, true).
 
 %% save_storage/2
 %% ====================================================================
@@ -667,15 +703,14 @@ save_storage(StorageDoc) ->
 %% ====================================================================
 save_storage(#veil_document{record = #storage_info{}} = StorageDoc, ClearCache) ->
     case ClearCache of
-      true ->
-        Doc = StorageDoc#veil_document.record,
-        clear_cache([{uuid, StorageDoc#veil_document.uuid}, {id, Doc#storage_info.id}]);
-      false ->
-        ok
+        true ->
+            Doc = StorageDoc#veil_document.record,
+            clear_cache([{uuid, StorageDoc#veil_document.uuid}, {id, Doc#storage_info.id}]);
+        false ->
+            ok
     end,
     dao_external:set_db(?SYSTEM_DB_NAME),
     dao_records:save_record(StorageDoc).
-
 
 
 %% remove_storage/1
@@ -688,22 +723,22 @@ save_storage(#veil_document{record = #storage_info{}} = StorageDoc, ClearCache) 
 remove_storage({uuid, DocUUID}) when is_list(DocUUID) ->
     {Ans, SData} = get_storage({uuid, DocUUID}),
     case Ans of
-      ok ->
-        Doc = SData#veil_document.record,
-        clear_cache([{uuid, DocUUID}, {id, Doc#storage_info.id}]),
+        ok ->
+            Doc = SData#veil_document.record,
+            clear_cache([{uuid, DocUUID}, {id, Doc#storage_info.id}]),
 
-        dao_external:set_db(?SYSTEM_DB_NAME),
-        dao_records:remove_record(DocUUID);
-      _ -> {Ans, SData}
+            dao_external:set_db(?SYSTEM_DB_NAME),
+            dao_records:remove_record(DocUUID);
+        _ -> {Ans, SData}
     end;
 remove_storage({id, StorageID}) when is_integer(StorageID) ->
     {Ans, SData} = get_storage({id, StorageID}),
     case Ans of
-      ok ->
-        clear_cache([{uuid, SData#veil_document.uuid}, {id, StorageID}]),
-        dao_external:set_db(?SYSTEM_DB_NAME),
-        dao_records:remove_record(SData#veil_document.uuid);
-      _ -> {Ans, SData}
+        ok ->
+            clear_cache([{uuid, SData#veil_document.uuid}, {id, StorageID}]),
+            dao_external:set_db(?SYSTEM_DB_NAME),
+            dao_records:remove_record(SData#veil_document.uuid);
+        _ -> {Ans, SData}
     end.
 
 %% exist_storage/1
@@ -730,18 +765,18 @@ exist_storage(Key) ->
 -spec get_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_storage(Key) ->
-  case ets:lookup(storage_cache, Key) of
-    [] -> %% Cached document not found. Fetch it from DB and save in cache
-      DBAns = get_storage_from_db(Key),
-      case DBAns of
-        {ok, Doc} ->
-          ets:insert(storage_cache, {Key, Doc}),
-          {ok, Doc};
-        Other -> Other
-      end;
-    [{_, Ans}] -> %% Return document from cache
-      {ok, Ans}
-  end.
+    case ets:lookup(storage_cache, Key) of
+        [] -> %% Cached document not found. Fetch it from DB and save in cache
+            DBAns = get_storage_from_db(Key),
+            case DBAns of
+                {ok, Doc} ->
+                    ets:insert(storage_cache, {Key, Doc}),
+                    {ok, Doc};
+                Other -> Other
+            end;
+        [{_, Ans}] -> %% Return document from cache
+            {ok, Ans}
+    end.
 
 
 %% exist_storage_in_db/1
@@ -787,19 +822,19 @@ get_storage_from_db({uuid, DocUUID}) when is_list(DocUUID) ->
     end;
 get_storage_from_db({id, StorageID}) when is_integer(StorageID) ->
     QueryArgs =
-        #view_query_args{keys = [StorageID], include_docs = true}, 
+        #view_query_args{keys = [StorageID], include_docs = true},
     case dao_records:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
         {ok, #view_result{rows = [Row]}} ->
-            #view_row{doc = #veil_document{record = #storage_info{} } = Doc } = Row,
+            #view_row{doc = #veil_document{record = #storage_info{}} = Doc} = Row,
             {ok, Doc};
         {ok, #view_result{rows = Rows}} ->
-            [#view_row{doc = #veil_document{record = #storage_info{} } = Doc } | _Tail] = Rows,
+            [#view_row{doc = #veil_document{record = #storage_info{}} = Doc} | _Tail] = Rows,
             ?warning("Storage with ID ~p is duplicated. Returning first copy. All: ~p", [StorageID, Rows]),
             {ok, Doc};
         _Other ->
             ?error("Invalid view response: ~p", [_Other]),
             throw(inavlid_data)
-    end. 
+    end.
 
 
 %% list_storage/0
@@ -815,7 +850,7 @@ list_storage() ->
         #view_query_args{start_key = 0, end_key = 1, include_docs = true}, %% All keys are (int)0 so will get all documents
     case dao_records:list_records(?ALL_STORAGE_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} ->
-            {ok, [Doc || #view_row{doc = #veil_document{record = #storage_info{} } = Doc } <- Rows]};
+            {ok, [Doc || #view_row{doc = #veil_document{record = #storage_info{}} = Doc} <- Rows]};
         _Other ->
             ?error("Invalid view response: ~p", [_Other]),
             throw(inavlid_data)
@@ -830,16 +865,16 @@ list_storage() ->
 -spec find_files(FileCriteria :: file_criteria()) -> {ok, [file_doc()]} | no_return().
 %% ====================================================================
 find_files(FileCriteria) when is_record(FileCriteria, file_criteria) ->
-  case are_name_or_uid_set(FileCriteria) of
-    true -> find_file_by_file_name_or_uuid(FileCriteria);
-    _ ->
-      case are_time_criteria_set(FileCriteria) of
-        true -> find_by_times(FileCriteria);
+    case are_name_or_uid_set(FileCriteria) of
+        true -> find_file_by_file_name_or_uuid(FileCriteria);
+        _ ->
+            case are_time_criteria_set(FileCriteria) of
+                true -> find_by_times(FileCriteria);
 
-        % no restrictions set - find_file_when_file_name_or_uuid_set handles this case
-        _ -> find_file_by_file_name_or_uuid(FileCriteria)
-      end
-  end.
+            % no restrictions set - find_file_when_file_name_or_uuid_set handles this case
+                _ -> find_file_by_file_name_or_uuid(FileCriteria)
+            end
+    end.
 
 
 %% ===================================================================
@@ -853,11 +888,11 @@ find_files(FileCriteria) when is_record(FileCriteria, file_criteria) ->
 %% ====================================================================
 %% TODO when storage adding procedure will change (now it always gets new id), clearing function should be updated
 clear_cache(Key) ->
-  lists:foreach(fun(K) -> ets:delete(storage_cache, K) end, Key),
-  case worker_host:clear_cache({storage_cache, Key}) of
-    ok -> ok;
-    Error -> throw({error_during_global_cache_clearing, Error})
-  end.
+    lists:foreach(fun(K) -> ets:delete(storage_cache, K) end, Key),
+    case worker_host:clear_cache({storage_cache, Key}) of
+        ok -> ok;
+        Error -> throw({error_during_global_cache_clearing, Error})
+    end.
 
 %% are_time_criteria_set/1
 %% @doc Returns true if any of time criteria (ctime or mtime) are set
@@ -866,7 +901,7 @@ clear_cache(Key) ->
 -spec are_time_criteria_set(FileCriteria :: file_criteria()) -> boolean().
 %% ====================================================================
 are_time_criteria_set(FileCriteria) when is_record(FileCriteria, file_criteria) ->
-  (FileCriteria#file_criteria.ctime /= #time_criteria{}) or (FileCriteria#file_criteria.mtime /= #time_criteria{}).
+    (FileCriteria#file_criteria.ctime /= #time_criteria{}) or (FileCriteria#file_criteria.mtime /= #time_criteria{}).
 
 %% are_name_or_uid_set/1
 %% @doc Returns true if name or uid is set.
@@ -875,7 +910,7 @@ are_time_criteria_set(FileCriteria) when is_record(FileCriteria, file_criteria) 
 -spec are_name_or_uid_set(FileCriteria :: file_criteria()) -> boolean().
 %% ====================================================================
 are_name_or_uid_set(FileCriteria) when is_record(FileCriteria, file_criteria) ->
-  (FileCriteria#file_criteria.file_pattern /= "") or (FileCriteria#file_criteria.uid /= null).
+    (FileCriteria#file_criteria.file_pattern /= "") or (FileCriteria#file_criteria.uid /= null).
 
 %% end_key_for_prefix/1
 %% @doc Returns given prefix concatenated with high value unicode character.
@@ -886,7 +921,7 @@ are_name_or_uid_set(FileCriteria) when is_record(FileCriteria, file_criteria) ->
 -spec end_key_for_prefix(Prefix :: string()) -> binary().
 %% ====================================================================
 end_key_for_prefix(Prefix) ->
-  unicode:characters_to_binary(Prefix ++ unicode:characters_to_list(string:chars(255, 2))).
+    unicode:characters_to_binary(Prefix ++ unicode:characters_to_list(string:chars(255, 2))).
 
 %% get_desired_filetypes/1
 %% @doc Returns list of file types that should be included according to given file_criteria record.
@@ -896,14 +931,14 @@ end_key_for_prefix(Prefix) ->
 -spec get_desired_filetypes(file_criteria()) -> binary().
 %% ====================================================================
 get_desired_filetypes(#file_criteria{include_dirs = IncludeDirs, include_files = IncludeFiles, include_links = IncludeLinks}) ->
-  Types = [{IncludeDirs, ?DIR_TYPE}, {IncludeFiles, ?REG_TYPE}, {IncludeLinks, ?LNK_TYPE}],
-  lists:filtermap(
-    fun({Included, Type}) ->
-      case Included of
-        true -> {Included, Type};
-        _ -> false
-      end
-    end, Types).
+    Types = [{IncludeDirs, ?DIR_TYPE}, {IncludeFiles, ?REG_TYPE}, {IncludeLinks, ?LNK_TYPE}],
+    lists:filtermap(
+        fun({Included, Type}) ->
+            case Included of
+                true -> {Included, Type};
+                _ -> false
+            end
+        end, Types).
 
 %% fetch_rows/2
 %% @doc Query given view with given #view_query_args and results list of rows
@@ -912,13 +947,13 @@ get_desired_filetypes(#file_criteria{include_dirs = IncludeDirs, include_files =
 -spec fetch_rows(ViewName :: string(), QueryArgs :: #view_query_args{}) -> list(#view_row{}) | no_return().
 %% ====================================================================
 fetch_rows(ViewName, QueryArgs) ->
-  case dao_records:list_records(ViewName, QueryArgs) of
-    {ok, #view_result{rows = Rows}} ->
-      Rows;
-    Error ->
-      ?error("Invalid view response: ~p", [Error]),
-      throw(invalid_data)
-  end.
+    case dao_records:list_records(ViewName, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+            Rows;
+        Error ->
+            ?error("Invalid view response: ~p", [Error]),
+            throw(invalid_data)
+    end.
 
 %% get_filter_predicate_for_time/1
 %% @doc Returns predicate function for filtering by time according to given #file_criteria
@@ -928,27 +963,27 @@ fetch_rows(ViewName, QueryArgs) ->
 %% ====================================================================
 % TODO: introduce some macro to make it more concise
 get_filter_predicate_for_time(#file_criteria{ctime = #time_criteria{time = Time, time_relation = TimeRelation}, mtime = #time_criteria{time = 0}}) ->
-  case TimeRelation of
-    older_than ->
-      fun(#view_row{doc = FileMetaDoc}) ->
-        FileMetaDoc#veil_document.record#file_meta.ctime < Time
-      end;
-    newer_than ->
-      fun(#view_row{doc = FileMetaDoc}) ->
-        FileMetaDoc#veil_document.record#file_meta.ctime > Time
-      end
-  end;
+    case TimeRelation of
+        older_than ->
+            fun(#view_row{doc = FileMetaDoc}) ->
+                FileMetaDoc#veil_document.record#file_meta.ctime < Time
+            end;
+        newer_than ->
+            fun(#view_row{doc = FileMetaDoc}) ->
+                FileMetaDoc#veil_document.record#file_meta.ctime > Time
+            end
+    end;
 get_filter_predicate_for_time(#file_criteria{mtime = #time_criteria{time = Time, time_relation = TimeRelation}, ctime = #time_criteria{time = 0}}) ->
-  case TimeRelation of
-    older_than ->
-      fun(#view_row{doc = FileMetaDoc}) ->
-        FileMetaDoc#veil_document.record#file_meta.mtime < Time
-      end;
-    newer_than ->
-      fun(#view_row{doc = FileMetaDoc}) ->
-        FileMetaDoc#veil_document.record#file_meta.mtime > Time
-      end
-  end.
+    case TimeRelation of
+        older_than ->
+            fun(#view_row{doc = FileMetaDoc}) ->
+                FileMetaDoc#veil_document.record#file_meta.mtime < Time
+            end;
+        newer_than ->
+            fun(#view_row{doc = FileMetaDoc}) ->
+                FileMetaDoc#veil_document.record#file_meta.mtime > Time
+            end
+    end.
 
 %% find_file_by_file_name_or_uuid/1
 %% @doc Returns uuids of file documents found with given #file_criteria.
@@ -958,47 +993,47 @@ get_filter_predicate_for_time(#file_criteria{mtime = #time_criteria{time = Time,
 -spec find_file_by_file_name_or_uuid(FileCriteria :: #file_criteria{}) -> {ok, [string()]} | no_return().
 %% ====================================================================
 find_file_by_file_name_or_uuid(FileCriteria) ->
-  FilePattern = FileCriteria#file_criteria.file_pattern,
-  UidBin = case FileCriteria#file_criteria.uid of
-             null -> null;
-             Uid when is_binary(Uid) -> Uid;
-             Uid when is_list(Uid) -> dao_helper:name(Uid);
-             Uid when is_integer(Uid) -> dao_helper:name(integer_to_list(Uid))
-           end,
+    FilePattern = FileCriteria#file_criteria.file_pattern,
+    UidBin = case FileCriteria#file_criteria.uid of
+                 null -> null;
+                 Uid when is_binary(Uid) -> Uid;
+                 Uid when is_list(Uid) -> dao_helper:name(Uid);
+                 Uid when is_integer(Uid) -> dao_helper:name(integer_to_list(Uid))
+             end,
 
-  QueryArgs = case FilePattern of
-                "" ->
-                  case UidBin of
-                    null -> #view_query_args{start_key = [<<"">>, null], end_key = [{}, {}]};
-                    _ -> #view_query_args{start_key = [UidBin, null], end_key = [UidBin, {}]}
-                  end;
-                _ ->
-                  case lists:nth(length(FilePattern), FilePattern) of
-                    $* ->
-                      Prefix = lists:sublist(FilePattern, length(FilePattern) - 1),
-                      #view_query_args{start_key = [UidBin, dao_helper:name(Prefix)], end_key = [UidBin, end_key_for_prefix(Prefix)]};
-                    _ -> #view_query_args{keys = [[UidBin, dao_helper:name(FilePattern)]]}
-                  end
+    QueryArgs = case FilePattern of
+                    "" ->
+                        case UidBin of
+                            null -> #view_query_args{start_key = [<<"">>, null], end_key = [{}, {}]};
+                            _ -> #view_query_args{start_key = [UidBin, null], end_key = [UidBin, {}]}
+                        end;
+                    _ ->
+                        case lists:nth(length(FilePattern), FilePattern) of
+                            $* ->
+                                Prefix = lists:sublist(FilePattern, length(FilePattern) - 1),
+                                #view_query_args{start_key = [UidBin, dao_helper:name(Prefix)], end_key = [UidBin, end_key_for_prefix(Prefix)]};
+                            _ -> #view_query_args{keys = [[UidBin, dao_helper:name(FilePattern)]]}
+                        end
+                end,
+
+    Rows = fetch_rows(?FILES_BY_UID_AND_FILENAME, QueryArgs#view_query_args{include_docs = true}),
+    Results = case are_time_criteria_set(FileCriteria) of
+    % if are_time_criteria_set then we need to additionally filter Rows
+                  true ->
+                      FilterPredicate = get_filter_predicate_for_time(FileCriteria),
+                      lists:filter(FilterPredicate, Rows);
+                  _ -> Rows
               end,
 
-  Rows = fetch_rows(?FILES_BY_UID_AND_FILENAME, QueryArgs#view_query_args{include_docs = true}),
-  Results = case are_time_criteria_set(FileCriteria) of
-  % if are_time_criteria_set then we need to additionally filter Rows
-              true ->
-                FilterPredicate = get_filter_predicate_for_time(FileCriteria),
-                lists:filter(FilterPredicate, Rows);
-              _ -> Rows
-            end,
-
-  DesiredTypes = get_desired_filetypes(FileCriteria),
-  FilteredByTypes = lists:filter(
-    fun(#view_row{value = V}) ->
-      {Value} = V,
-      Type = proplists:get_value(<<"type">>, Value),
-      lists:member(Type, DesiredTypes)
-    end,
-    Results),
-  {ok, lists:map(fun(#view_row{id = Id}) -> Id end, FilteredByTypes)}.
+    DesiredTypes = get_desired_filetypes(FileCriteria),
+    FilteredByTypes = lists:filter(
+        fun(#view_row{value = V}) ->
+            {Value} = V,
+            Type = proplists:get_value(<<"type">>, Value),
+            lists:member(Type, DesiredTypes)
+        end,
+        Results),
+    {ok, lists:map(fun(#view_row{id = Id}) -> Id end, FilteredByTypes)}.
 
 %% find_by_times/1
 %% @doc Returns uuids of file documents found with given #file_criteria.
@@ -1007,22 +1042,22 @@ find_file_by_file_name_or_uuid(FileCriteria) ->
 -spec find_by_times(FileCriteria :: #file_criteria{}) -> {ok, [string()]} | no_return().
 %% ====================================================================
 find_by_times(FileCriteria) ->
-  MetaIds = get_file_meta_ids(FileCriteria),
-  DesiredTypes = get_desired_filetypes(FileCriteria),
-  MetaIdsBin = lists:merge(lists:map(
-    fun(MetaId) ->
-      lists:map(
-        fun(DesiredType) ->
-          [dao_helper:name(MetaId), DesiredType]
+    MetaIds = get_file_meta_ids(FileCriteria),
+    DesiredTypes = get_desired_filetypes(FileCriteria),
+    MetaIdsBin = lists:merge(lists:map(
+        fun(MetaId) ->
+            lists:map(
+                fun(DesiredType) ->
+                    [dao_helper:name(MetaId), DesiredType]
+                end,
+                DesiredTypes)
         end,
-        DesiredTypes)
-    end,
-    MetaIds)),
+        MetaIds)),
 
-  Rows = fetch_rows(?FILES_BY_META_DOC, #view_query_args{keys = MetaIdsBin, include_docs = true}),
-  Result = lists:filter(fun(#view_row{doc = FileDoc}) ->
-    lists:member(FileDoc#veil_document.record#file.type, DesiredTypes) end, Rows),
-  {ok, lists:map(fun(#view_row{id = Id}) -> Id end, Result)}.
+    Rows = fetch_rows(?FILES_BY_META_DOC, #view_query_args{keys = MetaIdsBin, include_docs = true}),
+    Result = lists:filter(fun(#view_row{doc = FileDoc}) ->
+        lists:member(FileDoc#veil_document.record#file.type, DesiredTypes) end, Rows),
+    {ok, lists:map(fun(#view_row{id = Id}) -> Id end, Result)}.
 
 %% get_file_meta_ids/1
 %% ====================================================================
@@ -1032,32 +1067,32 @@ find_by_times(FileCriteria) ->
 -spec get_file_meta_ids(file_criteria()) -> list(string()) | no_return().
 %% ====================================================================
 get_file_meta_ids(FileCriteria) ->
-  QueryArgs1 = case FileCriteria#file_criteria.ctime of
-                 #time_criteria{time = Time, time_relation = older_than} ->
-                   #view_query_args{start_key = [0, null], end_key = [Time, {}]};
-                 #time_criteria{time = Time, time_relation = newer_than} ->
-                   #view_query_args{start_key = [Time + 1, null]};
-                 #time_criteria{} ->
-                   case FileCriteria#file_criteria.mtime of
+    QueryArgs1 = case FileCriteria#file_criteria.ctime of
                      #time_criteria{time = Time, time_relation = older_than} ->
-                       #view_query_args{end_key = [null, Time]};
+                         #view_query_args{start_key = [0, null], end_key = [Time, {}]};
                      #time_criteria{time = Time, time_relation = newer_than} ->
-                       #view_query_args{start_key = [null, Time + 1], end_key = [0, null]};
-                     #time_criteria{} -> null
-                   end
-               end,
+                         #view_query_args{start_key = [Time + 1, null]};
+                     #time_criteria{} ->
+                         case FileCriteria#file_criteria.mtime of
+                             #time_criteria{time = Time, time_relation = older_than} ->
+                                 #view_query_args{end_key = [null, Time]};
+                             #time_criteria{time = Time, time_relation = newer_than} ->
+                                 #view_query_args{start_key = [null, Time + 1], end_key = [0, null]};
+                             #time_criteria{} -> null
+                         end
+                 end,
 
-  case QueryArgs1 of
-    (QueryArgs) when is_record(QueryArgs, view_query_args) ->
-      case dao_records:list_records(?FILE_META_BY_TIMES, QueryArgs) of
-        {ok, #view_result{rows = Rows}} ->
-          lists:map(fun(#view_row{id = Id}) -> Id end, Rows);
-        Error ->
-          ?error("Invalid view response: ~p", [Error]),
-          throw(invalid_data)
-      end;
-    _ -> []
-  end.
+    case QueryArgs1 of
+        (QueryArgs) when is_record(QueryArgs, view_query_args) ->
+            case dao_records:list_records(?FILE_META_BY_TIMES, QueryArgs) of
+                {ok, #view_result{rows = Rows}} ->
+                    lists:map(fun(#view_row{id = Id}) -> Id end, Rows);
+                Error ->
+                    ?error("Invalid view response: ~p", [Error]),
+                    throw(invalid_data)
+            end;
+        _ -> []
+    end.
 
 %% file_path_analyze/1
 %% ====================================================================
@@ -1087,9 +1122,9 @@ file_path_analyze(Path) ->
 -spec uca_increment(Id :: string()) -> string().
 %% ====================================================================
 uca_increment(Str) when is_list(Str) ->
-    case try_toupper(Str) of 
+    case try_toupper(Str) of
         {Str1, true} -> Str1;
-        {_, false} ->   
+        {_, false} ->
             case lists:reverse(uca_increment({lists:reverse(Str), true})) of
                 [10 | T] -> [$Z || _ <- T] ++ [10];
                 Other -> Other
@@ -1101,7 +1136,7 @@ uca_increment({[], true}) ->
     [10];
 uca_increment({[C | Tail], true}) ->
     {NC, Continue} = next_char(C),
-    [NC | uca_increment({Tail ,Continue})].
+    [NC | uca_increment({Tail, Continue})].
 
 %% Internal helper function used by uca_increment/1
 try_toupper(Str) when is_list(Str) ->
@@ -1110,10 +1145,10 @@ try_toupper(Str) when is_list(Str) ->
 try_toupper({"", true}) ->
     {"", false};
 try_toupper({[C | Tail], true}) when C >= $a, C =< $z ->
-    { [(C - 32) | Tail], true };
+    {[(C - 32) | Tail], true};
 try_toupper({[C | Tail], true}) ->
-    { NewTail, Status} = try_toupper({Tail, true}),
-    { [ C | NewTail], Status }.
+    {NewTail, Status} = try_toupper({Tail, true}),
+    {[C | NewTail], Status}.
 
 %% Internal helper function used by uca_increment/1
 next_char(C) when C >= $a, C < $z; C >= $A, C < $Z; C >= $0, C < $9 ->
@@ -1128,9 +1163,9 @@ next_char($$) ->
     {$0, false};
 next_char(Other) ->
     Collation = " `^_-,;:!?.'\"()[]{}@*/\\&#%+<=>|~$",
-    Res = 
-        case lists:dropwhile(fun(Char) -> Char =/= Other end, Collation) of 
-            [Other | [ Next | _ ]] -> Next;
+    Res =
+        case lists:dropwhile(fun(Char) -> Char =/= Other end, Collation) of
+            [Other | [Next | _]] -> Next;
             [] -> throw({unsupported_char, Other})
         end,
     {Res, false}.

@@ -87,8 +87,8 @@ get_state(Id) ->
     case dao_records:get_record(Id) of
         {ok, State} ->
             {ok, State#veil_document.record};
-        Other ->
-            {error, Other}
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 

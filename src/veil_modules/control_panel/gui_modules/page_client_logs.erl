@@ -71,7 +71,7 @@ title() -> <<"Client logs">>.
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
     _Body = [
-        vcn_gui_utils:top_menu(client_logs_tab, logs_submenu()),
+        vcn_gui_utils:top_menu(administration_tab, logs_submenu()),
         #panel{style = <<"margin-top: 122px; z-index: -1;">>, body = main_table()},
         footer_popup()
     ],

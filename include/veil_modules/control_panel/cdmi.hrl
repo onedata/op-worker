@@ -15,15 +15,21 @@
 -include("veil_modules/control_panel/common.hrl").
 
 -record(state, {
-    handler_module = undefined,
+    handler_module = undefined :: atom(),
     method = <<"GET">> :: binary(),
-    filepath = undefined :: binary(),
+    filepath = undefined :: string(),
+    objectid = undefined :: binary(),
     attributes = undefined :: #fileattributes{},
-    cdmi_version = undefined :: undefined | binary(),
-    opts = [] :: [binary()]
+    cdmi_version = undefined :: binary(),
+    opts = [] :: [binary()],
+    capability = undefined :: atom()
 }).
 
+-define(error_bad_request_code, 400).
+-define(error_unauthorized_code, 401).
 -define(error_forbidden_code, 403).
 -define(error_not_found_code, 404).
 -define(error_not_acceptable_code, 406).
 -define(error_conflict_code, 409).
+
+-define(error_internal_code,500).

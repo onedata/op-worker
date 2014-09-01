@@ -307,18 +307,25 @@ veil_cluster_node_env:
 
   # Global Registry interfacing
   - parameter:
-      name: global_registry_provider_ca_cert_file
-      description: Path to .pem file containing the certificate signed by global registry CA, used for authorizing requests to it.
-      value: |
-        "\'certs/grpcert.pem\'"
-      erlang_term: "'certs/grpcert.pem'"
-
-  - parameter:
-      name: global_registry_provider_key_file
+      name: global_registry_provider_key_path
       description: Path to .pem file containing the private key to the grpcert.
       value: |
         "\'certs/grpkey.pem\'"
       erlang_term: "'certs/grpkey.pem'"
+      
+  - parameter:
+      name: global_registry_provider_cert_path
+      description: Path to .pem file containing the certificate signed by Global Registry CA, used for authorizing requests to it.
+      value: |
+        "\'certs/grpcert.pem\'"
+      erlang_term: "'certs/grpcert.pem'"
+      
+  - parameter:
+      name: global_registry_ca_cert_path
+      description: Path to .pem file containing the Global Registry CA certificate.
+      value: |
+        "\'cacerts/grpCA.pem\'"
+      erlang_term: "'cacerts/grpCA.pem'"
 
   - parameter:
       name: global_registry_hostname
@@ -326,6 +333,13 @@ veil_cluster_node_env:
       value: |
         "\'https://onedata.org\'"
       erlang_term: "'https://onedata.org'"
+
+  - parameter:
+      name: global_registry_url
+      description: Global Registry REST API endpoint URL.
+      value: |
+        "\'https://onedata.org:8443\'"
+      erlang_term: "'https://onedata.org:8443'"
 
   # Files management
   - parameter:
@@ -352,6 +366,11 @@ veil_cluster_node_env:
       name: new_dir_storage_mode
       description: Default mode for new directory at storage system (8#1330)
       value: 728
+
+  - parameter:
+      name: lowest_generated_storage_gid
+      description: Lowest GID used for files that shall belong to group that doesn't exist in OS.
+      value: 70000
 
 
   # DNS
@@ -406,8 +425,15 @@ veil_cluster_node_env:
   - parameter:
       name: io_bytes_threshold
       description: |
-           Defines how often io event is generated in terms of read or written bytes
+           Defines how often io event is generated in terms of read or written bytes.
       value: 1048576 # 1MB
+
+  - parameter:
+      name: view_def_location
+      description: Location of database views definitions.
+      value: |
+        "\'views/\'"
+      erlang_term: "'views/'"
 
   # Quota management
   - parameter:

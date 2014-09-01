@@ -15,12 +15,17 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/fsuid.h>
 #include <pwd.h>
 #include <grp.h>
 
+#ifndef __APPLE__
+#include <sys/fsuid.h>
+#endif
+
 #include <cstring>
 #include <memory>
+#include <iostream>
+#include <fstream>
 #include <vector>
 
 #define BADARG enif_make_badarg(env)
@@ -29,8 +34,8 @@
                 auto sh = SHFactory.getStorageHelper(get_string(env, argv[2]), get_args(env, argv[3])); \
                 if(!sh) \
                     return enif_make_tuple2(env, enif_make_atom(env, "error"), enif_make_atom(env, "unknown_storage_helper")); \
-                UserCTX holder(get_string(env, argv[0]), get_string(env, argv[1])); \
-                if(holder.uid() == (uid_t)-1 || holder.gid() == (gid_t)-1) \
+                UserCTX holder(get_string(env, argv[0]), get_int(env, argv[1])); \
+                if(holder.uid() == (uid_t)-1) \
                     return enif_make_int(env, -EINVAL);
 
 using namespace veil::cluster;
@@ -50,15 +55,23 @@ public:
         initCTX(uid, gid);
     }
 
+    UserCTX(std::string uname, gid_t gid)
+    {
+        initCTX(uNameToUID(uname), gid);
+    }
+
     UserCTX(std::string uname, std::string gname)
     {
-        initCTX(uname, gname);
+        initCTX(uNameToUID(uname), gNameToGID(gname, uname));
     }
 
     ~UserCTX()
     {
+// Only to make compilation possible - veilhelpers_nif does NOT support platforms other then Linux
+#ifndef __APPLE__
         setfsuid(0);
         setfsgid(0);
+#endif
     }
 
     uid_t uid()
@@ -80,6 +93,8 @@ private:
         m_uid = uid;
         m_gid = gid;
 
+// Only to make compilation possible - veilhelpers_nif does NOT support platforms other then Linux
+#ifndef __APPLE__
         if(uid != 0) {
             setgroups(0, nullptr);
             setegid(-1);
@@ -88,18 +103,22 @@ private:
 
         setfsuid(m_uid);
         setfsgid(m_gid);
+#endif
     }
 
-    void initCTX(std::string uname, std::string gname)
+    uid_t uNameToUID(std::string uname)
     {
-         struct passwd *ownerInfo = getpwnam(uname.c_str()); // Static buffer, do NOT free !
-         struct group  *groupInfo = getgrnam(gname.c_str()); // Static buffer, do NOT free !
+        struct passwd *ownerInfo = getpwnam(uname.c_str()); // Static buffer, do NOT free !
+        return (ownerInfo ? ownerInfo->pw_uid : -1);
+    }
 
-         uid_t uid = (ownerInfo ? ownerInfo->pw_uid : -1);
-         gid_t primary_gid = (ownerInfo ? ownerInfo->pw_gid : -1);
-         gid_t gid = (groupInfo ? groupInfo->gr_gid : primary_gid);
+    gid_t gNameToGID(std::string gname, std::string uname = "")
+    {
+        struct passwd *ownerInfo = getpwnam(uname.c_str()); // Static buffer, do NOT free !
+        struct group  *groupInfo = getgrnam(gname.c_str()); // Static buffer, do NOT free !
 
-         initCTX(uid, gid);
+        gid_t primary_gid = (ownerInfo ? ownerInfo->pw_gid : -1);
+        return (groupInfo ? groupInfo->gr_gid : primary_gid);
     }
 
 };

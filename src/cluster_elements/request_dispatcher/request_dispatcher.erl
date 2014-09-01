@@ -829,6 +829,13 @@ send_to_fuse(FuseId, Message, MessageDecoder) ->
 Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
 %% ====================================================================
 send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
+    case fslogic_context:is_global_fuse_id(FuseId) of
+        true ->
+            provider_proxy:reroute_push_message(fslogic_context:read_global_fuse_id(FuseId), Message, MessageDecoder);
+        false ->
+            send_to_fuse1(FuseId, Message, MessageDecoder, SendNum)
+    end.
+send_to_fuse1(FuseId, Message, MessageDecoder, SendNum) ->
   Ans = try
     Node = gen_server:call(?Dispatcher_Name, {get_callback, FuseId}, 500),
     case Node of

@@ -18,6 +18,7 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_registry/gr_providers.hrl").
 
 %% ====================================================================
 %% API
@@ -63,12 +64,12 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
-handle(ProtocolVersion, Record) when is_record(Record, remotefilemangement) ->
-    RequestBody = Record#remotefilemangement.input,
+handle(ProtocolVersion, #remotefilemangement{input = RequestBody, space_id = SpaceId}) ->
+    ?debug("RFM space ctx ~p", [SpaceId]),
     RequestType = element(1, RequestBody),
 
     fslogic_context:set_protocol_version(ProtocolVersion),
-    fslogic:fslogic_runner(fun handle_message/1, RequestType, RequestBody, remote_files_manager_errors);
+    fslogic:fslogic_runner(fun(ReqBody) -> maybe_handle_message(ReqBody, SpaceId) end, RequestType, RequestBody, remote_files_manager_errors);
 
 handle(_ProtocolVersion, _Msg) ->
   ?warning("Wrong request: ~p", [_Msg]),
@@ -82,6 +83,35 @@ handle(_ProtocolVersion, _Msg) ->
 cleanup() ->
   ok.
 
+
+%% maybe_handle_message/1
+%% ====================================================================
+%% @doc Tries to handle message locally (i.e. handle_message/1) or delegate request to 'provider_proxy' module.
+%% @end
+-spec maybe_handle_message(RequestBody :: tuple(), SpaceId :: binary()) -> Result :: term().
+%% ====================================================================
+maybe_handle_message(RequestBody, SpaceId) ->
+    {ok, #space_info{providers = Providers}} = fslogic_objects:get_space({uuid, SpaceId}),
+
+    Self = cluster_manager_lib:get_provider_id(),
+
+    case lists:member(Self, Providers) of
+        true ->
+            handle_message(RequestBody);
+        false ->
+            [RerouteToProvider | _] = Providers,
+            {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, RerouteToProvider),
+            ?info("Reroute to: ~p", [URLs]),
+            try
+                provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
+                    fslogic_context:get_fuse_id(), #remotefilemangement{space_id = SpaceId, input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
+            catch
+                Type:Reason ->
+                    ?error_stacktrace("Unable to process remote files manager request to provider ~p due to: ~p", [RerouteToProvider, {Type, Reason}]),
+                    throw({unable_to_reroute_message, Reason})
+            end
+    end.
+
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
@@ -93,6 +123,28 @@ cleanup() ->
 -spec handle_message(Record :: tuple()) -> Result when
   Result :: term().
 %% ====================================================================
+
+handle_message(Record) when is_record(Record, getattr) ->
+    FileId = Record#getattr.file_id,
+    {Storage_helper_info, File} = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
+    {ok, #st_stat{} = Stat} = storage_files_manager:getattr(Storage_helper_info, File),
+    #storageattibutes{
+        answer = ?VOK,
+        atime = Stat#st_stat.st_atime,
+        blksize = Stat#st_stat.st_blksize,
+        blocks = Stat#st_stat.st_blocks,
+        ctime = Stat#st_stat.st_ctime,
+        dev = Stat#st_stat.st_dev,
+        gid = Stat#st_stat.st_gid,
+        ino = Stat#st_stat.st_ino,
+        mode = Stat#st_stat.st_mode,
+        mtime = Stat#st_stat.st_mtime,
+        nlink = Stat#st_stat.st_nlink,
+        rdev = Stat#st_stat.st_rdev,
+        size = Stat#st_stat.st_size,
+        uid = Stat#st_stat.st_uid
+    };
+
 handle_message(Record) when is_record(Record, createfile) ->
     FileId = Record#createfile.file_id,
     Mode = Record#createfile.mode,
@@ -263,21 +315,15 @@ handle_message(Record) when is_record(Record, changepermsatstorage) ->
     _ -> #atom{value = ?VEREMOTEIO}
   end.
 
+get_storage_and_id([$/ | Combined]) ->
+    get_storage_and_id(Combined);
 get_storage_and_id(Combined) ->
-  Pos = string:str(Combined, ?REMOTE_HELPER_SEPARATOR),
-  case Pos of
-    0 -> error;
-    _ ->
-      try
-        Storage = list_to_integer(string:substr(Combined, 1, Pos - 1)),
-        File = string:substr(Combined, Pos + length(?REMOTE_HELPER_SEPARATOR)),
-        case verify_file_name(File) of
-          {error, _} -> error;
-          {ok, VerifiedFile} -> {Storage, VerifiedFile}
-        end
-      catch
-        _:_ -> error
-      end
+  [StorageStr | PathTokens] = filename:split(Combined),
+  Storage = list_to_integer(StorageStr),
+  File = filename:join(PathTokens),
+  case verify_file_name(File) of
+    {error, _} -> error;
+    {ok, VerifiedFile} -> {Storage, VerifiedFile}
   end.
 
 %% get_helper_and_id/2

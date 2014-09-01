@@ -11,31 +11,40 @@
 -module(cdmi_container).
 
 -include("veil_modules/control_panel/cdmi.hrl").
-
--define(default_get_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
--define(default_post_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
+-include("veil_modules/control_panel/cdmi_capabilities.hrl").
+-include("veil_modules/control_panel/cdmi_container.hrl").
 
 %% API
--export([allowed_methods/2, resource_exists/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
--export([get_cdmi_container/2, put_cdmi_container/2]).
-
+-export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
+-export([get_cdmi_container/2, put_cdmi_container/2, put_binary/2]).
 
 %% allowed_methods/2
 %% ====================================================================
 %% @doc
 %% Returns binary list of methods that are allowed (i.e GET, PUT, DELETE).
 %% @end
-%% ====================================================================
 -spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
 
+%% malformed_request/2
+%% ====================================================================
+%% @doc
+%% Checks if request contains all mandatory fields and their values are set properly
+%% depending on requested operation
+%% @end
+-spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
+%% ====================================================================
+malformed_request(Req, #state{cdmi_version = Version, method = <<"PUT">>} = State) when is_binary(Version) ->
+    {<<"application/cdmi-container">>, Req2} = cowboy_req:header(<<"content-type">>, Req),
+    {false, Req2, State};
+malformed_request(Req, State) ->
+    {false, Req, State}.
+
 %% resource_exists/2
 %% ====================================================================
-%% Determines if resource, that can be obtained from state, exists.
-%% @end
-%% ====================================================================
+%% @doc Determines if resource, that can be obtained from state, exists.
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 resource_exists(Req, State = #state{filepath = Filepath}) ->
@@ -46,6 +55,7 @@ resource_exists(Req, State = #state{filepath = Filepath}) ->
 
 %% content_types_provided/2
 %% ====================================================================
+%% @doc
 %% Returns content types that can be provided and what functions should be used to process the request.
 %% Before adding new content type make sure that adequate routing function
 %% exists in cdmi_handler
@@ -73,6 +83,10 @@ content_types_provided(Req, State) ->
     ContentType :: binary(),
     Method :: atom().
 %% ====================================================================
+content_types_accepted(Req, #state{cdmi_version = undefined} = State) ->
+    {[
+        {'*', put_binary}
+    ], Req, State};
 content_types_accepted(Req, State) ->
     {[
         {<<"application/cdmi-container">>, put_cdmi_container}
@@ -81,8 +95,6 @@ content_types_accepted(Req, State) ->
 %% delete_resource/3
 %% ====================================================================
 %% @doc Deletes the resource. Returns whether the deletion was successful.
-%% @end
-%% ====================================================================
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 delete_resource(Req, #state{filepath = Filepath} = State) ->
@@ -90,9 +102,7 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
         false ->
             fs_remove_dir(Filepath),
             {true, Req, State};
-        true ->
-            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_forbidden_code, Req]),
-            {halt, Req2, State}
+        true -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Deleting group dir, which is forbidden",[])
     end.
 
 %% ====================================================================
@@ -104,8 +114,7 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
 
 %% get_cdmi_container/2
 %% ====================================================================
-%% @doc Callback function for cdmi container GET operation (create dir)
-%% @end
+%% @doc Callback function for cdmi container GET operation (list dir)
 -spec get_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_cdmi_container(Req, #state{opts = Opts} = State) ->
@@ -116,24 +125,39 @@ get_cdmi_container(Req, #state{opts = Opts} = State) ->
 %% put_cdmi_container/2
 %% ====================================================================
 %% @doc Callback function for cdmi container PUT operation (create dir)
-%% @end
 -spec put_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:mkdir(Filepath) of
         ok -> %todo check given body
-            Response = rest_utils:encode_to_json({struct, prepare_container_ans(?default_post_dir_opts, State)}),
-            Req2 = cowboy_req:set_resp_body(Response, Req),
-            {true, Req2, State};
-        {error, dir_exists} ->
-            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_conflict_code, Req]),
-            {halt, Req2, State};
-        {logical_file_system_error, "enoent"} ->
-            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_not_found_code, Req]),
-            {halt, Req2, State};
-        _ ->
-            {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [?error_forbidden_code, Req]),
-            {halt, Req2, State}
+            case logical_files_manager:getfileattr(Filepath) of
+                {ok, Attr} ->
+                    Response = rest_utils:encode_to_json(
+                        {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr})}),
+                    Req2 = cowboy_req:set_resp_body(Response, Req),
+                    {true, Req2, State};
+                Error ->
+                    logical_files_manager:rmdir(Filepath),
+                    cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Cannot get dir attrs: ~p",[Error])
+            end;
+        {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?error_conflict_code, "Dir creation conflict",[]);
+        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?error_not_found_code, "Parent dir not found",[]);
+        Error -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Dir creation error: ~p",[Error])
+    end.
+
+%% put_binary/2
+%% ====================================================================
+%% @doc Callback function for cdmi container PUT operation with non-cdmi
+%% body content-type.
+%% @end
+-spec put_binary(req(), #state{}) -> {term(), req(), #state{}}.
+%% ====================================================================
+put_binary(Req, #state{filepath = Filepath} = State) ->
+    case logical_files_manager:mkdir(Filepath) of
+        ok -> {true, Req, State};
+        {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?error_conflict_code, "Dir creation conflict",[]);
+        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?error_not_found_code, "Parent dir not found",[]);
+        Error -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Dir creation error: ~p",[Error])
     end.
 
 %% ====================================================================
@@ -143,27 +167,42 @@ put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
 %% prepare_container_ans/2
 %% ====================================================================
 %% @doc Prepares proplist formatted answer with field names from given list of binaries
-%% @end
 -spec prepare_container_ans([FieldName :: binary()], #state{}) -> [{FieldName :: binary(), Value :: term()}].
 %% ====================================================================
 prepare_container_ans([], _State) ->
     [];
 prepare_container_ans([<<"objectType">> | Tail], State) ->
     [{<<"objectType">>, <<"application/cdmi-container">>} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"objectID">> | Tail], #state{filepath = Filepath} = State) ->
+    {ok, Uuid} = logical_files_manager:get_file_uuid(Filepath),
+    [{<<"objectID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"objectName">>, list_to_binary([filename:basename(Filepath), "/"])} | prepare_container_ans(Tail, State)];
-prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = <<"/">>} = State) ->
-    [{<<"parentURI">>, <<>>} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = "/"} = State) ->
+    prepare_container_ans(Tail, State);
 prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_container_ans(Tail, State)];
+    ParentURI = case fslogic_path:strip_path_leaf(Filepath) of
+                    "/" -> <<"/">>;
+                    Other -> list_to_binary(Other)
+                end,
+    [{<<"parentURI">>, ParentURI} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"parentID">> | Tail], #state{filepath = "/"} = State) ->
+    prepare_container_ans(Tail, State);
+prepare_container_ans([<<"parentID">> | Tail], #state{filepath = Filepath} = State) ->
+    {ok,Uuid} = logical_files_manager:get_file_uuid(fslogic_path:strip_path_leaf(Filepath)),
+    [{<<"parentID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"capabilitiesURI">> | Tail], State) ->
+    [{<<"capabilitiesURI">>, list_to_binary(?container_capability_path)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(Tail, State)];
-prepare_container_ans([<<"metadata">> | Tail], State) -> %todo extract metadata
-    [{<<"metadata">>, <<>>} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->
+    [{<<"metadata">>, rest_utils:prepare_metadata(Attrs)} | prepare_container_ans(Tail, State)];
+prepare_container_ans([{<<"metadata">>, Prefix} | Tail], #state{attributes = Attrs} = State) ->
+    [{<<"metadata">>, rest_utils:prepare_metadata(Prefix, Attrs)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(Tail, State)];
-prepare_container_ans([Other | Tail], State) ->
-    [{Other, <<>>} | prepare_container_ans(Tail, State)].
+prepare_container_ans([_Other | Tail], State) ->
+    prepare_container_ans(Tail, State).
 
 %% fs_remove/1
 %% ====================================================================
@@ -227,8 +266,8 @@ fs_list_dir(Path, Offset, Count, Result) ->
 -spec is_group_dir(Path :: string()) -> boolean().
 %% ====================================================================
 is_group_dir(Path) ->
-    case string:tokens(Path, "/") of
-        [?GROUPS_BASE_DIR_NAME] -> true;
-        [?GROUPS_BASE_DIR_NAME, _GroupName] -> true;
+    case string:tokens(Path,"/") of
+        [?SPACES_BASE_DIR_NAME] -> true;
+        [?SPACES_BASE_DIR_NAME , _GroupName] ->  true;
         _ -> false
     end.
