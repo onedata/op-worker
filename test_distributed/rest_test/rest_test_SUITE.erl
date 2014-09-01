@@ -395,7 +395,7 @@ init_per_testcase(main_test, Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    Nodes = test_node_starter:start_test_nodes(1),
+    Nodes = test_node_starter:start_test_nodes(1, true),
     [Node1 | _] = Nodes,
 
 
@@ -403,6 +403,7 @@ init_per_testcase(main_test, Config) ->
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
+            {initialization_time, 1},
             {dispatcher_port, 5055},
             {ccm_nodes, [Node1]},
             {dns_port, 1308},
