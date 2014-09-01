@@ -51,14 +51,11 @@ body() ->
                                 page_error:redirect_with_error(?error_openid_login_error);
                             {ok, Proplist} ->
                                 {Login, UserDoc} = user_logic:sign_in(Proplist, <<"">>),
-                                % This is a non production login flow. If it was used, use mock spaces
-                                % for the user so no GR is required (set role to developer).
-                                {ok, NewDoc} = user_logic:update_role(UserDoc, developer),
                                 LogoutToken = vcn_gui_utils:gen_logout_token(),
                                 gui_ctx:create_session(),
                                 gui_ctx:set_user_id(Login),
-                                vcn_gui_utils:set_user_fullname(user_logic:get_name(NewDoc)),
-                                vcn_gui_utils:set_user_role(user_logic:get_role(NewDoc)),
+                                vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
+                                vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
                                 vcn_gui_utils:set_logout_token(LogoutToken),
                                 gui_jq:redirect_from_login(),
                                 ?debug("User ~p logged in", [Login])
