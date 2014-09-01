@@ -24,4 +24,4 @@ set(GTEST_LIBRARIES ${GTEST_LIBRARIES} PARENT_SCOPE)
 
 add_custom_command(OUTPUT ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES} DEPENDS gmockBuild)
 add_custom_target(gmock DEPENDS ${GMOCK_LIBRARIES})
-add_custom_target(gtest DEPENDS ${GMOCK_LIBRARIES})
+add_custom_target(gtest DEPENDS ${GTEST_LIBRARIES})
