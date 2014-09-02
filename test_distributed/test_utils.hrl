@@ -33,7 +33,7 @@
                         end).
 
 %% Veilcluster dependencies
--define(VEIL_DEPS, [sasl,lager,ssl,cowlib,ranch,cowboy,ibrowse,meck]).
+-define(VEIL_DEPS, [sasl,lager,ssl,cowlib,ranch,cowboy,ibrowse,gproc,meck]).
 
 %% Returns absolute path to given file using virtual CWD which equals to current SUITE directory
 -define(TEST_FILE(X), filename:join(ets:match(suite_state, {test_root, '$1'}) ++ [X])).

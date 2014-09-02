@@ -153,8 +153,10 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
                        end,
             Base64EncodedSize = byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4 * ceil(DataSize / 3.0)),
 
+            UserDN = fslogic_context:get_user_dn(),
             StreamFun = fun(Socket, Transport) ->
                 try
+                    fslogic_context:set_user_dn(UserDN),
                     Transport:send(Socket, JsonBodyPrefix),
                     {ok, BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
                     stream_file(Socket, Transport, State, Range, <<"base64">>, BufferSize), %todo send also utf-8 when possible)
