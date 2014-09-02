@@ -1407,7 +1407,7 @@ static_dispatches(DocRoot, StaticPaths) ->
         {Dir ++ "[...]", veil_cowboy_bridge,
             [
                 {delegation, true},
-                {handler_module, static_file_handler},
+                {handler_module, cowboy_static},
                 {handler_opts, {dir, DocRoot ++ Dir}}
             ]}
     end, StaticPaths).
