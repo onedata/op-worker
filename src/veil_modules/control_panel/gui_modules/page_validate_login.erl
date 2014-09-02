@@ -67,8 +67,7 @@ body() ->
                                         mock(AllNodes, gr_users, get_spaces, fun(_) ->
                                             {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
                                         mock(AllNodes, gr_adapter, get_space_info, fun(SpaceId, _) ->
-                                            {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [<<"providerId">>]}} end),
-                                        application:set_env(veil_cluster_node, spaces_mocked, true)
+                                            {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [<<"providerId">>]}} end)
                                 end,
 
                                 {Login, UserDoc} = user_logic:sign_in(Proplist, <<"">>),
@@ -104,5 +103,7 @@ event(terminate) -> ok.
 mock(NodesUp, Module, Method, Fun) ->
     meck:new(Module, [passthrough, non_strict, unstick, no_link]),
     meck:expect(Module, Method, Fun),
+    application:set_env(veil_cluster_node, spaces_mocked, true),
     {_, []} = rpc:multicall(NodesUp, meck, new, [Module, [passthrough, non_strict, unstick, no_link]]),
-    {_, []} = rpc:multicall(NodesUp, meck, expect, [Module, Method, Fun]).
+    {_, []} = rpc:multicall(NodesUp, meck, expect, [Module, Method, Fun]),
+    {_, []} = rpc:multicall(application, set_env, [veil_cluster_node, spaces_mocked, true]).
