@@ -137,7 +137,7 @@ message ChangeFilePerms {
     required int32 perms = 2;
 }
 
-message CheckPerms {
+message CheckFilePerms {
     required string file_logic_name = 1;
     required string type = 2 [default = "root"];
 }
