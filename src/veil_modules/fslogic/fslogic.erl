@@ -294,6 +294,10 @@ handle_fuse_message(Req = #changefileperms{file_logic_name = FName, perms = Perm
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:change_file_perms(FullFileName, Perms);
 
+handle_fuse_message(Req = #checkperms{file_logic_name = FName, type = Type}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:check_file_perms(FullFileName, Type);
+
 handle_fuse_message(Req = #getfileattr{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:get_file_attr(FullFileName);
