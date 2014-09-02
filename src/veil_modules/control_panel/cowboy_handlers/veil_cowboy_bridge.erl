@@ -35,8 +35,11 @@
 -export([websocket_init/3, websocket_handle/3, websocket_info/3, websocket_terminate/3]).
 
 %% Cowboy REST handler API
--export([rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2]).
--export([content_types_accepted/2, delete_resource/2]).
+%% This is not the full cowboy API. If needed, more functions can be added to this bridge.
+-export([rest_init/2, malformed_request/2, known_methods/2, allowed_methods/2, is_authorized/2, options/2, resource_exists/2]).
+-export([content_types_provided/2, languages_provided/2, charsets_provided/2]).
+-export([moved_permanently/2, moved_temporarily/2, content_types_accepted/2, delete_resource/2]).
+-export([generate_etag/2, last_modified/2, expires/2, forbidden/2]).
 %% REST handler specific funs
 -export([get_resource/2, handle_urlencoded_data/2, handle_json_data/2, handle_multipart_data/2]).
 %% CDMI handler specific funs
@@ -45,7 +48,7 @@
 %% Static file handler specific funs
 -export([get_file/2]).
 
-%% This is an internal function, but must be exported to user ?MODULE: in recursion.
+%% This is an internal function, but must be exported to use ?MODULE: in recursion.
 -export([delegation_loop/1]).
 
 %% ====================================================================
@@ -250,6 +253,28 @@ rest_init(Req, Opts) ->
     delegate(rest_init, [Req, HandlerOpts]).
 
 
+%% malformed_request/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Checks request validity.
+%% @end
+-spec malformed_request(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+%% ====================================================================
+malformed_request(Req, State) ->
+    delegate(malformed_request, [Req, State], true).
+
+
+%% known_methods/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns methods resolvable by the handler.
+%% @end
+-spec known_methods(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
+%% ====================================================================
+known_methods(Req, State) ->
+    delegate(known_methods, [Req, State], true).
+
+
 %% allowed_methods/2
 %% ====================================================================
 %% @doc Cowboy callback function.
@@ -258,7 +283,29 @@ rest_init(Req, Opts) ->
 -spec allowed_methods(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 allowed_methods(Req, State) ->
-    delegate(allowed_methods, [Req, State]).
+    delegate(allowed_methods, [Req, State], true).
+
+
+%% is_authorized/2
+%% ====================================================================
+%% @doc Cowboy callback function.
+%% Returns true or false if the client is authorized to perform such request.
+%% @end
+-spec is_authorized(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+%% ====================================================================
+is_authorized(Req, State) ->
+    delegate(is_authorized, [Req, State], true).
+
+
+%% options/2
+%% ====================================================================
+%% @doc Cowboy callback function.
+%% Returns options / requirements associated with a resource.
+%% @end
+-spec options(Req :: req(), State :: term()) -> {Result :: [term()], NewReq :: req(), NewState :: term()}.
+%% ====================================================================
+options(Req, State) ->
+    delegate(options, [Req, State], true).
 
 
 %% content_types_provided/2
@@ -270,7 +317,51 @@ allowed_methods(Req, State) ->
 -spec content_types_provided(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 content_types_provided(Req, State) ->
-    delegate(content_types_provided, [Req, State]).
+    delegate(content_types_provided, [Req, State], true).
+
+
+%% languages_provided/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns list of languages in which the response can be sent.
+%% @end
+-spec languages_provided(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
+%% ====================================================================
+languages_provided(Req, State) ->
+    delegate(languages_provided, [Req, State], true).
+
+
+%% charsets_provided/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns list of charsets in which the response can be encoded.
+%% @end
+-spec charsets_provided(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
+%% ====================================================================
+charsets_provided(Req, State) ->
+    delegate(charsets_provided, [Req, State], true).
+
+
+%% moved_permanently/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns false or {true, Location}.
+%% @end
+-spec moved_permanently(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+%% ====================================================================
+moved_permanently(Req, State) ->
+    delegate(moved_permanently, [Req, State], true).
+
+
+%% moved_temporarily/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns false or {true, Location}.
+%% @end
+-spec moved_temporarily(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+%% ====================================================================
+moved_temporarily(Req, State) ->
+    delegate(moved_temporarily, [Req, State], true).
 
 
 %% resource_exists/2
@@ -281,7 +372,51 @@ content_types_provided(Req, State) ->
 -spec resource_exists(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 resource_exists(Req, State) ->
-    delegate(resource_exists, [Req, State]).
+    delegate(resource_exists, [Req, State], true).
+
+
+%% generate_etag/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns an etag generated from a static file.
+%% @end
+-spec generate_etag(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), NewState :: term()}.
+%% ====================================================================
+generate_etag(Req, State) ->
+    delegate(generate_etag, [Req, State], true).
+
+
+%% last_modified/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns file's modification time.
+%% @end
+-spec last_modified(Req :: req(), State :: term()) -> {Result :: integer(), NewReq :: req(), NewState :: term()}.
+%% ====================================================================
+last_modified(Req, State) ->
+    delegate(last_modified, [Req, State], true).
+
+
+%% expires/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns time of expiration of a resource.
+%% @end
+-spec expires(Req :: req(), State :: term()) -> {Result :: integer(), NewReq :: req(), NewState :: term()}.
+%% ====================================================================
+expires(Req, State) ->
+    delegate(expires, [Req, State], true).
+
+
+%% forbidden/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns true if access to a resource is forbidden.
+%% @end
+-spec forbidden(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+%% ====================================================================
+forbidden(Req, State) ->
+    delegate(forbidden, [Req, State], true).
 
 
 %% get_resource/2
@@ -478,18 +613,30 @@ terminate_handling_process() ->
 %% @doc Function used to delegate a cowboy callback. Depending on if the
 %% delegation flag was set to true, this will contact a handling process
 %% or cause the socket process to evaluate the callback.
+%% FailWithNoCall flag allows returning a no_call atom to cowboy,
+%% which tells it that the function is not implemented so it can
+%% decide for itself what to do. This is useful with optional cowboy
+%% callbacks (mostly REST).
 %% @end
 -spec delegate(Fun :: function(), Args :: [term()]) -> term().
 %% ====================================================================
 delegate(Fun, Args) ->
+    delegate(Fun, Args, false).
+
+delegate(Fun, Args, FailWithNoCall) ->
     HandlerModule = get_handler_module(),
-    case get_delegation() of
+    case (FailWithNoCall) andalso (not erlang:function_exported(HandlerModule, Fun, Args)) of
         true ->
-            HandlerPid = get_handler_pid(),
-            HandlerPid ! {apply, HandlerModule, Fun, Args},
-            delegation_loop(HandlerPid);
+            no_call;
         false ->
-            erlang:apply(HandlerModule, Fun, Args)
+            case get_delegation() of
+                true ->
+                    HandlerPid = get_handler_pid(),
+                    HandlerPid ! {apply, HandlerModule, Fun, Args},
+                    delegation_loop(HandlerPid);
+                false ->
+                    erlang:apply(HandlerModule, Fun, Args)
+            end
     end.
 
 
