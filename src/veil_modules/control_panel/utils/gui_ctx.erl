@@ -20,7 +20,10 @@
 -export([get_requested_hostname/0, get_requested_page/0, get_request_params/0]).
 
 % Parameters querying
--export([postback_param/1, url_param/1, form_params/0, cookie/1, cookie/2]).
+-export([postback_param/1, url_param/1, form_params/0]).
+
+% Cookies
+-export([cookie/1, cookie/2]).
 
 
 %% ====================================================================
@@ -183,6 +186,7 @@ form_params() ->
 %% ====================================================================
 %% @doc Returns cookie value for given cookie name. Undefined if no such cookie was sent.
 %% Uses the http_req record from context (wf_context).
+%% NOTE! This should be used instead of cowboy_req:cookie as it contains a bug.
 %% @end
 -spec cookie(Name :: binary()) -> binary() | undefined.
 %% ====================================================================
@@ -193,6 +197,7 @@ cookie(Name) ->
 %% cookie/2
 %% ====================================================================
 %% @doc Returns cookie value for given cookie name. Undefined if no such cookie was sent.
+%% NOTE! This should be used instead of cowboy_req:cookie as it contains a bug.
 %% @end
 -spec cookie(Name :: binary(), Req :: req()) -> binary() | undefined.
 %% ====================================================================
