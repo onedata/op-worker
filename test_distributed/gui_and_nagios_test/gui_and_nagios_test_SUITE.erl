@@ -100,6 +100,7 @@ init_per_testcase(main_test, Config) ->
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
+            {initialization_time, 1},
             {dispatcher_port, 5055},
             {ccm_nodes, [Node1]},
             {dns_port, 1308},
