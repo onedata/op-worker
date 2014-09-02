@@ -146,8 +146,7 @@ cookie_policy_popup_body(PrivacyPolicyURL) ->
 -spec is_cookie_policy_accepted(Req :: req()) -> term().
 %% ====================================================================
 is_cookie_policy_accepted(Req) ->
-    {Cookie, _} = cowboy_req:cookie(<<?cookie_policy_cookie_name>>, Req),
-    case Cookie of
+    case gui_ctx:cookie(?cookie_policy_cookie_name) of
         <<"true">> -> true;
         _ -> false
     end.

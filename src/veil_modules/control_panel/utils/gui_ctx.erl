@@ -20,7 +20,7 @@
 -export([get_requested_hostname/0, get_requested_page/0, get_request_params/0]).
 
 % Parameters querying
--export([postback_param/1, url_param/1, form_params/0]).
+-export([postback_param/1, url_param/1, form_params/0, cookie/1]).
 
 
 %% ====================================================================
@@ -178,3 +178,17 @@ form_params() ->
     {ok, Params, _Req} = cowboy_req:body_qs(?REQ),
     Params.
 
+
+%% cookie/1
+%% ====================================================================
+%% @doc Returns cookie value for given cookie name. Undefined if no such cookie was sent.
+%% @end
+-spec cookie(Name :: binary()) -> binary() | undefined.
+%% ====================================================================
+cookie(Name) ->
+    try
+        {Value, _Req} = cowboy_req:cookie(Name, ?REQ),
+        Value
+    catch _:_ ->
+        undefined
+    end.
