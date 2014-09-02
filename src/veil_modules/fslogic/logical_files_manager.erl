@@ -28,7 +28,8 @@
 %% Logical file organization management (only db is used)
 -export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1]).
 %% File access (db and helper are used)
--export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1, change_file_perm/2]).
+-export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
+-export([change_file_perm/2, check_file_perm/2]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
@@ -542,6 +543,28 @@ change_file_perm(FileName, NewPerms) ->
       end;
     _ -> {Status, TmpAns}
   end.
+
+%% check_file_perms/2
+%% ====================================================================
+%% @doc Checks permissions to open the file in chosen mode.
+%% @end
+-spec check_file_perm(FileName :: string(), Type :: root | owner | delete | read | write | execute | rdwr | '') -> Result when
+    Result :: ok | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+check_file_perm(FileName, Type) ->
+    Record = #checkfileperms{file_logic_name = FileName, type = Type},
+    {Status, TmpAns} = contact_fslogic(Record),
+    case Status of
+        ok ->
+            Response = TmpAns#atom.value,
+            case Response of
+                ?VOK -> true;                    
+                _ -> false
+            end;
+        _ -> {Status, TmpAns}
+    end.
 
 %% exists/1
 %% ====================================================================

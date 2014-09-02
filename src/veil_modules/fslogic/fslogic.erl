@@ -294,7 +294,7 @@ handle_fuse_message(Req = #changefileperms{file_logic_name = FName, perms = Perm
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:change_file_perms(FullFileName, Perms);
 
-handle_fuse_message(Req = #checkperms{file_logic_name = FName, type = Type}) ->
+handle_fuse_message(Req = #checkfileperms{file_logic_name = FName, type = Type}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:check_file_perms(FullFileName, Type);
 
@@ -415,6 +415,8 @@ extract_logical_path(#changefileowner{file_logic_name = Path}) ->
 extract_logical_path(#changefilegroup{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#changefileperms{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#checkfileperms{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#updatetimes{file_logic_name = Path}) ->
     Path;

@@ -88,6 +88,8 @@ gen_error_message(changefilegroup, Error) ->
     #atom{value = Error};
 gen_error_message(changefileperms, Error) ->
     #atom{value = Error};
+gen_error_message(checkfileperms, Error) ->
+    #atom{value = Error};
 gen_error_message(updatetimes, Error) ->
     #atom{value = Error};
 gen_error_message(createlink, Error) ->
