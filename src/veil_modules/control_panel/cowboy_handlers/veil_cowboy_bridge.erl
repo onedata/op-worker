@@ -156,12 +156,12 @@ init(Type, Req, Opts) ->
         true ->
             case spawn_handling_process() of
                 ok ->
-                    delegate(init, [Type, Req, HandlerOpts]);
+                    delegate(init, [Type, Req, HandlerOpts], 3);
                 _ ->
                     {shutdown, Req}
             end;
         false ->
-            delegate(init, [Type, Req, HandlerOpts])
+            delegate(init, [Type, Req, HandlerOpts], 3)
     end.
 
 
@@ -172,7 +172,7 @@ init(Type, Req, Opts) ->
 -spec handle(Req :: term(), State :: term()) -> {ok, NewReq :: term(), State :: term()}.
 %% ====================================================================
 handle(Req, State) ->
-    delegate(handle, [Req, State]).
+    delegate(handle, [Req, State], 2).
 
 
 %% terminate/3
@@ -182,7 +182,7 @@ handle(Req, State) ->
 -spec terminate(Reason :: term(), Req :: term(), State :: term()) -> ok.
 %% ====================================================================
 terminate(Reason, Req, State) ->
-    delegate(terminate, [Reason, Req, State]),
+    delegate(terminate, [Reason, Req, State], 3),
     case get_delegation() of
         true ->
             terminate_handling_process();
@@ -203,7 +203,7 @@ terminate(Reason, Req, State) ->
 %% ====================================================================
 websocket_init(Transport, Req, Opts) ->
     HandlerOpts = proplists:get_value(handler_opts, Opts, []),
-    delegate(websocket_init, [Transport, Req, HandlerOpts]).
+    delegate(websocket_init, [Transport, Req, HandlerOpts], 3).
 
 
 %% websocket_handle/3
@@ -214,7 +214,7 @@ websocket_init(Transport, Req, Opts) ->
 -spec websocket_handle(Data :: term(), Req :: term(), State :: term()) -> ok.
 %% ====================================================================
 websocket_handle(Data, Req, State) ->
-    delegate(websocket_handle, [Data, Req, State]).
+    delegate(websocket_handle, [Data, Req, State], 3).
 
 
 %% websocket_info/3
@@ -224,7 +224,7 @@ websocket_handle(Data, Req, State) ->
 -spec websocket_info(Info :: term(), Req :: term(), State :: term()) -> ok.
 %% ====================================================================
 websocket_info(Info, Req, State) ->
-    delegate(websocket_info, [Info, Req, State]).
+    delegate(websocket_info, [Info, Req, State], 3).
 
 
 %% websocket_terminate/3
@@ -234,7 +234,7 @@ websocket_info(Info, Req, State) ->
 -spec websocket_terminate(Reason :: term(), Req :: term(), State :: term()) -> ok.
 %% ====================================================================
 websocket_terminate(Reason, Req, State) ->
-    delegate(websocket_terminate, [Reason, Req, State]),
+    delegate(websocket_terminate, [Reason, Req, State], 3),
     terminate_handling_process().
 
 
@@ -250,7 +250,7 @@ websocket_terminate(Reason, Req, State) ->
 %% ====================================================================
 rest_init(Req, Opts) ->
     HandlerOpts = proplists:get_value(handler_opts, Opts, []),
-    delegate(rest_init, [Req, HandlerOpts]).
+    delegate(rest_init, [Req, HandlerOpts], 2).
 
 
 %% malformed_request/2
@@ -261,7 +261,7 @@ rest_init(Req, Opts) ->
 -spec malformed_request(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 malformed_request(Req, State) ->
-    delegate(malformed_request, [Req, State], true).
+    delegate(malformed_request, [Req, State], 2, true).
 
 
 %% known_methods/2
@@ -272,7 +272,7 @@ malformed_request(Req, State) ->
 -spec known_methods(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 known_methods(Req, State) ->
-    delegate(known_methods, [Req, State], true).
+    delegate(known_methods, [Req, State], 2, true).
 
 
 %% allowed_methods/2
@@ -283,7 +283,7 @@ known_methods(Req, State) ->
 -spec allowed_methods(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 allowed_methods(Req, State) ->
-    delegate(allowed_methods, [Req, State], true).
+    delegate(allowed_methods, [Req, State], 2, true).
 
 
 %% is_authorized/2
@@ -294,7 +294,7 @@ allowed_methods(Req, State) ->
 -spec is_authorized(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 is_authorized(Req, State) ->
-    delegate(is_authorized, [Req, State], true).
+    delegate(is_authorized, [Req, State], 2, true).
 
 
 %% options/2
@@ -305,7 +305,7 @@ is_authorized(Req, State) ->
 -spec options(Req :: req(), State :: term()) -> {Result :: [term()], NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 options(Req, State) ->
-    delegate(options, [Req, State], true).
+    delegate(options, [Req, State], 2, true).
 
 
 %% content_types_provided/2
@@ -317,7 +317,7 @@ options(Req, State) ->
 -spec content_types_provided(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 content_types_provided(Req, State) ->
-    delegate(content_types_provided, [Req, State], true).
+    delegate(content_types_provided, [Req, State], 2, true).
 
 
 %% languages_provided/2
@@ -328,7 +328,7 @@ content_types_provided(Req, State) ->
 -spec languages_provided(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 languages_provided(Req, State) ->
-    delegate(languages_provided, [Req, State], true).
+    delegate(languages_provided, [Req, State], 2, true).
 
 
 %% charsets_provided/2
@@ -339,7 +339,7 @@ languages_provided(Req, State) ->
 -spec charsets_provided(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 charsets_provided(Req, State) ->
-    delegate(charsets_provided, [Req, State], true).
+    delegate(charsets_provided, [Req, State], 2, true).
 
 
 %% moved_permanently/2
@@ -350,7 +350,7 @@ charsets_provided(Req, State) ->
 -spec moved_permanently(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 moved_permanently(Req, State) ->
-    delegate(moved_permanently, [Req, State], true).
+    delegate(moved_permanently, [Req, State], 2, true).
 
 
 %% moved_temporarily/2
@@ -361,7 +361,7 @@ moved_permanently(Req, State) ->
 -spec moved_temporarily(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 moved_temporarily(Req, State) ->
-    delegate(moved_temporarily, [Req, State], true).
+    delegate(moved_temporarily, [Req, State], 2, true).
 
 
 %% resource_exists/2
@@ -372,7 +372,7 @@ moved_temporarily(Req, State) ->
 -spec resource_exists(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 resource_exists(Req, State) ->
-    delegate(resource_exists, [Req, State], true).
+    delegate(resource_exists, [Req, State], 2, true).
 
 
 %% generate_etag/2
@@ -383,7 +383,7 @@ resource_exists(Req, State) ->
 -spec generate_etag(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 generate_etag(Req, State) ->
-    delegate(generate_etag, [Req, State], true).
+    delegate(generate_etag, [Req, State], 2, true).
 
 
 %% last_modified/2
@@ -394,7 +394,7 @@ generate_etag(Req, State) ->
 -spec last_modified(Req :: req(), State :: term()) -> {Result :: integer(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 last_modified(Req, State) ->
-    delegate(last_modified, [Req, State], true).
+    delegate(last_modified, [Req, State], 2, true).
 
 
 %% expires/2
@@ -405,7 +405,7 @@ last_modified(Req, State) ->
 -spec expires(Req :: req(), State :: term()) -> {Result :: integer(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 expires(Req, State) ->
-    delegate(expires, [Req, State], true).
+    delegate(expires, [Req, State], 2, true).
 
 
 %% forbidden/2
@@ -416,7 +416,7 @@ expires(Req, State) ->
 -spec forbidden(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 forbidden(Req, State) ->
-    delegate(forbidden, [Req, State], true).
+    delegate(forbidden, [Req, State], 2, true).
 
 
 %% get_resource/2
@@ -427,7 +427,7 @@ forbidden(Req, State) ->
 -spec get_resource(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 get_resource(Req, State) ->
-    delegate(get_resource, [Req, State]).
+    delegate(get_resource, [Req, State], 2, true).
 
 
 %% content_types_accepted/2
@@ -439,7 +439,7 @@ get_resource(Req, State) ->
 -spec content_types_accepted(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 content_types_accepted(Req, State) ->
-    delegate(content_types_accepted, [Req, State]).
+    delegate(content_types_accepted, [Req, State], 2, true).
 
 
 %% handle_urlencoded_data/2
@@ -449,7 +449,7 @@ content_types_accepted(Req, State) ->
 -spec handle_urlencoded_data(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 handle_urlencoded_data(Req, State) ->
-    delegate(handle_urlencoded_data, [Req, State]).
+    delegate(handle_urlencoded_data, [Req, State], 2).
 
 
 %% handle_json_data/2
@@ -459,7 +459,7 @@ handle_urlencoded_data(Req, State) ->
 -spec handle_json_data(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 handle_json_data(Req, State) ->
-    delegate(handle_json_data, [Req, State]).
+    delegate(handle_json_data, [Req, State], 2).
 
 
 %% handle_multipart_data/2
@@ -469,7 +469,7 @@ handle_json_data(Req, State) ->
 -spec handle_multipart_data(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 handle_multipart_data(Req, State) ->
-    delegate(handle_multipart_data, [Req, State]).
+    delegate(handle_multipart_data, [Req, State], 2).
 
 
 %% delete_resource/2
@@ -480,7 +480,7 @@ handle_multipart_data(Req, State) ->
 -spec delete_resource(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), NewState :: term()}.
 %% ====================================================================
 delete_resource(Req, State) ->
-    delegate(delete_resource, [Req, State]).
+    delegate(delete_resource, [Req, State], 2).
 
 
 %% ====================================================================
@@ -494,7 +494,7 @@ delete_resource(Req, State) ->
 -spec get_cdmi_container(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), term()}.
 %% ====================================================================
 get_cdmi_container(Req, State) ->
-    delegate(get_cdmi_container, [Req, State]).
+    delegate(get_cdmi_container, [Req, State], 2).
 
 
 %% get_cdmi_object/2
@@ -504,7 +504,7 @@ get_cdmi_container(Req, State) ->
 -spec get_cdmi_object(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
 %% ====================================================================
 get_cdmi_object(Req, State) ->
-    delegate(get_cdmi_object, [Req, State]).
+    delegate(get_cdmi_object, [Req, State], 2).
 
 
 %% get_binary/2
@@ -514,7 +514,7 @@ get_cdmi_object(Req, State) ->
 -spec get_binary(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
 %% ====================================================================
 get_binary(Req, State) ->
-    delegate(get_binary, [Req, State]).
+    delegate(get_binary, [Req, State], 2).
 
 
 %% put_cdmi_container/2
@@ -524,7 +524,7 @@ get_binary(Req, State) ->
 -spec put_cdmi_container(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
 %% ====================================================================
 put_cdmi_container(Req, State) ->
-    delegate(put_cdmi_container, [Req, State]).
+    delegate(put_cdmi_container, [Req, State], 2).
 
 
 %% put_cdmi_object/2
@@ -534,7 +534,7 @@ put_cdmi_container(Req, State) ->
 -spec put_cdmi_object(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
 %% ====================================================================
 put_cdmi_object(Req, State) ->
-    delegate(put_cdmi_object, [Req, State]).
+    delegate(put_cdmi_object, [Req, State], 2).
 
 
 %% put_binary/2
@@ -544,7 +544,7 @@ put_cdmi_object(Req, State) ->
 -spec put_binary(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
 %% ====================================================================
 put_binary(Req, State) ->
-    delegate(put_binary, [Req, State]).
+    delegate(put_binary, [Req, State], 2).
 
 
 %% get_cdmi_capability/2
@@ -554,7 +554,7 @@ put_binary(Req, State) ->
 -spec get_cdmi_capability(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
 %% ====================================================================
 get_cdmi_capability(Req, State) ->
-    delegate(get_cdmi_capability, [Req, State]).
+    delegate(get_cdmi_capability, [Req, State], 2).
 
 
 %% ====================================================================
@@ -568,7 +568,7 @@ get_cdmi_capability(Req, State) ->
 -spec get_file(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
 %% ====================================================================
 get_file(Req, State) ->
-    delegate(get_file, [Req, State]).
+    delegate(get_file, [Req, State], 2).
 
 
 %% ====================================================================
@@ -608,7 +608,7 @@ terminate_handling_process() ->
     get_handler_pid() ! terminate.
 
 
-%% delegate/2
+%% delegate/3
 %% ====================================================================
 %% @doc Function used to delegate a cowboy callback. Depending on if the
 %% delegation flag was set to true, this will contact a handling process
@@ -618,14 +618,16 @@ terminate_handling_process() ->
 %% decide for itself what to do. This is useful with optional cowboy
 %% callbacks (mostly REST).
 %% @end
--spec delegate(Fun :: function(), Args :: [term()]) -> term().
+-spec delegate(Fun :: function(), Args :: [term()], Arity :: integer()) -> term().
 %% ====================================================================
-delegate(Fun, Args) ->
-    delegate(Fun, Args, false).
+delegate(Fun, Args, Arity) ->
+    delegate(Fun, Args, Arity, false).
 
-delegate(Fun, Args, FailWithNoCall) ->
+-spec delegate(Fun :: function(), Args :: [term()], Arity :: integer(), FailWithNoCall :: boolean()) -> term().
+%% ====================================================================
+delegate(Fun, Args, Arity, FailWithNoCall) ->
     HandlerModule = get_handler_module(),
-    case (FailWithNoCall) andalso (not erlang:function_exported(HandlerModule, Fun, Args)) of
+    case (FailWithNoCall) andalso (not erlang:function_exported(HandlerModule, Fun, Arity)) of
         true ->
             no_call;
         false ->
