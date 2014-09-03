@@ -955,9 +955,9 @@ permissions_management_test(Config) ->
   ?assertEqual(Group, Group4),
 
     % Test to assert permission setting and checking in user context.
-    {InsertStorageAns, _} = rpc:call(Node, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
+    {InsertStorageAns, _} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
     ?assertEqual(ok, InsertStorageAns),
-    
+
     Cert1 = ?COMMON_FILE("peer.pem"),
     Teams1 = ?TEST_GROUP,
     Login1 = ?TEST_USER,
@@ -1043,7 +1043,9 @@ permissions_management_test(Config) ->
         end, ExpectedPerms),
 
     RemoveUserAns = rpc:call(Node1, user_logic, remove_user, [{dn, DN1}]),
-    ?assertEqual(ok, RemoveUserAns).
+    ?assertEqual(ok, RemoveUserAns),
+    RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+    ?assertEqual(ok, RemoveStorageAns).
 
 %% Checks user creation (root and dirs at storage creation).
 %% The test checks if directories for user and group files are created when the user is added to the system,
@@ -2366,7 +2368,7 @@ init_per_testcase(_, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(1, true),
+  NodesUp = test_node_starter:start_test_nodes(1),
   [FSLogicNode | _] = NodesUp,
 
   DB_Node = ?DB_NODE,
