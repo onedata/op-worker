@@ -554,13 +554,13 @@ change_file_perm(FileName, NewPerms) ->
     ErrorDetail :: term().
 %% ====================================================================
 check_file_perm(FileName, Type) ->
-    Record = #checkfileperms{file_logic_name = FileName, type = Type},
+    Record = #checkfileperms{file_logic_name = FileName, type = atom_to_list(Type)},
     {Status, TmpAns} = contact_fslogic(Record),
     case Status of
         ok ->
             Response = TmpAns#atom.value,
             case Response of
-                ?VOK -> true;                    
+                ?VOK -> true;
                 _ -> false
             end;
         _ -> {Status, TmpAns}

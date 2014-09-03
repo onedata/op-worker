@@ -154,8 +154,13 @@ handle_user_content_request(Req, Path) ->
             FileInfo =
                 try
                     UserFilePath = gui_str:binary_to_unicode_list(Path),
-                    {ok, #fileattributes{size = TrySize}} = logical_files_manager:getfileattr(UserFilePath),
-                    {UserFilePath, TrySize}
+                    case logical_files_manager:check_file_perm(UserFilePath, read) of
+                        false ->
+                            error_perms;
+                        true ->
+                            {ok, #fileattributes{size = TrySize}} = logical_files_manager:getfileattr(UserFilePath),
+                            {UserFilePath, TrySize}
+                    end
                 catch T2:M2 ->
                     ?warning_stacktrace("Cannot resolve fileattributes for user content request - ~p:~p", [T2, M2]),
                     error

@@ -150,7 +150,8 @@ change_file_perms(FullFileName, Perms) ->
 check_file_perms(FullFileName, Type) ->
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
     {ok, UserDoc} = fslogic_objects:get_user(),
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, list_to_existing_atom(Type)).
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, list_to_existing_atom(Type)),
+    #atom{value = ?VOK}.
 
 
 %% get_file_attr/2

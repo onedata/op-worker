@@ -1132,8 +1132,8 @@ item_list_md5(ItemList) ->
 
 is_group_dir(Path) ->
     case Path of
-        <<"/groups">> -> true;
-        <<"/groups", Rest>> -> case length(binary:split(Rest, <<"/">>, [global])) of
+        <<?SPACES_BASE_DIR_NAME>> -> true;
+        <<?SPACES_BASE_DIR_NAME, Rest>> -> case length(binary:split(Rest, <<"/">>, [global])) of
                                    2 -> true;
                                    _ -> false
                                end;
@@ -1235,14 +1235,7 @@ fs_get_share_uuid_by_filepath(Filepath) ->
     end.
 
 fs_has_perms(Path, CheckType) ->
-    true.
-%%     {ok, FullFilePath} = fslogic_path:get_full_file_name(gui_str:binary_to_unicode_list(Path)),
-%%     {ok, FileDoc} = fslogic_objects:get_file(FullFilePath),
-%%     {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
-%%     case fslogic_perms:check_file_perms(FullFilePath, UserDoc, FileDoc, CheckType) of
-%%         ok -> true;
-%%         _ -> false
-%%     end.
+    logical_files_manager:check_file_perm(gui_str:binary_to_unicode_list(Path), CheckType).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
