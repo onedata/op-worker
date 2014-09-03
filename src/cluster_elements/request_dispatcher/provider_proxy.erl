@@ -71,6 +71,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
 
     receive
         {response, MsgId, AnswerStatus, WorkerAnswer} ->
+            provider_proxy_con:report_ack(URL),
             ?debug("Answer for inter-provider pull request: ~p ~p", [AnswerStatus, WorkerAnswer]),
             case AnswerStatus of
                 ?VOK ->
@@ -81,6 +82,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
                     throw({invalid_status, InvalidStatus})
             end
     after 1000 ->
+        provider_proxy_con:report_timeout(URL),
         throw(reroute_timeout)
     end.
 

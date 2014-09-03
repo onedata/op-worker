@@ -415,6 +415,8 @@ create(File) ->
                       end;
                     _ -> {Status2, TmpAns2}
                   end;
+                {wrong_mknod_return_code, -17} ->
+                  {error, file_exists};
                 StorageBadAns ->
                   StorageBadAns
               end;

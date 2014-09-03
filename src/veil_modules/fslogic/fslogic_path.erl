@@ -17,7 +17,7 @@
 
 %% API
 -export([get_user_file_name/1, get_user_file_name/2]).
--export([get_full_file_name/1, get_full_file_name/2, get_full_file_name/4]).
+-export([get_full_file_name/1, get_full_file_name/2, get_full_file_name/4, get_short_file_name/1]).
 -export([verify_file_name/1, absolute_join/1]).
 -export([strip_path_leaf/1, basename/1]).
 -export([get_parent_and_name_from_path/2]).
@@ -57,6 +57,39 @@ get_user_file_name(FullFileName, UserDoc) ->
         _ ->
             filename:join(Tokens)
     end.
+
+
+%% get_short_file_name/1
+%% ====================================================================
+%% @doc Strips "/spaces/SpaceName" form given path if SpaceName is default spaces of current user.
+%% @end
+-spec get_short_file_name(FullFileName :: string()) -> Result when
+    Result :: UserFileName :: string() | no_return().
+%% ====================================================================
+get_short_file_name(FullFileName) ->
+    {_, UserDoc} = fslogic_objects:get_user(),
+    get_short_file_name(FullFileName, UserDoc).
+
+
+%% get_short_file_name/2
+%% ====================================================================
+%% @doc Strips "/spaces/SpaceName" form given path if SpaceName is default spaces of selected user.
+%% @end
+-spec get_short_file_name(FullFileName :: string(), UserDoc :: #veil_document{}) -> Result when
+    Result :: UserFileName :: string() | no_return().
+%% ====================================================================
+get_short_file_name(FullFileName, UserDoc) ->
+    get_short_file_name1(filename:split(FullFileName), UserDoc).
+get_short_file_name1([?SPACES_BASE_DIR_NAME, SpaceName | Tokens], #veil_document{record = #user{spaces = [DefaultSpaceId | _]}}) ->
+    {ok, #space_info{name = DefaultSpaceName}} = fslogic_objects:get_space({uuid, DefaultSpaceId}),
+    case unicode:characters_to_list(DefaultSpaceName) of
+        SpaceName -> absolute_join(Tokens);
+        _         -> absolute_join([?SPACES_BASE_DIR_NAME, SpaceName] ++ Tokens)
+    end;
+get_short_file_name1(Tokens, _UserDoc) ->
+    absolute_join(Tokens).
+
+
 
 
 %% get_full_file_name/1

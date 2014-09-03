@@ -28,10 +28,10 @@
 ]).
 
 %% API
--export([ensure_running/0, get_msg_id/0, send/3, main_loop/1]).
+-export([ensure_running/0, get_msg_id/0, send/3, main_loop/1, reset_connection/1, report_ack/1, report_timeout/1]).
 
 %% Connection master's state record
--record(ppcon_state, {msg_id = 0, connections = #{}, inbox = #{}}).
+-record(ppcon_state, {msg_id = 0, connections = #{}, inbox = #{}, error_counter = #{}}).
 
 %% ====================================================================
 %% API functions
@@ -64,6 +64,39 @@ ensure_running() ->
 get_msg_id() ->
     ensure_running(),
     exec(get_msg_id).
+
+
+%% reset_connection/1
+%% ====================================================================
+%% @doc Resets connection to selected HostName.
+%% @end
+-spec reset_connection(HostName :: string()) -> ok.
+%% ====================================================================
+reset_connection(HostName) ->
+    ensure_running(),
+    exec({reset_connection, HostName}).
+
+
+%% report_timeout/1
+%% ====================================================================
+%% @doc Report that answer message wasn't successfully delivered. Connection manager will increment its error counter for this HostName.
+%% @end
+-spec report_timeout(HostName :: string()) -> ok.
+%% ====================================================================
+report_timeout(HostName) ->
+    ensure_running(),
+    exec({report_timeout, HostName}).
+
+
+%% report_ack/1
+%% ====================================================================
+%% @doc Report that answer message was successfully delivered. Connection manager will reset its error counter for this HostName.
+%% @end
+-spec report_ack(HostName :: string()) -> ok.
+%% ====================================================================
+report_ack(HostName) ->
+    ensure_running(),
+    exec({report_ack, HostName}).
 
 
 %% send/3
@@ -129,10 +162,25 @@ main_loop() ->
 %% @end
 -spec main_loop(State :: #ppcon_state{}) -> Result :: any().
 %% ====================================================================
-main_loop(#ppcon_state{msg_id = CurrentMsgId, connections = Connections, inbox = Inbox} = State) ->
+main_loop(#ppcon_state{msg_id = CurrentMsgId, connections = Connections, inbox = Inbox, error_counter = Errors} = State) ->
     NewState =
 
         receive
+            {From, {report_timeout, HostName}} ->
+                From ! {self(), ok},
+                case maps:get(HostName, Errors, 0) of
+                    Counter when Counter > 3 ->
+                        ?error("There were over 3 timeouts in row for connection with ~p. Reseting the connection...", [HostName]),
+                        State#ppcon_state{connections = maps:remove(HostName, Connections), error_counter = maps:remove(HostName, Errors)};
+                    _ ->
+                        State#ppcon_state{error_counter = maps:put(HostName, maps:get(HostName, Errors, 0) + 1, Errors)}
+                end;
+            {From, {report_ack, HostName}} ->
+                From ! {self(), ok},
+                State#ppcon_state{error_counter = maps:remove(HostName, Errors)};
+            {From, {reset_connection, HostName}} ->
+                From ! {self(), ok},
+                State#ppcon_state{connections = maps:remove(HostName, Connections)};
             {From, get_msg_id} ->
                 From ! {self(), CurrentMsgId},
                 State#ppcon_state{msg_id = CurrentMsgId + 1};

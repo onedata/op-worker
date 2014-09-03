@@ -58,7 +58,7 @@ malformed_request(Req, State = #state{filepath = Filepath}) ->
                        false ->
                            case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
                                {ok, Name} when is_list(Name) ->Name,
-                                   Path = string:tokens(Name,"/"), % what if objectid points to someone's else file?
+                                   Path = string:tokens(fslogic_path:get_short_file_name(Name),"/"), % what if objectid points to someone's else file?
                                    case Path of
                                        [] -> "/";
                                        List -> filename:join(List)
