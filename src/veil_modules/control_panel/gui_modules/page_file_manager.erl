@@ -346,9 +346,9 @@ refresh_workspace() ->
 
 sort_item_list() ->
     AllItems = get_item_list(),
-    {ItemList, GroupsDirList} = lists:partition(
+    {SpacesDirList, ItemList} = lists:partition(
         fun(I) ->
-            item_path(I) /= <<"/groups">>
+            is_space_dir(item_path(I))
         end, AllItems),
     Attr = get_sort_by(),
     SortAscending = get_sort_ascending(),
@@ -377,7 +377,7 @@ sort_item_list() ->
                           Dirs ++ Files;
                       _ -> Result
                   end,
-    set_item_list(GroupsDirList ++ FinalResult).
+    set_item_list(SpacesDirList ++ FinalResult).
 
 
 sort_toggle(Type) ->
@@ -845,8 +845,8 @@ grid_view_body() ->
 
             ImageUrl = case item_is_dir(Item) of
                            true ->
-                               case is_group_dir(FullPath) of
-                                   true -> <<"/images/folder_groups64.png">>;
+                               case is_space_dir(FullPath) of
+                                   true -> <<"/images/folder_space64.png">>;
                                    false -> <<"/images/folder64.png">>
                                end;
                            false ->
@@ -959,8 +959,8 @@ list_view_body() ->
 
             ImageUrl = case item_is_dir(Item) of
                            true ->
-                               case is_group_dir(FullPath) of
-                                   true -> <<"/images/folder_groups32.png">>;
+                               case is_space_dir(FullPath) of
+                                   true -> <<"/images/folder_space32.png">>;
                                    false -> <<"/images/folder32.png">>
                                end;
                            false -> <<"/images/file32.png">>
@@ -1130,10 +1130,10 @@ item_list_md5(ItemList) ->
         end, <<"">>, ItemList).
 
 
-is_group_dir(Path) ->
+is_space_dir(Path) ->
     case Path of
-        <<?SPACES_BASE_DIR_NAME>> -> true;
-        <<?SPACES_BASE_DIR_NAME, Rest>> -> case length(binary:split(Rest, <<"/">>, [global])) of
+        <<"/", ?SPACES_BASE_DIR_NAME>> -> true;
+        <<"/", ?SPACES_BASE_DIR_NAME, Rest>> -> case length(binary:split(Rest, <<"/">>, [global])) of
                                    2 -> true;
                                    _ -> false
                                end;
@@ -1163,7 +1163,7 @@ fs_remove(BinPath) ->
 
 fs_remove_dir(BinDirPath) ->
     DirPath = gui_str:binary_to_unicode_list(BinDirPath),
-    case is_group_dir(BinDirPath) of
+    case is_space_dir(BinDirPath) of
         true ->
             skip;
         false ->
