@@ -93,7 +93,7 @@ message FileChildren {
     };
 
     optional string answer = 1 [default = "ok"];
-    repeated DirEntry child_logic_name = 2;
+    repeated DirEntry entry = 2;
 }
 
 
