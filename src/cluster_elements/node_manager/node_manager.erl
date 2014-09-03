@@ -423,7 +423,7 @@ terminate(_Reason, _State) ->
     catch cowboy:stop_listener(?https_listener),
 
     % Clean up after n2o.
-    gui_utils:cleanup_n2o(?session_logic_module),
+    catch gui_utils:cleanup_n2o(?session_logic_module),
     ok.
 
 %% code_change/3
@@ -1289,6 +1289,7 @@ start_gui_listener() ->
     ],
 
     % Create ets tables and set envs needed by n2o
+    io:format(user, "GOWNO~n~n", []),
     gui_utils:init_n2o_ets_and_envs(GuiPort, ?gui_routing_module, ?session_logic_module, ?cowboy_bridge_module),
 
     % Start the listener for web gui and nagios handler

@@ -29,6 +29,7 @@
 %% This test checks if node_manager is resistant to incorrect requests.
 wrong_request_test() ->
   application:set_env(?APP_Name, ccm_nodes, [not_existing_node]),
+  application:set_env(?APP_Name, initialization_time, 0),
   application:set_env(?APP_Name, heart_beat, 60),
   application:set_env(?APP_Name, node_monitoring_period, 15),
   application:set_env(?APP_Name, node_monitoring_initialization, 10),
@@ -45,6 +46,7 @@ wrong_request_test() ->
 %% This test checks if node_manager is able to properly identify type of node which it coordinates.
 node_type_test() ->
   application:set_env(?APP_Name, ccm_nodes, [not_existing_node]),
+  application:set_env(?APP_Name, initialization_time, 0),
   application:set_env(?APP_Name, heart_beat, 60),
   application:set_env(?APP_Name, node_monitoring_period, 15),
   application:set_env(?APP_Name, node_monitoring_initialization, 10),
