@@ -99,7 +99,7 @@ get_parameter_from_args()
 
 	# If its zero, the ARGS variable holds the desired string. If not, cut off the part after the hyphen
 	if [[ $INDEX -gt 0 ]]; then
-        ARGS=${ARGS:0:$((INDEX - 1))}
+        ARGS=${ARGS:0:$(($INDEX - 1))}
 	fi
 
 	# If the expected result is a single word, get the first one from remaining string. 

@@ -59,11 +59,11 @@ get_parameter_from_args()
 	local ARGS=${ARGS:$(($INDEX + ${#TOKEN})):${#ARGS}}
 
     # Find the next occurence of a hyphen that is just after a space
-	INDEX=`awk -v a="$ARGS" -v b=" -" 'BEGIN{print index(a, b)}'`
+	INDEX=`awk -v a=" $ARGS" -v b=" -" 'BEGIN{print index(a, b)}'`
 
 	# If its zero, the ARGS variable holds the desired string. If not, cut off the part after the hyphen
 	if [[ $INDEX -gt 0 ]]; then
-		ARGS=${ARGS:0:$INDEX}
+		ARGS=${ARGS:0:$(($INDEX - 1))}
 	fi
 
 	# If the expected result is a single word, get the first one from remaining string.
