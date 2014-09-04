@@ -119,12 +119,41 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
 -spec get_binary(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = Size}} = State) ->
-    StreamFun = file_download_handler:cowboy_file_stream_fun(Filepath, Size),
-    NewReq = file_download_handler:content_disposition_attachment_headers(Req, filename:basename(Filepath)),
-    {Type, Subtype, _} = cow_mimetypes:all(list_to_binary(Filepath)),
-    ContentType = <<Type/binary, "/", Subtype/binary>>,
-    Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, ContentType, NewReq),
-    {{stream, Size, StreamFun}, Req2, State}.
+    % get optional 'Range' header
+    {RawRange, _} = cowboy_req:header(<<"range">>, Req),
+    Ranges = case RawRange of
+                 undefined -> [{0,Size-1}];
+                 RawRange -> parse_byte_range(State,RawRange)
+             end,
+
+    % return bad request if Range is invalid
+    case Ranges of
+        invalid -> cdmi_error:error_reply(Req,State,?error_bad_request_code,"Invalid range: ~p",[RawRange]);
+        Ranges ->
+            % prepare data size and stream function
+            StreamSize = lists:foldl(fun({From,To},Acc) when To >= From -> Acc+To-From+1 end, 0, Ranges),
+            StreamFun = fun (Socket,Transport) ->
+                try
+                    {ok,BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
+                    lists:foreach(fun (Rng) -> stream_file(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
+                catch Type:Message ->
+                    % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
+                    ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Filepath, Type, Message])
+                end
+            end,
+
+            % set mimetype, todo return assigned mimetype (after we implement mimetype assigning functionality)
+            {Type, Subtype, _} = cow_mimetypes:all(list_to_binary(Filepath)), %
+            ContentType = <<Type/binary, "/", Subtype/binary>>,
+            Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, ContentType, Req),
+
+            % reply with stream and adequate status
+            {ok, Req3} = case RawRange of
+                             undefined -> cowboy_req:reply(?ok, [], {StreamSize,StreamFun}, Req2);
+                             _ -> cowboy_req:reply(?ok_partial_content, [], {StreamSize,StreamFun}, Req2)
+                         end,
+            {halt, Req3, State}
+    end.
 
 %% get_cdmi_object/2
 %% ====================================================================
@@ -363,3 +392,35 @@ encode(Data,_) ->
 %% ====================================================================
 ceil(N) when trunc(N) == N -> N;
 ceil(N) -> trunc(N+1).
+
+%% parse_byte_range/1
+%% ====================================================================
+%% @doc parses byte ranges from 'Range' http header format to list of erlang range tuples,
+%% i. e. <<"1-5,-3">> for a file with length 10 will produce -> [{1,5},{7,9}]
+%% @end
+-spec parse_byte_range(#state{}, binary() | list()) -> list(Range) | invalid when
+    Range :: {From :: integer(), To :: integer()}.
+%% ====================================================================
+parse_byte_range(State, Range) when is_binary(Range) ->
+    Ranges = parse_byte_range(State, binary:split(Range, <<",">>, [global])),
+    case lists:member(invalid,Ranges) of
+        true -> invalid;
+        false -> Ranges
+    end;
+parse_byte_range(_, []) ->
+    [];
+parse_byte_range(#state{attributes = #fileattributes{size = Size}} = State, [First | Rest]) ->
+    Range = case binary:split(First, <<"-">>, [global]) of
+                [<<>>, FromEnd] -> {max(0, Size - binary_to_integer(FromEnd)), Size - 1};
+                [From, <<>>] -> {binary_to_integer(From), Size - 1};
+                [From_, To] -> {binary_to_integer(From_), min(Size - 1, binary_to_integer(To))};
+                _ -> [invalid]
+            end,
+    case Range of
+        [invalid] -> [invalid];
+        {Begin,End} when Begin > End -> [invalid];
+        {Begin_,_End} when Begin_ > Size -> parse_byte_range(State, Rest); % range is unsatisfiable and we ignore it
+        ValidRange -> [ValidRange | parse_byte_range(State, Rest)]
+    end.
+
+

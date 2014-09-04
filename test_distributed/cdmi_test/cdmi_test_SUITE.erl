@@ -147,7 +147,20 @@ get_file_test(_Config) ->
     {Code6, _Headers6, Response6} = do_request("cdmi_objectid/"++binary_to_list(ObjectID), get, RequestHeaders6, []),
     ?assertEqual("200",Code6),
     {struct,CdmiResponse6} = mochijson2:decode(Response6),
-    ?assertEqual(FileContent,base64:decode(proplists:get_value(<<"value">>,CdmiResponse6))).
+    ?assertEqual(FileContent,base64:decode(proplists:get_value(<<"value">>,CdmiResponse6))),
+    %%------------------------------
+
+    %% selective value read non-cdmi
+    RequestHeaders7 = [{"Range","1-3,5-5,-3"}],
+    {Code7, _Headers7, Response7} = do_request(FileName, get, RequestHeaders7, []),
+    ?assertEqual("206",Code7),
+    ?assertEqual("omec...", Response7), % 1-3,5-5,12-14  from FileContent = <<"Some content...">>
+    %%------------------------------
+
+    %% selective value read non-cdmi error
+    RequestHeaders8 = [{"Range","1-3,6-4,-3"}],
+    {Code8, _Headers8, _Response8} = do_request(FileName, get, RequestHeaders8, []),
+    ?assertEqual("400",Code8).
     %%------------------------------
 
 % Tests cdmi metadata read on object GET request.
