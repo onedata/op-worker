@@ -29,7 +29,7 @@
 %% ====================================================================
 %% Physical files organization management (to better organize files on storage;
 %% the user does not see results of these operations)
--export([mkdir/2, mkdir/3, mv/3, delete_dir/2, chmod/3, chown/4]).
+-export([mkdir/2, mkdir/3, mv/3, delete_dir/2, chmod/3, chown/4, link/3]).
 
 %% Physical files access (used to create temporary copies for remote files)
 -export([getattr/2, read/4, write/4, write/3, create/2, create/3, truncate/3, delete/2, ls/0]).
@@ -54,6 +54,13 @@
 %% the user does not see results of these operations)
 %% ====================================================================
 
+
+link(Storage_helper_info, FileId, LinkId) ->
+    case veilhelpers:exec(link, Storage_helper_info, [FileId, LinkId]) of
+        0 -> ok;
+        ErrorCode ->
+            {error, fslogic_errors:posix_to_veilerror(ErrorCode)}
+    end.
 
 %% getattr/2
 %% ====================================================================

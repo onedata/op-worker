@@ -135,6 +135,16 @@ StorageHelperFactory SHFactory;     // StorageHelperFactory instance
 *
 *********************************************************************/
 
+static ERL_NIF_TERM sh_link(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    INIT;
+
+    struct stat st;
+    int ret = sh->sh_link(get_string(env, argv[4]).c_str(), get_string(env, argv[5]).c_str(), &st);
+
+    return enif_make_int(env, ret);
+}
+
 static ERL_NIF_TERM sh_getattr(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     INIT;
@@ -326,6 +336,7 @@ static ERL_NIF_TERM sh_rmdir(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
 
 static ErlNifFunc nif_funcs[] =
 {
+    {"link",        6, sh_link},
     {"getattr",     5, sh_getattr},
     {"access",      6, sh_access},
     {"mknod",       7, sh_mknod},

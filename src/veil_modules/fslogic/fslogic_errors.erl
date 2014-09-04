@@ -44,6 +44,8 @@ gen_error_code(invalid_group_access) ->
     {?VEACCES, invalid_group_access};
 gen_error_code(file_exists) ->
     {?VEEXIST, file_already_exists};
+gen_error_code({logical_file_system_error, ErrCode}) ->
+    {ErrCode, logical_file_system_error};
 
 %% Generic translations below. All custom translations shall be defined ^above this line.
 gen_error_code(ErrorCode) when is_list(ErrorCode) ->

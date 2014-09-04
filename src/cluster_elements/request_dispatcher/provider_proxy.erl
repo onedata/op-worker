@@ -67,10 +67,15 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
     ProviderMsg = #providermsg{message_type = "clustermsg", input = CLMBin, fuse_id = vcn_utils:ensure_binary(FuseId)},
     PRMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_providermsg(ProviderMsg)),
 
+    StartTime = vcn_utils:mtime(),
     provider_proxy_con:send(URL, MsgId, PRMBin),
+
+    Timeout = timeout_for_message(Message),
 
     receive
         {response, MsgId, AnswerStatus, WorkerAnswer} ->
+            EndTime = vcn_utils:mtime(),
+            ?info("InterProvider RAW roundtrip: ~p", [EndTime - StartTime]),
             provider_proxy_con:report_ack(URL),
             ?debug("Answer for inter-provider pull request: ~p ~p", [AnswerStatus, WorkerAnswer]),
             case AnswerStatus of
@@ -81,7 +86,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
                     ?error("Cannot reroute message ~p due to invalid answer status: ~p", [get_message_type(Message), InvalidStatus]),
                     throw({invalid_status, InvalidStatus})
             end
-    after 1000 ->
+    after Timeout ->
         provider_proxy_con:report_timeout(URL),
         throw(reroute_timeout)
     end.
@@ -215,3 +220,11 @@ a2l(Atom) when is_atom(Atom) ->
 a2l(List) when is_list(List) ->
     List.
 
+timeout_for_message(#fusemessage{input = #renamefile{}}) ->
+    60 * 60000;
+timeout_for_message(#remotefilemangement{input = #readfile{size = Bytes}}) ->
+    1000 + Bytes; %% 1 byte -> 1ms ~= 1kB/s
+timeout_for_message(#remotefilemangement{input = #writefile{data = Data}}) ->
+    1000 + size(Data); %% 1 byte -> 1ms ~= 1kB/s
+timeout_for_message(_) ->
+    1000.

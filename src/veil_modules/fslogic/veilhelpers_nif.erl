@@ -14,7 +14,7 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 
 -export([start/1, getattr/5, access/6, mknod/7, unlink/5, rename/6, chmod/6, chown/7, chown_name/7, truncate/6,
-         open/6, read/8, write/8, read/7, write/7, statfs/5, release/6, fsync/7, mkdir/6, rmdir/5]).
+         open/6, read/8, write/8, read/7, write/7, statfs/5, release/6, fsync/7, mkdir/6, rmdir/5, link/6]).
 %% TODO zaimplementować natsępujące funkcje (VFS-305)
 -export([is_reg/5, is_dir/5, get_flag/5, get_flag/1]).
 %% ===================================================================
@@ -48,6 +48,18 @@ get_flag(_uname, _gname, _sh_name, _sh_args, Flag) ->
 start(Prefix) ->
     erlang:load_nif(filename:join(Prefix, "c_lib/veilhelpers_drv"), 0).
 
+
+%% link/6
+%% ====================================================================
+%% @doc First 2 arguments of this method should come from #storage_helper_info{} record. <br/>
+%%      Those two arguments decide which Storage Helper shall be used for this operation. <br/>
+%%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
+%%      gettattr/3 returns #st_stat{} record for given file _path. Note that if ErrorCode does not equal 0, fields of #st_stat{} are undefined and shall be ignored.
+%% @end
+-spec link(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _link :: string()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+%% ====================================================================
+link(_uname, _gname, _sh_name, _sh_args, _fileId, _linkId) ->
+    {error, 'NIF_not_loaded'}.
 
 %% getattr/3
 %% ====================================================================

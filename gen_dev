@@ -176,11 +176,11 @@ echo "========================================"
 echo "Generating release for $NODE_NAME in    /releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME"
 
 # Skip generation if -no_generate is in args
-INDEX=`awk -v a=" $* " -v b="-no_generate" 'BEGIN{print index(a, b)}'`
+INDEX=`awk -v a=" $* " -v b=" -no_generate " 'BEGIN{print index(a, b)}'`
 if [[ $INDEX -eq 0 ]]; then
 
 	# Skip compilation if -no_compile is in args
-	INDEX=`awk -v a=" $* " -v b="-no_compile" 'BEGIN{print index(a, b)}'`
+	INDEX=`awk -v a=" $* " -v b=" -no_compile " 'BEGIN{print index(a, b)}'`
 	if [[ $INDEX -eq 0 ]]; then
 		# Compile the code
 		make deps

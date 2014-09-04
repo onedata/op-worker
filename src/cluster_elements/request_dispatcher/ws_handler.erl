@@ -126,16 +126,20 @@ setup_connection(InitCtx, OtpCert, _Certs, true) ->
     State :: #hander_state{}.
 %% ====================================================================
 websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString, peer_type = PeerType} = State) ->
+    put(t1, vcn_utils:mtime()),
     try
         Request =
             case PeerType of
                 provider -> decode_providermsg_pb(Data, DnString);
                 user     -> decode_clustermsg_pb(Data, DnString)
             end,
-
+        put(t2, vcn_utils:mtime()),
         ?debug("Received request: ~p", [Request]),
 
-        handle(Req, Request, State) %% Decode ClusterMsg and handle it
+        Res = handle(Req, Request, State) %% Decode ClusterMsg and handle it
+        ,put(t5, vcn_utils:mtime()),
+        ?info("InterProvider HANDLE time: ~p ~p ~p ~p ~p", [get(t5) - get(t1), get(t5) - get(t4), get(t4) - get(t3), get(t3) - get(t2), get(t2) - get(t1)]),
+        Res
     catch
         wrong_message_format                            -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
         {wrong_internal_message_type, MsgId2}           -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
@@ -267,19 +271,30 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         {FID, _} when is_list(FID) -> ok                               % FuseId is present
     end,
 
+    put(t3, vcn_utils:mtime()),
+
     {UserGID, AccessToken} =
-        try {SessionUserGID =/= undefined orelse not gr_adapter:verify_client(GlobalId, TokenHash), SessionAccessToken} of
-            {true, undefined} ->
-                auth_handler:get_access_token(SessionUserGID);
-            {true, _} ->
-                {SessionUserGID, SessionAccessToken};
+        case get({GlobalId, TokenHash}) of
+            CachedToken when is_binary(CachedToken) ->
+                {GlobalId, CachedToken};
             _ ->
-                auth_handler:get_access_token(GlobalId)
-        catch
-            Reason ->
-                ?error("Cannot verify user (~p) authentication due to: ~p", [GlobalId, Reason]),
-                throw({unable_to_authenticate, MsgId})
+                try {SessionUserGID =/= undefined orelse not gr_adapter:verify_client(GlobalId, TokenHash), SessionAccessToken} of
+                    {true, undefined} ->
+                        auth_handler:get_access_token(SessionUserGID);
+                    {true, _} ->
+                        {SessionUserGID, SessionAccessToken};
+                    _ ->
+                        auth_handler:get_access_token(GlobalId)
+                catch
+                    Reason ->
+                        ?error("Cannot verify user (~p) authentication due to: ~p", [GlobalId, Reason]),
+                        throw({unable_to_authenticate, MsgId})
+                end
         end,
+
+    put({UserGID, TokenHash}, AccessToken),
+
+    put(t4, vcn_utils:mtime()),
 
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->

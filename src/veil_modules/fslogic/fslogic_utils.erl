@@ -19,13 +19,39 @@
 -export([create_children_list/1, create_children_list/2, get_user_id_from_system/1]).
 -export([get_sh_and_id/3, get_sh_and_id/4, get_sh_and_id/5, get_files_number/3]).
 -export([get_space_info_for_path/1, get_user_groups/2]).
--export([random_ascii_lowercase_sequence/1]).
+-export([random_ascii_lowercase_sequence/1, path_walk/3, list_dir/1]).
 
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
+
+path_walk(Path, InitAcc, Fun) ->
+    {ok, #fileattributes{} = Attrs} = logical_files_manager:getfileattr(Path),
+    path_walk(Path, Attrs, InitAcc, Fun).
+path_walk(Path, #fileattributes{type = ?DIR_TYPE_PROT} = Attrs, Acc, Fun) ->
+    Acc1 = Fun(Path, Attrs, Acc),
+    lists:foldl(
+        fun(#dir_entry{name = Elem}, IAcc) ->
+            ElemPath = filename:join(Path, Elem),
+            {ok, #fileattributes{} = ElemAttrs} = logical_files_manager:getfileattr(ElemPath),
+            path_walk(ElemPath, ElemAttrs, IAcc, Fun)
+        end, Acc1, list_dir(Path));
+path_walk(Path, #fileattributes{} = Attrs, Acc, Fun) ->
+    Fun(Path, Attrs, Acc).
+
+
+list_dir(Path) ->
+    BatchSize = 2,
+    list_dir(Path, 0, BatchSize, []).
+list_dir(Path, Offset, BatchSize, Acc) ->
+    {ok, Childern} = logical_files_manager:ls(Path, BatchSize, Offset),
+    case length(Childern) < BatchSize of
+        true  -> Childern ++ Acc;
+        false ->
+            list_dir(Path, Offset + length(Childern), BatchSize, Childern ++ Acc)
+    end.
 
 %% get_sh_and_id/3
 %% ====================================================================
@@ -81,8 +107,10 @@ create_children_list([], Ans) ->
   Ans;
 
 create_children_list([File | Rest], Ans) ->
-  FileDesc = File#veil_document.record,
-  create_children_list(Rest, [FileDesc#file.name | Ans]).
+    FileDesc = File#veil_document.record,
+    Name =FileDesc#file.name,
+    Type = fslogic_file:normalize_file_type(protocol, FileDesc#file.type),
+    create_children_list(Rest, [#filechildren_direntry{name = Name, type = Type} | Ans]).
 
 
 %% random_ascii_lowercase_sequence

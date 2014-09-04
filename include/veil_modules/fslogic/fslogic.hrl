@@ -27,11 +27,12 @@
 -define(VEPERM,     "eperm").    %% Operation not permitted
 -define(VEINVAL,    "einval").   %% Invalid argument
 -define(VEDQUOT,    "edquot").   %% Quota exceeded
+-define(VECOMM,     "ecomm").    %% Communication error (unknown user's token, unable to communicate on his behalf)
 
 
 %% @todo: add test that verifies if the macro contains all available error code
 -define(ALL_ERROR_CODES, [?VOK, ?VENOENT, ?VEACCES, ?VEEXIST, ?VENOTSUP, ?VENOTEMPTY, ?VEREMOTEIO,
-                          ?VEPERM, ?VEINVAL, ?VEDQUOT]).
+                          ?VEPERM, ?VEINVAL, ?VEDQUOT, ?VECOMM]).
 
 
 %% POSIX & FUSE C structures definitions ported to erlang. For documentation please refer linux & fuse man pages.
@@ -54,6 +55,8 @@
   gname = [],
   links = 0
 }).
+
+-record(dir_entry, {name = "", type = ""}).
 
 % Callbacks management
 -record(callback, {fuse = 0, pid = 0, node = non, action = non}).
