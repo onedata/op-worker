@@ -90,7 +90,7 @@ message FileChildren {
     message DirEntry {
         required string child_logic_name = 1;
         required string type = 1;
-    };
+    }
 
     optional string answer = 1 [default = "ok"];
     repeated DirEntry entry = 2;
