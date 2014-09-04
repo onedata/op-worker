@@ -1070,7 +1070,7 @@ delete_pid_from_list(FuseId, Pid, [{F, {CList1, CList2}} | T], Ans) ->
 
 %% get_fuses_list/1
 %% ====================================================================
-%% @doc Get all fuses that have callbacka at this node
+%% @doc Get all fuses that have callbacks at this node
 -spec get_fuses_list(State :: term()) -> Result when
     Result :: list().
 %% ====================================================================
@@ -1289,7 +1289,6 @@ start_gui_listener() ->
     ],
 
     % Create ets tables and set envs needed by n2o
-    io:format(user, "GOWNO~n~n", []),
     gui_utils:init_n2o_ets_and_envs(GuiPort, ?gui_routing_module, ?session_logic_module, ?cowboy_bridge_module),
 
     % Start the listener for web gui and nagios handler

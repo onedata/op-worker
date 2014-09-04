@@ -47,19 +47,22 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% @doc Cowboy callback function
 %% Called right after protocol upgrade to init the request context.
 %% Will shut down the connection if the peer doesn't provide a valid
-%% proxy certificate.
+%% proxy certificate (unless it is a connection check where no auth is required).
 %% @end
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
-rest_init(Req, _Opts) when Req#http_req.path_info =:= [?connection_check_path] ->
-    % when checking connection, continue without cert verification
-    init_state(Req);
 rest_init(Req, _Opts) ->
-    {ok, DnString} = rest_utils:verify_peer_cert(Req),
-    Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req),
-    case rest_utils:prepare_context(DnString) of
-        ok -> init_state(Req2);
-        Error -> {ok, Req2, Error}
+    case cowboy_req:path_info(Req) of
+        {[?connection_check_path], _} ->
+            % when checking connection, continue without cert verification
+            init_state(Req);
+        _ ->
+            {ok, DnString} = rest_utils:verify_peer_cert(Req),
+            Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req),
+            case rest_utils:prepare_context(DnString) of
+                ok -> init_state(Req2);
+                Error -> {ok, Req2, Error}
+            end
     end.
 
 

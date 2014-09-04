@@ -182,7 +182,7 @@ handle_user_content_request(Req, Path) ->
                     catch Type:Message ->
                         ?error_stacktrace("Error while preparing to send file ~p to user ~p - ~p:~p",
                             [Filepath, UserLogin, Type, Message]),
-                        {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, Req#http_req{connection = close}])
+                        {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, cowboy_req:set([{connection = close}], Req)])
                     end
             end
     end.
@@ -226,7 +226,7 @@ handle_shared_files_request(Req, ShareID) ->
             catch Type:Message ->
                 ?error_stacktrace("Error while preparing to send shared file ~p - ~p:~p",
                     [FileID, Type, Message]),
-                {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, Req#http_req{connection = close}])
+                {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, cowboy_req:set([{connection = close}], Req)])
             end
     end.
 
@@ -244,7 +244,7 @@ send_file(Req, FilePathOrUUID, FileName, Size) ->
     StreamFun = cowboy_file_stream_fun(fslogic_context:get_user_dn(), FilePathOrUUID, Size),
     Req2 = content_disposition_attachment_headers(Req, FileName),
     Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
-    {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [200, Req3#http_req{connection = close}]).
+    {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [200, cowboy_req:set([{connection = close}], Req)]).
 
 
 %% stream_file/5

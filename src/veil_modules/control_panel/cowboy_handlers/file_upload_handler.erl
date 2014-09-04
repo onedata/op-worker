@@ -95,7 +95,7 @@ handle_http_upload(Req) ->
 
     case InitSession of
         error ->
-            {ok, _ErrorReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, Req#http_req{connection = close}]);
+            {ok, _ErrorReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, cowboy_req:set([{connection = close}], Req)]);
 
         {State, NewContext, SessionHandler} ->
             try
@@ -118,12 +118,12 @@ handle_http_upload(Req) ->
                     FinalCtx#context.req),
                 Req3 = cowboy_req:set_resp_body(RespBody, Req2),
                 % Force connection to close, so that every upload is in
-                {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [200, Req3#http_req{connection = close}])
+                {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [200, cowboy_req:set([{connection = close}], Req)])
 
             catch Type:Message ->
                 ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
                     [fslogic_context:get_user_dn(), Type, Message]),
-                {ok, _ErrorReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, Req#http_req{connection = close}])
+                {ok, _ErrorReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, cowboy_req:set([{connection = close}], Req)])
             end
     end.
 
