@@ -348,7 +348,7 @@ rename_file(FullFileName, FullTargetFileName) ->
 %% ====================================================================
 
 rename_file_trivial(_UserDoc, _FileType, SourceFilePath, TargetFilePath, {OldFile, OldFileDoc, NewParentUUID}) ->
-    ?info("rename_file_trivial ~p ~p", [SourceFilePath, TargetFilePath]),
+    ?debug("rename_file_trivial ~p ~p", [SourceFilePath, TargetFilePath]),
 
     RenamedFileInit =
         OldFile#file{parent = NewParentUUID, name = fslogic_path:basename(TargetFilePath)},
@@ -365,7 +365,7 @@ rename_file_trivial(_UserDoc, _FileType, SourceFilePath, TargetFilePath, {OldFil
     ok.
 
 rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {OldFile, OldFileDoc, NewParentUUID}) ->
-    ?info("rename_file_interspace ~p ~p ~p", [SourceAttrs, SourceFilePath, TargetFilePath]),
+    ?debug("rename_file_interspace ~p ~p ~p", [SourceAttrs, SourceFilePath, TargetFilePath]),
 
     SourceFileTokens = filename:split(SourceFilePath),
     TargetFileTokens = filename:split(TargetFilePath),
@@ -385,7 +385,6 @@ rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {Ol
         end),
 
 
-    ?info("==========> ALL REG: ~p", [AllRegularFiles]),
     StorageMoveResult = lists:map(
         fun({SourceFile, TargetFile}) ->
             case rename_on_storage(UserDoc, TargetSpaceInfo, SourceFile, TargetFile) of
@@ -398,8 +397,6 @@ rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {Ol
                 {error, Resaon} -> {error, Resaon}
             end
         end, AllRegularFiles),
-
-    ?info("==========> MOVE REG: ~p", [StorageMoveResult]),
 
     {GoodRes, BadRes} =
         lists:partition(
@@ -535,7 +532,7 @@ rename_on_storage(UserDoc, TargetSpaceInfo, SourceFilePath, TargetFilePath) ->
 
 
 rename_file_interprovider(UserDoc, ?DIR_TYPE_PROT, SourceFilePath, TargetFilePath) ->
-    ?info("rename_file_interprovider DIR ~p ~p", [SourceFilePath, TargetFilePath]),
+    ?debug("rename_file_interprovider DIR ~p ~p", [SourceFilePath, TargetFilePath]),
 
     ok = logical_files_manager:mkdir(TargetFilePath),
 
@@ -566,8 +563,6 @@ rename_file_interprovider(UserDoc, ?DIR_TYPE_PROT, SourceFilePath, TargetFilePat
             end
         end, PIDs),
 
-    ?info("Results =============> ~p", [Res]),
-
     Errors = lists:filter(fun(Elem) -> Elem =/= ok end, Res),
     [] = Errors,
 
@@ -575,7 +570,7 @@ rename_file_interprovider(UserDoc, ?DIR_TYPE_PROT, SourceFilePath, TargetFilePat
 
     ok;
 rename_file_interprovider(_UserDoc, ?LNK_TYPE_PROT, SourceFilePath, TargetFilePath) ->
-    ?info("rename_file_interprovider LNK ~p ~p", [SourceFilePath, TargetFilePath]),
+    ?debug("rename_file_interprovider LNK ~p ~p", [SourceFilePath, TargetFilePath]),
 
     {ok, LinkValue} = logical_files_manager:read_link(SourceFilePath),
     ok = logical_files_manager:create_link(LinkValue, TargetFilePath),
@@ -583,7 +578,7 @@ rename_file_interprovider(_UserDoc, ?LNK_TYPE_PROT, SourceFilePath, TargetFilePa
 
     ok;
 rename_file_interprovider(_UserDoc, ?REG_TYPE_PROT, SourceFilePath, TargetFilePath) ->
-    ?info("rename_file_interprovider REG ~p ~p", [SourceFilePath, TargetFilePath]),
+    ?debug("rename_file_interprovider REG ~p ~p", [SourceFilePath, TargetFilePath]),
 
     ok = logical_files_manager:create(TargetFilePath),
     ok = transfer_data(SourceFilePath, TargetFilePath),

@@ -126,20 +126,15 @@ setup_connection(InitCtx, OtpCert, _Certs, true) ->
     State :: #hander_state{}.
 %% ====================================================================
 websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString, peer_type = PeerType} = State) ->
-    put(t1, vcn_utils:mtime()),
     try
         Request =
             case PeerType of
                 provider -> decode_providermsg_pb(Data, DnString);
                 user     -> decode_clustermsg_pb(Data, DnString)
             end,
-        put(t2, vcn_utils:mtime()),
         ?debug("Received request: ~p", [Request]),
 
-        Res = handle(Req, Request, State) %% Decode ClusterMsg and handle it
-        ,put(t5, vcn_utils:mtime()),
-        ?info("InterProvider HANDLE time: ~p ~p ~p ~p ~p", [get(t5) - get(t1), get(t5) - get(t4), get(t4) - get(t3), get(t3) - get(t2), get(t2) - get(t1)]),
-        Res
+        handle(Req, Request, State) %% Decode ClusterMsg and handle it,
     catch
         wrong_message_format                            -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
         {wrong_internal_message_type, MsgId2}           -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
@@ -271,8 +266,6 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         {FID, _} when is_list(FID) -> ok                               % FuseId is present
     end,
 
-    put(t3, vcn_utils:mtime()),
-
     {UserGID, AccessToken} =
         case get({GlobalId, TokenHash}) of
             CachedToken when is_binary(CachedToken) ->
@@ -292,9 +285,8 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                 end
         end,
 
+    %% Cache AccessToken for the user
     put({UserGID, TokenHash}, AccessToken),
-
-    put(t4, vcn_utils:mtime()),
 
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->

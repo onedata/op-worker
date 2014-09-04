@@ -67,15 +67,12 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
     ProviderMsg = #providermsg{message_type = "clustermsg", input = CLMBin, fuse_id = vcn_utils:ensure_binary(FuseId)},
     PRMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_providermsg(ProviderMsg)),
 
-    StartTime = vcn_utils:mtime(),
     provider_proxy_con:send(URL, MsgId, PRMBin),
 
     Timeout = timeout_for_message(Message),
 
     receive
         {response, MsgId, AnswerStatus, WorkerAnswer} ->
-            EndTime = vcn_utils:mtime(),
-            ?info("InterProvider RAW roundtrip: ~p", [EndTime - StartTime]),
             provider_proxy_con:report_ack(URL),
             ?debug("Answer for inter-provider pull request: ~p ~p", [AnswerStatus, WorkerAnswer]),
             case AnswerStatus of
