@@ -30,13 +30,17 @@
 
 
 run_as_root(Fun) ->
+    %% Save user context
     DN_CTX = fslogic_context:get_user_dn(),
     {AT_CTX1, AT_CTX2} = fslogic_context:get_access_token(),
 
-    Fun(),
+    Result = Fun(),
 
+    %% Restore user context
     fslogic_context:set_user_dn(DN_CTX),
-    fslogic_context:set_access_token(AT_CTX1, AT_CTX2).
+    fslogic_context:set_access_token(AT_CTX1, AT_CTX2),
+
+    Result.
 
 
 path_walk(Path, InitAcc, Fun) ->

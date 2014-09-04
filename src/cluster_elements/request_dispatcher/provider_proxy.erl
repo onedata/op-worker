@@ -220,11 +220,15 @@ a2l(Atom) when is_atom(Atom) ->
 a2l(List) when is_list(List) ->
     List.
 
+timeout_for_message(#fusemessage{input = #getfilechildren{}}) ->
+    3000;
+timeout_for_message(#fusemessage{input = #getfileattr{}}) ->
+    2000;
 timeout_for_message(#fusemessage{input = #renamefile{}}) ->
-    60 * 60000;
+    60 * 60 * 1000;
 timeout_for_message(#remotefilemangement{input = #readfile{size = Bytes}}) ->
-    1000 + Bytes; %% 1 byte -> 1ms ~= 1kB/s
+    3000 + Bytes; %% 1 byte -> 1ms ~= 1kB/s
 timeout_for_message(#remotefilemangement{input = #writefile{data = Data}}) ->
-    1000 + size(Data); %% 1 byte -> 1ms ~= 1kB/s
+    3000 + size(Data); %% 1 byte -> 1ms ~= 1kB/s
 timeout_for_message(_) ->
-    1000.
+    10000.
