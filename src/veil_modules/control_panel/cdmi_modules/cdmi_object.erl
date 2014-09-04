@@ -209,10 +209,25 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:create(Filepath) of
         ok ->
             write_body_to_file(Req, State, 0);
-        {error, file_exists} -> %todo update
-            {ok, Req2} = cowboy_req:reply(?error_conflict_code, Req),
-            {halt, Req2, State};
-        Error -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Creating cdmi object end up with error: ~p",[Error])
+        {error, file_exists} ->
+            {RawRange, _} = cowboy_req:header(<<"content-range">>, Req),
+            case RawRange of
+                undefined ->
+                    logical_files_manager:truncate(Filepath, 0),
+                    write_body_to_file(Req, State, 0, false);
+                RawRange ->
+                    {Length, _} = cowboy_req:body_length(Req),
+                    ct:print("len ~p, range ~p",[Length, parse_byte_range(State, RawRange)]),
+                    case parse_byte_range(State, RawRange) of
+                        [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
+                            ct:print("range: ~p",[{From,To}]),
+                            write_body_to_file(Req, State, From, false);
+                        _ ->
+                            cdmi_error:error_reply(Req, State, ?error_bad_request_code, "Invalid range: ~p", [RawRange])
+                    end
+            end;
+        Error ->
+            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Creating cdmi object end up with error: ~p", [Error])
     end.
 
 %% put_cdmi_object/2
@@ -331,13 +346,22 @@ prepare_object_ans([_Other | Tail], State) ->
 
 %% write_body_to_file/3
 %% ====================================================================
+%% @doc @equiv write_body_to_file(Req, State, Offset, true)
+-spec write_body_to_file(req(), #state{}, integer()) -> {boolean(), req(), #state{}}.
+%% ====================================================================
+write_body_to_file(Req, State, Offset) ->
+    write_body_to_file(Req, State, Offset, true).
+
+%% write_body_to_file/4
+%% ====================================================================
 %% @doc Reads request's body and writes it to file obtained from state.
 %% This callback return value is compatibile with put requests.
 %% @end
--spec write_body_to_file(req(), #state{}, integer()) -> {boolean(), req(), #state{}}.
+-spec write_body_to_file(req(), #state{}, integer(), boolean()) -> {boolean(), req(), #state{}}.
 %% ====================================================================
-write_body_to_file(Req, #state{filepath = Filepath} = State, Offset) ->
+write_body_to_file(Req, #state{filepath = Filepath} = State, Offset, RemoveIfFails) ->
     {Status, Chunk, Req2} = cowboy_req:body(Req),
+    ct:print("chunk: ~p, Offset: ~p",[Chunk,Offset]),
     case logical_files_manager:write(Filepath, Offset, Chunk) of
         Bytes when is_integer(Bytes) ->
             case Status of
@@ -345,8 +369,11 @@ write_body_to_file(Req, #state{filepath = Filepath} = State, Offset) ->
                 ok -> {true, Req2, State}
             end;
         Error ->
-            logical_files_manager:delete(Filepath),
-            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p",[Error])
+            case RemoveIfFails of
+                true -> logical_files_manager:delete(Filepath);
+                false -> ok
+            end,
+            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p", [Error])
     end.
 
 %% stream_file/6
