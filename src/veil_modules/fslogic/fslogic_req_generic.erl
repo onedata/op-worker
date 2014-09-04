@@ -309,7 +309,7 @@ rename_file(FullFileName, FullTargetFileName) ->
     SourceTokens = filename:split(FullFileName),
     SourceFileType = SourceAttrs#fileattributes.type,
 
-    case (SourceFileType =:= ?DIR_TYPE_PROT) and (lists:prefix(SourceTokens, NewDirTokens) == 1) of
+    case (SourceFileType =:= ?DIR_TYPE_PROT) and lists:prefix(SourceTokens, NewDirTokens) of
         true ->
             ?warning("Moving dir ~p to its child: ~p", [FullFileName, SourceTokens]),
             throw(?VEREMOTEIO);
@@ -364,7 +364,7 @@ rename_file_trivial(_UserDoc, _FileType, SourceFilePath, TargetFilePath, {OldFil
 
     ok.
 
-rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {OldFile, OldFileDoc, NewParentUUID}) ->
+rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {_, _, NewParentUUID}) ->
     ?debug("rename_file_interspace ~p ~p ~p", [SourceAttrs, SourceFilePath, TargetFilePath]),
 
     SourceFileTokens = filename:split(SourceFilePath),
@@ -410,6 +410,7 @@ rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {Ol
     ok = fslogic_utils:run_as_root(fun() -> rename_storage_rollback(SourceSpaceInfo, BadRes) end),
 
     try
+        {ok, #veil_document{record = #file{} = OldFile} = OldFileDoc} = fslogic_objects:get_file(SourceFilePath),
         ok = rename_file_trivial(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {OldFile, OldFileDoc, NewParentUUID}),
         rename_storage_cleanup(GoodRes)
     catch

@@ -2089,8 +2089,9 @@ files_manager_standard_files_test(Config) ->
   {StatusLs, AnsLs} = rpc:call(Node1, logical_files_manager, ls, [DirName, 100, 0]),
   ?assertEqual(ok, StatusLs),
   ?assertEqual(2, length(AnsLs)),
-  ?assert(lists:member(FileInDir, AnsLs)),
-  ?assert(lists:member(FileInDir2, AnsLs)),
+  FileList1 = lists:map(fun(#dir_entry{name = Name}) -> Name end, AnsLs),
+  ?assert(lists:member(FileInDir, FileList1)),
+  ?assert(lists:member(FileInDir2, FileList1)),
 
   {File2LocationAns, File2Location} = rpc:call(Node1, files_tester, get_file_location, [File2]),
   ?assertEqual(ok, File2LocationAns),
@@ -2108,8 +2109,9 @@ files_manager_standard_files_test(Config) ->
   {StatusLs2, AnsLs2} = rpc:call(Node1, logical_files_manager, ls, [DirName, 100, 0]),
   ?assertEqual(ok, StatusLs2),
   ?assertEqual(2, length(AnsLs2)),
-  ?assert(lists:member(FileInDir, AnsLs2)),
-  ?assert(lists:member(FileInDir2NewName, AnsLs2)),
+  FileList2 = lists:map(fun(#dir_entry{name = Name}) -> Name end, AnsLs2),
+  ?assert(lists:member(FileInDir, FileList2)),
+  ?assert(lists:member(FileInDir2NewName, FileList2)),
 
 
 
@@ -2443,7 +2445,8 @@ ls(Socket, Dir, Num, Offset) ->
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Files = fuse_messages_pb:decode_filechildren(Bytes),
   Files2 = records_translator:translate(Files, "fuse_messages"),
-  {Status, Files2#filechildren.child_logic_name, Files2#filechildren.answer}.
+  FileList = lists:map(fun(#filechildren_direntry{name = Name}) -> Name end, Files2#filechildren.entry),
+  {Status, FileList, Files2#filechildren.answer}.
 
 delete_file(Socket, FileName) ->
   FslogicMessage = #deletefile{file_logic_name = FileName},
