@@ -1193,9 +1193,10 @@ fs_list_dir(BinPath, Offset, Count, Result) ->
     Path = gui_str:binary_to_unicode_list(BinPath),
     case logical_files_manager:ls(Path, Count, Offset) of
         {ok, FileList} ->
-            case length(FileList) of
-                Count -> fs_list_dir(Path, Offset + Count, Count * 10, Result ++ FileList);
-                _ -> Result ++ FileList
+            FileList1 = lists:map(fun(#dir_entry{name = Name}) -> Name end, FileList),
+            case length(FileList1) of
+                Count -> fs_list_dir(Path, Offset + Count, Count * 10, Result ++ FileList1);
+                _ -> Result ++ FileList1
             end;
         _ ->
             {error, not_a_dir}

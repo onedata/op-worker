@@ -204,8 +204,10 @@ ls(DirName, ChildrenNum, Offset) ->
       Response = TmpAns#filechildren.answer,
       case Response of
         ?VOK ->
-            DirEnt = lists:zipwith(fun(Name, Type) -> #dir_entry{name = Name, type = Type} end,
-                TmpAns#filechildren.child_logic_name, TmpAns#filechildren.child_type),
+            DirEnt = lists:map(
+                fun(#filechildren_direntry{name = Name, type = Type}) ->
+                    #dir_entry{name = Name, type = Type}
+                end, TmpAns#filechildren.entry),
             {ok, DirEnt};
         _ -> {logical_file_system_error, Response}
       end;

@@ -98,9 +98,9 @@ get_file_children(FullFileName, UserPathTokens, ROffset, RCount) ->
             {_Head, Tail} = lists:split(min(Offset, length(Teams)), Teams),
             {Ret, _} = lists:split(min(Num, length(Tail)), Tail),
             Entries = lists:map(fun(Elem) -> #filechildren_direntry{name = Elem, type = ?DIR_TYPE_PROT} end, Ret),
-            #filechildren{child_logic_name = Entries};
+            #filechildren{entry = Entries};
         Other ->
-            #filechildren{child_logic_name = Children}
+            #filechildren{entry = Children}
     end.
 
 

@@ -334,11 +334,12 @@ rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath) ->
 
     SourceFileTokens = filename:split(SourceFilePath),
     TargetFileTokens = filename:split(TargetFilePath),
+    {ok, #space_info{} = SourceSpaceInfo} = fslogic_utils:get_space_info_for_path(SourceFilePath),
     {ok, #space_info{} = TargetSpaceInfo} = fslogic_utils:get_space_info_for_path(TargetFilePath),
 
     AllRegularFiles = fslogic_utils:path_walk(SourceFilePath, [],
-        fun(ElemPath, ElemAttrs, AccIn) ->
-            case ElemAttrs#fileattributes.type of
+        fun(ElemPath, ElemType, AccIn) ->
+            case ElemType of
                 ?REG_TYPE_PROT ->
                     ElemTokens = filename:split(ElemPath),
                     ElemTargetTokens = TargetFileTokens ++ lists:sublist(ElemTokens, length(SourceFileTokens) + 1, length(ElemTokens)),
@@ -350,16 +351,106 @@ rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath) ->
 
 
     ?info("==========> ALL REG: ~p", [AllRegularFiles]),
-    lists:map(
+    StorageMoveResult = lists:map(
         fun({SourceFile, TargetFile}) ->
             move_on_storage(UserDoc, TargetSpaceInfo, SourceFile, TargetFile)
         end, AllRegularFiles),
 
+    ?info("==========> MOVE REG: ~p", [StorageMoveResult]),
+
+    {GoodRes, BadRes} =
+        lists:partition(
+            fun(Status) ->
+                case Status of
+                    {ok, _} -> true;
+                    {error, _} -> false
+                end
+            end, StorageMoveResult),
+
+    case BadRes of
+        [] ->
+            try
+                Errors = lists:filter(fun(UpdateRes) -> UpdateRes =/= ok end, update_moved_files(GoodRes)),
+                InvalidUUIDs = lists:map(fun({error, {UUID, _}}) -> UUID end, Errors),
+                {BadRes1, GoodRes1} = lists:partition(fun({ok, {_, _, _, _, #veil_document{uuid = UUID}, _}}) -> lists:member(UUID, InvalidUUIDs) end, GoodRes),
+                ok = rename_file_trivial(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath),
+                ok = storage_cleanup(GoodRes1)
+                %% @todo: BadRes1 ???
+            catch
+                _:Reason ->
+                    %% @todo: log
+                    fslogic_utils:run_as_root(fun() -> storage_rollback(SourceSpaceInfo, GoodRes ++ BadRes) end),
+                    throw(?VEREMOTEIO)
+            end;
+        _ ->
+            fslogic_utils:run_as_root(fun() -> storage_rollback(SourceSpaceInfo, GoodRes ++ BadRes) end),
+            %% @todo: log
+            throw(?VEREMOTEIO)
+    end,
+
     ok.
+
+
+storage_cleanup([]) ->
+    ok;
+storage_cleanup([{ok, {move, _FileID, _NewFileID, _SourceFilePath, _FileDoc, _Storage}} | T]) ->
+    storage_cleanup(T);
+storage_cleanup([{ok, {link, FileID, _NewFileID, _SourceFilePath, _FileDoc, Storage}} | T]) ->
+    SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+    case storage_files_manager:delete(SHInfo, FileID) of
+        ok -> ok;
+        {error, Reason} ->
+            %% @todo: log
+            ok
+    end,
+    storage_cleanup(T).
+
+
+update_moved_files([]) ->
+    [];
+update_moved_files([{ok, {_TransferType, _FileID, NewFileID, SourceFilePath, FileDoc, _Storage}} | T]) ->
+    [update_moved_file(SourceFilePath, FileDoc, NewFileID, 3) | update_moved_files(T)].
+
+update_moved_file(SourceFilePath, #veil_document{record = #file{location = Location} = File, uuid = FileUUID} = FileDoc, NewFileID, RetryCount) ->
+    NewFile = File#file{location = Location#filelocation{file_id = NewFileID}},
+
+    case fslogic_objects:save_file(FileDoc#veil_document{record = NewFile}) of
+        {ok, _} -> ok;
+        {error, Reason} when RetryCount > 0 ->
+            %% @todo: log
+            case fslogic_objects:get_file(SourceFilePath) of
+                {ok, NewFileDoc} ->
+                    update_moved_file(SourceFilePath, NewFileDoc, NewFileID, RetryCount - 1);
+                {error, GetError} ->
+                    %% @todo: log
+                    update_moved_file(SourceFilePath, FileDoc, NewFileID, RetryCount - 1)
+            end;
+        {error, Reason1} ->
+            %% @todo: log
+            {error, {FileUUID, Reason1}}
+    end.
+
+storage_rollback(_, []) ->
+    ok;
+storage_rollback(#space_info{} = SourceSpaceInfo, [{_, {TransferType, FileID, NewFileID, _SourceFilePath, _FileDoc, Storage}} | T]) when is_atom(TransferType) ->
+    SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+
+    case TransferType of
+        link -> storage_files_manager:delete(SHInfo, NewFileID);
+        move ->
+            storage_files_manager:mv(SHInfo, NewFileID, FileID),
+            storage_files_manager:chown(SHInfo, FileID, -1, fslogic_spaces:map_to_grp_owner(SourceSpaceInfo))
+    end,
+
+    storage_rollback(SourceSpaceInfo, T);
+storage_rollback(#space_info{} = SourceSpaceInfo, [{error, _} | T]) ->
+    storage_rollback(SourceSpaceInfo, T).
+
+
 
 move_on_storage(UserDoc, TargetSpaceInfo, SourceFilePath, TargetFilePath) ->
     try
-        {ok, #veil_document{record = File}} = fslogic_objects:get_file(SourceFilePath),
+        {ok, #veil_document{record = File} = FileDoc} = fslogic_objects:get_file(SourceFilePath),
         StorageID   = File#file.location#file_location.storage_id,
         FileID      = File#file.location#file_location.file_id,
         Storage = %% Storage info for the file
@@ -367,35 +458,36 @@ move_on_storage(UserDoc, TargetSpaceInfo, SourceFilePath, TargetFilePath) ->
             {ok, #veil_document{record = #storage_info{} = S}} -> S;
             {error, MReason} ->
                 ?error("Cannot fetch storage (ID: ~p) information for file ~p. Reason: ~p", [StorageID, SourceFilePath, MReason]),
-                throw(?VEREMOTEIO)
+                throw({storage_not_selected, MReason})
         end,
 
         SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage), %% Storage helper for cluster
         NewFileID = fslogic_storage:get_new_file_id(TargetSpaceInfo, TargetFilePath, UserDoc, SHInfo, fslogic_context:get_protocol_version()),
 
-        case storage_files_manager:link(SHInfo, FileID, NewFileID) of
-            ok -> ok;
-            {error, ErrCode} ->
-                ok
-        end
+        TransferType =
+            case storage_files_manager:link(SHInfo, FileID, NewFileID) of
+                ok -> link;
+                {error, ErrCode} ->
+                    ?warning("Cannot move file using hard links '~p' -> '~p' due to: ~p", [FileID, NewFileID, ErrCode]),
+                    case storage_files_manager:mv(SHInfo, FileID, NewFileID) of
+                        ok -> move;
+                        {error, ErrCode1} ->
+                            ?error("Cannot move file '~p' -> '~p' due to: ~p", [FileID, NewFileID, ErrCode1]),
+                            throw({file_not_moved, {{link_error, ErrCode}, {move_error, ErrCode1}}})
+                    end
+            end,
 
-%%         %% Change group owner
-%%         case storage_files_manager:chown(SHInfo, FileID, -1, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo)) of
-%%             ok -> ok;
-%%             MReason1 ->
-%%                 ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [FileID, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo), MReason1]),
-%%                 throw(?VEREMOTEIO)
-%%         end,
-%%
-%%         %% Move file to new location on storage
-%%         ActionR = storage_files_manager:mv(SHInfo, FileID, NewFileID),
-%%         _NewFile =
-%%             case ActionR of
-%%                 ok -> OldFile#file{location = OldFile#file.location#file_location{file_id = NewFileID}};
-%%                 MReason0 ->
-%%                     ?error("Cannot move file (from ID ~p, to ID: ~p) on storage due to: ~p", [FileID, NewFileID, MReason0]),
-%%                     throw(?VEREMOTEIO)
-%%             end
+        OPInfo = {TransferType, FileID, NewFileID, SourceFilePath, FileDoc, Storage},
+
+        %% Change group owner
+        case storage_files_manager:chown(SHInfo, NewFileID, -1, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo)) of
+            ok -> ok;
+            MReason1 ->
+                ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [FileID, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo), MReason1]),
+                throw(OPInfo)
+        end,
+
+        {ok, OPInfo}
     catch
         _:Reason ->
             {error, Reason}
@@ -408,7 +500,7 @@ rename_file_interprovider(UserDoc, ?DIR_TYPE_PROT, SourceFilePath, TargetFilePat
     ok = logical_files_manager:mkdir(TargetFilePath),
 
     lists:foreach(
-        fun({FileName, FileType}) ->
+        fun(#dir_entry{name = FileName, type = FileType}) ->
             NewSourceFilePath = filename:join(SourceFilePath, FileName),
             NewTargetFilePath = filename:join(TargetFilePath, FileName),
             %% {ok, NewSourceAttrs} = logical_files_manager:getfileattr(NewSourceFilePath),
@@ -437,7 +529,7 @@ rename_file_interprovider(_UserDoc, ?REG_TYPE_PROT, SourceFilePath, TargetFilePa
 
 
 transfer_data(SourceFilePath, TargetFilePath) ->
-    transfer_data(SourceFilePath, TargetFilePath, 0, 100 * 1024).
+    transfer_data(SourceFilePath, TargetFilePath, 0, 1024 * 1024).
 
 transfer_data(SourceFilePath, TargetFilePath, Offset, Size) ->
     {ok, Data} = logical_files_manager:read(SourceFilePath, Offset, Size),

@@ -13,6 +13,7 @@
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_types.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("fuse_messages_pb.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -20,11 +21,22 @@
 -export([get_sh_and_id/3, get_sh_and_id/4, get_sh_and_id/5, get_files_number/3]).
 -export([get_space_info_for_path/1, get_user_groups/2]).
 -export([random_ascii_lowercase_sequence/1, path_walk/3, list_dir/1]).
+-export([run_as_root/1]).
 
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+
+run_as_root(Fun) ->
+    DN_CTX = fslogic_context:get_user_dn(),
+    {AT_CTX1, AT_CTX2} = fslogic_context:get_access_token(),
+
+    Fun(),
+
+    fslogic_context:set_user_dn(DN_CTX),
+    fslogic_context:set_access_token(AT_CTX1, AT_CTX2).
 
 
 path_walk(Path, InitAcc, Fun) ->

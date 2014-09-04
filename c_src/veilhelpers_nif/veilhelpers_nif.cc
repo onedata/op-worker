@@ -139,8 +139,7 @@ static ERL_NIF_TERM sh_link(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     INIT;
 
-    struct stat st;
-    int ret = sh->sh_link(get_string(env, argv[4]).c_str(), get_string(env, argv[5]).c_str(), &st);
+    int ret = sh->sh_link(get_string(env, argv[4]).c_str(), get_string(env, argv[5]).c_str());
 
     return enif_make_int(env, ret);
 }
