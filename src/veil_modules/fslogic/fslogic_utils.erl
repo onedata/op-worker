@@ -58,7 +58,7 @@ path_walk(Path, FileType, Acc, Fun) ->
 
 
 list_dir(Path) ->
-    BatchSize = 2,
+    BatchSize = 100,
     list_dir(Path, 0, BatchSize, []).
 list_dir(Path, Offset, BatchSize, Acc) ->
     {ok, Childern} = logical_files_manager:ls(Path, BatchSize, Offset),

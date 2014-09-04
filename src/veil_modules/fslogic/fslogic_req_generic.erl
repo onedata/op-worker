@@ -389,8 +389,8 @@ rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {Ol
     StorageMoveResult = lists:map(
         fun({SourceFile, TargetFile}) ->
             case rename_on_storage(UserDoc, TargetSpaceInfo, SourceFile, TargetFile) of
-                {ok, {_TransferType, _FileID, NewFileID, SourceFilePath, FileDoc, _Storage} = OPInfo} ->
-                    case update_moved_file(SourceFilePath, FileDoc, NewFileID, 3) of
+                {ok, {_TransferType, _FileID, NewFileID, SourceSubFilePath, SubFileDoc, _Storage} = OPInfo} ->
+                    case update_moved_file(SourceSubFilePath, SubFileDoc, NewFileID, 3) of
                         ok -> {ok, OPInfo};
                         {error, _} ->
                             {error, OPInfo}
@@ -452,7 +452,7 @@ rename_db_rollback([_ | T]) ->
     rename_db_rollback(T).
 
 update_moved_file(SourceFilePath, #veil_document{record = #file{location = Location} = File, uuid = FileUUID} = FileDoc, NewFileID, RetryCount) ->
-    NewFile = File#file{location = Location#filelocation{file_id = NewFileID}},
+    NewFile = File#file{location = Location#file_location{file_id = NewFileID}},
 
     case fslogic_objects:save_file(FileDoc#veil_document{record = NewFile}) of
         {ok, _} -> ok;
@@ -525,7 +525,9 @@ rename_on_storage(UserDoc, TargetSpaceInfo, SourceFilePath, TargetFilePath) ->
             MReason1 ->
                 ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [FileID, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo), MReason1]),
                 throw(OPInfo)
-        end
+        end,
+
+        {ok, OPInfo}
     catch
         _:Reason ->
             {error, Reason}
