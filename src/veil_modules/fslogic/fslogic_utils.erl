@@ -28,18 +28,17 @@
 
 
 path_walk(Path, InitAcc, Fun) ->
-    {ok, #fileattributes{} = Attrs} = logical_files_manager:getfileattr(Path),
-    path_walk(Path, Attrs, InitAcc, Fun).
-path_walk(Path, #fileattributes{type = ?DIR_TYPE_PROT} = Attrs, Acc, Fun) ->
-    Acc1 = Fun(Path, Attrs, Acc),
+    {ok, #fileattributes{type = FileType}} = logical_files_manager:getfileattr(Path),
+    path_walk(Path, FileType, InitAcc, Fun).
+path_walk(Path, ?DIR_TYPE_PROT = FileType, Acc, Fun) ->
+    Acc1 = Fun(Path, FileType, Acc),
     lists:foldl(
-        fun(#dir_entry{name = Elem}, IAcc) ->
+        fun(#dir_entry{name = Elem, type = ElemType}, IAcc) ->
             ElemPath = filename:join(Path, Elem),
-            {ok, #fileattributes{} = ElemAttrs} = logical_files_manager:getfileattr(ElemPath),
-            path_walk(ElemPath, ElemAttrs, IAcc, Fun)
+            path_walk(ElemPath, ElemType, IAcc, Fun)
         end, Acc1, list_dir(Path));
-path_walk(Path, #fileattributes{} = Attrs, Acc, Fun) ->
-    Fun(Path, Attrs, Acc).
+path_walk(Path, FileType, Acc, Fun) ->
+    Fun(Path, FileType, Acc).
 
 
 list_dir(Path) ->

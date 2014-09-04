@@ -56,7 +56,7 @@ prerouting(_SpaceInfo, _Request, [RerouteTo | _Providers]) ->
 -spec postrouting(SpaceInfo :: #space_info{}, FailureReason :: term(), Request :: term()) -> Result :: undefined | term().
 %% ====================================================================
 postrouting(_SpaceInfo, {error, _FailureReason}, #getfilechildren{dir_logic_name = "/"}) ->
-    #filechildren{answer = ?VOK, child_logic_name = [?SPACES_BASE_DIR_NAME]};
+    #filechildren{answer = ?VOK, entry = [#filechildren_direntry{name = ?SPACES_BASE_DIR_NAME, type = ?DIR_TYPE_PROT}]};
 postrouting(#space_info{name = SpaceName} = SpaceInfo, {error, _FailureReason}, #getfileattr{file_logic_name = "/"}) ->
     #fileattr{answer = ?VOK, atime = vcn_utils:time(), mtime = vcn_utils:time(), ctime = vcn_utils:time(),
                 links = 2, size = 0, type = ?DIR_TYPE, gname = unicode:characters_to_list(SpaceName), gid = fslogic_spaces:map_to_grp_owner(SpaceInfo),

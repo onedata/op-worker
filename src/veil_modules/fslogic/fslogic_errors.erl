@@ -97,7 +97,7 @@ gen_error_message(createlink, Error) ->
 gen_error_message(renewfilelocation, Error) ->
     #filelocationvalidity{answer = Error, validity = 0};
 gen_error_message(getfilechildren, Error) ->
-    #filechildren{answer = Error, child_logic_name = []};
+    #filechildren{answer = Error, entry = []};
 gen_error_message(getlink, Error) ->
     #linkinfo{answer = Error, file_logic_name = ""};
 gen_error_message(testchannel, Error) ->
