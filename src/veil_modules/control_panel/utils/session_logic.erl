@@ -20,9 +20,6 @@
 -export([init/0, cleanup/0]).
 -export([save_session/3, lookup_session/1, delete_session/1, clear_expired_sessions/0, get_cookie_ttl/0]).
 
-% ETS name for cookies
--define(SESSION_ETS, cookies).
-
 % Max number of old session cookies retrieved from view at once
 -define(cookie_lookup_limit, 100).
 
@@ -117,25 +114,20 @@ save_session(SessionID, Props, TillArg) ->
 -spec lookup_session(SessionID :: binary()) -> Props :: [tuple()] | undefined.
 %% ====================================================================
 lookup_session(SessionID) ->
-    case SessionID of
-        undefined ->
-            undefined;
-        _ ->
-            case dao_lib:apply(dao_cookies, get_cookie, [SessionID], 1) of
-                {ok, #veil_document{record = #session_cookie{valid_till = Till, session_memory = Props}}} ->
-                    % Check if the session isn't outdated
-                    {Megaseconds, Seconds, _} = now(),
-                    Now = Megaseconds * 1000000 + Seconds,
-                    case Till > Now of
-                        true ->
-                            Props;
-                        false ->
-                            delete_session(SessionID),
-                            undefined
-                    end;
-                _ ->
+    case dao_lib:apply(dao_cookies, get_cookie, [SessionID], 1) of
+        {ok, #veil_document{record = #session_cookie{valid_till = Till, session_memory = Props}}} ->
+            % Check if the session isn't outdated
+            {Megaseconds, Seconds, _} = now(),
+            Now = Megaseconds * 1000000 + Seconds,
+            case Till > Now of
+                true ->
+                    Props;
+                false ->
+                    delete_session(SessionID),
                     undefined
-            end
+            end;
+        _ ->
+            undefined
     end.
 
 
@@ -146,12 +138,7 @@ lookup_session(SessionID) ->
 -spec delete_session(SessionID :: binary()) -> ok.
 %% ====================================================================
 delete_session(SessionID) ->
-    case SessionID of
-        undefined ->
-            ok;
-        _ ->
-            dao_lib:apply(dao_cookies, remove_cookie, [SessionID], 1)
-    end.
+    dao_lib:apply(dao_cookies, remove_cookie, [SessionID], 1).
 
 
 %% clear_expired_sessions/0

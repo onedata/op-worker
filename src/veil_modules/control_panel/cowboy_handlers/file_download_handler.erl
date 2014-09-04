@@ -244,7 +244,7 @@ send_file(Req, FilePathOrUUID, FileName, Size) ->
     StreamFun = cowboy_file_stream_fun(fslogic_context:get_user_dn(), FilePathOrUUID, Size),
     Req2 = content_disposition_attachment_headers(Req, FileName),
     Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
-    {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [200, cowboy_req:set([{connection, close}], Req)]).
+    {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [200, cowboy_req:set([{connection, close}], Req3)]).
 
 
 %% stream_file/5

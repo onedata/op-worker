@@ -118,7 +118,7 @@ handle_http_upload(Req) ->
                     FinalCtx#context.req),
                 Req3 = cowboy_req:set_resp_body(RespBody, Req2),
                 % Force connection to close, so that every upload is in
-                {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [200, cowboy_req:set([{connection, close}], Req)])
+                {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [200, cowboy_req:set([{connection, close}], Req3)])
 
             catch Type:Message ->
                 ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
