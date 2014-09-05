@@ -217,10 +217,8 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
                     write_body_to_file(Req, State, 0, false);
                 RawRange ->
                     {Length, _} = cowboy_req:body_length(Req),
-                    ct:print("len ~p, range ~p",[Length, parse_byte_range(State, RawRange)]),
                     case parse_byte_range(State, RawRange) of
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
-                            ct:print("range: ~p",[{From,To}]),
                             write_body_to_file(Req, State, From, false);
                         _ ->
                             cdmi_error:error_reply(Req, State, ?error_bad_request_code, "Invalid range: ~p", [RawRange])
@@ -361,7 +359,6 @@ write_body_to_file(Req, State, Offset) ->
 %% ====================================================================
 write_body_to_file(Req, #state{filepath = Filepath} = State, Offset, RemoveIfFails) ->
     {Status, Chunk, Req2} = cowboy_req:body(Req),
-    ct:print("chunk: ~p, Offset: ~p",[Chunk,Offset]),
     case logical_files_manager:write(Filepath, Offset, Chunk) of
         Bytes when is_integer(Bytes) ->
             case Status of
