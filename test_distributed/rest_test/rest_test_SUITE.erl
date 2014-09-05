@@ -18,7 +18,7 @@
 -include("registered_names.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
--include("veil_modules/control_panel/connection_check_values.hrl").
+-include("veil_modules/control_panel/global_registry_interfacing.hrl").
 
 -define(ProtocolVersion, 1).
 

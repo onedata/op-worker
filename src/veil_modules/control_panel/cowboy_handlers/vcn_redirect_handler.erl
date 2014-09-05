@@ -32,6 +32,7 @@ init(_Type, Req, _Opts) ->
 %% ====================================================================
 handle(Req, State) ->
     {FullHostname, _} = cowboy_req:header(<<"host">>, Req),
+    {QS, _} = cowboy_req:qs(Req),
     % Remove the leading 'www.' if present
     Hostname = case FullHostname of
                    <<"www.", Rest/binary>> -> Rest;
@@ -41,7 +42,7 @@ handle(Req, State) ->
     {ok, Req2} = veil_cowboy_bridge:apply(cowboy_req, reply, [
         301,
         [
-            {<<"location">>, <<"https://", Hostname/binary, Path/binary>>},
+            {<<"location">>, <<"https://", Hostname/binary, Path/binary, "?", QS/binary>>},
             {<<"content-type">>, <<"text/html">>}
         ],
         <<"">>,

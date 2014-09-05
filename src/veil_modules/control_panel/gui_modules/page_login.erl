@@ -12,6 +12,7 @@
 
 -module(page_login).
 -include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/global_registry_interfacing.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % n2o API
@@ -53,7 +54,10 @@ event(init) -> ok;
 % Login event handling
 event(globalregistry_login) ->
     {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
-    gui_jq:redirect(atom_to_binary(GlobalRegistryHostname, latin1));
+    RedirectURL =
+        <<(atom_to_binary(GlobalRegistryHostname, latin1))/binary, ?gr_login_endpoint,
+        "?", ?referer_request_param, "=", (cluster_manager_lib:get_provider_id())/binary>>,
+    gui_jq:redirect(RedirectURL);
 
 event(plgrid_login) ->
     % Collect redirect param if present

@@ -15,7 +15,7 @@
 -include_lib("public_key/include/public_key.hrl").
 -include("veil_modules/control_panel/common.hrl").
 -include("err.hrl").
--include("veil_modules/control_panel/connection_check_values.hrl").
+-include("veil_modules/control_panel/global_registry_interfacing.hrl").
 
 -record(state, {
     version = <<"latest">> :: binary(),
