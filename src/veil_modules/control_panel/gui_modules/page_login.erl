@@ -54,9 +54,10 @@ event(init) -> ok;
 % Login event handling
 event(globalregistry_login) ->
     {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
+    ProviderID = try cluster_manager_lib:get_provider_id() catch _:_ -> <<"">>,
     RedirectURL =
         <<(atom_to_binary(GlobalRegistryHostname, latin1))/binary, ?gr_login_endpoint,
-        "?", ?referer_request_param, "=", (cluster_manager_lib:get_provider_id())/binary>>,
+        "?", ?referer_request_param, "=", ProviderID/binary>>,
     gui_jq:redirect(RedirectURL);
 
 event(plgrid_login) ->
