@@ -36,11 +36,11 @@ allowed_methods(Req, State) ->
 %% @end
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
-malformed_request(Req, #state{cdmi_version = Version, method = <<"PUT">>} = State) when is_binary(Version) ->
+malformed_request(Req, #state{cdmi_version = Version, method = <<"PUT">>, filepath = Filepath} = State) when is_binary(Version) ->
     {<<"application/cdmi-container">>, Req2} = cowboy_req:header(<<"content-type">>, Req),
-    {false, Req2, State};
-malformed_request(Req, State) ->
-    {false, Req, State}.
+    {false, Req2, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
+malformed_request(Req, #state{filepath = Filepath} = State) ->
+    {false, Req, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}}.
 
 %% resource_exists/2
 %% ====================================================================
@@ -179,12 +179,9 @@ prepare_container_ans([<<"objectID">> | Tail], #state{filepath = Filepath} = Sta
 prepare_container_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"objectName">>, list_to_binary([filename:basename(Filepath), "/"])} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = "/"} = State) ->
-    prepare_container_ans(Tail, State);
+    [{<<"parentURI">>,<<>>} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
-    ParentURI = case fslogic_path:strip_path_leaf(Filepath) of
-                    "/" -> <<"/">>;
-                    Other -> list_to_binary(Other)
-                end,
+    ParentURI = list_to_binary(rest_utils:ensure_path_ends_with_slash(fslogic_path:strip_path_leaf(Filepath))),
     [{<<"parentURI">>, ParentURI} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"parentID">> | Tail], #state{filepath = "/"} = State) ->
     prepare_container_ans(Tail, State);
