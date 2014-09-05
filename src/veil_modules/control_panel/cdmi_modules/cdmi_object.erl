@@ -36,9 +36,9 @@ allowed_methods(Req, State) ->
 %% @end
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
-malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version, filepath = Filepath } = State) when is_binary(Version) -> % put cdmi
+malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version, filepath = Filepath} = State) when is_binary(Version) -> % put cdmi
     {<<"application/cdmi-object">>, _} = cowboy_req:header(<<"content-type">>, Req),
-    {false,Req,State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
+    {false, Req, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
 malformed_request(Req, #state{filepath = Filepath} = State) ->
     {false, Req, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}}.
 
@@ -123,22 +123,23 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
     % get optional 'Range' header
     {RawRange, _} = cowboy_req:header(<<"range">>, Req),
     Ranges = case RawRange of
-                 undefined -> [{0,Size-1}];
-                 RawRange -> parse_byte_range(State,RawRange)
+                 undefined -> [{0, Size - 1}];
+                 RawRange -> parse_byte_range(State, RawRange)
              end,
 
     % return bad request if Range is invalid
     case Ranges of
-        invalid -> cdmi_error:error_reply(Req,State,?error_bad_request_code,"Invalid range: ~p",[RawRange]);
+        invalid -> cdmi_error:error_reply(Req, State, ?error_bad_request_code, "Invalid range: ~p", [RawRange]);
         Ranges ->
             % prepare data size and stream function
-            StreamSize = lists:foldl(fun({From,To},Acc) when To >= From -> Acc+To-From+1 end, 0, Ranges),
+            StreamSize = lists:foldl(fun({From, To}, Acc) when To >= From -> Acc + To - From + 1 end, 0, Ranges),
             UserDN = fslogic_context:get_user_dn(),
-            StreamFun = fun (Socket,Transport) ->
+            StreamFun = fun(Socket, Transport) ->
                 try
                     fslogic_context:set_user_dn(UserDN),
-                    {ok,BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
-                    lists:foreach(fun (Rng) -> stream_file(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
+                    {ok, BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
+                    lists:foreach(fun(Rng) ->
+                        stream_file(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
                 catch Type:Message ->
                     % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
                     ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Filepath, Type, Message])
@@ -152,8 +153,10 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
 
             % reply with stream and adequate status
             {ok, Req3} = case RawRange of
-                             undefined -> cowboy_req:reply(?ok, [], {StreamSize,StreamFun}, Req2);
-                             _ -> cowboy_req:reply(?ok_partial_content, [], {StreamSize,StreamFun}, Req2)
+                             undefined ->
+                                 veil_cowboy_bridge:apply(cowboy_req, reply, [?ok, [], {StreamSize, StreamFun}, Req2]);
+                             _ ->
+                                 veil_cowboy_bridge:apply(cowboy_req, reply, [?ok_partial_content, [], {StreamSize, StreamFun}, Req2])
                          end,
             {halt, Req3, State}
     end.
@@ -425,7 +428,7 @@ encode(Data, _) ->
 -spec ceil(N :: number()) -> integer().
 %% ====================================================================
 ceil(N) when trunc(N) == N -> N;
-ceil(N) -> trunc(N+1).
+ceil(N) -> trunc(N + 1).
 
 %% parse_byte_range/1
 %% ====================================================================
@@ -437,7 +440,7 @@ ceil(N) -> trunc(N+1).
 %% ====================================================================
 parse_byte_range(State, Range) when is_binary(Range) ->
     Ranges = parse_byte_range(State, binary:split(Range, <<",">>, [global])),
-    case lists:member(invalid,Ranges) of
+    case lists:member(invalid, Ranges) of
         true -> invalid;
         false -> Ranges
     end;
@@ -452,8 +455,8 @@ parse_byte_range(#state{attributes = #fileattributes{size = Size}} = State, [Fir
             end,
     case Range of
         [invalid] -> [invalid];
-        {Begin,End} when Begin > End -> [invalid];
-        {Begin_,_End} when Begin_ > Size -> parse_byte_range(State, Rest); % range is unsatisfiable and we ignore it
+        {Begin, End} when Begin > End -> [invalid];
+        {Begin_, _End} when Begin_ > Size -> parse_byte_range(State, Rest); % range is unsatisfiable and we ignore it
         ValidRange -> [ValidRange | parse_byte_range(State, Rest)]
     end.
 
