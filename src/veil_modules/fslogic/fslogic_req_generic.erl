@@ -267,28 +267,6 @@ rename_file(FullFileName, FullTargetFileName) ->
     ?debug("rename_file(FullFileName: ~p, FullTargetFileName: ~p)", [FullFileName, FullTargetFileName]),
     {ok, #veil_document{record = #user{access_token = AccessToken, global_id = GRUID}} = UserDoc} = fslogic_objects:get_user(),
 
-    %% Check source path
-    case filename:split(FullFileName) of
-        [_InvalidBaseDir] ->
-            ?info("Attempt to move 'spaces' directory. Query: ~p", [FullFileName]),
-            throw(?VEACCES);
-        [?SPACES_BASE_DIR_NAME, _InvalidSource] ->
-            ?info("Attempt to move the space directory. Query: ~p", [FullFileName]),
-            throw(?VEACCES);
-        _ -> ok
-    end,
-
-    %% Check target path
-    case filename:split(FullFileName) of
-        [_InvalidBaseDir1] ->
-            ?info("Attempt to move onto 'spaces' directory. Query: ~p", [FullFileName]),
-            throw(?VEACCES);
-        [?SPACES_BASE_DIR_NAME, _InvalidSource1] ->
-            ?info("Attempt to move onto the space directory. Query: ~p", [FullFileName]),
-            throw(?VEACCES);
-        _ -> ok
-    end,
-
     {ok, #space_info{space_id = SourceSpaceId, providers = SourceSpaceProviders}} = fslogic_utils:get_space_info_for_path(FullFileName),
     {ok, #space_info{space_id = TargetSpaceId, providers = TargetSpaceProviders}} = fslogic_utils:get_space_info_for_path(FullTargetFileName),
 

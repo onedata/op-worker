@@ -134,7 +134,6 @@ websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString, peer_typ
             end,
         ?debug("Received request: ~p", [Request]),
 
-
         handle(Req, Request, State) %% Decode ClusterMsg and handle it
     catch
         wrong_message_format                            -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};

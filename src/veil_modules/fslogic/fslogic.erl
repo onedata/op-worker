@@ -270,7 +270,7 @@ fslogic_runner(Method, RequestType, RequestBody, ErrorHandler) when is_function(
         error:{badmatch, Reason} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went wrong, but it could be expected.
-            ?warning_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            ?warning("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:{case_clause, Reason} ->
