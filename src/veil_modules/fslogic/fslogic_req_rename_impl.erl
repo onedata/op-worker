@@ -240,7 +240,8 @@ rename_file_interprovider(_UserDoc, ?REG_TYPE_PROT, SourceFilePath, TargetFilePa
 
 %% transfer_data/2
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc Copies data from SourceFilePath to TargetFilePath. Target will be overridden.
+%%      Both files have to be existing valid regular files.
 %% @end
 -spec transfer_data(SourceFilePath :: path(), TargetFilePath :: path()) ->
     ok | {error, {write | read, ValidBytes :: non_neg_integer(), Reason :: any()}}.
@@ -270,7 +271,8 @@ transfer_data4(SourceFilePath, TargetFilePath, Offset, Size) ->
 
 %% reconstuct_tree_for_zombie_files/1
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc For each operation_status_neg() runs {@link reconstuct_tree_for_zombie_file/2}. Any argument that does not give
+%%      required information is skipped.
 %% @end
 -spec reconstuct_tree_for_zombie_files([OPStatus :: operation_status_neg() | any()]) ->
     [{error, Reason :: any()}].
@@ -291,7 +293,8 @@ reconstuct_tree_for_zombie_files([_ | T]) ->
 
 %% reconstuct_tree_for_zombie_file/2
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc For given (already moved) file_doc(), tries to revert this file document to original location.
+%%      This operation may require to recreate some directories in source location.
 %% @end
 -spec reconstuct_tree_for_zombie_file(SourceFilePath :: path(), FileDoc :: file_doc()) -> ok | no_return().
 %% ====================================================================
@@ -313,7 +316,7 @@ reconstuct_tree_for_zombie_file(_SourceFilePath, #veil_document{record = #file{}
 
 %% storage_cleanup/1
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc For each operation_status_pos() cleanups storage (i.e. removes unneeded hard-links).
 %% @end
 -spec storage_cleanup([operation_status_pos()]) -> [{error, {Reason :: any(), OPInfo :: operation_info()}}].
 %% ====================================================================
@@ -333,7 +336,7 @@ storage_cleanup([{ok, #{transfer_type := link, source_fileid := FileID, storage 
 
 %% db_rollback/1
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc For each operation_status_any() reverts changes in DB if there were any.
 %% @end
 -spec db_rollback([OPStatus :: operation_status_any()]) -> [ok | {error, Reason :: any()}].
 %% ====================================================================
@@ -347,7 +350,7 @@ db_rollback([_ | T]) ->
 
 %% update_moved_file/4
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc Updates given file_doc() with new storage_file_id().
 %% @end
 -spec update_moved_file(SourceFilePath :: path(), FileDoc :: file_doc(), NewFileId :: storage_file_id(), RetryCount :: non_neg_integer()) ->
     ok | {error, Reason :: any()}.
@@ -374,7 +377,7 @@ update_moved_file(SourceFilePath, #veil_document{record = #file{location = Locat
 
 %% storage_rollback/2
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc For each operation_status_any() reverts the operation on storage.
 %% @end
 -spec storage_rollback(SourceSpaceInfo :: space_info(), [OPStatus :: operation_status_any()]) -> ok.
 %% ====================================================================
@@ -400,7 +403,20 @@ storage_rollback(#space_info{} = SourceSpaceInfo, [{_, _} | T]) ->
 
 %% rename_on_storage/4
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc Makes given file accessible on target space (storage level). If only possible (supported) this is done
+%%      using hard links in order to simulate semi-atomicity of the whole rename operation. In this case old hard link is NOT
+%%      removed. If storage does not support hard links, file is moved which means that no cleanup is needed afterwards.
+%%      This function returns operation_status_any() which gives just enough information to find out what went wrong and what
+%%      kind of cleanup / recovery is required.
+
+%%      operation_info() field semantics:
+%%          transfer_type => 'none' (file wasn't moved at all), 'link' (file was hard-linked) or 'move' (file was moved)
+%%          source_fileid => initial storage fileId
+%%          source_path and source_path => logical paths to source and target file location
+%%          storage => if this field doesn't exist, operation failed before storage information was selected
+%%          target_fileid => storage target (destination) fileId. If this field doesn't exist, operation failed before the fileId was generated
+%%      If both 'storage' and 'target_fileid' are set, 'transfer_type' is not 'none' and operation has failed,
+%%      file was moved/linked but is not viable to use. Normally rollback is required in that case although if file was linked, old - source_fileid can still be used.
 %% @end
 -spec rename_on_storage(UserDoc :: user_doc(), TargetSpaceInfo :: space_info(), SourceFilePath :: path(), TargetFilePath :: path()) ->
     OPStatus :: operation_status_any() | {error, Reason :: any()}.
@@ -412,7 +428,7 @@ rename_on_storage(UserDoc, TargetSpaceInfo, SourceFilePath, TargetFilePath) ->
         FileID      = File#file.location#file_location.file_id,
 
         OPInfo0 = #{transfer_type => none, source_fileid => FileID,
-            source_path => SourceFilePath, target_path => TargetFilePath, file_doc => FileDoc},
+            source_path => SourceFilePath, source_path => TargetFilePath, file_doc => FileDoc},
 
         Storage = %% Storage info for the file
         case dao_lib:apply(dao_vfs, get_storage, [{uuid, StorageID}], 1) of

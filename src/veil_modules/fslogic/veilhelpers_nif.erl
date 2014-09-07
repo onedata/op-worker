@@ -54,7 +54,7 @@ start(Prefix) ->
 %% @doc First 2 arguments of this method should come from #storage_helper_info{} record. <br/>
 %%      Those two arguments decide which Storage Helper shall be used for this operation. <br/>
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
-%%      gettattr/3 returns #st_stat{} record for given file _path. Note that if ErrorCode does not equal 0, fields of #st_stat{} are undefined and shall be ignored.
+%%      link/6 creates hard link _linkId to existing file _fileId. Behaves exactly as 'link' syscall.
 %% @end
 -spec link(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _link :: string()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
