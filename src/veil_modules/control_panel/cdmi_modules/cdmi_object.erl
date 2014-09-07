@@ -123,13 +123,13 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
     {RawRange, _} = cowboy_req:header(<<"range">>, Req),
     Ranges = case RawRange of
                  undefined -> [{0,Size-1}];
-                 RawRange -> parse_byte_range(State,RawRange)
+                 _ -> parse_byte_range(State,RawRange)
              end,
 
     % return bad request if Range is invalid
     case Ranges of
         invalid -> cdmi_error:error_reply(Req,State,?error_bad_request_code,"Invalid range: ~p",[RawRange]);
-        Ranges ->
+        _ ->
             % prepare data size and stream function
             StreamSize = lists:foldl(fun({From,To},Acc) when To >= From -> Acc+To-From+1 end, 0, Ranges),
             StreamFun = fun (Socket,Transport) ->
@@ -215,7 +215,7 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
                 undefined ->
                     logical_files_manager:truncate(Filepath, 0),
                     write_body_to_file(Req, State, 0, false);
-                RawRange ->
+                _ ->
                     {Length, _} = cowboy_req:body_length(Req),
                     case parse_byte_range(State, RawRange) of
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
