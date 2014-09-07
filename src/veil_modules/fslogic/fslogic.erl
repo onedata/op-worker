@@ -191,11 +191,8 @@ maybe_handle_fuse_message(RequestBody) ->
                     {ok, {reroute, Self}} ->
                         {ok, handle_fuse_message(RequestBody)};
                     {ok, {reroute, RerouteToProvider}} ->
-                        StartTime = vcn_utils:mtime(),
                         RemoteResponse = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
                             fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))}),
-                        EndTime = vcn_utils:mtime(),
-                        ?info("InterProvider roundtrip time: ~p", [EndTime - StartTime]),
                         {ok, RemoteResponse};
                     {ok, {response, Response}} ->
                         {ok, Response};

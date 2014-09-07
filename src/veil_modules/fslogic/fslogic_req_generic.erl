@@ -350,6 +350,7 @@ rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {_,
     {ok, #space_info{} = SourceSpaceInfo} = fslogic_utils:get_space_info_for_path(SourceFilePath),
     {ok, #space_info{} = TargetSpaceInfo} = fslogic_utils:get_space_info_for_path(TargetFilePath),
 
+    %% [{SourcePath, TargetPath}]
     AllRegularFiles = fslogic_utils:path_walk(SourceFilePath, [],
         fun(ElemPath, ElemType, AccIn) ->
             case ElemType of
@@ -366,7 +367,7 @@ rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {_,
     StorageMoveResult = lists:map(
         fun({SourceFile, TargetFile}) ->
             case rename_on_storage(UserDoc, TargetSpaceInfo, SourceFile, TargetFile) of
-                {ok, {_TransferType, _FileID, NewFileID, SourceSubFilePath, SubFileDoc, _Storage} = OPInfo} ->
+                {ok, #{target_fileid := NewFileID, source_path := SourceSubFilePath, file_doc := SubFileDoc} = OPInfo} ->
                     case update_moved_file(SourceSubFilePath, SubFileDoc, NewFileID, 3) of
                         ok -> {ok, OPInfo};
                         {error, _} ->
@@ -390,7 +391,7 @@ rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {_,
     try
         {ok, #veil_document{record = #file{} = OldFile} = OldFileDoc} = fslogic_objects:get_file(SourceFilePath),
         ok = rename_file_trivial(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {OldFile, OldFileDoc, NewParentUUID}),
-        rename_storage_cleanup(GoodRes)
+        catch rename_storage_cleanup(GoodRes) %% We don't really care whether cleanup fails or not.
     catch
         _:Reason ->
             ?error_stacktrace("Unable to move file tree due to: ~p. Initializing rollback...", [Reason]),
@@ -402,14 +403,41 @@ rename_file_interspace(UserDoc, SourceAttrs, SourceFilePath, TargetFilePath, {_,
             throw({?VEREMOTEIO, Reason})
     end,
 
-    ok.
+    case BadRes of
+        [] -> ok;
+        _  ->
+            rename_reconstuct_tree_for_zombie_files(BadRes),
+            throw({?VEREMOTEIO, {files_not_moved, BadRes}})
+    end.
 
+
+rename_reconstuct_tree_for_zombie_files([]) ->
+    [];
+rename_reconstuct_tree_for_zombie_files([{error, #{file_doc := FileDoc, source_path := SourceFilePath}} | T]) ->
+    [catch rename_reconstuct_tree_for_zombie_file(SourceFilePath, FileDoc) | rename_reconstuct_tree_for_zombie_files(T)];
+rename_reconstuct_tree_for_zombie_files([_ | T]) ->
+    rename_reconstuct_tree_for_zombie_files(T).
+
+rename_reconstuct_tree_for_zombie_file(SourceFilePath, #veil_document{record = #file{type = ?REG_TYPE} = File} = FileDoc) ->
+    SourceParentPath = fslogic_path:strip_path_leaf(SourceFilePath),
+    [?SPACES_BASE_DIR_NAME, SpaceDir | SourceParentTokens] = fslogic_path:split(SourceParentPath),
+    lists:foldl(
+        fun(NextDirName, CurrTokens) ->
+            NextTokens = CurrTokens ++ [NextDirName],
+            logical_files_manager:mkdir(filename:join(NextTokens)),
+            NextTokens
+        end, [?SPACES_BASE_DIR_NAME, SpaceDir], SourceParentTokens),
+
+    {ok, #veil_document{uuid = ParentUUID}} = fslogic_objects:get_file(SourceParentPath),
+    {ok, _} = fslogic_objects:save_file(FileDoc#veil_document{force_update = true, record = File#file{parent = ParentUUID}});
+rename_reconstuct_tree_for_zombie_file(_SourceFilePath, _FileDoc) ->
+    ok.
 
 rename_storage_cleanup([]) ->
     ok;
-rename_storage_cleanup([{ok, {move, _FileID, _NewFileID, _SourceFilePath, _FileDoc, _Storage}} | T]) ->
+rename_storage_cleanup([{ok, #{transfer_type := move}} | T]) ->
     rename_storage_cleanup(T);
-rename_storage_cleanup([{ok, {link, FileID, _NewFileID, _SourceFilePath, _FileDoc, Storage}} | T]) ->
+rename_storage_cleanup([{ok, #{transfer_type := link, source_fileid := FileID, storage := Storage}} | T]) ->
     SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
     case storage_files_manager:delete(SHInfo, FileID) of
         ok -> ok;
@@ -422,7 +450,7 @@ rename_storage_cleanup([{ok, {link, FileID, _NewFileID, _SourceFilePath, _FileDo
 
 rename_db_rollback([]) ->
     [];
-rename_db_rollback([{_, {_TransferType, FileID, _NewFileID, SourceFilePath, FileDoc, _Storage}} | T]) ->
+rename_db_rollback([{_, #{source_fileid := FileID, source_path := SourceFilePath, file_doc := FileDoc}} | T]) ->
     [update_moved_file(SourceFilePath, FileDoc, FileID, 3) | rename_db_rollback(T)];
 rename_db_rollback([_ | T]) ->
     rename_db_rollback(T).
@@ -448,10 +476,13 @@ update_moved_file(SourceFilePath, #veil_document{record = #file{location = Locat
 
 rename_storage_rollback(_, []) ->
     ok;
-rename_storage_rollback(#space_info{} = SourceSpaceInfo, [{_, {TransferType, FileID, NewFileID, _SourceFilePath, _FileDoc, Storage}} | T]) when is_atom(TransferType) ->
+rename_storage_rollback(#space_info{} = SourceSpaceInfo,
+                        [{_, #{transfer_type := TransferType, source_fileid := FileID,
+                               target_fileid := NewFileID,    storage       := Storage}} | T]) when is_atom(TransferType) ->
     SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
 
     case TransferType of
+        none -> ok;
         link -> storage_files_manager:delete(SHInfo, NewFileID);
         move ->
             storage_files_manager:mv(SHInfo, NewFileID, FileID),
@@ -469,44 +500,59 @@ rename_on_storage(UserDoc, TargetSpaceInfo, SourceFilePath, TargetFilePath) ->
         {ok, #veil_document{record = File} = FileDoc} = fslogic_objects:get_file(SourceFilePath),
         StorageID   = File#file.location#file_location.storage_id,
         FileID      = File#file.location#file_location.file_id,
+
+        OPInfo0 = #{transfer_type => none, source_fileid => FileID,
+            source_path => SourceFilePath, target_path => TargetFilePath, file_doc => FileDoc},
+
         Storage = %% Storage info for the file
         case dao_lib:apply(dao_vfs, get_storage, [{uuid, StorageID}], 1) of
             {ok, #veil_document{record = #storage_info{} = S}} -> S;
             {error, MReason} ->
                 ?error("Cannot fetch storage (ID: ~p) information for file ~p. Reason: ~p", [StorageID, SourceFilePath, MReason]),
-                throw({storage_not_selected, MReason})
+                throw(OPInfo0)
         end,
+
+        OPInfo1 = OPInfo0#{storage => Storage},
 
         SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage), %% Storage helper for cluster
         NewFileID = fslogic_storage:get_new_file_id(TargetSpaceInfo, TargetFilePath, UserDoc, SHInfo, fslogic_context:get_protocol_version()),
+        {ok, #st_stat{st_uid = OwnerUID}} = storage_files_manager:getattr(SHInfo, FileID),
+
+        OPInfo2 = OPInfo1#{target_fileid => NewFileID},
 
         TransferType =
-            case storage_files_manager:link(SHInfo, FileID, NewFileID) of
+            case fslogic_utils:run_as_root(fun() -> storage_files_manager:link(SHInfo, FileID, NewFileID) end) of
                 ok -> link;
                 {error, ErrCode} ->
                     ?warning("Cannot move file using hard links '~p' -> '~p' due to: ~p", [FileID, NewFileID, ErrCode]),
-                    case storage_files_manager:mv(SHInfo, FileID, NewFileID) of
+                    case fslogic_utils:run_as_root(fun() -> storage_files_manager:mv(SHInfo, FileID, NewFileID) end) of
                         ok -> move;
                         {error, ErrCode1} ->
                             ?error("Cannot move file '~p' -> '~p' due to: ~p", [FileID, NewFileID, ErrCode1]),
-                            throw({file_not_moved, {{link_error, ErrCode}, {move_error, ErrCode1}}})
+                            throw(OPInfo2);
+                        ErrCode1Compat ->
+                            ?error("Cannot move file '~p' -> '~p' due to: ~p", [FileID, NewFileID, ErrCode1Compat]),
+                            throw(OPInfo2)
                     end
             end,
 
-        OPInfo = {TransferType, FileID, NewFileID, SourceFilePath, FileDoc, Storage},
+        OPInfo3 = OPInfo2#{transfer_type := TransferType},
 
         %% Change group owner
-        case fslogic_utils:run_as_root(fun() -> storage_files_manager:chown(SHInfo, NewFileID, -1, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo)) end) of
+        case fslogic_utils:run_as_root(fun() -> storage_files_manager:chown(SHInfo, NewFileID, OwnerUID, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo)) end) of
             ok -> ok;
             MReason1 ->
-                ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [FileID, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo), MReason1]),
-                throw(OPInfo)
+                ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [NewFileID, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo), MReason1]),
+                throw(OPInfo3)
         end,
 
-        {ok, OPInfo}
+        {ok, OPInfo3}
     catch
-        _:Reason ->
-            {error, Reason}
+        throw:Reason ->
+            {error, Reason};
+        _:Reason1 ->
+            ?error_stacktrace("Unknown error while renaming file on storage: ~p", [Reason1]),
+            {error, Reason1}
     end.
 
 
@@ -527,7 +573,7 @@ rename_file_interprovider(UserDoc, ?DIR_TYPE_PROT, SourceFilePath, TargetFilePat
                     fslogic_context:set_access_token(AT_CTX1, AT_CTX2),
                     NewSourceFilePath = filename:join(SourceFilePath, FileName),
                     NewTargetFilePath = filename:join(TargetFilePath, FileName),
-                    %% {ok, NewSourceAttrs} = logical_files_manager:getfileattr(NewSourceFilePath),
+
                     rename_file_interprovider(UserDoc, FileType, NewSourceFilePath, NewTargetFilePath),
                     Self ! {self(), ok}
 %%                 end)
@@ -582,12 +628,10 @@ transfer_data(SourceFilePath, TargetFilePath, Offset, Size) ->
 
 
 rename_file_common_local_assertions(UserDoc, SourceFilePath, TargetFilePath) ->
-    OldDir = fslogic_path:strip_path_leaf(SourceFilePath),
     NewDir = fslogic_path:strip_path_leaf(TargetFilePath),
 
     {ok, #veil_document{record = #file{} = OldFile} = OldDoc} = fslogic_objects:get_file(SourceFilePath),
     {ok, #veil_document{uuid = NewParentUUID} = NewParentDoc} = fslogic_objects:get_file(NewDir),
-    {ok, #veil_document{record = #file{}} = OldParentDoc} = fslogic_objects:get_file(OldDir),
 
     ok = fslogic_perms:check_file_perms(SourceFilePath, UserDoc, OldDoc, delete),
     ok = fslogic_perms:check_file_perms(NewDir, UserDoc, NewParentDoc, write),

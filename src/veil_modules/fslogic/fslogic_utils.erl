@@ -29,10 +29,19 @@
 %% ====================================================================
 
 
+%% run_as_root/1
+%% ====================================================================
+%% @doc Runs given function as root.
+%% @end
+-spec run_as_root(Fun :: function()) -> Result :: term().
+%% ====================================================================
 run_as_root(Fun) ->
     %% Save user context
     DN_CTX = fslogic_context:get_user_dn(),
     {AT_CTX1, AT_CTX2} = fslogic_context:get_access_token(),
+
+    %% Clear user context
+    fslogic_context:clear_user_ctx(),
 
     Result = Fun(),
 
@@ -45,27 +54,27 @@ run_as_root(Fun) ->
 
 path_walk(Path, InitAcc, Fun) ->
     {ok, #fileattributes{type = FileType}} = logical_files_manager:getfileattr(Path),
-    path_walk(Path, FileType, InitAcc, Fun).
-path_walk(Path, ?DIR_TYPE_PROT = FileType, Acc, Fun) ->
+    path_walk4(Path, FileType, InitAcc, Fun).
+path_walk4(Path, ?DIR_TYPE_PROT = FileType, Acc, Fun) ->
     Acc1 = Fun(Path, FileType, Acc),
     lists:foldl(
         fun(#dir_entry{name = Elem, type = ElemType}, IAcc) ->
             ElemPath = filename:join(Path, Elem),
-            path_walk(ElemPath, ElemType, IAcc, Fun)
+            path_walk4(ElemPath, ElemType, IAcc, Fun)
         end, Acc1, list_dir(Path));
-path_walk(Path, FileType, Acc, Fun) ->
+path_walk4(Path, FileType, Acc, Fun) ->
     Fun(Path, FileType, Acc).
 
 
 list_dir(Path) ->
     BatchSize = 100,
-    list_dir(Path, 0, BatchSize, []).
-list_dir(Path, Offset, BatchSize, Acc) ->
+    list_dir4(Path, 0, BatchSize, []).
+list_dir4(Path, Offset, BatchSize, Acc) ->
     {ok, Childern} = logical_files_manager:ls(Path, BatchSize, Offset),
     case length(Childern) < BatchSize of
         true  -> Childern ++ Acc;
         false ->
-            list_dir(Path, Offset + length(Childern), BatchSize, Childern ++ Acc)
+            list_dir4(Path, Offset + length(Childern), BatchSize, Childern ++ Acc)
     end.
 
 %% get_sh_and_id/3
