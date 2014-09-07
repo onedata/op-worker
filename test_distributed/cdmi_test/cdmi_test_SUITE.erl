@@ -147,7 +147,20 @@ get_file_test(_Config) ->
     {Code6, _Headers6, Response6} = do_request("cdmi_objectid/"++binary_to_list(ObjectID), get, RequestHeaders6, []),
     ?assertEqual("200",Code6),
     {struct,CdmiResponse6} = mochijson2:decode(Response6),
-    ?assertEqual(FileContent,base64:decode(proplists:get_value(<<"value">>,CdmiResponse6))).
+    ?assertEqual(FileContent,base64:decode(proplists:get_value(<<"value">>,CdmiResponse6))),
+    %%------------------------------
+
+    %% selective value read non-cdmi
+    RequestHeaders7 = [{"Range","1-3,5-5,-3"}],
+    {Code7, _Headers7, Response7} = do_request(FileName, get, RequestHeaders7, []),
+    ?assertEqual("206",Code7),
+    ?assertEqual("omec...", Response7), % 1-3,5-5,12-14  from FileContent = <<"Some content...">>
+    %%------------------------------
+
+    %% selective value read non-cdmi error
+    RequestHeaders8 = [{"Range","1-3,6-4,-3"}],
+    {Code8, _Headers8, _Response8} = do_request(FileName, get, RequestHeaders8, []),
+    ?assertEqual("400",Code8).
     %%------------------------------
 
 % Tests cdmi metadata read on object GET request.
@@ -305,7 +318,7 @@ create_file_test(_Config) ->
     {struct,CdmiResponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>,CdmiResponse2)),
     ?assertEqual(<<"file1.txt">>, proplists:get_value(<<"objectName">>,CdmiResponse2)),
-    ?assertEqual(<<"/spaces/veilfstestgroup/">>, proplists:get_value(<<"parentURI">>,CdmiResponse2)),
+    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiResponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiResponse2)),
     ?assert(proplists:get_value(<<"metadata">>,CdmiResponse2) =/= <<>>),
 
@@ -339,6 +352,7 @@ create_file_test(_Config) ->
 update_file_test(_Config) ->
     FullName = filename:join(["/",?Test_dir_name,?Test_file_name]),
     NewValue = <<"New Value!">>,
+    UpdatedValue = <<"123 Value!">>,
 
     %%--- value replace, cdmi ------
     ?assert(object_exists(FullName)),
@@ -355,9 +369,6 @@ update_file_test(_Config) ->
     %%------------------------------
 
     %%---- value update, cdmi ------
-    ?assert(object_exists(FullName)),
-    ?assertEqual(NewValue,get_file_content(FullName)),
-
     UpdateValue = <<"123">>,
     RequestHeaders2 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
     RequestBody2 = [{<<"value">>, UpdateValue}],
@@ -366,7 +377,36 @@ update_file_test(_Config) ->
     ?assertEqual("204",Code2),
 
     ?assert(object_exists(FullName)),
-    ?assertEqual(<<"123 Value!">>,get_file_content(FullName)).
+    ?assertEqual(UpdatedValue,get_file_content(FullName)),
+    %%------------------------------
+
+    %%--- value replace, http ------
+    RequestBody3 = ?Test_file_content,
+    {Code3, _Headers3, _Response3} = do_request(FullName, put, [], RequestBody3),
+    ?assertEqual("204",Code3),
+
+    ?assert(object_exists(FullName)),
+    ?assertEqual(?Test_file_content,get_file_content(FullName)),
+    %%------------------------------
+
+    %%---- value update, http ------
+    UpdateValue = <<"123">>,
+    RequestHeaders4 = [{"content-range", "0-2"}],
+    {Code4, _Headers4, _Response4} = do_request(FullName, put, RequestHeaders4, UpdateValue),
+    ?assertEqual("204",Code4),
+
+    ?assert(object_exists(FullName)),
+    ?assertEqual(<<"123t_file_content">>,get_file_content(FullName)),
+    %%------------------------------
+
+    %%---- value update, http error ------
+    UpdateValue = <<"123">>,
+    RequestHeaders5 = [{"content-range", "0-2,3-4"}],
+    {Code5, _Headers5, _Response5} = do_request(FullName, put, RequestHeaders5, UpdateValue),
+    ?assertEqual("400",Code5),
+
+    ?assert(object_exists(FullName)),
+    ?assertEqual(<<"123t_file_content">>,get_file_content(FullName)).
     %%------------------------------
 
 % Tests cdmi container DELETE requests
@@ -492,7 +532,7 @@ objectid_and_capabilities_test(_Config) ->
     RootId = proplists:get_value(<<"objectID">>,CdmiResponse1),
     ?assertNotEqual(RootId,undefined),
     ?assert(is_binary(RootId)),
-    ?assertEqual(undefined, proplists:get_value(<<"parentURI">>,CdmiResponse1)),
+    ?assertEqual(<<>>, proplists:get_value(<<"parentURI">>,CdmiResponse1)),
     ?assertEqual(undefined, proplists:get_value(<<"parentID">>,CdmiResponse1)),
     ?assertEqual(<<"cdmi_capabilities/container/">>,proplists:get_value(<<"capabilitiesURI">>,CdmiResponse1)),
     %%------------------------------
