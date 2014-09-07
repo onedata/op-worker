@@ -82,11 +82,6 @@
 -define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getfileuuid, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren]).
 
 
-%% File types used in protocol. Use fslogic_file:normalize_file_type to translate types from/to normal macros like ?REG_TYPE.
--define(REG_TYPE_PROT, "REG").
--define(DIR_TYPE_PROT, "DIR").
--define(LNK_TYPE_PROT, "LNK").
-
 % File open modes (open flags)
 -define(UNSPECIFIED_MODE,"").
 -define(READ_MODE,"read").
@@ -101,5 +96,8 @@
 
 %% Default permissions for space directory (i.e. /spaces/SpaceName)
 -define(SpaceDirPerm, 8#1770).
+
+%% [1MB] Block size used while transferring date through provider_proxy module
+-define(PROVIDER_PROXT_BLOCK_SIZE, 1024 * 1024).
 
 -endif.

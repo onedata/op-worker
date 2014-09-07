@@ -52,6 +52,12 @@ run_as_root(Fun) ->
     Result.
 
 
+%% path_walk/3
+%% ====================================================================
+%% @doc @todo: write me !
+%% @end
+-spec path_walk(Path :: path(), InitAcc :: [term()], Fun :: function()) -> AccOut :: [term()] | no_return().
+%% ====================================================================
 path_walk(Path, InitAcc, Fun) ->
     {ok, #fileattributes{type = FileType}} = logical_files_manager:getfileattr(Path),
     path_walk4(Path, FileType, InitAcc, Fun).
@@ -66,6 +72,12 @@ path_walk4(Path, FileType, Acc, Fun) ->
     Fun(Path, FileType, Acc).
 
 
+%% list_dir/1
+%% ====================================================================
+%% @doc @todo: write me !
+%% @end
+-spec list_dir(Path :: path()) -> [#dir_entry{}] | no_return().
+%% ====================================================================
 list_dir(Path) ->
     BatchSize = 100,
     list_dir4(Path, 0, BatchSize, []).
