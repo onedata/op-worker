@@ -57,7 +57,8 @@ run_as_root(Fun) ->
 %% @doc Executes given function for each file which path starts with StartPath. This function behaves very similar to
 %%      lists:foldl/3 only that instead list iteration, recursive path walk is made. File order is unspecified.
 %% @end
--spec path_walk(StartPath :: path(), InitAcc :: [term()], Fun :: function(SubPath :: path(), FileType :: file_type_protocol(), AccIn :: [term()])) ->
+-spec path_walk(StartPath :: path(), InitAcc :: [term()],
+    Fun :: fun((SubPath :: path(), FileType :: file_type_protocol(), AccIn :: [term()]) -> [term()])) ->
     AccOut :: [term()] | no_return().
 %% ====================================================================
 path_walk(Path, InitAcc, Fun) ->
