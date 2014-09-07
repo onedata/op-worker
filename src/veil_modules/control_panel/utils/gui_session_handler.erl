@@ -45,7 +45,7 @@
 -spec init(State :: term(), Ctx :: #context{}) -> {ok, NewState :: term(), NewCtx :: #context{}}.
 %% ====================================================================
 init(State, Ctx) ->
-    {Cookie, _} = cowboy_req:cookie(?cookie_name, Ctx#context.req),
+    Cookie = gui_ctx:cookie(?cookie_name, Ctx#context.req),
     {Path, _} = cowboy_req:path(Ctx#context.req),
 
     Module = get_session_logic_module(),
