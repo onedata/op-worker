@@ -200,12 +200,16 @@ CommunicationHandler::Pool Communicator::poolType(const google::protobuf::Messag
             : CommunicationHandler::Pool::META;
 }
 
-std::shared_ptr<Communicator> createWebsocketCommunicator(unsigned int dataPoolSize,
-                                                          unsigned int metaPoolSize,
-                                                          std::string uri,
-                                                          std::shared_ptr<const CertificateData> certificateData,
-                                                          const bool verifyServerCertificate)
+std::shared_ptr<Communicator> createWebsocketCommunicator(const unsigned int dataPoolSize,
+                                                          const unsigned int metaPoolSize,
+                                                          std::string hostname,
+                                                          unsigned int port,
+                                                          std::string endpoint,
+                                                          const bool verifyServerCertificate,
+                                                          std::shared_ptr<const CertificateData> certificateData)
 {
+    const auto uri = "wss://"+hostname+std::to_string(port)+endpoint;
+
     LOG(INFO) << "Creating a WebSocket++ based Communicator instance with " <<
                  dataPoolSize << " data pool connections, " << metaPoolSize <<
                  " metadata pool connections. Connecting to " << uri << "with "
@@ -213,10 +217,10 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(unsigned int dataPoolS
                  (verifyServerCertificate ? "enabled" : "disabled") << ".";
 
     auto dataPool = std::make_unique<WebsocketConnectionPool>(
-                dataPoolSize, uri, certificateData, verifyServerCertificate);
+                dataPoolSize, uri, verifyServerCertificate, certificateData);
 
     auto metaPool = std::make_unique<WebsocketConnectionPool>(
-                metaPoolSize, uri, certificateData, verifyServerCertificate);
+                metaPoolSize, uri, verifyServerCertificate, certificateData);
 
     auto communicationHandler = std::make_unique<CommunicationHandler>(
                 std::move(dataPool), std::move(metaPool));
