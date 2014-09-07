@@ -40,7 +40,9 @@
 
 %% common_assertions/3
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc Common assertions for rename operation. Shall be used prior to every rename operation
+%%      that is handled as 'internal' (not inter-provider).
+%%      This function returns bunch of useful common data or fails with exception.
 %% @end
 -spec common_assertions(UserDoc :: user_doc(), SourceFilePath :: path(), TargetFilePath :: path()) ->
     {ok, OldFile :: file_doc(), OldDoc :: file_doc(), NewParentUUID :: uuid()} | no_return().
@@ -59,7 +61,10 @@ common_assertions(UserDoc, SourceFilePath, TargetFilePath) ->
 
 %% rename_file_trivial/3
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc One of rename operation's implementation. Trivial rename is the fastest one
+%%      and also the safest one since the whole operation is fully atomic.
+%%
+%%      Precondition: Both SourceFilePath and TargetFilePath are pointing to the same space (have common prefix like /spaces/some_name).
 %% @end
 -spec rename_file_trivial(SourceFilePath :: path(), TargetFilePath :: path(),
     {OldFile :: file_info(), OldFileDoc :: file_doc(), NewParentUUID :: uuid()}) ->
@@ -85,7 +90,11 @@ rename_file_trivial(SourceFilePath, TargetFilePath, {OldFile, OldFileDoc, NewPar
 
 %% rename_file_interspace/4
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc One of rename operation's implementation. Inter-Space rename is quite fast
+%%      since meta-tree move is atomic. Only regular files are handled one by one, so in case of failure
+%%      only those can end up not renamed.
+%%
+%%      Precondition: Both SourceFilePath and TargetFilePath are pointing spaces that are supported by this provider.
 %% @end
 -spec rename_file_interspace(UserDoc :: user_doc(), SourceFilePath :: path(), TargetFilePath :: path(),
     {OldFile :: file_info(), OldFileDoc :: file_doc(), NewParentUUID :: uuid()}) ->
@@ -161,7 +170,14 @@ rename_file_interspace(UserDoc, SourceFilePath, TargetFilePath, {_, _, NewParent
 
 %% rename_file_interprovider/4
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc One of rename operation's implementation. Inter-Provider rename is the most general one.
+%%      Each and every file is handled separately. In case of failure, operation will be aborted (exact behaviour is not specified)
+%%      and all files that weren't transferred successfully will be available at source location while successful ones
+%%      will be available at target location.
+%%      Since there are not preconditions for this function call, it can be used instead any other rename_file_* implementation
+%%      although there can be significant negative performance and data consistency impact.
+%%
+%%      Precondition: none.
 %% @end
 -spec rename_file_interprovider(UserDoc :: user_doc(), FileType :: file_type_protocol(), SourceFilePath :: path(), TargetFilePath :: path()) ->
     ok | no_return().
@@ -177,6 +193,7 @@ rename_file_interprovider(UserDoc, ?DIR_TYPE_PROT, SourceFilePath, TargetFilePat
 
     PIDs = lists:map(
         fun(#dir_entry{name = FileName, type = FileType}) ->
+%%             Uncomment for parallel renaming
 %%             spawn_monitor(
 %%                 fun() ->
             fslogic_context:set_user_dn(DN_CTX),
@@ -214,9 +231,6 @@ rename_file_interprovider(_UserDoc, ?REG_TYPE_PROT, SourceFilePath, TargetFilePa
     ok = logical_files_manager:create(TargetFilePath),
     ok = transfer_data(SourceFilePath, TargetFilePath),
     ok = logical_files_manager:delete(SourceFilePath).
-
-
-
 
 
 %% ====================================================================
