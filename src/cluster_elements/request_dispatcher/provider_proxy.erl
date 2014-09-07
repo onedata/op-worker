@@ -217,6 +217,13 @@ a2l(Atom) when is_atom(Atom) ->
 a2l(List) when is_list(List) ->
     List.
 
+
+%% timeout_for_message/1
+%% ====================================================================
+%% @doc Returns timeout (ms) for given request.
+%% @end
+-spec timeout_for_message(Request :: term()) -> Timeout :: non_neg_integer().
+%% ====================================================================
 timeout_for_message(#fusemessage{input = #getfilechildren{}}) ->
     3000;
 timeout_for_message(#fusemessage{input = #getfileattr{}}) ->

@@ -54,9 +54,11 @@ run_as_root(Fun) ->
 
 %% path_walk/3
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc Executes given function for each file which path starts with StartPath. This function behaves very similar to
+%%      lists:foldl/3 only that instead list iteration, recursive path walk is made. File order is unspecified.
 %% @end
--spec path_walk(Path :: path(), InitAcc :: [term()], Fun :: function()) -> AccOut :: [term()] | no_return().
+-spec path_walk(StartPath :: path(), InitAcc :: [term()], Fun :: function(SubPath :: path(), FileType :: file_type_protocol(), AccIn :: [term()])) ->
+    AccOut :: [term()] | no_return().
 %% ====================================================================
 path_walk(Path, InitAcc, Fun) ->
     {ok, #fileattributes{type = FileType}} = logical_files_manager:getfileattr(Path),
@@ -74,7 +76,7 @@ path_walk4(Path, FileType, Acc, Fun) ->
 
 %% list_dir/1
 %% ====================================================================
-%% @doc @todo: write me !
+%% @doc Returns all dir's entries.
 %% @end
 -spec list_dir(Path :: path()) -> [#dir_entry{}] | no_return().
 %% ====================================================================
