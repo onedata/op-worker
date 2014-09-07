@@ -27,6 +27,13 @@
 %% API functions
 %% ====================================================================
 
+
+%% split/1
+%% ====================================================================
+%% @doc Same as {@link filename:split/1} but returned tokes build always relative path.
+%% @end
+-spec split(Path :: string()) -> [string()].
+%% ====================================================================
 split(Path) ->
     case filename:split(Path) of
         ["/" | Rest] -> Rest;

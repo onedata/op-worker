@@ -56,6 +56,7 @@
   links = 0
 }).
 
+%% Directory entry: name :: string(), type :: file_type_protocol().
 -record(dir_entry, {name = "", type = ""}).
 
 % Callbacks management
