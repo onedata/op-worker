@@ -56,7 +56,7 @@ list_dir_test(_Config) ->
     ?assertEqual("200", Code2),
     {struct,CdmiResponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiResponse2)),
-    ?assertEqual([<<"dir">>,<<"spaces">>], proplists:get_value(<<"children">>,CdmiResponse2)),
+    ?assertEqual([<<"dir/">>,<<"spaces/">>], proplists:get_value(<<"children">>,CdmiResponse2)),
     %%------------------------------
 
     %%--- list nonexisting dir -----
@@ -609,7 +609,7 @@ objectid_and_capabilities_test(_Config) ->
     ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse8)),
     ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"objectName">>,CdmiResponse8)),
     ?assertEqual(<<"0-1">>, proplists:get_value(<<"childrenrange">>,CdmiResponse8)),
-    ?assertEqual([list_to_binary(?container_capability_path),list_to_binary(?dataobject_capability_path)], proplists:get_value(<<"children">>,CdmiResponse8)),
+    ?assertEqual([<<"container/">>,<<"dataobject/">>], proplists:get_value(<<"children">>,CdmiResponse8)),
     ?assertMatch({struct,_}, proplists:get_value(<<"capabilities">>,CdmiResponse8)),
     {struct,Capabilities} = proplists:get_value(<<"capabilities">>,CdmiResponse8),
     ?assertEqual(?root_capability_list,Capabilities),
@@ -625,7 +625,7 @@ objectid_and_capabilities_test(_Config) ->
     ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"parentURI">>,CdmiResponse9)),
     ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse9)),
     ?assertEqual(?container_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse9)),
-    ?assertEqual(list_to_binary(?container_capability_path), proplists:get_value(<<"objectName">>,CdmiResponse9)),
+    ?assertEqual(<<"container/">>, proplists:get_value(<<"objectName">>,CdmiResponse9)),
     ?assertMatch({struct,_}, proplists:get_value(<<"capabilities">>,CdmiResponse9)),
     {struct,Capabilities2} = proplists:get_value(<<"capabilities">>,CdmiResponse9),
     ?assertEqual(?container_capability_list,Capabilities2),
@@ -641,7 +641,7 @@ objectid_and_capabilities_test(_Config) ->
     ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"parentURI">>,CdmiResponse10)),
     ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse10)),
     ?assertEqual(?dataobject_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse10)),
-    ?assertEqual(list_to_binary(?dataobject_capability_path), proplists:get_value(<<"objectName">>,CdmiResponse10)),
+    ?assertEqual(<<"dataobject/">>, proplists:get_value(<<"objectName">>,CdmiResponse10)),
     ?assertMatch({struct,_}, proplists:get_value(<<"capabilities">>,CdmiResponse10)),
     {struct,Capabilities3} = proplists:get_value(<<"capabilities">>,CdmiResponse10),
     ?assertEqual(?dataobject_capability_list,Capabilities3).

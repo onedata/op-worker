@@ -195,7 +195,14 @@ prepare_container_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = Stat
 prepare_container_ans([{<<"metadata">>, Prefix} | Tail], #state{attributes = Attrs} = State) ->
     [{<<"metadata">>, rest_utils:prepare_metadata(Prefix, Attrs)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(Tail, State)];
+    Childs = lists:map(fun(Name) ->
+            case logical_files_manager:getfileattr(filename:join(Filepath,Name)) of
+                {ok,#fileattributes{type = "DIR"}} -> list_to_binary(rest_utils:ensure_path_ends_with_slash(Name));
+                _ -> list_to_binary(Name)
+            end
+        end,
+        rest_utils:list_dir(Filepath)),
+    [{<<"children">>, Childs} | prepare_container_ans(Tail, State)];
 prepare_container_ans([_Other | Tail], State) ->
     prepare_container_ans(Tail, State).
 
