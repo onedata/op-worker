@@ -208,7 +208,7 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(const unsigned int dat
                                                           const bool verifyServerCertificate,
                                                           std::shared_ptr<const CertificateData> certificateData)
 {
-    const auto uri = "wss://"+hostname+std::to_string(port)+endpoint;
+    const auto uri = "wss://"+hostname+":"+std::to_string(port)+endpoint;
 
     LOG(INFO) << "Creating a WebSocket++ based Communicator instance with " <<
                  dataPoolSize << " data pool connections, " << metaPoolSize <<
