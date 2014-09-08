@@ -292,7 +292,7 @@ list_xattr(FullFileName) ->
     case Status of
         ok ->
             case TmpAns#xattrlist.answer of
-                ?VOK -> {ok, [{Name,Value} || #xattrlist_xattrentry{name = Name, value = Value} = TmpAns#xattrlist.attrs]};
+                ?VOK -> {ok, [{Name,Value} || #xattrlist_xattrentry{name = Name, value = Value} <- TmpAns#xattrlist.attrs]};
                 Error -> {logical_file_system_error, Error}
             end;
         _ -> {Status, TmpAns}

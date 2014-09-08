@@ -2270,15 +2270,41 @@ xattrs_test(Config) ->
 
     DirName = "test_xattr_dir",
 
+    % make test file
     AnsDirCreate1 = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
     ?assertEqual(ok, AnsDirCreate1),
 
-    AnsSetXAttr = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name1", "value1"]),
-    ?assertEqual(ok, AnsSetXAttr),
+    % test setting and getting xattrs
+    Ans1 = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name1", "value1"]),
+    ?assertEqual(ok, Ans1),
+    Ans2 = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name1"]),
+    ?assertEqual({ok,"value1"}, Ans2),
 
-    AnsGetXAttr = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name1"]),
-    ?assertEqual({ok,"value1"}, AnsGetXAttr),
+    % test replacing xattr
+    Ans3 = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name1", "other_value"]),
+    ?assertEqual(ok, Ans3),
+    Ans4 = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name1"]),
+    ?assertEqual({ok,"other_value"}, Ans4),
 
+    % test listing xattr
+    Ans5 = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name2", "value2"]),
+    ?assertEqual(ok, Ans5),
+    Ans6 = rpc:call(Node1, logical_files_manager, list_xattr, [DirName]),
+    ?assertEqual({ok, [{"name2","value2"}, {"name1","other_value"}]}, Ans6),
+
+    % test removing xattr
+    Ans7 = rpc:call(Node1, logical_files_manager, remove_xattr, [DirName,"name2"]),
+    ?assertEqual(ok, Ans7),
+    Ans8 = rpc:call(Node1, logical_files_manager, list_xattr, [DirName]),
+    ?assertEqual({ok,[{"name1","other_value"}]}, Ans8),
+
+    % test error reporting
+    Ans9 = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name3"]),
+    ?assertEqual({logical_file_system_error, ?VENOATTR}, Ans9),
+
+    % cleanup
+    AnsDel = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
+    ?assertEqual(ok, AnsDel),
     RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
     ?assertEqual(ok, RemoveStorageAns).
 
@@ -2302,7 +2328,7 @@ init_per_testcase(_, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(1,true),
+  NodesUp = test_node_starter:start_test_nodes(1),
   [FSLogicNode | _] = NodesUp,
 
   DB_Node = ?DB_NODE,
