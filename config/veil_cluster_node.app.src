@@ -21,6 +21,7 @@
             public_key,
             crypto,
             ssl,
+            % Meck is needed only for development purposes, should be removed before release.
             meck,
             % ctool already requires those apps below, but they are here
             % for awareness of them being used in the project and

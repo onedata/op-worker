@@ -34,6 +34,7 @@ get_provider_id() ->
             [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
             PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
             ProviderId = auth_handler:get_provider_id(PeerCert),
-            application:set_env(veil_cluster_node, provider_id, ProviderId)
+            application:set_env(veil_cluster_node, provider_id, ProviderId),
+            ProviderId
     end.
 
