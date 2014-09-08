@@ -26,6 +26,15 @@
 %% API functions
 %% ====================================================================
 
+%% prerouting/3
+%% ====================================================================
+%% @doc This function is called for each request that should be rerouted to remote provider and allows to choose
+%%      the provider ({ok, {reroute, ProviderId}}), stop rerouting while giving response to the request ({ok, {response, Response}})
+%%      or stop rerouting due to error.
+%% @end
+-spec prerouting(SpaceInfo :: #space_info{}, Request :: term(), [ProviderId :: binary()]) ->
+    {ok, {response, Response :: term()}} | {ok, {reroute, ProviderId :: binary()}} | {error, Reason :: any()}.
+%% ====================================================================
 prerouting(_, _, []) ->
     {error, no_providers};
 prerouting(_SpaceInfo, #renamefile{from_file_logic_name = From, to_file_logic_name = To} = RequestBody, [RerouteTo | _Providers]) ->
@@ -51,9 +60,11 @@ prerouting(_SpaceInfo, _Request, [RerouteTo | _Providers]) ->
 
 %% postrouting/3
 %% ====================================================================
-%% @doc @todo: Write me !
+%% @doc This function is called for each response from remote provider and allows altering this response
+%%      (i.e. show empty directory instead of error in some cases).
+%%      'undefined' return value means, that response is invalid and the whole rerouting process shall fail.
 %% @end
--spec postrouting(SpaceInfo :: #space_info{}, FailureReason :: term(), Request :: term()) -> Result :: undefined | term().
+-spec postrouting(SpaceInfo :: #space_info{}, {ok | error, ResponseOrReason :: term()}, Request :: term()) -> Result :: undefined | term().
 %% ====================================================================
 postrouting(_SpaceInfo, {error, _FailureReason}, #getfilechildren{dir_logic_name = "/"}) ->
     #filechildren{answer = ?VOK, entry = [#filechildren_direntry{name = ?SPACES_BASE_DIR_NAME, type = ?DIR_TYPE_PROT}]};

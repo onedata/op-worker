@@ -26,7 +26,7 @@
 %% API
 %% ====================================================================
 %% Logical file organization management (only db is used)
--export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, rmlink/1, read_link/1, create_link/2]).
+-export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, rmlink/1, read_link/1, create_symlink/2]).
 %% File access (db and helper are used)
 -export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1, change_file_perm/2]).
 
@@ -54,6 +54,12 @@
 %% ====================================================================
 
 
+%% read_link/1
+%% ====================================================================
+%% @doc Reads symbolic link from DB.
+%% @end
+-spec read_link(Path :: path()) -> {ok, LinkValue :: string()} | {error | logical_file_system_error, Reason :: any()}.
+%% ====================================================================
 read_link(Path) ->
     Record = #getlink{file_logic_name = Path},
     {Status, TmpAns} = contact_fslogic(Record),
@@ -70,7 +76,13 @@ read_link(Path) ->
     end.
 
 
-create_link(LinkValue, LinkFile) ->
+%% create_symlink/2
+%% ====================================================================
+%% @doc Creates symbolic link in DB.
+%% @end
+-spec create_symlink(LinkValue :: string(), LinkFilePath :: path()) -> ok | {error | logical_file_system_error, Reason :: any()}.
+%% ====================================================================
+create_symlink(LinkValue, LinkFile) ->
     Record = #createlink{from_file_logic_name = LinkFile, to_file_logic_name = LinkValue},
     {Status, TmpAns} = contact_fslogic(Record),
     case Status of
@@ -1141,6 +1153,12 @@ clear_cache(File) ->
   ok.
 
 
+%% delete_special/1
+%% ====================================================================
+%% @doc Removes special (not regular) file from DB.
+%% @end
+-spec delete_special(Path :: path()) -> ok | {error | logical_file_system_error, Reason :: any()}.
+%% ====================================================================
 delete_special(Path) ->
     Record = #deletefile{file_logic_name = Path},
     {Status, TmpAns} = contact_fslogic(Record),
