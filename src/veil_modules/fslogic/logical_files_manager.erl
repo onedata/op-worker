@@ -67,7 +67,8 @@ read_link(Path) ->
         ok ->
             Response = TmpAns#linkinfo.answer,
             case Response of
-                ?VOK -> {ok, TmpAns#linkinfo.file_logic_name};
+                ?VOK ->
+                    {ok, TmpAns#linkinfo.file_logic_name};
                 _ ->
                     {logical_file_system_error, Response}
             end;
@@ -654,9 +655,9 @@ contact_fslogic(Message, Value) ->
 
   Timeout = case Value of
       #renamefile{} ->
-          10 * 60000;
+          timer:minutes(10);
       _ ->
-          7000
+          timer:seconds(7)
   end,
 
   try

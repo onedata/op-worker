@@ -126,7 +126,8 @@ rename_file_interspace(UserDoc, SourceFilePath, TargetFilePath, {_, _, NewParent
             case rename_on_storage(UserDoc, TargetSpaceInfo, SourceFile, TargetFile) of
                 {ok, #{target_fileid := NewFileID, source_path := SourceSubFilePath, file_doc := SubFileDoc} = OPInfo} ->
                     case update_moved_file(SourceSubFilePath, SubFileDoc, NewFileID, 3) of
-                        ok -> {ok, OPInfo};
+                        ok ->
+                            {ok, OPInfo};
                         {error, _} ->
                             {error, OPInfo}
                     end;

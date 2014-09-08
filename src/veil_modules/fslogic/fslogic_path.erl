@@ -30,7 +30,7 @@
 
 %% split/1
 %% ====================================================================
-%% @doc Same as {@link filename:split/1} but returned tokes build always relative path.
+%% @doc Same as {@link filename:split/1} but returned tokens build always relative path.
 %% @end
 -spec split(Path :: string()) -> [string()].
 %% ====================================================================

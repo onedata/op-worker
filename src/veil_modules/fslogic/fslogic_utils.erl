@@ -87,9 +87,9 @@ list_dir(Path) ->
 list_dir4(Path, Offset, BatchSize, Acc) ->
     {ok, Childern} = logical_files_manager:ls(Path, BatchSize, Offset),
     case length(Childern) < BatchSize of
-        true  -> Childern ++ Acc;
+        true  -> lists:flatten([Childern | Acc]);
         false ->
-            list_dir4(Path, Offset + length(Childern), BatchSize, Childern ++ Acc)
+            list_dir4(Path, Offset + length(Childern), BatchSize, [Childern | Acc])
     end.
 
 %% get_sh_and_id/3
@@ -147,7 +147,7 @@ create_children_list([], Ans) ->
 
 create_children_list([File | Rest], Ans) ->
     FileDesc = File#veil_document.record,
-    Name =FileDesc#file.name,
+    Name = FileDesc#file.name,
     Type = fslogic_file:normalize_file_type(protocol, FileDesc#file.type),
     create_children_list(Rest, [#filechildren_direntry{name = Name, type = Type} | Ans]).
 

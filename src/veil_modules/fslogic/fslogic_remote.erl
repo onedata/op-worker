@@ -13,7 +13,6 @@
 -author("Rafal Slota").
 
 -include("communication_protocol_pb.hrl").
--include("communication_protocol_pb.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
@@ -44,10 +43,11 @@ prerouting(_SpaceInfo, #renamefile{from_file_logic_name = From, to_file_logic_na
     {ok, #space_info{providers = FromProviders}} = fslogic_utils:get_space_info_for_path(From1),
     {ok, #space_info{providers = ToProviders}} = fslogic_utils:get_space_info_for_path(To1),
 
-    NotCommonProviders = FromProviders -- ToProviders,
-    CommonProviders = FromProviders -- NotCommonProviders,
+    FromProvidersSet = ordsets:from_list(FromProviders),
+    ToProvidersSet = ordsets:from_list(ToProviders),
+    CommonProvidersSet = ordsets:intersection(FromProvidersSet, ToProvidersSet),
 
-    case CommonProviders of
+    case ordsets:to_list(CommonProvidersSet) of
         [CommonProvider | _] ->
             {ok, {reroute, CommonProvider}};
         [] ->

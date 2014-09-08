@@ -57,6 +57,7 @@
 }).
 
 %% Directory entry: name :: string(), type :: file_type_protocol().
+%% This is an logical_files_manager's abstraction for similar VeilProtocol's message.
 -record(dir_entry, {name = "", type = ""}).
 
 % Callbacks management

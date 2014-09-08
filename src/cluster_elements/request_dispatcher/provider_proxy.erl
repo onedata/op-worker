@@ -225,14 +225,14 @@ a2l(List) when is_list(List) ->
 -spec timeout_for_message(Request :: term()) -> Timeout :: non_neg_integer().
 %% ====================================================================
 timeout_for_message(#fusemessage{input = #getfilechildren{}}) ->
-    3000;
+    timer:seconds(3);
 timeout_for_message(#fusemessage{input = #getfileattr{}}) ->
-    2000;
+    timer:seconds(2);
 timeout_for_message(#fusemessage{input = #renamefile{}}) ->
-    60 * 60 * 1000;
+    timer:hours(1);
 timeout_for_message(#remotefilemangement{input = #readfile{size = Bytes}}) ->
-    3000 + Bytes; %% 1 byte -> 1ms ~= 1kB/s
+    timer:seconds(3) + Bytes; %% 1 byte -> 1ms ~= 1kB/s
 timeout_for_message(#remotefilemangement{input = #writefile{data = Data}}) ->
-    3000 + size(Data); %% 1 byte -> 1ms ~= 1kB/s
+    timer:seconds(3) + size(Data); %% 1 byte -> 1ms ~= 1kB/s
 timeout_for_message(_) ->
-    10000.
+    timer:seconds(10).

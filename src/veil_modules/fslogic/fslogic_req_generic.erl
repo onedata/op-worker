@@ -280,7 +280,7 @@ rename_file(FullFileName, FullTargetFileName) ->
             ok;
         {ok, #fileattributes{}} ->
             ?warning("Destination file already exists: ~p", [FullTargetFileName]),
-             throw(?VEEXIST)
+            throw(?VEEXIST)
     end,
 
     NewDirTokens = filename:split(fslogic_path:strip_path_leaf(FullTargetFileName)),
@@ -301,10 +301,11 @@ rename_file(FullFileName, FullTargetFileName) ->
             {ok, OldFile, OldFileDoc, NewParentUUID} = fslogic_req_rename_impl:common_assertions(UserDoc, FullFileName, FullTargetFileName),
             ok = fslogic_req_rename_impl:rename_file_trivial(FullFileName, FullTargetFileName, {OldFile, OldFileDoc, NewParentUUID});
         false -> %% Not trivial
-            NotCommonProviders = SourceSpaceProviders -- TargetSpaceProviders,
-            CommonProviders = SourceSpaceProviders -- NotCommonProviders,
+            SourceSpaceProvidersSet = ordsets:from_list(SourceSpaceProviders),
+            SourceSpaceProvidersSet = ordsets:from_list(TargetSpaceProviders),
+            CommonProvidersSet = ordsets:intersection(SourceSpaceProvidersSet, SourceSpaceProvidersSet),
 
-            case lists:member(SelfGRPID, CommonProviders) of
+            case ordsets:is_element(SelfGRPID, CommonProvidersSet) of
                 true -> %% Inter-Space
                     {ok, OldFile, OldFileDoc, NewParentUUID} = fslogic_req_rename_impl:common_assertions(UserDoc, FullFileName, FullTargetFileName),
                     ok = fslogic_req_rename_impl:rename_file_interspace(UserDoc, FullFileName, FullTargetFileName, {OldFile, OldFileDoc, NewParentUUID});
