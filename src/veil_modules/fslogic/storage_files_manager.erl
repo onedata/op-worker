@@ -55,6 +55,15 @@
 %% ====================================================================
 
 
+%% link/3
+%% ====================================================================
+%% @doc Creates hard-link on storage
+%% @end
+-spec mkdir(Storage_helper_info :: record(), FileId :: string(), LinkId :: string()) -> Result when
+    Result :: ok | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
 link(Storage_helper_info, FileId, LinkId) ->
     case veilhelpers:exec(link, Storage_helper_info, [FileId, LinkId]) of
         0 -> ok;
