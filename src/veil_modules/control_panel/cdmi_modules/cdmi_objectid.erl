@@ -53,7 +53,7 @@ malformed_request(Req, State = #state{filepath = Filepath}) ->
                end,
 
         % get path of object with that uuid
-        BaseName = case is_capability_object(Req) of
+        BaseName = case is_capability_object(Req2) of
                        true -> proplists:get_value(Id,?CapabilityPathById);
                        false ->
                            case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
@@ -75,7 +75,7 @@ malformed_request(Req, State = #state{filepath = Filepath}) ->
         {Url, Req3} = cowboy_req:path(Req2),
         case binary:last(Url) =:= $/ of
             true ->
-                case is_capability_object(Req) of
+                case is_capability_object(Req3) of
                     false -> cdmi_container:malformed_request(Req3,State#state{filepath = FullFileName, handler_module = cdmi_container});
                     true -> cdmi_capabilities:malformed_request(Req3,State#state{filepath = FullFileName, handler_module = cdmi_capabilities})
                 end;

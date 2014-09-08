@@ -47,22 +47,22 @@ rest_init(Req, _Opt) ->
     try
         {ok, DnString} = rest_utils:verify_peer_cert(Req),
         ok = rest_utils:prepare_context(DnString),
-        {Method, _} = cowboy_req:method(Req),
-        {PathInfo, _} = cowboy_req:path_info(Req),
-        {Url, _} = cowboy_req:path(Req),
-        {RawOpts, _} = cowboy_req:qs(Req),
-        {CdmiVersionList, _} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
+        {Method, Req1} = cowboy_req:method(Req),
+        {PathInfo, Req2} = cowboy_req:path_info(Req1),
+        {Url, Req3} = cowboy_req:path(Req2),
+        {RawOpts, Req4} = cowboy_req:qs(Req3),
+        {CdmiVersionList, Req5} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req4),
         CdmiVersion = get_supported_version(CdmiVersionList),
-        Req2 = case CdmiVersion of
-                   undefined -> Req;
-                   Version -> cowboy_req:set_resp_header(<<"x-cdmi-specification-version">>,Version,Req)
+        Req6 = case CdmiVersion of
+                   undefined -> Req5;
+                   _ -> cowboy_req:set_resp_header(<<"x-cdmi-specification-version">>, CdmiVersion, Req5)
                end,
         Path = case PathInfo == [] of
                    true -> "/";
                    false -> gui_str:binary_to_unicode_list(rest_utils:join_to_path(PathInfo))
                end,
         HandlerModule = cdmi_routes:route(PathInfo, Url),
-        {ok, Req2, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts), cdmi_version = CdmiVersion, handler_module = HandlerModule}}
+        {ok, Req6, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts), cdmi_version = CdmiVersion, handler_module = HandlerModule}}
     catch
         _Type:{badmatch,{error, Error}} -> {ok, Req, {error, Error}};
         _Type:{badmatch,Error} -> {ok, Req, {error,Error}};

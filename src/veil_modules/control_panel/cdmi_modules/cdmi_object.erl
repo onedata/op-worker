@@ -36,9 +36,9 @@ allowed_methods(Req, State) ->
 %% @end
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
-malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version, filepath = Filepath} = State) when is_binary(Version) -> % put cdmi
-    {<<"application/cdmi-object">>, _} = cowboy_req:header(<<"content-type">>, Req),
-    {false, Req, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
+malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version, filepath = Filepath } = State) when is_binary(Version) -> % put cdmi
+    {<<"application/cdmi-object">>, Req1} = cowboy_req:header(<<"content-type">>, Req),
+    {false,Req1,State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
 malformed_request(Req, #state{filepath = Filepath} = State) ->
     {false, Req, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}}.
 
@@ -121,16 +121,16 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
 %% ====================================================================
 get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = Size}} = State) ->
     % get optional 'Range' header
-    {RawRange, _} = cowboy_req:header(<<"range">>, Req),
+    {RawRange, Req1} = cowboy_req:header(<<"range">>, Req),
     Ranges = case RawRange of
-                 undefined -> [{0, Size - 1}];
-                 RawRange -> parse_byte_range(State, RawRange)
+                 undefined -> [{0,Size-1}];
+                 _ -> parse_byte_range(State,RawRange)
              end,
 
     % return bad request if Range is invalid
     case Ranges of
-        invalid -> cdmi_error:error_reply(Req, State, ?error_bad_request_code, "Invalid range: ~p", [RawRange]);
-        Ranges ->
+        invalid -> cdmi_error:error_reply(Req1,State,?error_bad_request_code,"Invalid range: ~p",[RawRange]);
+        _ ->
             % prepare data size and stream function
             StreamSize = lists:foldl(fun({From, To}, Acc) when To >= From -> Acc + To - From + 1 end, 0, Ranges),
             UserDN = fslogic_context:get_user_dn(),
@@ -149,7 +149,7 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
             % set mimetype, todo return assigned mimetype (after we implement mimetype assigning functionality)
             {Type, Subtype, _} = cow_mimetypes:all(list_to_binary(Filepath)), %
             ContentType = <<Type/binary, "/", Subtype/binary>>,
-            Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, ContentType, Req),
+            Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, ContentType, Req1),
 
             % reply with stream and adequate status
             {ok, Req3} = case RawRange of
@@ -219,18 +219,18 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
         ok ->
             write_body_to_file(Req, State, 0);
         {error, file_exists} ->
-            {RawRange, _} = cowboy_req:header(<<"content-range">>, Req),
+            {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
             case RawRange of
                 undefined ->
                     logical_files_manager:truncate(Filepath, 0),
-                    write_body_to_file(Req, State, 0, false);
-                RawRange ->
-                    {Length, _} = cowboy_req:body_length(Req),
+                    write_body_to_file(Req1, State, 0, false);
+                _ ->
+                    {Length, Req2} = cowboy_req:body_length(Req1),
                     case parse_byte_range(State, RawRange) of
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
-                            write_body_to_file(Req, State, From, false);
+                            write_body_to_file(Req2, State, From, false);
                         _ ->
-                            cdmi_error:error_reply(Req, State, ?error_bad_request_code, "Invalid range: ~p", [RawRange])
+                            cdmi_error:error_reply(Req2, State, ?error_bad_request_code, "Invalid range: ~p", [RawRange])
                     end
             end;
         Error ->
@@ -244,8 +244,8 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
 %% @end
 -spec put_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_cdmi_object(Req, #state{filepath = Filepath, opts = Opts} = State) -> %todo read body in chunks
-    {ok, RawBody, _} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
+put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo read body in chunks
+    {ok, RawBody, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Body = rest_utils:parse_body(RawBody),
     ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body, <<"utf-8">>),  %todo check given body opts, store given mimetype
     Value = proplists:get_value(<<"value">>, Body, <<>>),
@@ -264,39 +264,35 @@ put_cdmi_object(Req, #state{filepath = Filepath, opts = Opts} = State) -> %todo 
                     case logical_files_manager:getfileattr(Filepath) of
                         {ok, Attrs} ->
                             Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
-                            Req2 = cowboy_req:set_resp_body(Response, Req),
+                            Req2 = cowboy_req:set_resp_body(Response, Req1),
                             {true, Req2, State};
                         Error ->
                             logical_files_manager:delete(Filepath),
-                            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Getting attributes end up with error: ~p", Error)
+                            cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Getting attributes end up with error: ~p",Error)
                     end;
                 Error ->
                     logical_files_manager:delete(Filepath),
-                    cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p", Error)
+                    cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
             end;
         {error, file_exists} ->
             case Range of
                 {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
                     case logical_files_manager:write(Filepath, From, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                            {true, Req, State};
-                        Error ->
-                            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p", Error)
+                            {true, Req1, State};
+                        Error -> cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
                     end;
                 undefined when is_binary(Value) ->
                     logical_files_manager:truncate(Filepath, 0),
                     case logical_files_manager:write(Filepath, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                            {true, Req, State};
-                        Error ->
-                            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p", Error)
+                            {true, Req1, State};
+                        Error -> cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p", Error)
                     end;
-                undefined -> {true, Req, State};
-                _ ->
-                    cdmi_error:error_reply(Req, State, ?error_bad_request_code, "Updating cdmi object end up with error", [])
+                undefined -> {true, Req1, State};
+                _ -> cdmi_error:error_reply(Req1, State, ?error_bad_request_code, "Updating cdmi object end up with error",[])
             end;
-        Error ->
-            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Creating cdmi object end up with error: ~p", [Error])
+        Error -> cdmi_error:error_reply(Req1, State, ?error_forbidden_code, "Creating cdmi object end up with error: ~p",[Error])
     end.
 
 %% ====================================================================
@@ -371,19 +367,19 @@ write_body_to_file(Req, State, Offset) ->
 -spec write_body_to_file(req(), #state{}, integer(), boolean()) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 write_body_to_file(Req, #state{filepath = Filepath} = State, Offset, RemoveIfFails) ->
-    {Status, Chunk, Req2} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
+    {Status, Chunk, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     case logical_files_manager:write(Filepath, Offset, Chunk) of
         Bytes when is_integer(Bytes) ->
             case Status of
-                more -> write_body_to_file(Req2, State, Offset + Bytes);
-                ok -> {true, Req2, State}
+                more -> write_body_to_file(Req1, State, Offset + Bytes);
+                ok -> {true, Req1, State}
             end;
         Error ->
             case RemoveIfFails of
                 true -> logical_files_manager:delete(Filepath);
                 false -> ok
             end,
-            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p", [Error])
+            cdmi_error:error_reply(Req1, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p", [Error])
     end.
 
 %% stream_file/6
