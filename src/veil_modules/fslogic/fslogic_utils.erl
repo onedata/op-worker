@@ -87,9 +87,9 @@ list_dir(Path) ->
 list_dir4(Path, Offset, BatchSize, Acc) ->
     {ok, Childern} = logical_files_manager:ls(Path, BatchSize, Offset),
     case length(Childern) < BatchSize of
-        true  -> lists:flatten([Childern | Acc]);
+        true  -> Childern ++ Acc;
         false ->
-            list_dir4(Path, Offset + length(Childern), BatchSize, [Childern | Acc])
+            list_dir4(Path, Offset + length(Childern), BatchSize, Childern ++ Acc)
     end.
 
 %% get_sh_and_id/3

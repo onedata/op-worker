@@ -99,7 +99,4 @@
 %% Default permissions for space directory (i.e. /spaces/SpaceName)
 -define(SpaceDirPerm, 8#1770).
 
-%% [1MB] Block size used while transferring date through provider_proxy module
--define(PROVIDER_PROXT_BLOCK_SIZE, 1024 * 1024).
-
 -endif.

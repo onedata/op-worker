@@ -248,7 +248,8 @@ rename_file_interprovider(_UserDoc, ?REG_TYPE_PROT, SourceFilePath, TargetFilePa
     ok | {error, {write | read, ValidBytes :: non_neg_integer(), Reason :: any()}}.
 %% ====================================================================
 transfer_data(SourceFilePath, TargetFilePath) ->
-    transfer_data4(SourceFilePath, TargetFilePath, 0, ?PROVIDER_PROXT_BLOCK_SIZE).
+    {ok, BlockSize} = veil_cluster_node_app:get_env(provider_proxy_block_size),
+    transfer_data4(SourceFilePath, TargetFilePath, 0, BlockSize).
 transfer_data4(SourceFilePath, TargetFilePath, Offset, Size) ->
     case logical_files_manager:read(SourceFilePath, Offset, Size) of
         {ok, Data} ->
