@@ -68,6 +68,14 @@ gen_error_code(UnknownReason) ->
 %% ====================================================================
 gen_error_message(getfileattr, Error) ->
     #fileattr{answer = Error, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""};
+gen_error_message(getxattr, Error) ->
+    #xattr{answer = Error, name = "", value = ""};
+gen_error_message(setxattr, Error) ->
+    #atom{value = Error};
+gen_error_message(removexattr, Error) ->
+    #atom{value = Error};
+gen_error_message(listxattr, Error) ->
+    #xattrlist{answer = Error, attrs =[]};
 gen_error_message(getfileuuid, Error) ->
     #fileuuid{answer = Error, uuid = ""};
 gen_error_message(getfilelocation, Error) ->

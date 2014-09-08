@@ -298,6 +298,22 @@ handle_fuse_message(Req = #getfileattr{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:get_file_attr(FullFileName);
 
+handle_fuse_message(Req = #getxattr{file_logic_name = FName, name = Name}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:get_xattr(FullFileName, Name);
+
+handle_fuse_message(Req = #setxattr{file_logic_name = FName, name = Name, value = Value, flags = Flags}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:set_xattr(FullFileName, Name, Value, Flags);
+
+handle_fuse_message(Req = #removexattr{file_logic_name = FName, name = Name}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:remove_xattr(FullFileName,Name);
+
+handle_fuse_message(Req = #listxattr{file_logic_name = FName}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:list_xattr(FullFileName);
+
 handle_fuse_message(Req = #getfileuuid{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_utility:get_file_uuid(FullFileName);
@@ -385,6 +401,16 @@ handle_custom_request({getfilelocation, UUID}) ->
 %% -spec extract_logical_path(Record :: tuple()) -> string() | no_return().
 %% %% ====================================================================
 extract_logical_path(#getfileattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getfileuuid{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getxattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#setxattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#removexattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#listxattr{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#getfilelocation{file_logic_name = Path}) ->
     Path;

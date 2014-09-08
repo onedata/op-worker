@@ -29,10 +29,11 @@
 -export([spaces_permissions_test/1, files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1]).
 -export([permissions_management_test/1, user_creation_test/1, get_file_links_test/1, fuse_requests_test/1, users_separation_test/1]).
 -export([file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, user_file_size_test/1, dirs_creating_test/1, spaces_test/1]).
--export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2]).
+-export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2, xattrs_test/1]).
 
 all() -> [spaces_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
-  fuse_requests_test, spaces_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test, concurrent_file_creation_test, get_file_links_test, user_file_size_test
+  fuse_requests_test, spaces_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test,
+  concurrent_file_creation_test, get_file_links_test, user_file_size_test, xattrs_test
 ].
 
 -define(SH, "DirectIO").
@@ -2254,6 +2255,32 @@ get_file_links_test(Config) ->
     RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
     ?assertEqual(ok, RemoveStorageAns).
 
+xattrs_test(Config) ->
+    NodesUp = ?config(nodes, Config),
+    [Node1 | _] = NodesUp,
+
+    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    test_utils:wait_for_cluster_cast(),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    test_utils:wait_for_cluster_init(),
+
+    {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
+    ?assertEqual(ok, InsertStorageAns),
+
+    DirName = "test_xattr_dir",
+
+    AnsDirCreate1 = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
+    ?assertEqual(ok, AnsDirCreate1),
+
+    AnsSetXAttr = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name1", "value1"]),
+    ?assertEqual(ok, AnsSetXAttr),
+
+    AnsGetXAttr = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name1"]),
+    ?assertEqual({ok,"value1"}, AnsGetXAttr),
+
+    RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+    ?assertEqual(ok, RemoveStorageAns).
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -2275,7 +2302,7 @@ init_per_testcase(_, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1,true),
   [FSLogicNode | _] = NodesUp,
 
   DB_Node = ?DB_NODE,
