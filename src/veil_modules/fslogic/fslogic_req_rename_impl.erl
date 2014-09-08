@@ -178,6 +178,8 @@ rename_file_interspace(UserDoc, SourceFilePath, TargetFilePath, {_, _, NewParent
 %%      Since there are not preconditions for this function call, it can be used instead any other rename_file_* implementation
 %%      although there can be significant negative performance and data consistency impact.
 %%
+%%      For best performance, this function should be used by provider that supports source space.
+%%
 %%      Precondition: none.
 %% @end
 -spec rename_file_interprovider(UserDoc :: user_doc(), FileType :: file_type_protocol(), SourceFilePath :: path(), TargetFilePath :: path()) ->
@@ -410,7 +412,7 @@ storage_rollback(#space_info{} = SourceSpaceInfo, [{_, _} | T]) ->
 %%      removed. If storage does not support hard links, file is moved which means that no cleanup is needed afterwards.
 %%      This function returns operation_status_any() which gives just enough information to find out what went wrong and what
 %%      kind of cleanup / recovery is required.
-
+%%
 %%      operation_info() field semantics:
 %%          transfer_type => 'none' (file wasn't moved at all), 'link' (file was hard-linked) or 'move' (file was moved)
 %%          source_fileid => initial storage fileId
