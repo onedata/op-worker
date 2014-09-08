@@ -124,15 +124,9 @@ message GetFileChildren {
 }
 
 message FileChildren {
-    message DirEntry {
-        required string name = 1;
-        required string type = 2;
-    }
-
     optional string answer = 1 [default = "ok"];
-    repeated DirEntry entry = 2;
+    repeated string child_logic_name = 2;
 }
-
 
 message CreateDir {
     required string dir_logic_name = 1;
