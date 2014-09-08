@@ -188,13 +188,13 @@ maybe_handle_fuse_message(RequestBody) ->
         false ->
             PrePostProcessResponse = try
                 case fslogic_remote:prerouting(SpaceInfo, RequestBody, Providers) of
-                    {ok, {reroute, Self}} ->
+                    {ok, {reroute, Self}} ->  %% Request should be handled locally for some reason
                         {ok, handle_fuse_message(RequestBody)};
                     {ok, {reroute, RerouteToProvider}} ->
                         RemoteResponse = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
                             fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))}),
                         {ok, RemoteResponse};
-                    {ok, {response, Response}} ->
+                    {ok, {response, Response}} -> %% Do not handle this request and return custom response
                         {ok, Response};
                     {error, PreRouteError} ->
                         ?error("Cannot initialize reouting for request ~p due to error in prerouting handler: ~p", [RequestBody, PreRouteError]),
