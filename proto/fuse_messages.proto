@@ -87,8 +87,13 @@ message GetFileChildren {
 }
 
 message FileChildren {
+    message DirEntry {
+        required string name = 1;
+        required string type = 1;
+    }
+
     optional string answer = 1 [default = "ok"];
-    repeated string child_logic_name = 2;
+    repeated DirEntry entry = 2;
 }
 
 
