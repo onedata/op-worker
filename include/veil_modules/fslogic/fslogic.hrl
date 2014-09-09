@@ -52,7 +52,8 @@
   size = 0,
   uname = [],
   gname = [],
-  links = 0
+  links = 0,
+  user_metadata = []
 }).
 
 % Callbacks management

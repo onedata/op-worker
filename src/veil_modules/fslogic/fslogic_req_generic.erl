@@ -161,10 +161,11 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
 
     %% Get attributes
-    {CTime, MTime, ATime, _SizeFromDB} =
+    {CTime, MTime, ATime, _SizeFromDB, UserMetadata} =
         case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
             {ok, #veil_document{record = FMeta}} ->
-                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size};
+                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size,
+                    FMeta#file_meta.user_metadata};
             {error, Error} ->
                 ?warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
                 {0, 0, 0, 0}
@@ -183,7 +184,8 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
             end,
 
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = UID, gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links};
+        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = UID,
+        gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links, user_metadata = UserMetadata};
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
     case fslogic_objects:get_file(FullFileName) of

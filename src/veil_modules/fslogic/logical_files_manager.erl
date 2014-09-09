@@ -219,7 +219,8 @@ getfileattr(Message, Value) ->
           size = TmpAns#fileattr.size,
           uname = TmpAns#fileattr.uname,
           gname = TmpAns#fileattr.gname,
-          links = TmpAns#fileattr.links
+          links = TmpAns#fileattr.links,
+          user_metadata = TmpAns#fileattr.user_metadata
         }};
         _ -> {logical_file_system_error, Response}
       end;

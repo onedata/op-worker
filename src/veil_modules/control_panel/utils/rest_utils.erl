@@ -276,7 +276,8 @@ prepare_metadata(Attrs) ->
 %% ====================================================================
 prepare_metadata(Prefix, Attrs) ->
     WithPrefix = lists:filter(fun(X) -> metadata_with_prefix(X, Prefix) end, ?default_storage_system_metadata),
-    lists:map(fun(X) -> cdmi_metadata_to_attrs(X,Attrs) end, WithPrefix).
+    StorageSystemMetadata = lists:map(fun(X) -> cdmi_metadata_to_attrs(X,Attrs) end, WithPrefix),
+    lists:append(StorageSystemMetadata, Attrs#fileattributes.user_metadata).
 
 %% ====================================================================
 %% Internal Functions
