@@ -525,9 +525,10 @@ request_format_check_test(_Config) ->
 objectid_and_capabilities_test(_Config) ->
     %%-------- / objectid ----------
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code1, _Headers1, Response1} = do_request("", get, RequestHeaders1, []),
+    {Code1, Headers1, Response1} = do_request("", get, RequestHeaders1, []),
     ?assertEqual("200",Code1),
 
+    ?assertEqual("application/cdmi-container",proplists:get_value("content-type",Headers1)),
     {struct,CdmiResponse1} = mochijson2:decode(Response1),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiResponse1)),
     RootId = proplists:get_value(<<"objectID">>,CdmiResponse1),
@@ -603,9 +604,10 @@ objectid_and_capabilities_test(_Config) ->
 
     %%--- system capabilities ------
     RequestHeaders8 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code8, _Headers8, Response8} = do_request("cdmi_capabilities/", get, RequestHeaders8, []),
+    {Code8, Headers8, Response8} = do_request("cdmi_capabilities/", get, RequestHeaders8, []),
     ?assertEqual("200",Code8),
 
+    ?assertEqual("application/cdmi-capability",proplists:get_value("content-type",Headers8)),
     {struct,CdmiResponse8} = mochijson2:decode(Response8),
     ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse8)),
     ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"objectName">>,CdmiResponse8)),
@@ -713,14 +715,14 @@ moved_pemanently_test(_Config) ->
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code1, Headers1, _Response1} = do_request(?Test_dir_name, get, RequestHeaders1, []),
     ?assertEqual("301",Code1),
-    ?assertEqual(list_to_binary("/"++?Test_dir_name++"/"),proplists:get_value(<<"location">>,Headers1)),
+    ?assertEqual("/"++?Test_dir_name++"/",proplists:get_value("Location",Headers1)),
     %%------------------------------
 
     %%--------- file test ----------
     RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code2, Headers2, _Response2} = do_request(filename:join(?Test_dir_name,?Test_file_name)++"/", get, RequestHeaders2, []),
     ?assertEqual("301",Code2),
-    ?assertEqual(list_to_binary("/"++filename:join(?Test_dir_name,?Test_file_name)),proplists:get_value(<<"location">>,Headers2)).
+    ?assertEqual("/"++filename:join(?Test_dir_name,?Test_file_name),proplists:get_value("Location",Headers2)).
     %%------------------------------
 
 %% ====================================================================
