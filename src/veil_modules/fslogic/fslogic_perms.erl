@@ -57,11 +57,10 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
     end;
 check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms}}, CheckType) -> %check read/write/execute perms
     UserUid = UserDoc#veil_document.uuid,
-    FileGroup = get_group(FileName),
-    UserGroups = user_logic:get_space_names(UserDoc#veil_document.record),
+    FileSpace = get_group(FileName),
 
     UserOwnsFile = UserUid=:=FileOwnerUid,
-    UserGroupOwnsFile = lists:member(FileGroup,UserGroups),
+    UserGroupOwnsFile = is_member_of_space(UserDoc, FileSpace),
     case has_permission(CheckType,FilePerms,UserOwnsFile,UserGroupOwnsFile) of
         true -> ok;
         false -> ?permission_denied_error(UserDoc,FileName,CheckType)
@@ -78,20 +77,52 @@ assert_group_access(_UserDoc, cluster_request, _LogicalPath) ->
 assert_group_access(#veil_document{uuid = ?CLUSTER_USER_ID}, _Request, _LogicalPath) ->
     ok;
 assert_group_access(UserDoc, Request, LogicalPath) ->
-    case assert_grp_access(UserDoc, Request, string:tokens(LogicalPath, "/"), true) of
+    case assert_grp_access(UserDoc, Request, string:tokens(LogicalPath, "/")) of
         true -> ok;
         false -> error
     end.
 
-%% assert_grp_access/1
+is_member_of_space(#veil_document{record = #user{}} = UserDoc, SpaceReq) ->
+    try
+        is_member_of_space3(UserDoc, SpaceReq, true)
+    catch
+        _:Reason ->
+            false
+    end.
+is_member_of_space3(#veil_document{record = #user{global_id = GRUID}} = UserDoc, #space_info{users = Users} = SpaceInfo, Retry) ->
+    case lists:member(vcn_utils:ensure_binary(GRUID), Users) of
+        true -> true;
+        false when Retry ->
+            cluster_manager_lib:sync_all_spaces(),
+            is_member_of_space3(UserDoc, SpaceInfo, false);
+        false -> false
+    end;
+is_member_of_space3(#veil_document{record = #user{}} = UserDoc, SpaceName, Retry) ->
+    UserSpaces = user_logic:get_space_names(UserDoc),
+    case lists:member(SpaceName, UserSpaces) of
+        true -> true;
+        false ->
+            case fslogic_objects:get_space(SpaceName) of
+                {ok, #space_info{} = SpaceInfo} ->
+                    is_member_of_space3(UserDoc, SpaceInfo, Retry);
+                _ when Retry ->
+                    cluster_manager_lib:sync_all_spaces(),
+                    is_member_of_space3(UserDoc, SpaceName, false);
+                _ ->
+                    false
+            end
+    end.
+
+
+%% assert_grp_access/3
 %% ====================================================================
 %% @doc Checks if operation given as parameter (one of fuse_messages) is allowed to be invoked in groups context.
 %% @end
--spec assert_grp_access(UserDoc :: tuple(), Request :: atom(), Path :: list(), boolean()) -> boolean().
+-spec assert_grp_access(UserDoc :: tuple(), Request :: atom(), Path :: list()) -> boolean().
 %% ====================================================================
-assert_grp_access(_UserDoc, Request, [?SPACES_BASE_DIR_NAME], _Retry) ->
+assert_grp_access(_UserDoc, Request, [?SPACES_BASE_DIR_NAME]) ->
     lists:member(Request, ?GROUPS_BASE_ALLOWED_ACTIONS);
-assert_grp_access(#veil_document{record = #user{global_id = GRUID}} = UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail] = PathTokens, Retry) ->
+assert_grp_access(#veil_document{record = #user{}} = UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail] = PathTokens) ->
     TailCheck = case Tail of
                     [_GroupName] ->
                         lists:member(Request, ?GROUPS_ALLOWED_ACTIONS);
@@ -100,25 +131,12 @@ assert_grp_access(#veil_document{record = #user{global_id = GRUID}} = UserDoc, R
                 end,
     case TailCheck of
         true ->
-            UserTeams = user_logic:get_space_names(UserDoc),
-            [GroupName2 | _] = Tail,
-            case lists:member(GroupName2, UserTeams) of
-                true    -> true;
-                false   ->
-                    case fslogic_objects:get_space(GroupName2) of
-                        {ok, #space_info{users = Users}} ->
-                            lists:member(vcn_utils:ensure_binary(GRUID), Users);
-                        _ when Retry ->
-                            cluster_manager_lib:sync_all_spaces(),
-                            assert_grp_access(UserDoc, Request, PathTokens, false);
-                        _ ->
-                            false
-                    end
-            end;
+            [SpaceName | _] = Tail,
+            is_member_of_space(UserDoc, SpaceName);
         _ ->
             TailCheck
     end;
-assert_grp_access(_, _, _, _) ->
+assert_grp_access(_, _, _) ->
     true.
 
 %% ====================================================================

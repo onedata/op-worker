@@ -850,18 +850,35 @@ setup_ctx(File) ->
     ?debug("Setup storage ctx based on fslogc ctx -> DN: ~p, AccessToken: ~p", [fslogic_context:get_user_dn(), fslogic_context:get_access_token()]),
 
     case fslogic_objects:get_user() of
-        {ok, #veil_document{record = #user{login = UserName} = UserRec}} ->
+        {ok, #veil_document{record = #user{login = UserName, global_id = GRUID} = UserRec}} ->
             fslogic_context:set_fs_user_ctx(UserName),
             case check_access_type(File) of
                 {ok, {group, SpaceId}} ->
                     UserSpaces = user_logic:get_spaces(UserRec),
+
                     SelectedSpace = [SP || #space_info{space_id = X} = SP <- UserSpaces, vcn_utils:ensure_binary(SpaceId) =:= X],
-                    GIDs =
+                    {UserSpaces1, SelectedSpace1} =
                         case SelectedSpace of
                             [] ->
-                                fslogic_spaces:map_to_grp_owner(UserSpaces);
+                                UserSpaces0 =
+                                    case dao_lib:apply(vfs, get_space_files, [{gruid, vcn_utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()) of
+                                        {ok, SpaceFiles} ->
+                                            [fslogic_utils:file_to_space_info(SpaceFile) || #veil_document{record = #file{}} = SpaceFile <- SpaceFiles];
+                                        _ ->
+                                            []
+                                    end,
+                                SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, vcn_utils:ensure_binary(SpaceId) =:= X],
+                                {UserSpaces0 ++ UserSpaces, SelectedSpace0};
+                            _  ->
+                                {UserSpaces, SelectedSpace}
+                        end,
+
+                    GIDs =
+                        case SelectedSpace1 of
+                            [] ->
+                                fslogic_spaces:map_to_grp_owner(UserSpaces1);
                             [#space_info{} = SpaceInfo] ->
-                                [fslogic_spaces:map_to_grp_owner(SpaceInfo)] ++ fslogic_spaces:map_to_grp_owner(UserSpaces)
+                                [fslogic_spaces:map_to_grp_owner(SpaceInfo)] ++ fslogic_spaces:map_to_grp_owner(UserSpaces1)
                         end,
                     fslogic_context:set_fs_group_ctx(GIDs),
                     ok;

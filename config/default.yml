@@ -212,7 +212,7 @@ veil_cluster_node_env:
   - parameter:
       name: dispatcher_timeout
       description: Time in ms after witch ranch answers with error
-      value: 10000
+      value: 120000
 
   - parameter:
       name: ca_dir

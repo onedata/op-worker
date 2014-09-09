@@ -95,6 +95,10 @@ postrouting(#space_info{name = SpaceName} = SpaceInfo, {error, _FailureReason}, 
         mode = ?SpaceDirPerm, uid = 0};
 postrouting(#space_info{}, {ok, #atom{value = ?VECOMM}}, #renamefile{} = RequestBody) ->
     fslogic:handle_fuse_message(RequestBody);
+postrouting(#space_info{}, {ok, #atom{value = ?VEACCES}}, #renamefile{} = RequestBody) ->
+    fslogic:handle_fuse_message(RequestBody);
+postrouting(#space_info{}, {ok, #atom{value = ?VEPERM}}, #renamefile{} = RequestBody) ->
+    fslogic:handle_fuse_message(RequestBody);
 postrouting(#space_info{} = _SpaceInfo, {ok, Response}, _Request) ->
     Response;
 postrouting(_SpaceInfo, UnkResult, Request) ->
