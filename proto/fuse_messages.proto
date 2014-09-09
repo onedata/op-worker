@@ -89,7 +89,7 @@ message GetFileChildren {
 message FileChildren {
     message DirEntry {
         required string name = 1;
-        required string type = 1;
+        required string type = 2;
     }
 
     optional string answer = 1 [default = "ok"];
