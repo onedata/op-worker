@@ -12,3 +12,11 @@
 %% the default json response for get/put cdmi_object will contain this entities, they can be choosed selectively by appending '?name1;name2' list to the request url
 -define(default_get_file_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>, <<"valuerange">>, <<"value">>]).
 -define(default_put_file_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
+
+%% Keys of mimetype end encoding attrs
+-define(mimetype_xattr_key, <<"cdmi_mimetype">>).
+-define(encoding_xattr_key, <<"cdmi_valuetransferencoding">>).
+
+%% Default values of mimetype end encoding attrs
+-define(mimetype_default_value, <<"application/octet-stream">>).
+-define(encoding_default_value, <<"base64">>).

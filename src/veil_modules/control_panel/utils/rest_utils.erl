@@ -21,7 +21,7 @@
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
 -export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, parse_body/1,
-         validate_body/1, prepare_metadata/1, prepare_metadata/2, ensure_path_ends_with_slash/1, get_path_leaf_with_ending_slash/1]).
+         validate_body/1, prepare_metadata/1, prepare_metadata/2, ensure_path_ends_with_slash/1, get_path_leaf_with_ending_slash/1, trim_spaces/1]).
 
 %% ====================================================================
 %% API functions
@@ -333,3 +333,11 @@ ensure_path_ends_with_slash(Path) ->
 %% ====================================================================
 get_path_leaf_with_ending_slash(Path) ->
     ensure_path_ends_with_slash(fslogic_path:basename(Path)).
+
+%% trim_spaces/1
+%% ====================================================================
+%% @doc trims spaces from front and end of given binary
+-spec trim_spaces(binary()) -> binary().
+%% ====================================================================
+trim_spaces(Binary) when is_binary(Binary) ->
+    list_to_binary(string:strip(binary_to_list(Binary), both, $ )).

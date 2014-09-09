@@ -198,7 +198,7 @@ get_file_attr(FullFileName) ->
 %% ====================================================================
 %% @doc Gets file's extended attribute by name.
 %% @end
--spec get_xattr(FullFileName :: string(), Name :: string()) ->
+-spec get_xattr(FullFileName :: string(), Name :: binary()) ->
     #xattr{} | no_return().
 %% ====================================================================
 get_xattr(FullFileName, Name) ->
@@ -214,7 +214,7 @@ get_xattr(FullFileName, Name) ->
 %% ====================================================================
 %% @doc Sets file's extended attribute as {Name, Value}.
 %% @end
--spec set_xattr(FullFileName :: string(), Name :: string(), Value :: string(), Flags :: integer()) ->
+-spec set_xattr(FullFileName :: string(), Name :: binary(), Value :: binary(), Flags :: integer()) ->
     #atom{} | no_return().
 %% ====================================================================
 set_xattr(FullFileName, Name, Value, _Flags) ->
@@ -229,7 +229,7 @@ set_xattr(FullFileName, Name, Value, _Flags) ->
 %% ====================================================================
 %% @doc Removes file's extended attribute with given Name.
 %% @end
--spec remove_xattr(FullFileName :: string(), Name :: string()) ->
+-spec remove_xattr(FullFileName :: string(), Name :: binary()) ->
     #atom{} | no_return().
 %% ====================================================================
 remove_xattr(FullFileName,Name) ->

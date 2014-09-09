@@ -230,8 +230,8 @@ getfileattr(Message, Value) ->
 %% ====================================================================
 %% @doc Gets file's extended attribute by name.
 %% @end
--spec get_xattr(FullFileName :: string(), Name :: string()) ->
-    string() | no_return().
+-spec get_xattr(FullFileName :: string(), Name :: binary()) ->
+    binary() | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
 get_xattr(FullFileName, Name) ->
     {Status, TmpAns} = contact_fslogic(#getxattr{file_logic_name = FullFileName, name = Name}),
@@ -248,8 +248,8 @@ get_xattr(FullFileName, Name) ->
 %% ====================================================================
 %% @doc Sets file's extended attribute as {Name, Value}.
 %% @end
--spec set_xattr(FullFileName :: string(), Name :: string(), Value :: string()) ->
-    ok | no_return().
+-spec set_xattr(FullFileName :: string(), Name :: binary(), Value :: binary()) ->
+    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
 set_xattr(FullFileName, Name, Value) ->
     {Status, TmpAns} = contact_fslogic(#setxattr{file_logic_name = FullFileName, name = Name, value = Value}),
@@ -266,8 +266,8 @@ set_xattr(FullFileName, Name, Value) ->
 %% ====================================================================
 %% @doc Removes file's extended attribute with given Name.
 %% @end
--spec remove_xattr(FullFileName :: string(), Name :: string()) ->
-    ok | no_return().
+-spec remove_xattr(FullFileName :: string(), Name :: binary()) ->
+    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
 remove_xattr(FullFileName,Name) ->
     {Status, TmpAns} = contact_fslogic(#removexattr{file_logic_name = FullFileName, name = Name}),
@@ -285,7 +285,7 @@ remove_xattr(FullFileName,Name) ->
 %% @doc Gets file's extended attribute list.
 %% @end
 -spec list_xattr(FullFileName :: string()) ->
-    list() | no_return().
+    list() | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
 list_xattr(FullFileName) ->
     {Status, TmpAns} = contact_fslogic(#listxattr{file_logic_name = FullFileName}),

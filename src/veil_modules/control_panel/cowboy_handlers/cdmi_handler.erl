@@ -210,7 +210,7 @@ parse_opts(RawOpts) ->
 %% ====================================================================
 get_supported_version(undefined) -> undefined;
 get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
-    VersionList = lists:map(fun trim_spaces/1, binary:split(VersionBinary,<<",">>,[global])),
+    VersionList = lists:map(fun rest_utils:trim_spaces/1, binary:split(VersionBinary,<<",">>,[global])),
     get_supported_version(VersionList);
 get_supported_version([]) ->
     ?error("Request with unsupported cdmi version list"),
@@ -219,10 +219,3 @@ get_supported_version([<<"1.0.2">> | _Rest]) -> <<"1.0.2">>;
 get_supported_version([<<"1.0.1">> | _Rest]) -> <<"1.0.1">>;
 get_supported_version([_Version | Rest]) -> get_supported_version(Rest).
 
-%% trim_spaces/1
-%% ====================================================================
-%% @doc trims spaces from front and end of given binary
--spec trim_spaces(binary()) -> binary().
-%% ====================================================================
-trim_spaces(Binary) when is_binary(Binary) ->
-    list_to_binary(string:strip(binary_to_list(Binary), both, $ )).
