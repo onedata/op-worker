@@ -25,9 +25,9 @@
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1, get_file_test/1, metadata_test/1, create_dir_test/1, create_file_test/1, update_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1, mimetype_and_encoding_test/1]).
+-export([list_dir_test/1, get_file_test/1, metadata_test/1, create_dir_test/1, create_file_test/1, update_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1, mimetype_and_encoding_test/1, moved_pemanently_test/1]).
 
-all() -> [list_dir_test, get_file_test, metadata_test, create_dir_test, create_file_test, update_file_test, delete_dir_test, delete_file_test, version_test, request_format_check_test, objectid_and_capabilities_test, mimetype_and_encoding_test].
+all() -> [list_dir_test, get_file_test, metadata_test, create_dir_test, create_file_test, update_file_test, delete_dir_test, delete_file_test, version_test, request_format_check_test, objectid_and_capabilities_test, mimetype_and_encoding_test, moved_pemanently_test].
 
 %% ====================================================================
 %% Test functions
@@ -705,6 +705,22 @@ mimetype_and_encoding_test(_Config) ->
     ?assertEqual(<<"text/plain">>,proplists:get_value(<<"mimetype">>,CdmiResponse7)),
     ?assertEqual(<<"utf-8">>,proplists:get_value(<<"valuetransferencoding">>,CdmiResponse7)),
     ?assertEqual(FileContent6,proplists:get_value(<<"value">>,CdmiResponse7)).
+    %%------------------------------
+
+% tests if cdmi returns 'moved pemanently' code when we forget about '/' in path
+moved_pemanently_test(_Config) ->
+    %%--------- dir test -----------
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code1, Headers1, _Response1} = do_request(?Test_dir_name, get, RequestHeaders1, []),
+    ?assertEqual("301",Code1),
+    ?assertEqual(list_to_binary("/"++?Test_dir_name++"/"),proplists:get_value(<<"location">>,Headers1)),
+    %%------------------------------
+
+    %%--------- file test ----------
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code2, Headers2, _Response2} = do_request(filename:join(?Test_dir_name,?Test_file_name)++"/", get, RequestHeaders2, []),
+    ?assertEqual("301",Code2),
+    ?assertEqual(list_to_binary("/"++filename:join(?Test_dir_name,?Test_file_name)),proplists:get_value(<<"location">>,Headers2)).
     %%------------------------------
 
 %% ====================================================================

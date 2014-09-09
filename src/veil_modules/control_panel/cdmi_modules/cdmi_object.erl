@@ -51,6 +51,9 @@ malformed_request(Req, #state{filepath = Filepath} = State) ->
 resource_exists(Req, State = #state{filepath = Filepath}) ->
     case logical_files_manager:getfileattr(Filepath) of
         {ok, #fileattributes{type = "REG"} = Attr} -> {true, Req, State#state{attributes = Attr}};
+        {ok, _} ->
+            Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath++"/"), Req),
+            cdmi_error:error_reply(Req1,State,?moved_pemanently_code, "Filepath '~s' poins to directory but does not end with '/'",[Filepath]);
         _ -> {false, Req, State}
     end.
 
