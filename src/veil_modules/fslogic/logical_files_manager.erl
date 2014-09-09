@@ -549,7 +549,7 @@ change_file_perm(FileName, NewPerms) ->
 %% @doc Checks permissions to open the file in chosen mode.
 %% @end
 -spec check_file_perm(FileName :: string(), Type :: root | owner | delete | read | write | execute | rdwr | '') -> Result when
-    Result :: ok | {ErrorGeneral, ErrorDetail},
+    Result :: boolean() | {ErrorGeneral, ErrorDetail},
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
