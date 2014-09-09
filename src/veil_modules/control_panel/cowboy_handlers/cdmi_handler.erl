@@ -171,7 +171,9 @@ put_cdmi_container(Req,State = #state{handler_module = Handler}) ->
 put_binary(Req,State = #state{handler_module = Handler}) ->
     Handler:put_binary(Req,State).
 put_cdmi_object(Req,State = #state{handler_module = Handler}) ->
-    Handler:put_cdmi_object(Req,State).
+    try Handler:put_cdmi_object(Req,State)
+    catch _:invalid_base64 -> cdmi_error:error_reply(Req, State, ?error_bad_request_code, "Invalid base64 string", [])
+    end.
 
 %% ====================================================================
 %% Internal functions

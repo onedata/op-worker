@@ -734,14 +734,21 @@ errors_test(_Config) ->
 
     %%----- wrong create path ------
     RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type","application/cdmi-container"}],
-    {Code2, _Headers2, _Response2} = do_request("/dir", put, RequestHeaders2, []),
+    {Code2, _Headers2, _Response2} = do_request("dir", put, RequestHeaders2, []),
     ?assertEqual("400", Code2),
     %%------------------------------
 
     %%---- wrong create path 2 -----
     RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type","application/cdmi-object"}],
-    {Code3, _Headers3, _Response3} = do_request("/dir/", put, RequestHeaders3, []),
-    ?assertEqual("400", Code3).
+    {Code3, _Headers3, _Response3} = do_request("dir/", put, RequestHeaders3, []),
+    ?assertEqual("400", Code3),
+    %%------------------------------
+
+    %%-------- wrong base64 --------
+    RequestHeaders4 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type","application/cdmi-object"}],
+    RequestBody4 = rest_utils:encode_to_json([{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, <<"#$%">>}]),
+    {Code4, _Headers4, _Response4} = do_request("some_file_b64", put, RequestHeaders4, RequestBody4),
+    ?assertEqual("400", Code4).
     %%------------------------------
 
 %% ====================================================================
@@ -771,7 +778,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1,true),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
