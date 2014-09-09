@@ -20,6 +20,7 @@
 #include <exception>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 extern template class websocketpp::client<websocketpp::config::asio_tls_client>;
 
@@ -60,6 +61,7 @@ public:
      * @param onErrorCallback Callback to be called on open connection's error.
      * @param endpoint A reference to an ASIO endpoint.
      * @param uri Server's URI to connect to.
+     * @param additionalHeaders Additional HTTP headers to use for the connection.
      * @param certificateData Certificate data to use for SSL authentication.
      * @param verifyServerCertificate Determines whether to verify server's
      * certificate.
@@ -71,6 +73,7 @@ public:
             std::function<void(Connection&)> onErrorCallback,
             endpoint_type &endpoint,
             const std::string &uri,
+            const std::unordered_map<std::string, std::string> &additionalHeaders,
             std::shared_ptr<const CertificateData> certificateData,
             const bool verifyServerCertificate);
 

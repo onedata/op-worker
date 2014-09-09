@@ -18,6 +18,7 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace veil
 {
@@ -216,14 +217,16 @@ private:
  * @param dataPoolSize Number of connections to maintain in a data pool.
  * @param metaPoolSize Number of connections to maintain in a metadata pool
  * @param uri Server's URI to connect to.
- * @param certificateData Certificate data to use for SSL authentication.
  * @param verifyServerCertificate Determines whether to verify server's cert.
+ * @param additionalHeaders Additional headers to use for HTTP connection.
+ * @param certificateData Certificate data to use for SSL authentication.
  * @return A new Communicator instance based on @c WebsocketConnectionPool .
  */
 std::shared_ptr<Communicator> createWebsocketCommunicator(
         const unsigned int dataPoolSize, const unsigned int metaPoolSize,
         std::string hostname, unsigned int port,
         std::string endpoint, const bool verifyServerCertificate,
+        const std::unordered_map<std::string, std::string> &additionalHeaders,
         std::shared_ptr<const CertificateData> certificateData = nullptr);
 
 } // namespace communication
