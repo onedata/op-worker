@@ -51,18 +51,12 @@ rest_init(Req, _Opt) ->
         {PathInfo, Req2} = cowboy_req:path_info(Req1),
         {Url, Req3} = cowboy_req:path(Req2),
         {RawOpts, Req4} = cowboy_req:qs(Req3),
-        {CdmiVersionList, Req5} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req4),
-        CdmiVersion = get_supported_version(CdmiVersionList),
-        Req6 = case CdmiVersion of
-                   undefined -> Req5;
-                   _ -> cowboy_req:set_resp_header(<<"x-cdmi-specification-version">>, CdmiVersion, Req5)
-               end,
         Path = case PathInfo == [] of
                    true -> "/";
                    false -> gui_str:binary_to_unicode_list(rest_utils:join_to_path(PathInfo))
                end,
         HandlerModule = cdmi_routes:route(PathInfo, Url),
-        {ok, Req6, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts), cdmi_version = CdmiVersion, handler_module = HandlerModule}}
+        {ok, Req4, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts), handler_module = HandlerModule}}
     catch
         _Type:{badmatch,{error, Error}} -> {ok, Req, {error, Error}};
         _Type:{badmatch,Error} -> {ok, Req, {error,Error}};
@@ -82,7 +76,7 @@ rest_init(Req, _Opt) ->
 allowed_methods(Req, {error,Error}) ->
     case Error of
         {user_unknown, DnString} -> cdmi_error:error_reply(Req, undefined, ?error_unauthorized_code, "No user found with given DN: ~p",[DnString]);
-        unsupported_version -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "Provided cdmi version is unsupported",[]);
+        invalid_cert -> cdmi_error:error_reply(Req, undefined, ?error_unauthorized_code, "Invalid peer certificate error",[]);
         Error -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "State init error: ~p",[Error])
     end;
 allowed_methods(Req, #state{handler_module = Handler} = State) ->
@@ -98,7 +92,17 @@ allowed_methods(Req, #state{handler_module = Handler} = State) ->
 %% ====================================================================
 malformed_request(Req, #state{handler_module = Handler} = State) ->
     try
-        Handler:malformed_request(Req,State)
+        % check cdmi version
+        {CdmiVersionList, Req1} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
+        CdmiVersion = get_supported_version(CdmiVersionList),
+
+        % set response header
+        Req2 = case CdmiVersion of
+                   undefined -> Req1;
+                   _ -> cowboy_req:set_resp_header(<<"x-cdmi-specification-version">>, CdmiVersion, Req1)
+               end,
+
+        Handler:malformed_request(Req2,State#state{cdmi_version = CdmiVersion})
     catch
         _Type:Error -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "Malformed request error: ~p",[Error])
     end.

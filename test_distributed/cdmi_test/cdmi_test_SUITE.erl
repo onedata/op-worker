@@ -25,9 +25,9 @@
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1, get_file_test/1, metadata_test/1, create_dir_test/1, create_file_test/1, update_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1, mimetype_and_encoding_test/1, moved_pemanently_test/1]).
+-export([list_dir_test/1, get_file_test/1, metadata_test/1, create_dir_test/1, create_file_test/1, update_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1, mimetype_and_encoding_test/1, moved_pemanently_test/1, errors_test/1]).
 
-all() -> [list_dir_test, get_file_test, metadata_test, create_dir_test, create_file_test, update_file_test, delete_dir_test, delete_file_test, version_test, request_format_check_test, objectid_and_capabilities_test, mimetype_and_encoding_test, moved_pemanently_test].
+all() -> [list_dir_test, get_file_test, metadata_test, create_dir_test, create_file_test, update_file_test, delete_dir_test, delete_file_test, version_test, request_format_check_test, objectid_and_capabilities_test, mimetype_and_encoding_test, moved_pemanently_test, errors_test].
 
 %% ====================================================================
 %% Test functions
@@ -725,6 +725,25 @@ moved_pemanently_test(_Config) ->
     ?assertEqual("/"++filename:join(?Test_dir_name,?Test_file_name),proplists:get_value("Location",Headers2)).
     %%------------------------------
 
+% test error handling
+errors_test(_Config) ->
+    %%---- unauthorized access -----
+    {Code1, _Headers1, _Response1} = do_request(?Test_dir_name, get, [], [], false),
+    ?assertEqual("401", Code1),
+    %%------------------------------
+
+    %%----- wrong create path ------
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type","application/cdmi-container"}],
+    {Code2, _Headers2, _Response2} = do_request("/dir", put, RequestHeaders2, []),
+    ?assertEqual("400", Code2),
+    %%------------------------------
+
+    %%---- wrong create path 2 -----
+    RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type","application/cdmi-object"}],
+    {Code3, _Headers3, _Response3} = do_request("/dir/", put, RequestHeaders3, []),
+    ?assertEqual("400", Code3).
+    %%------------------------------
+
 %% ====================================================================
 %% SetUp and TearDown functions
 %% ====================================================================
@@ -892,22 +911,28 @@ setup_user_in_db(Cert, Config) ->
 
 % Performs a single request using ibrowse
 do_request(RestSubpath, Method, Headers, Body) ->
+    do_request(RestSubpath, Method, Headers, Body, true).
+
+do_request(RestSubpath, Method, Headers, Body, UseCert) ->
     Cert = get(cert),
     CCM = get(ccm),
-
 
     {ok, Port} = rpc:call(CCM, application, get_env, [veil_cluster_node, rest_port]),
     Hostname = case (Port =:= 80) or (Port =:= 443) of
                    true -> "https://localhost";
                    false -> "https://localhost:" ++ integer_to_list(Port)
                end,
+    Opts = case UseCert of
+               true -> [{ssl_options, [{certfile, Cert}, {reuse_sessions, false}]}];
+               false -> [{ssl_options, [{reuse_sessions, false}]}]
+           end,
     {ok, Code, RespHeaders, Response} =
         ibrowse:send_req(
             Hostname ++ "/cdmi/" ++ RestSubpath,
             Headers,
             Method,
             Body,
-            [{ssl_options, [{certfile, Cert}, {reuse_sessions, false}]}]
+            Opts
         ),
     {Code, RespHeaders, Response}.
 

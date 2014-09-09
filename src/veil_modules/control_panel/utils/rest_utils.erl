@@ -136,7 +136,7 @@ verify_peer_cert(Req) ->
                        catch
                            _:_ ->
                                ?error("[REST] Peer connected but cerificate chain was not found. Please check if GSI validation is enabled."),
-                               erlang:error(invalid_cert)
+                               throw(invalid_cert)
                        end,
     case gsi_handler:call(gsi_nif, verify_cert_c,
         [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate
@@ -149,13 +149,13 @@ verify_peer_cert(Req) ->
             {ok,_DnString} = user_logic:rdn_sequence_to_dn_string(Rdn);
         {ok, 0, Errno} ->
             ?info("[REST] Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
-            erlang:error({gsi_error_code, Errno});
+            throw(invalid_cert);
         {error, Reason} ->
             ?error("[REST] GSI peer verification callback error: ~p", [Reason]),
-            erlang:error(Reason);
+            throw(invalid_cert);
         Other ->
             ?error("[REST] GSI verification callback returned unknown response ~p", [Other]),
-            erlang:error({gsi_unknown_response, Other})
+            throw(invalid_cert)
     end.
 
 
