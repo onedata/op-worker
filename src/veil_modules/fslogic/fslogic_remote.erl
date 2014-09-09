@@ -40,6 +40,8 @@ prerouting(_SpaceInfo, #renamefile{from_file_logic_name = From, to_file_logic_na
     {ok, From1} = fslogic_path:get_full_file_name(From),
     {ok, To1} = fslogic_path:get_full_file_name(To),
 
+    RequestBody1 = RequestBody#renamefile{from_file_logic_name = From1, to_file_logic_name = To1},
+
     {ok, #space_info{providers = FromProviders}} = fslogic_utils:get_space_info_for_path(From1),
     {ok, #space_info{providers = ToProviders}} = fslogic_utils:get_space_info_for_path(To1),
 
@@ -49,12 +51,23 @@ prerouting(_SpaceInfo, #renamefile{from_file_logic_name = From, to_file_logic_na
 
     case ordsets:to_list(CommonProvidersSet) of
         [CommonProvider | _] ->
-            {ok, {reroute, CommonProvider}};
+            {ok, {reroute, CommonProvider, RequestBody1}};
         [] ->
-            {ok, {reroute, RerouteTo}}
+            {ok, {reroute, RerouteTo, RequestBody1}}
     end;
-prerouting(_SpaceInfo, _Request, [RerouteTo | _Providers]) ->
-    {ok, {reroute, RerouteTo}}.
+prerouting(_SpaceInfo, RequestBody, [RerouteTo | _Providers]) ->
+    Path = fslogic:extract_logical_path(RequestBody),
+    {ok, FullPath} = fslogic_path:get_full_file_name(Path),
+    TupleList = lists:map(
+        fun(Elem) ->
+            case Elem of
+                Path -> FullPath;
+                _    -> Elem
+            end
+        end, tuple_to_list(RequestBody)),
+    RequestBody1 = list_to_tuple(TupleList),
+    ?info("New request ================> ~p", [RequestBody1]),
+    {ok, {reroute, RerouteTo, RequestBody1}}.
 
 
 
@@ -66,8 +79,12 @@ prerouting(_SpaceInfo, _Request, [RerouteTo | _Providers]) ->
 %% @end
 -spec postrouting(SpaceInfo :: #space_info{}, {ok | error, ResponseOrReason :: term()}, Request :: term()) -> Result :: undefined | term().
 %% ====================================================================
-postrouting(_SpaceInfo, {error, _FailureReason}, #getfilechildren{dir_logic_name = "/"}) ->
+postrouting(_SpaceInfo, {error, _FailureReason}, #getfilechildren{dir_logic_name = "/", offset = 0}) ->
     #filechildren{answer = ?VOK, entry = [#filechildren_direntry{name = ?SPACES_BASE_DIR_NAME, type = ?DIR_TYPE_PROT}]};
+postrouting(_SpaceInfo, {ok, #filechildren{answer = ?VOK, entry = Entries} = Response}, #getfilechildren{dir_logic_name = "/", offset = 0, children_num = Count}) ->
+    Entries1 = [#filechildren_direntry{name = ?SPACES_BASE_DIR_NAME, type = ?DIR_TYPE_PROT} | Entries],
+    Entries2 = lists:sublist(Entries1, Count),
+    Response#filechildren{entry = Entries2};
 postrouting(#space_info{name = SpaceName} = SpaceInfo, {error, _FailureReason}, #getfileattr{file_logic_name = "/"}) ->
     #fileattr{answer = ?VOK, atime = vcn_utils:time(), mtime = vcn_utils:time(), ctime = vcn_utils:time(),
                 links = 2, size = 0, type = ?DIR_TYPE, gname = unicode:characters_to_list(SpaceName), gid = fslogic_spaces:map_to_grp_owner(SpaceInfo),

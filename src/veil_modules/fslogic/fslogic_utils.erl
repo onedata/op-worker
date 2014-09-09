@@ -21,13 +21,23 @@
 -export([get_sh_and_id/3, get_sh_and_id/4, get_sh_and_id/5, get_files_number/3]).
 -export([get_space_info_for_path/1, get_user_groups/2]).
 -export([random_ascii_lowercase_sequence/1, path_walk/3, list_dir/1]).
--export([run_as_root/1]).
+-export([run_as_root/1, file_to_space_info/1]).
 
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
+
+file_to_space_info(#veil_document{record = #file{} = File}) ->
+    file_to_space_info(File);
+file_to_space_info(#file{extensions = Exts} = File) ->
+    case lists:keyfind(?file_space_info_extestion, 1, Exts) of
+        {?file_space_info_extestion, #space_info{} = SpaceInfo} ->
+            SpaceInfo;
+        _ ->
+            error({badarg, File})
+    end.
 
 %% run_as_root/1
 %% ====================================================================

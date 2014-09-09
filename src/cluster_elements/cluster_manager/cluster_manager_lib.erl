@@ -15,7 +15,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_provider_id/0]).
+-export([get_provider_id/0, sync_all_spaces/0]).
 
 %% get_provider_id/0
 %% ====================================================================
@@ -30,4 +30,16 @@ get_provider_id() ->
     PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
 
     auth_handler:get_provider_id(PeerCert).
+
+
+sync_all_spaces() ->
+    case gr_providers:get_spaces(provider) of
+        {ok, SpaceIds} ->
+            Result = [fslogic_spaces:initialize(SpaceId) || SpaceId <- SpaceIds],
+            ?info("Sync result ~p", [Result]),
+            {ok, Result};
+        {error, Reason} ->
+            ?error("Cannot get supported spaces due to: ~p", [Reason]),
+            {error, Reason}
+    end.
 

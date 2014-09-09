@@ -78,42 +78,48 @@ assert_group_access(_UserDoc, cluster_request, _LogicalPath) ->
 assert_group_access(#veil_document{uuid = ?CLUSTER_USER_ID}, _Request, _LogicalPath) ->
     ok;
 assert_group_access(UserDoc, Request, LogicalPath) ->
-    assert_grp_access(UserDoc, Request, string:tokens(LogicalPath, "/")).
+    case assert_grp_access(UserDoc, Request, string:tokens(LogicalPath, "/"), true) of
+        true -> ok;
+        false -> error
+    end.
 
 %% assert_grp_access/1
 %% ====================================================================
 %% @doc Checks if operation given as parameter (one of fuse_messages) is allowed to be invoked in groups context.
 %% @end
--spec assert_grp_access(UserDoc :: tuple(), Request :: atom(), Path :: list()) -> ok | error.
+-spec assert_grp_access(UserDoc :: tuple(), Request :: atom(), Path :: list(), boolean()) -> boolean().
 %% ====================================================================
-assert_grp_access(_UserDoc, Request, [?SPACES_BASE_DIR_NAME]) ->
-    case lists:member(Request, ?GROUPS_BASE_ALLOWED_ACTIONS) of
-        false   -> error;
-        true    -> ok
-    end;
-assert_grp_access(UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail]) ->
+assert_grp_access(_UserDoc, Request, [?SPACES_BASE_DIR_NAME], _Retry) ->
+    lists:member(Request, ?GROUPS_BASE_ALLOWED_ACTIONS);
+assert_grp_access(#veil_document{record = #user{global_id = GRUID}} = UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail] = PathTokens, Retry) ->
     TailCheck = case Tail of
                     [_GroupName] ->
-                        case lists:member(Request, ?GROUPS_ALLOWED_ACTIONS) of
-                            false   -> error;
-                            true    -> ok
-                        end;
+                        lists:member(Request, ?GROUPS_ALLOWED_ACTIONS);
                     _ ->
-                        ok
+                        true
                 end,
     case TailCheck of
-        ok ->
+        true ->
             UserTeams = user_logic:get_space_names(UserDoc),
             [GroupName2 | _] = Tail,
             case lists:member(GroupName2, UserTeams) of
-                true    -> ok;
-                false   -> error
+                true    -> true;
+                false   ->
+                    case fslogic_objects:get_space(GroupName2) of
+                        {ok, #space_info{users = Users}} ->
+                            lists:member(vcn_utils:ensure_binary(GRUID), Users);
+                        _ when Retry ->
+                            cluster_manager_lib:sync_all_spaces(),
+                            assert_grp_access(UserDoc, Request, PathTokens, false);
+                        _ ->
+                            false
+                    end
             end;
         _ ->
             TailCheck
     end;
-assert_grp_access(_, _, _) ->
-    ok.
+assert_grp_access(_, _, _, _) ->
+    true.
 
 %% ====================================================================
 %% Internal functions

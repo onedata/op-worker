@@ -142,7 +142,7 @@ get_full_file_name(FileName, Request) ->
     ErrorDesc :: atom.
 %% ====================================================================
 
-get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
+ get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
     {ok, Tokens} = verify_file_name(FileName),
     VerifiedFileName = string:join(Tokens, "/"),
     case UserDocStatus of

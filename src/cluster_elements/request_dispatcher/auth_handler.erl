@@ -24,7 +24,7 @@
 %% ====================================================================
 %% @doc Returns user's AccessToken that is currently used by local Provider.
 %% @end
--spec get_access_token(UserGlobalId :: binary()) -> {UserGlobalId :: binary(), AccessToken :: binary()} | {undefined, undefined}.
+-spec get_access_token(UserGlobalId :: binary()) -> {UserGlobalId :: binary(), AccessToken :: binary() | undefined} | {undefined, undefined}.
 %% ====================================================================
 get_access_token(undefined) ->
     {undefined, undefined};
@@ -34,7 +34,7 @@ get_access_token(GlobalId) ->
             {GlobalId, AccessToken};
         {error, Reason} ->
             ?error("Cannot find user ~p due to: ~p", [GlobalId, Reason]),
-            {undefined, undefined}
+            {GlobalId, undefined}
     end.
 
 %% get_provider_id/1

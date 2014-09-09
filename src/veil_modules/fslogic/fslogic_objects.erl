@@ -17,6 +17,7 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_types.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_registry/gr_users.hrl").
 
 %% API
 -export([get_file/1, get_waiting_file/1, get_file/3, get_waiting_file/3]).
@@ -121,14 +122,25 @@ get_storage({Type, StorageID}) ->
 %% ====================================================================
 get_user(#veil_document{record = #user{}} = UserDoc) ->
     {ok, UserDoc};
-get_user({Key, UserGID}) ->
-    case UserGID of
+get_user({Key, Value}) ->
+    get_user2({Key, Value}, true).
+get_user2({Key, Value}, Retry) ->
+    case Value of
         undefined -> {ok, #veil_document{uuid = ?CLUSTER_USER_ID, record = #user{login = "root", role = admin}}};
-        DN ->
-            case user_logic:get_user({Key, DN}) of
+        Value ->
+            case user_logic:get_user({Key, Value}) of
                 {ok, #veil_document{}} = OKRet -> OKRet;
+                {error, user_not_found} when Key =:= global_id, Retry ->
+                    cluster_manager_lib:sync_all_spaces(),
+                    {ok, SpaceFiles} = dao_lib:apply(vfs, get_space_files, [{gruid, vcn_utils:ensure_binary(Value)}], fslogic_context:get_protocol_version()),
+                    Spaces = [fslogic_utils:file_to_space_info(SpaceFile) || #veil_document{record = #file{}} = SpaceFile <- SpaceFiles],
+                    ?info("Spaces =============> ~p ~p", [Spaces, SpaceFiles]),
+                    [#space_info{space_id = SpaceId} = SpaceInfo | _] = Spaces,
+                    {ok, #user_details{name = Name}} = gr_spaces:get_user_details(provider, SpaceId, Value),
+                    user_logic:sign_in([{global_id, vcn_utils:ensure_list(Value)}, {name, Name}, {login, openid_utils:get_user_login(Value)}], undefined),
+                    get_user2({Key, Value}, false);
                 {error, Reason} ->
-                    {error, {get_user_error, {Reason, {dn, DN}}}}
+                    {error, {get_user_error, {Reason, {key, Key}, {value, Value}}}}
             end
     end.
 
@@ -142,8 +154,8 @@ get_user({Key, UserGID}) ->
 %% ====================================================================
 get_user() ->
     case fslogic_context:get_access_token() of
-        {UserGID, _} when UserGID =/= undefined ->
-            get_user({global_id, UserGID});
+        {GRUID, _} when GRUID =/= undefined ->
+            get_user({global_id, GRUID});
         {_, _} ->
             get_user({dn, fslogic_context:get_user_dn()})
     end.
