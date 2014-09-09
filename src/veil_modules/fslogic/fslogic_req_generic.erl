@@ -302,8 +302,8 @@ rename_file(FullFileName, FullTargetFileName) ->
             ok = fslogic_req_rename_impl:rename_file_trivial(FullFileName, FullTargetFileName, {OldFile, OldFileDoc, NewParentUUID});
         false -> %% Not trivial
             SourceSpaceProvidersSet = ordsets:from_list(SourceSpaceProviders),
-            SourceSpaceProvidersSet = ordsets:from_list(TargetSpaceProviders),
-            CommonProvidersSet = ordsets:intersection(SourceSpaceProvidersSet, SourceSpaceProvidersSet),
+            TargetSpaceProvidersSet = ordsets:from_list(TargetSpaceProviders),
+            CommonProvidersSet = ordsets:intersection(SourceSpaceProvidersSet, TargetSpaceProvidersSet),
 
             case ordsets:is_element(SelfGRPID, CommonProvidersSet) of
                 true -> %% Inter-Space
