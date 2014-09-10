@@ -250,20 +250,27 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
                end,
     case logical_files_manager:create(Filepath) of
         ok ->
-            case logical_files_manager:write(Filepath, RawValue) of
-                Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                    case logical_files_manager:getfileattr(Filepath) of
-                        {ok,Attrs} ->
-                            Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
-                            Req2 = cowboy_req:set_resp_body(Response, Req1),
-                            {true, Req2, State};
-                        Error -> 
+            {struct, UserMetadata} = proplists:get_value(<<"metadata">>, Body, []),
+            case logical_files_manager:set_user_metadata(Filepath, UserMetadata) of
+                ok ->
+                    case logical_files_manager:write(Filepath, RawValue) of
+                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
+                            case logical_files_manager:getfileattr(Filepath) of
+                                {ok,Attrs} ->
+                                    Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
+                                    Req2 = cowboy_req:set_resp_body(Response, Req1),
+                                    {true, Req2, State};
+                                Error ->
+                                    logical_files_manager:delete(Filepath),
+                                    cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Getting attributes end up with error: ~p",Error)
+                            end;
+                        Error ->
                             logical_files_manager:delete(Filepath),
-                            cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Getting attributes end up with error: ~p",Error)
+                            cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
                     end;
                 Error ->
                     logical_files_manager:delete(Filepath),
-                    cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
+                    cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Setting user metadata end up with error: ~p",Error)
             end;
         {error, file_exists} ->
             case Range of

@@ -267,7 +267,7 @@ fslogic_runner(Method, RequestType, RequestBody, ErrorHandler) when is_function(
         error:UnkError ->
             {ErrorCode, ErrorDetails} = {?VEREMOTEIO, UnkError},
             %% Bad Match assertion - something went horribly wrong. This should not happen.
-            ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p) Method ~p", [RequestBody, ErrorDetails, ErrorCode, Method]),
             ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
     end.
 
@@ -297,6 +297,10 @@ handle_fuse_message(Req = #changefileperms{file_logic_name = FName, perms = Perm
 handle_fuse_message(Req = #getfileattr{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:get_file_attr(FullFileName);
+
+handle_fuse_message(Req = #setfileusermetadata{file_logic_name = FName, user_metadata = Metadata}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:set_file_user_metadata(FullFileName, Metadata);
 
 handle_fuse_message(Req = #getfileuuid{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),

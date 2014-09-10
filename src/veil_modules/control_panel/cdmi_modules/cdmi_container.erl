@@ -127,16 +127,28 @@ get_cdmi_container(Req, #state{opts = Opts} = State) ->
 %% ====================================================================
 put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:mkdir(Filepath) of
-        ok -> %todo check given body
-            case logical_files_manager:getfileattr(Filepath) of
-                {ok, Attr} ->
-                    Response = rest_utils:encode_to_json(
-                        {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr})}),
-                    Req2 = cowboy_req:set_resp_body(Response, Req),
-                    {true, Req2, State};
+        ok ->
+            %todo check given body
+            {ok, RawBody, _Req} = cowboy_req:body(Req),
+            Body = rest_utils:parse_body(RawBody),
+            %todo check given metadata (don't allow cdmi_ prefixes, check number of entries)
+            %todo add possibility to update specific metadata entries
+            {struct, UserMetadata} = proplists:get_value(<<"metadata">>, Body, []),
+            case logical_files_manager:set_user_metadata(Filepath, UserMetadata) of
+                ok ->
+                    case logical_files_manager:getfileattr(Filepath) of
+                        {ok, Attr} ->
+                            Response = rest_utils:encode_to_json(
+                                {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr})}),
+                            Req2 = cowboy_req:set_resp_body(Response, Req),
+                            {true, Req2, State};
+                        Error ->
+                            logical_files_manager:rmdir(Filepath),
+                            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Cannot get dir attrs: ~p",[Error])
+                    end;
                 Error ->
                     logical_files_manager:rmdir(Filepath),
-                    cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Cannot get dir attrs: ~p",[Error])
+                    cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Cannot set dir user metadata: ~p",[Error])
             end;
         {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?error_conflict_code, "Dir creation conflict",[]);
         {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?error_not_found_code, "Parent dir not found",[]);

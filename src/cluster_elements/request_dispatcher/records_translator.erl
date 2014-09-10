@@ -78,6 +78,8 @@ translate_to_record(Value) ->
 %% ====================================================================
 get_answer_decoder_and_type(#fusemessage{input = #getfileattr{}}) ->
     {fuse_messages, fileattr};
+get_answer_decoder_and_type(#fusemessage{input = #setfileusermetadata{}}) ->
+    {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #getfilelocation{}}) ->
     {fuse_messages, filelocation};
 get_answer_decoder_and_type(#fusemessage{input = #getnewfilelocation{}}) ->

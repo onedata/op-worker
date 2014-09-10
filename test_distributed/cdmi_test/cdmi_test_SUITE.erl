@@ -167,17 +167,19 @@ get_file_test(_Config) ->
 metadata_test(_Config) ->
     FileName = "/metadataTest.txt",
     FileContent = <<"Some content...">>,
-    Before = now_in_secs(),
+    DirName = "metadataTestDir/",
 
-    create_file(FileName),
-    ?assert(object_exists(FileName)),
-    write_to_file(FileName,FileContent),
-    ?assertEqual(FileContent,get_file_content(FileName)),
+    %%-------- create file with user metadata --------
+    ?assert(not object_exists(FileName)),
+
+    RequestHeaders = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestBody1 = [{<<"value">>, FileContent}, {<<"metadata">>, [{<<"my_metadata">>, <<"my_value">>}]}],
+    RawRequestBody1 = rest_utils:encode_to_json(RequestBody1),
+    Before = now_in_secs(),
+    {Code1, _Headers1, Response1} = do_request(FileName, put, RequestHeaders, RawRequestBody1),
     After = now_in_secs(),
 
-    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code1, _Headers1, Response1} = do_request(FileName, get, RequestHeaders1, []),
-    ?assertEqual("200",Code1),
+    ?assertEqual("201",Code1),
     {struct,CdmiResponse1} = mochijson2:decode(Response1),
     {struct, Metadata1} = proplists:get_value(<<"metadata">>,CdmiResponse1),
     ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata1)),
@@ -189,40 +191,54 @@ metadata_test(_Config) ->
     ?assert(CTime1 =< ATime1),
     ?assert(CTime1 =< MTime1),
     ?assertEqual(<<"veilfstestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
+    ?assertEqual(<<"my_value">>, proplists:get_value(<<"my_metadata">>, Metadata1)),
+    ?assertEqual(6, length(Metadata1)),
 
     %%-- selective metadata read -----
-    {_Code2, _Headers2, Response2} = do_request(FileName++"?metadata:", get, RequestHeaders1, []),
+    {_Code2, _Headers2, Response2} = do_request(FileName++"?metadata:", get, RequestHeaders, []),
     {struct,CdmiResponse2} = mochijson2:decode(Response2),
     ?assertEqual(1, length(CdmiResponse2)),
     {struct, Metadata2} = proplists:get_value(<<"metadata">>,CdmiResponse2),
-    ?assertEqual(5, length(Metadata2)),
+    ?assertEqual(6, length(Metadata2)),
 
     %%-- selective metadata read with prefix -----
-    {Code3, _Headers3, Response3} = do_request(FileName++"?metadata:cdmi_", get, RequestHeaders1, []),
+    {Code3, _Headers3, Response3} = do_request(FileName++"?metadata:cdmi_", get, RequestHeaders, []),
     ?assertEqual("200",Code3),
     {struct,CdmiResponse3} = mochijson2:decode(Response3),
     ?assertEqual(1, length(CdmiResponse3)),
     {struct, Metadata3} = proplists:get_value(<<"metadata">>,CdmiResponse3),
     ?assertEqual(5, length(Metadata3)),
 
-    {_Code4, _Headers4, Response4} = do_request(FileName++"?metadata:cdmi_o", get, RequestHeaders1, []),
+    {_Code4, _Headers4, Response4} = do_request(FileName++"?metadata:cdmi_o", get, RequestHeaders, []),
     {struct,CdmiResponse4} = mochijson2:decode(Response4),
     ?assertEqual(1, length(CdmiResponse4)),
     {struct, Metadata4} = proplists:get_value(<<"metadata">>,CdmiResponse4),
     ?assertEqual(<<"veilfstestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
     ?assertEqual(1, length(Metadata4)),
 
-    {_Code5, _Headers5, Response5} = do_request(FileName++"?metadata:cdmi_size", get, RequestHeaders1, []),
+    {_Code5, _Headers5, Response5} = do_request(FileName++"?metadata:cdmi_size", get, RequestHeaders, []),
     {struct,CdmiResponse5} = mochijson2:decode(Response5),
     ?assertEqual(1, length(CdmiResponse5)),
     {struct, Metadata5} = proplists:get_value(<<"metadata">>,CdmiResponse5),
     ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata5)),
     ?assertEqual(1, length(Metadata5)),
 
-    {_Code6, _Headers6, Response6} = do_request(FileName++"?metadata:cdmi_no_such_metadata", get, RequestHeaders1, []),
+    {_Code6, _Headers6, Response6} = do_request(FileName++"?metadata:cdmi_no_such_metadata", get, RequestHeaders, []),
     {struct,CdmiResponse6} = mochijson2:decode(Response6),
     ?assertEqual(1, length(CdmiResponse6)),
-    ?assertEqual([], proplists:get_value(<<"metadata">>,CdmiResponse6)).
+    ?assertEqual([], proplists:get_value(<<"metadata">>,CdmiResponse6)),
+
+    ct:print("!!!!!!!!!!!!", []),
+
+    %%------ create directory with user metadata  ----------
+    RequestHeaders2 = [{"content-type", "application/cdmi-container"},{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestBody2 = [{<<"metadata">>, [{<<"my_metadata">>, <<"my_dir_value">>}]}],
+    RawRequestBody2 = rest_utils:encode_to_json(RequestBody2),
+    {Code7, _Headers7, Response7} = do_request(DirName, put, RequestHeaders2, RawRequestBody2),
+    ?assertEqual("201",Code7),
+    {struct,CdmiResponse7} = mochijson2:decode(Response7),
+    {struct, Metadata7} = proplists:get_value(<<"metadata">>,CdmiResponse7),
+    ?assertEqual(<<"my_dir_value">>, proplists:get_value(<<"my_metadata">>, Metadata7)).
     %%------------------------------
 
 % Tests dir creation (cdmi container PUT), remember that every container URI ends
@@ -300,7 +316,8 @@ create_file_test(_Config) ->
     ?assertEqual(<<"file.txt">>, proplists:get_value(<<"objectName">>,CdmiResponse1)),
     ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiResponse1)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiResponse1)),
-    ?assert(proplists:get_value(<<"metadata">>,CdmiResponse1) =/= <<>>),
+    {struct, Metadata1} = proplists:get_value(<<"metadata">>,CdmiResponse1),
+    ?assertEqual(5, length(Metadata1)),
 
     ?assert(object_exists(ToCreate)),
     ?assertEqual(FileContent,get_file_content(ToCreate)),
@@ -674,7 +691,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1, true),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},

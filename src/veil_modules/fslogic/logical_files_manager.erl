@@ -26,7 +26,7 @@
 %% API
 %% ====================================================================
 %% Logical file organization management (only db is used)
--export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1]).
+-export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, set_user_metadata/2]).
 %% File access (db and helper are used)
 -export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1, change_file_perm/2]).
 
@@ -226,6 +226,29 @@ getfileattr(Message, Value) ->
       end;
     _ -> {Status, TmpAns}
   end.
+
+%% set_user_metadata/2
+%% ====================================================================
+%% @doc Sets user metadata in db.
+%% @end
+-spec set_user_metadata(FileName :: string(), Metadata :: [{Name :: string(), Value :: string()}]) -> Result when
+    Result :: ok | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+set_user_metadata(FileName, Metadata) ->
+    Record = #setfileusermetadata{file_logic_name = FileName, user_metadata = Metadata},
+    {Status, TmpAns} = contact_fslogic(Record),
+    case Status of
+        ok ->
+            Response = TmpAns#atom.value,
+            case Response of
+                ?VOK -> ok;
+                _ -> {logical_file_system_error, Response}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
 
 %% ====================================================================
 %% File access (db and helper are used)

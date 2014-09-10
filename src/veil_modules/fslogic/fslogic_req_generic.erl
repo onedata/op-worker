@@ -19,7 +19,8 @@
 
 
 %% API
--export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, get_file_attr/1, delete_file/1, rename_file/2, get_statfs/0]).
+-export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, get_file_attr/1,
+    set_file_user_metadata/2, delete_file/1, rename_file/2, get_statfs/0]).
 
 %% ====================================================================
 %% API functions
@@ -195,6 +196,23 @@ get_file_attr(FullFileName) ->
             throw(?VENOENT)
     end.
 
+%% set_file_user_metadata/2
+%% ====================================================================
+%% @doc Sets user metadata for a file.
+%% @end
+    -spec set_file_user_metadata(FullFileName :: string(), Metadata :: list()) ->
+#atom{} | no_return().
+set_file_user_metadata(FullFileName, Metadata) ->
+    ?debug("set_file_user_metadata(FullFileName: ~p, Metadata: ~p)", [FullFileName, Metadata]),
+
+    {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
+    File1 = fslogic_meta:update_meta_attr(File, user_metadata, Metadata),
+    Status = string:equal(File1#file.meta_doc, File#file.meta_doc),
+    if
+        Status -> #atom{value = ?VOK};
+        true ->
+            {ok, _} = fslogic_objects:save_file(FileDoc#veil_document{record = File1})
+    end.
 
 %% delete_file/1
 %% ====================================================================

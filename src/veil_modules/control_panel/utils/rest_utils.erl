@@ -275,9 +275,9 @@ prepare_metadata(Attrs) ->
 -spec prepare_metadata(Prefix :: binary(), #fileattributes{}) -> [{CdmiName :: binary(), Value :: binary()}].
 %% ====================================================================
 prepare_metadata(Prefix, Attrs) ->
-    WithPrefix = lists:filter(fun(X) -> metadata_with_prefix(X, Prefix) end, ?default_storage_system_metadata),
-    StorageSystemMetadata = lists:map(fun(X) -> cdmi_metadata_to_attrs(X,Attrs) end, WithPrefix),
-    lists:append(StorageSystemMetadata, Attrs#fileattributes.user_metadata).
+    StorageSystemMetadata = lists:map(fun(X) -> cdmi_metadata_to_attrs(X,Attrs) end, ?default_storage_system_metadata),
+    Metadata = lists:append(StorageSystemMetadata, Attrs#fileattributes.user_metadata),
+    lists:filter(fun(X) -> metadata_with_prefix(X, Prefix) end, Metadata).
 
 %% ====================================================================
 %% Internal Functions
@@ -289,7 +289,7 @@ prepare_metadata(Prefix, Attrs) ->
 %% @end
 -spec metadata_with_prefix(Name :: binary(), Prefix :: binary()) -> true | false.
 %% ====================================================================
-metadata_with_prefix(Name, Prefix) ->
+metadata_with_prefix({Name, _Value}, Prefix) ->
     binary:longest_common_prefix([Name, Prefix]) =:= size(Prefix).
 
 %% cdmi_metadata_to_attrs/2
