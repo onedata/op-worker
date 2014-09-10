@@ -135,7 +135,6 @@ get_user({Key, Value}) ->
                     {ok, SpaceFiles} = dao_lib:apply(vfs, get_space_files, [{gruid, vcn_utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()),
 
                     Spaces = [fslogic_utils:file_to_space_info(SpaceFile) || #veil_document{record = #file{}} = SpaceFile <- SpaceFiles],
-                    ?info("Spaces =============> ~p ~p", [Spaces, SpaceFiles]),
 
                     user_logic:create_partial_user(GRUID, Spaces);
                 {error, Reason} ->

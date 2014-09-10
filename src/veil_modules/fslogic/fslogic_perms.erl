@@ -60,7 +60,7 @@ check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwne
     FileSpace = get_group(FileName),
 
     UserOwnsFile = UserUid=:=FileOwnerUid,
-    UserGroupOwnsFile = is_member_of_space(UserDoc, FileSpace),
+    UserGroupOwnsFile = is_member_of_space(UserDoc, {name, FileSpace}),
     case has_permission(CheckType,FilePerms,UserOwnsFile,UserGroupOwnsFile) of
         true -> ok;
         false -> ?permission_denied_error(UserDoc,FileName,CheckType)
@@ -82,6 +82,13 @@ assert_group_access(UserDoc, Request, LogicalPath) ->
         false -> error
     end.
 
+
+%% is_member_of_space/2
+%% ====================================================================
+%% @doc Checks if the user is an member of given space.
+%% @end
+-spec is_member_of_space(UserDoc :: user_doc(), space_info() | {name, SpaceName :: string() | binary()}) -> boolean().
+%% ====================================================================
 is_member_of_space(#veil_document{record = #user{}} = UserDoc, SpaceReq) ->
     try
         is_member_of_space3(UserDoc, SpaceReq, true)
@@ -98,7 +105,7 @@ is_member_of_space3(#veil_document{record = #user{global_id = GRUID}} = UserDoc,
             is_member_of_space3(UserDoc, SpaceInfo, false);
         false -> false
     end;
-is_member_of_space3(#veil_document{record = #user{}} = UserDoc, SpaceName, Retry) ->
+is_member_of_space3(#veil_document{record = #user{}} = UserDoc, {name, SpaceName}, Retry) ->
     UserSpaces = user_logic:get_space_names(UserDoc),
     case lists:member(SpaceName, UserSpaces) of
         true -> true;
@@ -133,7 +140,7 @@ assert_grp_access(#veil_document{record = #user{}} = UserDoc, Request, [?SPACES_
     case TailCheck of
         true ->
             [SpaceName | _] = Tail,
-            is_member_of_space(UserDoc, SpaceName);
+            is_member_of_space(UserDoc, {name, SpaceName});
         _ ->
             TailCheck
     end;

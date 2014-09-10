@@ -196,7 +196,6 @@ rename_file_interprovider(UserDoc, ?DIR_TYPE_PROT, SourceFilePath, TargetFilePat
 
     PIDs = lists:map(
         fun(#dir_entry{name = FileName, type = FileType}) ->
-            ?info("OMG: ====================> ~p ~p", [FileName, FileType]),
 %%             Uncomment for parallel renaming
 %%             spawn_monitor(
 %%                 fun() ->

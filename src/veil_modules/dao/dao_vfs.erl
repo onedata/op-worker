@@ -66,10 +66,15 @@ get_space_file1(InitArg) ->
     end.
 
 
+%% get_space_file/1
+%% ====================================================================
+%% @doc Retrieves files associated with spaces that belongs to user with given GRUID.
+%% @end
+-spec get_space_files({gruid, GRUID :: binary() | string()}) -> {ok, [file_doc()]} | {error, term()}.
+%% ====================================================================
 get_space_files({gruid, GRUID}) when is_binary(GRUID) ->
     get_space_files({gruid, ?RECORD_FIELD_BINARY_PREFIX ++ vcn_utils:ensure_list(GRUID)});
 get_space_files({gruid, GRUID}) when is_list(GRUID) ->
-    ?info("KEy ==============> ~p", [GRUID]),
     QueryArgs = #view_query_args{keys = [dao_helper:name(GRUID)], include_docs = true},
     case dao_records:list_records(?SPACES_BY_GRUID_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} ->
@@ -78,6 +83,7 @@ get_space_files({gruid, GRUID}) when is_list(GRUID) ->
             ?error("Cannot fetch space files due to: ~p", [Resaon]),
             {error, Resaon}
     end.
+
 
 %% ===================================================================
 %% File Descriptors Management

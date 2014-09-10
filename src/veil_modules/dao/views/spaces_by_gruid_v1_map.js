@@ -1,4 +1,4 @@
-// View that allows counting of groups' files
+// For each space emit all its users. This view allows selecting space list for each user by its GRUID
 function(doc) {
     if(doc.record__ == "file" && doc.type == 1)
     {

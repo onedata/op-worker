@@ -57,6 +57,8 @@ prerouting(_SpaceInfo, #renamefile{from_file_logic_name = From, to_file_logic_na
     end;
 prerouting(_SpaceInfo, RequestBody, [RerouteTo | _Providers]) ->
     Path = fslogic:extract_logical_path(RequestBody),
+
+    %% Replace all paths in this request with their "full" versions (with /spaces prefix).
     {ok, FullPath} = fslogic_path:get_full_file_name(Path),
     TupleList = lists:map(
         fun(Elem) ->
@@ -66,7 +68,6 @@ prerouting(_SpaceInfo, RequestBody, [RerouteTo | _Providers]) ->
             end
         end, tuple_to_list(RequestBody)),
     RequestBody1 = list_to_tuple(TupleList),
-    ?info("New request ================> ~p", [RequestBody1]),
     {ok, {reroute, RerouteTo, RequestBody1}}.
 
 

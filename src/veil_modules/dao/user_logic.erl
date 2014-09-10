@@ -38,6 +38,14 @@
 %% API functions
 %% ====================================================================
 
+
+%% create_partial_user/2
+%% ====================================================================
+%% @doc Creates user based on data received from Global Registry for user with given GRUID.
+%%      Spaces list shall contain at least one of user's spaces.
+%% @end
+-spec create_partial_user(GRUID :: binary(), [space_info()]) -> {ok, user_doc()} | {error, Reason :: term()}.
+%% ====================================================================
 create_partial_user(GRUID, Spaces) ->
     [#space_info{space_id = SpaceId} | _] = Spaces,
     case gr_spaces:get_user_details(provider, SpaceId, GRUID) of
@@ -56,6 +64,7 @@ create_partial_user(GRUID, Spaces) ->
             ?error("Cannot create partial user ~p due to: ~p", [GRUID, Reason]),
             {error, Reason}
     end.
+
 
 %% sign_in/1
 %% ====================================================================

@@ -29,6 +29,12 @@
 %% ====================================================================
 
 
+%% file_to_space_info/1
+%% ====================================================================
+%% @doc Extracts space_info() from file_doc(). If given file is not an space's root file, fails with error:{badarg, file_info()}.
+%% @end
+-spec file_to_space_info(SpaceFile :: file_doc() | file_info()) -> space_info() | no_return().
+%% ====================================================================
 file_to_space_info(#veil_document{record = #file{} = File}) ->
     file_to_space_info(File);
 file_to_space_info(#file{extensions = Exts} = File) ->
@@ -38,6 +44,7 @@ file_to_space_info(#file{extensions = Exts} = File) ->
         _ ->
             error({badarg, File})
     end.
+
 
 %% run_as_root/1
 %% ====================================================================

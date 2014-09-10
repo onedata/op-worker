@@ -18,7 +18,13 @@
 %% API
 -export([initialize/1, map_to_grp_owner/1, get_storage_space_name/1, sync_all_supported_spaces/0]).
 
--spec sync_all_supported_spaces() -> ok | {error, Reason :: any}.
+
+%% sync_all_supported_spaces/0
+%% ====================================================================
+%% @doc Synchronizes all spaces that are supported by this provider.
+%% @end
+-spec sync_all_supported_spaces() -> ok | {error, Reason :: any()} | {error, [Reason :: any()]}.
+%% ====================================================================
 sync_all_supported_spaces() ->
     case gr_providers:get_spaces(provider) of
         {ok, SpaceIds} ->
