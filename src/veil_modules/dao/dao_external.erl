@@ -46,7 +46,13 @@ get_db() ->
 -spec is_valid_record(Record :: atom() | string() | tuple()) -> boolean().
 %% ====================================================================
 is_valid_record(Record) when is_list(Record) ->
-    is_valid_record(list_to_atom(Record));
+  try
+    is_valid_record(list_to_existing_atom(Record))
+  catch
+    _:_ ->
+      ?error("Checking record that should not exist: ~p", [Record]),
+      false
+  end;
 is_valid_record(Record) when is_atom(Record) ->
     case ?dao_record_info(Record) of
         {_Size, _Fields, _} -> true;    %% When checking only name of record, we omit size check
