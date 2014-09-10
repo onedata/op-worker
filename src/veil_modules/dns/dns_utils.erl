@@ -152,7 +152,11 @@ create_response_params(A_In_Queries, AllQueries, ArList, Dispatcher, DispatcherT
 create_workers_response_params(#dns_query{domain = Domain,type = Type, class = Class}, Dispatcher, DispatcherTimeout, ResponseTTL) ->
 	LoweredDomain = string:to_lower(Domain),
 	[StrModule | Domain_Suffix] = string:tokens(LoweredDomain, "."),
-	Module = list_to_atom(StrModule),
+	Module = try
+		list_to_existing_atom(StrModule)
+	catch
+		_:_ -> not_existing_module
+	end,
 
 	case lists:member(Module, ?EXTERNALLY_VISIBLE_MODULES) of
 		true ->
