@@ -53,8 +53,8 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% ====================================================================
 rest_init(Req, _Opts) ->
     case cowboy_req:path_info(Req) of
-        {[?connection_check_path], _} ->
-            % when checking connection, continue without cert verification
+        {[Endpoint], _} when Endpoint =:= ?connection_check_path orelse Endpoint =:= <<"token">> ->
+            % when checking connection or generating token, continue without cert verification
             init_state(Req);
         _ ->
             {ok, Identity, Req1} = rest_utils:verify_peer_cert(Req),
@@ -64,7 +64,6 @@ rest_init(Req, _Opts) ->
                 Error -> {ok, Req2, Error}
             end
     end.
-
 
 %% allowed_methods/2
 %% ====================================================================
