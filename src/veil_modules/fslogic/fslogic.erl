@@ -181,7 +181,7 @@ maybe_handle_fuse_message(RequestBody) ->
     Self = cluster_manager_lib:get_provider_id(),
 
     ?debug("Space for request: ~p, providers: ~p (current ~p). AccessToken: ~p, ~p, FullName: ~p / ~p",
-        [SpaceName, Providers, Self, fslogic_context:get_access_token(), RequestBody, PathCtx, AbsolutePathCtx]),
+        [SpaceName, Providers, Self, fslogic_context:get_gr_auth(), RequestBody, PathCtx, AbsolutePathCtx]),
 
     case lists:member(Self, Providers) of
         true ->
@@ -192,7 +192,7 @@ maybe_handle_fuse_message(RequestBody) ->
                     {ok, {reroute, Self, RequestBody1}} ->  %% Request should be handled locally for some reason
                         {ok, handle_fuse_message(RequestBody1)};
                     {ok, {reroute, RerouteToProvider, RequestBody1}} ->
-                        RemoteResponse = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
+                        RemoteResponse = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_gr_auth(),
                             fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody1, message_type = atom_to_list(element(1, RequestBody))}),
                         {ok, RemoteResponse};
                     {ok, {response, Response}} -> %% Do not handle this request and return custom response

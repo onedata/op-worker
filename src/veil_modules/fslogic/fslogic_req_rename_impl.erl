@@ -192,7 +192,7 @@ rename_file_interprovider(UserDoc, ?DIR_TYPE_PROT, SourceFilePath, TargetFilePat
 
     Self = self(),
     DN_CTX = fslogic_context:get_user_dn(),
-    {AT_CTX1, AT_CTX2} = fslogic_context:get_access_token(),
+    {AT_CTX1, AT_CTX2} = fslogic_context:get_gr_auth(),
 
     PIDs = lists:map(
         fun(#dir_entry{name = FileName, type = FileType}) ->
@@ -201,7 +201,7 @@ rename_file_interprovider(UserDoc, ?DIR_TYPE_PROT, SourceFilePath, TargetFilePat
 %%             spawn_monitor(
 %%                 fun() ->
             fslogic_context:set_user_dn(DN_CTX),
-            fslogic_context:set_access_token(AT_CTX1, AT_CTX2),
+            fslogic_context:set_gr_auth(AT_CTX1, AT_CTX2),
             NewSourceFilePath = filename:join(SourceFilePath, FileName),
             NewTargetFilePath = filename:join(TargetFilePath, FileName),
 

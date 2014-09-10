@@ -19,22 +19,37 @@
 %% API
 -export([get_fuse_id/0, set_fuse_id/1, get_user_dn/0, set_user_dn/1, clear_user_dn/0, set_protocol_version/1, get_protocol_version/0, get_user_id/0]).
 -export([set_fs_user_ctx/1, get_fs_user_ctx/0, set_fs_group_ctx/1, get_fs_group_ctx/0]).
--export([get_access_token/0, set_access_token/2]).
+-export([get_gr_auth/0, set_gr_auth/2]).
 -export([gen_global_fuse_id/2, read_global_fuse_id/1, is_global_fuse_id/1]).
--export([clear_user_ctx/0, clear_access_token/0]).
+-export([clear_user_ctx/0, clear_gr_auth/0]).
+-export([get_user_query/0]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
 
-%% get_access_token/0
+%% get_user_query/0
+%% ====================================================================
+%% @doc Gets query that shall be used for user_logic:get_user for current request or 'undefined' when no user context is available.
+-spec get_user_query() -> term() | undefined.
+%% ====================================================================
+get_user_query() ->
+    case get_gr_auth() of
+        {undefined, _} ->
+            {dn, get_user_dn()};
+        {GRUID, _} ->
+            {global_id, vcn_utils:ensure_list(GRUID)}
+    end.
+
+
+%% get_gr_auth/0
 %% ====================================================================
 %% @doc Gets user's GRUID and AccessToken for current request. If access token wasn't set, this method will try
 %%      to get it from DB based on user's DN ctx.
--spec get_access_token() -> {GRUID :: binary(), AccessToken :: binary()} | {undefined, undefined}.
+-spec get_gr_auth() -> {GRUID :: binary(), AccessToken :: binary()} | {undefined, undefined}.
 %% ====================================================================
-get_access_token() ->
+get_gr_auth() ->
     case {get(gruid), get(access_token)} of
         {undefined, _} ->
             case get_user_dn() of
@@ -48,22 +63,22 @@ get_access_token() ->
     end.
 
 
-%% set_access_token/1
+%% set_gr_auth/1
 %% ====================================================================
 %% @doc Sets user's GRUID and AccessToken for current request.
--spec set_access_token(GRUID :: binary(), AccessToken :: binary()) -> Result :: any().
+-spec set_gr_auth(GRUID :: binary(), AccessToken :: binary()) -> Result :: any().
 %% ====================================================================
-set_access_token(GRUID, AccessToken) ->
+set_gr_auth(GRUID, AccessToken) ->
     put(access_token, AccessToken),
     put(gruid, GRUID).
 
 
-%% clear_access_token/0
+%% clear_gr_auth/0
 %% ====================================================================
 %% @doc Clears user's GRUID and AccessToken for current request.
--spec clear_access_token() -> ok.
+-spec clear_gr_auth() -> ok.
 %% ====================================================================
-clear_access_token() ->
+clear_gr_auth() ->
     erase(access_token),
     erase(gruid),
     ok.
@@ -75,7 +90,7 @@ clear_access_token() ->
 -spec clear_user_ctx() -> ok.
 %% ====================================================================
 clear_user_ctx() ->
-    clear_access_token(),
+    clear_gr_auth(),
     clear_user_dn(),
     ok.
 

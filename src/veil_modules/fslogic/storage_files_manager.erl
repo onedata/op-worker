@@ -109,12 +109,12 @@ mkdir(Storage_helper_info, Dir, Mode) ->
                 0 ->
                     derive_gid_from_parent(Storage_helper_info, Dir),
 
-                    UserID = fslogic_context:get_user_dn(),
+                    Query = fslogic_context:get_user_query(),
 
-                    case UserID of
+                    case Query of
                         undefined -> ok;
                         _ ->
-                            {GetUserAns, User} = user_logic:get_user({dn, UserID}),
+                            {GetUserAns, User} = user_logic:get_user(Query),
                             case GetUserAns of
                                 ok ->
                                     UserRecord = User#veil_document.record,
@@ -847,7 +847,7 @@ check_access_type(File) ->
 -spec setup_ctx(File :: string()) -> ok | {error, no_user}.
 %% ====================================================================
 setup_ctx(File) ->
-    ?debug("Setup storage ctx based on fslogc ctx -> DN: ~p, AccessToken: ~p", [fslogic_context:get_user_dn(), fslogic_context:get_access_token()]),
+    ?debug("Setup storage ctx based on fslogc ctx -> DN: ~p, AccessToken: ~p", [fslogic_context:get_user_dn(), fslogic_context:get_gr_auth()]),
 
     case fslogic_objects:get_user() of
         {ok, #veil_document{record = #user{login = UserName, global_id = GRUID} = UserRec}} ->

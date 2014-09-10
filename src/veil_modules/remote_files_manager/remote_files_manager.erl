@@ -103,7 +103,7 @@ maybe_handle_message(RequestBody, SpaceId) ->
             {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, RerouteToProvider),
             ?info("Reroute to: ~p", [URLs]),
             try
-                provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
+                provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_gr_auth(),
                     fslogic_context:get_fuse_id(), #remotefilemangement{space_id = SpaceId, input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
             catch
                 Type:Reason ->

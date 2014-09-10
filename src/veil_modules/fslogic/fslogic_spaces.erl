@@ -77,7 +77,7 @@ initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
             {error, Reason}
     end;
 initialize(SpaceId) ->
-    case gr_adapter:get_space_info(SpaceId, fslogic_context:get_access_token()) of
+    case gr_adapter:get_space_info(SpaceId, fslogic_context:get_gr_auth()) of
         {ok, #space_info{} = SpaceInfo} ->
             initialize(SpaceInfo);
         {error, Reason} ->

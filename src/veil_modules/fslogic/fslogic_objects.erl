@@ -152,7 +152,7 @@ get_user({Key, Value}) ->
 -spec get_user() -> {ok, UserDoc :: user_doc()} | {error, any()}.
 %% ====================================================================
 get_user() ->
-    case fslogic_context:get_access_token() of
+    case fslogic_context:get_gr_auth() of
         {GRUID, _} when GRUID =/= undefined ->
             get_user({global_id, GRUID});
         {_, _} ->

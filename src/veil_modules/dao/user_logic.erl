@@ -82,7 +82,7 @@ sign_in(Proplist, AccessToken) ->
 
     ?debug("Login with token: ~p", [AccessToken]),
 
-    fslogic_context:set_access_token(GlobalId, AccessToken),
+    fslogic_context:set_gr_auth(GlobalId, AccessToken),
 
     User = case get_user({global_id, GlobalId}) of
                {ok, ExistingUser} ->
@@ -217,7 +217,7 @@ synchronize_spaces_info(#veil_document{record = #user{global_id = GlobalId} = Us
 
             ?debug("New spaces: ~p", [NewSpaces]),
 
-            fslogic_context:set_access_token(GlobalId, AccessToken),
+            fslogic_context:set_gr_auth(GlobalId, AccessToken),
             [fslogic_spaces:initialize(SpaceId) || SpaceId <- NewSpaces],
 
             UserDoc1 = UserDoc#veil_document{record = UserRec#user{spaces = NewSpaces}},
@@ -755,7 +755,7 @@ create_dirs_at_storage(SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
 
     DN_CTX = fslogic_context:get_user_dn(),
-    {AT_CTX1, AT_CTX2} = fslogic_context:get_access_token(),
+    {AT_CTX1, AT_CTX2} = fslogic_context:get_gr_auth(),
 
     fslogic_context:clear_user_ctx(),
 
@@ -785,7 +785,7 @@ create_dirs_at_storage(SpacesInfo, Storage) ->
 
     Result = lists:foldl(CreateTeamsDirs, ok, SpacesInfo),
     fslogic_context:set_user_dn(DN_CTX),
-    fslogic_context:set_access_token(AT_CTX1, AT_CTX2),
+    fslogic_context:set_gr_auth(AT_CTX1, AT_CTX2),
 
     Result.
 
