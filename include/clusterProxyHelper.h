@@ -97,6 +97,7 @@ protected:
     std::string       m_proxyCert;
     std::string       m_clusterHostname;
     BufferAgent       m_bufferAgent;
+    std::string       m_spaceId;
 
     template<typename AnswerType>
     std::string requestMessage(const google::protobuf::Message &msg,
