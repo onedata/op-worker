@@ -27,12 +27,12 @@
 
 -export([list_dir_test/1, get_file_test/1, metadata_test/1, create_dir_test/1, create_file_test/1, update_file_test/1,
     delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1,
-    mimetype_and_encoding_test/1, moved_pemanently_test/1, errors_test/1, token_test/1]).
+    mimetype_and_encoding_test/1, moved_pemanently_test/1, errors_test/1, token_test/1, out_of_range_test/1]).
 
 
 all() -> [list_dir_test, get_file_test, metadata_test, create_dir_test, create_file_test, update_file_test,
     delete_dir_test, delete_file_test, version_test, request_format_check_test, objectid_and_capabilities_test,
-    mimetype_and_encoding_test, moved_pemanently_test, errors_test, token_test].
+    mimetype_and_encoding_test, moved_pemanently_test, errors_test, token_test, out_of_range_test].
 
 %% ====================================================================
 %% Test functions
@@ -768,14 +768,38 @@ token_test(_Config) ->
     ?assertEqual("200",Code1).
     %%------------------------------
 
-%%     %%----- read test file ---------
-%%     ?assert(object_exists(filename:join(?Test_dir_name,?Test_file_name))),
+% tests writing to file at random ranges
+out_of_range_test(_Config) ->
+    FileName = "random_range_file.txt",
+    create_file(FileName),
+
+%%     %%---- reading out of range ---- todo handle this somehow
+%%     ?assertEqual(<<>>, get_file_content(FileName)),
+%%     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
 %%
-%%     RequestHeaders2 = [{"X-Auth-Token", binary_to_list(Token)}],
-%%     {Code2, _Headers2, Response2} = do_request(filename:join(?Test_dir_name,?Test_file_name), get, RequestHeaders2, [], false),
-%%     ?assertEqual("200",Code2),
-%%     ?assertEqual(Response2,?Test_file_content).
+%%     RequestBody1 = rest_utils:encode_to_json([{<<"value">>, <<"data">>}]),
+%%     {Code1, _Headers1, _Response1} = do_request(FileName ++ "?value:0-3", get, RequestHeaders1, RequestBody1),
+%%     ?assertEqual("400",Code1). %?
 %%     %%------------------------------
+
+    %%------ writing at end --------
+    ?assertEqual(<<>>, get_file_content(FileName)),
+
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
+    RequestBody2 = rest_utils:encode_to_json([{<<"value">>, <<"data">>}]),
+    {Code2, _Headers2, _Response2} = do_request(FileName ++ "?value:0-3", put, RequestHeaders2, RequestBody2),
+    ?assertEqual("204",Code2),
+
+    ?assertEqual(<<"data">>, get_file_content(FileName)),
+    %%------------------------------
+
+    %%------ writing at random --------
+    RequestBody3 = rest_utils:encode_to_json([{<<"value">>, <<"data">>}]),
+    {Code3, _Headers3, _Response3} = do_request(FileName ++ "?value:10-13", put, RequestHeaders2, RequestBody3),
+    ?assertEqual("204",Code3),
+
+    ?assertEqual(<<100,97,116,97,0,0,0,0,0,0,100,97,116,97>>, get_file_content(FileName)). % "data(6x<0_byte>)data"
+    %%------------------------------
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -804,7 +828,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1, true),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
