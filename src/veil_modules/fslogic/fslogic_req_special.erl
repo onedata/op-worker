@@ -94,7 +94,8 @@ get_file_children(FullFileName, UserPathTokens, ROffset, RCount) ->
             #filechildren{entry = Children ++ [#filechildren_direntry{name = ?SPACES_BASE_DIR_NAME, type = ?DIR_TYPE_PROT}]}; %% Only for offset = 0
         {_, [?SPACES_BASE_DIR_NAME]} -> %% For group list query ignore DB result and generate list based on user's teams
 
-            Teams = user_logic:get_space_names({dn, fslogic_context:get_user_dn()}),
+            {ok, UserDoc} = fslogic_objects:get_user(),
+            Teams = user_logic:get_space_names(UserDoc),
             {_Head, Tail} = lists:split(min(Offset, length(Teams)), Teams),
             {Ret, _} = lists:split(min(Num, length(Tail)), Tail),
             Entries = lists:map(fun(Elem) -> #filechildren_direntry{name = Elem, type = ?DIR_TYPE_PROT} end, Ret),
