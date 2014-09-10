@@ -1130,14 +1130,17 @@ item_list_md5(ItemList) ->
         end, <<"">>, ItemList).
 
 
-is_space_dir(Path) ->
+is_space_dir(<<"/", Path/binary>>) ->
     case Path of
-        <<"/", ?SPACES_BASE_DIR_NAME>> -> true;
-        <<"/", ?SPACES_BASE_DIR_NAME, Rest>> -> case length(binary:split(Rest, <<"/">>, [global])) of
-                                   2 -> true;
-                                   _ -> false
-                               end;
-        _ -> false
+        <<?SPACES_BASE_DIR_NAME>> ->
+            true;
+        <<?SPACES_BASE_DIR_NAME, Rest/binary>> ->
+            case length(binary:split(Rest, <<"/">>, [global])) of
+                2 -> true;
+                _ -> false
+            end;
+        _ ->
+            false
     end.
 
 
