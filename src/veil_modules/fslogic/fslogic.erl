@@ -267,7 +267,7 @@ fslogic_runner(Method, RequestType, RequestBody, ErrorHandler) when is_function(
         error:UnkError ->
             {ErrorCode, ErrorDetails} = {?VEREMOTEIO, UnkError},
             %% Bad Match assertion - something went horribly wrong. This should not happen.
-            ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p) Method ~p", [RequestBody, ErrorDetails, ErrorCode, Method]),
+            ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode, Method]),
             ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
     end.
 
