@@ -272,7 +272,7 @@ comet_loop(#?STATE{} = State) ->
                 State
         end
                         catch Type:Reason ->
-                            ?error("Comet process exception: ~p:~p", [Type, Reason]),
+                            ?error_stacktrace("Comet process exception: ~p:~p", [Type, Reason]),
                             vcn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
                             gui_comet:flush(),
                             {error, Reason}
