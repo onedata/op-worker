@@ -128,10 +128,10 @@ error_reply(Record) ->
 -spec verify_peer_cert(Req :: req()) -> {ok, DnString :: string()} | no_return().
 %% ====================================================================
 verify_peer_cert(Req) ->
-    case cowboy_req:header(<<"X-Auth-Token">>, Req) of
-        {undefined, _} ->
+    case cowboy_req:header(<<"x-auth-token">>, Req) of
+        {undefined, Req1} ->
             {OtpCert, Certs} = try
-                {ok, PeerCert} = ssl:peercert(cowboy_req:get(socket, Req)),
+                {ok, PeerCert} = ssl:peercert(cowboy_req:get(socket, Req1)),
                 {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
                 [{_, [TryOtpCert | TryCerts], _}] = ets:lookup(gsi_state, {Serial, Issuer}),
                 {TryOtpCert, TryCerts}
@@ -149,7 +149,7 @@ verify_peer_cert(Req) ->
                     {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
                     {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
                     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
-                    {ok, DnString, Req};
+                    {ok, DnString, Req1};
                 {ok, 0, Errno} ->
                     ?info("[REST] Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
                     throw(invalid_cert);
@@ -182,7 +182,8 @@ verify_peer_cert(Req) ->
     Result :: ok | {error, {user_unknown, DnString :: string()}}.
 %% ====================================================================
 prepare_context({token, Token, GRUID}) ->
-    fslogic_context:set_access_token(GRUID,Token);
+    fslogic_context:set_access_token(GRUID,Token),
+    ok;
 prepare_context(DnString) ->
     case user_logic:get_user({dn, DnString}) of
         {ok, _} ->

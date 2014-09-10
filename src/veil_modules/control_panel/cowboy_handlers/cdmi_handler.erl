@@ -77,6 +77,7 @@ allowed_methods(Req, {error,Error}) ->
     case Error of
         {user_unknown, DnString} -> cdmi_error:error_reply(Req, undefined, ?error_unauthorized_code, "No user found with given DN: ~p",[DnString]);
         invalid_cert -> cdmi_error:error_reply(Req, undefined, ?error_unauthorized_code, "Invalid peer certificate error",[]);
+        invalid_token -> cdmi_error:error_reply(Req, undefined, ?error_unauthorized_code, "Invalid token error",[]);
         Error -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "State init error: ~p",[Error])
     end;
 allowed_methods(Req, #state{handler_module = Handler} = State) ->

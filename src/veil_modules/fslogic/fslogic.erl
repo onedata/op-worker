@@ -448,7 +448,5 @@ extract_logical_path(#updatetimes{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#createfileack{file_logic_name = Path}) ->
     Path;
-extract_logical_path(#getfileuuid{file_logic_name = Path}) ->
-    Path;
 extract_logical_path(_) ->
     "/".
