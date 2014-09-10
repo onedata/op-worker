@@ -402,10 +402,7 @@ encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, MessageIdForClien
 %% ====================================================================
 %% @doc Decodes the clustermsg message using protocol buffers records_translator.
 -spec decode_clustermsg_pb(MsgBytes :: binary()) -> Result when
-    Result :: {Synch, ModuleName, Msg, MsgId, Answer_type, {GlobalId, TokenHash}},
-%% @doc Decodes the message using protocol buffers records_translator.
--spec decode_protocol_buffer(MsgBytes :: binary()) -> Result when
-    Result :: {Synch, ModuleName, Msg, MsgId, Answer_type} | no_return(),
+    Result :: {Synch, ModuleName, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} | no_return(),
     Synch :: boolean(),
     ModuleName :: atom(),
     Msg :: term(),
