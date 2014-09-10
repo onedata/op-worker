@@ -42,8 +42,7 @@
 -export([websocket_terminate/3]).
 
 -ifdef(TEST).
--export([decode_clustermsg_pb/2, encode_answer/2, encode_answer/3, encode_answer/5, encode_answer/6, checkMessage/2]).
--export([decode_protocol_buffer/1, encode_answer/2, encode_answer/3, encode_answer/5, encode_answer/6]).
+-export([decode_clustermsg_pb/1, encode_answer/2, encode_answer/3, encode_answer/5, encode_answer/6]).
 -endif.
 
 %% ====================================================================
@@ -136,8 +135,7 @@ websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString, peer_typ
 
         ?debug("Received request: ~p", [Request]),
 
-        handle(Req, Request, State) %% Decode ClusterMsg and handle it
-        handle(Req, decode_protocol_buffer(Data), State) %% Decode ClusterMsg and handle it
+        handle(Req, Request, State) %% Handle message
     catch
         wrong_message_format                            -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
         {wrong_internal_message_type, MsgId2}           -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
@@ -400,11 +398,10 @@ encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, MessageIdForClien
             {ok, Req, State}
     end.
 
-%% decode_clustermsg_pb/2
-%% decode_protocol_buffer/1
+%% decode_clustermsg_pb/1
 %% ====================================================================
 %% @doc Decodes the clustermsg message using protocol buffers records_translator.
--spec decode_clustermsg_pb(MsgBytes :: binary(), DN :: string()) -> Result when
+-spec decode_clustermsg_pb(MsgBytes :: binary()) -> Result when
     Result :: {Synch, ModuleName, Msg, MsgId, Answer_type, {GlobalId, TokenHash}},
 %% @doc Decodes the message using protocol buffers records_translator.
 -spec decode_protocol_buffer(MsgBytes :: binary()) -> Result when
@@ -417,8 +414,7 @@ encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, MessageIdForClien
     GlobalId :: binary(),
     TokenHash :: binary().
 %% ====================================================================
-decode_clustermsg_pb(MsgBytes, DN) ->
-decode_protocol_buffer(MsgBytes) ->
+decode_clustermsg_pb(MsgBytes) ->
     DecodedBytes = try
         communication_protocol_pb:decode_clustermsg(MsgBytes)
                    catch
@@ -437,29 +433,29 @@ decode_protocol_buffer(MsgBytes) ->
 
     Msg =
         try
-            erlang:apply(list_to_atom(Message_decoder_name ++ "_pb"), list_to_atom("decode_" ++ Message_type), [Bytes])
+            erlang:apply(Decoder, DecodingFun, [Bytes])
         catch
             _:_ -> throw({wrong_internal_message_type, MsgId})
         end,
 
-    TranslatedMsg = records_translator:translate(Msg, Message_decoder_name),
-    case checkMessage(TranslatedMsg, DN) of
-        true -> {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type, {GlobalId, TokenHash}};
-        false -> throw({message_not_supported, MsgId})
-    end.
+    TranslatedMsg = try
+      records_translator:translate(Msg, Message_decoder_name)
+                    catch
+                      _:message_not_supported -> throw({message_not_supported, MsgId})
+                    end,
+    {Synch, ModuleNameAtom, Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type, {GlobalId, TokenHash}}.
 
-
-%% decode_answer_pb/2
+%% decode_answer_pb/1
 %% ====================================================================
 %% @doc Decodes the answer message using protocol buffers records_translator.
--spec decode_answer_pb(MsgBytes :: binary(), DN :: string()) -> Result when
+-spec decode_answer_pb(MsgBytes :: binary()) -> Result when
     Result :: {Msg, MsgId, DecoderName, MsgType},
     Msg :: term(),
     MsgId :: integer(),
     DecoderName :: string(),
     MsgType :: string().
 %% ====================================================================
-decode_answer_pb(MsgBytes, DN) ->
+decode_answer_pb(MsgBytes) ->
     DecodedBytes = try
         communication_protocol_pb:decode_answer(MsgBytes)
                    catch
@@ -474,24 +470,24 @@ decode_answer_pb(MsgBytes, DN) ->
                        _  -> DecoderName
                    end,
 
+    {Decoder, DecodingFun} = try
+      {list_to_existing_atom(DecoderName1 ++ "_pb"), list_to_existing_atom("decode_" ++ MsgType)}
+    catch
+      _:_ -> throw({message_not_supported, MsgId})
+    end,
+
     Msg = try
-        erlang:apply(list_to_atom(DecoderName1 ++ "_pb"), list_to_atom("decode_" ++ MsgType), [Input])
-        erlang:apply(Decoder, DecodingFun, [Bytes])
+        erlang:apply(Decoder, DecodingFun, [Input])
           catch
               _:_ -> throw({wrong_internal_message_type, MsgId})
           end,
 
-    TranslatedMsg = records_translator:translate(Msg, DecoderName1),
-    case checkMessage(TranslatedMsg, DN) of
-        true -> {TranslatedMsg, MsgId, DecoderName1, MsgType};
-        false -> throw({message_not_supported, MsgId})
-    end.
     TranslatedMsg = try
       records_translator:translate(Msg, Message_decoder_name)
     catch
       _:message_not_supported -> throw({message_not_supported, MsgId})
     end,
-    {Synch, ModuleNameAtom, Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type}.
+    {TranslatedMsg, MsgId, DecoderName1, MsgType}.
 
 
 %% decode_providermsg_pb/2

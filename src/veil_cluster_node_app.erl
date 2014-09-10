@@ -15,7 +15,6 @@
 
 -include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
--include("logging.hrl").
 -include("messages_white_list.hrl").
 
 %% Application callbacks

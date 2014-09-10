@@ -44,7 +44,7 @@ protocol_buffers_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {_, _}} = ws_handler:decode_clustermsg_pb(MessageBytes, standard_user),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {_, _}} = ws_handler:decode_clustermsg_pb(MessageBytes),
   ?assert(Synch),
   ?assert(Msg =:= ping),
   ?assert(Task =:= dao),
@@ -142,7 +142,7 @@ protocol_buffers_wrong_request_structure_test() ->
   veil_cluster_node_app:activate_white_lists(),
 
   Ans = try
-    ws_handler:decode_clustermsg_pb(some_atom, standard_user),
+    ws_handler:decode_clustermsg_pb(some_atom),
     ok
   catch
     wrong_message_format -> wrong_message_format;
@@ -164,7 +164,7 @@ protocol_buffers_wrong_request_message_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 33, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
   Ans2 = try
-    ws_handler:decode_clustermsg_pb(MessageBytes, standard_user),
+    ws_handler:decode_clustermsg_pb(MessageBytes),
     ok
   catch
     {message_not_supported, 33} -> message_not_supported;
@@ -177,7 +177,7 @@ protocol_buffers_wrong_request_message_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 44, input = NotExistingAtomBytes},
   MessageBytes2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
   Ans3 = try
-    ws_handler:decode_clustermsg_pb(MessageBytes2, standard_user),
+    ws_handler:decode_clustermsg_pb(MessageBytes2),
     ok
          catch
            {message_not_supported, 44} -> message_not_supported;

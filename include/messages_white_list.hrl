@@ -12,7 +12,6 @@
 -ifndef(MESSAGES_WHITE_LIST_HRL).
 -define(MESSAGES_WHITE_LIST_HRL, 1).
 
-%% white lists defined as lists of pairs {user_type, white_list_for_user_type}
 %% white lists of messages that can be processed by VeilCluster
 -define(MessagesWhiteList, [
   clustermsg, answer, atom, channelregistration, channelclose, fusemessage, getfilelocation,

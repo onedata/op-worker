@@ -47,8 +47,8 @@ translate(Record, DecoderName) when is_tuple(Record) ->
     RecordList2 = case BinPrefix of
         [End, Type | T] when is_binary(End), is_list(Type) ->
             try
-                DecodedEnd = erlang:apply(list_to_atom(DecoderName ++ "_pb"), list_to_atom("decode_" ++ Type), [End]),
-                NotBin ++ [DecodedEnd | [list_to_atom(Type) | T]]
+                DecodedEnd = erlang:apply(list_to_existing_atom(DecoderName ++ "_pb"), list_to_existing_atom("decode_" ++ Type), [End]),
+                NotBin ++ [DecodedEnd | [list_to_existing_atom(Type) | T]]
             catch
             _:_ ->
                 ?warning("Can not translate record: ~p, using decoder: ~p", [Record, DecoderName]),
@@ -58,23 +58,6 @@ translate(Record, DecoderName) when is_tuple(Record) ->
     end,
     TmpAns = lists:foldl(fun(E, Sum) -> [translate(E, DecoderName) | Sum] end, [], RecordList2),
     list_to_tuple(TmpAns);
-  RecordList = lists:reverse(tuple_to_list(Record)),
-  [End | Rest] = RecordList,
-  RecordList2 = case is_binary(End) of
-    true ->
-      try
-        [Type | Rest2] = Rest,
-        DecodedEnd = erlang:apply(list_to_existing_atom(DecoderName ++ "_pb"), list_to_existing_atom("decode_" ++ Type), [End]),
-        [DecodedEnd | [list_to_existing_atom(Type) | Rest2]]
-      catch
-        _:_ ->
-          ?warning("Can not translate record: ~p, using decoder: ~p", [Record, DecoderName]),
-          RecordList
-      end;
-    false -> RecordList
-  end,
-  TmpAns = lists:foldl(fun(E, Sum) -> [translate(E, DecoderName) | Sum] end, [], RecordList2),
-  list_to_tuple(TmpAns);
 
 translate(Record, _DecoderName) ->
   Record.
