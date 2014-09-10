@@ -29,7 +29,7 @@
 -record(handler_state, {peer_serial, dispatcher_timeout, fuse_id = "", connection_id = "",
     peer_type = user, %% user | provider
     provider_id = <<>>, %% only valid if peer_type = provider
-    peer_dn, access_token, user_global_id, user_secret %% only valid if peer_type = user
+    peer_dn, access_token, user_global_id %% only valid if peer_type = user
 }).
 
 %% ====================================================================
@@ -103,21 +103,20 @@ websocket_init(TransportName, Req, _Opts) ->
         {error, no_peercert} ->
             {GRUID, Req2}  = cowboy_req:header(<<"global-user-id">>, Req),
             {Secret, Req3} = cowboy_req:header(<<"authentication-secret">>, Req2),
-            
+
             case is_binary(GRUID) and is_binary(Secret) of
                 true ->
                     case auth_handler:authenticate_user_by_secret(GRUID, Secret) of
                         {true, AccessToken} ->
                             State = InitCtx#handler_state{peer_type = user,
-                                user_global_id = GRUID, user_secret = Secret,
-                                access_token = AccessToken},
+                                user_global_id = GRUID, access_token = AccessToken},
                             {ok, Req3, State};
 
                         false ->
                             ?info("Peer rejected: token authentication credentials verification failed"),
                             {shutdown, Req3}
                     end;
-                                    
+
                 false ->
                     ?info("Peer rejected: no peer certificate"),
                     {shutdown, Req3}
@@ -189,8 +188,8 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
 
     ?debug("Handshake request: ~p", [HReq]),
     NewFuseId = genFuseId(HReq),
-    UID = case GRUID =:= undefined of %% Fetch user's ID
-        true ->
+    UID = case DnString =:= undefined of %% Fetch user's ID
+        false ->
             case user_logic:get_user({dn, DnString}) of
                 {ok, #veil_document{uuid = UID1}} ->
                     UID1;
@@ -220,7 +219,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
                     end
             end;
 
-        false ->
+        true ->
             case user_logic:get_user({global_id, vcn_utils:ensure_list(GRUID)}) of
                 {ok, #veil_document{uuid = UID1}} ->
                     UID1;
@@ -247,26 +246,24 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = NewFuseId})}, Req, NewState};
 
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
-handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, {_GlobalId, _TokenHash}}, #handler_state{peer_dn = DnString} = State) ->
-    {_UID, AccessToken, UserGID} = %% Fetch user's ID
-        case DnString =:= undefined of
-            true ->
-                #handler_state{access_token = AccessToken1, user_global_id = GRUID} = State,
-                {uid, AccessToken1, GRUID};
+handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, {_GlobalId, _TokenHash}}, #handler_state{peer_dn = DnString, user_global_id = GRUID} = State) ->
+    UserKey = case DnString =:= undefined of
+        true  -> {global_id, vcn_utils:ensure_list(GRUID)};
+        false -> {dn, DnString}
+    end,
 
-            false ->
-                case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
-                        {ok, #veil_document{uuid = UID1, record = #user{access_token = AccessToken1, global_id = UserGID1}}} ->
-                        {UID1, AccessToken1, UserGID1};
-                        {error, Error} ->
-                        ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
-                        throw({no_user_found_error, Error, MsgId})
-                end
+    {UID, AccessToken, UserGID} = %% Fetch user's ID
+        case dao_lib:apply(dao_users, get_user, [UserKey], ProtocolVersion) of
+            {ok, #veil_document{uuid = UID1, record = #user{access_token = AccessToken1, global_id = UserGID1}}} ->
+                {UID1, AccessToken1, UserGID1};
+            {error, Error} ->
+                ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [UserKey, Error]),
+                throw({no_user_found_error, Error, MsgId})
         end,
 
     %% Fetch session data (using FUSE ID)
     case dao_lib:apply(dao_cluster, get_fuse_session, [NewFuseId], ProtocolVersion) of
-        {ok, #veil_document{uuid = SessID}} ->
+        {ok, #veil_document{uuid = SessID, record = #fuse_session{uid = UID}}} ->
             %% Save connection's location (node and pid) to DB or crash, sice failure leaves no way of recovering
             {ok, ConnID} = dao_lib:apply(dao_cluster, save_connection_info, [#connection_info{session_id = SessID, controlling_node = node(), controlling_pid = self()}], ProtocolVersion),
 
@@ -280,9 +277,15 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
             end,
 
             %% Session data found, and its user ID matches -> send OK status and update current connection state
-            ?debug("User (DN: ~p, GRUID: ~p) assigned FUSE ID ~p to the connection (PID: ~p)", [DnString, UserGID, NewFuseId, self()]),
+            ?debug("User ~p assigned FUSE ID ~p to the connection (PID: ~p)", [UserKey, NewFuseId, self()]),
             {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req,
                         State#handler_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = AccessToken, user_global_id = UserGID}};
+
+        {ok, #veil_document{record = #fuse_session{uid = OtherUID}}} ->
+            %% Current user does not match session owner
+            ?warning("User ~p tried to access someone else's session (fuse ID: ~p, session owner UID: ~p)", [UserKey, NewFuseId, OtherUID]),
+            throw({invalid_fuse_id, MsgId});
+
         {error, Error1} ->
             ?error("Cannot use fuseID ~p due to dao error: ~p", [NewFuseId, Error1]),
             throw({invalid_fuse_id, MsgId})
