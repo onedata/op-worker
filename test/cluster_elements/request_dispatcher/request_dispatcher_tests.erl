@@ -10,7 +10,7 @@
 %% @end
 %% ===================================================================
 
-%% TODO sprawdzić zachowanie funkcji kodującej i dekudującej (encode_answer i decode_protocol_buffer) w ws_handler
+%% TODO sprawdzić zachowanie funkcji kodującej i dekudującej (encode_answer i decode_clustermsg_pb) w ws_handler
 %% w przypadku błędnych argumentów (rekordów/protoclo_bufferów)
 
 %% TODO sprawdzić metodę handle_call pod kątem forwardowania różnych typów zapytań do workerów
@@ -75,7 +75,7 @@ recursive_decoding_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = InternalMessage2Bytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, _} = ws_handler:decode_clustermsg_pb(MessageBytes),
   ?assert(Synch),
   ?assert(Task =:= fslogic),
   ?assert(Answer_decoder_name =:= "communication_protocol"),
@@ -100,7 +100,7 @@ recursive_decoding_error_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = InternalMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, _} = ws_handler:decode_clustermsg_pb(MessageBytes),
   ?assert(Synch),
   ?assert(Task =:= fslogic),
   ?assert(Answer_decoder_name =:= "communication_protocol"),
@@ -125,7 +125,7 @@ recursive_not_supported_message_decoding_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = InternalMessage2Bytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, _} = ws_handler:decode_clustermsg_pb(MessageBytes),
   ?assert(Synch),
   ?assert(Task =:= fslogic),
   ?assert(Answer_decoder_name =:= "communication_protocol"),
@@ -190,7 +190,7 @@ protocol_buffers_wrong_request_message_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 55, input = "wrong_input"},
   MessageBytes3 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message3)),
   Ans4 = try
-    ws_handler:decode_protocol_buffer(MessageBytes3),
+    ws_handler:decode_clustermsg_pb(MessageBytes3),
     ok
          catch
            {wrong_internal_message_type, 55} -> wrong_internal_message_type;
@@ -211,7 +211,7 @@ protocol_buffers_wrong_request_decoder_test() ->
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   Ans = try
-    ws_handler:decode_protocol_buffer(MessageBytes),
+    ws_handler:decode_clustermsg_pb(MessageBytes),
     ok
          catch
            {message_not_supported, 66} -> message_not_supported;
@@ -232,7 +232,7 @@ protocol_buffers_wrong_request_module_test() ->
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   Ans = try
-    ws_handler:decode_protocol_buffer(MessageBytes),
+    ws_handler:decode_clustermsg_pb(MessageBytes),
     ok
         catch
           {message_not_supported, 77} -> message_not_supported;
