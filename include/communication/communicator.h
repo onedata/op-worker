@@ -221,8 +221,9 @@ private:
  * @return A new Communicator instance based on @c WebsocketConnectionPool .
  */
 std::shared_ptr<Communicator> createWebsocketCommunicator(
-        unsigned int dataPoolSize, unsigned int metaPoolSize, std::string uri,
-        const bool verifyServerCertificate,
+        const unsigned int dataPoolSize, const unsigned int metaPoolSize,
+        std::string hostname, unsigned int port,
+        std::string endpoint, const bool verifyServerCertificate,
         std::shared_ptr<const CertificateData> certificateData = nullptr);
 
 } // namespace communication

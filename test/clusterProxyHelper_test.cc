@@ -48,7 +48,7 @@ protected:
     {
         mockCommunicator = std::make_shared<MockCommunicator>();
         proxy = std::make_shared<ProxyClusterProxyHelper>(mockCommunicator,
-                                                          IStorageHelper::ArgsMap{});
+                                                          IStorageHelper::ArgsMap{{srvArg(0), std::string("testSpace")}});
     }
 };
 
@@ -101,6 +101,7 @@ TEST_F(ClusterProxyHelperTest, read)
 
     rfm.set_input(subMsg.SerializeAsString());
     rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
+    rfm.set_space_id("testSpace");
 
     EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 }
@@ -143,6 +144,7 @@ TEST_F(ClusterProxyHelperTest, write)
 
     rfm.set_input(subMsg.SerializeAsString());
     rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
+    rfm.set_space_id("testSpace");
 
     EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 }
@@ -221,6 +223,7 @@ TEST_F(ClusterProxyHelperTest, mknod)
 
     rfm.set_input(subMsg.SerializeAsString());
     rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
+    rfm.set_space_id("testSpace");
 
     EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 }
@@ -260,6 +263,7 @@ TEST_F(ClusterProxyHelperTest, unlink)
 
     rfm.set_input(subMsg.SerializeAsString());
     rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
+    rfm.set_space_id("testSpace");
 
     EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 }
@@ -331,6 +335,7 @@ TEST_F(ClusterProxyHelperTest, truncate)
 
     rfm.set_input(subMsg.SerializeAsString());
     rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
+    rfm.set_space_id("testSpace");
 
     EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 }
