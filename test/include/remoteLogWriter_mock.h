@@ -10,17 +10,16 @@
 
 
 #include "logging.h"
+
 #include <gmock/gmock.h>
 
-using namespace veil::logging;
-
-class MockRemoteLogWriter: public RemoteLogWriter
+class MockRemoteLogWriter: public veil::logging::RemoteLogWriter
 {
 public:
-    MOCK_METHOD5(buffer, void(const RemoteLogLevel, const std::string&,
+    MOCK_METHOD5(buffer, void(const veil::logging::RemoteLogLevel, const std::string&,
                               const int, const time_t, const std::string&));
 
-    MOCK_METHOD1(handleThresholdChange, bool(const protocol::communication_protocol::Answer&));
+    MOCK_METHOD1(handleThresholdChange, bool(const veil::protocol::communication_protocol::Answer&));
 };
 
 

@@ -1,95 +1,95 @@
 /**
- * @file ClusterProxyHelper.cc
+ * @file clusterProxyHelper.cc
  * @author Rafal Slota
  * @copyright (C) 2013 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "veilConfig.h"
-#include <limits.h>
-
-#include <boost/algorithm/string.hpp>
-#include "logging.h"
 #include "clusterProxyHelper.h"
-#include "helpers/storageHelperFactory.h"
-#include <google/protobuf/descriptor.h>
-#include "veilErrors.h"
 
-#include <iostream>
+#include "communication/communicator.h"
+#include "communication/exception.h"
+#include "logging.h"
+#include "make_unique.h"
+#include "remote_file_management.pb.h"
+
+#include <boost/algorithm/string/case_conv.hpp>
+#include <boost/any.hpp>
+
+#include <functional>
 
 using namespace std;
-using namespace boost::algorithm;
+using namespace std::placeholders;
 using namespace veil::protocol::remote_file_management;
 using namespace veil::protocol::communication_protocol;
 
 namespace veil {
 namespace helpers {
 
-
-ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string &inputData) {
-
-    RemoteFileMangement rfm;
-    rfm.set_message_type(utils::tolower(inputType));
-    rfm.set_input(inputData);
-
-    ClusterMsg clm;
-    clm.set_protocol_version(PROTOCOL_VERSION);
-    clm.set_synch(true);
-    clm.set_module_name(RFM_MODULE_NAME);
-    clm.set_message_decoder_name(RFM_DECODER);
-    clm.set_message_type(utils::tolower(rfm.GetDescriptor()->name()));
-
-    clm.set_input(rfm.SerializeAsString());
-
-    return clm;
+std::unique_ptr<RemoteFileMangement> wrap(const google::protobuf::Message &msg)
+{
+    auto wrapper = std::make_unique<RemoteFileMangement>();
+    wrapper->set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
+    msg.SerializeToString(wrapper->mutable_input());
+    return wrapper;
 }
 
-string ClusterProxyHelper::requestMessage(string inputType, string answerType, string &inputData, uint32_t timeout) {
-    ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
-
-    clm.set_answer_type(utils::tolower(answerType));
-    clm.set_answer_decoder_name(RFM_DECODER);
-
-    Answer answer = sendCluserMessage(clm, timeout);
-
-    return answer.worker_answer();
-}
-
-string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
-    ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
-
-    clm.set_answer_type(utils::tolower(Atom::descriptor()->name()));
-    clm.set_answer_decoder_name(COMMUNICATION_PROTOCOL_DECODER);
-
-    Answer answer = sendCluserMessage(clm);
-
-    Atom atom;
-    if(answer.has_worker_answer()) {
-        atom.ParseFromString(answer.worker_answer());
-        return atom.value();
-    }
-
-    return "";
-}
-
-Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg, uint32_t timeout) {
-    auto connection = m_connectionPool->selectConnection(SimpleConnectionPool::DATA_POOL);
-    if(!connection)
+template<typename AnswerType>
+string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg,
+                                          const std::chrono::milliseconds timeout)
+{
+    try
     {
-        LOG(ERROR) << "Cannot select connection from connectionPool";
-        return Answer();
+        const auto answer = m_communicator->communicate<AnswerType>(
+                    communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg), 2, timeout);
+        return answer->worker_answer();
+    }
+    catch(communication::Exception &e)
+    {
+        LOG(WARNING) << "Communication error: " << e.what();
     }
 
-    Answer answer = connection->communicate(msg, 2, timeout);
-    if(answer.answer_status() != VEIO)
-        m_connectionPool->releaseConnection(connection);
-
-    if(answer.answer_status() != VOK)
-        LOG(WARNING) << "Cluster send non-ok message. status = " << answer.answer_status();
-
-    return answer;
+    return {};
 }
 
+template<typename AnswerType>
+string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg)
+{
+    try
+    {
+        const auto answer = m_communicator->communicate<AnswerType>(
+                    communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg), 2);
+        return answer->worker_answer();
+    }
+    catch(communication::Exception &e)
+    {
+        LOG(WARNING) << "Communication error: " << e.what();
+    }
+
+    return {};
+}
+
+string ClusterProxyHelper::requestAtom(const google::protobuf::Message &msg)
+{
+    try
+    {
+        const auto answer = m_communicator->communicate<Atom>(
+                    communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg), 2);
+
+        Atom atom;
+        if(answer->has_worker_answer())
+        {
+            atom.ParseFromString(answer->worker_answer());
+            return atom.value();
+        }
+    }
+    catch(communication::Exception &e)
+    {
+        LOG(WARNING) << "Communication error: " << e.what();
+    }
+
+    return {};
+}
 
 //////////////////////
 // Helper callbacks //
@@ -115,7 +115,7 @@ int ClusterProxyHelper::sh_mknod(const char *path, mode_t mode, dev_t rdev)
     msg.set_file_id(string(path));
     msg.set_mode(mode);
 
-    return translateError(requestAtom(msg.GetDescriptor()->name(), msg.SerializeAsString()));
+    return translateError(requestAtom(msg));
 }
 
 int ClusterProxyHelper::sh_unlink(const char *path)
@@ -125,7 +125,7 @@ int ClusterProxyHelper::sh_unlink(const char *path)
     DeleteFileAtStorage msg;
     msg.set_file_id(string(path));
 
-    return translateError(requestAtom(msg.GetDescriptor()->name(), msg.SerializeAsString()));
+    return translateError(requestAtom(msg));
 }
 
 int ClusterProxyHelper::sh_chmod(const char *path, mode_t mode)
@@ -146,7 +146,7 @@ int ClusterProxyHelper::sh_truncate(const char *path, off_t size)
     msg.set_file_id(string(path));
     msg.set_length(size);
 
-    return translateError(requestAtom(msg.GetDescriptor()->name(), msg.SerializeAsString()));
+    return translateError(requestAtom(msg));
 }
 
 int ClusterProxyHelper::sh_open(const char *path, struct fuse_file_info *fi)
@@ -304,8 +304,7 @@ int ClusterProxyHelper::doWrite(const string &path, const std::string &buf, size
     WriteInfo answer;
     string inputData = msg.SerializeAsString();
 
-    if(!answer.ParseFromString(
-        requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), inputData)))
+    if(!answer.ParseFromString(requestMessage<WriteInfo>(msg)))
     {
         LOG(WARNING) << "Cannot parse answer for file: " << string(path);
         return translateError(VEIO);
@@ -329,10 +328,9 @@ int ClusterProxyHelper::doRead(const string &path, std::string &buf, size_t size
     FileData answer;
     string inputData = msg.SerializeAsString();
 
-    uint64_t timeout = size * 2; // 2ms for each byte (minimum of 500B/s);
+    std::chrono::milliseconds timeout{size * 2}; // 2ms for each byte (minimum of 500B/s);
 
-    if(!answer.ParseFromString(
-        requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), inputData, timeout)))
+    if(!answer.ParseFromString(requestMessage<FileData>(msg, timeout)))
     {
         LOG(WARNING) << "Cannot parse answer for file: " << string(path);
         return translateError(VEIO);
@@ -359,23 +357,19 @@ int ClusterProxyHelper::doRead(const string &path, std::string &buf, size_t size
     return 0;
 }
 
-ClusterProxyHelper::ClusterProxyHelper(boost::shared_ptr<SimpleConnectionPool> connectionPool,
+ClusterProxyHelper::ClusterProxyHelper(std::shared_ptr<communication::Communicator> communicator,
                                        const BufferLimits &limits, const ArgsMap &args)
   : m_bufferAgent(
         limits,
-        boost::bind(&ClusterProxyHelper::doWrite, this, _1, _2, _3, _4, _5),
-        boost::bind(&ClusterProxyHelper::doRead, this, _1, _2, _3, _4, _5))
-  , m_connectionPool{std::move(connectionPool)}
+        std::bind(&ClusterProxyHelper::doWrite, this, _1, _2, _3, _4, _5),
+        std::bind(&ClusterProxyHelper::doRead, this, _1, _2, _3, _4, _5))
+  , m_communicator{std::move(communicator)}
 {
     m_clusterHostname = args.count("cluster_hostname") ?
                 boost::any_cast<std::string>(args.at("cluster_hostname")) : std::string{};
 
     m_clusterPort = args.count("cluster_port") ?
                 boost::any_cast<unsigned int>(args.at("cluster_port")) : 0;
-}
-
-ClusterProxyHelper::~ClusterProxyHelper()
-{
 }
 
 } // namespace helpers

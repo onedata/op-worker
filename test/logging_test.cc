@@ -5,44 +5,48 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "connectionPool_mock.h"
-#include "communicationHandler_mock.h"
+#include "communication/communicator_mock.h"
+#include "helpers/storageHelperFactory.h"
 #include "logging.h"
 #include "logging.pb.h"
 #include "remoteLogWriter_mock.h"
-#include "testCommonH.h"
-#include "helpers/storageHelperFactory.h"
 
-#include <boost/atomic.hpp>
-#include <boost/shared_ptr.hpp>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <unistd.h>
 
+#include <atomic>
 #include <ctime>
+#include <memory>
+
+using namespace ::testing;
+using namespace veil::logging;
+
+ACTION_P(SaveMessage, messagePtr)
+{
+    *messagePtr = static_cast<const veil::protocol::logging::LogMessage&>(arg1);
+}
 
 struct RemoteLogSinkFixture: public ::testing::Test
 {
     RemoteLogSinkFixture()
-        : mockLogWriter(new NiceMock<MockRemoteLogWriter>)
+        : mockLogWriter(std::make_shared<NiceMock<MockRemoteLogWriter>>())
         , logSink(mockLogWriter)
     {
     }
 
-    boost::shared_ptr<NiceMock<MockRemoteLogWriter> > mockLogWriter;
+    std::shared_ptr<NiceMock<MockRemoteLogWriter>> mockLogWriter;
     veil::logging::RemoteLogSink logSink;
 };
 
 struct RemoteLogWriterFixture: public ::testing::Test
 {
     RemoteLogWriterFixture()
-        : mockConnectionPool(new NiceMock<MockConnectionPool>)
-        , mockCommunicationHandler(new NiceMock<MockCommunicationHandler>)
+        : mockCommunicator(std::make_shared<NiceMock<MockCommunicator>>())
         , logWriter(veil::protocol::logging::LDEBUG)
     {
-        ON_CALL(*mockConnectionPool, selectConnection(_))
-                .WillByDefault(::testing::Return(mockCommunicationHandler));
-
-        logWriter.run(mockConnectionPool);
+        logWriter.run(mockCommunicator);
     }
 
     bool areMessagesEqual(const veil::protocol::logging::LogMessage &l,
@@ -67,27 +71,23 @@ struct RemoteLogWriterFixture: public ::testing::Test
     {
         using namespace ::testing;
 
-        boost::atomic<bool> messageSent(false);
-        veil::protocol::communication_protocol::ClusterMsg sentClsMessage;
+        std::atomic<bool> messageSent(false);
+        veil::protocol::logging::LogMessage sentMessage;
 
-        EXPECT_CALL(*mockCommunicationHandler, sendMessage(_, _))
-                .WillOnce(DoAll(SaveArg<0>(&sentClsMessage), Assign(&messageSent, true), Return(0)));
+        EXPECT_CALL(*mockCommunicator, send(_, _, _))
+                .WillOnce(DoAll(SaveMessage(&sentMessage), Assign(&messageSent, true)));
 
         logWriter.buffer(level, fileName, line, timestamp, message);
         EXPECT_TRUE(waitUntil(messageSent, 10));
 
-        veil::protocol::logging::LogMessage sentMessage;
-        EXPECT_TRUE(sentMessage.ParseFromString(sentClsMessage.input()));
+        EXPECT_TRUE(sentMessage.has_message());
 
         return sentMessage;
     }
 
-    boost::shared_ptr<NiceMock<MockConnectionPool> > mockConnectionPool;
-    boost::shared_ptr<NiceMock<MockCommunicationHandler> > mockCommunicationHandler;
+    std::shared_ptr<MockCommunicator> mockCommunicator;
     RemoteLogWriter logWriter;
 };
-
-INIT_AND_RUN_ALL_TESTS()
 
 TEST_F(RemoteLogSinkFixture, ShouldBeUsableByGlog)
 {
@@ -169,20 +169,6 @@ TEST_F(RemoteLogWriterFixture, ShouldSendCurrentPIDInTheMessage)
     EXPECT_EQ(getpid(), static_cast<pid_t>(sentMessage.pid()));
 }
 
-TEST_F(RemoteLogWriterFixture, ShouldSendAMessageWithIGNORE_ANSWER_MSG_ID)
-{
-    using namespace ::testing;
-
-    boost::atomic<bool> messageSent(false);
-
-    EXPECT_CALL(*mockCommunicationHandler, sendMessage(_, IGNORE_ANSWER_MSG_ID))
-            .WillOnce(DoAll(Assign(&messageSent, true), Return(0)));
-
-    logWriter.buffer(veil::protocol::logging::INFO, "", 0, 0, "");
-
-    waitUntil(messageSent, 10);
-}
-
 TEST_F(RemoteLogWriterFixture, ShouldDropMessagesAfterExceedingMaxBufferSize)
 {
     veil::logging::RemoteLogWriter writer(veil::protocol::logging::LDEBUG,
@@ -195,21 +181,18 @@ TEST_F(RemoteLogWriterFixture, ShouldDropMessagesAfterExceedingMaxBufferSize)
 
     // We expect the writer to send 6 messages total, the last one being a
     // warning about dropped messages.
-    boost::atomic<bool> messageSent(false);
-    veil::protocol::communication_protocol::ClusterMsg sentClsMessage;
+    std::atomic<bool> messageSent(false);
+    veil::protocol::logging::LogMessage sentMessage;
 
     // Note: gmock satisfies expectations in reverse order
-    EXPECT_CALL(*mockCommunicationHandler, sendMessage(_, _))
-            .WillOnce(DoAll(SaveArg<0>(&sentClsMessage), Assign(&messageSent, true), Return(0)));
-    EXPECT_CALL(*mockCommunicationHandler, sendMessage(_, _))
-            .Times(5).WillRepeatedly(Return(0)).RetiresOnSaturation();
+    EXPECT_CALL(*mockCommunicator, send(_, _, _))
+            .WillOnce(DoAll(SaveMessage(&sentMessage), Assign(&messageSent, true)));
+    EXPECT_CALL(*mockCommunicator, send(_, _, _))
+            .Times(5).RetiresOnSaturation();
 
-    writer.run(mockConnectionPool);
+    writer.run(mockCommunicator);
     waitUntil(messageSent, 10);
 
-    veil::protocol::logging::LogMessage log;
-    log.ParseFromString(sentClsMessage.input());
-
-    EXPECT_EQ(veil::protocol::logging::WARNING, log.level());
-    EXPECT_NE(std::string::npos, log.message().find("buffered messages has been exceeded"));
+    EXPECT_EQ(veil::protocol::logging::WARNING, sentMessage.level());
+    EXPECT_NE(std::string::npos, sentMessage.message().find("buffered messages has been exceeded"));
 }

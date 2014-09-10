@@ -5,32 +5,24 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "testCommonH.h"
 #include "fileCache.h"
 
-using namespace boost;
+#include <gtest/gtest.h>
 
-INIT_AND_RUN_ALL_TESTS(); // TEST RUNNER !
+using namespace ::testing;
+using namespace veil;
+using namespace veil::helpers;
 
-// TEST definitions below
-
-class FileCacheTest
-    : public ::testing::Test {
-
+class FileCacheTest: public ::testing::Test
+{
 protected:
-
     FileCache cache;
-    string buff;
+    std::string buff;
 
-    FileCacheTest() : cache(10) {}
-
-    virtual void SetUp() {
-
+    FileCacheTest()
+        : cache(10)
+    {
     }
-
-    virtual void TearDown() {
-    }
-
 };
 
 // Test selectConnection method

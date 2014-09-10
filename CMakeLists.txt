@@ -1,5 +1,5 @@
-cmake_minimum_required (VERSION 2.8.0)
-project (VeilHelpers)
+cmake_minimum_required(VERSION 2.8.0)
+project(VeilHelpers C CXX)
 
 # The version number.
 set(VeilHelpers_VERSION_MAJOR 0)
@@ -9,31 +9,21 @@ set(VeilHelpers_VERSION $(VeilHelpers_VERSION_MAJOR).$(VeilHelpers_VERSION_MINOR
 
 # CMake config
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
-set(DEPS_DIR "deps")
 link_directories(${PROJECT_BINARY_DIR})
 
-string( TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_L )
-if(CMAKE_BUILD_TYPE_L MATCHES "debug")
-    set(VeilHelpers_DEBUG 1)
-else()
-    set(VeilHelpers_DEBUG 0)
-endif()
-
 configure_file (
-    "${PROJECT_SOURCE_DIR}/include/veilConfig.h.in"
-    "${PROJECT_BINARY_DIR}/veilConfig.h"
+    include/veilConfig.h.in
+    ${PROJECT_BINARY_DIR}/veilConfig.h
 )
 
 # Deps
-add_subdirectory(${DEPS_DIR}/gmock)
-add_subdirectory(${DEPS_DIR}/glog)
-add_subdirectory(${DEPS_DIR}/websocketpp)
+add_subdirectory(deps/gmock)
+add_subdirectory(deps/glog)
+add_subdirectory(deps/websocketpp)
 
 # Include paths
-include_directories(${PROJECT_SOURCE_DIR}/include)
-include_directories(${PROJECT_BINARY_DIR})
-include_directories(${GLOG_INCLUDE_DIR})
-include_directories(${WSPP_INCLUDE_DIR})
+include_directories(include ${PROJECT_BINARY_DIR})
+include_directories(SYSTEM ${GLOG_INCLUDE_DIR} ${WSPP_INCLUDE_DIR})
 
 # Setup git
 message(STATUS "Checking for Git...")
@@ -44,33 +34,28 @@ message(STATUS "Checking for Protobuf...")
 find_package(Protobuf REQUIRED)
 
 if(${PREFER_STATIC_LINK})
-    find_library(PROTOBUF_LIBS NAMES libprotobuf.a protobuf)
-else()
-    set(PROTOBUF_LIBS ${PROTOBUF_LIBRARY})
-endif()
+    find_library(PROTOBUF_LIBRARY NAMES libprotobuf.a protobuf)
+endif(${PREFER_STATIC_LINK})
 
-include_directories(${PROTOBUF_INCLUDE_DIR})
-
+include_directories(SYSTEM ${PROTOBUF_INCLUDE_DIR})
 
 # Setup OpenSSL
 message(STATUS "Checking for OpenSSL...")
 find_package(OpenSSL REQUIRED)
 
 if(${PREFER_STATIC_LINK})
-
     find_library(SSL_LIBRARY NAMES libssl.a ssl)
     find_library(CRYPTO_LIBRARY NAMES libcrypto.a crypto)
-
     find_library(KRB5_LIBRARY krb5)
+
     if(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
-        set(OPENSSL_LIBRARIES "${SSL_LIBRARY};${CRYPTO_LIBRARY}")
+        set(OPENSSL_LIBRARIES ${SSL_LIBRARY} ${CRYPTO_LIBRARY})
     else(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
-        set(OPENSSL_LIBRARIES "${SSL_LIBRARY};${CRYPTO_LIBRARY};${KRB5_LIBRARY}")
+        set(OPENSSL_LIBRARIES ${SSL_LIBRARY} ${CRYPTO_LIBRARY} ${KRB5_LIBRARY})
     endif(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
+endif(${PREFER_STATIC_LINK})
 
-endif()
-
-include_directories(${OPENSSL_INCLUDE_DIR})
+include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
 
 # Setup pthreads
 message(STATUS "Checking for pthreads...")
@@ -79,47 +64,33 @@ find_package(Threads REQUIRED)
 # Setup fuse
 message(STATUS "Checking for FUSE...")
 find_package(FUSE REQUIRED)
-include_directories(${FUSE_INCLUDE_DIRS})
-
+include_directories(SYSTEM ${FUSE_INCLUDE_DIRS})
 
 # Setup Boost
-set(Boost_USE_STATIC_LIBS       OFF)
+if(${PREFER_STATIC_LINK})
+    set(Boost_USE_STATIC_LIBS       ON)
+else(${PREFER_STATIC_LINK})
+    set(Boost_USE_STATIC_LIBS       OFF)
+endif(${PREFER_STATIC_LINK})
+
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME    OFF)
 find_package(Boost COMPONENTS thread filesystem system random REQUIRED)
 
-if(${PREFER_STATIC_LINK})
-
-    set(BOOST_LIBS boost_thread boost_filesystem boost_system boost_random)
-
-    foreach(LIB ${BOOST_LIBS})
-        find_library(BOOST_${LIB}_LIBRARY NAMES lib${LIB}-mt.a lib${LIB}.a ${LIB}-mt ${LIB})
-        if(${BOOST_${LIB}_LIBRARY} MATCHES .*_LIBRARY-NOTFOUND)
-            message( FATAL_ERROR "ERROR: ${LIB} NOT FOUND!")
-        endif()
-        set(BOOST_DEPS ${BOOST_DEPS};${BOOST_${LIB}_LIBRARY})
-    endforeach()
-    set(Boost_LIBRARIES ${BOOST_DEPS})
-
-endif()
-
-
 link_directories(${Boost_LIBRARY_DIRS})
-include_directories(${Boost_INCLUDE_DIRS})
-
+include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
 # Utility libs
 if(${PREFER_STATIC_LINK})
     find_library(LTDL_LIBRARY NAMES libltdl.a ltdl)
     find_library(ZLIB_LIBRARY NAMES libz.a z)
-else()
+else(${PREFER_STATIC_LINK})
     find_library(LTDL_LIBRARY ltdl)
     find_library(ZLIB_LIBRARY z)
-endif()
+endif(${PREFER_STATIC_LINK})
 
 find_library(RT_LIBRARY rt)
 find_library(DL_LIBRARY dl)
-
 
 # Pull git submodules
 message(STATUS "Pulling submodules using git...")
@@ -131,42 +102,38 @@ execute_process(COMMAND ${GIT_EXECUTABLE} submodule foreach git checkout
                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 # Compile .proto files
-file(GLOB PROTO_FILES "${PROJECT_SOURCE_DIR}/veilprotocol/proto/*.proto")
+file(GLOB PROTO_FILES veilprotocol/proto/*.proto)
 PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # Setup sources
-file(GLOB HELPER_SOURCES "src/[a-zA-Z]*.cc")
+file(GLOB_RECURSE HELPER_SOURCES src/*.cc include/*.h)
 
 # Setup compile flags
 if(${PREFER_STATIC_LINK}) # Try to link libstdc++.a
     execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libstdc++.a OUTPUT_VARIABLE LIBSTD_NAME)
     string(REGEX REPLACE "(\r?\n)+$" "" LIBSTD_NAME "${LIBSTD_NAME}")
     execute_process(COMMAND ln -sf "${LIBSTD_NAME}" WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
-endif()
+endif(${PREFER_STATIC_LINK})
 
 set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_DIR}:.:${LIB_DIR}:../${LIB_DIR}:./c_lib:../c_lib:$ORIGIN")
+set(PLATFORM_EXTRA_LIBS ${CMAKE_THREAD_LIBS_INIT} ${LTDL_LIBRARY} ${ZLIB_LIBRARY} ${DL_LIBRARY})
 
 if(APPLE)
-    set(PLATFORM_EXTRA_LIBS "${CMAKE_THREAD_LIBS_INIT};${LTDL_LIBRARY};${ZLIB_LIBRARY};${DL_LIBRARY}")
     set(SECTION_FRAGMENTATION_FLAGS "-Wno-deprecated-declarations")
-else()
-    set(PLATFORM_EXTRA_LIBS "${CMAKE_THREAD_LIBS_INIT};${LTDL_LIBRARY};${ZLIB_LIBRARY};${DL_LIBRARY};${RT_LIBRARY}")
+else(APPLE)
+    set(PLATFORM_EXTRA_LIBS ${PLATFORM_EXTRA_LIBS} ${RT_LIBRARY})
     set(SECTION_FRAGMENTATION_FLAGS "-fdata-sections -ffunction-sections")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--gc-sections -Wl,-rpath,${CUSTOM_RPATH}")
-endif()
+endif(APPLE)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SECTION_FRAGMENTATION_FLAGS} -Wall -fPIC -std=c++11")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
-add_definitions(${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -D_WEBSOCKETPP_CPP11_STL_)
+add_definitions(${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -D_WEBSOCKETPP_CPP11_STL_ -DBOOST_BIND_NO_PLACEHOLDERS)
 
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
 
 # Define targets
-
-add_library(veilprotocol ${PROTO_SRCS})
-
+add_library(veilprotocol STATIC ${PROTO_SRCS})
 add_library(veilhelpers_obj OBJECT ${HELPER_SOURCES})
 add_library(veilhelpers STATIC $<TARGET_OBJECTS:veilhelpers_obj>)
 add_library(veilhelpersShared SHARED $<TARGET_OBJECTS:veilhelpers_obj>)
@@ -175,33 +142,21 @@ add_dependencies(veilhelpers_obj glog veilprotocol websocketpp)
 
 set_target_properties(veilhelpersShared PROPERTIES OUTPUT_NAME veilhelpers)
 
-target_link_libraries(veilhelpers
+set(COMMON_LIBRARIES
     ${Boost_LIBRARIES}
     ${GLOG_LIBRARIES}
-    ${PROTOBUF_LIBS}
+    ${PROTOBUF_LIBRARY}
     ${OPENSSL_LIBRARIES}
     ${GLOG_LIBRARIES}
     veilprotocol
     ${PLATFORM_EXTRA_LIBS}
 )
 
-target_link_libraries(veilhelpersShared
-    ${Boost_LIBRARIES}
-    ${GLOG_LIBRARIES}
-    ${PROTOBUF_LIBS}
-    ${OPENSSL_LIBRARIES}
-    ${GLOG_LIBRARIES}
-    veilprotocol
-    ${PLATFORM_EXTRA_LIBS}
-)
+target_link_libraries(veilhelpers ${COMMON_LIBRARIES})
+target_link_libraries(veilhelpersShared ${COMMON_LIBRARIES})
+target_link_libraries(veilprotocol ${PROTOBUF_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
 
-target_link_libraries(veilprotocol
-    ${PROTOBUF_LIBS}
-    ${CMAKE_THREAD_LIBS_INIT}
-)
-
-
-install(TARGETS veilhelpers veilhelpersShared
+install(TARGETS veilhelpers veilhelpersShared veilprotocol
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
 )
@@ -209,15 +164,18 @@ install(FILES ${GLOG_LIBRARIES} ${GTEST_LIBRARIES} ${GMOCK_LIBRARIES} DESTINATIO
 install(DIRECTORY ${GTEST_INCLUDE_DIR}/gtest DESTINATION include)
 install(DIRECTORY ${GMOCK_INCLUDE_DIR}/gmock DESTINATION include)
 install(DIRECTORY ${GLOG_INCLUDE_DIR}/glog DESTINATION include)
-message(STATUS ${GLOG_INCLUDE_DIR})
 
 ###########################
 ##         TESTS         ##
 ###########################
 
 enable_testing()
-include_directories(${GTEST_INCLUDE_DIR})
-include_directories(${GMOCK_INCLUDE_DIR})
+include_directories(test/include)
+include_directories(SYSTEM ${GTEST_INCLUDE_DIR} ${GMOCK_INCLUDE_DIR})
+
+file(GLOB_RECURSE HELPER_TEST_HEADERS test/include/*.h)
+add_library(testRunner OBJECT test/testRunner.cc)
+add_dependencies(testRunner glog gmock gtest)
 
 add_custom_target(cunit)
 macro(run_test test_target)
@@ -229,14 +187,11 @@ macro(run_test test_target)
   add_dependencies(cunit ${test_target}_runtest)
 endmacro()
 
-set(TEST_SOURCES_DIR "test")
-include_directories(${TEST_SOURCES_DIR}/include)
-
-file(GLOB files ${TEST_SOURCES_DIR}/*_test.cc)
-foreach(file ${files})
-    get_filename_component(TEST_NAME ${file} NAME_WE)
-    add_executable(${TEST_NAME} ${file})
-    add_dependencies(${TEST_NAME} gtest gmock veilFuse veilhelpers veilclient veilprotocol)
+file(GLOB_RECURSE HELPER_TEST_SOURCES test/*_test.cc)
+foreach(TEST_FILE ${HELPER_TEST_SOURCES})
+    get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
+    add_executable(${TEST_NAME} ${TEST_FILE} ${HELPER_TEST_HEADERS} $<TARGET_OBJECTS:testRunner>)
+    add_dependencies(${TEST_NAME} gmock gtest)
     target_link_libraries(${TEST_NAME}
         ${GTEST_LIBRARIES}
         ${Boost_LIBRARIES_SHARED}
