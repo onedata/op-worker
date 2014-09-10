@@ -103,6 +103,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
       {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
 
       Dispatch = cowboy_router:compile([{'_', [{?VEILCLIENT_URI_PATH, ws_handler, []}]}]),
+      ets:new(?WS_TOKEN_AUTHENTICATION, [set, named_table, public]),
 
       {ok, _} = cowboy:start_https(?DISPATCHER_LISTENER_REF, DispatcherPoolSize,
         [
@@ -404,6 +405,7 @@ handle_info(_Info, State) ->
 %% ====================================================================
 terminate(_Reason, _State) ->
   try
+    ets:delete(?WS_TOKEN_AUTHENTICATION),
     cowboy:stop_listener(?DISPATCHER_LISTENER_REF),
     ok
   catch

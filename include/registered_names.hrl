@@ -53,4 +53,7 @@
 %% name of ETS which contains ack handlers
 -define(ACK_HANDLERS, ack_handlers).
 
+%% name of ETS which caches details about token-based user authentication.
+-define(WS_TOKEN_AUTHENTICATION, ws_token_authentication).
+
 -endif.
