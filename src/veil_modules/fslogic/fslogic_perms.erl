@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 
 -include("veil_modules/dao/dao.hrl").
+-include("veil_modules/dao/dao_types.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include_lib("ctool/include/logging.hrl").
 
