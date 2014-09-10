@@ -87,13 +87,14 @@ is_member_of_space(#veil_document{record = #user{}} = UserDoc, SpaceReq) ->
         is_member_of_space3(UserDoc, SpaceReq, true)
     catch
         _:Reason ->
+            ?error("Cannot check space (~p) membership of user ~p due to: ~p", [SpaceReq, UserDoc, Reason]),
             false
     end.
 is_member_of_space3(#veil_document{record = #user{global_id = GRUID}} = UserDoc, #space_info{users = Users} = SpaceInfo, Retry) ->
     case lists:member(vcn_utils:ensure_binary(GRUID), Users) of
         true -> true;
         false when Retry ->
-            cluster_manager_lib:sync_all_spaces(),
+            fslogic_spaces:sync_all_supported_spaces(),
             is_member_of_space3(UserDoc, SpaceInfo, false);
         false -> false
     end;
@@ -106,7 +107,7 @@ is_member_of_space3(#veil_document{record = #user{}} = UserDoc, SpaceName, Retry
                 {ok, #space_info{} = SpaceInfo} ->
                     is_member_of_space3(UserDoc, SpaceInfo, Retry);
                 _ when Retry ->
-                    cluster_manager_lib:sync_all_spaces(),
+                    fslogic_spaces:sync_all_supported_spaces(),
                     is_member_of_space3(UserDoc, SpaceName, false);
                 _ ->
                     false

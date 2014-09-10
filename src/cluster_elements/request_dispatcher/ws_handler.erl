@@ -286,6 +286,7 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         end,
 
     %% Cache AccessToken for the user
+    %% @todo: use common auth cache system written by @plgkzemek (ETS based), which is not merged just yet
     put({UserGID, TokenHash}, AccessToken),
 
     Request = case Msg of

@@ -16,7 +16,30 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([initialize/1, map_to_grp_owner/1, get_storage_space_name/1]).
+-export([initialize/1, map_to_grp_owner/1, get_storage_space_name/1, sync_all_supported_spaces/0]).
+
+-spec sync_all_supported_spaces() -> ok | {error, Reason :: any}.
+sync_all_supported_spaces() ->
+    case gr_providers:get_spaces(provider) of
+        {ok, SpaceIds} ->
+            Result = [catch fslogic_spaces:initialize(SpaceId) || SpaceId <- SpaceIds],
+            {_GoodRes, BadRes} = lists:partition(
+                fun(Elem) ->
+                    case Elem of
+                        {ok, _} -> true;
+                        _       -> false
+                    end
+                end, Result),
+
+            case BadRes of
+                [] -> ok;
+                _  ->
+                    {error, BadRes}
+            end;
+        {error, Reason} ->
+            ?error("Cannot get supported spaces due to: ~p", [Reason]),
+            {error, Reason}
+    end.
 
 
 %% initialize/1

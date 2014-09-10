@@ -66,7 +66,7 @@ handle(_ProtocolVersion, get_version) ->
 %% TODO: create generic mechanism for getting configuration on client startup
 handle(ProtocolVersion, is_write_enabled) ->
   try
-    case user_logic:get_user({dn, fslogic_context:get_user_dn()}) of
+    case fslogic_objects:get_user() of
       {ok, UserDoc} ->
         case user_logic:get_quota(UserDoc) of
           {ok, #quota{exceeded = Exceeded}} when is_boolean(Exceeded) ->

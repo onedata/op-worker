@@ -31,12 +31,31 @@
 -export([get_space_names/1, create_space_dir/1, get_spaces/1]).
 -export([create_dirs_at_storage/2, create_dirs_at_storage/1]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
--export([synchronize_spaces_info/2]).
+-export([synchronize_spaces_info/2, create_partial_user/2]).
 
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+create_partial_user(GRUID, Spaces) ->
+    [#space_info{space_id = SpaceId} | _] = Spaces,
+    case gr_spaces:get_user_details(provider, SpaceId, GRUID) of
+        {ok, #user_details{name = Name0}} ->
+            Login = openid_utils:get_user_login(GRUID),
+            Name = vcn_utils:ensure_list(Name0),
+            try user_logic:sign_in([{global_id, vcn_utils:ensure_list(GRUID)}, {name, Name}, {login, Login}], undefined) of
+                {_, UserDoc} ->
+                    {ok, UserDoc}
+            catch
+                _:Reason ->
+                    ?error("Cannot create partial user ~p due to: ~p", [GRUID, Reason]),
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            ?error("Cannot create partial user ~p due to: ~p", [GRUID, Reason]),
+            {error, Reason}
+    end.
 
 %% sign_in/1
 %% ====================================================================
@@ -48,7 +67,7 @@
 %% @end
 -spec sign_in(Proplist, AuthorizationCode :: binary()) -> Result when
     Proplist :: list(),
-    Result :: {string(), user_doc()}.
+    Result :: {string(), user_doc()} | no_return().
 %% ====================================================================
 sign_in(Proplist, AccessToken) ->
     GlobalId = case proplists:get_value(global_id, Proplist, "") of

@@ -73,7 +73,7 @@ exists(Req, _Version, Id) ->
 get(Req, <<"1.0">>, Id) ->
     Response = case Id of
                    undefined ->
-                       {ok, #veil_document{uuid = UserID}} = user_logic:get_user({dn, fslogic_context:get_user_dn()}),
+                       {ok, #veil_document{uuid = UserID}} = fslogic_objects:get_user(),
                        ShareList = case logical_files_manager:get_share({user, UserID}) of
                                        {ok, List} when is_list(List) -> List;
                                        {ok, Doc} -> [Doc];
