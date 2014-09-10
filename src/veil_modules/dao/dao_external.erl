@@ -13,6 +13,8 @@
 -author("Tomasz Lichon").
 
 -include_lib("veil_modules/dao/dao.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 %% API
 -export([set_db/1, get_db/0, record_info/1, is_valid_record/1, sequential_synch_call/3, view_def_location/0]).
 
