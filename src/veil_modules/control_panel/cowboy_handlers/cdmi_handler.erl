@@ -43,10 +43,10 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% @end
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
-rest_init(Req, _Opt) ->
+rest_init(ReqArg, _Opt) ->
     try
-        {ok, DnString} = rest_utils:verify_peer_cert(Req),
-        ok = rest_utils:prepare_context(DnString),
+        {ok, Identity, Req} = rest_utils:verify_peer_cert(ReqArg),
+        ok = rest_utils:prepare_context(Identity),
         {Method, Req1} = cowboy_req:method(Req),
         {PathInfo, Req2} = cowboy_req:path_info(Req1),
         {Url, Req3} = cowboy_req:path(Req2),
@@ -64,9 +64,9 @@ rest_init(Req, _Opt) ->
         HandlerModule = cdmi_routes:route(PathInfo, Url),
         {ok, Req6, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts), cdmi_version = CdmiVersion, handler_module = HandlerModule}}
     catch
-        _Type:{badmatch,{error, Error}} -> {ok, Req, {error, Error}};
-        _Type:{badmatch,Error} -> {ok, Req, {error,Error}};
-        _Type:Error -> {ok, Req, {error,Error}}
+        _Type:{badmatch,{error, Error}} -> {ok, ReqArg, {error, Error}};
+        _Type:{badmatch,Error} -> {ok, ReqArg, {error,Error}};
+        _Type:Error -> {ok, ReqArg, {error,Error}}
     end.
 
 %% allowed_methods/2
