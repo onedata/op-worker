@@ -125,12 +125,12 @@ setup_connection(InitCtx, OtpCert, _Certs, true) ->
     Req :: term(),
     State :: #hander_state{}.
 %% ====================================================================
-websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString, peer_type = PeerType} = State) ->
+websocket_handle({binary, Data}, Req, #hander_state{peer_type = PeerType} = State) ->
     try
         Request =
             case PeerType of
-                provider -> decode_providermsg_pb(Data, DnString);
-                user     -> decode_clustermsg_pb(Data, DnString)
+                provider -> decode_providermsg_pb(Data);
+                user     -> decode_clustermsg_pb(Data)
             end,
 
         ?debug("Received request: ~p", [Request]),
@@ -480,7 +480,7 @@ decode_answer_pb(MsgBytes) ->
           end,
 
     TranslatedMsg = try
-      records_translator:translate(Msg, Message_decoder_name)
+      records_translator:translate(Msg, DecoderName1)
     catch
       _:message_not_supported -> throw({message_not_supported, MsgId})
     end,
@@ -493,10 +493,10 @@ decode_answer_pb(MsgBytes) ->
 %%      In case of 'pull' message - InputMessage is decoded with decode_clustermsg_pb/2. <br/>
 %%      In case of 'push' message - InputMessage is decoded with decode_answermsg_pb/2.
 %% @end
--spec decode_providermsg_pb(MsgBytes :: binary(), DN :: string()) -> Result when
+-spec decode_providermsg_pb(MsgBytes :: binary()) -> Result when
     Result :: {pull | push, FuseId :: binary(), InputMessage :: term()}.
 %% ====================================================================
-decode_providermsg_pb(MsgBytes, DN) ->
+decode_providermsg_pb(MsgBytes) ->
     DecodedBytes = try
         communication_protocol_pb:decode_providermsg(MsgBytes)
                    catch
@@ -507,9 +507,9 @@ decode_providermsg_pb(MsgBytes, DN) ->
     FuseID1 = case FuseID of undefined -> "cluster_fid"; _ -> FuseID end,
     case MsgType of
         "clustermsg" ->
-            {pull, FuseID1, decode_clustermsg_pb(Input, DN)};
+            {pull, FuseID1, decode_clustermsg_pb(Input)};
         "answer" ->
-            {push, FuseID1, decode_answer_pb(Input, DN)}
+            {push, FuseID1, decode_answer_pb(Input)}
     end.
 
 
