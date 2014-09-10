@@ -101,7 +101,8 @@ malformed_request(Req, State = #state{filepath = Filepath}) ->
 %% ====================================================================
 -spec is_capability_object(req()) -> boolean().
 %% ====================================================================
-is_capability_object(#http_req{path_info = PathInfo}) ->
+is_capability_object(Req) ->
+    {PathInfo, _} = cowboy_req:path_info(Req),
     case PathInfo of
         [<<"cdmi_objectid">>, Id | _Rest] ->
             proplists:is_defined(Id,?CapabilityPathById);

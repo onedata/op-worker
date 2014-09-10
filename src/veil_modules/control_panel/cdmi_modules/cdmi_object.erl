@@ -16,7 +16,7 @@
 -include("veil_modules/control_panel/cdmi_object.hrl").
 
 %% API
--export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
+-export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 -export([get_binary/2, get_cdmi_object/2, put_binary/2, put_cdmi_object/2]).
 -export([stream_file/6]).
 
@@ -134,11 +134,14 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
         invalid -> cdmi_error:error_reply(Req1,State,?error_bad_request_code,"Invalid range: ~p",[RawRange]);
         _ ->
             % prepare data size and stream function
-            StreamSize = lists:foldl(fun({From,To},Acc) when To >= From -> Acc+To-From+1 end, 0, Ranges),
-            StreamFun = fun (Socket,Transport) ->
+            StreamSize = lists:foldl(fun({From, To}, Acc) when To >= From -> Acc + To - From + 1 end, 0, Ranges),
+            UserDN = fslogic_context:get_user_dn(),
+            StreamFun = fun(Socket, Transport) ->
                 try
-                    {ok,BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
-                    lists:foreach(fun (Rng) -> stream_file(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
+                    fslogic_context:set_user_dn(UserDN),
+                    {ok, BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
+                    lists:foreach(fun(Rng) ->
+                        stream_file(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
                 catch Type:Message ->
                     % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
                     ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Filepath, Type, Message])
@@ -150,8 +153,10 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
 
             % reply with stream and adequate status
             {ok, Req3} = case RawRange of
-                             undefined -> cowboy_req:reply(?ok, [], {StreamSize,StreamFun}, Req2);
-                             _ -> cowboy_req:reply(?ok_partial_content, [], {StreamSize,StreamFun}, Req2)
+                             undefined ->
+                                 veil_cowboy_bridge:apply(cowboy_req, reply, [?ok, [], {StreamSize, StreamFun}, Req2]);
+                             _ ->
+                                 veil_cowboy_bridge:apply(cowboy_req, reply, [?ok_partial_content, [], {StreamSize, StreamFun}, Req2])
                          end,
             {halt, Req3, State}
     end.
@@ -179,10 +184,12 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
                            {From,To} when To >= From -> {To - From +1, <<"base64">>};
                            default -> {Size, get_encoding(Filepath)}
                        end,
-            Base64EncodedSize = byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4*ceil(DataSize / 3.0)),
+            Base64EncodedSize = byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4 * ceil(DataSize / 3.0)),
 
-            StreamFun = fun (Socket,Transport) ->
+            UserDN = fslogic_context:get_user_dn(),
+            StreamFun = fun(Socket, Transport) ->
                 try
+                    fslogic_context:set_user_dn(UserDN),
                     Transport:send(Socket,JsonBodyPrefix),
                     {ok,BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
                     stream_file(Socket, Transport, State, Range, Encoding, BufferSize),
@@ -243,7 +250,7 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
 -spec put_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo read body in chunks
-    {ok, RawBody, Req1} = cowboy_req:body(Req),
+    {ok, RawBody, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Body = rest_utils:parse_body(RawBody),
     RequestedMimetype = proplists:get_value(<<"mimetype">>, Body),
     RequestedValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body),
@@ -278,14 +285,14 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
             update_encoding(Filepath, RequestedValueTransferEncoding),
             update_mimetype(Filepath, RequestedMimetype),
             case Range of
-                {From, To} when is_binary(Value) andalso To-From+1 == byte_size(RawValue) ->
+                {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
                     case logical_files_manager:write(Filepath, From, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             {true, Req1, State};
                         Error -> cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
                     end;
                 undefined when is_binary(Value) ->
-                    logical_files_manager:truncate(Filepath,0),
+                    logical_files_manager:truncate(Filepath, 0),
                     case logical_files_manager:write(Filepath, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             {true, Req1, State};
@@ -368,7 +375,7 @@ write_body_to_file(Req, State, Offset) ->
 -spec write_body_to_file(req(), #state{}, integer(), boolean()) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 write_body_to_file(Req, #state{filepath = Filepath} = State, Offset, RemoveIfFails) ->
-    {Status, Chunk, Req1} = cowboy_req:body(Req),
+    {Status, Chunk, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     case logical_files_manager:write(Filepath, Offset, Chunk) of
         Bytes when is_integer(Bytes) ->
             case Status of
@@ -394,18 +401,18 @@ write_body_to_file(Req, #state{filepath = Filepath} = State, Offset, RemoveIfFai
 %% ====================================================================
 stream_file(Socket, Transport, State, Range, Encoding, BufferSize) when (BufferSize rem 3) =/= 0 ->
     stream_file(Socket, Transport, State, Range, Encoding, BufferSize - (BufferSize rem 3)); %buffer size is extended, so it's divisible by 3 to allow base64 on the fly conversion
-stream_file(Socket, Transport, #state{attributes = #fileattributes{ size = Size}} = State, default, Encoding, BufferSize) ->
+stream_file(Socket, Transport, #state{attributes = #fileattributes{size = Size}} = State, default, Encoding, BufferSize) ->
     stream_file(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize); %default range should remain consistent with parse_object_ans/2 valuerange clause
 stream_file(Socket, Transport, #state{filepath = Path} = State, {From, To}, Encoding, BufferSize) ->
     ToRead = To - From + 1,
     case ToRead > BufferSize of
         true ->
-            {ok,Data} = logical_files_manager:read(Path, From, BufferSize),
-            Transport:send(Socket,encode(Data,Encoding)),
-            stream_file(Socket,Transport,State, {From+BufferSize,To},Encoding,BufferSize);
+            {ok, Data} = logical_files_manager:read(Path, From, BufferSize),
+            Transport:send(Socket, encode(Data, Encoding)),
+            stream_file(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize);
         false ->
-            {ok,Data} = logical_files_manager:read(Path, From, ToRead),
-            Transport:send(Socket,encode(Data,Encoding))
+            {ok, Data} = logical_files_manager:read(Path, From, ToRead),
+            Transport:send(Socket, encode(Data, Encoding))
     end.
 
 %% encode/2
@@ -413,9 +420,9 @@ stream_file(Socket, Transport, #state{filepath = Path} = State, {From, To}, Enco
 %% @doc Encodes data according to given ecoding
 -spec encode(Data :: binary(), Encoding :: binary()) -> binary().
 %% ====================================================================
-encode(Data,Encoding) when Encoding =:= <<"base64">> ->
+encode(Data, Encoding) when Encoding =:= <<"base64">> ->
     base64:encode(Data);
-encode(Data,_) ->
+encode(Data, _) ->
     Data.
 
 %% decode/2
@@ -425,11 +432,11 @@ encode(Data,_) ->
 %% ====================================================================
 decode(undefined,_Encoding) ->
     <<>>;
-decode(Data,Encoding) when Encoding =:= <<"base64">> ->
+decode(Data, Encoding) when Encoding =:= <<"base64">> ->
     try base64:decode(Data)
     catch _:_ -> throw(invalid_base64)
     end;
-decode(Data,_) ->
+decode(Data, _) ->
     Data.
 
 %% ceil/1
@@ -438,7 +445,7 @@ decode(Data,_) ->
 -spec ceil(N :: number()) -> integer().
 %% ====================================================================
 ceil(N) when trunc(N) == N -> N;
-ceil(N) -> trunc(N+1).
+ceil(N) -> trunc(N + 1).
 
 %% parse_byte_range/1
 %% ====================================================================
@@ -450,7 +457,7 @@ ceil(N) -> trunc(N+1).
 %% ====================================================================
 parse_byte_range(State, Range) when is_binary(Range) ->
     Ranges = parse_byte_range(State, binary:split(Range, <<",">>, [global])),
-    case lists:member(invalid,Ranges) of
+    case lists:member(invalid, Ranges) of
         true -> invalid;
         false -> Ranges
     end;
@@ -465,8 +472,8 @@ parse_byte_range(#state{attributes = #fileattributes{size = Size}} = State, [Fir
             end,
     case Range of
         [invalid] -> [invalid];
-        {Begin,End} when Begin > End -> [invalid];
-        {Begin_,_End} when Begin_ > Size -> parse_byte_range(State, Rest); % range is unsatisfiable and we ignore it
+        {Begin, End} when Begin > End -> [invalid];
+        {Begin_, _End} when Begin_ > Size -> parse_byte_range(State, Rest); % range is unsatisfiable and we ignore it
         ValidRange -> [ValidRange | parse_byte_range(State, Rest)]
     end.
 

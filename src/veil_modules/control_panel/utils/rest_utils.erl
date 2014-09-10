@@ -128,34 +128,46 @@ error_reply(Record) ->
 -spec verify_peer_cert(Req :: req()) -> {ok, DnString :: string()} | no_return().
 %% ====================================================================
 verify_peer_cert(Req) ->
-    {OtpCert, Certs} = try
-                           {ok, PeerCert} = ssl:peercert(cowboy_req:get(socket, Req)),
-                           {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
-                           [{_, [TryOtpCert | TryCerts], _}] = ets:lookup(gsi_state, {Serial, Issuer}),
-                           {TryOtpCert, TryCerts}
-                       catch
-                           _:_ ->
-                               ?error("[REST] Peer connected but cerificate chain was not found. Please check if GSI validation is enabled."),
-                               throw(invalid_cert)
-                       end,
-    case gsi_handler:call(gsi_nif, verify_cert_c,
-        [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate
-            [public_key:pkix_encode('OTPCertificate', Cert, otp) || Cert <- Certs], %% peer CA chain
-            [DER || [DER] <- ets:match(gsi_state, {{ca, '_'}, '$1', '_'})],         %% cluster CA store
-            [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
-        {ok, 1} ->
-            {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
-            {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
-            {ok,_DnString} = user_logic:rdn_sequence_to_dn_string(Rdn);
-        {ok, 0, Errno} ->
-            ?info("[REST] Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
-            throw(invalid_cert);
-        {error, Reason} ->
-            ?error("[REST] GSI peer verification callback error: ~p", [Reason]),
-            throw(invalid_cert);
-        Other ->
-            ?error("[REST] GSI verification callback returned unknown response ~p", [Other]),
-            throw(invalid_cert)
+    case cowboy_req:header(<<"X-Auth-Token">>, Req) of
+        {undefined, _} ->
+            {OtpCert, Certs} = try
+                {ok, PeerCert} = ssl:peercert(cowboy_req:get(socket, Req)),
+                {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
+                [{_, [TryOtpCert | TryCerts], _}] = ets:lookup(gsi_state, {Serial, Issuer}),
+                {TryOtpCert, TryCerts}
+                               catch
+                                   _:_ ->
+                                       ?error("[REST] Peer connected but cerificate chain was not found. Please check if GSI validation is enabled."),
+                                       throw(invalid_cert)
+                               end,
+            case gsi_handler:call(gsi_nif, verify_cert_c,
+                [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate
+                    [public_key:pkix_encode('OTPCertificate', Cert, otp) || Cert <- Certs], %% peer CA chain
+                    [DER || [DER] <- ets:match(gsi_state, {{ca, '_'}, '$1', '_'})],         %% cluster CA store
+                    [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
+                {ok, 1} ->
+                    {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
+                    {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
+                    {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
+                    {ok, DnString, Req};
+                {ok, 0, Errno} ->
+                    ?info("[REST] Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
+                    throw(invalid_cert);
+                {error, Reason} ->
+                    ?error("[REST] GSI peer verification callback error: ~p", [Reason]),
+                    throw(invalid_cert);
+                Other ->
+                    ?error("[REST] GSI verification callback returned unknown response ~p", [Other]),
+                    throw(invalid_cert)
+            end;
+        {Token, Req2} ->
+            case binary:split(base64:decode(Token),<<";">>) of
+                [AccessToken, GRUID] ->
+                    {ok, {token, AccessToken, GRUID}, Req2};
+                _ ->
+                    ?error("[REST] Peer was rejected due to invalid token format"),
+                    throw(invalid_token)
+            end
     end.
 
 
@@ -163,8 +175,14 @@ verify_peer_cert(Req) ->
 %% ====================================================================
 %% @doc This function attempts to get user (with given DN) from db, and to put him into fslogic_context
 %% @end
--spec prepare_context(DnString :: string()) -> ok | {error, {user_unknown, DnString :: string()}}.
+-spec prepare_context(Identity) -> Result when
+    Identity :: DnString | Token,
+    DnString :: string(),
+    Token :: {token, AccessToken :: binary(), GRUID :: binary()},
+    Result :: ok | {error, {user_unknown, DnString :: string()}}.
 %% ====================================================================
+prepare_context({token, Token, GRUID}) ->
+    fslogic_context:set_access_token(GRUID,Token);
 prepare_context(DnString) ->
     case user_logic:get_user({dn, DnString}) of
         {ok, _} ->

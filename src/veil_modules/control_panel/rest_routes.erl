@@ -12,7 +12,7 @@
 
 -module(rest_routes).
 
--include("veil_modules/control_panel/connection_check_values.hrl").
+-include("veil_modules/control_panel/global_registry_interfacing.hrl").
 
 -export([route/1]).
 
@@ -39,6 +39,7 @@ route([<<"attrs">>])                -> {rest_attrs, undefined};
 route([<<"attrs">>|Path])           -> {rest_attrs, rest_utils:join_to_path(Path)};
 route([<<"shares">>])               -> {rest_shares, undefined};
 route([<<"shares">>, ID])           -> {rest_shares, ID};
+route([<<"token">>])                -> {rest_token, undefined};
 route([?connection_check_path])     -> {rest_connection_check, undefined};
 route(_)                            -> {error, path_invalid}.
 

@@ -25,9 +25,10 @@
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1, get_file_test/1, metadata_test/1, create_dir_test/1, create_file_test/1, update_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1, mimetype_and_encoding_test/1, moved_pemanently_test/1, errors_test/1]).
+-export([list_dir_test/1, get_file_test/1, metadata_test/1, create_dir_test/1, create_file_test/1, update_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1, mimetype_and_encoding_test/1, moved_pemanently_test/1, errors_test/1, token_test/1]).
 
-all() -> [list_dir_test, get_file_test, metadata_test, create_dir_test, create_file_test, update_file_test, delete_dir_test, delete_file_test, version_test, request_format_check_test, objectid_and_capabilities_test, mimetype_and_encoding_test, moved_pemanently_test, errors_test].
+
+all() -> [list_dir_test, get_file_test, metadata_test, create_dir_test, create_file_test, update_file_test, delete_dir_test, delete_file_test, version_test, request_format_check_test, objectid_and_capabilities_test, mimetype_and_encoding_test, moved_pemanently_test, errors_test, token_test].
 
 %% ====================================================================
 %% Test functions
@@ -751,6 +752,16 @@ errors_test(_Config) ->
     ?assertEqual("400", Code4).
     %%------------------------------
 
+% tests authentication by token
+token_test(_Config) ->
+    AccessToken = <<"access_token">>,
+    GRUID = <<"global_id_for_", ?TEST_USER>>,
+    Token = base64:encode(<<AccessToken/binary, ";", GRUID/binary>>),
+
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"X-Auth-Token", Token}],
+    {Code1, _Headers1, _Response1} = do_request([], get, RequestHeaders1, []),
+    ?assertEqual("201",Code1).
+
 %% ====================================================================
 %% SetUp and TearDown functions
 %% ====================================================================
@@ -778,10 +789,11 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1,true),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
+            {initialization_time, 1},
             {dispatcher_port, 5055},
             {ccm_nodes, [CCM]},
             {dns_port, 1308},
