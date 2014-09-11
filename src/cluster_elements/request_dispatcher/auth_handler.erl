@@ -12,13 +12,18 @@
 -module(auth_handler).
 -author("Rafal Slota").
 
+-include("registered_names.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% @TODO: Expiration could be given by Global Registry
+-define(AUTH_CACHE_EXPIRATION_MINUTES, 10).
+
 %% API
 -export([get_access_token/1]).
 -export([is_provider/1, get_provider_id/1]).
+-export([authenticate_user_by_secret/2]).
 
 %% get_access_token/1
 %% ====================================================================
@@ -82,4 +87,40 @@ is_provider(#'OTPCertificate'{} = Cert) ->
         [<<"Providers">>] =:= OU
     catch
         _:_ -> false
+    end.
+
+
+%% authenticate_user_by_secret/2
+%% ====================================================================
+%% @doc Attempts to verify user credentials with Global Registry.
+-spec authenticate_user_by_secret(GRUID :: binary(), Secret :: binary()) ->
+    {true, AccessToken :: binary()} | false.
+%% ====================================================================
+authenticate_user_by_secret(GRUID, Secret) ->
+    Now = vcn_utils:time(),
+
+    CachedData = case ets:lookup(?TOKEN_AUTHENTICATION_CACHE, Secret) of
+        [{Secret, {Expiration, CachedGRUID, CachedAccessToken}}] when Expiration > Now ->
+            {CachedGRUID, CachedAccessToken};
+        _ ->
+            undefined
+    end,
+
+    %% Asynchronically clear expired tokens
+    spawn(fun() ->
+        ets:select_delete(?TOKEN_AUTHENTICATION_CACHE,
+            [{{'_', {'$1', '_', '_'}}, [{'<', '$1', Now}], [true]}])
+    end),
+
+    case CachedData of
+        {GRUID, AccessToken} -> {true, AccessToken};
+        undefined ->
+            case gr_adapter:verify_client(GRUID, Secret) of
+                false -> false;
+                true ->
+                    {GRUID, AccessToken} = auth_handler:get_access_token(GRUID),
+                    ExpirationTime = vcn_utils:time() + timer:minutes(?AUTH_CACHE_EXPIRATION_MINUTES),
+                    ets:insert(?TOKEN_AUTHENTICATION_CACHE, {Secret, {ExpirationTime, GRUID, AccessToken}}),
+                    {true, AccessToken}
+            end
     end.
