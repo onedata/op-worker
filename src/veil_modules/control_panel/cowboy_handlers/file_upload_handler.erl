@@ -95,7 +95,7 @@ handle_http_upload(Req) ->
 
     case InitSession of
         error ->
-            {ok, _ErrorReq} = cowboy_req:reply(500, Req#http_req{connection = close});
+            {ok, _ErrorReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, cowboy_req:set([{connection, close}], Req)]);
 
         {State, NewContext, SessionHandler} ->
             try
@@ -118,12 +118,12 @@ handle_http_upload(Req) ->
                     FinalCtx#context.req),
                 Req3 = cowboy_req:set_resp_body(RespBody, Req2),
                 % Force connection to close, so that every upload is in
-                {ok, _FinReq} = cowboy_req:reply(200, Req3#http_req{connection = close})
+                {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [200, cowboy_req:set([{connection, close}], Req3)])
 
             catch Type:Message ->
                 ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
                     [fslogic_context:get_user_dn(), Type, Message]),
-                {ok, _ErrorReq} = cowboy_req:reply(500, Req#http_req{connection = close})
+                {ok, _ErrorReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, cowboy_req:set([{connection, close}], Req)])
             end
     end.
 
@@ -158,8 +158,8 @@ handle_rest_upload(Req, Path, Overwrite) ->
                 ErrorRec = ?report_error(?error_upload_unprocessable),
                 {{error, rest_utils:error_reply(ErrorRec)}, Req}
         end
-    catch        Type:Message ->
-        ?error_stacktrace("Cannot upload file - ~p:~p", [Type,Message]),
+    catch Type:Message ->
+        ?error_stacktrace("Cannot upload file - ~p:~p", [Type, Message]),
         ErrorRec2 = ?report_error(?error_upload_unprocessable),
         {{error, rest_utils:error_reply(ErrorRec2)}, Req}
     end.
@@ -177,12 +177,12 @@ handle_rest_upload(Req, Path, Overwrite) ->
 -spec parse_http_upload(Req :: req(), Params :: [tuple()], Files :: [tuple()]) -> {ok, Params :: [tuple()], Files :: [tuple()]}.
 %% ====================================================================
 parse_http_upload(Req, Params, Files) ->
-    case cowboy_req:part(Req) of
+    case veil_cowboy_bridge:apply(cowboy_req, part, [Req]) of
         {ok, Headers, Req2} ->
             case cow_multipart:form_data(Headers) of
                 {data, FieldName} ->
                     % Form field
-                    {ok, FieldBody, Req3} = cowboy_req:part_body(Req2),
+                    {ok, FieldBody, Req3} = veil_cowboy_bridge:apply(cowboy_req, part_body, [Req2]),
                     parse_http_upload(Req3, [{FieldName, FieldBody} | Params], Files);
                 {file, _FieldName, Filename, _CType, _CTransferEncoding} ->
                     % File
@@ -213,12 +213,12 @@ parse_http_upload(Req, Params, Files) ->
 -spec parse_rest_upload(Req :: req(), Path :: string()) -> {boolean(), req()}.
 %% ====================================================================
 parse_rest_upload(Req, Path) ->
-    case cowboy_req:part(Req) of
+    case veil_cowboy_bridge:apply(cowboy_req, part, [Req]) of
         {ok, Headers, Req2} ->
             case cow_multipart:form_data(Headers) of
                 {data, _FieldName} ->
                     % Form field
-                    {ok, _FieldBody, Req3} = cowboy_req:part_body(Req2),
+                    {ok, _FieldBody, Req3} = veil_cowboy_bridge:apply(cowboy_req, part_body, [Req2]),
                     parse_rest_upload(Req3, Path);
                 {file, _FieldName, _Filename, _CType, _CTransferEncoding} ->
                     % File
@@ -243,7 +243,7 @@ parse_rest_upload(Req, Path) ->
 -spec stream_file_to_fslogic(Req :: req(), FullPath :: string(), BufferSize :: integer()) -> req().
 %% ====================================================================
 stream_file_to_fslogic(Req, FullPath, BufferSize) ->
-    case cowboy_req:part_body(Req, [{length, BufferSize}, {read_timeout, ?UPLOAD_PART_TIMEOUT}]) of
+    case veil_cowboy_bridge:apply(cowboy_req, part_body, [Req, [{length, BufferSize}, {read_timeout, ?UPLOAD_PART_TIMEOUT}]]) of
         {ok, Binary, Req2} ->
             write_to_file(Binary, FullPath),
             Req2;

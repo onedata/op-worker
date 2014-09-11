@@ -25,9 +25,16 @@
 -spec get_provider_id() -> ProviderId :: binary() | no_return().
 %% ====================================================================
 get_provider_id() ->
-    {ok, Bin} = file:read_file(gr_plugin:get_cert_path()),
-    [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
-    PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
-
-    auth_handler:get_provider_id(PeerCert).
+    % Cache the provider ID so that we don't decode the cert every time
+    case application:get_env(veil_cluster_node, provider_id) of
+        {ok, ProviderId} ->
+            ProviderId;
+        _ ->
+            {ok, Bin} = file:read_file(gr_plugin:get_cert_path()),
+            [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
+            PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
+            ProviderId = auth_handler:get_provider_id(PeerCert),
+            application:set_env(veil_cluster_node, provider_id, ProviderId),
+            ProviderId
+    end.
 

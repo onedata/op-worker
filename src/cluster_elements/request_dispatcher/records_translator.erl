@@ -33,7 +33,13 @@
   Result ::  term().
 %% ====================================================================
 translate(Record, _DecoderName) when is_record(Record, atom) ->
-    list_to_atom(Record#atom.value);
+  try
+    list_to_existing_atom(Record#atom.value)
+  catch
+    _:_ ->
+      ?warning("Unsupported atom: ~p", [Record#atom.value]),
+      throw(message_not_supported)
+  end;
 
 translate(Record, DecoderName) when is_tuple(Record) ->
     RecordList = lists:reverse(tuple_to_list(Record)),
@@ -41,8 +47,8 @@ translate(Record, DecoderName) when is_tuple(Record) ->
     RecordList2 = case BinPrefix of
         [End, Type | T] when is_binary(End), is_list(Type) ->
             try
-                DecodedEnd = erlang:apply(list_to_atom(DecoderName ++ "_pb"), list_to_atom("decode_" ++ Type), [End]),
-                NotBin ++ [DecodedEnd | [list_to_atom(Type) | T]]
+                DecodedEnd = erlang:apply(list_to_existing_atom(DecoderName ++ "_pb"), list_to_existing_atom("decode_" ++ Type), [End]),
+                NotBin ++ [DecodedEnd | [list_to_existing_atom(Type) | T]]
             catch
             _:_ ->
                 ?warning("Can not translate record: ~p, using decoder: ~p", [Record, DecoderName]),
@@ -95,6 +101,8 @@ get_answer_decoder_and_type(#fusemessage{input = #changefileowner{}}) ->
 get_answer_decoder_and_type(#fusemessage{input = #changefilegroup{}}) ->
     {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #changefileperms{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #checkfileperms{}}) ->
     {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #updatetimes{}}) ->
     {communication_protocol, atom};

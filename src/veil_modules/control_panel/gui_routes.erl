@@ -12,7 +12,7 @@
 
 -module(gui_routes).
 -include_lib("n2o/include/wf.hrl").
--include("veil_modules/control_panel/connection_check_values.hrl").
+-include("veil_modules/control_panel/global_registry_interfacing.hrl").
 -export([init/2, finish/2]).
 
 finish(State, Ctx) -> {ok, State, Ctx}.

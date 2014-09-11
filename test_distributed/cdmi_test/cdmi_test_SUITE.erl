@@ -678,6 +678,7 @@ init_per_suite(Config) ->
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
+            {initialization_time, 1},
             {dispatcher_port, 5055},
             {ccm_nodes, [CCM]},
             {dns_port, 1308},

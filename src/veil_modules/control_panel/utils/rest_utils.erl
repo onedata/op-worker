@@ -59,7 +59,7 @@ unmap([], RecordTuple, _) ->
     RecordTuple;
 
 unmap([{KeyBin, Val} | Proplist], RecordTuple, Fields) ->
-    Key = binary_to_atom(KeyBin, latin1),
+    Key = binary_to_existing_atom(KeyBin, latin1),
     Value = case Val of
                 I when is_integer(I) -> Val;
                 A when is_atom(A) -> Val;
