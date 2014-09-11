@@ -126,6 +126,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
     end,
 
     %% TODO: replace with permanent cache
+    ets:new(?TOKEN_AUTHENTICATION_CACHE, [set, named_table, public]),
     ets:new(?LFM_EVENT_PRODUCTION_ENABLED_ETS, [set, named_table, public]),
     ets:new(?WRITE_DISABLED_USERS, [set, named_table, public]),
     ets:new(?ACK_HANDLERS, [set, named_table, public]),
@@ -421,6 +422,8 @@ terminate(_Reason, _State) ->
     catch cowboy:stop_listener(?http_redirector_listener),
     catch cowboy:stop_listener(?rest_listener),
     catch cowboy:stop_listener(?https_listener),
+
+    catch ets:delete(?TOKEN_AUTHENTICATION_CACHE),
 
     % Clean up after n2o.
     catch gui_utils:cleanup_n2o(?session_logic_module),
