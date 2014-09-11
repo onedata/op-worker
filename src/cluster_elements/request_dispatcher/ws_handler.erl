@@ -594,7 +594,7 @@ encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker
                                          end
                                        catch
                                          _:_ ->
-                                           ?error("Wrong decoder ~p or encoding function ~p", [Answer_decoder_name, AnswerType]),
+                                           ?error_stacktrace("Wrong decoder ~p or encoding function ~p", [Answer_decoder_name, AnswerType]),
                                            #answer{answer_status = "not_supported_answer_decoder", message_id = MsgId}
                                        end
                                end;
