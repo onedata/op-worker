@@ -32,12 +32,15 @@
 %% get_user_query/0
 %% ====================================================================
 %% @doc Gets query that shall be used for user_logic:get_user for current request or 'undefined' when no user context is available.
--spec get_user_query() -> term() | undefined.
+-spec get_user_query() -> {dn, string()} | {global_id, GRUID :: binary()} | undefined.
 %% ====================================================================
 get_user_query() ->
     case get_gr_auth() of
         {undefined, _} ->
-            {dn, get_user_dn()};
+            case get_user_dn() of
+                undefined -> undefined;
+                DN        -> {dn, DN}
+            end;
         {GRUID, _} ->
             {global_id, vcn_utils:ensure_list(GRUID)}
     end.
