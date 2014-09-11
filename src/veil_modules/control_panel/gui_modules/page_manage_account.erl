@@ -138,6 +138,19 @@ main_table() ->
             #td{style = <<"padding: 15px; vertical-align: top;">>,
                 body = #link{style = <<"font-size: 18px;">>, body = <<"Authorization preferences">>,
                     url = <<(atom_to_binary(GlobalRegistryHostname, latin1))/binary, "/manage_account">>}}
+        ]},
+
+        #tr{cells = [
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Access via VeilClient">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #panel{body = [
+                    #p{body = <<"Download and install preferred package to gain access via a fuse client.">>},
+                    #list{style = <<"margin-top: -3px;">>, numbered = true, body = [
+                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #link{body = <<"RPM package">>, url = "a"}},
+                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #link{body = <<"DEB package">>, url = "b"}}
+                    ]}
+                ]}}
         ]}
     ]}.
 
