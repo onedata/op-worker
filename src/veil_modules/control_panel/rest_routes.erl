@@ -12,7 +12,7 @@
 
 -module(rest_routes).
 
--include("veil_modules/control_panel/connection_check_values.hrl").
+-include("veil_modules/control_panel/global_registry_interfacing.hrl").
 
 -export([route/1]).
 

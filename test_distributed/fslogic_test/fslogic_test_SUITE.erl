@@ -952,7 +952,100 @@ permissions_management_test(Config) ->
   {OwnStatus4, User4, Group4} = files_tester:get_owner(?TEST_ROOT ++ "/" ++ File),
   ?assertEqual(ok, OwnStatus4),
   ?assertEqual(User, User4),
-  ?assertEqual(Group, Group4).
+  ?assertEqual(Group, Group4),
+
+    % Test to assert permission setting and checking in user context.
+    {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
+    ?assertEqual(ok, InsertStorageAns),
+
+    Cert1 = ?COMMON_FILE("peer.pem"),
+    Teams1 = ?TEST_GROUP,
+    Login1 = ?TEST_USER,
+    UserDoc1 = test_utils:add_user(Config, Login1, Cert1, Teams1),
+    [DN1 | _] = user_logic:get_dn_list(UserDoc1),
+
+    FilePath = "/file.txt",
+
+    LFM = fun(Fun, Args) ->
+        Me = self(),
+        Pid = spawn_link(Node1, fun() -> fslogic_context:set_user_dn(DN1), Me ! {self(), apply(logical_files_manager, Fun, Args)} end),
+        receive
+            {Pid, Resp} -> Resp
+        end
+    end,
+
+    ?assertEqual(ok, LFM(create, [FilePath])),
+    ?assertEqual(ok, LFM(change_file_perm, [FilePath, 8#000])),
+
+    ?assertEqual(true, LFM(check_file_perm, [FilePath, ''])),
+    ?assertEqual(false, LFM(check_file_perm, [FilePath, root])),
+    ?assertEqual(true, LFM(check_file_perm, [FilePath, owner])),
+    ?assertEqual(true, LFM(check_file_perm, [FilePath, delete])),
+
+    ExpectedPerms = [
+        {8#000, [
+            {read, false},
+            {write, false},
+            {execute, false},
+            {rdwr, false}
+        ]},
+        {8#100, [
+            {read, false},
+            {write, false},
+            {execute, true},
+            {rdwr, false}
+        ]},
+        {8#200, [
+            {read, false},
+            {write, true},
+            {execute, false},
+            {rdwr, false}
+        ]},
+        {8#300, [
+            {read, false},
+            {write, true},
+            {execute, true},
+            {rdwr, false}
+        ]},
+        {8#400, [
+            {read, true},
+            {write, false},
+            {execute, false},
+            {rdwr, false}
+        ]},
+        {8#500, [
+            {read, true},
+            {write, false},
+            {execute, true},
+            {rdwr, false}
+        ]},
+        {8#600, [
+            {read, true},
+            {write, true},
+            {execute, false},
+            {rdwr, true}
+        ]},
+        {8#700, [
+            {read, true},
+            {write, true},
+            {execute, true},
+            {rdwr, true}
+        ]}
+    ],
+
+    lists:foreach(
+        fun({PermsInt, Assertions}) ->
+            ?assertEqual(ok, LFM(change_file_perm, [FilePath, PermsInt])),
+            lists:foreach(
+                fun({Type, Assertion}) ->
+                    ?assertEqual(Assertion, LFM(check_file_perm, [FilePath, Type]))
+                end, Assertions)
+        end, ExpectedPerms),
+
+    RemoveUserAns = rpc:call(Node1, user_logic, remove_user, [{dn, DN1}]),
+    ?assertEqual(ok, RemoveUserAns),
+    RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+    ?assertEqual(ok, RemoveStorageAns).
 
 %% Checks user creation (root and dirs at storage creation).
 %% The test checks if directories for user and group files are created when the user is added to the system,
@@ -1738,7 +1831,7 @@ users_separation_test(Config) ->
 
   %% Users have different (and next to each other) IDs
   UID1 = list_to_integer(UserID1),
-  UID2 = list_to_integer(UserID2),  
+  UID2 = list_to_integer(UserID2),
   ?assertEqual(UID2, UID1 + 1),
 
   {Status, Helper, Id, _Validity, AnswerOpt} = create_file(Socket, TestFile),
@@ -1789,7 +1882,7 @@ users_separation_test(Config) ->
   ?assertEqual(UID2, Attr2#fileattr.uid),
 
   test_utils:wait_for_db_reaction(),
-  
+
   %% chown test
   {Status23, Answer23} = chown(Socket, TestFile, 77777, "unknown"),
   ?assertEqual("ok", Status23),

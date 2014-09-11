@@ -19,7 +19,7 @@
 
 
 %% API
--export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, get_file_attr/1, delete_file/1, rename_file/2, get_statfs/0]).
+-export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, delete_file/1, rename_file/2, get_statfs/0]).
 
 %% ====================================================================
 %% API functions
@@ -140,6 +140,20 @@ change_file_perms(FullFileName, Perms) ->
     #atom{value = ?VOK}.
 
 
+%% check_file_perms/2
+%% ====================================================================
+%% @doc Checks for rights to read/write/delete/rdwr etc.
+%% @end
+-spec check_file_perms(FullFileName :: string(), Type :: root | owner | delete | read | write | execute | rdwr | '') ->
+    #atom{} | no_return().
+%% ====================================================================
+check_file_perms(FullFileName, Type) ->
+    {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
+    {ok, UserDoc} = fslogic_objects:get_user(),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, list_to_existing_atom(Type)),
+    #atom{value = ?VOK}.
+
+
 %% get_file_attr/2
 %% ====================================================================
 %% @doc Gets file's attributes.
@@ -174,11 +188,11 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     Links = case Type of
                 "DIR" ->
                     case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
-                         {ok, Sum} -> Sum + 2;
-                         _Other ->
-                             ?error("Error: can not get number of links for file: ~s", [File]),
-                             0
-                     end;
+                        {ok, Sum} -> Sum + 2;
+                        _Other ->
+                            ?error("Error: can not get number of links for file: ~s", [File]),
+                            0
+                    end;
                 _ -> 1
             end,
 
@@ -246,7 +260,7 @@ get_statfs() ->
         end,
 
     case user_logic:get_files_size(UserDoc#veil_document.uuid, fslogic_context:get_protocol_version()) of
-        {ok, Size} when Size>Quota#quota.size ->
+        {ok, Size} when Size > Quota#quota.size ->
             %% df -h cannot handle situation when files_size is greater than quota_size
             #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Quota#quota.size};
         {ok, Size} ->

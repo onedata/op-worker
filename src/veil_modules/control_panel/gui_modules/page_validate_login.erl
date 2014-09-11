@@ -12,7 +12,11 @@
 
 -module(page_validate_login).
 -include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/dao/dao_spaces.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("dao/include/common.hrl").
+-include_lib("ctool/include/global_registry/gr_users.hrl").
+-include_lib("ctool/include/global_registry/gr_spaces.hrl").
 
 % n2o API
 -export([main/0, event/1]).
@@ -50,6 +54,22 @@ body() ->
                             {error, invalid_request} ->
                                 page_error:redirect_with_error(?error_openid_login_error);
                             {ok, Proplist} ->
+                                % If a user logs in directly via PLGrid Openid, then mock spaces synchronization
+                                case application:get_env(veil_cluster_node, spaces_mocked) of
+                                    {ok, true} ->
+                                        % But dont do it twice
+                                        ok;
+                                    _ ->
+                                        Nodes = gen_server:call({global, central_cluster_manager}, get_nodes),
+                                        AllNodes = Nodes -- [node()],
+                                        mock(AllNodes, cluster_manager_lib, get_provider_id, fun() -> <<"providerId">> end),
+                                        SpacesBinary = [<<"space1">>, <<"space2">>],
+                                        mock(AllNodes, gr_users, get_spaces, fun(_) ->
+                                            {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
+                                        mock(AllNodes, gr_adapter, get_space_info, fun(SpaceId, _) ->
+                                            {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [<<"providerId">>]}} end)
+                                end,
+
                                 {Login, UserDoc} = user_logic:sign_in(Proplist, <<"">>),
                                 LogoutToken = vcn_gui_utils:gen_logout_token(),
                                 gui_ctx:create_session(),
@@ -77,3 +97,13 @@ body() ->
 
 event(init) -> ok;
 event(terminate) -> ok.
+
+
+% Used in development to mock spaces synchronization
+mock(NodesUp, Module, Method, Fun) ->
+    meck:new(Module, [passthrough, non_strict, unstick, no_link]),
+    meck:expect(Module, Method, Fun),
+    application:set_env(veil_cluster_node, spaces_mocked, true),
+    {_, []} = rpc:multicall(NodesUp, meck, new, [Module, [passthrough, non_strict, unstick, no_link]]),
+    {_, []} = rpc:multicall(NodesUp, meck, expect, [Module, Method, Fun]),
+    {_, []} = rpc:multicall(application, set_env, [veil_cluster_node, spaces_mocked, true]).
