@@ -12,6 +12,9 @@
 -module(rrderlang_tests).
 -include("registered_names.hrl").
 
+%% gen_server call timeout
+-define(TIMEOUT, 5000).
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -define(RRD_NAME, "test_database.rrd").
@@ -32,7 +35,7 @@ rrderlang_test_() ->
       {"should select row", fun should_select_row/0},
       {"should start rrderlang application", fun should_start_rrderlang/0},
       {"should create rrd", fun should_create_rrd/0},
-      {"should not create rrd when_missing parameters", fun should_not_create_rrd_when_missing_parameters/0},
+      {"should not create rrd when missing parameters", fun should_not_create_rrd_when_missing_parameters/0},
       {"should not overwrite rrd", fun should_not_overwrite_rrd/0},
       {"should update rrd", fun should_update_rrd/0},
       {"should not update rrd when not created", fun should_not_update_rrd_when_not_created/0},
@@ -49,7 +52,7 @@ rrderlang_test_() ->
 %% ===================================================================
 
 setup() ->
-  application:set_env(?APP_Name, rrd_timeout, 5000).
+  application:set_env(?APP_Name, rrd_timeout, ?TIMEOUT).
 
 teardown(_) ->
   ?assertCmd("rm -f " ++ ?RRD_NAME).
@@ -97,7 +100,6 @@ should_select_row() ->
   ?assertEqual(ok, Status3),
   ?assertEqual({1000000, [1.1, 1.6]}, Result3).
 
-
 should_create_rrd() ->
   rrderlang:start_link(),
   Filename = list_to_binary(?RRD_NAME),
@@ -114,7 +116,7 @@ should_create_rrd() ->
     <<"RRA:MAX:0.5:1:100">>,
     <<"RRA:LAST:0.5:1:100">>
   ],
-  {CreateAnswer, _} = gen_server:call(?RrdErlang_Name, {create, Filename, Options, DSs, RRAs}, 5000),
+  {CreateAnswer, _} = gen_server:call(?RrdErlang_Name, {create, Filename, Options, DSs, RRAs}, ?TIMEOUT),
   ?assertEqual(ok, CreateAnswer).
 
 should_not_create_rrd_when_missing_parameters() ->
@@ -123,7 +125,7 @@ should_not_create_rrd_when_missing_parameters() ->
   Options = <<>>,
   DSs = [],
   RRAs = [],
-  {CreateAnswer, _} = gen_server:call(?RrdErlang_Name, {create, Filename, Options, DSs, RRAs}, 5000),
+  {CreateAnswer, _} = gen_server:call(?RrdErlang_Name, {create, Filename, Options, DSs, RRAs}, ?TIMEOUT),
   ?assertEqual(error, CreateAnswer).
 
 should_not_overwrite_rrd() ->
@@ -136,32 +138,32 @@ should_not_overwrite_rrd() ->
   RRAs = [
     <<"RRA:AVERAGE:0.5:1:100">>
   ],
-  {CreateAnswer, _} = gen_server:call(?RrdErlang_Name, {create, Filename, Options, DSs, RRAs}, 5000),
+  {CreateAnswer, _} = gen_server:call(?RrdErlang_Name, {create, Filename, Options, DSs, RRAs}, ?TIMEOUT),
   ?assertEqual(error, CreateAnswer).
 
 should_update_rrd() ->
   should_create_rrd(),
   Filename = list_to_binary(?RRD_NAME),
   Options = <<>>,
-  {FirstUpdateAnswer, _} = gen_server:call(?RrdErlang_Name, {update, Filename, Options, [1.0, 2, 3, 4], <<"N">>}, 5000),
+  {FirstUpdateAnswer, _} = gen_server:call(?RrdErlang_Name, {update, Filename, Options, [1.0, 2, 3, 4], <<"N">>}, ?TIMEOUT),
   ?assertEqual(ok, FirstUpdateAnswer),
-  {SecondUpdateAnswer, _} = gen_server:call(?RrdErlang_Name, {update, Filename, Options, [1, 2, 3, 4], <<"N">>}, 5000),
+  {SecondUpdateAnswer, _} = gen_server:call(?RrdErlang_Name, {update, Filename, Options, [1, 2, 3, 4], <<"N">>}, ?TIMEOUT),
   ?assertEqual(ok, SecondUpdateAnswer),
-  {ThirdUpdateAnswer, _} = gen_server:call(?RrdErlang_Name, {update, Filename, Options, [1.0, 2, 3, 4], <<"N">>}, 5000),
+  {ThirdUpdateAnswer, _} = gen_server:call(?RrdErlang_Name, {update, Filename, Options, [1.0, 2, 3, 4], <<"N">>}, ?TIMEOUT),
   ?assertEqual(ok, ThirdUpdateAnswer).
 
 should_not_update_rrd_when_not_created() ->
-  rrderlang:start_link(),
+  should_create_rrd(),
   Filename = list_to_binary(?RRD_NAME),
   Options = <<>>,
-  {UpdateAnswer, _} = gen_server:call(?RrdErlang_Name, {update, Filename, Options, [1.0, 2.0, 3.0, 4.0], <<"N">>}, 5000),
+  {UpdateAnswer, _} = gen_server:call(?RrdErlang_Name, {update, Filename, Options, [1.0, 2.0, 3.0, 4.0], <<"N">>}, ?TIMEOUT),
   ?assertEqual(error, UpdateAnswer).
 
 should_not_update_rrd_when_missing_parameters() ->
   should_create_rrd(),
   Filename = list_to_binary(?RRD_NAME),
   Options = <<>>,
-  {UpdateAnswer, _} = gen_server:call(?RrdErlang_Name, {update, Filename, Options, [], <<"N">>}, 5000),
+  {UpdateAnswer, _} = gen_server:call(?RrdErlang_Name, {update, Filename, Options, [], <<"N">>}, ?TIMEOUT),
   ?assertEqual(error, UpdateAnswer).
 
 should_fetch_data() ->
@@ -175,7 +177,7 @@ should_fetch_data() ->
   Filename = list_to_binary(?RRD_NAME),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
   CF = <<"AVERAGE">>,
-  {FetchAnswer, {FetchHeader, FetchData}} = gen_server:call(?RrdErlang_Name, {fetch, Filename, Options, CF}, 5000),
+  {FetchAnswer, {FetchHeader, FetchData}} = gen_server:call(?RrdErlang_Name, {fetch, Filename, Options, CF}, ?TIMEOUT),
 
   ?assertEqual(ok, FetchAnswer),
   ?assertEqual([<<"first">>, <<"second">>, <<"third">>, <<"fourth">>], FetchHeader),
@@ -188,7 +190,7 @@ should_not_fetch_data() ->
   Filename = list_to_binary(?RRD_NAME),
   Options = <<"--start -5 --end -10">>,
   CF = <<"AVERAGE">>,
-  {FetchAnswer, _} = gen_server:call(?RrdErlang_Name, {fetch, Filename, Options, CF}, 5000),
+  {FetchAnswer, _} = gen_server:call(?RrdErlang_Name, {fetch, Filename, Options, CF}, ?TIMEOUT),
   ?assertEqual(error, FetchAnswer).
 
 should_fetch_selected_data() ->
@@ -202,7 +204,7 @@ should_fetch_selected_data() ->
   Filename = list_to_binary(?RRD_NAME),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
   CF = <<"AVERAGE">>,
-  {FetchAnswer, {FetchHeader, FetchData}} = gen_server:call(?RrdErlang_Name, {fetch, Filename, Options, CF, {name, [<<"first">>]}}, 5000),
+  {FetchAnswer, {FetchHeader, FetchData}} = gen_server:call(?RrdErlang_Name, {fetch, Filename, Options, CF, {name, [<<"first">>]}}, ?TIMEOUT),
 
   ?assertEqual(ok, FetchAnswer),
   ?assertEqual([<<"first">>], FetchHeader),
@@ -228,7 +230,7 @@ should_fetch_start_with_data() ->
     <<"RRA:MAX:0.5:1:100">>,
     <<"RRA:LAST:0.5:1:100">>
   ],
-  {CreateAnswer, _} = gen_server:call(?RrdErlang_Name, {create, Filename, Step, DSs, RRAs}, 5000),
+  {CreateAnswer, _} = gen_server:call(?RrdErlang_Name, {create, Filename, Step, DSs, RRAs}, ?TIMEOUT),
   ?assertEqual(ok, CreateAnswer),
 
   Data = update_rrd_ntimes(10, 1),
@@ -239,7 +241,7 @@ should_fetch_start_with_data() ->
 
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
   CF = <<"AVERAGE">>,
-  {FetchAnswer, {FetchHeader, _}} = gen_server:call(?RrdErlang_Name, {fetch, Filename, Options, CF, {starts_with, [<<"A">>]}}, 5000),
+  {FetchAnswer, {FetchHeader, _}} = gen_server:call(?RrdErlang_Name, {fetch, Filename, Options, CF, {starts_with, [<<"A">>]}}, ?TIMEOUT),
 
   ?assertEqual(ok, FetchAnswer),
   ?assertEqual([<<"Aa">>, <<"Ac">>], FetchHeader).
@@ -249,20 +251,20 @@ should_fetch_start_with_data() ->
 %% %===================================================================
 
 update_rrd_ntimes(N, Step) ->
-  update_rrd_ntimes(N, Step * 1000, []).
-
-update_rrd_ntimes(0, _, Acc) ->
-  lists:reverse(Acc);
-update_rrd_ntimes(N, Step, Acc) ->
   {MegaSecs, Secs, MicroSecs} = erlang:now(),
   random:seed(MegaSecs, Secs, MicroSecs),
+  Timestamp = 1000000 * MegaSecs + Secs,
+  update_rrd_ntimes(N, Step, Timestamp, []).
+
+update_rrd_ntimes(0, _, _, Acc) ->
+  lists:reverse(Acc);
+update_rrd_ntimes(N, Step, Timestamp, Acc) ->
   Filename = list_to_binary(?RRD_NAME),
   Options = <<>>,
   Values = lists:map(fun(_) -> random:uniform(100) end, lists:duplicate(4, 0)),
-  Timestamp = 1000000 * MegaSecs + Secs,
-  {UpdateAnswer, _} = gen_server:call(?RrdErlang_Name, {update, Filename, Options, Values, integer_to_binary(Timestamp)}, 5000),
+  {UpdateAnswer, _} = gen_server:call(?RrdErlang_Name, {update, Filename, Options, Values, integer_to_binary(Timestamp)}, ?TIMEOUT),
   ?assertEqual(ok, UpdateAnswer),
-  timer:sleep(Step),
-  update_rrd_ntimes(N - 1, Step, [{Timestamp, Values} | Acc]).
+  timer:sleep(Step * 1000),
+  update_rrd_ntimes(N - 1, Step, Timestamp + Step, [{Timestamp, Values} | Acc]).
 
 -endif.

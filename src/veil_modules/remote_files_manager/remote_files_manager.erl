@@ -299,7 +299,6 @@ handle_message(Record) when is_record(Record, changepermsatstorage) ->
               case TmpAns of
                 ok -> #atom{value = ?VOK};
                   {_, ErrorCode} when is_integer(ErrorCode) ->
-                      ct:print("error_code: ~p",[ErrorCode]),
                       throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
                   ?warning("storage_files_manager:chmod error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
