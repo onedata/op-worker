@@ -421,12 +421,12 @@ create(Storage_helper_info, File, Mode) ->
             0 ->
               derive_gid_from_parent(Storage_helper_info, File),
 
-              UserID = fslogic_context:get_user_dn(),
+              Query = fslogic_context:get_user_query(),
 
-              case UserID of
+              case Query of
                 undefined -> ok;
                 _ ->
-                  {GetUserAns, User} = user_logic:get_user({dn, UserID}),
+                  {GetUserAns, User} = user_logic:get_user(Query),
                   case GetUserAns of
                     ok ->
                       UserRecord = User#veil_document.record,
