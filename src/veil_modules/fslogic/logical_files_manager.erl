@@ -286,7 +286,7 @@ getfileattr(Message, Value) ->
 %% @doc Gets file's extended attribute by name.
 %% @end
 -spec get_xattr(FullFileName :: string(), Name :: binary()) ->
-    binary() | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+    {ok, binary()} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
 get_xattr(FullFileName, Name) ->
     {Status, TmpAns} = contact_fslogic(#getxattr{file_logic_name = FullFileName, name = Name}),
@@ -340,7 +340,7 @@ remove_xattr(FullFileName,Name) ->
 %% @doc Gets file's extended attribute list.
 %% @end
 -spec list_xattr(FullFileName :: string()) ->
-    list() | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+    {ok, list()} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
 list_xattr(FullFileName) ->
     {Status, TmpAns} = contact_fslogic(#listxattr{file_logic_name = FullFileName}),
