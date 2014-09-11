@@ -17,6 +17,9 @@
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% @TODO: Expiration could be given by Global Registry
+-define(AUTH_CACHE_EXPIRATION_MINUTES, 10).
+
 %% API
 -export([get_access_token/1]).
 -export([is_provider/1, get_provider_id/1]).
@@ -94,19 +97,21 @@ is_provider(#'OTPCertificate'{} = Cert) ->
     {true, AccessToken :: binary()} | false.
 %% ====================================================================
 authenticate_user_by_secret(GRUID, Secret) ->
-    CachedData = case ets:lookup(?WS_TOKEN_AUTHENTICATION, Secret) of
-        [{Secret, {Expiration, CachedGRUID, CachedAccessToken}}] ->
-            Now = vcn_utils:time(),
-            case Expiration > Now of
-                true -> {CachedGRUID, CachedAccessToken};
-                false ->
-                    ets:delete(?WS_TOKEN_AUTHENTICATION, Secret),
-                    undefined
-            end;
+    Now = vcn_utils:time(),
 
-            _ -> undefined
+    CachedData = case ets:lookup(?TOKEN_AUTHENTICATION_CACHE, Secret) of
+        [{Secret, {Expiration, CachedGRUID, CachedAccessToken}}] when Expiration > Now ->
+            {CachedGRUID, CachedAccessToken};
+        _ ->
+            undefined
     end,
-    %% @TODO: Expiration could be given by Global Registry
+
+    %% Asynchronically clear expired tokens
+    spawn(fun() ->
+        ets:select_delete(?TOKEN_AUTHENTICATION_CACHE,
+            [{{'_', {'$1', '_', '_'}}, [{'<', '$1', Now}], [true]}])
+    end),
+
     case CachedData of
         {GRUID, AccessToken} -> {true, AccessToken};
         undefined ->
@@ -114,8 +119,8 @@ authenticate_user_by_secret(GRUID, Secret) ->
                 false -> false;
                 true ->
                     {GRUID, AccessToken} = auth_handler:get_access_token(GRUID),
-                    ExpirationTime = vcn_utils:time() + timer:minutes(10),
-                    ets:insert(?WS_TOKEN_AUTHENTICATION, {Secret, {ExpirationTime, GRUID, AccessToken}}),
+                    ExpirationTime = vcn_utils:time() + timer:minutes(?AUTH_CACHE_EXPIRATION_MINUTES),
+                    ets:insert(?TOKEN_AUTHENTICATION_CACHE, {Secret, {ExpirationTime, GRUID, AccessToken}}),
                     {true, AccessToken}
             end
     end.
