@@ -51,4 +51,8 @@
 -type file_share_info() :: #share_desc{}.
 -type file_share_doc() :: #veil_document{record :: #share_desc{}}.
 
+-type cookie() :: uuid().
+-type cookie_info() :: #session_cookie{}.
+-type cookie_doc() :: #veil_document{record :: #session_cookie{}}.
+
 -endif.

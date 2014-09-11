@@ -126,11 +126,11 @@ handle(_ProtocolVersion, LogMessage) when is_record(LogMessage, logmessage) ->
                  FID ->
                      FID
              end,
-    #logmessage{level = Severity, file_name = Finename, line = Line, pid = Pid, timestamp = UnixTimestamp, message = Message} = LogMessage,
+    #logmessage{level = Severity, file_name = Filename, line = Line, pid = Pid, timestamp = UnixTimestamp, message = Message} = LogMessage,
     Metadata = [
         {user, User},
         {fuse_id, FuseID},
-        {file, Finename},
+        {file, Filename},
         {line, Line},
         {pid, Pid}
     ],

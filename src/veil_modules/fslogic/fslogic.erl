@@ -267,7 +267,7 @@ fslogic_runner(Method, RequestType, RequestBody, ErrorHandler) when is_function(
         error:UnkError ->
             {ErrorCode, ErrorDetails} = {?VEREMOTEIO, UnkError},
             %% Bad Match assertion - something went horribly wrong. This should not happen.
-            ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode, Method]),
+            ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
     end.
 
@@ -294,13 +294,29 @@ handle_fuse_message(Req = #changefileperms{file_logic_name = FName, perms = Perm
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:change_file_perms(FullFileName, Perms);
 
+handle_fuse_message(Req = #checkfileperms{file_logic_name = FName, type = Type}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:check_file_perms(FullFileName, Type);
+
 handle_fuse_message(Req = #getfileattr{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:get_file_attr(FullFileName);
 
-handle_fuse_message(Req = #setfileusermetadata{file_logic_name = FName, user_metadata = Metadata}) ->
+handle_fuse_message(Req = #getxattr{file_logic_name = FName, name = Name}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_req_generic:set_file_user_metadata(FullFileName, Metadata);
+    fslogic_req_generic:get_xattr(FullFileName, Name);
+
+handle_fuse_message(Req = #setxattr{file_logic_name = FName, name = Name, value = Value, flags = Flags}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:set_xattr(FullFileName, Name, Value, Flags);
+
+handle_fuse_message(Req = #removexattr{file_logic_name = FName, name = Name}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:remove_xattr(FullFileName,Name);
+
+handle_fuse_message(Req = #listxattr{file_logic_name = FName}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:list_xattr(FullFileName);
 
 handle_fuse_message(Req = #getfileuuid{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
@@ -390,6 +406,16 @@ handle_custom_request({getfilelocation, UUID}) ->
 %% %% ====================================================================
 extract_logical_path(#getfileattr{file_logic_name = Path}) ->
     Path;
+extract_logical_path(#getfileuuid{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getxattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#setxattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#removexattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#listxattr{file_logic_name = Path}) ->
+    Path;
 extract_logical_path(#getfilelocation{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#deletefile{file_logic_name = Path}) ->
@@ -416,11 +442,11 @@ extract_logical_path(#changefilegroup{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#changefileperms{file_logic_name = Path}) ->
     Path;
+extract_logical_path(#checkfileperms{file_logic_name = Path}) ->
+    Path;
 extract_logical_path(#updatetimes{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#createfileack{file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#getfileuuid{file_logic_name = Path}) ->
     Path;
 extract_logical_path(_) ->
     "/".

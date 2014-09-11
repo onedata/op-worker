@@ -15,6 +15,7 @@
 -include("records.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
 -include("veil_modules/dao/dao_users.hrl").
+-include("veil_modules/dao/dao_cookies.hrl").
 -include("veil_modules/dao/dao_share.hrl").
 -include("veil_modules/dao/dao_cluster.hrl").
 -include("veil_modules/dao/dao_db_structure.hrl").

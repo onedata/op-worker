@@ -19,8 +19,8 @@
 
 
 %% API
--export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, get_file_attr/1,
-    set_file_user_metadata/2, delete_file/1, rename_file/2, get_statfs/0]).
+-export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
+    remove_xattr/2, list_xattr/1, delete_file/1, rename_file/2, get_statfs/0]).
 
 %% ====================================================================
 %% API functions
@@ -141,6 +141,20 @@ change_file_perms(FullFileName, Perms) ->
     #atom{value = ?VOK}.
 
 
+%% check_file_perms/2
+%% ====================================================================
+%% @doc Checks for rights to read/write/delete/rdwr etc.
+%% @end
+-spec check_file_perms(FullFileName :: string(), Type :: root | owner | delete | read | write | execute | rdwr | '') ->
+    #atom{} | no_return().
+%% ====================================================================
+check_file_perms(FullFileName, Type) ->
+    {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
+    {ok, UserDoc} = fslogic_objects:get_user(),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, list_to_existing_atom(Type)),
+    #atom{value = ?VOK}.
+
+
 %% get_file_attr/2
 %% ====================================================================
 %% @doc Gets file's attributes.
@@ -162,11 +176,10 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
 
     %% Get attributes
-    {CTime, MTime, ATime, _SizeFromDB, UserMetadata} =
+    {CTime, MTime, ATime, _SizeFromDB} =
         case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
             {ok, #veil_document{record = FMeta}} ->
-                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size,
-                    FMeta#file_meta.user_metadata};
+                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size};
             {error, Error} ->
                 ?warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
                 {0, 0, 0, 0}
@@ -176,17 +189,16 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     Links = case Type of
                 "DIR" ->
                     case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
-                         {ok, Sum} -> Sum + 2;
-                         _Other ->
-                             ?error("Error: can not get number of links for file: ~s", [File]),
-                             0
-                     end;
+                        {ok, Sum} -> Sum + 2;
+                        _Other ->
+                            ?error("Error: can not get number of links for file: ~s", [File]),
+                            0
+                    end;
                 _ -> 1
             end,
 
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = UID,
-        gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links, user_metadata = UserMetadata};
+        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = UID, gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links};
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
     case fslogic_objects:get_file(FullFileName) of
@@ -196,23 +208,63 @@ get_file_attr(FullFileName) ->
             throw(?VENOENT)
     end.
 
-%% set_file_user_metadata/2
+%% get_xattr/2
 %% ====================================================================
-%% @doc Sets user metadata for a file.
+%% @doc Gets file's extended attribute by name.
 %% @end
-    -spec set_file_user_metadata(FullFileName :: string(), Metadata :: list()) ->
-#atom{} | no_return().
-set_file_user_metadata(FullFileName, Metadata) ->
-    ?debug("set_file_user_metadata(FullFileName: ~p, Metadata: ~p)", [FullFileName, Metadata]),
+-spec get_xattr(FullFileName :: string(), Name :: binary()) ->
+    #xattr{} | no_return().
+%% ====================================================================
+get_xattr(FullFileName, Name) ->
+    {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
+    {ok, #veil_document{record = #file_meta{xattrs = XAttrs}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+    Value = case proplists:get_value(Name,XAttrs) of
+        undefined -> throw(?VENOATTR);
+        Val -> Val
+    end,
+    #xattr{answer = ?VOK, name = Name, value = Value}.
 
-    {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
-    File1 = fslogic_meta:update_meta_attr(File, user_metadata, Metadata),
-    Status = string:equal(File1#file.meta_doc, File#file.meta_doc),
-    if
-        Status -> #atom{value = ?VOK};
-        true ->
-            {ok, _} = fslogic_objects:save_file(FileDoc#veil_document{record = File1})
-    end.
+%% set_xattr/4
+%% ====================================================================
+%% @doc Sets file's extended attribute as {Name, Value}.
+%% @end
+-spec set_xattr(FullFileName :: string(), Name :: binary(), Value :: binary(), Flags :: integer()) ->
+    #atom{} | no_return().
+%% ====================================================================
+set_xattr(FullFileName, Name, Value, _Flags) ->
+    {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
+    {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+    #veil_document{record = #file_meta{xattrs = XAttrs}} = FileMetaDoc,
+    UpdatedXAttrs = [{Name,Value} | proplists:delete(Name,XAttrs)],
+    {ok, _} = dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#veil_document{record = #file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
+    #atom{value = ?VOK}.
+
+%% remove_xattr/2
+%% ====================================================================
+%% @doc Removes file's extended attribute with given Name.
+%% @end
+-spec remove_xattr(FullFileName :: string(), Name :: binary()) ->
+    #atom{} | no_return().
+%% ====================================================================
+remove_xattr(FullFileName,Name) ->
+    {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
+    {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+    #veil_document{record = #file_meta{xattrs = XAttrs}} = FileMetaDoc,
+    UpdatedXAttrs = proplists:delete(Name,XAttrs),
+    dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#veil_document{record = #file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
+    #atom{value = ?VOK}.
+
+%% list_xattr/1
+%% ====================================================================
+%% @doc Gets file's extended attribute list.
+%% @end
+-spec list_xattr(FullFileName :: string()) ->
+    #xattrlist{} | no_return().
+%% ====================================================================
+list_xattr(FullFileName) ->
+    {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
+    {ok, #veil_document{record = #file_meta{xattrs = XAttrs}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+    #xattrlist{answer = ?VOK, attrs = [#xattrlist_xattrentry{name = Name, value = Value} || {Name,Value} <- XAttrs]}.
 
 %% delete_file/1
 %% ====================================================================
@@ -292,8 +344,8 @@ rename_file(FullFileName, FullNewFileName) ->
     MoveOnStorage =
         fun(#file{type = ?REG_TYPE}) -> %% Returns new file record with updated file_id field or throws excpetion
             %% Get storage info
-            StorageID   = OldFile#file.location#file_location.storage_id,
-            FileID      = OldFile#file.location#file_location.file_id,
+            StorageID = OldFile#file.location#file_location.storage_id,
+            FileID = OldFile#file.location#file_location.file_id,
             Storage = %% Storage info for the file
             case dao_lib:apply(dao_vfs, get_storage, [{uuid, StorageID}], 1) of
                 {ok, #veil_document{record = #storage_info{} = S}} -> S;
@@ -382,7 +434,7 @@ get_statfs() ->
         end,
 
     case user_logic:get_files_size(UserDoc#veil_document.uuid, fslogic_context:get_protocol_version()) of
-        {ok, Size} when Size>Quota#quota.size ->
+        {ok, Size} when Size > Quota#quota.size ->
             %% df -h cannot handle situation when files_size is greater than quota_size
             #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Quota#quota.size};
         {ok, Size} ->

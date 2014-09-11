@@ -47,9 +47,12 @@ malformed_request(Req, #state{filepath = Filepath} = State) ->
 %% @doc Determines if resource, that can be obtained from state, exists.
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
-resource_exists(Req,State = #state{filepath = Filepath}) ->
+resource_exists(Req, State = #state{filepath = Filepath}) ->
     case logical_files_manager:getfileattr(Filepath) of
         {ok, #fileattributes{type = "DIR"} = Attr} -> {true, Req, State#state{attributes = Attr}};
+        {ok, _} ->
+            Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath), Req),
+            cdmi_error:error_reply(Req1,State,?moved_pemanently_code, "Filepath '~s' poins to regular file but does end with '/'",[Filepath]);
         _ -> {false, Req, State}
     end.
 
@@ -60,7 +63,8 @@ resource_exists(Req,State = #state{filepath = Filepath}) ->
 %% Before adding new content type make sure that adequate routing function
 %% exists in cdmi_handler
 %% @end
--spec content_types_provided(req(), #state{}) -> {[{ContentType,Method}], req(), #state{}} when
+%% ====================================================================
+-spec content_types_provided(req(), #state{}) -> {[{ContentType, Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
 %% ====================================================================
@@ -77,7 +81,8 @@ content_types_provided(Req, State) ->
 %% Before adding new content type make sure that adequate routing function
 %% exists in cdmi_handler
 %% @end
--spec content_types_accepted(req(), #state{}) -> {[{ContentType,Method}], req(), #state{}} when
+%% ====================================================================
+-spec content_types_accepted(req(), #state{}) -> {[{ContentType, Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
 %% ====================================================================
@@ -127,28 +132,16 @@ get_cdmi_container(Req, #state{opts = Opts} = State) ->
 %% ====================================================================
 put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:mkdir(Filepath) of
-        ok ->
-            %todo check given body
-            {ok, RawBody, _Req} = cowboy_req:body(Req),
-            Body = rest_utils:parse_body(RawBody),
-            %todo check given metadata (don't allow cdmi_ prefixes, check number of entries)
-            %todo add possibility to update specific metadata entries
-            {struct, UserMetadata} = proplists:get_value(<<"metadata">>, Body, []),
-            case logical_files_manager:set_user_metadata(Filepath, UserMetadata) of
-                ok ->
-                    case logical_files_manager:getfileattr(Filepath) of
-                        {ok, Attr} ->
-                            Response = rest_utils:encode_to_json(
-                                {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr})}),
-                            Req2 = cowboy_req:set_resp_body(Response, Req),
-                            {true, Req2, State};
-                        Error ->
-                            logical_files_manager:rmdir(Filepath),
-                            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Cannot get dir attrs: ~p",[Error])
-                    end;
+        ok -> %todo check given body
+            case logical_files_manager:getfileattr(Filepath) of
+                {ok, Attr} ->
+                    Response = rest_utils:encode_to_json(
+                        {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr})}),
+                    Req2 = cowboy_req:set_resp_body(Response, Req),
+                    {true, Req2, State};
                 Error ->
                     logical_files_manager:rmdir(Filepath),
-                    cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Cannot set dir user metadata: ~p",[Error])
+                    cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Cannot get dir attrs: ~p",[Error])
             end;
         {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?error_conflict_code, "Dir creation conflict",[]);
         {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?error_not_found_code, "Parent dir not found",[]);
@@ -207,7 +200,14 @@ prepare_container_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = Stat
 prepare_container_ans([{<<"metadata">>, Prefix} | Tail], #state{attributes = Attrs} = State) ->
     [{<<"metadata">>, rest_utils:prepare_metadata(Prefix, Attrs)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(Tail, State)];
+    Childs = lists:map(fun(Name) ->
+            case logical_files_manager:getfileattr(filename:join(Filepath,Name)) of
+                {ok,#fileattributes{type = "DIR"}} -> list_to_binary(rest_utils:ensure_path_ends_with_slash(Name));
+                _ -> list_to_binary(Name)
+            end
+        end,
+        rest_utils:list_dir(Filepath)),
+    [{<<"children">>, Childs} | prepare_container_ans(Tail, State)];
 prepare_container_ans([_Other | Tail], State) ->
     prepare_container_ans(Tail, State).
 

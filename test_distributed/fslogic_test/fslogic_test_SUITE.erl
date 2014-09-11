@@ -29,10 +29,11 @@
 -export([spaces_permissions_test/1, files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1]).
 -export([permissions_management_test/1, user_creation_test/1, get_file_links_test/1, fuse_requests_test/1, users_separation_test/1]).
 -export([file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, user_file_size_test/1, dirs_creating_test/1, spaces_test/1]).
--export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2]).
+-export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2, xattrs_test/1]).
 
 all() -> [spaces_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
-  fuse_requests_test, spaces_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test, concurrent_file_creation_test, get_file_links_test, user_file_size_test
+  fuse_requests_test, spaces_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test,
+  concurrent_file_creation_test, get_file_links_test, user_file_size_test, xattrs_test
 ].
 
 -define(SH, "DirectIO").
@@ -952,7 +953,100 @@ permissions_management_test(Config) ->
   {OwnStatus4, User4, Group4} = files_tester:get_owner(?TEST_ROOT ++ "/" ++ File),
   ?assertEqual(ok, OwnStatus4),
   ?assertEqual(User, User4),
-  ?assertEqual(Group, Group4).
+  ?assertEqual(Group, Group4),
+
+    % Test to assert permission setting and checking in user context.
+    {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
+    ?assertEqual(ok, InsertStorageAns),
+
+    Cert1 = ?COMMON_FILE("peer.pem"),
+    Teams1 = ?TEST_GROUP,
+    Login1 = ?TEST_USER,
+    UserDoc1 = test_utils:add_user(Config, Login1, Cert1, Teams1),
+    [DN1 | _] = user_logic:get_dn_list(UserDoc1),
+
+    FilePath = "/file.txt",
+
+    LFM = fun(Fun, Args) ->
+        Me = self(),
+        Pid = spawn_link(Node1, fun() -> fslogic_context:set_user_dn(DN1), Me ! {self(), apply(logical_files_manager, Fun, Args)} end),
+        receive
+            {Pid, Resp} -> Resp
+        end
+    end,
+
+    ?assertEqual(ok, LFM(create, [FilePath])),
+    ?assertEqual(ok, LFM(change_file_perm, [FilePath, 8#000])),
+
+    ?assertEqual(true, LFM(check_file_perm, [FilePath, ''])),
+    ?assertEqual(false, LFM(check_file_perm, [FilePath, root])),
+    ?assertEqual(true, LFM(check_file_perm, [FilePath, owner])),
+    ?assertEqual(true, LFM(check_file_perm, [FilePath, delete])),
+
+    ExpectedPerms = [
+        {8#000, [
+            {read, false},
+            {write, false},
+            {execute, false},
+            {rdwr, false}
+        ]},
+        {8#100, [
+            {read, false},
+            {write, false},
+            {execute, true},
+            {rdwr, false}
+        ]},
+        {8#200, [
+            {read, false},
+            {write, true},
+            {execute, false},
+            {rdwr, false}
+        ]},
+        {8#300, [
+            {read, false},
+            {write, true},
+            {execute, true},
+            {rdwr, false}
+        ]},
+        {8#400, [
+            {read, true},
+            {write, false},
+            {execute, false},
+            {rdwr, false}
+        ]},
+        {8#500, [
+            {read, true},
+            {write, false},
+            {execute, true},
+            {rdwr, false}
+        ]},
+        {8#600, [
+            {read, true},
+            {write, true},
+            {execute, false},
+            {rdwr, true}
+        ]},
+        {8#700, [
+            {read, true},
+            {write, true},
+            {execute, true},
+            {rdwr, true}
+        ]}
+    ],
+
+    lists:foreach(
+        fun({PermsInt, Assertions}) ->
+            ?assertEqual(ok, LFM(change_file_perm, [FilePath, PermsInt])),
+            lists:foreach(
+                fun({Type, Assertion}) ->
+                    ?assertEqual(Assertion, LFM(check_file_perm, [FilePath, Type]))
+                end, Assertions)
+        end, ExpectedPerms),
+
+    RemoveUserAns = rpc:call(Node1, user_logic, remove_user, [{dn, DN1}]),
+    ?assertEqual(ok, RemoveUserAns),
+    RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+    ?assertEqual(ok, RemoveStorageAns).
 
 %% Checks user creation (root and dirs at storage creation).
 %% The test checks if directories for user and group files are created when the user is added to the system,
@@ -1738,7 +1832,7 @@ users_separation_test(Config) ->
 
   %% Users have different (and next to each other) IDs
   UID1 = list_to_integer(UserID1),
-  UID2 = list_to_integer(UserID2),  
+  UID2 = list_to_integer(UserID2),
   ?assertEqual(UID2, UID1 + 1),
 
   {Status, Helper, Id, _Validity, AnswerOpt} = create_file(Socket, TestFile),
@@ -1789,7 +1883,7 @@ users_separation_test(Config) ->
   ?assertEqual(UID2, Attr2#fileattr.uid),
 
   test_utils:wait_for_db_reaction(),
-  
+
   %% chown test
   {Status23, Answer23} = chown(Socket, TestFile, 77777, "unknown"),
   ?assertEqual("ok", Status23),
@@ -2254,6 +2348,58 @@ get_file_links_test(Config) ->
     RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
     ?assertEqual(ok, RemoveStorageAns).
 
+xattrs_test(Config) ->
+    NodesUp = ?config(nodes, Config),
+    [Node1 | _] = NodesUp,
+
+    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    test_utils:wait_for_cluster_cast(),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    test_utils:wait_for_cluster_init(),
+
+    {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
+    ?assertEqual(ok, InsertStorageAns),
+
+    DirName = "test_xattr_dir",
+
+    % make test file
+    AnsDirCreate1 = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
+    ?assertEqual(ok, AnsDirCreate1),
+
+    % test setting and getting xattrs
+    Ans1 = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name1", "value1"]),
+    ?assertEqual(ok, Ans1),
+    Ans2 = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name1"]),
+    ?assertEqual({ok,"value1"}, Ans2),
+
+    % test replacing xattr
+    Ans3 = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name1", "other_value"]),
+    ?assertEqual(ok, Ans3),
+    Ans4 = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name1"]),
+    ?assertEqual({ok,"other_value"}, Ans4),
+
+    % test listing xattr
+    Ans5 = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name2", "value2"]),
+    ?assertEqual(ok, Ans5),
+    Ans6 = rpc:call(Node1, logical_files_manager, list_xattr, [DirName]),
+    ?assertEqual({ok, [{"name2","value2"}, {"name1","other_value"}]}, Ans6),
+
+    % test removing xattr
+    Ans7 = rpc:call(Node1, logical_files_manager, remove_xattr, [DirName,"name2"]),
+    ?assertEqual(ok, Ans7),
+    Ans8 = rpc:call(Node1, logical_files_manager, list_xattr, [DirName]),
+    ?assertEqual({ok,[{"name1","other_value"}]}, Ans8),
+
+    % test error reporting
+    Ans9 = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name3"]),
+    ?assertEqual({logical_file_system_error, ?VENOATTR}, Ans9),
+
+    % cleanup
+    AnsDel = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
+    ?assertEqual(ok, AnsDel),
+    RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+    ?assertEqual(ok, RemoveStorageAns).
 
 %% ====================================================================
 %% SetUp and TearDown functions

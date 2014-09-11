@@ -16,7 +16,7 @@
 -include("veil_modules/control_panel/cdmi_object.hrl").
 
 %% API
--export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
+-export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 -export([get_binary/2, get_cdmi_object/2, put_binary/2, put_cdmi_object/2]).
 -export([stream_file/6]).
 
@@ -51,6 +51,9 @@ malformed_request(Req, #state{filepath = Filepath} = State) ->
 resource_exists(Req, State = #state{filepath = Filepath}) ->
     case logical_files_manager:getfileattr(Filepath) of
         {ok, #fileattributes{type = "REG"} = Attr} -> {true, Req, State#state{attributes = Attr}};
+        {ok, _} ->
+            Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath++"/"), Req),
+            cdmi_error:error_reply(Req1,State,?moved_pemanently_code, "Filepath '~s' poins to directory but does not end with '/'",[Filepath]);
         _ -> {false, Req, State}
     end.
 
@@ -131,26 +134,29 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
         invalid -> cdmi_error:error_reply(Req1,State,?error_bad_request_code,"Invalid range: ~p",[RawRange]);
         _ ->
             % prepare data size and stream function
-            StreamSize = lists:foldl(fun({From,To},Acc) when To >= From -> Acc+To-From+1 end, 0, Ranges),
-            StreamFun = fun (Socket,Transport) ->
+            StreamSize = lists:foldl(fun({From, To}, Acc) when To >= From -> Acc + To - From + 1 end, 0, Ranges),
+            UserDN = fslogic_context:get_user_dn(),
+            StreamFun = fun(Socket, Transport) ->
                 try
-                    {ok,BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
-                    lists:foreach(fun (Rng) -> stream_file(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
+                    fslogic_context:set_user_dn(UserDN),
+                    {ok, BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
+                    lists:foreach(fun(Rng) ->
+                        stream_file(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
                 catch Type:Message ->
                     % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
                     ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Filepath, Type, Message])
                 end
             end,
 
-            % set mimetype, todo return assigned mimetype (after we implement mimetype assigning functionality)
-            {Type, Subtype, _} = cow_mimetypes:all(list_to_binary(Filepath)), %
-            ContentType = <<Type/binary, "/", Subtype/binary>>,
-            Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, ContentType, Req1),
+            % set mimetype
+            Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, get_mimetype(Filepath), Req1),
 
             % reply with stream and adequate status
             {ok, Req3} = case RawRange of
-                             undefined -> cowboy_req:reply(?ok, [], {StreamSize,StreamFun}, Req2);
-                             _ -> cowboy_req:reply(?ok_partial_content, [], {StreamSize,StreamFun}, Req2)
+                             undefined ->
+                                 veil_cowboy_bridge:apply(cowboy_req, reply, [?ok, [], {StreamSize, StreamFun}, Req2]);
+                             _ ->
+                                 veil_cowboy_bridge:apply(cowboy_req, reply, [?ok_partial_content, [], {StreamSize, StreamFun}, Req2])
                          end,
             {halt, Req3, State}
     end.
@@ -174,17 +180,19 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
                                  _ -> <<(erlang:binary_part(JsonBodyWithoutValue,0,byte_size(JsonBodyWithoutValue)-1))/binary,",\"value\":\"">>
                              end,
             JsonBodySuffix = <<"\"}">>,
-            DataSize = case Range of
-                           {From,To} when To >= From -> To - From +1;
-                           default -> Size
+            {DataSize, Encoding} = case Range of
+                           {From,To} when To >= From -> {To - From +1, <<"base64">>};
+                           default -> {Size, get_encoding(Filepath)}
                        end,
-            Base64EncodedSize = byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4*ceil(DataSize / 3.0)),
+            Base64EncodedSize = byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4 * ceil(DataSize / 3.0)),
 
-            StreamFun = fun (Socket,Transport) ->
+            UserDN = fslogic_context:get_user_dn(),
+            StreamFun = fun(Socket, Transport) ->
                 try
+                    fslogic_context:set_user_dn(UserDN),
                     Transport:send(Socket,JsonBodyPrefix),
                     {ok,BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
-                    stream_file(Socket, Transport, State, Range, <<"base64">>, BufferSize), %todo send also utf-8 when possible)
+                    stream_file(Socket, Transport, State, Range, Encoding, BufferSize),
                     Transport:send(Socket,JsonBodySuffix)
                 catch Type:Message ->
                     % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
@@ -205,11 +213,17 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
 %% @end
 -spec put_binary(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_binary(Req, #state{filepath = Filepath} = State) ->
+put_binary(ReqArg, #state{filepath = Filepath} = State) ->
+    {Content, Req} = cowboy_req:header(<<"content-type">>, ReqArg, ?mimetype_default_value),
+    {Mimetype, Encoding} = parse_content(Content),
     case logical_files_manager:create(Filepath) of
         ok ->
+            update_mimetype(Filepath, Mimetype),
+            update_encoding(Filepath, Encoding),
             write_body_to_file(Req, State, 0);
         {error, file_exists} ->
+            update_mimetype(Filepath, Mimetype),
+            update_encoding(Filepath, Encoding),
             {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
             case RawRange of
                 undefined ->
@@ -236,52 +250,49 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
 -spec put_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo read body in chunks
-    {ok, RawBody, Req1} = cowboy_req:body(Req),
+    {ok, RawBody, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Body = rest_utils:parse_body(RawBody),
-    ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body, <<"utf-8">>),  %todo check given body opts, store given mimetype
-    Value = proplists:get_value(<<"value">>, Body, <<>>),
+    RequestedMimetype = proplists:get_value(<<"mimetype">>, Body),
+    RequestedValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body),
+    ValueTransferEncoding = case RequestedValueTransferEncoding of undefined -> <<"utf-8">>; _ -> RequestedValueTransferEncoding end,
+    Value = proplists:get_value(<<"value">>, Body),
     Range = case lists:keyfind(<<"value">>, 1, Opts) of
         {<<"value">>, From_, To_} -> {From_,To_};
         false -> undefined
     end,
-    RawValue = case ValueTransferEncoding of
-                   <<"base64">> -> base64:decode(Value);
-                   <<"utf-8">> -> Value
-               end,
+    RawValue = decode(Value,ValueTransferEncoding),
+
     case logical_files_manager:create(Filepath) of
         ok ->
-            {struct, UserMetadata} = proplists:get_value(<<"metadata">>, Body, []),
-            case logical_files_manager:set_user_metadata(Filepath, UserMetadata) of
-                ok ->
-                    case logical_files_manager:write(Filepath, RawValue) of
-                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                            case logical_files_manager:getfileattr(Filepath) of
-                                {ok,Attrs} ->
-                                    Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
-                                    Req2 = cowboy_req:set_resp_body(Response, Req1),
-                                    {true, Req2, State};
-                                Error ->
-                                    logical_files_manager:delete(Filepath),
-                                    cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Getting attributes end up with error: ~p",Error)
-                            end;
+            case logical_files_manager:write(Filepath, RawValue) of
+                Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
+                    case logical_files_manager:getfileattr(Filepath) of
+                        {ok,Attrs} ->
+                            update_encoding(Filepath, RequestedValueTransferEncoding),
+                            update_mimetype(Filepath, RequestedMimetype),
+                            Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
+                            Req2 = cowboy_req:set_resp_body(Response, Req1),
+                            {true, Req2, State};
                         Error ->
                             logical_files_manager:delete(Filepath),
-                            cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
+                            cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Getting attributes end up with error: ~p",Error)
                     end;
                 Error ->
                     logical_files_manager:delete(Filepath),
-                    cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Setting user metadata end up with error: ~p",Error)
+                    cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
             end;
         {error, file_exists} ->
+            update_encoding(Filepath, RequestedValueTransferEncoding),
+            update_mimetype(Filepath, RequestedMimetype),
             case Range of
-                {From, To} when is_binary(Value) andalso To-From+1 == byte_size(RawValue) ->
+                {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
                     case logical_files_manager:write(Filepath, From, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             {true, Req1, State};
                         Error -> cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
                     end;
                 undefined when is_binary(Value) ->
-                    logical_files_manager:truncate(Filepath,0),
+                    logical_files_manager:truncate(Filepath, 0),
                     case logical_files_manager:write(Filepath, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             {true, Req1, State};
@@ -327,14 +338,13 @@ prepare_object_ans([<<"capabilitiesURI">> | Tail], State) ->
 prepare_object_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"mimetype">> | Tail], #state{filepath = Filepath} = State) ->
-    {Type, Subtype, _} = cow_mimetypes:all(gui_str:to_binary(Filepath)),
-    [{<<"mimetype">>, <<Type/binary, "/", Subtype/binary>>} | prepare_object_ans(Tail, State)];
+    [{<<"mimetype">>, get_mimetype(Filepath)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->
     [{<<"metadata">>, rest_utils:prepare_metadata(Attrs)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([{<<"metadata">>, Prefix} | Tail], #state{attributes = Attrs} = State) ->
     [{<<"metadata">>, rest_utils:prepare_metadata(Prefix, Attrs)} | prepare_object_ans(Tail, State)];
-prepare_object_ans([<<"valuetransferencoding">> | Tail], State) ->
-    [{<<"valuetransferencoding">>, <<"base64">>} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"valuetransferencoding">> | Tail], #state{filepath = Filepath} = State) ->
+    [{<<"valuetransferencoding">>, get_encoding(Filepath)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"value">> | Tail], State) ->
     [{<<"value">>, {range, default}} | prepare_object_ans(Tail, State)];
 prepare_object_ans([{<<"value">>, From, To} | Tail], State) ->
@@ -365,7 +375,7 @@ write_body_to_file(Req, State, Offset) ->
 -spec write_body_to_file(req(), #state{}, integer(), boolean()) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 write_body_to_file(Req, #state{filepath = Filepath} = State, Offset, RemoveIfFails) ->
-    {Status, Chunk, Req1} = cowboy_req:body(Req),
+    {Status, Chunk, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     case logical_files_manager:write(Filepath, Offset, Chunk) of
         Bytes when is_integer(Bytes) ->
             case Status of
@@ -391,29 +401,42 @@ write_body_to_file(Req, #state{filepath = Filepath} = State, Offset, RemoveIfFai
 %% ====================================================================
 stream_file(Socket, Transport, State, Range, Encoding, BufferSize) when (BufferSize rem 3) =/= 0 ->
     stream_file(Socket, Transport, State, Range, Encoding, BufferSize - (BufferSize rem 3)); %buffer size is extended, so it's divisible by 3 to allow base64 on the fly conversion
-stream_file(Socket, Transport, #state{attributes = #fileattributes{ size = Size}} = State, default, Encoding, BufferSize) ->
+stream_file(Socket, Transport, #state{attributes = #fileattributes{size = Size}} = State, default, Encoding, BufferSize) ->
     stream_file(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize); %default range should remain consistent with parse_object_ans/2 valuerange clause
 stream_file(Socket, Transport, #state{filepath = Path} = State, {From, To}, Encoding, BufferSize) ->
     ToRead = To - From + 1,
     case ToRead > BufferSize of
         true ->
-            {ok,Data} = logical_files_manager:read(Path, From, BufferSize),
-            Transport:send(Socket,encode(Data,Encoding)),
-            stream_file(Socket,Transport,State, {From+BufferSize,To},Encoding,BufferSize);
+            {ok, Data} = logical_files_manager:read(Path, From, BufferSize),
+            Transport:send(Socket, encode(Data, Encoding)),
+            stream_file(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize);
         false ->
-            {ok,Data} = logical_files_manager:read(Path, From, ToRead),
-            Transport:send(Socket,encode(Data,Encoding))
+            {ok, Data} = logical_files_manager:read(Path, From, ToRead),
+            Transport:send(Socket, encode(Data, Encoding))
     end.
 
 %% encode/2
 %% ====================================================================
 %% @doc Encodes data according to given ecoding
-%% @end
 -spec encode(Data :: binary(), Encoding :: binary()) -> binary().
 %% ====================================================================
-encode(Data,Encoding) when Encoding =:= <<"base64">> ->
+encode(Data, Encoding) when Encoding =:= <<"base64">> ->
     base64:encode(Data);
-encode(Data,_) ->
+encode(Data, _) ->
+    Data.
+
+%% decode/2
+%% ====================================================================
+%% @doc Decodes data according to given ecoding
+-spec decode(Data :: binary(), Encoding :: binary()) -> binary().
+%% ====================================================================
+decode(undefined,_Encoding) ->
+    <<>>;
+decode(Data, Encoding) when Encoding =:= <<"base64">> ->
+    try base64:decode(Data)
+    catch _:_ -> throw(invalid_base64)
+    end;
+decode(Data, _) ->
     Data.
 
 %% ceil/1
@@ -422,11 +445,11 @@ encode(Data,_) ->
 -spec ceil(N :: number()) -> integer().
 %% ====================================================================
 ceil(N) when trunc(N) == N -> N;
-ceil(N) -> trunc(N+1).
+ceil(N) -> trunc(N + 1).
 
 %% parse_byte_range/1
 %% ====================================================================
-%% @doc parses byte ranges from 'Range' http header format to list of erlang range tuples,
+%% @doc Parses byte ranges from 'Range' http header format to list of erlang range tuples,
 %% i. e. <<"1-5,-3">> for a file with length 10 will produce -> [{1,5},{7,9}]
 %% @end
 -spec parse_byte_range(#state{}, binary() | list()) -> list(Range) | invalid when
@@ -434,7 +457,7 @@ ceil(N) -> trunc(N+1).
 %% ====================================================================
 parse_byte_range(State, Range) when is_binary(Range) ->
     Ranges = parse_byte_range(State, binary:split(Range, <<",">>, [global])),
-    case lists:member(invalid,Ranges) of
+    case lists:member(invalid, Ranges) of
         true -> invalid;
         false -> Ranges
     end;
@@ -449,9 +472,72 @@ parse_byte_range(#state{attributes = #fileattributes{size = Size}} = State, [Fir
             end,
     case Range of
         [invalid] -> [invalid];
-        {Begin,End} when Begin > End -> [invalid];
-        {Begin_,_End} when Begin_ > Size -> parse_byte_range(State, Rest); % range is unsatisfiable and we ignore it
+        {Begin, End} when Begin > End -> [invalid];
+        {Begin_, _End} when Begin_ > Size -> parse_byte_range(State, Rest); % range is unsatisfiable and we ignore it
         ValidRange -> [ValidRange | parse_byte_range(State, Rest)]
     end.
 
+%% parse_content/1
+%% ====================================================================
+%% @doc Parses content-type header to mimetype and charset part, if charset is other than utf-8,
+%% function returns undefined
+%% @end
+-spec parse_content(binary()) -> {Mimetype :: binary(), Encoding :: binary() | undefined}.
+%% ====================================================================
+parse_content(Content) ->
+    case binary:split(Content,<<";">>) of
+        [RawMimetype, RawEncoding] ->
+            case binary:split(rest_utils:trim_spaces(RawEncoding),<<"=">>) of
+                [<<"charset">>, <<"utf-8">>] ->
+                    {rest_utils:trim_spaces(RawMimetype), <<"utf-8">>};
+                _ ->
+                    {rest_utils:trim_spaces(RawMimetype), undefined}
+            end;
+        [RawMimetype] ->
+            {rest_utils:trim_spaces(RawMimetype), undefined}
+    end.
+
+%% get_mimetype/1
+%% ====================================================================
+%% @doc Gets mimetype associated with file, returns default value if no mimetype
+%% could be found
+%% @end
+-spec get_mimetype(string()) -> binary().
+%% ====================================================================
+get_mimetype(Filepath) ->
+    case logical_files_manager:get_xattr(Filepath, ?mimetype_xattr_key) of
+        {ok, Value} -> Value;
+        {logical_file_system_error, ?VENOATTR} -> ?mimetype_default_value
+    end.
+
+%% get_encoding/1
+%% ====================================================================
+%% @doc Gets valuetransferencoding associated with file, returns default value if no valuetransferencoding
+%% could be found
+%% @end
+-spec get_encoding(string()) -> binary().
+%% ====================================================================
+get_encoding(Filepath) ->
+    case logical_files_manager:get_xattr(Filepath, ?encoding_xattr_key) of
+        {ok, Value} -> Value;
+        {logical_file_system_error, ?VENOATTR} -> ?encoding_default_value
+    end.
+
+%% update_mimetype/2
+%% ====================================================================
+%% @doc Updates mimetype associated with file
+-spec update_mimetype(string(), binary()) -> ok | no_return().
+%% ====================================================================
+update_mimetype(_Filepath, undefined) -> ok;
+update_mimetype(Filepath, Mimetype) ->
+    ok = logical_files_manager:set_xattr(Filepath, ?mimetype_xattr_key, Mimetype).
+
+%% update_encoding/2
+%% ====================================================================
+%% @doc Updates valuetransferencoding associated with file
+-spec update_encoding(string(), binary()) -> ok | no_return().
+%% ====================================================================
+update_encoding(_Filepath, undefined) -> ok;
+update_encoding(Filepath, Encoding) ->
+    ok = logical_files_manager:set_xattr(Filepath, ?encoding_xattr_key, Encoding).
 

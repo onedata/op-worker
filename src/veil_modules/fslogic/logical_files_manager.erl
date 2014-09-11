@@ -26,9 +26,10 @@
 %% API
 %% ====================================================================
 %% Logical file organization management (only db is used)
--export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, set_user_metadata/2]).
+-export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, get_xattr/2, set_xattr/3, remove_xattr/2, list_xattr/1]).
 %% File access (db and helper are used)
--export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1, change_file_perm/2]).
+-export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
+-export([change_file_perm/2, check_file_perm/2]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
@@ -219,36 +220,84 @@ getfileattr(Message, Value) ->
           size = TmpAns#fileattr.size,
           uname = TmpAns#fileattr.uname,
           gname = TmpAns#fileattr.gname,
-          links = TmpAns#fileattr.links,
-          user_metadata = TmpAns#fileattr.user_metadata
+          links = TmpAns#fileattr.links
         }};
         _ -> {logical_file_system_error, Response}
       end;
     _ -> {Status, TmpAns}
   end.
 
-%% set_user_metadata/2
+%% get_xattr/2
 %% ====================================================================
-%% @doc Sets user metadata in db.
+%% @doc Gets file's extended attribute by name.
 %% @end
--spec set_user_metadata(FileName :: string(), Metadata :: [{Name :: string(), Value :: string()}]) -> Result when
-    Result :: ok | {ErrorGeneral, ErrorDetail},
-    ErrorGeneral :: atom(),
-    ErrorDetail :: term().
+-spec get_xattr(FullFileName :: string(), Name :: binary()) ->
+    binary() | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
-set_user_metadata(FileName, Metadata) ->
-    Record = #setfileusermetadata{file_logic_name = FileName, user_metadata = Metadata},
-    {Status, TmpAns} = contact_fslogic(Record),
+get_xattr(FullFileName, Name) ->
+    {Status, TmpAns} = contact_fslogic(#getxattr{file_logic_name = FullFileName, name = Name}),
     case Status of
         ok ->
-            Response = TmpAns#atom.value,
-            case Response of
-                ?VOK -> ok;
-                _ -> {logical_file_system_error, Response}
+            case TmpAns#xattr.answer of
+                ?VOK -> {ok, TmpAns#xattr.value};
+                Error -> {logical_file_system_error, Error}
             end;
         _ -> {Status, TmpAns}
     end.
 
+%% set_xattr/3
+%% ====================================================================
+%% @doc Sets file's extended attribute as {Name, Value}.
+%% @end
+-spec set_xattr(FullFileName :: string(), Name :: binary(), Value :: binary()) ->
+    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+set_xattr(FullFileName, Name, Value) ->
+    {Status, TmpAns} = contact_fslogic(#setxattr{file_logic_name = FullFileName, name = Name, value = Value}),
+    case Status of
+        ok ->
+            case TmpAns#atom.value of
+                ?VOK -> ok;
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
+%% remove_xattr/2
+%% ====================================================================
+%% @doc Removes file's extended attribute with given Name.
+%% @end
+-spec remove_xattr(FullFileName :: string(), Name :: binary()) ->
+    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+remove_xattr(FullFileName,Name) ->
+    {Status, TmpAns} = contact_fslogic(#removexattr{file_logic_name = FullFileName, name = Name}),
+    case Status of
+        ok ->
+            case TmpAns#atom.value of
+                ?VOK -> ok;
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
+%% list_xattr/1
+%% ====================================================================
+%% @doc Gets file's extended attribute list.
+%% @end
+-spec list_xattr(FullFileName :: string()) ->
+    list() | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+list_xattr(FullFileName) ->
+    {Status, TmpAns} = contact_fslogic(#listxattr{file_logic_name = FullFileName}),
+    case Status of
+        ok ->
+            case TmpAns#xattrlist.answer of
+                ?VOK -> {ok, [{Name,Value} || #xattrlist_xattrentry{name = Name, value = Value} <- TmpAns#xattrlist.attrs]};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
 
 %% ====================================================================
 %% File access (db and helper are used)
@@ -566,6 +615,28 @@ change_file_perm(FileName, NewPerms) ->
       end;
     _ -> {Status, TmpAns}
   end.
+
+%% check_file_perms/2
+%% ====================================================================
+%% @doc Checks permissions to open the file in chosen mode.
+%% @end
+-spec check_file_perm(FileName :: string(), Type :: root | owner | delete | read | write | execute | rdwr | '') -> Result when
+    Result :: boolean() | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+check_file_perm(FileName, Type) ->
+    Record = #checkfileperms{file_logic_name = FileName, type = atom_to_list(Type)},
+    {Status, TmpAns} = contact_fslogic(Record),
+    case Status of
+        ok ->
+            Response = TmpAns#atom.value,
+            case Response of
+                ?VOK -> true;
+                _ -> false
+            end;
+        _ -> {Status, TmpAns}
+    end.
 
 %% exists/1
 %% ====================================================================

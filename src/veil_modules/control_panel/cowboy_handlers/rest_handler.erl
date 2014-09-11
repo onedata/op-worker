@@ -15,7 +15,7 @@
 -include_lib("public_key/include/public_key.hrl").
 -include("veil_modules/control_panel/common.hrl").
 -include("err.hrl").
--include("veil_modules/control_panel/connection_check_values.hrl").
+-include("veil_modules/control_panel/global_registry_interfacing.hrl").
 
 -record(state, {
     version = <<"latest">> :: binary(),
@@ -47,21 +47,23 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% @doc Cowboy callback function
 %% Called right after protocol upgrade to init the request context.
 %% Will shut down the connection if the peer doesn't provide a valid
-%% proxy certificate.
+%% proxy certificate (unless it is a connection check where no auth is required).
 %% @end
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
-rest_init(Req, _Opts) when Req#http_req.path_info =:= [?connection_check_path] ->
-    % when checking connection, continue without cert verification
-    init_state(Req);
 rest_init(Req, _Opts) ->
-    {ok,DnString} = rest_utils:verify_peer_cert(Req),
-    Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req),
-    case rest_utils:prepare_context(DnString) of
-        ok -> init_state(Req2);
-        Error -> {ok,Req2,Error}
+    case cowboy_req:path_info(Req) of
+        {[Endpoint], _} when Endpoint =:= ?connection_check_path orelse Endpoint =:= <<"token">> ->
+            % when checking connection or generating token, continue without cert verification
+            init_state(Req);
+        _ ->
+            {ok, Identity, Req1} = rest_utils:verify_peer_cert(Req),
+            Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req1),
+            case rest_utils:prepare_context(Identity) of
+                ok -> init_state(Req2);
+                Error -> {ok, Req2, Error}
+            end
     end.
-
 
 %% allowed_methods/2
 %% ====================================================================
@@ -69,7 +71,7 @@ rest_init(Req, _Opts) ->
 %% Returns methods that are allowed, based on version specified in URI.
 %% Will call methods_and_version_info/1 from rest_module_behaviour.
 %% @end
--spec allowed_methods(req(), #state{} | {error, term()}) -> {[binary()], req(), #state{}}.
+-spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
 allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
     {MethodsVersionInfo, Req2} = Mod:methods_and_versions_info(Req),
@@ -104,6 +106,7 @@ allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
                     end
             end
     end;
+
 
 % Some errors could have been detected in do_init/2. If so, State contains
 % an {error, Type} tuple. These errors shall be handled here,
@@ -151,8 +154,7 @@ resource_exists(Req, #state{version = Version, handler_module = Mod, resource_id
             {false, Req2, State};
         true ->
             {true, NewReq, State}
-    end
-.
+    end.
 
 
 %% get_resource/2
@@ -175,11 +177,11 @@ get_resource(Req, #state{version = Version, handler_module = Mod, resource_id = 
                              Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, ContentType, Req2),
                              {{stream, Size, Fun}, Req3};
                          error ->
-                             {ok, Req3} = cowboy_req:reply(500, Req2),
+                             {ok, Req3} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, Req2]),
                              {halt, Req3};
                          {error, ErrorDesc} ->
                              Req3 = cowboy_req:set_resp_body(ErrorDesc, Req2),
-                             {ok, Req4} = cowboy_req:reply(500, Req3),
+                             {ok, Req4} = veil_cowboy_bridge:apply(cowboy_req, reply, [500, Req3]),
                              {halt, Req4}
                      end,
     {Resp, NewReq, State}.
@@ -220,7 +222,7 @@ handle_urlencoded_data(Req, #state{handler_module = Mod, version = Version, reso
 -spec handle_json_data(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 handle_json_data(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) ->
-    {ok, Binary, Req2} = cowboy_req:body(Req),
+    {ok, Binary, Req2} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Data = case Binary of
                <<"">> ->
                    <<"">>;
@@ -274,8 +276,8 @@ init_state(Req) ->
     {PathInfo, _} = cowboy_req:path_info(Req),
     case rest_routes:route(PathInfo) of
         {error, Error} ->
-            {ok, Req, {error,Error}};
-        {Module,Id} ->
+            {ok, Req, {error, Error}};
+        {Module, Id} ->
             {ok, Req, #state{version = Version, handler_module = Module, method = Method, resource_id = Id}}
     end.
 

@@ -5,18 +5,19 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module implements rest_module_behaviour, handles GET requests directed at /rest/connection_check, and always returns <<"rest">>,
-%% it's used by globalregistry to test connection
+%% @doc This module implements rest_module_behaviour and provides tokens that can
+%% be attached as "X-Auth-Token" header to rest requests, replacing standard certificate
+%% based authentication. To generate token user must obtain one-shot code from globalregistry,
+%% and send it with his token request.
 %% @end
 %% ===================================================================
--module(rest_connection_check).
+-module(rest_token).
 -behaviour(rest_module_behaviour).
 
--include("veil_modules/control_panel/common.hrl").
--include("veil_modules/control_panel/rest_messages.hrl").
+%% Includes
+-include_lib("ctool/include/global_registry/gr_openid.hrl").
 -include("err.hrl").
--include("veil_modules/control_panel/global_registry_interfacing.hrl").
-
+-include("veil_modules/control_panel/common.hrl").
 
 %% API
 -export([methods_and_versions_info/1, exists/3]).
@@ -31,7 +32,7 @@
 -spec methods_and_versions_info(req()) -> {[{binary(), [binary()]}], req()}.
 %% ====================================================================
 methods_and_versions_info(Req) ->
-    {[{<<"1.0">>, [<<"GET">>]}], Req}.
+    {[{<<"1.0">>, [<<"POST">>]}], Req}.
 
 %% exists/3
 %% ====================================================================
@@ -52,7 +53,7 @@ exists(Req, _Version, _Id) ->
     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
 %% ====================================================================
 get(Req, <<"1.0">>, _Id) ->
-    {{body, ?rest_connection_check_value},Req}.
+    {error,Req}.
 
 %% delete/3
 %% ====================================================================
@@ -63,8 +64,7 @@ get(Req, <<"1.0">>, _Id) ->
     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
 %% ====================================================================
 delete(Req, <<"1.0">>, _Id) ->
-    ErrorRec = ?report_error(?error_method_unsupported),
-    {{error, rest_utils:error_reply(ErrorRec)}, Req}.
+    {error, Req}.
 
 %% post/4
 %% ====================================================================
@@ -74,9 +74,15 @@ delete(Req, <<"1.0">>, _Id) ->
 -spec post(req(), binary(), binary(), term()) -> {Response, req()} when
     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
 %% ====================================================================
-post(Req, <<"1.0">>, _Id, _Data) ->
-    ErrorRec = ?report_error(?error_method_unsupported),
-    {{error, rest_utils:error_reply(ErrorRec)}, Req}.
+post(_Req, <<"1.0">>, _Id, Data) ->
+    AccessCode = proplists:get_value(<<"authorizationCode">>, Data),
+    case gr_openid:get_token_response(client,[{<<"grant_type">>, <<"authorization_code">>}, {<<"code">>, AccessCode}]) of
+        {ok, #token_response{access_token = AccessToken, id_token = #id_token{sub = GRUID}}} ->
+            {body, [{<<"accessToken">>, base64:encode(<<AccessToken/binary,";",GRUID/binary>>)}]};
+        {error,Reason} ->
+            ?warning("Token generation failed with reason: ~p", [Reason]),
+            {error, <<"Cannot take token from Global Registry">>}
+    end.
 
 %% put/4
 %% ====================================================================
@@ -87,5 +93,4 @@ post(Req, <<"1.0">>, _Id, _Data) ->
     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
 %% ====================================================================
 put(Req, <<"1.0">>, _Id, _Data) ->
-    ErrorRec = ?report_error(?error_method_unsupported),
-    {{error, rest_utils:error_reply(ErrorRec)}, Req}.
+    {error, Req}.

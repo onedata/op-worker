@@ -13,7 +13,7 @@
 -module(gui_and_nagios_test_SUITE).
 -include("test_utils.hrl").
 -include("registered_names.hrl").
--include("veil_modules/control_panel/connection_check_values.hrl").
+-include("veil_modules/control_panel/global_registry_interfacing.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
@@ -100,6 +100,7 @@ init_per_testcase(main_test, Config) ->
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
+            {initialization_time, 1},
             {dispatcher_port, 5055},
             {ccm_nodes, [Node1]},
             {dns_port, 1308},

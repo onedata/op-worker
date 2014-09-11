@@ -247,8 +247,8 @@ comet_loop(#?STATE{} = State) ->
     NewCometLoopState = try
         receive
             get_access_code ->
-                case gr_openid:get_client_access_code({user, vcn_gui_utils:get_access_token()}) of
-                    {ok, AccessCode} ->
+                case gr_openid:get_client_authorization_code({user, vcn_gui_utils:get_access_token()}) of
+                    {ok, AccessCode} when is_binary(AccessCode) ->
                         Message = <<"Enter underlying access code into FUSE client.",
                         "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", AccessCode/binary, "\">">>,
                         gui_jq:info_popup(<<"Access code">>, Message, <<"return true;">>);
@@ -272,7 +272,7 @@ comet_loop(#?STATE{} = State) ->
                 State
         end
                         catch Type:Reason ->
-                            ?error("Comet process exception: ~p:~p", [Type, Reason]),
+                            ?error_stacktrace("Comet process exception: ~p:~p", [Type, Reason]),
                             vcn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
                             gui_comet:flush(),
                             {error, Reason}

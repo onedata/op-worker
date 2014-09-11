@@ -36,13 +36,13 @@
 validate_login() ->
     try
         AuthorizationCode = gui_ctx:url_param(<<"code">>),
-        {ok, #grant_token{
+        {ok, #token_response{
             access_token = AccessToken,
             id_token = #id_token{
                 sub = GRUID,
                 name = Name,
                 email = EmailList}
-        }} = gr_openid:get_grant_token(
+        }} = gr_openid:get_token_response(
             provider,
             [{<<"code">>, AuthorizationCode}, {<<"grant_type">>, <<"authorization_code">>}]
         ),
@@ -63,6 +63,7 @@ validate_login() ->
             vcn_gui_utils:set_access_token(AccessToken),
             vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
             vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
+            vcn_gui_utils:set_logout_token(vcn_gui_utils:gen_logout_token()),
             ?debug("User ~p logged in", [Login]),
             ok
         catch

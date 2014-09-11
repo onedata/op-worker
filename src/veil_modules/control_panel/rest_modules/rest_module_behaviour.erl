@@ -56,7 +56,7 @@ behaviour_info(_Other) ->
 
 %% NOTE!
 %% There is an optional callback - handle_multipart_data/4. It will be called 
-%% only if a rest_module implements it. It is designed to handle multipart requests.
+%% only if a rest module implements it. It is designed to handle multipart requests.
 %% See description at the end of file
 
 

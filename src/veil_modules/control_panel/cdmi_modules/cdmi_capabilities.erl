@@ -114,13 +114,16 @@ prepare_capability_ans([<<"capabilities">> | Tail], State = #state{capability = 
 prepare_capability_ans([<<"childrenrange">> | Tail], State = #state{capability = root}) ->
     [{<<"childrenrange">>, <<"0-1">>} | prepare_capability_ans(Tail, State)]; %todo hardcoded childrens, when adding childrenranges or new capabilities, this has to be changed
 prepare_capability_ans([<<"children">> | Tail], State = #state{capability = root}) ->
-    [{<<"children">>, [list_to_binary(?container_capability_path), list_to_binary(?dataobject_capability_path)]} | prepare_capability_ans(Tail, State)];
+    [{<<"children">>, [
+        list_to_binary(rest_utils:get_path_leaf_with_ending_slash(?container_capability_path)),
+        list_to_binary(rest_utils:get_path_leaf_with_ending_slash(?dataobject_capability_path))
+    ]} | prepare_capability_ans(Tail, State)];
 
 % container capabilities
 prepare_capability_ans([<<"objectID">> | Tail], State = #state{capability = container}) ->
     [{<<"objectID">>, ?container_capability_id} | prepare_capability_ans(Tail, State)];
 prepare_capability_ans([<<"objectName">> | Tail], State = #state{capability = container}) ->
-    [{<<"objectName">>, list_to_binary(?container_capability_path)} | prepare_capability_ans(Tail, State)];
+    [{<<"objectName">>, list_to_binary(rest_utils:get_path_leaf_with_ending_slash(?container_capability_path))} | prepare_capability_ans(Tail, State)];
 prepare_capability_ans([<<"parentURI">> | Tail], State = #state{capability = container}) ->
     [{<<"parentURI">>, list_to_binary(?root_capability_path)} | prepare_capability_ans(Tail, State)];
 prepare_capability_ans([<<"parentID">> | Tail], State = #state{capability = container}) ->
@@ -136,7 +139,7 @@ prepare_capability_ans([<<"children">> | Tail], State = #state{capability = cont
 prepare_capability_ans([<<"objectID">> | Tail], State = #state{capability = dataobject}) ->
     [{<<"objectID">>, ?dataobject_capability_id} | prepare_capability_ans(Tail, State)];
 prepare_capability_ans([<<"objectName">> | Tail], State = #state{capability = dataobject}) ->
-    [{<<"objectName">>, list_to_binary(?dataobject_capability_path)} | prepare_capability_ans(Tail, State)];
+    [{<<"objectName">>, list_to_binary(rest_utils:get_path_leaf_with_ending_slash(?dataobject_capability_path))} | prepare_capability_ans(Tail, State)];
 prepare_capability_ans([<<"parentURI">> | Tail], State = #state{capability = dataobject}) ->
     [{<<"parentURI">>, list_to_binary(?root_capability_path)} | prepare_capability_ans(Tail, State)];
 prepare_capability_ans([<<"parentID">> | Tail], State = #state{capability = dataobject}) ->

@@ -27,11 +27,12 @@
 -define(VEPERM,     "eperm").    %% Operation not permitted
 -define(VEINVAL,    "einval").   %% Invalid argument
 -define(VEDQUOT,    "edquot").   %% Quota exceeded
+-define(VENOATTR,   "enoattr").  %% The named attribute does not exist, or the process has no access to this attribute.
 
 
 %% @todo: add test that verifies if the macro contains all available error code
 -define(ALL_ERROR_CODES, [?VOK, ?VENOENT, ?VEACCES, ?VEEXIST, ?VENOTSUP, ?VENOTEMPTY, ?VEREMOTEIO,
-                          ?VEPERM, ?VEINVAL, ?VEDQUOT]).
+                          ?VEPERM, ?VEINVAL, ?VEDQUOT, ?VENOATTR]).
 
 
 %% POSIX & FUSE C structures definitions ported to erlang. For documentation please refer linux & fuse man pages.
@@ -52,8 +53,7 @@
   size = 0,
   uname = [],
   gname = [],
-  links = 0,
-  user_metadata = []
+  links = 0
 }).
 
 % Callbacks management
@@ -74,10 +74,10 @@
 -define(FILE_COUNTING_BASE, 256).
 
 %% Which fuse operations (messages) are allowed to operate on base group directory ("/groups")
--define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, getfileuuid, updatetimes, getfilechildren]).
+-define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, getfileuuid, updatetimes, getfilechildren, checkfileperms]).
 
 %% Which fuse operations (messages) are allowed to operate on second level group directory (e.g. "/groups/grpName")
--define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getfileuuid, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren]).
+-define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getfileuuid, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren, checkfileperms]).
 
 
 %% File types used in protocol. Use fslogic_file:normalize_file_type to translate types from/to normal macros like ?REG_TYPE.
