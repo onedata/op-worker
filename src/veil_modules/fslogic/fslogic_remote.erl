@@ -32,7 +32,7 @@
 %%      or stop rerouting due to error.
 %% @end
 -spec prerouting(SpaceInfo :: #space_info{}, Request :: term(), [ProviderId :: binary()]) ->
-    {ok, {response, Response :: term()}} | {ok, {reroute, ProviderId :: binary()}} | {error, Reason :: any()}.
+    {ok, {response, Response :: term()}} | {ok, {reroute, ProviderId :: binary(), NewRequest :: term()}} | {error, Reason :: any()}.
 %% ====================================================================
 prerouting(_, _, []) ->
     {error, no_providers};
