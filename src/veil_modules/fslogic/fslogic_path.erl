@@ -247,6 +247,14 @@ get_parent_and_name_from_path(Path, ProtocolVersion) ->
 
 get_user_root(#veil_document{uuid = ?CLUSTER_USER_ID}) ->
     "";
+get_user_root(#veil_document{record = #user{spaces = []} = User} = UserDoc) ->
+    case fslogic_context:clear_gr_auth() of
+        {GRUID, AccessToken} when is_binary(GRUID), is_binary(AccessToken) ->
+            #veil_document{record = #user{} = UpdatedUser} = user_logic:synchronize_spaces_info(UserDoc, AccessToken),
+            get_user_root(UpdatedUser);
+        _ ->
+            get_user_root(User)
+    end;
 get_user_root(#veil_document{record = UserRec}) ->
     get_user_root(UserRec);
 get_user_root(#user{spaces = []}) ->

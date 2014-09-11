@@ -24,7 +24,7 @@
 -export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
--export([get_space_file/1]).
+-export([get_space_file/1, get_space_files/1]).
 
 
 -ifdef(TEST).
@@ -64,6 +64,26 @@ get_space_file1(InitArg) ->
             end;
         {error, Reason} -> {error, Reason}
     end.
+
+
+%% get_space_file/1
+%% ====================================================================
+%% @doc Retrieves files associated with spaces that belongs to user with given GRUID.
+%% @end
+-spec get_space_files({gruid, GRUID :: binary() | string()}) -> {ok, [file_doc()]} | {error, term()}.
+%% ====================================================================
+get_space_files({gruid, GRUID}) when is_binary(GRUID) ->
+    get_space_files({gruid, ?RECORD_FIELD_BINARY_PREFIX ++ vcn_utils:ensure_list(GRUID)});
+get_space_files({gruid, GRUID}) when is_list(GRUID) ->
+    QueryArgs = #view_query_args{keys = [dao_helper:name(GRUID)], include_docs = true},
+    case dao_records:list_records(?SPACES_BY_GRUID_VIEW, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+            {ok, [FileDoc || #view_row{doc = #veil_document{record = #file{}} = FileDoc} <- Rows]};
+        {error, Resaon} ->
+            ?error("Cannot fetch space files due to: ~p", [Resaon]),
+            {error, Resaon}
+    end.
+
 
 %% ===================================================================
 %% File Descriptors Management

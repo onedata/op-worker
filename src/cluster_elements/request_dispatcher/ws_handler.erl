@@ -167,6 +167,7 @@ websocket_handle({binary, Data}, Req, #handler_state{peer_type = PeerType} = Sta
         {wrong_internal_message_type, MsgId2}           -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
         {message_not_supported, MsgId2}                 -> {reply, {binary, encode_answer(message_not_supported, MsgId2)}, Req, State};
         {handshake_error, _HError, MsgId2}              -> {reply, {binary, encode_answer(handshake_error, MsgId2)}, Req, State};
+        {no_credentials, MsgId2}                        -> {reply, {binary, encode_answer(no_credentials, MsgId2)}, Req, State};
         {no_user_found_error, _HError, MsgId2}          -> {reply, {binary, encode_answer(no_user_found_error, MsgId2)}, Req, State};
         {cert_confirmation_required, UserLogin, MsgId2} -> {reply, {binary, encode_answer(cert_confirmation_required, MsgId2, UserLogin)}, Req, State};
         {cert_denied_by_user, MsgId2}                   -> {reply, {binary, encode_answer(cert_denied_by_user, MsgId2)}, Req, State};
@@ -278,7 +279,7 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
             %% Session data found, and its user ID matches -> send OK status and update current connection state
             ?debug("User ~p assigned FUSE ID ~p to the connection (PID: ~p)", [UserKey, NewFuseId, self()]),
             {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req,
-                        State#handler_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = AccessToken, user_global_id = UserGID}};
+                        State#handler_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = vcn_utils:ensure_binary(AccessToken), user_global_id = vcn_utils:ensure_binary(UserGID)}};
 
         {ok, #veil_document{record = #fuse_session{uid = OtherUID}}} ->
             %% Current user does not match session owner
@@ -314,25 +315,31 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
 
     {UserGID, AccessToken} =
         case get({GlobalId, TokenHash}) of
-            CachedToken when is_binary(CachedToken) ->
+            <<CachedToken/binary>> ->
                 {GlobalId, CachedToken};
             _ ->
-                try {SessionUserGID =/= undefined orelse not gr_adapter:verify_client(GlobalId, TokenHash), SessionAccessToken} of
-                    {true, undefined} ->
+                case {SessionUserGID, SessionAccessToken} of
+                    {undefined, _} ->
+                        case auth_handler:authenticate_user_by_secret(GlobalId, TokenHash) of
+                            {true, AccessToken1} ->
+                                %% Cache AccessToken for the user
+                                put({GlobalId, TokenHash}, AccessToken1),
+
+                                {GlobalId, AccessToken1};
+                            false ->
+                                {undefined, undefined}
+                        end;
+                    {<<SessionUserGID/binary>>, undefined} ->
                         auth_handler:get_access_token(SessionUserGID);
-                    {true, _} ->
-                        {SessionUserGID, SessionAccessToken};
-                    _ ->
-                        auth_handler:get_access_token(GlobalId)
-                catch
-                    Reason ->
-                        ?error("Cannot verify user (~p) authentication due to: ~p", [GlobalId, Reason]),
-                        throw({unable_to_authenticate, MsgId})
+                    {<<SessionUserGID/binary>>, <<SessionAccessToken/binary>>} ->
+                        {SessionUserGID, SessionAccessToken}
                 end
         end,
 
-    %% Cache AccessToken for the user
-    put({UserGID, TokenHash}, AccessToken),
+    case DnString =/= undefined orelse UserGID =/= undefined of
+        true  -> ok;
+        false -> throw({no_credentials, MsgId})
+    end,
 
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->

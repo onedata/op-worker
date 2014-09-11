@@ -582,7 +582,7 @@ preproccess_msg(Msg) ->
         fslogic_context:set_user_dn(Subj),
         case AccessTokenTuple of
             {UserID, AccessToken} ->
-                fslogic_context:set_access_token(UserID, AccessToken);
+                fslogic_context:set_gr_auth(UserID, AccessToken);
             _ -> undefined
         end,
         put(fuse_id, FuseID),
