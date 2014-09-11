@@ -40,6 +40,7 @@
         session_cookie      -> ?record_info_gen(session_cookie);
         fuse_group_info     -> ?record_info_gen(fuse_group_info);
         storage_helper_info -> ?record_info_gen(storage_helper_info);
+        space_info          -> ?record_info_gen(space_info);
     %next_record        -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).

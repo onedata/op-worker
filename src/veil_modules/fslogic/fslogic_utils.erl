@@ -21,12 +21,29 @@
 -export([get_sh_and_id/3, get_sh_and_id/4, get_sh_and_id/5, get_files_number/3]).
 -export([get_space_info_for_path/1, get_user_groups/2]).
 -export([random_ascii_lowercase_sequence/1, path_walk/3, list_dir/1]).
--export([run_as_root/1]).
+-export([run_as_root/1, file_to_space_info/1]).
 
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+
+%% file_to_space_info/1
+%% ====================================================================
+%% @doc Extracts space_info() from file_doc(). If given file is not an space's root file, fails with error:{badarg, file_info()}.
+%% @end
+-spec file_to_space_info(SpaceFile :: file_doc() | file_info()) -> space_info() | no_return().
+%% ====================================================================
+file_to_space_info(#veil_document{record = #file{} = File}) ->
+    file_to_space_info(File);
+file_to_space_info(#file{extensions = Exts} = File) ->
+    case lists:keyfind(?file_space_info_extestion, 1, Exts) of
+        {?file_space_info_extestion, #space_info{} = SpaceInfo} ->
+            SpaceInfo;
+        _ ->
+            error({badarg, File})
+    end.
 
 
 %% run_as_root/1
@@ -38,7 +55,7 @@
 run_as_root(Fun) ->
     %% Save user context
     DN_CTX = fslogic_context:get_user_dn(),
-    {AT_CTX1, AT_CTX2} = fslogic_context:get_access_token(),
+    {AT_CTX1, AT_CTX2} = fslogic_context:get_gr_auth(),
 
     %% Clear user context
     fslogic_context:clear_user_ctx(),
@@ -47,7 +64,7 @@ run_as_root(Fun) ->
 
     %% Restore user context
     fslogic_context:set_user_dn(DN_CTX),
-    fslogic_context:set_access_token(AT_CTX1, AT_CTX2),
+    fslogic_context:set_gr_auth(AT_CTX1, AT_CTX2),
 
     Result.
 

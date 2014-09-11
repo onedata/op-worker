@@ -58,7 +58,14 @@ get_space_info(SpaceId, {UserGID, AccessToken}) ->
             name = Name}
         } = gr_spaces:get_details({try_user, AccessToken}, vcn_utils:ensure_binary(SpaceId)),
         {ok, ProviderIds} = get_space_providers(SpaceId, {UserGID, AccessToken}),
-        {ok, #space_info{space_id = BinarySpaceId, name = Name, providers = ProviderIds}}
+
+        UserIds =
+            case gr_spaces:get_users(provider, SpaceId) of
+                {ok, Users} -> Users;
+                _           -> []
+            end,
+
+        {ok, #space_info{space_id = BinarySpaceId, name = Name, providers = ProviderIds, users = UserIds}}
     catch
         _:Reason ->
             ?error("Cannot get info of Space with ID ~p: ~p", [SpaceId, Reason]),

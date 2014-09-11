@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 
 -include("veil_modules/dao/dao.hrl").
+-include("veil_modules/dao/dao_types.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -57,11 +58,10 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
     end;
 check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms}}, CheckType) -> %check read/write/execute perms
     UserUid = UserDoc#veil_document.uuid,
-    FileGroup = get_group(FileName),
-    UserGroups = user_logic:get_space_names(UserDoc#veil_document.record),
+    FileSpace = get_group(FileName),
 
     UserOwnsFile = UserUid=:=FileOwnerUid,
-    UserGroupOwnsFile = lists:member(FileGroup,UserGroups),
+    UserGroupOwnsFile = is_member_of_space(UserDoc, {name, FileSpace}),
     case has_permission(CheckType,FilePerms,UserOwnsFile,UserGroupOwnsFile) of
         true -> ok;
         false -> ?permission_denied_error(UserDoc,FileName,CheckType)
@@ -78,42 +78,75 @@ assert_group_access(_UserDoc, cluster_request, _LogicalPath) ->
 assert_group_access(#veil_document{uuid = ?CLUSTER_USER_ID}, _Request, _LogicalPath) ->
     ok;
 assert_group_access(UserDoc, Request, LogicalPath) ->
-    assert_grp_access(UserDoc, Request, string:tokens(LogicalPath, "/")).
+    case assert_grp_access(UserDoc, Request, string:tokens(LogicalPath, "/")) of
+        true -> ok;
+        false -> error
+    end.
 
-%% assert_grp_access/1
+
+%% is_member_of_space/2
+%% ====================================================================
+%% @doc Checks if the user is an member of given space.
+%% @end
+-spec is_member_of_space(UserDoc :: user_doc(), space_info() | {name, SpaceName :: string() | binary()}) -> boolean().
+%% ====================================================================
+is_member_of_space(#veil_document{record = #user{}} = UserDoc, SpaceReq) ->
+    try
+        is_member_of_space3(UserDoc, SpaceReq, true)
+    catch
+        _:Reason ->
+            ?error("Cannot check space (~p) membership of user ~p due to: ~p", [SpaceReq, UserDoc, Reason]),
+            false
+    end.
+is_member_of_space3(#veil_document{record = #user{global_id = GRUID}} = UserDoc, #space_info{users = Users} = SpaceInfo, Retry) ->
+    case lists:member(vcn_utils:ensure_binary(GRUID), Users) of
+        true -> true;
+        false when Retry ->
+            fslogic_spaces:sync_all_supported_spaces(),
+            is_member_of_space3(UserDoc, SpaceInfo, false);
+        false -> false
+    end;
+is_member_of_space3(#veil_document{record = #user{}} = UserDoc, {name, SpaceName}, Retry) ->
+    UserSpaces = user_logic:get_space_names(UserDoc),
+    case lists:member(SpaceName, UserSpaces) of
+        true -> true;
+        false ->
+            case fslogic_objects:get_space(SpaceName) of
+                {ok, #space_info{} = SpaceInfo} ->
+                    is_member_of_space3(UserDoc, SpaceInfo, Retry);
+                _ when Retry ->
+                    fslogic_spaces:sync_all_supported_spaces(),
+                    is_member_of_space3(UserDoc, SpaceName, false);
+                _ ->
+                    false
+            end
+    end.
+
+
+%% assert_grp_access/3
 %% ====================================================================
 %% @doc Checks if operation given as parameter (one of fuse_messages) is allowed to be invoked in groups context.
 %% @end
--spec assert_grp_access(UserDoc :: tuple(), Request :: atom(), Path :: list()) -> ok | error.
+-spec assert_grp_access(UserDoc :: tuple(), Request :: atom(), Path :: list()) -> boolean().
 %% ====================================================================
 assert_grp_access(_UserDoc, Request, [?SPACES_BASE_DIR_NAME]) ->
-    case lists:member(Request, ?GROUPS_BASE_ALLOWED_ACTIONS) of
-        false   -> error;
-        true    -> ok
-    end;
-assert_grp_access(UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail]) ->
+    lists:member(Request, ?GROUPS_BASE_ALLOWED_ACTIONS);
+assert_grp_access(#veil_document{record = #user{}} = UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail] = PathTokens) ->
     TailCheck = case Tail of
                     [_GroupName] ->
-                        case lists:member(Request, ?GROUPS_ALLOWED_ACTIONS) of
-                            false   -> error;
-                            true    -> ok
-                        end;
+                        lists:member(Request, ?GROUPS_ALLOWED_ACTIONS);
                     _ ->
-                        ok
+                        true
                 end,
     case TailCheck of
-        ok ->
-            UserTeams = user_logic:get_space_names(UserDoc),
-            [GroupName2 | _] = Tail,
-            case lists:member(GroupName2, UserTeams) of
-                true    -> ok;
-                false   -> error
-            end;
+        true ->
+            [SpaceName | _] = Tail,
+            is_member_of_space(UserDoc, {name, SpaceName});
         _ ->
             TailCheck
     end;
 assert_grp_access(_, _, _) ->
-    ok.
+    true.
 
 %% ====================================================================
 %% Internal functions

@@ -760,7 +760,7 @@ contact_fslogic(Message, Value) ->
     CallAns = case Message of
                 internal_call ->
                   gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId,
-                      #veil_request{access_token = fslogic_context:get_access_token(), subject = fslogic_context:get_user_dn(),
+                      #veil_request{access_token = fslogic_context:get_gr_auth(), subject = fslogic_context:get_user_dn(),
                           request = {internal_call, Value}}});
                 _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {Message, Value}})
               end,

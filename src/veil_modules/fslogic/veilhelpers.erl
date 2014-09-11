@@ -167,7 +167,7 @@ do_reroute(SpaceId, RequestBody) ->
     [RerouteToProvider | _] = Providers,
     ?debug("VeilHelper Reroute to: ~p", [RerouteToProvider]),
     try
-        Response = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
+        Response = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_gr_auth(),
             fslogic_context:get_fuse_id(), #remotefilemangement{space_id = SpaceId, input = RequestBody, message_type = atom_to_list(element(1, RequestBody))}),
         cluster_proxy_response_to_internal(Response)
     catch

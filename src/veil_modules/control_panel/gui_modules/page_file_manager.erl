@@ -247,7 +247,7 @@ event({action, Fun, Args}) ->
 comet_loop_init(UserId, GRUID, UserAccessToken, RequestedHostname) ->
     % Initialize page state
     fslogic_context:set_user_dn(UserId),
-    fslogic_context:set_access_token(GRUID, UserAccessToken),
+    fslogic_context:set_gr_auth(GRUID, UserAccessToken),
 
     set_requested_hostname(RequestedHostname),
     set_working_directory(<<"/">>),
