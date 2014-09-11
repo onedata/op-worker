@@ -194,8 +194,8 @@ list_dir_to_json(Path) ->
             {error, <<"error: not a dir">>};
         DirList ->
             DirListBin = lists:map(
-                fun(Dir) ->
-                    gui_str:unicode_list_to_binary(Dir)
+                fun(#dir_entry{name = Name}) ->
+                    gui_str:unicode_list_to_binary(Name)
                 end, DirList),
             Body = {array, DirListBin},
             {body, rest_utils:encode_to_json(Body)}

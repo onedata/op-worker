@@ -233,7 +233,7 @@ join_to_path(Path, [Binary|Tail]) ->
 %% ====================================================================
 %% @doc List the given directory, calling itself recursively if there is more to fetch.
 %% @end
--spec list_dir(string()) -> [string()].
+-spec list_dir(string()) -> [#dir_entry{}].
 %% ====================================================================
 list_dir(Path) ->
     list_dir(Path, 0, 10, []).
@@ -241,10 +241,9 @@ list_dir(Path) ->
 list_dir(Path, Offset, Count, Result) ->
     case logical_files_manager:ls(Path, Count, Offset) of
         {ok, FileList} ->
-            FileList1 = lists:map(fun(#dir_entry{name = Name}) -> Name end, FileList),
-            case length(FileList1) of
-                Count -> list_dir(Path, Offset + Count, Count * 10, Result ++ FileList1);
-                _ -> Result ++ FileList1
+            case length(FileList) of
+                Count -> list_dir(Path, Offset + Count, Count * 10, Result ++ FileList);
+                _ -> Result ++ FileList
             end;
         _ ->
             {error, not_a_dir}
