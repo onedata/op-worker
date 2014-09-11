@@ -151,7 +151,7 @@ verify_peer_cert(Req) ->
                     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
                     {ok, DnString, Req1};
                 {ok, 0, Errno} ->
-                    ?info("[REST] Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
+                    ?error("[REST] Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
                     throw(invalid_cert);
                 {error, Reason} ->
                     ?error("[REST] GSI peer verification callback error: ~p", [Reason]),

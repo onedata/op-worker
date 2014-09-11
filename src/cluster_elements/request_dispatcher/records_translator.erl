@@ -120,6 +120,14 @@ get_answer_decoder_and_type(#fusemessage{input = #createfileack{}}) ->
     {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #getfileuuid{}}) ->
     {fusemessage, fileuuid};
+get_answer_decoder_and_type(#fusemessage{input = #getxattr{}}) ->
+    {fuse_messages, xattr};
+get_answer_decoder_and_type(#fusemessage{input = #setxattr{}}) ->
+    {fuse_messages, atom};
+get_answer_decoder_and_type(#fusemessage{input = #removexattr{}}) ->
+    {fuse_messages, atom};
+get_answer_decoder_and_type(#fusemessage{input = #listxattr{}}) ->
+    {fuse_messages, xattrlist};
 
 get_answer_decoder_and_type(#remotefilemangement{input = #createfile{}}) ->
     {communication_protocol, atom};
