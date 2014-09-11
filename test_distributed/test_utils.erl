@@ -70,11 +70,18 @@ add_user(Config, Login, Cert, Spaces, AccessToken) ->
 
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
 
+    AllSpaces = case get(ct_spaces) of
+        undefined -> put(ct_spaces, SpacesBinary);
+        Ctx -> put(ct_spaces, lists:usort(SpacesBinary ++ Ctx))
+    end,
+
     {CreateUserAns, NewUserDoc} = rpc:call(CCM, user_logic, create_user, ["global_id_for_" ++ Login, Login, Name, Teams, Email, DnList, AccessToken]),
     ?assertMatch({ok, _}, {CreateUserAns, NewUserDoc}),
 
     test_utils:ct_mock(Config, gr_users, get_spaces, fun(_) -> {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
     test_utils:ct_mock(Config, gr_adapter, get_space_info, fun(SpaceId, _) -> {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [?LOCAL_PROVIDER_ID]}} end),
+
+    test_utils:ct_mock(Config, gr_providers, get_spaces, fun(provider) -> {ok, AllSpaces} end),
 
     _UserDoc = rpc:call(CCM, user_logic, synchronize_spaces_info, [NewUserDoc, AccessToken]).
 

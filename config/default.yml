@@ -212,7 +212,7 @@ veil_cluster_node_env:
   - parameter:
       name: dispatcher_timeout
       description: Time in ms after witch ranch answers with error
-      value: 10000
+      value: 120000
 
   - parameter:
       name: ca_dir
@@ -371,6 +371,11 @@ veil_cluster_node_env:
       name: lowest_generated_storage_gid
       description: Lowest GID used for files that shall belong to group that doesn't exist in OS.
       value: 70000
+
+  - parameter:
+        name: provider_proxy_block_size
+        description: Block size for inter-provider file read/write operation
+        value: 1048576 # 1MB
 
 
   # DNS

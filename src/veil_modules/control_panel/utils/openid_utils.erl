@@ -21,7 +21,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([validate_login/0]).
+-export([validate_login/0, get_user_login/1]).
 
 %% validate_login/0
 %% ====================================================================
@@ -36,13 +36,13 @@
 validate_login() ->
     try
         AuthorizationCode = gui_ctx:url_param(<<"code">>),
-        {ok, #grant_token{
+        {ok, #token_response{
             access_token = AccessToken,
             id_token = #id_token{
                 sub = GRUID,
                 name = Name,
                 email = EmailList}
-        }} = gr_openid:get_grant_token(
+        }} = gr_openid:get_token_response(
             provider,
             [{<<"code">>, AuthorizationCode}, {<<"grant_type">>, <<"authorization_code">>}]
         ),

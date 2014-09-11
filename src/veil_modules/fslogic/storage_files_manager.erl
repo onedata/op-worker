@@ -29,7 +29,7 @@
 %% ====================================================================
 %% Physical files organization management (to better organize files on storage;
 %% the user does not see results of these operations)
--export([mkdir/2, mkdir/3, mv/3, delete_dir/2, chmod/3, chown/4]).
+-export([mkdir/2, mkdir/3, mv/3, delete_dir/2, chmod/3, chown/4, link/3]).
 
 %% Physical files access (used to create temporary copies for remote files)
 -export([getattr/2, read/4, write/4, write/3, create/2, create/3, truncate/3, delete/2, ls/0]).
@@ -54,6 +54,22 @@
 %% the user does not see results of these operations)
 %% ====================================================================
 
+
+%% link/3
+%% ====================================================================
+%% @doc Creates hard-link on storage
+%% @end
+-spec mkdir(Storage_helper_info :: record(), FileId :: string(), LinkId :: string()) -> Result when
+    Result :: ok | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+link(Storage_helper_info, FileId, LinkId) ->
+    case veilhelpers:exec(link, Storage_helper_info, [FileId, LinkId]) of
+        0 -> ok;
+        ErrorCode ->
+            {error, fslogic_errors:posix_to_veilerror(ErrorCode)}
+    end.
 
 %% getattr/2
 %% ====================================================================
@@ -93,12 +109,12 @@ mkdir(Storage_helper_info, Dir, Mode) ->
                 0 ->
                     derive_gid_from_parent(Storage_helper_info, Dir),
 
-                    UserID = fslogic_context:get_user_dn(),
+                    Query = fslogic_context:get_user_query(),
 
-                    case UserID of
+                    case Query of
                         undefined -> ok;
                         _ ->
-                            {GetUserAns, User} = user_logic:get_user({dn, UserID}),
+                            {GetUserAns, User} = user_logic:get_user(Query),
                             case GetUserAns of
                                 ok ->
                                     UserRecord = User#veil_document.record,
@@ -405,12 +421,12 @@ create(Storage_helper_info, File, Mode) ->
             0 ->
               derive_gid_from_parent(Storage_helper_info, File),
 
-              UserID = fslogic_context:get_user_dn(),
+              Query = fslogic_context:get_user_query(),
 
-              case UserID of
+              case Query of
                 undefined -> ok;
                 _ ->
-                  {GetUserAns, User} = user_logic:get_user({dn, UserID}),
+                  {GetUserAns, User} = user_logic:get_user(Query),
                   case GetUserAns of
                     ok ->
                       UserRecord = User#veil_document.record,
@@ -831,21 +847,38 @@ check_access_type(File) ->
 -spec setup_ctx(File :: string()) -> ok | {error, no_user}.
 %% ====================================================================
 setup_ctx(File) ->
-    ?debug("Setup storage ctx based on fslogc ctx -> DN: ~p, AccessToken: ~p", [fslogic_context:get_user_dn(), fslogic_context:get_access_token()]),
+    ?debug("Setup storage ctx based on fslogc ctx -> DN: ~p, AccessToken: ~p", [fslogic_context:get_user_dn(), fslogic_context:get_gr_auth()]),
 
     case fslogic_objects:get_user() of
-        {ok, #veil_document{record = #user{login = UserName} = UserRec}} ->
+        {ok, #veil_document{record = #user{login = UserName, global_id = GRUID} = UserRec}} ->
             fslogic_context:set_fs_user_ctx(UserName),
             case check_access_type(File) of
                 {ok, {group, SpaceId}} ->
                     UserSpaces = user_logic:get_spaces(UserRec),
+
                     SelectedSpace = [SP || #space_info{space_id = X} = SP <- UserSpaces, vcn_utils:ensure_binary(SpaceId) =:= X],
-                    GIDs =
+                    {UserSpaces1, SelectedSpace1} =
                         case SelectedSpace of
                             [] ->
-                                fslogic_spaces:map_to_grp_owner(UserSpaces);
+                                UserSpaces0 =
+                                    case dao_lib:apply(vfs, get_space_files, [{gruid, vcn_utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()) of
+                                        {ok, SpaceFiles} ->
+                                            [fslogic_utils:file_to_space_info(SpaceFile) || #veil_document{record = #file{}} = SpaceFile <- SpaceFiles];
+                                        _ ->
+                                            []
+                                    end,
+                                SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, vcn_utils:ensure_binary(SpaceId) =:= X],
+                                {UserSpaces0 ++ UserSpaces, SelectedSpace0};
+                            _  ->
+                                {UserSpaces, SelectedSpace}
+                        end,
+
+                    GIDs =
+                        case SelectedSpace1 of
+                            [] ->
+                                fslogic_spaces:map_to_grp_owner(UserSpaces1);
                             [#space_info{} = SpaceInfo] ->
-                                [fslogic_spaces:map_to_grp_owner(SpaceInfo)] ++ fslogic_spaces:map_to_grp_owner(UserSpaces)
+                                [fslogic_spaces:map_to_grp_owner(SpaceInfo)] ++ fslogic_spaces:map_to_grp_owner(UserSpaces1)
                         end,
                     fslogic_context:set_fs_group_ctx(GIDs),
                     ok;

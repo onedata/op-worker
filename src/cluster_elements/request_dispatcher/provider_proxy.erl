@@ -52,7 +52,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
     {AnswerDecoderName, AnswerType} = records_translator:get_answer_decoder_and_type(Message),
     MsgBytes = encode(Message),
 
-    TokenHash = access_token_hash(GlobalID, AccessToken),
+    TokenHash = vcn_utils:access_token_hash(AccessToken),
 
     MsgId = provider_proxy_con:get_msg_id(),
 
@@ -69,6 +69,8 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
 
     provider_proxy_con:send(URL, MsgId, PRMBin),
 
+    Timeout = timeout_for_message(Message),
+
     receive
         {response, MsgId, AnswerStatus, WorkerAnswer} ->
             provider_proxy_con:report_ack(URL),
@@ -81,7 +83,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
                     ?error("Cannot reroute message ~p due to invalid answer status: ~p", [get_message_type(Message), InvalidStatus]),
                     throw({invalid_status, InvalidStatus})
             end
-    after 1000 ->
+    after Timeout ->
         provider_proxy_con:report_timeout(URL),
         throw(reroute_timeout)
     end.
@@ -119,16 +121,6 @@ reroute_push_message({ProviderId, FuseId}, Message, MessageDecoder) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-
-
-%% access_token_hash/2
-%% ====================================================================
-%% @doc Returns hash of given AccessToken. Can be used to confirm user's GlobalId using GlobalRegistry.
-%% @end
--spec access_token_hash(GlobalId :: binary(), AccessToken :: binary()) -> Hash :: binary().
-%% ====================================================================
-access_token_hash(_GlobalId, AccessToken) ->
-    base64:encode(crypto:hash(sha512, AccessToken)).
 
 
 %% encode/1
@@ -215,3 +207,22 @@ a2l(Atom) when is_atom(Atom) ->
 a2l(List) when is_list(List) ->
     List.
 
+
+%% timeout_for_message/1
+%% ====================================================================
+%% @doc Returns timeout (ms) for given request.
+%% @end
+-spec timeout_for_message(Request :: term()) -> Timeout :: non_neg_integer().
+%% ====================================================================
+timeout_for_message(#fusemessage{input = #getfilechildren{}}) ->
+    timer:seconds(3);
+timeout_for_message(#fusemessage{input = #getfileattr{}}) ->
+    timer:seconds(2);
+timeout_for_message(#fusemessage{input = #renamefile{}}) ->
+    timer:hours(1);
+timeout_for_message(#remotefilemangement{input = #readfile{size = Bytes}}) ->
+    timer:seconds(3) + Bytes; %% 1 byte -> 1ms ~= 1kB/s
+timeout_for_message(#remotefilemangement{input = #writefile{data = Data}}) ->
+    timer:seconds(3) + size(Data); %% 1 byte -> 1ms ~= 1kB/s
+timeout_for_message(_) ->
+    timer:seconds(10).

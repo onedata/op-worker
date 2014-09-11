@@ -29,10 +29,11 @@
 -export([spaces_permissions_test/1, files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1]).
 -export([permissions_management_test/1, user_creation_test/1, get_file_links_test/1, fuse_requests_test/1, users_separation_test/1]).
 -export([file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, user_file_size_test/1, dirs_creating_test/1, spaces_test/1]).
--export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2]).
+-export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2, xattrs_test/1]).
 
 all() -> [spaces_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
-  fuse_requests_test, spaces_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test, concurrent_file_creation_test, get_file_links_test, user_file_size_test
+  fuse_requests_test, spaces_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test,
+  concurrent_file_creation_test, get_file_links_test, user_file_size_test, xattrs_test
 ].
 
 -define(SH, "DirectIO").
@@ -2182,8 +2183,9 @@ files_manager_standard_files_test(Config) ->
   {StatusLs, AnsLs} = rpc:call(Node1, logical_files_manager, ls, [DirName, 100, 0]),
   ?assertEqual(ok, StatusLs),
   ?assertEqual(2, length(AnsLs)),
-  ?assert(lists:member(FileInDir, AnsLs)),
-  ?assert(lists:member(FileInDir2, AnsLs)),
+  FileList1 = lists:map(fun(#dir_entry{name = Name}) -> Name end, AnsLs),
+  ?assert(lists:member(FileInDir, FileList1)),
+  ?assert(lists:member(FileInDir2, FileList1)),
 
   {File2LocationAns, File2Location} = rpc:call(Node1, files_tester, get_file_location, [File2]),
   ?assertEqual(ok, File2LocationAns),
@@ -2201,8 +2203,9 @@ files_manager_standard_files_test(Config) ->
   {StatusLs2, AnsLs2} = rpc:call(Node1, logical_files_manager, ls, [DirName, 100, 0]),
   ?assertEqual(ok, StatusLs2),
   ?assertEqual(2, length(AnsLs2)),
-  ?assert(lists:member(FileInDir, AnsLs2)),
-  ?assert(lists:member(FileInDir2NewName, AnsLs2)),
+  FileList2 = lists:map(fun(#dir_entry{name = Name}) -> Name end, AnsLs2),
+  ?assert(lists:member(FileInDir, FileList2)),
+  ?assert(lists:member(FileInDir2NewName, FileList2)),
 
 
 
@@ -2347,6 +2350,58 @@ get_file_links_test(Config) ->
     RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
     ?assertEqual(ok, RemoveStorageAns).
 
+xattrs_test(Config) ->
+    NodesUp = ?config(nodes, Config),
+    [Node1 | _] = NodesUp,
+
+    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    test_utils:wait_for_cluster_cast(),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    test_utils:wait_for_cluster_init(),
+
+    {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
+    ?assertEqual(ok, InsertStorageAns),
+
+    DirName = "test_xattr_dir",
+
+    % make test file
+    AnsDirCreate1 = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
+    ?assertEqual(ok, AnsDirCreate1),
+
+    % test setting and getting xattrs
+    Ans1 = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name1", "value1"]),
+    ?assertEqual(ok, Ans1),
+    Ans2 = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name1"]),
+    ?assertEqual({ok,"value1"}, Ans2),
+
+    % test replacing xattr
+    Ans3 = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name1", "other_value"]),
+    ?assertEqual(ok, Ans3),
+    Ans4 = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name1"]),
+    ?assertEqual({ok,"other_value"}, Ans4),
+
+    % test listing xattr
+    Ans5 = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name2", "value2"]),
+    ?assertEqual(ok, Ans5),
+    Ans6 = rpc:call(Node1, logical_files_manager, list_xattr, [DirName]),
+    ?assertEqual({ok, [{"name2","value2"}, {"name1","other_value"}]}, Ans6),
+
+    % test removing xattr
+    Ans7 = rpc:call(Node1, logical_files_manager, remove_xattr, [DirName,"name2"]),
+    ?assertEqual(ok, Ans7),
+    Ans8 = rpc:call(Node1, logical_files_manager, list_xattr, [DirName]),
+    ?assertEqual({ok,[{"name1","other_value"}]}, Ans8),
+
+    % test error reporting
+    Ans9 = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name3"]),
+    ?assertEqual({logical_file_system_error, ?VENOATTR}, Ans9),
+
+    % cleanup
+    AnsDel = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
+    ?assertEqual(ok, AnsDel),
+    RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+    ?assertEqual(ok, RemoveStorageAns).
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -2536,7 +2591,8 @@ ls(Socket, Dir, Num, Offset) ->
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Files = fuse_messages_pb:decode_filechildren(Bytes),
   Files2 = records_translator:translate(Files, "fuse_messages"),
-  {Status, Files2#filechildren.child_logic_name, Files2#filechildren.answer}.
+  FileList = lists:map(fun(#filechildren_direntry{name = Name}) -> Name end, Files2#filechildren.entry),
+  {Status, FileList, Files2#filechildren.answer}.
 
 delete_file(Socket, FileName) ->
   FslogicMessage = #deletefile{file_logic_name = FileName},

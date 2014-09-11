@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Michal Wrzeszcz
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -25,7 +25,8 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([init/1, handle/2, cleanup/0, fslogic_runner/4]).
+-export([init/1, handle/2, cleanup/0, fslogic_runner/4, handle_fuse_message/1]).
+-export([extract_logical_path/1]).
 
 %% ====================================================================
 %% API functions
@@ -65,7 +66,7 @@ handle(_ProtocolVersion, get_version) ->
 %% TODO: create generic mechanism for getting configuration on client startup
 handle(ProtocolVersion, is_write_enabled) ->
   try
-    case user_logic:get_user({dn, fslogic_context:get_user_dn()}) of
+    case fslogic_objects:get_user() of
       {ok, UserDoc} ->
         case user_logic:get_quota(UserDoc) of
           {ok, #quota{exceeded = Exceeded}} when is_boolean(Exceeded) ->
@@ -180,23 +181,34 @@ maybe_handle_fuse_message(RequestBody) ->
     Self = cluster_manager_lib:get_provider_id(),
 
     ?debug("Space for request: ~p, providers: ~p (current ~p). AccessToken: ~p, ~p, FullName: ~p / ~p",
-        [SpaceName, Providers, Self, fslogic_context:get_access_token(), RequestBody, PathCtx, AbsolutePathCtx]),
+        [SpaceName, Providers, Self, fslogic_context:get_gr_auth(), RequestBody, PathCtx, AbsolutePathCtx]),
 
     case lists:member(Self, Providers) of
         true ->
             handle_fuse_message(RequestBody);
         false ->
-            [RerouteToProvider | _] = Providers,
-            try
-                provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
-                    fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
+            PrePostProcessResponse = try
+                case fslogic_remote:prerouting(SpaceInfo, RequestBody, Providers) of
+                    {ok, {reroute, Self, RequestBody1}} ->  %% Request should be handled locally for some reason
+                        {ok, handle_fuse_message(RequestBody1)};
+                    {ok, {reroute, RerouteToProvider, RequestBody1}} ->
+                        RemoteResponse = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_gr_auth(),
+                            fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody1, message_type = atom_to_list(element(1, RequestBody))}),
+                        {ok, RemoteResponse};
+                    {ok, {response, Response}} -> %% Do not handle this request and return custom response
+                        {ok, Response};
+                    {error, PreRouteError} ->
+                        ?error("Cannot initialize reouting for request ~p due to error in prerouting handler: ~p", [RequestBody, PreRouteError]),
+                        throw({unable_to_reroute_message, {prerouting_error, PreRouteError}})
+                end
             catch
                 Type:Reason ->
-                    ?error_stacktrace("Unable to process remote fslogic request to provider ~p due to: ~p", [RerouteToProvider, {Type, Reason}]),
-                    case fslogic_remote:local_clean_postprocess(SpaceInfo, Reason, RequestBody) of
-                        undefined -> throw({unable_to_reroute_message, Reason});
-                        LocalResponse -> LocalResponse
-                    end
+                    ?error_stacktrace("Unable to process remote fslogic request due to: ~p", [{Type, Reason}]),
+                    {error, {Type, Reason}}
+            end,
+            case fslogic_remote:postrouting(SpaceInfo, PrePostProcessResponse, RequestBody) of
+                undefined -> throw({unable_to_reroute_message, PrePostProcessResponse});
+                LocalResponse -> LocalResponse
             end
     end.
 
@@ -253,13 +265,13 @@ fslogic_runner(Method, RequestType, RequestBody, ErrorHandler) when is_function(
             %% Manually thrown error, normal interrupt case.
             ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
-        error:{badmatch, {error, Reason}} ->
+        error:{badmatch, Reason} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went wrong, but it could be expected.
-            ?warning("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            ?warning_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
-        error:{case_clause, {error, Reason}} ->
+        error:{case_clause, Reason} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went seriously wrong and we should know about it.
             ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
@@ -301,6 +313,22 @@ handle_fuse_message(Req = #checkfileperms{file_logic_name = FName, type = Type})
 handle_fuse_message(Req = #getfileattr{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:get_file_attr(FullFileName);
+
+handle_fuse_message(Req = #getxattr{file_logic_name = FName, name = Name}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:get_xattr(FullFileName, Name);
+
+handle_fuse_message(Req = #setxattr{file_logic_name = FName, name = Name, value = Value, flags = Flags}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:set_xattr(FullFileName, Name, Value, Flags);
+
+handle_fuse_message(Req = #removexattr{file_logic_name = FName, name = Name}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:remove_xattr(FullFileName,Name);
+
+handle_fuse_message(Req = #listxattr{file_logic_name = FName}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:list_xattr(FullFileName);
 
 handle_fuse_message(Req = #getfileuuid{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
@@ -390,6 +418,16 @@ handle_custom_request({getfilelocation, UUID}) ->
 %% %% ====================================================================
 extract_logical_path(#getfileattr{file_logic_name = Path}) ->
     Path;
+extract_logical_path(#getfileuuid{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getxattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#setxattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#removexattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#listxattr{file_logic_name = Path}) ->
+    Path;
 extract_logical_path(#getfilelocation{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#deletefile{file_logic_name = Path}) ->
@@ -421,8 +459,6 @@ extract_logical_path(#checkfileperms{file_logic_name = Path}) ->
 extract_logical_path(#updatetimes{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#createfileack{file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#getfileuuid{file_logic_name = Path}) ->
     Path;
 extract_logical_path(_) ->
     "/".

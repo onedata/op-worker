@@ -247,7 +247,7 @@ event({action, Fun, Args}) ->
 comet_loop_init(UserId, GRUID, UserAccessToken, RequestedHostname) ->
     % Initialize page state
     fslogic_context:set_user_dn(UserId),
-    fslogic_context:set_access_token(GRUID, UserAccessToken),
+    fslogic_context:set_gr_auth(GRUID, UserAccessToken),
 
     set_requested_hostname(RequestedHostname),
     set_working_directory(<<"/">>),
@@ -1196,9 +1196,10 @@ fs_list_dir(BinPath, Offset, Count, Result) ->
     Path = gui_str:binary_to_unicode_list(BinPath),
     case logical_files_manager:ls(Path, Count, Offset) of
         {ok, FileList} ->
-            case length(FileList) of
-                Count -> fs_list_dir(Path, Offset + Count, Count * 10, Result ++ FileList);
-                _ -> Result ++ FileList
+            FileList1 = lists:map(fun(#dir_entry{name = Name}) -> Name end, FileList),
+            case length(FileList1) of
+                Count -> fs_list_dir(Path, Offset + Count, Count * 10, Result ++ FileList1);
+                _ -> Result ++ FileList1
             end;
         _ ->
             {error, not_a_dir}

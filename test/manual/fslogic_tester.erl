@@ -264,7 +264,8 @@ ls(Host, Cert, Port, Dir, Num, Offset) ->
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Files = fuse_messages_pb:decode_filechildren(Bytes),
   Files2 = records_translator:translate(Files, "fuse_messages"),
-  {Status, Files2#filechildren.child_logic_name, Files2#filechildren.answer}.
+  FileList1 = lists:map(fun(#filechildren_direntry{name = Name}) -> Name end, Files2#filechildren.entry),
+  {Status, FileList1, Files2#filechildren.answer}.
 
 delete_file(Host, Cert, Port, FileName) ->
   FslogicMessage = #deletefile{file_logic_name = FileName},

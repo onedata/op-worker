@@ -12,9 +12,9 @@ error_bad_args()
 {
 	echo "Usage:"
 	echo "variant 1: (argument order can be arbitrary)"
-	echo "	$0 -name node_name@host -main_ccm main_ccm_node@host [-opt_ccms opt_ccm_node1@host opt_ccm_node2@host ...] -db_nodes dbnode1@host dbnode2@host ... [-storage_config_path "/path"]"
+	echo "	$0 -name node_name@host -main_ccm main_ccm_node@host [-opt_ccms opt_ccm_node1@host opt_ccm_node2@host ...] -db_nodes dbnode1@host dbnode2@host ... [-storage_config_path \"/path\"] [-output_dir \"/path\"]"
 	echo " "
-	echo "variant 2: (file 'gen_dev.args' with arguments present in script directory)"
+	echo "variant 2: (file 'gen_dev.args' with arguments present in script directory or file pointed by GEN_DEV_ARGS_FILE env variable"
 	echo "	$0"
 	echo " "
 	echo "Additional parameters: (acceptable in both variants)"
@@ -41,7 +41,7 @@ get_parameter_from_args()
 	# Exception: -opt_ccms and -storage_config_path could have been left empty intentionally.
 	local INDEX=`awk -v a=" $ARGS " -v b=" $TOKEN " 'BEGIN{print index(a, b)}'`
 	if [[ $INDEX -eq 0 ]]; then
-		if [ $TOKEN == '-opt_ccms' ] || [ $TOKEN == '-storage_config_path' ]; then
+		if [ $TOKEN == '-opt_ccms' ] || [ $TOKEN == '-storage_config_path' ] || [ $TOKEN == '-output_dir' ]; then
 			RESULT=""
 			return
 		else
@@ -58,15 +58,15 @@ get_parameter_from_args()
 	# Trim the arguments string so that it starts after the token
 	local ARGS=${ARGS:$(($INDEX + ${#TOKEN})):${#ARGS}}
 
-	# Find the next occurence of a hyphen 
-	INDEX=`awk -v a="$ARGS" -v b="-" 'BEGIN{print index(a, b)}'`
+    # Find the next occurence of a hyphen that is just after a space
+	INDEX=`awk -v a=" $ARGS" -v b=" -" 'BEGIN{print index(a, b)}'`
 
 	# If its zero, the ARGS variable holds the desired string. If not, cut off the part after the hyphen
 	if [[ $INDEX -gt 0 ]]; then
 		ARGS=${ARGS:0:$(($INDEX - 1))}
 	fi
 
-	# If the expected result is a single word, get the first one from remaining string. 
+	# If the expected result is a single word, get the first one from remaining string.
 	# This somehow resolves errors like passing a double word 'name' parameter.
 	if [[ $RETURN_OPTION == "single" ]]; then
 		ARGS=`echo $ARGS | cut -f1 -d' '`
@@ -102,10 +102,16 @@ cd $PATH_TO_SCRIPT
 if  [[ $# -eq 0 ]] || 
 	[[ $# -eq 1  && $1 == "-no_compile" ]] || 
 	[[ $# -eq 1  && $1 == "-no_generate" ]]; then
+
+	ARGS_FILE="${GEN_DEV_ARGS_FILE}"
+	if [ -z "${ARGS_FILE}" ]; then
+	    ARGS_FILE=gen_dev.args
+	fi
+
 	# Check for .args file
-	if [[ -f gen_dev.args ]]; then
+	if [[ -f "${ARGS_FILE}" ]]; then
 		# Get args from 
-		ARGS=`cat gen_dev.args`
+		ARGS=`cat "${ARGS_FILE}"`
 		# And execute the script with the args from there
 		if [[ $1 == "" ]]; then
 			echo "Using arguments from gen_dev.args"
@@ -144,6 +150,13 @@ DB_NODES=$RESULT
 get_parameter_from_args "$*" -storage_config_path single
 STORAGE_CONFIG_PATH=$RESULT
 
+get_parameter_from_args "$*" -output_dir single
+TEST_NODE_DIR=$RESULT
+
+if [ -z "$TEST_NODE_DIR" ]; then
+    TEST_NODE_DIR=test_cluster
+fi
+
 # Get short node name (without hostname) and hostname
 AT_INDEX=`echo "$NODE_NAME" | sed -n "s/["@"].*//p" | wc -c`
 if [[ $AT_INDEX -gt 0 ]]; then
@@ -160,7 +173,7 @@ fi
 
 echo " "
 echo "========================================"
-echo "Generating release for $NODE_NAME in    /releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME"
+echo "Generating release for $NODE_NAME in    /releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME"
 
 # Skip generation if -no_generate is in args
 INDEX=`awk -v a=" $* " -v b=" -no_generate " 'BEGIN{print index(a, b)}'`
@@ -202,7 +215,7 @@ else
 fi
 
 # Create directory for test nodes if it doesn't exit
-mkdir -p releases/test_cluster
+mkdir -p "releases/${TEST_NODE_DIR}"
 
 
 # Originally let's assume this node is a worker
@@ -221,13 +234,13 @@ done
 
 
 # Remove old release
-rm -r releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME 2>/dev/null
+rm -r "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME" 2>/dev/null
 
 # Copy the release package to proper location (directory named as the node without hostname), preserve mode
-cp -R -p releases/veil_cluster_node releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME
+cp -R -p releases/veil_cluster_node "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME"
 
 # Execute the veil_cluster script with proper arguments
-./releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/bin/veil_cluster \
+./releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME/bin/veil_cluster \
 -name $NODE_NAME -main_ccm $MAIN_CCM -opt_ccms $OPT_CCMS -db_nodes $DB_NODES -storage_config_path $STORAGE_CONFIG_PATH
 
 # Get hostname to use it as the cookie
@@ -242,27 +255,27 @@ if [[ $AT_INDEX -gt 0 ]]; then
 fi
 
 # Get application version
-START_ERL=`cat releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/releases/start_erl.data`
+START_ERL=`cat "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME/releases/start_erl.data"`
 APP_VSN=${START_ERL#* }
 
 # Replace the cookie
-sed $SED_OPTS  "s/-setcookie.*/-setcookie '$COOKIE'/g" releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/releases/$APP_VSN/vm.args
+sed $SED_OPTS  "s/-setcookie.*/-setcookie '$COOKIE'/g" "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME/releases/$APP_VSN/vm.args"
 echo "Cookie set to: $COOKIE"
 
 # Generate a corresponding worker if this node is a CCM
 if [[ $NODE_TYPE == "ccm" ]]; then
     echo " "
     echo "****************"
-    echo "Generating worker for $NODE_NAME in    /releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker"
+    echo "Generating worker for $NODE_NAME in    /releases/${TEST_NODE_DIR}/${NODE_NAME_WITHOUT_HOSTNAME}_worker"
 
-    rm -r releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker 2>/dev/null
+    rm -r "releases/${TEST_NODE_DIR}/${NODE_NAME_WITHOUT_HOSTNAME}_worker" 2>/dev/null
 
-    cp -R -p releases/veil_cluster_node releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker
+    cp -R -p releases/veil_cluster_node "releases/$TEST_NODE_DIR/${NODE_NAME_WITHOUT_HOSTNAME}_worker"
 
-    ./releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker/bin/veil_cluster \
+    ./releases/${TEST_NODE_DIR}/${NODE_NAME_WITHOUT_HOSTNAME}_worker/bin/veil_cluster \
     -name ${NODE_NAME_WITHOUT_HOSTNAME}_worker${HOSTNAME} -main_ccm $MAIN_CCM -opt_ccms $OPT_CCMS -db_nodes $DB_NODES -storage_config_path $STORAGE_CONFIG_PATH
 
-    sed $SED_OPTS  "s/-setcookie.*/-setcookie '$COOKIE'/g" releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker/releases/$APP_VSN/vm.args
+    sed $SED_OPTS  "s/-setcookie.*/-setcookie '$COOKIE'/g" "releases/${TEST_NODE_DIR}/${NODE_NAME_WITHOUT_HOSTNAME}_worker/releases/$APP_VSN/vm.args"
     echo "Cookie set to: $COOKIE"
 fi
 

@@ -16,7 +16,36 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([initialize/1, map_to_grp_owner/1, get_storage_space_name/1]).
+-export([initialize/1, map_to_grp_owner/1, get_storage_space_name/1, sync_all_supported_spaces/0]).
+
+
+%% sync_all_supported_spaces/0
+%% ====================================================================
+%% @doc Synchronizes all spaces that are supported by this provider.
+%% @end
+-spec sync_all_supported_spaces() -> ok | {error, Reason :: any()} | {error, [Reason :: any()]}.
+%% ====================================================================
+sync_all_supported_spaces() ->
+    case gr_providers:get_spaces(provider) of
+        {ok, SpaceIds} ->
+            Result = [catch fslogic_spaces:initialize(SpaceId) || SpaceId <- SpaceIds],
+            {_GoodRes, BadRes} = lists:partition(
+                fun(Elem) ->
+                    case Elem of
+                        {ok, _} -> true;
+                        _       -> false
+                    end
+                end, Result),
+
+            case BadRes of
+                [] -> ok;
+                _  ->
+                    {error, BadRes}
+            end;
+        {error, Reason} ->
+            ?error("Cannot get supported spaces due to: ~p", [Reason]),
+            {error, Reason}
+    end.
 
 
 %% initialize/1
@@ -54,7 +83,7 @@ initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
             {error, Reason}
     end;
 initialize(SpaceId) ->
-    case gr_adapter:get_space_info(SpaceId, fslogic_context:get_access_token()) of
+    case gr_adapter:get_space_info(SpaceId, fslogic_context:get_gr_auth()) of
         {ok, #space_info{} = SpaceInfo} ->
             initialize(SpaceInfo);
         {error, Reason} ->
@@ -78,7 +107,7 @@ map_to_grp_owner(#space_info{name = SpaceName, space_id = SpaceId}) ->
         "" ->
             <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, SpaceId),
             {ok, LowestGID} = veil_cluster_node_app:get_env(lowest_generated_storage_gid),
-            70000 + GID0 rem 1000000;
+            LowestGID + GID0 rem 1000000;
         StrGID ->
             list_to_integer(StrGID)
     end.

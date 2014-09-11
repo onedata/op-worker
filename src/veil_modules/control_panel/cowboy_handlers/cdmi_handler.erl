@@ -43,30 +43,24 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% @end
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
-rest_init(Req, _Opt) ->
+rest_init(ReqArg, _Opt) ->
     try
-        {ok, DnString} = rest_utils:verify_peer_cert(Req),
-        ok = rest_utils:prepare_context(DnString),
+        {ok, Identity, Req} = rest_utils:verify_peer_cert(ReqArg),
+        ok = rest_utils:prepare_context(Identity),
         {Method, Req1} = cowboy_req:method(Req),
         {PathInfo, Req2} = cowboy_req:path_info(Req1),
         {Url, Req3} = cowboy_req:path(Req2),
         {RawOpts, Req4} = cowboy_req:qs(Req3),
-        {CdmiVersionList, Req5} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req4),
-        CdmiVersion = get_supported_version(CdmiVersionList),
-        Req6 = case CdmiVersion of
-                   undefined -> Req5;
-                   _ -> cowboy_req:set_resp_header(<<"x-cdmi-specification-version">>, CdmiVersion, Req5)
-               end,
         Path = case PathInfo == [] of
                    true -> "/";
                    false -> gui_str:binary_to_unicode_list(rest_utils:join_to_path(PathInfo))
                end,
         HandlerModule = cdmi_routes:route(PathInfo, Url),
-        {ok, Req6, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts), cdmi_version = CdmiVersion, handler_module = HandlerModule}}
+        {ok, Req4, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts), handler_module = HandlerModule}}
     catch
-        _Type:{badmatch,{error, Error}} -> {ok, Req, {error, Error}};
-        _Type:{badmatch,Error} -> {ok, Req, {error,Error}};
-        _Type:Error -> {ok, Req, {error,Error}}
+        _Type:{badmatch,{error, Error}} -> {ok, ReqArg, {error, Error}};
+        _Type:{badmatch,Error} -> {ok, ReqArg, {error,Error}};
+        _Type:Error -> {ok, ReqArg, {error,Error}}
     end.
 
 %% allowed_methods/2
@@ -82,7 +76,8 @@ rest_init(Req, _Opt) ->
 allowed_methods(Req, {error,Error}) ->
     case Error of
         {user_unknown, DnString} -> cdmi_error:error_reply(Req, undefined, ?error_unauthorized_code, "No user found with given DN: ~p",[DnString]);
-        unsupported_version -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "Provided cdmi version is unsupported",[]);
+        invalid_cert -> cdmi_error:error_reply(Req, undefined, ?error_unauthorized_code, "Invalid peer certificate error",[]);
+        invalid_token -> cdmi_error:error_reply(Req, undefined, ?error_unauthorized_code, "Invalid token error",[]);
         Error -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "State init error: ~p",[Error])
     end;
 allowed_methods(Req, #state{handler_module = Handler} = State) ->
@@ -98,7 +93,17 @@ allowed_methods(Req, #state{handler_module = Handler} = State) ->
 %% ====================================================================
 malformed_request(Req, #state{handler_module = Handler} = State) ->
     try
-        Handler:malformed_request(Req,State)
+        % check cdmi version
+        {CdmiVersionList, Req1} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
+        CdmiVersion = get_supported_version(CdmiVersionList),
+
+        % set response header
+        Req2 = case CdmiVersion of
+                   undefined -> Req1;
+                   _ -> cowboy_req:set_resp_header(<<"x-cdmi-specification-version">>, CdmiVersion, Req1)
+               end,
+
+        Handler:malformed_request(Req2,State#state{cdmi_version = CdmiVersion})
     catch
         _Type:Error -> cdmi_error:error_reply(Req, undefined, ?error_bad_request_code, "Malformed request error: ~p",[Error])
     end.
@@ -167,7 +172,9 @@ put_cdmi_container(Req,State = #state{handler_module = Handler}) ->
 put_binary(Req,State = #state{handler_module = Handler}) ->
     Handler:put_binary(Req,State).
 put_cdmi_object(Req,State = #state{handler_module = Handler}) ->
-    Handler:put_cdmi_object(Req,State).
+    try Handler:put_cdmi_object(Req,State)
+    catch _:invalid_base64 -> cdmi_error:error_reply(Req, State, ?error_bad_request_code, "Invalid base64 string", [])
+    end.
 
 %% ====================================================================
 %% Internal functions
@@ -210,7 +217,7 @@ parse_opts(RawOpts) ->
 %% ====================================================================
 get_supported_version(undefined) -> undefined;
 get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
-    VersionList = lists:map(fun trim_spaces/1, binary:split(VersionBinary,<<",">>,[global])),
+    VersionList = lists:map(fun rest_utils:trim_spaces/1, binary:split(VersionBinary,<<",">>,[global])),
     get_supported_version(VersionList);
 get_supported_version([]) ->
     ?error("Request with unsupported cdmi version list"),
@@ -219,10 +226,3 @@ get_supported_version([<<"1.0.2">> | _Rest]) -> <<"1.0.2">>;
 get_supported_version([<<"1.0.1">> | _Rest]) -> <<"1.0.1">>;
 get_supported_version([_Version | Rest]) -> get_supported_version(Rest).
 
-%% trim_spaces/1
-%% ====================================================================
-%% @doc trims spaces from front and end of given binary
--spec trim_spaces(binary()) -> binary().
-%% ====================================================================
-trim_spaces(Binary) when is_binary(Binary) ->
-    list_to_binary(string:strip(binary_to_list(Binary), both, $ )).

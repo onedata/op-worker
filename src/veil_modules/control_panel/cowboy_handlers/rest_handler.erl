@@ -53,18 +53,17 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% ====================================================================
 rest_init(Req, _Opts) ->
     case cowboy_req:path_info(Req) of
-        {[?connection_check_path], _} ->
-            % when checking connection, continue without cert verification
+        {[Endpoint], _} when Endpoint =:= ?connection_check_path orelse Endpoint =:= <<"token">> ->
+            % when checking connection or generating token, continue without cert verification
             init_state(Req);
         _ ->
-            {ok, DnString} = rest_utils:verify_peer_cert(Req),
-            Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req),
-            case rest_utils:prepare_context(DnString) of
+            {ok, Identity, Req1} = rest_utils:verify_peer_cert(Req),
+            Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req1),
+            case rest_utils:prepare_context(Identity) of
                 ok -> init_state(Req2);
                 Error -> {ok, Req2, Error}
             end
     end.
-
 
 %% allowed_methods/2
 %% ====================================================================

@@ -13,19 +13,101 @@
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_types.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("fuse_messages_pb.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([create_children_list/1, create_children_list/2, get_user_id_from_system/1]).
 -export([get_sh_and_id/3, get_sh_and_id/4, get_sh_and_id/5, get_files_number/3]).
 -export([get_space_info_for_path/1, get_user_groups/2]).
--export([random_ascii_lowercase_sequence/1]).
+-export([random_ascii_lowercase_sequence/1, path_walk/3, list_dir/1]).
+-export([run_as_root/1, file_to_space_info/1]).
 
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
+
+%% file_to_space_info/1
+%% ====================================================================
+%% @doc Extracts space_info() from file_doc(). If given file is not an space's root file, fails with error:{badarg, file_info()}.
+%% @end
+-spec file_to_space_info(SpaceFile :: file_doc() | file_info()) -> space_info() | no_return().
+%% ====================================================================
+file_to_space_info(#veil_document{record = #file{} = File}) ->
+    file_to_space_info(File);
+file_to_space_info(#file{extensions = Exts} = File) ->
+    case lists:keyfind(?file_space_info_extestion, 1, Exts) of
+        {?file_space_info_extestion, #space_info{} = SpaceInfo} ->
+            SpaceInfo;
+        _ ->
+            error({badarg, File})
+    end.
+
+
+%% run_as_root/1
+%% ====================================================================
+%% @doc Runs given function as root.
+%% @end
+-spec run_as_root(Fun :: function()) -> Result :: term().
+%% ====================================================================
+run_as_root(Fun) ->
+    %% Save user context
+    DN_CTX = fslogic_context:get_user_dn(),
+    {AT_CTX1, AT_CTX2} = fslogic_context:get_gr_auth(),
+
+    %% Clear user context
+    fslogic_context:clear_user_ctx(),
+
+    Result = Fun(),
+
+    %% Restore user context
+    fslogic_context:set_user_dn(DN_CTX),
+    fslogic_context:set_gr_auth(AT_CTX1, AT_CTX2),
+
+    Result.
+
+
+%% path_walk/3
+%% ====================================================================
+%% @doc Executes given function for each file which path starts with StartPath. This function behaves very similar to
+%%      lists:foldl/3 only that instead list iteration, recursive path walk is made. File order is unspecified.
+%% @end
+-spec path_walk(StartPath :: path(), InitAcc :: [term()],
+    Fun :: fun((SubPath :: path(), FileType :: file_type_protocol(), AccIn :: [term()]) -> [term()])) ->
+    AccOut :: [term()] | no_return().
+%% ====================================================================
+path_walk(Path, InitAcc, Fun) ->
+    {ok, #fileattributes{type = FileType}} = logical_files_manager:getfileattr(Path),
+    path_walk4(Path, FileType, InitAcc, Fun).
+path_walk4(Path, ?DIR_TYPE_PROT = FileType, Acc, Fun) ->
+    Acc1 = Fun(Path, FileType, Acc),
+    lists:foldl(
+        fun(#dir_entry{name = Elem, type = ElemType}, IAcc) ->
+            ElemPath = filename:join(Path, Elem),
+            path_walk4(ElemPath, ElemType, IAcc, Fun)
+        end, Acc1, list_dir(Path));
+path_walk4(Path, FileType, Acc, Fun) ->
+    Fun(Path, FileType, Acc).
+
+
+%% list_dir/1
+%% ====================================================================
+%% @doc Returns all dir's entries.
+%% @end
+-spec list_dir(Path :: path()) -> [#dir_entry{}] | no_return().
+%% ====================================================================
+list_dir(Path) ->
+    BatchSize = 100,
+    list_dir4(Path, 0, BatchSize, []).
+list_dir4(Path, Offset, BatchSize, Acc) ->
+    {ok, Childern} = logical_files_manager:ls(Path, BatchSize, Offset),
+    case length(Childern) < BatchSize of
+        true  -> Childern ++ Acc;
+        false ->
+            list_dir4(Path, Offset + length(Childern), BatchSize, Childern ++ Acc)
+    end.
 
 %% get_sh_and_id/3
 %% ====================================================================
@@ -81,8 +163,10 @@ create_children_list([], Ans) ->
   Ans;
 
 create_children_list([File | Rest], Ans) ->
-  FileDesc = File#veil_document.record,
-  create_children_list(Rest, [FileDesc#file.name | Ans]).
+    FileDesc = File#veil_document.record,
+    Name = FileDesc#file.name,
+    Type = fslogic_file:normalize_file_type(protocol, FileDesc#file.type),
+    create_children_list(Rest, [#filechildren_direntry{name = Name, type = Type} | Ans]).
 
 
 %% random_ascii_lowercase_sequence

@@ -28,6 +28,8 @@
 -define(ok, 200).
 -define(ok_partial_content, 206).
 
+-define(moved_pemanently_code, 301).
+
 -define(error_bad_request_code, 400).
 -define(error_unauthorized_code, 401).
 -define(error_forbidden_code, 403).
