@@ -22,6 +22,7 @@
 -export([get_access_token/0, set_access_token/2]).
 -export([gen_global_fuse_id/2, read_global_fuse_id/1, is_global_fuse_id/1]).
 -export([clear_user_ctx/0, clear_access_token/0]).
+-export([get_user_context/0, set_user_context/1]).
 
 %% ====================================================================
 %% API functions
@@ -248,6 +249,28 @@ read_global_fuse_id(GlobalFuseId) ->
 is_global_fuse_id(GlobalFuseId) ->
     GlobalFuseId1 = vcn_utils:ensure_binary(GlobalFuseId),
     length(binary:split(GlobalFuseId1, <<"::">>)) =:= 2.
+
+
+%% get_user_context/0
+%% ====================================================================
+%% @doc Gets user DN, accessToken and GRUID
+%% @end
+-spec get_user_context() -> {Dn :: binary(), {GRUID :: binary(), Token :: binary()}}.
+%% ====================================================================
+get_user_context() ->
+    {get_user_dn(),{get(gruid), get(access_token)}}.
+
+
+%% set_user_context/0
+%% ====================================================================
+%% @doc Gets user DN, accessToken and GRUID
+%% @end
+-spec set_user_context({Dn :: binary(), {GRUID :: binary(), Token :: binary()}}) -> ok.
+%% ====================================================================
+set_user_context({Dn,{GRUID,AccessToken}}) ->
+    set_user_dn(Dn),
+    set_access_token(GRUID,AccessToken),
+    ok.
 
 %% ====================================================================
 %% Internal functions

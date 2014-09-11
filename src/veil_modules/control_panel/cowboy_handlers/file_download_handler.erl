@@ -78,12 +78,13 @@ terminate(_Reason, _Req, _State) ->
 %% by cowboy to send data (file content) to receiving socket.
 %% NOTE! FilePathOrUUID must be a unicode string (not utf8)
 %% @end
--spec cowboy_file_stream_fun(UserDN :: string(), FilePathOrUUID :: string() | {uuid, string()}, Size :: integer()) -> function().
+-spec cowboy_file_stream_fun(Context, FilePathOrUUID :: string() | {uuid, string()}, Size :: integer()) -> function() when
+    Context :: {Dn :: binary(), {GRUID :: binary(), Token :: binary()}}.
 %% ====================================================================
-cowboy_file_stream_fun(UserDN, FilePathOrUUID, Size) ->
+cowboy_file_stream_fun(Context, FilePathOrUUID, Size) ->
     fun(Socket, Transport) ->
         try
-            fslogic_context:set_user_dn(UserDN),
+            fslogic_context:set_user_context(Context),
             stream_file(Socket, Transport, FilePathOrUUID, Size, get_download_buffer_size())
         catch Type:Message ->
             % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
@@ -241,7 +242,7 @@ handle_shared_files_request(Req, ShareID) ->
 -spec send_file(Req :: req(), FilePathOrUUID :: string() | {uuid, string()}, FileName :: string(), Size :: integer()) -> {ok, req()}.
 %% ====================================================================
 send_file(Req, FilePathOrUUID, FileName, Size) ->
-    StreamFun = cowboy_file_stream_fun(fslogic_context:get_user_dn(), FilePathOrUUID, Size),
+    StreamFun = cowboy_file_stream_fun(fslogic_context:get_user_context(), FilePathOrUUID, Size),
     Req2 = content_disposition_attachment_headers(Req, FileName),
     Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
     {ok, _FinReq} = veil_cowboy_bridge:apply(cowboy_req, reply, [200, cowboy_req:set([{connection, close}], Req3)]).

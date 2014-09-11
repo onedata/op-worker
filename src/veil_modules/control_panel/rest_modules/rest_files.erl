@@ -97,7 +97,7 @@ get(Req, <<"1.0">>, Id) ->
             % File attrs were cached in exists/3
             Fileattr = erlang:get(file_attr),
             Size = Fileattr#fileattributes.size,
-            StreamFun = file_download_handler:cowboy_file_stream_fun(fslogic_context:get_user_dn(), FilePath, Size),
+            StreamFun = file_download_handler:cowboy_file_stream_fun(fslogic_context:get_user_context(), FilePath, Size),
             NewReq = file_download_handler:content_disposition_attachment_headers(Req, filename:basename(FilePath)),
             {Type, Subtype, _} = cow_mimetypes:all(Id),
             Mimetype = <<Type/binary, "/", Subtype/binary>>,

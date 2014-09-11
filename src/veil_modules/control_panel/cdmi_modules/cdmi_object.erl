@@ -135,10 +135,10 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
         _ ->
             % prepare data size and stream function
             StreamSize = lists:foldl(fun({From, To}, Acc) when To >= From -> Acc + To - From + 1 end, 0, Ranges),
-            UserDN = fslogic_context:get_user_dn(),
+            Context = fslogic_context:get_user_context(),
             StreamFun = fun(Socket, Transport) ->
                 try
-                    fslogic_context:set_user_dn(UserDN),
+                    fslogic_context:set_user_context(Context),
                     {ok, BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
                     lists:foreach(fun(Rng) ->
                         stream_file(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
@@ -186,10 +186,10 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
                        end,
             Base64EncodedSize = byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4 * ceil(DataSize / 3.0)),
 
-            UserDN = fslogic_context:get_user_dn(),
+            Context = fslogic_context:get_user_context(),
             StreamFun = fun(Socket, Transport) ->
                 try
-                    fslogic_context:set_user_dn(UserDN),
+                    fslogic_context:set_user_context(Context),
                     Transport:send(Socket,JsonBodyPrefix),
                     {ok,BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
                     stream_file(Socket, Transport, State, Range, Encoding, BufferSize),
