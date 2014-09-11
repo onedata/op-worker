@@ -69,6 +69,8 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
 
     provider_proxy_con:send(URL, MsgId, PRMBin),
 
+    Timeout = timeout_for_message(Message),
+
     receive
         {response, MsgId, AnswerStatus, WorkerAnswer} ->
             provider_proxy_con:report_ack(URL),
@@ -81,7 +83,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
                     ?error("Cannot reroute message ~p due to invalid answer status: ~p", [get_message_type(Message), InvalidStatus]),
                     throw({invalid_status, InvalidStatus})
             end
-    after 1000 ->
+    after Timeout ->
         provider_proxy_con:report_timeout(URL),
         throw(reroute_timeout)
     end.
@@ -215,3 +217,22 @@ a2l(Atom) when is_atom(Atom) ->
 a2l(List) when is_list(List) ->
     List.
 
+
+%% timeout_for_message/1
+%% ====================================================================
+%% @doc Returns timeout (ms) for given request.
+%% @end
+-spec timeout_for_message(Request :: term()) -> Timeout :: non_neg_integer().
+%% ====================================================================
+timeout_for_message(#fusemessage{input = #getfilechildren{}}) ->
+    timer:seconds(3);
+timeout_for_message(#fusemessage{input = #getfileattr{}}) ->
+    timer:seconds(2);
+timeout_for_message(#fusemessage{input = #renamefile{}}) ->
+    timer:hours(1);
+timeout_for_message(#remotefilemangement{input = #readfile{size = Bytes}}) ->
+    timer:seconds(3) + Bytes; %% 1 byte -> 1ms ~= 1kB/s
+timeout_for_message(#remotefilemangement{input = #writefile{data = Data}}) ->
+    timer:seconds(3) + size(Data); %% 1 byte -> 1ms ~= 1kB/s
+timeout_for_message(_) ->
+    timer:seconds(10).

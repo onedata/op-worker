@@ -28,11 +28,13 @@
 -define(VEINVAL,    "einval").   %% Invalid argument
 -define(VEDQUOT,    "edquot").   %% Quota exceeded
 -define(VENOATTR,   "enoattr").  %% The named attribute does not exist, or the process has no access to this attribute.
+-define(VECOMM,     "ecomm").    %% Communication error (unknown user's token, unable to communicate on his behalf)
 
 
 %% @todo: add test that verifies if the macro contains all available error code
 -define(ALL_ERROR_CODES, [?VOK, ?VENOENT, ?VEACCES, ?VEEXIST, ?VENOTSUP, ?VENOTEMPTY, ?VEREMOTEIO,
-                          ?VEPERM, ?VEINVAL, ?VEDQUOT, ?VENOATTR]).
+                          ?VEPERM, ?VEINVAL, ?VEDQUOT, ?VECOMM, ?VENOATTR]).
+
 
 
 %% POSIX & FUSE C structures definitions ported to erlang. For documentation please refer linux & fuse man pages.
@@ -56,6 +58,10 @@
   links = 0
 }).
 
+%% Directory entry: name :: string(), type :: file_type_protocol().
+%% This is an logical_files_manager's abstraction for similar VeilProtocol's message.
+-record(dir_entry, {name = "", type = ""}).
+
 % Callbacks management
 -record(callback, {fuse = 0, pid = 0, node = non, action = non}).
 
@@ -78,12 +84,6 @@
 
 %% Which fuse operations (messages) are allowed to operate on second level group directory (e.g. "/groups/grpName")
 -define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getfileuuid, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren, checkfileperms]).
-
-
-%% File types used in protocol. Use fslogic_file:normalize_file_type to translate types from/to normal macros like ?REG_TYPE.
--define(REG_TYPE_PROT, "REG").
--define(DIR_TYPE_PROT, "DIR").
--define(LNK_TYPE_PROT, "LNK").
 
 % File open modes (open flags)
 -define(UNSPECIFIED_MODE,"").

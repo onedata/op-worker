@@ -44,6 +44,8 @@ gen_error_code(invalid_group_access) ->
     {?VEACCES, invalid_group_access};
 gen_error_code(file_exists) ->
     {?VEEXIST, file_already_exists};
+gen_error_code({logical_file_system_error, ErrCode}) ->
+    {ErrCode, logical_file_system_error};
 
 %% Generic translations below. All custom translations shall be defined ^above this line.
 gen_error_code(ErrorCode) when is_list(ErrorCode) ->
@@ -105,7 +107,7 @@ gen_error_message(createlink, Error) ->
 gen_error_message(renewfilelocation, Error) ->
     #filelocationvalidity{answer = Error, validity = 0};
 gen_error_message(getfilechildren, Error) ->
-    #filechildren{answer = Error, child_logic_name = []};
+    #filechildren{answer = Error, entry = []};
 gen_error_message(getlink, Error) ->
     #linkinfo{answer = Error, file_logic_name = ""};
 gen_error_message(testchannel, Error) ->

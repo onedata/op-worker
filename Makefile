@@ -7,6 +7,7 @@ DIST_TESTS_SRC_DIR = "test_distributed"
 all: deps generate docs
 
 compile:
+	-@if [ -f ebin/.test ]; then rm -rf ebin; fi 
 	./gen_config
 	cp -R veilprotocol/proto src
 	./rebar compile
@@ -31,14 +32,20 @@ eunit: deps compile
 ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
-ct: eunit
+ct:
+	-@if [ ! -f ebin/.test ]; then rm -rf ebin; fi
+	-@mkdir -p ebin ; touch ebin/.test 
+	./gen_config
+	 cp -R veilprotocol/proto src
+	./rebar -D TEST compile
+	rm -rf src/proto
 	./rebar ct skip_deps=true
 	chmod +x test_distributed/start_distributed_test.sh
 	./test_distributed/start_distributed_test.sh ${SUITE} ${CASE}
 ## Remove *_per_suite result from CT test results
 	@for tout in `find distributed_tests_out -name "TEST-*.xml"`; do awk '/testcase/{gsub("<testcase name=\"[a-z]+_per_suite\"(([^/>]*/>)|([^>]*>[^<]*</testcase>))", "")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
-test: ct
+test: eunit ct
 
 
 generate: compile
