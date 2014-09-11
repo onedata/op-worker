@@ -249,9 +249,12 @@ comet_loop(#?STATE{} = State) ->
             get_access_code ->
                 case gr_openid:get_client_access_code({user, vcn_gui_utils:get_access_token()}) of
                     {ok, AccessCode} ->
-                        Message = <<"Enter underlying access code into FUSE client.",
-                        "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", AccessCode/binary, "\">">>,
-                        gui_jq:info_popup(<<"Access code">>, Message, <<"return true;">>);
+                        Message = <<"Use the access code below to log in with a FUSE client.",
+                        "<input id=\"access_code_textbox\" type=\"text\" style=\"margin-top: 1em;"
+                        " width: 80%;\" value=\"", AccessCode/binary, "\">">>,
+                        gui_jq:info_popup(<<"Access code">>, Message, <<"return true;">>),
+                        gui_comet:flush(),
+                        gui_jq:select_text(<<"access_code_textbox">>);
                     _ ->
                         vcn_gui_utils:message(<<"error_message">>, <<"Cannot get access code.">>)
                 end,

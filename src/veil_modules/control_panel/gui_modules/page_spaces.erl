@@ -24,7 +24,7 @@
 -define(NAVIGATION_COLUMN_STYLE, <<"border-left-width: 0; width: 20px; padding-left: 0;">>).
 -define(DESCRIPTION_STYLE, <<"border-width: 0; text-align: right; width: 10%; padding-left: 0; padding-right: 0;">>).
 -define(MAIN_STYLE, <<"border-width: 0;  text-align: left; padding-left: 1em; width: 90%;">>).
--define(LABEL_STYLE, <<"margin: 0 auto;">>).
+-define(LABEL_STYLE, <<"margin: 0 auto; cursor: auto;">>).
 -define(PARAGRAPH_STYLE, <<"margin: 0 auto;">>).
 -define(TABLE_STYLE, <<"border-width: 0; width: 100%; border-collapse: inherit;">>).
 
@@ -114,14 +114,14 @@ body() ->
                         #button{
                             id = <<"create_space_button">>,
                             postback = create_space,
-                            class = <<"btn btn-primary btn-small">>,
+                            class = <<"btn btn-inverse btn-small">>,
                             style = <<"margin-right: 1em;">>,
                             body = <<"Create Space">>
                         },
                         #button{
                             id = <<"join_space_button">>,
                             postback = join_space,
-                            class = <<"btn btn-primary btn-small">>,
+                            class = <<"btn btn-inverse btn-small">>,
                             style = <<"margin-left: 1em;">>,
                             body = <<"Join Space">>
                         }
@@ -306,7 +306,7 @@ space_row_expanded(SpaceId, RowId, Default) ->
         ]),
         DefaultLabel = #label{
             id = LabelId,
-            style = <<"margin: 0 auto;">>,
+            style = ?LABEL_STYLE,
             class = <<"label label-large label-success pull-right">>,
             body = LabelBody
         },
