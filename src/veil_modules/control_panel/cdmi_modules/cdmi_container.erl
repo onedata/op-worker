@@ -13,6 +13,7 @@
 -include("veil_modules/control_panel/cdmi.hrl").
 -include("veil_modules/control_panel/cdmi_capabilities.hrl").
 -include("veil_modules/control_panel/cdmi_container.hrl").
+-include("files_common.hrl").
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2,delete_resource/2]).
@@ -50,6 +51,9 @@ malformed_request(Req, #state{filepath = Filepath} = State) ->
 resource_exists(Req, State = #state{filepath = Filepath}) ->
     case logical_files_manager:getfileattr(Filepath) of
         {ok, #fileattributes{type = "DIR"} = Attr} -> {true, Req, State#state{attributes = Attr}};
+        {ok, _} ->
+            Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath), Req),
+            cdmi_error:error_reply(Req1,State,?moved_pemanently_code, "Filepath '~s' poins to regular file but does end with '/'",[Filepath]);
         _ -> {false, Req, State}
     end.
 
@@ -197,24 +201,17 @@ prepare_container_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = Stat
 prepare_container_ans([{<<"metadata">>, Prefix} | Tail], #state{attributes = Attrs} = State) ->
     [{<<"metadata">>, rest_utils:prepare_metadata(Prefix, Attrs)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(Tail, State)];
+    Childs = lists:map(
+        fun(#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) ->
+                list_to_binary(rest_utils:ensure_path_ends_with_slash(Name));
+           (#dir_entry{name = Name, type = ?REG_TYPE_PROT}) ->
+                list_to_binary(Name)
+        end,
+        rest_utils:list_dir(Filepath)),
+    [{<<"children">>, Childs} | prepare_container_ans(Tail, State)];
 prepare_container_ans([_Other | Tail], State) ->
     prepare_container_ans(Tail, State).
 
-%% fs_remove/1
-%% ====================================================================
-%% @doc Removes given file/dir from filesystem and db. In case of dir, it's
-%% done recursively.
-%% @end
--spec fs_remove(Path :: string()) -> Result when
-    Result :: ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
-%% ====================================================================
-fs_remove(Path) ->
-    {ok, FA} = logical_files_manager:getfileattr(Path),
-    case FA#fileattributes.type of
-        "DIR" -> fs_remove_dir(Path);
-        "REG" -> logical_files_manager:delete(Path)
-    end.
 
 %% fs_remove_dir/1
 %% ====================================================================
@@ -227,35 +224,12 @@ fs_remove_dir(DirPath) ->
     case is_group_dir(DirPath) of
         true -> ok;
         false ->
-            ItemList = fs_list_dir(DirPath),
-            lists:foreach(fun(Item) -> fs_remove(filename:join(DirPath, Item)) end, ItemList),
+            lists:foreach(
+                fun(#dir_entry{name = Name, type = ?REG_TYPE_PROT}) -> logical_files_manager:delete(filename:join(DirPath, Name));
+                   (#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) -> fs_remove_dir(filename:join(DirPath, Name))
+                end,
+                rest_utils:list_dir(DirPath)),
             logical_files_manager:rmdir(DirPath)
-    end.
-
-%% fs_list_dir/1
-%% ====================================================================
-%% @doc @equiv fs_list_dir(Dir, 0, 10, [])
--spec fs_list_dir(Dir :: string()) -> [string()].
-%% ====================================================================
-fs_list_dir(Dir) ->
-    fs_list_dir(Dir, 0, 10, []).
-
-%% fs_list_dir/4
-%% ====================================================================
-%% @doc Lists all childrens of given dir, starting from offset and with initial
-%% chunk size set to 'Count'
--spec fs_list_dir(Dir :: string(), Offset :: integer(), Count :: integer(), Result :: [string()]) -> [string()].
-%% ====================================================================
-fs_list_dir(Path, Offset, Count, Result) ->
-    case logical_files_manager:ls(Path, Count, Offset) of
-        {ok, FileList} ->
-            FileList1 = lists:map(fun(#dir_entry{name = Name}) -> Name end, FileList),
-            case length(FileList1) of
-                Count -> fs_list_dir(Path, Offset + Count, Count * 10, Result ++ FileList1);
-                _ -> Result ++ FileList1
-            end;
-        _ ->
-            {error, not_a_dir}
     end.
 
 %% is_group_dir/1

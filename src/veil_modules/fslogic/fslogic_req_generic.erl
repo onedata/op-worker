@@ -19,7 +19,8 @@
 
 
 %% API
--export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, delete_file/1, rename_file/2, get_statfs/0]).
+-export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
+    remove_xattr/2, list_xattr/1, delete_file/1, rename_file/2, get_statfs/0]).
 
 %% ====================================================================
 %% API functions
@@ -207,6 +208,63 @@ get_file_attr(FullFileName) ->
             throw(?VENOENT)
     end.
 
+%% get_xattr/2
+%% ====================================================================
+%% @doc Gets file's extended attribute by name.
+%% @end
+-spec get_xattr(FullFileName :: string(), Name :: binary()) ->
+    #xattr{} | no_return().
+%% ====================================================================
+get_xattr(FullFileName, Name) ->
+    {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
+    {ok, #veil_document{record = #file_meta{xattrs = XAttrs}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+    Value = case proplists:get_value(Name,XAttrs) of
+        undefined -> throw(?VENOATTR);
+        Val -> Val
+    end,
+    #xattr{answer = ?VOK, name = Name, value = Value}.
+
+%% set_xattr/4
+%% ====================================================================
+%% @doc Sets file's extended attribute as {Name, Value}.
+%% @end
+-spec set_xattr(FullFileName :: string(), Name :: binary(), Value :: binary(), Flags :: integer()) ->
+    #atom{} | no_return().
+%% ====================================================================
+set_xattr(FullFileName, Name, Value, _Flags) ->
+    {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
+    {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+    #veil_document{record = #file_meta{xattrs = XAttrs}} = FileMetaDoc,
+    UpdatedXAttrs = [{Name,Value} | proplists:delete(Name,XAttrs)],
+    {ok, _} = dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#veil_document{record = #file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
+    #atom{value = ?VOK}.
+
+%% remove_xattr/2
+%% ====================================================================
+%% @doc Removes file's extended attribute with given Name.
+%% @end
+-spec remove_xattr(FullFileName :: string(), Name :: binary()) ->
+    #atom{} | no_return().
+%% ====================================================================
+remove_xattr(FullFileName,Name) ->
+    {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
+    {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+    #veil_document{record = #file_meta{xattrs = XAttrs}} = FileMetaDoc,
+    UpdatedXAttrs = proplists:delete(Name,XAttrs),
+    dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#veil_document{record = #file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
+    #atom{value = ?VOK}.
+
+%% list_xattr/1
+%% ====================================================================
+%% @doc Gets file's extended attribute list.
+%% @end
+-spec list_xattr(FullFileName :: string()) ->
+    #xattrlist{} | no_return().
+%% ====================================================================
+list_xattr(FullFileName) ->
+    {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
+    {ok, #veil_document{record = #file_meta{xattrs = XAttrs}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+    #xattrlist{answer = ?VOK, attrs = [#xattrlist_xattrentry{name = Name, value = Value} || {Name,Value} <- XAttrs]}.
 
 %% delete_file/1
 %% ====================================================================

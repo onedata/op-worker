@@ -52,7 +52,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
     {AnswerDecoderName, AnswerType} = records_translator:get_answer_decoder_and_type(Message),
     MsgBytes = encode(Message),
 
-    TokenHash = access_token_hash(GlobalID, AccessToken),
+    TokenHash = vcn_utils:access_token_hash(AccessToken),
 
     MsgId = provider_proxy_con:get_msg_id(),
 
@@ -121,16 +121,6 @@ reroute_push_message({ProviderId, FuseId}, Message, MessageDecoder) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-
-
-%% access_token_hash/2
-%% ====================================================================
-%% @doc Returns hash of given AccessToken. Can be used to confirm user's GlobalId using GlobalRegistry.
-%% @end
--spec access_token_hash(GlobalId :: binary(), AccessToken :: binary()) -> Hash :: binary().
-%% ====================================================================
-access_token_hash(_GlobalId, AccessToken) ->
-    base64:encode(crypto:hash(sha512, AccessToken)).
 
 
 %% encode/1

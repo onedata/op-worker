@@ -24,11 +24,15 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
-%% -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1, get_file_test/1, metadata_test/1, create_dir_test/1, create_file_test/1, update_file_test/1, delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1]).
+-export([list_dir_test/1, get_file_test/1, metadata_test/1, create_dir_test/1, create_file_test/1, update_file_test/1,
+    delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1,
+    mimetype_and_encoding_test/1, moved_pemanently_test/1, errors_test/1, token_test/1, out_of_range_test/1]).
 
-all() -> [list_dir_test, get_file_test, metadata_test, create_dir_test, create_file_test, update_file_test, delete_dir_test, delete_file_test, version_test, request_format_check_test, objectid_and_capabilities_test].
+
+all() -> [list_dir_test, get_file_test, metadata_test, create_dir_test, create_file_test, update_file_test,
+    delete_dir_test, delete_file_test, version_test, request_format_check_test, objectid_and_capabilities_test,
+    mimetype_and_encoding_test, moved_pemanently_test, errors_test, token_test, out_of_range_test].
 
 %% ====================================================================
 %% Test functions
@@ -56,7 +60,7 @@ list_dir_test(_Config) ->
     ?assertEqual("200", Code2),
     {struct,CdmiResponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiResponse2)),
-    ?assertEqual([<<"dir">>,<<"spaces">>], proplists:get_value(<<"children">>,CdmiResponse2)),
+    ?assertEqual([<<"dir/">>,<<"spaces/">>], proplists:get_value(<<"children">>,CdmiResponse2)),
     %%------------------------------
 
     %%--- list nonexisting dir -----
@@ -100,6 +104,7 @@ get_file_test(_Config) ->
     ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiResponse1)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiResponse1)),
     ?assertEqual(<<"base64">>, proplists:get_value(<<"valuetransferencoding">>,CdmiResponse1)),
+    ?assertEqual(<<"application/octet-stream">>, proplists:get_value(<<"mimetype">>,CdmiResponse1)),
     ?assertEqual(<<"0-14">>, proplists:get_value(<<"valuerange">>,CdmiResponse1)),
     ?assert(proplists:get_value(<<"metadata">>,CdmiResponse1) =/= <<>>),
     ?assertEqual(FileContent, base64:decode(proplists:get_value(<<"value">>,CdmiResponse1))),
@@ -127,9 +132,10 @@ get_file_test(_Config) ->
     %%------------------------------
 
     %%------- noncdmi read --------
-    {Code4, _Headers4, Response4} = do_request(FileName, get, [], []),
+    {Code4, Headers4, Response4} = do_request(FileName, get, [], []),
     ?assertEqual("200",Code4),
 
+    ?assertEqual("application/octet-stream", proplists:get_value("content-type",Headers4)),
     ?assertEqual(binary_to_list(FileContent), Response4),
     %%------------------------------
 
@@ -524,9 +530,10 @@ request_format_check_test(_Config) ->
 objectid_and_capabilities_test(_Config) ->
     %%-------- / objectid ----------
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code1, _Headers1, Response1} = do_request("", get, RequestHeaders1, []),
+    {Code1, Headers1, Response1} = do_request("", get, RequestHeaders1, []),
     ?assertEqual("200",Code1),
 
+    ?assertEqual("application/cdmi-container",proplists:get_value("content-type",Headers1)),
     {struct,CdmiResponse1} = mochijson2:decode(Response1),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiResponse1)),
     RootId = proplists:get_value(<<"objectID">>,CdmiResponse1),
@@ -602,14 +609,15 @@ objectid_and_capabilities_test(_Config) ->
 
     %%--- system capabilities ------
     RequestHeaders8 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code8, _Headers8, Response8} = do_request("cdmi_capabilities/", get, RequestHeaders8, []),
+    {Code8, Headers8, Response8} = do_request("cdmi_capabilities/", get, RequestHeaders8, []),
     ?assertEqual("200",Code8),
 
+    ?assertEqual("application/cdmi-capability",proplists:get_value("content-type",Headers8)),
     {struct,CdmiResponse8} = mochijson2:decode(Response8),
     ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse8)),
     ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"objectName">>,CdmiResponse8)),
     ?assertEqual(<<"0-1">>, proplists:get_value(<<"childrenrange">>,CdmiResponse8)),
-    ?assertEqual([list_to_binary(?container_capability_path),list_to_binary(?dataobject_capability_path)], proplists:get_value(<<"children">>,CdmiResponse8)),
+    ?assertEqual([<<"container/">>,<<"dataobject/">>], proplists:get_value(<<"children">>,CdmiResponse8)),
     ?assertMatch({struct,_}, proplists:get_value(<<"capabilities">>,CdmiResponse8)),
     {struct,Capabilities} = proplists:get_value(<<"capabilities">>,CdmiResponse8),
     ?assertEqual(?root_capability_list,Capabilities),
@@ -625,7 +633,7 @@ objectid_and_capabilities_test(_Config) ->
     ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"parentURI">>,CdmiResponse9)),
     ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse9)),
     ?assertEqual(?container_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse9)),
-    ?assertEqual(list_to_binary(?container_capability_path), proplists:get_value(<<"objectName">>,CdmiResponse9)),
+    ?assertEqual(<<"container/">>, proplists:get_value(<<"objectName">>,CdmiResponse9)),
     ?assertMatch({struct,_}, proplists:get_value(<<"capabilities">>,CdmiResponse9)),
     {struct,Capabilities2} = proplists:get_value(<<"capabilities">>,CdmiResponse9),
     ?assertEqual(?container_capability_list,Capabilities2),
@@ -641,10 +649,159 @@ objectid_and_capabilities_test(_Config) ->
     ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"parentURI">>,CdmiResponse10)),
     ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse10)),
     ?assertEqual(?dataobject_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse10)),
-    ?assertEqual(list_to_binary(?dataobject_capability_path), proplists:get_value(<<"objectName">>,CdmiResponse10)),
+    ?assertEqual(<<"dataobject/">>, proplists:get_value(<<"objectName">>,CdmiResponse10)),
     ?assertMatch({struct,_}, proplists:get_value(<<"capabilities">>,CdmiResponse10)),
     {struct,Capabilities3} = proplists:get_value(<<"capabilities">>,CdmiResponse10),
     ?assertEqual(?dataobject_capability_list,Capabilities3).
+    %%------------------------------
+
+% tests mimetype and valuetransferencoding properties
+mimetype_and_encoding_test(_Config) ->
+    %% get mimetype and valuetransferencoding of non-cdmi file
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code1, _Headers1, Response1} = do_request(filename:join(?Test_dir_name,?Test_file_name) ++ "?mimetype;valuetransferencoding", get, RequestHeaders1, []),
+    ?assertEqual("200",Code1),
+    {struct,CdmiResponse1} = mochijson2:decode(Response1),
+    ?assertEqual(<<"application/octet-stream">>,proplists:get_value(<<"mimetype">>,CdmiResponse1)),
+    ?assertEqual(<<"base64">>,proplists:get_value(<<"valuetransferencoding">>,CdmiResponse1)),
+    %%------------------------------
+
+    %%-- update mime and encoding --
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
+    RawBody2 = rest_utils:encode_to_json([{<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"application/binary">>}]),
+    {Code2, _Headers2, _Response2} = do_request(filename:join(?Test_dir_name,?Test_file_name), put, RequestHeaders2, RawBody2),
+    ?assertEqual("204",Code2),
+
+    {Code3, _Headers3, Response3} = do_request(filename:join(?Test_dir_name,?Test_file_name) ++ "?mimetype;valuetransferencoding", get, RequestHeaders2, []),
+    ?assertEqual("200",Code3),
+    {struct,CdmiResponse3} = mochijson2:decode(Response3),
+    ?assertEqual(<<"application/binary">>,proplists:get_value(<<"mimetype">>,CdmiResponse3)),
+    ?assertEqual(<<"utf-8">>,proplists:get_value(<<"valuetransferencoding">>,CdmiResponse3)),
+    %%------------------------------
+
+    %% create file with given mime and encoding
+    FileName4 = "mime_file.txt",
+    FileContent4 = <<"some content">>,
+    RequestHeaders4 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
+    RawBody4 = rest_utils:encode_to_json([{<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"text/plain">>}, {<<"value">>, FileContent4}]),
+    {Code4, _Headers4, Response4} = do_request(FileName4, put, RequestHeaders4, RawBody4),
+    ?assertEqual("201",Code4),
+    {struct,CdmiResponse4} = mochijson2:decode(Response4),
+    ?assertEqual(<<"text/plain">>,proplists:get_value(<<"mimetype">>,CdmiResponse4)),
+
+    RequestHeaders5 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code5, _Headers5, Response5} = do_request(FileName4 ++ "?value;mimetype;valuetransferencoding", get, RequestHeaders5, []),
+    ?assertEqual("200",Code5),
+    {struct,CdmiResponse5} = mochijson2:decode(Response5),
+    ?assertEqual(<<"text/plain">>,proplists:get_value(<<"mimetype">>,CdmiResponse5)),
+    ?assertEqual(<<"utf-8">>,proplists:get_value(<<"valuetransferencoding">>,CdmiResponse5)), %todo what do we return here if file contains valid utf-8 string and we read byte range?
+    ?assertEqual(FileContent4,proplists:get_value(<<"value">>,CdmiResponse5)),
+    %%------------------------------
+
+    %% create file with given mime and encoding using non-cdmi request
+    FileName6 = "mime_file_noncdmi.txt",
+    FileContent6 = <<"some content">>,
+    RequestHeaders6 = [{"Content-Type", "text/plain; charset=utf-8"}],
+    {Code6, _Headers6, _Response6} = do_request(FileName6, put, RequestHeaders6, FileContent6),
+    ?assertEqual("201",Code6),
+
+    RequestHeaders7 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code7, _Headers7, Response7} = do_request(FileName6 ++ "?value;mimetype;valuetransferencoding", get, RequestHeaders7, []),
+    ?assertEqual("200",Code7),
+    {struct,CdmiResponse7} = mochijson2:decode(Response7),
+    ?assertEqual(<<"text/plain">>,proplists:get_value(<<"mimetype">>,CdmiResponse7)),
+    ?assertEqual(<<"utf-8">>,proplists:get_value(<<"valuetransferencoding">>,CdmiResponse7)),
+    ?assertEqual(FileContent6,proplists:get_value(<<"value">>,CdmiResponse7)).
+    %%------------------------------
+
+% tests if cdmi returns 'moved pemanently' code when we forget about '/' in path
+moved_pemanently_test(_Config) ->
+    %%--------- dir test -----------
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code1, Headers1, _Response1} = do_request(?Test_dir_name, get, RequestHeaders1, []),
+    ?assertEqual("301",Code1),
+    ?assertEqual("/"++?Test_dir_name++"/",proplists:get_value("Location",Headers1)),
+    %%------------------------------
+
+    %%--------- file test ----------
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code2, Headers2, _Response2} = do_request(filename:join(?Test_dir_name,?Test_file_name)++"/", get, RequestHeaders2, []),
+    ?assertEqual("301",Code2),
+    ?assertEqual("/"++filename:join(?Test_dir_name,?Test_file_name),proplists:get_value("Location",Headers2)).
+    %%------------------------------
+
+% test error handling
+errors_test(_Config) ->
+    %%---- unauthorized access -----
+    {Code1, _Headers1, _Response1} = do_request(?Test_dir_name, get, [], [], false),
+    ?assertEqual("401", Code1),
+    %%------------------------------
+
+    %%----- wrong create path ------
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type","application/cdmi-container"}],
+    {Code2, _Headers2, _Response2} = do_request("dir", put, RequestHeaders2, []),
+    ?assertEqual("400", Code2),
+    %%------------------------------
+
+    %%---- wrong create path 2 -----
+    RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type","application/cdmi-object"}],
+    {Code3, _Headers3, _Response3} = do_request("dir/", put, RequestHeaders3, []),
+    ?assertEqual("400", Code3),
+    %%------------------------------
+
+    %%-------- wrong base64 --------
+    RequestHeaders4 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type","application/cdmi-object"}],
+    RequestBody4 = rest_utils:encode_to_json([{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, <<"#$%">>}]),
+    {Code4, _Headers4, _Response4} = do_request("some_file_b64", put, RequestHeaders4, RequestBody4),
+    ?assertEqual("400", Code4).
+    %%------------------------------
+
+% tests authentication by token
+token_test(_Config) ->
+    AccessToken = "access_token",
+    GRUID = "global_id_for_" ++ ?TEST_USER,
+    Token = base64:encode(AccessToken ++ ";" ++ GRUID),
+
+    %%--------- read root ----------
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"X-Auth-Token", binary_to_list(Token)}],
+    {Code1, _Headers1, _Response1} = do_request([], get, RequestHeaders1, [], false),
+    ?assertEqual("200",Code1).
+    %%------------------------------
+
+% tests writing to file at random ranges
+out_of_range_test(_Config) ->
+    FileName = "random_range_file.txt",
+    create_file(FileName),
+
+    %%---- reading out of range ----
+    ?assertEqual(<<>>, get_file_content(FileName)),
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+
+    RequestBody1 = rest_utils:encode_to_json([{<<"value">>, <<"data">>}]),
+    {Code1, _Headers1, Response1} = do_request(FileName ++ "?value:0-3", get, RequestHeaders1, RequestBody1),
+    ?assertEqual("200",Code1),
+    ct:print("~p",[Response1]),
+    {struct, CdmiResponse1} = mochijson2:decode(Response1),
+    ?assertEqual(<<>>,proplists:get_value(<<"value">>,CdmiResponse1)),
+    %%------------------------------
+
+    %%------ writing at end --------
+    ?assertEqual(<<>>, get_file_content(FileName)),
+
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
+    RequestBody2 = rest_utils:encode_to_json([{<<"value">>, <<"data">>}]),
+    {Code2, _Headers2, _Response2} = do_request(FileName ++ "?value:0-3", put, RequestHeaders2, RequestBody2),
+    ?assertEqual("204",Code2),
+
+    ?assertEqual(<<"data">>, get_file_content(FileName)),
+    %%------------------------------
+
+    %%------ writing at random --------
+    RequestBody3 = rest_utils:encode_to_json([{<<"value">>, <<"data">>}]),
+    {Code3, _Headers3, _Response3} = do_request(FileName ++ "?value:10-13", put, RequestHeaders2, RequestBody3),
+    ?assertEqual("204",Code3),
+
+    ?assertEqual(<<100,97,116,97,0,0,0,0,0,0,100,97,116,97>>, get_file_content(FileName)). % "data(6x<0_byte>)data"
     %%------------------------------
 
 %% ====================================================================
@@ -815,22 +972,28 @@ setup_user_in_db(Cert, Config) ->
 
 % Performs a single request using ibrowse
 do_request(RestSubpath, Method, Headers, Body) ->
+    do_request(RestSubpath, Method, Headers, Body, true).
+
+do_request(RestSubpath, Method, Headers, Body, UseCert) ->
     Cert = get(cert),
     CCM = get(ccm),
-
 
     {ok, Port} = rpc:call(CCM, application, get_env, [veil_cluster_node, rest_port]),
     Hostname = case (Port =:= 80) or (Port =:= 443) of
                    true -> "https://localhost";
                    false -> "https://localhost:" ++ integer_to_list(Port)
                end,
+    Opts = case UseCert of
+               true -> [{ssl_options, [{certfile, Cert}, {reuse_sessions, false}]}];
+               false -> [{ssl_options, [{reuse_sessions, false}]}]
+           end,
     {ok, Code, RespHeaders, Response} =
         ibrowse:send_req(
             Hostname ++ "/cdmi/" ++ RestSubpath,
             Headers,
             Method,
             Body,
-            [{ssl_options, [{certfile, Cert}, {reuse_sessions, false}]}]
+            Opts
         ),
     {Code, RespHeaders, Response}.
 

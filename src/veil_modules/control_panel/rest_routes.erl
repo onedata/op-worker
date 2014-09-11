@@ -39,6 +39,7 @@ route([<<"attrs">>])                -> {rest_attrs, undefined};
 route([<<"attrs">>|Path])           -> {rest_attrs, rest_utils:join_to_path(Path)};
 route([<<"shares">>])               -> {rest_shares, undefined};
 route([<<"shares">>, ID])           -> {rest_shares, ID};
+route([<<"token">>])                -> {rest_token, undefined};
 route([?connection_check_path])     -> {rest_connection_check, undefined};
 route(_)                            -> {error, path_invalid}.
 

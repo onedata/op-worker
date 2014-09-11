@@ -26,7 +26,8 @@
 %% API
 %% ====================================================================
 %% Logical file organization management (only db is used)
--export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, rmlink/1, read_link/1, create_symlink/2]).
+
+-export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, get_xattr/2, set_xattr/3, remove_xattr/2, list_xattr/1, rmlink/1, read_link/1, create_symlink/2]).
 %% File access (db and helper are used)
 -export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
 -export([change_file_perm/2, check_file_perm/2]).
@@ -279,6 +280,78 @@ getfileattr(Message, Value) ->
       end;
     _ -> {Status, TmpAns}
   end.
+
+%% get_xattr/2
+%% ====================================================================
+%% @doc Gets file's extended attribute by name.
+%% @end
+-spec get_xattr(FullFileName :: string(), Name :: binary()) ->
+    {ok, binary()} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+get_xattr(FullFileName, Name) ->
+    {Status, TmpAns} = contact_fslogic(#getxattr{file_logic_name = FullFileName, name = Name}),
+    case Status of
+        ok ->
+            case TmpAns#xattr.answer of
+                ?VOK -> {ok, TmpAns#xattr.value};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
+%% set_xattr/3
+%% ====================================================================
+%% @doc Sets file's extended attribute as {Name, Value}.
+%% @end
+-spec set_xattr(FullFileName :: string(), Name :: binary(), Value :: binary()) ->
+    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+set_xattr(FullFileName, Name, Value) ->
+    {Status, TmpAns} = contact_fslogic(#setxattr{file_logic_name = FullFileName, name = Name, value = Value}),
+    case Status of
+        ok ->
+            case TmpAns#atom.value of
+                ?VOK -> ok;
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
+%% remove_xattr/2
+%% ====================================================================
+%% @doc Removes file's extended attribute with given Name.
+%% @end
+-spec remove_xattr(FullFileName :: string(), Name :: binary()) ->
+    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+remove_xattr(FullFileName,Name) ->
+    {Status, TmpAns} = contact_fslogic(#removexattr{file_logic_name = FullFileName, name = Name}),
+    case Status of
+        ok ->
+            case TmpAns#atom.value of
+                ?VOK -> ok;
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
+%% list_xattr/1
+%% ====================================================================
+%% @doc Gets file's extended attribute list.
+%% @end
+-spec list_xattr(FullFileName :: string()) ->
+    {ok, list()} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+list_xattr(FullFileName) ->
+    {Status, TmpAns} = contact_fslogic(#listxattr{file_logic_name = FullFileName}),
+    case Status of
+        ok ->
+            case TmpAns#xattrlist.answer of
+                ?VOK -> {ok, [{Name,Value} || #xattrlist_xattrentry{name = Name, value = Value} <- TmpAns#xattrlist.attrs]};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
 
 %% ====================================================================
 %% File access (db and helper are used)

@@ -28,7 +28,7 @@
 
 %% Those record contains meta data for file which UUID match #file_meta.file field
 -record(file_tag, {key = "", value = []}).
--record(file_meta, {uid = "", tags = [], mime_type = "", size = 0, ctime = 0, atime = 0, mtime = 0, description = ""}).
+-record(file_meta, {uid = "", tags = [], mime_type = "", size = 0, ctime = 0, atime = 0, mtime = 0, description = "", xattrs = []}).
 
 %% This type represents time relation, useful in time_criteria record
 -type time_relation() :: older_than | newer_than | the_same.

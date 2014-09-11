@@ -27,12 +27,14 @@
 -define(VEPERM,     "eperm").    %% Operation not permitted
 -define(VEINVAL,    "einval").   %% Invalid argument
 -define(VEDQUOT,    "edquot").   %% Quota exceeded
+-define(VENOATTR,   "enoattr").  %% The named attribute does not exist, or the process has no access to this attribute.
 -define(VECOMM,     "ecomm").    %% Communication error (unknown user's token, unable to communicate on his behalf)
 
 
 %% @todo: add test that verifies if the macro contains all available error code
 -define(ALL_ERROR_CODES, [?VOK, ?VENOENT, ?VEACCES, ?VEEXIST, ?VENOTSUP, ?VENOTEMPTY, ?VEREMOTEIO,
-                          ?VEPERM, ?VEINVAL, ?VEDQUOT, ?VECOMM]).
+                          ?VEPERM, ?VEINVAL, ?VEDQUOT, ?VECOMM, ?VENOATTR]).
+
 
 
 %% POSIX & FUSE C structures definitions ported to erlang. For documentation please refer linux & fuse man pages.
@@ -82,7 +84,6 @@
 
 %% Which fuse operations (messages) are allowed to operate on second level group directory (e.g. "/groups/grpName")
 -define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getfileuuid, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren, checkfileperms]).
-
 
 % File open modes (open flags)
 -define(UNSPECIFIED_MODE,"").
