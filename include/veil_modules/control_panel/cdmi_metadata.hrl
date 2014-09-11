@@ -11,3 +11,5 @@
 
 -define(default_storage_system_metadata,
     [<<"cdmi_size">>, <<"cdmi_ctime">>, <<"cdmi_atime">>, <<"cdmi_mtime">>, <<"cdmi_owner">>]).
+
+-define(user_metadata_forbidden_prefix, <<"cdmi_">>).

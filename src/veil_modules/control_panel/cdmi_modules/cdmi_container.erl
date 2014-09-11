@@ -130,18 +130,19 @@ get_cdmi_container(Req, #state{opts = Opts} = State) ->
 %% @doc Callback function for cdmi container PUT operation (create dir)
 -spec put_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
+put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
     {ok, RawBody, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Body = rest_utils:parse_body(RawBody),
+    RequestedUserMetadata =
+        case proplists:get_value(<<"metadata">>, Body) of
+            {struct, UserMetadata} -> UserMetadata;
+            _ -> []
+        end,
     case logical_files_manager:mkdir(Filepath) of
         ok -> %todo check given body
             case logical_files_manager:getfileattr(Filepath) of
                 {ok, Attr} ->
-                    case proplists:get_value(<<"metadata">>, Body) of
-                        {struct, RequestedUserMetadata} ->
-                            cdmi_metadata:replace_user_metadata(Filepath, RequestedUserMetadata);
-                        _ -> ok
-                    end,
+                    cdmi_metadata:replace_user_metadata(Filepath, RequestedUserMetadata),
                     Response = rest_utils:encode_to_json(
                         {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr})}),
                     Req2 = cowboy_req:set_resp_body(Response, Req),
@@ -150,7 +151,10 @@ put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
                     logical_files_manager:rmdir(Filepath),
                     cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Cannot get dir attrs: ~p",[Error])
             end;
-        {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?error_conflict_code, "Dir creation conflict",[]);
+        {error, dir_exists} ->
+            URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
+            cdmi_metadata:update_user_metadata(Filepath, URIMetadataNames, RequestedUserMetadata),
+            {true, Req1, State};
         {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?error_not_found_code, "Parent dir not found",[]);
         Error -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Dir creation error: ~p",[Error])
     end.
