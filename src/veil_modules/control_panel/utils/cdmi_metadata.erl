@@ -41,9 +41,9 @@ get_user_metadata(Filepath) ->
 %% ====================================================================
 -spec replace_user_metadata(Filepath :: string(), [{Name :: binary(), Value :: binary()}]) -> ok.
 replace_user_metadata(Filepath, UserMetadata) ->
-    {CurrentNames, _Values} = lists:unzip(get_user_metadata(Filepath)),
+    {CurrentNames, _} = lists:unzip(get_user_metadata(Filepath)),
     % starts with CDMI
-    {RequestedNames, _Values} = lists:unzip(UserMetadata),
+    {RequestedNames, _} = lists:unzip(UserMetadata),
     lists:map(fun(Name) -> logical_files_manager:remove_xattr(Filepath, Name) end, CurrentNames -- RequestedNames),
     lists:map(fun({Name, Value}) -> logical_files_manager:set_xattr(Filepath, Name, Value) end, UserMetadata),
     ok.

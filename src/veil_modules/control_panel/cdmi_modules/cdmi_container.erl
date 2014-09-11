@@ -131,10 +131,14 @@ get_cdmi_container(Req, #state{opts = Opts} = State) ->
 -spec put_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 put_cdmi_container(Req, #state{filepath = Filepath} = State) ->
+    {ok, RawBody, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
+    Body = rest_utils:parse_body(RawBody),
+    {struct, RequestedUserMetadata} = proplists:get_value(<<"metadata">>, Body),
     case logical_files_manager:mkdir(Filepath) of
         ok -> %todo check given body
             case logical_files_manager:getfileattr(Filepath) of
                 {ok, Attr} ->
+                    cdmi_metadata:replace_user_metadata(Filepath, RequestedUserMetadata),
                     Response = rest_utils:encode_to_json(
                         {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr})}),
                     Req2 = cowboy_req:set_resp_body(Response, Req),
@@ -195,10 +199,10 @@ prepare_container_ans([<<"capabilitiesURI">> | Tail], State) ->
     [{<<"capabilitiesURI">>, list_to_binary(?container_capability_path)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(Tail, State)];
-prepare_container_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->
-    [{<<"metadata">>, rest_utils:prepare_metadata(Attrs)} | prepare_container_ans(Tail, State)];
-prepare_container_ans([{<<"metadata">>, Prefix} | Tail], #state{attributes = Attrs} = State) ->
-    [{<<"metadata">>, rest_utils:prepare_metadata(Prefix, Attrs)} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"metadata">> | Tail], #state{filepath = Filepath, attributes = Attrs} = State) ->
+    [{<<"metadata">>, cdmi_metadata:prepare_metadata(Filepath, Attrs)} | prepare_container_ans(Tail, State)];
+prepare_container_ans([{<<"metadata">>, Prefix} | Tail], #state{filepath = Filepath, attributes = Attrs} = State) ->
+    [{<<"metadata">>, cdmi_metadata:prepare_metadata(Filepath, Prefix, Attrs)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
     Childs = lists:map(fun(Name) ->
             case logical_files_manager:getfileattr(filename:join(Filepath,Name)) of

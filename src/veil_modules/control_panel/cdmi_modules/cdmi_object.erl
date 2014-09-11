@@ -254,7 +254,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
     Body = rest_utils:parse_body(RawBody),
     RequestedMimetype = proplists:get_value(<<"mimetype">>, Body),
     RequestedValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body),
-    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
+    {struct, RequestedUserMetadata} = proplists:get_value(<<"metadata">>, Body),
     ValueTransferEncoding = case RequestedValueTransferEncoding of undefined -> <<"utf-8">>; _ -> RequestedValueTransferEncoding end,
     Value = proplists:get_value(<<"value">>, Body),
     Range = case lists:keyfind(<<"value">>, 1, Opts) of
