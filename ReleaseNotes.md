@@ -1,3 +1,18 @@
+VeilCluster 1.6
+===========
+
+VeilCluster 1.6 is a part of VeilFS 1.6. This is mainly a bug-fix release. See further details below.
+
+New features
+-----
+
+* Security mechanism against attack for atoms table added
+
+Fixed Bugs
+-----
+
+* Invalid use of WebGUI cache fixed
+
 VeilCluster 1.5
 ===========
 
