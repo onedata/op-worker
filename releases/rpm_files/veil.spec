@@ -2,6 +2,7 @@
 %global __os_install_post %{nil}
 
 %define __prelink_undo_cmd %{nil}
+%define debug_package %{nil}
 
 %define _topdir     /tmp/veil_rpmbuild
 %define _tmppath    %{_topdir}/tmp

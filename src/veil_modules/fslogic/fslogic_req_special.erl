@@ -91,16 +91,17 @@ get_file_children(FullFileName, UserPathTokens, ROffset, RCount) ->
 
     case {ROffset, TokenizedPath} of
         {0, []}    -> %% When asking about root, add virtual ?SPACES_BASE_DIR_NAME entry
-            #filechildren{child_logic_name = Children ++ [?SPACES_BASE_DIR_NAME]}; %% Only for offset = 0
+            #filechildren{entry = Children ++ [#filechildren_direntry{name = ?SPACES_BASE_DIR_NAME, type = ?DIR_TYPE_PROT}]}; %% Only for offset = 0
         {_, [?SPACES_BASE_DIR_NAME]} -> %% For group list query ignore DB result and generate list based on user's teams
 
             {ok, UserDoc} = fslogic_objects:get_user(),
             Teams = user_logic:get_space_names(UserDoc),
             {_Head, Tail} = lists:split(min(Offset, length(Teams)), Teams),
             {Ret, _} = lists:split(min(Num, length(Tail)), Tail),
-            #filechildren{child_logic_name = Ret};
+            Entries = lists:map(fun(Elem) -> #filechildren_direntry{name = Elem, type = ?DIR_TYPE_PROT} end, Ret),
+            #filechildren{entry = Entries};
         Other ->
-            #filechildren{child_logic_name = Children}
+            #filechildren{entry = Children}
     end.
 
 

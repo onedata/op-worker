@@ -25,7 +25,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([init/1, handle/2, cleanup/0, fslogic_runner/4]).
+-export([init/1, handle/2, cleanup/0, fslogic_runner/4, handle_fuse_message/1]).
 
 %% ====================================================================
 %% API functions
@@ -186,17 +186,28 @@ maybe_handle_fuse_message(RequestBody) ->
         true ->
             handle_fuse_message(RequestBody);
         false ->
-            [RerouteToProvider | _] = Providers,
-            try
-                provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
-                    fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
+            PrePostProcessResponse = try
+                case fslogic_remote:prerouting(SpaceInfo, RequestBody, Providers) of
+                    {ok, {reroute, Self}} ->  %% Request should be handled locally for some reason
+                        {ok, handle_fuse_message(RequestBody)};
+                    {ok, {reroute, RerouteToProvider}} ->
+                        RemoteResponse = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_access_token(),
+                            fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))}),
+                        {ok, RemoteResponse};
+                    {ok, {response, Response}} -> %% Do not handle this request and return custom response
+                        {ok, Response};
+                    {error, PreRouteError} ->
+                        ?error("Cannot initialize reouting for request ~p due to error in prerouting handler: ~p", [RequestBody, PreRouteError]),
+                        throw({unable_to_reroute_message, {prerouting_error, PreRouteError}})
+                end
             catch
                 Type:Reason ->
-                    ?error_stacktrace("Unable to process remote fslogic request to provider ~p due to: ~p", [RerouteToProvider, {Type, Reason}]),
-                    case fslogic_remote:local_clean_postprocess(SpaceInfo, Reason, RequestBody) of
-                        undefined -> throw({unable_to_reroute_message, Reason});
-                        LocalResponse -> LocalResponse
-                    end
+                    ?error_stacktrace("Unable to process remote fslogic request due to: ~p", [{Type, Reason}]),
+                    {error, {Type, Reason}}
+            end,
+            case fslogic_remote:postrouting(SpaceInfo, PrePostProcessResponse, RequestBody) of
+                undefined -> throw({unable_to_reroute_message, PrePostProcessResponse});
+                LocalResponse -> LocalResponse
             end
     end.
 
@@ -253,13 +264,13 @@ fslogic_runner(Method, RequestType, RequestBody, ErrorHandler) when is_function(
             %% Manually thrown error, normal interrupt case.
             ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
-        error:{badmatch, {error, Reason}} ->
+        error:{badmatch, Reason} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went wrong, but it could be expected.
             ?warning("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
-        error:{case_clause, {error, Reason}} ->
+        error:{case_clause, Reason} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went seriously wrong and we should know about it.
             ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),

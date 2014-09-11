@@ -26,7 +26,7 @@
 %% API
 %% ====================================================================
 %% Logical file organization management (only db is used)
--export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1]).
+-export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, rmlink/1, read_link/1, create_symlink/2]).
 %% File access (db and helper are used)
 -export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
 -export([change_file_perm/2, check_file_perm/2]).
@@ -53,6 +53,52 @@
 %% ====================================================================
 %% Logical file organization management (only db is used)
 %% ====================================================================
+
+
+%% read_link/1
+%% ====================================================================
+%% @doc Reads symbolic link from DB.
+%% @end
+-spec read_link(Path :: path()) -> {ok, LinkValue :: string()} | {error | logical_file_system_error, Reason :: any()}.
+%% ====================================================================
+read_link(Path) ->
+    Record = #getlink{file_logic_name = Path},
+    {Status, TmpAns} = contact_fslogic(Record),
+    case Status of
+        ok ->
+            Response = TmpAns#linkinfo.answer,
+            case Response of
+                ?VOK ->
+                    {ok, TmpAns#linkinfo.file_logic_name};
+                _ ->
+                    {logical_file_system_error, Response}
+            end;
+        _ ->
+            {Status, TmpAns}
+    end.
+
+
+%% create_symlink/2
+%% ====================================================================
+%% @doc Creates symbolic link in DB.
+%% @end
+-spec create_symlink(LinkValue :: string(), LinkFilePath :: path()) -> ok | {error | logical_file_system_error, Reason :: any()}.
+%% ====================================================================
+create_symlink(LinkValue, LinkFile) ->
+    Record = #createlink{from_file_logic_name = LinkFile, to_file_logic_name = LinkValue},
+    {Status, TmpAns} = contact_fslogic(Record),
+    case Status of
+        ok ->
+            Response = TmpAns#atom.value,
+            case Response of
+                ?VOK -> ok;
+                _ ->
+                    {logical_file_system_error, Response}
+            end;
+        _ ->
+            {Status, TmpAns}
+    end.
+
 
 %% mkdir/1
 %% ====================================================================
@@ -82,6 +128,18 @@ mkdir(DirName) ->
     _ -> {error, cannot_get_file_mode}
   end.
 
+%% rmlink/1
+%% ====================================================================
+%% @doc Deletes link (in db)
+%% @end
+-spec rmlink(LnkName :: string()) -> Result when
+    Result :: ok | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+rmlink(LnkName) ->
+    delete_special(LnkName).
+
 %% rmdir/1
 %% ====================================================================
 %% @doc Deletes directory (in db)
@@ -92,17 +150,7 @@ mkdir(DirName) ->
   ErrorDetail :: term().
 %% ====================================================================
 rmdir(DirName) ->
-  Record = #deletefile{file_logic_name = DirName},
-  {Status, TmpAns} = contact_fslogic(Record),
-  case Status of
-    ok ->
-      Response = TmpAns#atom.value,
-      case Response of
-        ?VOK -> ok;
-        _ -> {logical_file_system_error, Response}
-      end;
-    _ -> {Status, TmpAns}
-  end.
+    delete_special(DirName).
 
 %% mv/2
 %% ====================================================================
@@ -169,7 +217,12 @@ ls(DirName, ChildrenNum, Offset) ->
     ok ->
       Response = TmpAns#filechildren.answer,
       case Response of
-        ?VOK -> {ok, TmpAns#filechildren.child_logic_name};
+        ?VOK ->
+            DirEnt = lists:map(
+                fun(#filechildren_direntry{name = Name, type = Type}) ->
+                    #dir_entry{name = Name, type = Type}
+                end, TmpAns#filechildren.entry),
+            {ok, DirEnt};
         _ -> {logical_file_system_error, Response}
       end;
     _ -> {Status, TmpAns}
@@ -623,15 +676,19 @@ contact_fslogic(Message, Value) ->
             _ -> put(files_manager_msg_id, 0)
           end,
 
+  Timeout = case Value of
+      #renamefile{} ->
+          timer:minutes(10);
+      _ ->
+          timer:seconds(7)
+  end,
+
   try
     CallAns = case Message of
                 internal_call ->
-                  UserID = fslogic_context:get_user_dn(),
-                  case UserID of
-                    undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Value}});
-                    _ ->
-                      gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{access_token = fslogic_context:get_access_token(), subject = UserID, request = {internal_call, Value}}})
-                  end;
+                  gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId,
+                      #veil_request{access_token = fslogic_context:get_access_token(), subject = fslogic_context:get_user_dn(),
+                          request = {internal_call, Value}}});
                 _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {Message, Value}})
               end,
 
@@ -639,7 +696,7 @@ contact_fslogic(Message, Value) ->
       ok ->
         receive
           {worker_answer, MsgId, Resp} -> {ok, Resp}
-        after 7000 ->
+        after Timeout ->
           ?error("Logical files manager: error during contact with fslogic, timeout"),
           {error, timeout}
         end;
@@ -1118,3 +1175,23 @@ clear_cache(File) ->
   erase(File),
   erase({File, size}),
   ok.
+
+
+%% delete_special/1
+%% ====================================================================
+%% @doc Removes special (not regular) file from DB.
+%% @end
+-spec delete_special(Path :: path()) -> ok | {error | logical_file_system_error, Reason :: any()}.
+%% ====================================================================
+delete_special(Path) ->
+    Record = #deletefile{file_logic_name = Path},
+    {Status, TmpAns} = contact_fslogic(Record),
+    case Status of
+        ok ->
+            Response = TmpAns#atom.value,
+            case Response of
+                ?VOK -> ok;
+                _ -> {logical_file_system_error, Response}
+            end;
+        _ -> {Status, TmpAns}
+    end.

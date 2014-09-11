@@ -242,122 +242,6 @@ delete_file(FullFileName) ->
     end.
 
 
-%% rename_file/2
-%% ====================================================================
-%% @doc Renames file.
-%% @end
--spec rename_file(FullFileName :: string(), FullNewFileName :: string()) ->
-    #atom{} | no_return().
-%% ====================================================================
-rename_file(FullFileName, FullNewFileName) ->
-    ?debug("rename_file(FullFileName: ~p, FullNewFileName: ~p)", [FullFileName, FullNewFileName]),
-    {ok, UserDoc} = fslogic_objects:get_user(),
-    {ok, #veil_document{record = #file{} = OldFile} = OldDoc} = fslogic_objects:get_file(FullFileName),
-
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, OldDoc, delete),
-
-    %% Check if destination file exists
-    case fslogic_objects:get_file(FullNewFileName) of
-        {ok, #veil_document{}} ->
-            ?warning("Destination file already exists: ~p", [FullFileName]),
-            throw(?VEEXIST);
-        {error, file_not_found} ->
-            ok
-    end,
-
-    NewDir = fslogic_path:strip_path_leaf(FullNewFileName),
-
-    case (OldFile#file.type =:= ?DIR_TYPE) and (string:str(NewDir, FullFileName) == 1) of
-        true ->
-            ?warning("Moving dir ~p to its child: ~p", [FullFileName, NewDir]),
-            throw(?VEREMOTEIO);
-        false -> ok
-    end,
-
-    {ok, #veil_document{uuid = NewParent} = NewParentDoc} = fslogic_objects:get_file(NewDir),
-
-    OldDir = fslogic_path:strip_path_leaf(FullFileName),
-    {ok, OldParentDoc} = fslogic_objects:get_file(OldDir),
-
-    ok = fslogic_perms:check_file_perms(NewDir, UserDoc, NewParentDoc, write),
-
-    {ok, TargetSpaceInfo} = fslogic_utils:get_space_info_for_path(FullNewFileName),
-
-    MoveOnStorage =
-        fun(#file{type = ?REG_TYPE}) -> %% Returns new file record with updated file_id field or throws excpetion
-            %% Get storage info
-            StorageID = OldFile#file.location#file_location.storage_id,
-            FileID = OldFile#file.location#file_location.file_id,
-            Storage = %% Storage info for the file
-            case dao_lib:apply(dao_vfs, get_storage, [{uuid, StorageID}], 1) of
-                {ok, #veil_document{record = #storage_info{} = S}} -> S;
-                {error, MReason} ->
-                    ?error("Cannot fetch storage (ID: ~p) information for file ~p. Reason: ~p", [StorageID, FullFileName, MReason]),
-                    throw(?VEREMOTEIO)
-            end,
-            SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage), %% Storage helper for cluster
-            NewFileID = fslogic_storage:get_new_file_id(TargetSpaceInfo, FullNewFileName, UserDoc, SHInfo, fslogic_context:get_protocol_version()),
-
-            %% Change group owner if needed
-            case storage_files_manager:chown(SHInfo, FileID, -1, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo)) of
-                ok -> ok;
-                MReason1 ->
-                    ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [FileID, fslogic_spaces:map_to_grp_owner(TargetSpaceInfo), MReason1]),
-                    throw(?VEREMOTEIO)
-            end,
-
-            %% Move file to new location on storage
-            ActionR = storage_files_manager:mv(SHInfo, FileID, NewFileID),
-            _NewFile =
-                case ActionR of
-                    ok -> OldFile#file{location = OldFile#file.location#file_location{file_id = NewFileID}};
-                    MReason0 ->
-                        ?error("Cannot move file (from ID ~p, to ID: ~p) on storage due to: ~p", [FileID, NewFileID, MReason0]),
-                        throw(?VEREMOTEIO)
-                end;
-            (_) -> ok %% Dont move non-regular files
-        end, %% end fun()
-
-    %% Check if we need to move file on storage and do it when we do need it
-    NewFile =
-        case {string:tokens(fslogic_path:get_user_file_name(FullFileName), "/"), string:tokens(fslogic_path:get_user_file_name(FullNewFileName), "/")} of
-            {_, [?SPACES_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
-                ?info("Attempt to move file to base group directory. Query: ~p", [stub]),
-                throw(?VEACCES);
-            {[?SPACES_BASE_DIR_NAME, _InvalidSource], _} -> %% Moving from ?GROUPS_BASE_DIR_NAME dir is not allowed
-                ?info("Attemt to move base group directory. Query: ~p", [stub]),
-                throw(?VEACCES);
-
-            {[?SPACES_BASE_DIR_NAME, X | _FromF0], [?SPACES_BASE_DIR_NAME, X | _ToF0]} -> %% Local (group dir) move, no storage actions are required
-                OldFile;
-
-            {[?SPACES_BASE_DIR_NAME, _FromGrp0 | _FromF0], [?SPACES_BASE_DIR_NAME, _ToGrp0 | _ToF0]} -> %% From group X to Y
-                MoveOnStorage(OldFile);
-            {[?SPACES_BASE_DIR_NAME, _FromGrp1 | _FromF1], _} ->
-                %% From group X user dir
-                MoveOnStorage(OldFile);
-            {_, [?SPACES_BASE_DIR_NAME, _ToGrp2 | _ToF2]} ->
-                %% From user dir to group X
-                MoveOnStorage(OldFile);
-
-            {_, _} -> %% Local (user dir) move, no storage actions are required
-                OldFile
-        end,
-
-    RenamedFileInit =
-        NewFile#file{parent = NewParent, name = fslogic_path:basename(FullNewFileName)},
-
-    RenamedFile = fslogic_meta:update_meta_attr(RenamedFileInit, ctime, vcn_utils:time()),
-    Renamed = OldDoc#veil_document{record = RenamedFile},
-
-    {ok, _} = fslogic_objects:save_file(Renamed),
-
-    CTime = vcn_utils:time(),
-    fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullNewFileName), CTime),
-    fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullFileName), CTime),
-    #atom{value = ?VOK}.
-
-
 %% get_statfs/0
 %% ====================================================================
 %% @doc Gets file system statistics.
@@ -384,6 +268,71 @@ get_statfs() ->
         _ ->
             #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
     end.
+
+
+%% rename_file/2
+%% ====================================================================
+%% @doc Renames file.
+%% @end
+-spec rename_file(FullFileName :: string(), FullTargetFileName :: string()) ->
+    #atom{} | no_return().
+%% ====================================================================
+rename_file(FullFileName, FullTargetFileName) ->
+    ?debug("rename_file(FullFileName: ~p, FullTargetFileName: ~p)", [FullFileName, FullTargetFileName]),
+    {ok, #veil_document{record = #user{access_token = AccessToken, global_id = GRUID}} = UserDoc} = fslogic_objects:get_user(),
+
+    {ok, #space_info{space_id = SourceSpaceId, providers = SourceSpaceProviders}} = fslogic_utils:get_space_info_for_path(FullFileName),
+    {ok, #space_info{space_id = TargetSpaceId, providers = TargetSpaceProviders}} = fslogic_utils:get_space_info_for_path(FullTargetFileName),
+
+    SelfGRPID = cluster_manager_lib:get_provider_id(),
+
+    {ok, #fileattributes{} = SourceAttrs} = logical_files_manager:getfileattr(FullFileName),
+
+    %% Check if destination file exists
+    case logical_files_manager:getfileattr(FullTargetFileName) of
+        {logical_file_system_error, ?VENOENT} ->
+            ok;
+        {ok, #fileattributes{}} ->
+            ?warning("Destination file already exists: ~p", [FullTargetFileName]),
+            throw(?VEEXIST)
+    end,
+
+    NewDirTokens = filename:split(fslogic_path:strip_path_leaf(FullTargetFileName)),
+    SourceTokens = filename:split(FullFileName),
+    SourceFileType = SourceAttrs#fileattributes.type,
+
+    case (SourceFileType =:= ?DIR_TYPE_PROT) and lists:prefix(SourceTokens, NewDirTokens) of
+        true ->
+            ?warning("Moving dir ~p to its child: ~p", [FullFileName, SourceTokens]),
+            throw(?VEREMOTEIO);
+        false -> ok
+    end,
+
+
+    %% Check if operation is trivial, inter-space or inter-provider
+    case SourceSpaceId =:= TargetSpaceId of
+        true -> %% Trivial
+            {ok, OldFile, OldFileDoc, NewParentUUID} = fslogic_req_rename_impl:common_assertions(UserDoc, FullFileName, FullTargetFileName),
+            ok = fslogic_req_rename_impl:rename_file_trivial(FullFileName, FullTargetFileName, {OldFile, OldFileDoc, NewParentUUID});
+        false -> %% Not trivial
+            SourceSpaceProvidersSet = ordsets:from_list(SourceSpaceProviders),
+            TargetSpaceProvidersSet = ordsets:from_list(TargetSpaceProviders),
+            CommonProvidersSet = ordsets:intersection(SourceSpaceProvidersSet, TargetSpaceProvidersSet),
+
+            case ordsets:is_element(SelfGRPID, CommonProvidersSet) of
+                true -> %% Inter-Space
+                    {ok, OldFile, OldFileDoc, NewParentUUID} = fslogic_req_rename_impl:common_assertions(UserDoc, FullFileName, FullTargetFileName),
+                    ok = fslogic_req_rename_impl:rename_file_interspace(UserDoc, FullFileName, FullTargetFileName, {OldFile, OldFileDoc, NewParentUUID});
+                false when is_binary(AccessToken) -> %% Inter-Provider
+                    ok = fslogic_req_rename_impl:rename_file_interprovider(UserDoc, SourceFileType, FullFileName, FullTargetFileName);
+                _ ->
+                    ?error("Unable to handle rename request due to insufficient local permissions of user (GRUID) ~p", [GRUID]),
+                    throw(?VECOMM)
+            end
+    end,
+
+    #atom{value = ?VOK}.
+
 
 %% ====================================================================
 %% Internal functions
