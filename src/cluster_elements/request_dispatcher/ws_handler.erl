@@ -132,7 +132,6 @@ websocket_handle({binary, Data}, Req, #hander_state{peer_type = PeerType} = Stat
                 provider -> decode_providermsg_pb(Data);
                 user     -> decode_clustermsg_pb(Data)
             end,
-
         ?debug("Received request: ~p", [Request]),
 
         handle(Req, Request, State) %% Handle message
@@ -268,18 +267,26 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
     end,
 
     {UserGID, AccessToken} =
-        try {SessionUserGID =/= undefined orelse not gr_adapter:verify_client(GlobalId, TokenHash), SessionAccessToken} of
-            {true, undefined} ->
-                auth_handler:get_access_token(SessionUserGID);
-            {true, _} ->
-                {SessionUserGID, SessionAccessToken};
+        case get({GlobalId, TokenHash}) of
+            CachedToken when is_binary(CachedToken) ->
+                {GlobalId, CachedToken};
             _ ->
-                auth_handler:get_access_token(GlobalId)
-        catch
-            Reason ->
-                ?error("Cannot verify user (~p) authentication due to: ~p", [GlobalId, Reason]),
-                throw({unable_to_authenticate, MsgId})
+                try {SessionUserGID =/= undefined orelse not gr_adapter:verify_client(GlobalId, TokenHash), SessionAccessToken} of
+                    {true, undefined} ->
+                        auth_handler:get_access_token(SessionUserGID);
+                    {true, _} ->
+                        {SessionUserGID, SessionAccessToken};
+                    _ ->
+                        auth_handler:get_access_token(GlobalId)
+                catch
+                    Reason ->
+                        ?error("Cannot verify user (~p) authentication due to: ~p", [GlobalId, Reason]),
+                        throw({unable_to_authenticate, MsgId})
+                end
         end,
+
+    %% Cache AccessToken for the user
+    put({UserGID, TokenHash}, AccessToken),
 
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->

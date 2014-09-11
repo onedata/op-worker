@@ -19,13 +19,26 @@
 -export([get_user_file_name/1, get_user_file_name/2]).
 -export([get_full_file_name/1, get_full_file_name/2, get_full_file_name/4, get_short_file_name/1]).
 -export([verify_file_name/1, absolute_join/1]).
--export([strip_path_leaf/1, basename/1]).
+-export([strip_path_leaf/1, basename/1, split/1]).
 -export([get_parent_and_name_from_path/2]).
 -export([get_user_root/0, get_user_root/2, get_user_root/1]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+
+%% split/1
+%% ====================================================================
+%% @doc Same as {@link filename:split/1} but returned tokens build always relative path.
+%% @end
+-spec split(Path :: string()) -> [string()].
+%% ====================================================================
+split(Path) ->
+    case filename:split(Path) of
+        ["/" | Rest] -> Rest;
+        Relative     -> Relative
+    end.
 
 %% get_user_file_name/1
 %% ====================================================================
