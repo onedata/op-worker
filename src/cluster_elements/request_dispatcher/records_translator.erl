@@ -123,9 +123,9 @@ get_answer_decoder_and_type(#fusemessage{input = #getfileuuid{}}) ->
 get_answer_decoder_and_type(#fusemessage{input = #getxattr{}}) ->
     {fuse_messages, xattr};
 get_answer_decoder_and_type(#fusemessage{input = #setxattr{}}) ->
-    {fuse_messages, atom};
+    {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #removexattr{}}) ->
-    {fuse_messages, atom};
+    {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #listxattr{}}) ->
     {fuse_messages, xattrlist};
 
