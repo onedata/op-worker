@@ -24,22 +24,22 @@
 
 %% get_user_metadata/1
 %% ====================================================================
-%% @doc Gets user matadata associated with file, that is all xattrs
+%% @doc Gets user matadata associated with file, which are all xattrs
 %% without "cdmi_" prefix.
 %% @end
--spec get_user_metadata(string()) -> list().
+-spec get_user_metadata(Filepath :: string()) -> [{Name :: binary(), Value :: binary()}].
 %% ====================================================================
 get_user_metadata(Filepath) ->
     case logical_files_manager:list_xattr(Filepath) of
-        {ok, XAttrs} -> lists:filter(fun(X) -> xattrs_without_prefix(X, <<"cdmi_">>) end, XAttrs);
+        {ok, XAttrs} -> lists:filter(fun(X) -> not binary_with_prefix(X, <<"cdmi_">>) end, XAttrs);
         _ -> []
     end.
 
 %% replace_user_metadata/1
 %% ====================================================================
-%% @doc
+%% @doc Replaces user metadata associated with file.
 %% ====================================================================
--spec replace_user_metadata(string(), list()) -> list().
+-spec replace_user_metadata(Filepath :: string(), [{Name :: binary(), Value :: binary()}]) -> ok.
 replace_user_metadata(Filepath, UserMetadata) ->
     {CurrentNames, _Values} = lists:unzip(get_user_metadata(Filepath)),
     % starts with CDMI
@@ -50,44 +50,35 @@ replace_user_metadata(Filepath, UserMetadata) ->
 
 %% prepare_metadata/2
 %% ====================================================================
-%% @doc Prepares cdmi metadata based on file attributes.
+%% @doc Prepares cdmi user and storage system metadata.
 %% @end
--spec prepare_metadata(#fileattributes{}) -> [{CdmiName :: binary(), Value :: binary()}].
+-spec prepare_metadata(Filepath :: string(), #fileattributes{}) -> [{CdmiName :: binary(), Value :: binary()}].
 %% ====================================================================
 prepare_metadata(Filepath, Attrs) ->
     prepare_metadata(Filepath, <<"">>, Attrs).
 
 %% prepare_metadata/3
 %% ====================================================================
-%% @doc Prepares cdmi metadata with given prefix based on file attributes.
+%% @doc Prepares cdmi user and storage system metadata with given prefix.
 %% @end
--spec prepare_metadata(Prefix :: binary(), #fileattributes{}) -> [{CdmiName :: binary(), Value :: binary()}].
+-spec prepare_metadata(Filepath :: string(), Prefix :: binary(), #fileattributes{}) -> [{CdmiName :: binary(), Value :: binary()}].
 %% ====================================================================
 prepare_metadata(Filepath, Prefix, Attrs) ->
     StorageSystemMetadata = lists:map(fun(X) -> cdmi_metadata_to_attrs(X,Attrs) end, ?default_storage_system_metadata),
     Metadata = lists:append(StorageSystemMetadata, get_user_metadata(Filepath)),
-    lists:filter(fun(X) -> metadata_with_prefix(X, Prefix) end, Metadata).
+    lists:filter(fun(X) -> binary_with_prefix(X, Prefix) end, Metadata).
 
 %% ====================================================================
 %% Internal Functions
 %% ====================================================================
 
-%% xattrs_without_prefix/2
+%% binary_with_prefix/2
 %% ====================================================================
 %% @doc Predicate that tells whether a binary starts with given prefix.
 %% @end
--spec xattrs_without_prefix(Name :: binary(), Prefix :: binary()) -> true | false.
+-spec binary_with_prefix(Name :: binary(), Prefix :: binary()) -> true | false.
 %% ====================================================================
-xattrs_without_prefix({Name, _Value}, Prefix) ->
-    binary:longest_common_prefix([Name, Prefix]) =/= size(Prefix).
-
-%% metadata_with_prefix/2
-%% ====================================================================
-%% @doc Predicate that tells whether a binary starts with given prefix.
-%% @end
--spec metadata_with_prefix(Name :: binary(), Prefix :: binary()) -> true | false.
-%% ====================================================================
-metadata_with_prefix({Name, _Value}, Prefix) ->
+binary_with_prefix({Name, _Value}, Prefix) ->
     binary:longest_common_prefix([Name, Prefix]) =:= size(Prefix).
 
 %% cdmi_metadata_to_attrs/2
