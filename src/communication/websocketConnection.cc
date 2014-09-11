@@ -22,6 +22,7 @@ WebsocketConnection::WebsocketConnection(std::function<void(const std::string&)>
                                          std::function<void(Connection&)> onErrorCallback,
                                          endpoint_type &endpoint,
                                          const std::string &uri,
+                                         const std::unordered_map<std::string, std::string> &additionalHeaders,
                                          std::shared_ptr<const CertificateData> certificateData,
                                          const bool verifyServerCertificate)
     : Connection{std::move(onMessageCallback), std::move(onFailCallback),
@@ -49,6 +50,9 @@ WebsocketConnection::WebsocketConnection(std::function<void(const std::string&)>
     connection->set_pong_handler        (bind(&WebsocketConnection::onPong, this, p::_2));
     connection->set_pong_timeout_handler(bind(&WebsocketConnection::onPongTimeout, this, p::_2));
     connection->set_interrupt_handler   (bind(&WebsocketConnection::onInterrupt, this));
+
+    for(const auto &header: additionalHeaders)
+        connection->append_header(header.first, header.second);
 
     m_connection = connection;
 

@@ -28,9 +28,11 @@ class CertificateData;
 
 WebsocketConnectionPool::WebsocketConnectionPool(const unsigned int connectionsNumber,
                                                  std::string uri,
-                                                 const bool verifyServerCertificate,
-                                                 std::shared_ptr<const CertificateData> certificateData)
+                                                 std::unordered_map<std::string, std::string> additionalHeaders,
+                                                 std::shared_ptr<const CertificateData> certificateData,
+                                                 const bool verifyServerCertificate)
     : ConnectionPool{connectionsNumber, std::move(uri)}
+    , m_additionalHeaders{std::move(additionalHeaders)}
     , m_certificateData{std::move(certificateData)}
     , m_verifyServerCertificate{verifyServerCertificate}
 {
@@ -104,7 +106,8 @@ std::unique_ptr<Connection> WebsocketConnectionPool::createConnection()
                 std::bind(&WebsocketConnectionPool::onFail, this, _1, _2),
                 std::bind(&WebsocketConnectionPool::onOpen, this, _1),
                 std::bind(&WebsocketConnectionPool::onError, this, _1),
-                m_endpoint, m_uri, m_certificateData, m_verifyServerCertificate);
+                m_endpoint, m_uri, m_additionalHeaders, m_certificateData,
+                m_verifyServerCertificate);
 }
 
 } // namespace communication

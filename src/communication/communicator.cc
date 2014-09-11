@@ -206,9 +206,10 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(const unsigned int dat
                                                           unsigned int port,
                                                           std::string endpoint,
                                                           const bool verifyServerCertificate,
+                                                          const std::unordered_map<std::string, std::string> &additionalHeaders,
                                                           std::shared_ptr<const CertificateData> certificateData)
 {
-    const auto uri = "wss://"+hostname+std::to_string(port)+endpoint;
+    const auto uri = "wss://"+hostname+":"+std::to_string(port)+endpoint;
 
     LOG(INFO) << "Creating a WebSocket++ based Communicator instance with " <<
                  dataPoolSize << " data pool connections, " << metaPoolSize <<
@@ -216,14 +217,14 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(const unsigned int dat
                  "certificate verification " <<
                  (verifyServerCertificate ? "enabled" : "disabled") << ".";
 
-    auto dataPool = std::make_unique<WebsocketConnectionPool>(
-                dataPoolSize, uri, verifyServerCertificate, certificateData);
-
-    auto metaPool = std::make_unique<WebsocketConnectionPool>(
-                metaPoolSize, uri, verifyServerCertificate, certificateData);
+    auto createDataPool = [&](const unsigned int poolSize) {
+        return std::make_unique<WebsocketConnectionPool>(
+                    poolSize, uri, additionalHeaders,
+                    certificateData, verifyServerCertificate);
+    };
 
     auto communicationHandler = std::make_unique<CommunicationHandler>(
-                std::move(dataPool), std::move(metaPool));
+                createDataPool(dataPoolSize), createDataPool(metaPoolSize));
 
     return std::make_shared<Communicator>(std::move(communicationHandler));
 }

@@ -18,6 +18,7 @@
 
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 
 extern template class websocketpp::client<websocketpp::config::asio_tls_client>;
@@ -47,15 +48,17 @@ public:
      * @param connectionsNumber Number of connections that should be maintained
      * by this pool.
      * @param uri Server's URI to connect to.
-     * @param certificateData Certificate data to use for SSL authentication.
      * @param verifyServerCertificate Determines whether to verify server's
      * certificate.
+     * @param additionalHeaders Additional HTTP headers to use for the connection.
+     * @param certificateData Certificate data to use for SSL authentication.
      */
     WebsocketConnectionPool(
             const unsigned int connectionsNumber,
             std::string uri,
-            const bool verifyServerCertificate,
-            std::shared_ptr<const CertificateData> certificateData);
+            std::unordered_map<std::string, std::string> additionalHeaders,
+            std::shared_ptr<const CertificateData> certificateData,
+            const bool verifyServerCertificate);
 
     /**
      * Destructor.
@@ -83,6 +86,7 @@ private:
 
     std::thread m_ioThread;
     endpoint_type m_endpoint;
+    const std::unordered_map<std::string, std::string> m_additionalHeaders;
     const std::shared_ptr<const CertificateData> m_certificateData;
     const bool m_verifyServerCertificate;
 };
