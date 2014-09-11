@@ -182,7 +182,7 @@ verify_peer_cert(Req) ->
     Result :: ok | {error, {user_unknown, DnString :: string()}}.
 %% ====================================================================
 prepare_context({token, Token, GRUID}) ->
-    fslogic_context:set_access_token(GRUID,Token),
+    fslogic_context:set_gr_auth(GRUID,Token),
     ok;
 prepare_context(DnString) ->
     case user_logic:get_user({dn, DnString}) of
