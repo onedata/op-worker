@@ -323,7 +323,7 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                         case auth_handler:authenticate_user_by_secret(GlobalId, TokenHash) of
                             {true, AccessToken1} ->
                                 %% Cache AccessToken for the user
-                                put({UserGID, TokenHash}, AccessToken1),
+                                put({GlobalId, TokenHash}, AccessToken1),
 
                                 {GlobalId, AccessToken1};
                             false ->
