@@ -91,7 +91,7 @@ encode_to_json(Term) ->
 %% ====================================================================
 %% @doc Convinience function that convert JSON binary to an erlang term.
 %% @end
--spec decode_from_json(term()) -> binary().
+-spec decode_from_json(binary()) -> term().
 %% ====================================================================
 decode_from_json(JSON) ->
     mochijson2:decode(JSON).
