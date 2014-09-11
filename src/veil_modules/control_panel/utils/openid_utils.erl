@@ -63,6 +63,7 @@ validate_login() ->
             vcn_gui_utils:set_access_token(AccessToken),
             vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
             vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
+            vcn_gui_utils:set_logout_token(vcn_gui_utils:gen_logout_token()),
             ?debug("User ~p logged in", [Login]),
             ok
         catch
