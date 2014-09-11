@@ -15,12 +15,13 @@
 
 -include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("messages_white_list.hrl").
 
 %% Application callbacks
 -export([start/2, stop/1, get_env/1]).
 
 -ifdef(TEST).
--export([ports_ok/0]).
+-export([ports_ok/0, activate_white_lists/0]).
 -endif.
 
 %% ===================================================================
@@ -39,6 +40,8 @@
                 | term().
 %% ====================================================================
 start(_StartType, _StartArgs) ->
+  activate_white_lists(),
+
 	Ans = case its_ccm() orelse ports_ok() of
 		true ->
 			{ok, NodeType} = application:get_env(?APP_Name, node_type),
@@ -142,3 +145,10 @@ ports_are_free(Port)->
 			io:format(standard_error, "Port ~w is in use. Starting aborted.~n", [Port]),
 			false
 	end.
+
+activate_white_lists() ->
+  ?AtomsWhiteList,
+  ?VisibleModules,
+
+  lists:foreach(fun(Decoder) -> list_to_atom(atom_to_list(Decoder) ++ "_pb") end, ?DecodersList),
+  lists:foreach(fun(Message) -> {list_to_atom("decode_" ++ atom_to_list(Message)), list_to_atom("encode_" ++ atom_to_list(Message))} end, ?MessagesWhiteList).
