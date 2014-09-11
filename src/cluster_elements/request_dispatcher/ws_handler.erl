@@ -279,7 +279,7 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
             %% Session data found, and its user ID matches -> send OK status and update current connection state
             ?debug("User ~p assigned FUSE ID ~p to the connection (PID: ~p)", [UserKey, NewFuseId, self()]),
             {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req,
-                        State#handler_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = AccessToken, user_global_id = UserGID}};
+                        State#handler_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = vcn_utils:ensure_binary(AccessToken), user_global_id = vcn_utils:ensure_binary(UserGID)}};
 
         {ok, #veil_document{record = #fuse_session{uid = OtherUID}}} ->
             %% Current user does not match session owner
