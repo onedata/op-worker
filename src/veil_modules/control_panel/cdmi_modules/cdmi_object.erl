@@ -254,6 +254,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
     Body = rest_utils:parse_body(RawBody),
     RequestedMimetype = proplists:get_value(<<"mimetype">>, Body),
     RequestedValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body),
+    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
     ValueTransferEncoding = case RequestedValueTransferEncoding of undefined -> <<"utf-8">>; _ -> RequestedValueTransferEncoding end,
     Value = proplists:get_value(<<"value">>, Body),
     Range = case lists:keyfind(<<"value">>, 1, Opts) of
@@ -270,6 +271,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
                         {ok,Attrs} ->
                             update_encoding(Filepath, RequestedValueTransferEncoding),
                             update_mimetype(Filepath, RequestedMimetype),
+                            cdmi_metadata:replace_user_metadata(Filepath, RequestedUserMetadata),
                             Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
                             Req2 = cowboy_req:set_resp_body(Response, Req1),
                             {true, Req2, State};
@@ -339,10 +341,10 @@ prepare_object_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"mimetype">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"mimetype">>, get_mimetype(Filepath)} | prepare_object_ans(Tail, State)];
-prepare_object_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->
-    [{<<"metadata">>, rest_utils:prepare_metadata(Attrs)} | prepare_object_ans(Tail, State)];
-prepare_object_ans([{<<"metadata">>, Prefix} | Tail], #state{attributes = Attrs} = State) ->
-    [{<<"metadata">>, rest_utils:prepare_metadata(Prefix, Attrs)} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"metadata">> | Tail], #state{filepath = Filepath, attributes = Attrs} = State) ->
+    [{<<"metadata">>, cdmi_metadata:prepare_metadata(Filepath, Attrs)} | prepare_object_ans(Tail, State)];
+prepare_object_ans([{<<"metadata">>, Prefix} | Tail], #state{filepath = Filepath, attributes = Attrs} = State) ->
+    [{<<"metadata">>, cdmi_metadata:prepare_metadata(Filepath, Prefix, Attrs)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"valuetransferencoding">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"valuetransferencoding">>, get_encoding(Filepath)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"value">> | Tail], State) ->
