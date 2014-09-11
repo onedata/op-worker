@@ -195,6 +195,7 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
                     stream_file(Socket, Transport, State, Range, Encoding, BufferSize),
                     Transport:send(Socket,JsonBodySuffix)
                 catch Type:Message ->
+                    Transport:send(Socket,JsonBodySuffix),
                     % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
                     ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Filepath, Type, Message])
                 end

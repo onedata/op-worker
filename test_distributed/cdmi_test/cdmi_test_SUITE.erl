@@ -773,14 +773,17 @@ out_of_range_test(_Config) ->
     FileName = "random_range_file.txt",
     create_file(FileName),
 
-%%     %%---- reading out of range ---- todo handle this somehow
-%%     ?assertEqual(<<>>, get_file_content(FileName)),
-%%     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-%%
-%%     RequestBody1 = rest_utils:encode_to_json([{<<"value">>, <<"data">>}]),
-%%     {Code1, _Headers1, _Response1} = do_request(FileName ++ "?value:0-3", get, RequestHeaders1, RequestBody1),
-%%     ?assertEqual("400",Code1). %?
-%%     %%------------------------------
+    %%---- reading out of range ----
+    ?assertEqual(<<>>, get_file_content(FileName)),
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+
+    RequestBody1 = rest_utils:encode_to_json([{<<"value">>, <<"data">>}]),
+    {Code1, _Headers1, Response1} = do_request(FileName ++ "?value:0-3", get, RequestHeaders1, RequestBody1),
+    ?assertEqual("200",Code1),
+    ct:print("~p",[Response1]),
+    {struct, CdmiResponse1} = mochijson2:decode(Response1),
+    ?assertEqual(<<>>,proplists:get_value(<<"value">>,CdmiResponse1)),
+    %%------------------------------
 
     %%------ writing at end --------
     ?assertEqual(<<>>, get_file_content(FileName)),
