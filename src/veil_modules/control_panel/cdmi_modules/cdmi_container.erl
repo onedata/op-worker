@@ -47,7 +47,7 @@ malformed_request(Req, #state{filepath = Filepath} = State) ->
 %% @doc Determines if resource, that can be obtained from state, exists.
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
-resource_exists(Req,State = #state{filepath = Filepath}) ->
+resource_exists(Req, State = #state{filepath = Filepath}) ->
     case logical_files_manager:getfileattr(Filepath) of
         {ok, #fileattributes{type = "DIR"} = Attr} -> {true, Req, State#state{attributes = Attr}};
         _ -> {false, Req, State}
@@ -60,7 +60,8 @@ resource_exists(Req,State = #state{filepath = Filepath}) ->
 %% Before adding new content type make sure that adequate routing function
 %% exists in cdmi_handler
 %% @end
--spec content_types_provided(req(), #state{}) -> {[{ContentType,Method}], req(), #state{}} when
+%% ====================================================================
+-spec content_types_provided(req(), #state{}) -> {[{ContentType, Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
 %% ====================================================================
@@ -77,7 +78,8 @@ content_types_provided(Req, State) ->
 %% Before adding new content type make sure that adequate routing function
 %% exists in cdmi_handler
 %% @end
--spec content_types_accepted(req(), #state{}) -> {[{ContentType,Method}], req(), #state{}} when
+%% ====================================================================
+-spec content_types_accepted(req(), #state{}) -> {[{ContentType, Method}], req(), #state{}} when
     ContentType :: binary(),
     Method :: atom().
 %% ====================================================================

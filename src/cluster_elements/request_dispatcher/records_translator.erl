@@ -102,6 +102,8 @@ get_answer_decoder_and_type(#fusemessage{input = #changefilegroup{}}) ->
     {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #changefileperms{}}) ->
     {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #checkfileperms{}}) ->
+    {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #updatetimes{}}) ->
     {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #createlink{}}) ->

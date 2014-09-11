@@ -73,10 +73,10 @@
 -define(FILE_COUNTING_BASE, 256).
 
 %% Which fuse operations (messages) are allowed to operate on base group directory ("/groups")
--define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, getfileuuid, updatetimes, getfilechildren]).
+-define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, getfileuuid, updatetimes, getfilechildren, checkfileperms]).
 
 %% Which fuse operations (messages) are allowed to operate on second level group directory (e.g. "/groups/grpName")
--define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getfileuuid, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren]).
+-define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getfileuuid, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren, checkfileperms]).
 
 
 %% File types used in protocol. Use fslogic_file:normalize_file_type to translate types from/to normal macros like ?REG_TYPE.

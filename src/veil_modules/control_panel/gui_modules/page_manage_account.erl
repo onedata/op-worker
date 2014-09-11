@@ -19,10 +19,6 @@
 % Postback functions
 -export([api_event/3, update_email/2, update_dn/2, show_email_adding/1, show_dn_adding/1]).
 
--define(mail_validation_regexp,
-    <<"^[a-z0-9!#$%&'*+\\/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+\\/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$">>).
-
-
 %% Template points to the template file, which will be filled with content
 main() ->
     case vcn_gui_utils:maybe_redirect(true, false, false, true) of
@@ -263,9 +259,10 @@ update_email(User, AddOrRemove) ->
     OldEmailList = user_logic:get_email_list(User),
     case AddOrRemove of
         {add, submitted} ->
-            NewEmail = gui_ctx:postback_param(<<"new_email_textbox">>),
-            case re:run(NewEmail, ?mail_validation_regexp) of
-                {match, _} ->
+            NewEmailNotNormalized = gui_ctx:postback_param(<<"new_email_textbox">>),
+            NewEmail = gui_utils:normalize_email(NewEmailNotNormalized),
+            case gui_utils:validate_email(NewEmail) of
+                true ->
                     NewEmailUnicode = gui_str:binary_to_unicode_list(NewEmail),
                     case user_logic:get_user({email, NewEmailUnicode}) of
                         {ok, _} ->
@@ -273,7 +270,7 @@ update_email(User, AddOrRemove) ->
                         _ ->
                             user_logic:update_email_list(User, OldEmailList ++ [NewEmailUnicode])
                     end;
-                _ ->
+                false ->
                     gui_jq:wire(#alert{text = <<"Please enter a valid email address.">>})
             end;
         {remove, Email} ->
