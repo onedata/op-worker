@@ -909,10 +909,8 @@ comet_loop(#?STATE{} = State) ->
                         Message = <<"Give the token below to a provider willing to support your Space.",
                         "<input id=\"support_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
                         " width: 80%;\" value=\"", Token/binary, "\">">>,
-                        gui_jq:info_popup(<<"Request support">>, Message, <<"return true;">>),
-                        gui_comet:flush(),
-                        gui_jq:select_text(<<"support_token_textbox">>),
-                        gui_comet:flush();
+                        gui_jq:info_popup(<<"Request support">>, Message, <<"return true;">>, <<"btn-inverse">>),
+                        gui_jq:wire(<<"box.on('shown',function(){ $(\"#support_token_textbox\").focus().select(); });">>);
                     Other ->
                         ?error("Cannot get support token for Space with ID ~p: ~p", [SpaceId, Other]),
                         vcn_gui_utils:message(<<"error_message">>, <<"Cannot get support token for Space with ID: <b>", SpaceId, "</b>."
@@ -928,10 +926,8 @@ comet_loop(#?STATE{} = State) ->
                         Message = <<"Give the token below to a user willing to join your Space.",
                         "<input id=\"join_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
                         " width: 80%;\" value=\"", Token/binary, "\">">>,
-                        gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>),
-                        gui_comet:flush(),
-                        gui_jq:select_text(<<"join_token_textbox">>),
-                        gui_comet:flush();
+                        gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>, <<"btn-inverse">>),
+                        gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_token_textbox\").focus().select(); });">>);
                     Other ->
                         ?error("Cannot get invitation token for Space with ID ~p: ~p", [SpaceId, Other]),
                         vcn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."

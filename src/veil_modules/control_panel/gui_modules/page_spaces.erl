@@ -234,7 +234,7 @@ space_row_collapsed(SpaceId, RowId, Default) ->
                                     style = <<"border-width: 0; text-align: left; padding-left: 0; padding-right: 1em;">>,
                                     body = #p{
                                         style = ?PARAGRAPH_STYLE,
-                                        body = <<"<b>", Name/binary, "</b> ( ", SpaceId/binary, " )">>
+                                        body = <<"<b>", Name/binary, "</b> (", SpaceId/binary, ")">>
                                     }
                                 },
                                 #td{
