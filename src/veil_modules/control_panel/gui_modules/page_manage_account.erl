@@ -19,6 +19,10 @@
 % Postback functions
 -export([api_event/3, update_email/2, update_dn/2, show_email_adding/1, show_dn_adding/1]).
 
+% URLs for client packages download
+-define(CLIENT_RPM_URL, "http://packages.onedata.org/VeilClient-Linux.rpm").
+-define(CLIENT_DEB_URL, "http://packages.onedata.org/VeilClient-Linux.deb").
+
 %% Template points to the template file, which will be filled with content
 main() ->
     case vcn_gui_utils:maybe_redirect(true, false, false, true) of
@@ -138,6 +142,21 @@ main_table() ->
             #td{style = <<"padding: 15px; vertical-align: top;">>,
                 body = #link{style = <<"font-size: 18px;">>, body = <<"Authorization preferences">>,
                     url = <<(atom_to_binary(GlobalRegistryHostname, latin1))/binary, "/manage_account">>}}
+        ]},
+
+        #tr{cells = [
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Access via fuse client">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #panel{body = [
+                    #p{body = <<"Download and install preferred package to mount onedata storage on your computer:">>},
+                    #list{style = <<"margin-top: -3px;">>, numbered = true, body = [
+                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
+                        #link{body = <<"RPM package">>, url = <<?CLIENT_RPM_URL>>}},
+                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
+                        #link{body = <<"DEB package">>, url = <<?CLIENT_DEB_URL>>}}
+                    ]}
+                ]}}
         ]}
     ]}.
 
