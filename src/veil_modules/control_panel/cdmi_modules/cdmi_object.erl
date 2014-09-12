@@ -259,7 +259,6 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
             {struct, UserMetadata} -> UserMetadata;
             _ -> []
         end,
-    URIUserMetadata = proplists:get_value(<<"metadata">>, Body),
     ValueTransferEncoding = case RequestedValueTransferEncoding of undefined -> <<"utf-8">>; _ -> RequestedValueTransferEncoding end,
     Value = proplists:get_value(<<"value">>, Body),
     Range = case lists:keyfind(<<"value">>, 1, Opts) of
