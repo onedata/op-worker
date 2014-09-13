@@ -142,7 +142,7 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
         ok -> %todo check given body
             case logical_files_manager:getfileattr(Filepath) of
                 {ok, Attr} ->
-                    cdmi_metadata:replace_user_metadata(Filepath, RequestedUserMetadata),
+                    cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata),
                     Response = rest_utils:encode_to_json(
                         {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr})}),
                     Req2 = cowboy_req:set_resp_body(Response, Req),

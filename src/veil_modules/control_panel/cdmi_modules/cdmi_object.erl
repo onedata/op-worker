@@ -275,7 +275,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
                         {ok,Attrs} ->
                             update_encoding(Filepath, RequestedValueTransferEncoding),
                             update_mimetype(Filepath, RequestedMimetype),
-                            cdmi_metadata:replace_user_metadata(Filepath, RequestedUserMetadata),
+                            cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata),
                             Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
                             Req2 = cowboy_req:set_resp_body(Response, Req1),
                             {true, Req2, State};
