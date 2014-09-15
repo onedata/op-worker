@@ -220,7 +220,7 @@ can_view_monitoring() ->
 maybe_redirect(NeedLogin, NeedDN, NeedStorage, SaveSourcePage) ->
     case NeedLogin and (not gui_ctx:user_logged_in()) of
         true ->
-            gui_jq:redirect_to_login(SaveSourcePage),
+            gui_jq:redirect_to_login(),
             true;
         false ->
             case NeedDN and (vcn_gui_utils:get_user_dn() =:= undefined) of
@@ -261,7 +261,7 @@ apply_or_redirect(Module, Fun, Args, NeedDN) ->
     try
         case gui_ctx:user_logged_in() of
             false ->
-                gui_jq:redirect_to_login(true);
+                gui_jq:redirect_to_login();
             true ->
                 case NeedDN and (not dn_and_storage_defined()) of
                     true -> gui_jq:redirect(<<"/manage_account">>);
