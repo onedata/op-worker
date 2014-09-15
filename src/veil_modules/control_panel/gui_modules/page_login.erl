@@ -26,6 +26,22 @@ title() -> <<"Login page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
+    case application:get_env(veil_cluster_node, developer_mode) of
+        {ok, true} -> body_devel();
+        _ -> body_production()
+    end.
+
+
+% In production, the user will be redirected straight to Global Registry
+body_production() ->
+    case gui_ctx:user_logged_in() of
+        true -> gui_jq:redirect(<<"/">>);
+        false -> event(globalregistry_login)
+    end.
+
+
+% For development, you can choose whether to log in via GR or directly via PLGrid OpenID
+body_devel() ->
     case gui_ctx:user_logged_in() of
         true -> gui_jq:redirect(<<"/">>);
         false ->

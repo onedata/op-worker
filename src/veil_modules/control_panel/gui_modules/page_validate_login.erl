@@ -29,7 +29,11 @@ title() -> <<"Login page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    case gui_ctx:user_logged_in() of
+    DisableThisPage = case application:get_env(veil_cluster_node, developer_mode) of
+                          {ok, true} -> false;
+                          _ -> true
+                      end,
+    case gui_ctx:user_logged_in() orelse DisableThisPage of
         true -> gui_jq:redirect(<<"/">>);
         false ->
             LoginMessage = case plgrid_openid_utils:prepare_validation_parameters() of
@@ -62,7 +66,8 @@ body() ->
                                     _ ->
                                         Nodes = gen_server:call({global, central_cluster_manager}, get_nodes),
                                         AllNodes = Nodes -- [node()],
-                                        mock(AllNodes, cluster_manager_lib, get_provider_id, fun() -> <<"providerId">> end),
+                                        mock(AllNodes, cluster_manager_lib, get_provider_id, fun() ->
+                                            <<"providerId">> end),
                                         SpacesBinary = [<<"space1">>, <<"space2">>],
                                         mock(AllNodes, gr_users, get_spaces, fun(_) ->
                                             {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
