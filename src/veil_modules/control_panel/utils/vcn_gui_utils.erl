@@ -21,7 +21,7 @@
 -export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0, gen_logout_token/0, set_logout_token/1, get_logout_token/0]).
 
 % Functions to check for user's session
--export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/4]).
+-export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/3]).
 
 % Functions to generate page elements
 -export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
@@ -165,17 +165,16 @@ can_view_monitoring() ->
     get_user_role() /= user.
 
 
-%% maybe_redirect/4
+%% maybe_redirect/3
 %% ====================================================================
 %% @doc Decides if user can view the page, depending on arguments.
 %% Returns false if no redirection is needed.
 %% Otherwise, it issues a redirection and returns true.
-%% Setting "SaveSourcePage" on true will allow a redirect back from login.
 %% NOTE: Should be called from page:main().
 %% @end
--spec maybe_redirect(NeedLogin :: boolean(), NeedDN :: boolean(), NeedStorage :: boolean(), SaveSourcePage :: boolean()) -> ok.
+-spec maybe_redirect(NeedLogin :: boolean(), NeedDN :: boolean(), NeedStorage :: boolean()) -> ok.
 %% ====================================================================
-maybe_redirect(NeedLogin, NeedDN, NeedStorage, SaveSourcePage) ->
+maybe_redirect(NeedLogin, NeedDN, NeedStorage) ->
     case NeedLogin and (not gui_ctx:user_logged_in()) of
         true ->
             gui_jq:redirect_to_login(),
