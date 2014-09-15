@@ -121,9 +121,6 @@ form_submit_action(TriggerID, Postback, SourcesArg) ->
     #event{type = "click", postback = Postback, target = gui_str:to_list(TriggerID), source = Sources}.
 
 
-
-
-
 %% redirect/1
 %% ====================================================================
 %% @doc Redirects to given page.
