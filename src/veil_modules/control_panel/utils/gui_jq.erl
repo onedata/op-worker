@@ -24,7 +24,7 @@
 -export([postback_action/2, form_submit_action/3]).
 
 % Redirections
--export([redirect/1, redirect_to_login/1, redirect_from_login/0]).
+-export([redirect/1, redirect_to_login/0, redirect_to_login/1, redirect_from_login/0]).
 
 % Useful functions for binding custom events
 -export([register_escape_event/1, bind_enter_to_submit_button/2, bind_element_click/2]).
@@ -121,6 +121,9 @@ form_submit_action(TriggerID, Postback, SourcesArg) ->
     #event{type = "click", postback = Postback, target = gui_str:to_list(TriggerID), source = Sources}.
 
 
+
+
+
 %% redirect/1
 %% ====================================================================
 %% @doc Redirects to given page.
@@ -131,33 +134,33 @@ redirect(URL) ->
     wf:redirect(URL).
 
 
+%% redirect_to_login/0
+%% ====================================================================
+%% @equiv redirect_to_login(<<"/login">>).
+-spec redirect_to_login() -> ok.
+%% ====================================================================
+redirect_to_login() ->
+    redirect_to_login(<<"/login">>).
+
+
 %% redirect_to_login/1
 %% ====================================================================
-%% @doc Redirects to login page. Can remember the source page, so that
-%% a user can be redirected back after logging in.
+%% @doc Redirects the user to login page.
 %% @end
--spec redirect_to_login(SaveSourcePage :: boolean()) -> ok.
+-spec redirect_to_login(LoginURL :: binary()) -> ok.
 %% ====================================================================
-redirect_to_login(SaveSourcePage) ->
-    PageName = gui_ctx:get_requested_page(),
-    case SaveSourcePage andalso PageName /= <<"/">> of
-        false -> wf:redirect(<<"/login">>);
-        true -> wf:redirect(<<"/login?x=", PageName/binary>>)
-    end.
+redirect_to_login(LoginURL) ->
+    wf:redirect(LoginURL).
 
 
 %% redirect_from_login/0
 %% ====================================================================
-%% @doc Redirects back from login page to the originally requested page.
-%% If it hasn't been stored before, redirects to index page.
+%% @doc Redirects back from login page to the index page.
 %% @end
 -spec redirect_from_login() -> ok.
 %% ====================================================================
 redirect_from_login() ->
-    case wf:q(<<"x">>) of
-        undefined -> wf:redirect(<<"/">>);
-        TargetPage -> wf:redirect(TargetPage)
-    end.
+    wf:redirect(<<"/">>).
 
 
 %% register_escape_event/1
