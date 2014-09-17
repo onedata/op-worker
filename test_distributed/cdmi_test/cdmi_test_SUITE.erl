@@ -265,16 +265,6 @@ create_dir_test(_Config) ->
     ?assert(object_exists(DirName2)),
     %%------------------------------
 
-    %%----- creation conflict ------
-    ?assert(object_exists(DirName)),
-
-    RequestHeaders3 = [{"content-type", "application/cdmi-container"},{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code3, _Headers3, _Response3} = do_request(DirName, put, RequestHeaders3, []),
-    ?assertEqual("409",Code3),
-
-    ?assert(object_exists(DirName)),
-    %%------------------------------
-
     %%----- missing parent ---------
     ?assert(not object_exists(MissingParentName)),
 
@@ -733,8 +723,12 @@ moved_pemanently_test(_Config) ->
 % test error handling
 errors_test(_Config) ->
     %%---- unauthorized access -----
-    {Code1, _Headers1, _Response1} = do_request(?Test_dir_name, get, [], [], false),
+    {Code1, _Headers1, Response1} = do_request(?Test_dir_name, get, [], [], false),
+    {struct, Error1} = rest_utils:decode_from_json(Response1),
     ?assertEqual("401", Code1),
+
+    %test if error responses are returned
+    ?assertMatch([{<<"CertificateError">>, _}],Error1),
     %%------------------------------
 
     %%----- wrong create path ------
@@ -780,7 +774,6 @@ out_of_range_test(_Config) ->
     RequestBody1 = rest_utils:encode_to_json([{<<"value">>, <<"data">>}]),
     {Code1, _Headers1, Response1} = do_request(FileName ++ "?value:0-3", get, RequestHeaders1, RequestBody1),
     ?assertEqual("200",Code1),
-    ct:print("~p",[Response1]),
     {struct, CdmiResponse1} = mochijson2:decode(Response1),
     ?assertEqual(<<>>,proplists:get_value(<<"value">>,CdmiResponse1)),
     %%------------------------------

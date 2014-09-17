@@ -53,7 +53,7 @@ resource_exists(Req, State = #state{filepath = Filepath}) ->
         {ok, #fileattributes{type = "REG"} = Attr} -> {true, Req, State#state{attributes = Attr}};
         {ok, _} ->
             Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath++"/"), Req),
-            cdmi_error:error_reply(Req1,State,?moved_pemanently_code, "Filepath '~s' poins to directory but does not end with '/'",[Filepath]);
+            cdmi_error:error_reply(Req1, State, {moved_permanently, Filepath});
         _ -> {false, Req, State}
     end.
 
@@ -106,7 +106,7 @@ content_types_accepted(Req, State) ->
 delete_resource(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:delete(Filepath) of
         ok -> {true, Req, State};
-        Error -> cdmi_error:error_reply(Req, State, ?error_bad_request_code, "Deleting cdmi object end up with error: ~p",[Error])
+        Error -> cdmi_error:error_reply(Req, State, {file_delete_unknown_error,Error})
     end.
 
 %% ====================================================================
@@ -131,7 +131,7 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
 
     % return bad request if Range is invalid
     case Ranges of
-        invalid -> cdmi_error:error_reply(Req1,State,?error_bad_request_code,"Invalid range: ~p",[RawRange]);
+        invalid -> cdmi_error:error_reply(Req1, State, {invalid_range, RawRange});
         _ ->
             % prepare data size and stream function
             StreamSize = lists:foldl(fun({From, To}, Acc) when To >= From -> Acc + To - From + 1 end, 0, Ranges),
@@ -236,11 +236,11 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
                             write_body_to_file(Req2, State, From, false);
                         _ ->
-                            cdmi_error:error_reply(Req2, State, ?error_bad_request_code, "Invalid range: ~p", [RawRange])
+                            cdmi_error:error_reply(Req2, State, {invalid_range, RawRange})
                     end
             end;
         Error ->
-            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Creating cdmi object end up with error: ~p", [Error])
+            cdmi_error:error_reply(Req, State, {put_object_unknown_error, Error}) %todo handle creation forbidden error
     end.
 
 %% put_cdmi_object/2
@@ -276,11 +276,11 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
                             {true, Req2, State};
                         Error ->
                             logical_files_manager:delete(Filepath),
-                            cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Getting attributes end up with error: ~p",Error)
+                            cdmi_error:error_reply(Req1, State, {get_attr_unknown_error, Error})
                     end;
                 Error ->
                     logical_files_manager:delete(Filepath),
-                    cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
+                    cdmi_error:error_reply(Req1, State, {write_object_unknown_error, Error}) %todo handle create file forbidden
             end;
         {error, file_exists} ->
             update_encoding(Filepath, RequestedValueTransferEncoding),
@@ -290,19 +290,19 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
                     case logical_files_manager:write(Filepath, From, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             {true, Req1, State};
-                        Error -> cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
+                        Error -> cdmi_error:error_reply(Req1, State, {write_object_unknown_error, Error}) %todo handle write file forbidden
                     end;
                 undefined when is_binary(Value) ->
                     logical_files_manager:truncate(Filepath, 0),
                     case logical_files_manager:write(Filepath, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             {true, Req1, State};
-                        Error -> cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p", Error)
+                        Error -> cdmi_error:error_reply(Req1, State, {write_object_unknown_error, Error}) %todo handle write file forbidden
                     end;
                 undefined -> {true, Req1, State};
-                _ -> cdmi_error:error_reply(Req1, State, ?error_bad_request_code, "Updating cdmi object end up with error",[])
+                MalformedRange -> cdmi_error:error_reply(Req1, State, {invalid_range, MalformedRange})
             end;
-        Error -> cdmi_error:error_reply(Req1, State, ?error_forbidden_code, "Creating cdmi object end up with error: ~p",[Error])
+        Error -> cdmi_error:error_reply(Req1, State, {put_object_unknown_error, Error})
     end.
 
 %% ====================================================================
@@ -383,12 +383,12 @@ write_body_to_file(Req, #state{filepath = Filepath} = State, Offset, RemoveIfFai
                 more -> write_body_to_file(Req1, State, Offset + Bytes);
                 ok -> {true, Req1, State}
             end;
-        Error ->
+        Error -> %todo handle write file forbidden
             case RemoveIfFails of
                 true -> logical_files_manager:delete(Filepath);
                 false -> ok
             end,
-            cdmi_error:error_reply(Req1, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p", [Error])
+            cdmi_error:error_reply(Req1, State, {write_object_unknown_error, Error})
     end.
 
 %% stream_file/6

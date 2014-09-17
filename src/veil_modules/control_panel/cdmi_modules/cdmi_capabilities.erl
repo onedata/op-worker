@@ -35,8 +35,7 @@ allowed_methods(Req, State) ->
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
 malformed_request(Req, #state{cdmi_version = undefined } = State) ->
-    ?error_stacktrace("No cdmi version secified in cdmi_capabilities request"),
-    {true,Req,State};
+    cdmi_error:error_reply(Req, State, no_version_given);
 malformed_request(Req,  State) ->
     {false,Req,State}.
 

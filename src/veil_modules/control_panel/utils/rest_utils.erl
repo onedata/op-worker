@@ -138,7 +138,7 @@ verify_peer_cert(Req) ->
                                catch
                                    _:_ ->
                                        ?error("[REST] Peer connected but cerificate chain was not found. Please check if GSI validation is enabled."),
-                                       throw(invalid_cert)
+                                       throw(no_certificate_chain_found)
                                end,
             case gsi_handler:call(gsi_nif, verify_cert_c,
                 [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate

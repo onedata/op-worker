@@ -41,48 +41,44 @@ allowed_methods(Req, State) ->
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
 malformed_request(Req, State = #state{filepath = Filepath}) ->
-    try
-        % get objectid
-        {PathInfo, Req2} = cowboy_req:path_info(Req),
-        [<<"cdmi_objectid">>, Id | _Rest] = PathInfo,
+    % get objectid
+    {PathInfo, Req2} = cowboy_req:path_info(Req),
+    [<<"cdmi_objectid">>, Id | _Rest] = PathInfo,
 
-        % get uuid from objectid
-        Uuid = case cdmi_id:objectid_to_uuid(Id) of
-                   Uuid_ when is_list(Uuid_) -> Uuid_;
-                   _ -> throw(cdmi_error:error_reply(Req2,State,?error_bad_request_code,"Could not decode objectid: ~p",[Id]))
+    % get uuid from objectid
+    Uuid = case cdmi_id:objectid_to_uuid(Id) of
+               Uuid_ when is_list(Uuid_) -> Uuid_;
+               _ -> throw(cdmi_error:error_reply(Req2, State, {invalid_objectid, Id}))
+           end,
+
+    % get path of object with that uuid
+    BaseName = case is_capability_object(Req2) of
+                   true -> proplists:get_value(Id,?CapabilityPathById);
+                   false ->
+                       case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
+                           {ok, Name} when is_list(Name) ->Name,
+                               Path = string:tokens(fslogic_path:get_short_file_name(Name),"/"),
+                               case Path of
+                                   [] -> "/";
+                                   List -> filename:join(List)
+                               end;
+                           _ -> throw(cdmi_error:error_reply(Req2, State, not_found))
+                       end
                end,
 
-        % get path of object with that uuid
-        BaseName = case is_capability_object(Req2) of
-                       true -> proplists:get_value(Id,?CapabilityPathById);
-                       false ->
-                           case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
-                               {ok, Name} when is_list(Name) ->Name,
-                                   Path = string:tokens(fslogic_path:get_short_file_name(Name),"/"),
-                                   case Path of
-                                       [] -> "/";
-                                       List -> filename:join(List)
-                                   end;
-                               _ -> throw(cdmi_error:error_reply(Req2,State,?error_not_found_code,"Could not find file name for uuid: ~p",[Uuid]))
-                           end
-                   end,
+    % join base name with the rest of filepath
+    ["cdmi_objectid", _Id | Rest] = string:tokens(Filepath, "/"),
+    FullFileName = filename:join([BaseName | Rest]),
 
-        % join base name with the rest of filepath
-        ["cdmi_objectid", _Id | Rest] = string:tokens(Filepath, "/"),
-        FullFileName = filename:join([BaseName | Rest]),
-
-        % delegate request to cdmi_container/cdmi_object/cdmi_capability (depending on filepath)
-        {Url, Req3} = cowboy_req:path(Req2),
-        case binary:last(Url) =:= $/ of
-            true ->
-                case is_capability_object(Req3) of
-                    false -> cdmi_container:malformed_request(Req3,State#state{filepath = FullFileName, handler_module = cdmi_container});
-                    true -> cdmi_capabilities:malformed_request(Req3,State#state{filepath = FullFileName, handler_module = cdmi_capabilities})
-                end;
-            false -> cdmi_object:malformed_request(Req3,State#state{filepath = FullFileName, handler_module = cdmi_object})
-        end
-    catch
-        throw:{halt,ErrReq,ErrState}  -> {halt,ErrReq,ErrState}
+    % delegate request to cdmi_container/cdmi_object/cdmi_capability (depending on filepath)
+    {Url, Req3} = cowboy_req:path(Req2),
+    case binary:last(Url) =:= $/ of
+        true ->
+            case is_capability_object(Req3) of
+                false -> cdmi_container:malformed_request(Req3,State#state{filepath = FullFileName, handler_module = cdmi_container});
+                true -> cdmi_capabilities:malformed_request(Req3,State#state{filepath = FullFileName, handler_module = cdmi_capabilities})
+            end;
+        false -> cdmi_object:malformed_request(Req3,State#state{filepath = FullFileName, handler_module = cdmi_object})
     end.
 
 %% ====================================================================
