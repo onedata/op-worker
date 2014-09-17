@@ -194,11 +194,13 @@ parse_http_upload(Req, Params, Files) ->
                                     Path -> Path
                                 end,
                     RequestedFullPath = filename:absname(Filename, TargetDir),
+                    ?dump(RequestedFullPath),
                     FullPath = gui_str:binary_to_unicode_list(ensure_unique_filename(RequestedFullPath, 0)),
                     try
+                        ok = logical_files_manager:create(FullPath),
                         stream_file_to_fslogic(Req2, FullPath, get_upload_buffer_size())
                     catch Type:Message ->
-                        logical_files_manager:delete(FullPath),
+                        catch logical_files_manager:delete(FullPath),
                         throw({"Error in parse_file", Type, Message})
                     end,
                     {ok, Params, [{Filename, FullPath} | Files]}
@@ -295,27 +297,26 @@ get_upload_buffer_size() ->
 
 %% ensure_unique_filename/2
 %% ====================================================================
-%% @doc Tries to create a file until one is created (changing its name every time).
+%% @doc Tries to find a unique filename for a file (changing its name every time by adding a counter).
 %% @end
 -spec ensure_unique_filename(RequestedPath :: binary(), Counter :: integer()) -> binary() | no_return().
 %% ====================================================================
 ensure_unique_filename(RequestedPath, 0) ->
     case logical_files_manager:exists(gui_str:binary_to_unicode_list(RequestedPath)) of
-        ok -> RequestedPath;
+        false -> RequestedPath;
         _ -> ensure_unique_filename(RequestedPath, 1)
     end;
 
 ensure_unique_filename(_, ?MAX_UNIEQUE_FILENAME_COUNTER) ->
-    throw({"Error in ensure_unique_filename", counter_hit_20});
+    throw({"Error in ensure_unique_filename", counter_limit});
 
 ensure_unique_filename(RequestedPath, Counter) ->
     Ext = filename:extension(RequestedPath),
     Rootname = filename:rootname(RequestedPath),
-    NewName = lists:flatten(io_lib:format("~s(~B)~s", [Rootname, Counter, Ext])),
-    case logical_files_manager:create(NewName) of
-        ok -> NewName;
-        {_, file_exists} -> ensure_unique_filename(RequestedPath, Counter + 1);
-        Error -> throw({"Error in ensure_unique_filename", Error})
+    NewName = <<Rootname/binary, "(", (integer_to_binary(Counter))/binary, ")", Ext/binary>>,
+    case logical_files_manager:exists(gui_str:binary_to_unicode_list(NewName)) of
+        false -> NewName;
+        _ -> ensure_unique_filename(RequestedPath, Counter + 1)
     end.
 
 
