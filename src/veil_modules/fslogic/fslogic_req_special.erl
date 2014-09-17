@@ -82,7 +82,7 @@ get_file_children(FullFileName, ROffset, RCount) ->
             {0 = Off0, []} -> %% First iteration over "/" dir has to contain "groups" folder, so fetch `num - 1` files instead `num`
                 {RCount - 1, Off0};
             {Off1, []} -> %% Next iteration over "/" dir has start one entry earlier, so fetch `num` files starting on `offset - 1`
-                {ROffset, Off1 - 1};
+                {RCount, Off1 - 1};
             {Off2, _} -> %% Non-root dir -> proceed normally
                 {RCount, Off2}
         end,
