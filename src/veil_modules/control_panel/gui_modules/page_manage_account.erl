@@ -42,9 +42,9 @@ body() ->
         vcn_gui_utils:top_menu(manage_account_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
             #panel{id = <<"dn_error_panel">>, style = <<"display: none;">>,
-                class = <<"dialog dialog-danger">>, body = [
-                    #p{body = <<"You have no registered certificates. You can use the web application, but you ",
-                    "will not be able to use VeilClient. To register a certificate, do one of the following:">>},
+                class = <<"dialog dialog-warning">>, body = [
+                    #p{body = <<"You have no registered certificates. Certificates are used for access via oneclient and ",
+                    "REST API. With oneclient, you can also use <b>access tokens</b>. To register a certificate, do one of the following:">>},
                     #panel{style = <<"margin-left: auto; margin-right: auto; text-align: left; display: inline-block;">>, body = [
                         #list{body = [
                             #li{style = <<"padding: 10px 0 0;">>,
@@ -56,14 +56,14 @@ body() ->
                 ]},
             #panel{id = <<"unverified_dns_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-danger">>, body = [
-                    #p{body = <<"Some of certificates you added are not verified. To verify them, connect to the system with VeilClient ",
+                    #p{body = <<"Some of certificates you added are not verified. To verify them, connect to the system with OneClient ",
                     "using matching credentials.">>}
                 ]},
             #panel{id = <<"helper_error_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-danger">>, body = [
                     #p{body = <<"To be able to use any functionalities, there must be at least one storage helper defined.">>}
                 ]},
-            #h6{style = <<" text-align: center;">>, body = <<"Manage account">>},
+            #h6{style = <<"text-align: center;">>, body = <<"Manage account">>},
             #panel{id = <<"main_table">>, body = main_table()}
         ]}
     ] ++ vcn_gui_utils:logotype_footer(20)}.
@@ -251,7 +251,10 @@ dn_list_body(UserDoc) ->
                 body = #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
             #link{id = <<"new_dn_cancel">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
                 postback = {action, show_dn_adding, [false]}, body =
-                #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
+                #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}},
+            #link{id = <<"dn_warning">>, class = <<"glyph-link">>, style = <<"margin-left: 30px;">>,
+                postback = {action, show_dn_adding, [true]}, body =
+                #span{class = <<"fui-question">>, style = <<"font-size: 16px;">>}}
         ]}
     ],
     #list{style = <<"margin-top: -3px;">>, numbered = true, body = CurrentDNs ++ UnverifiedDNs ++ NewDN}.

@@ -236,6 +236,13 @@ done
 # Remove old release
 rm -r "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME" 2>/dev/null
 
+# Get application version
+START_ERL=`cat "releases/veil_cluster_node/releases/start_erl.data"`
+APP_VSN=${START_ERL#* }
+
+# Replace developer_mode env to enable developer functionalities in generated package
+sed -i "s/-veil_cluster_node developer_mode.*/-veil_cluster_node developer_mode true/g" releases/veil_cluster_node/releases/$APP_VSN/vm.args
+
 # Copy the release package to proper location (directory named as the node without hostname), preserve mode
 cp -R -p releases/veil_cluster_node "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME"
 
@@ -253,10 +260,6 @@ AT_INDEX=`echo "$FIRST_DB_NODE" | sed -n "s/["@"].*//p" | wc -c`
 if [[ $AT_INDEX -gt 0 ]]; then
 	COOKIE=${FIRST_DB_NODE:$AT_INDEX:${#FIRST_DB_NODE}}
 fi
-
-# Get application version
-START_ERL=`cat "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME/releases/start_erl.data"`
-APP_VSN=${START_ERL#* }
 
 # Replace the cookie
 sed $SED_OPTS  "s/-setcookie.*/-setcookie '$COOKIE'/g" "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME/releases/$APP_VSN/vm.args"

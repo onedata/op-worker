@@ -26,6 +26,9 @@
 % Timeout for fetching single part of data from socket
 -define(UPLOAD_PART_TIMEOUT, 30000). % 30 seconds
 
+% How many tries of creating a unique filename before failure.
+-define(MAX_UNIEQUE_FILENAME_COUNTER, 20).
+
 %% Cowboy callbacks
 -export([init/3, handle/2, terminate/3]).
 %% Functions used in external modules (e.g. rest_handlers)
@@ -190,8 +193,8 @@ parse_http_upload(Req, Params, Files) ->
                                     undefined -> throw("Error in parse_file - no upload target specified");
                                     Path -> Path
                                 end,
-                    RequestedFullPath = gui_str:binary_to_unicode_list(filename:absname(Filename, TargetDir)),
-                    FullPath = ensure_unique_filename(RequestedFullPath, 0),
+                    RequestedFullPath = filename:absname(Filename, TargetDir),
+                    FullPath = gui_str:binary_to_unicode_list(ensure_unique_filename(RequestedFullPath, 0)),
                     try
                         stream_file_to_fslogic(Req2, FullPath, get_upload_buffer_size())
                     catch Type:Message ->
@@ -294,16 +297,15 @@ get_upload_buffer_size() ->
 %% ====================================================================
 %% @doc Tries to create a file until one is created (changing its name every time).
 %% @end
--spec ensure_unique_filename(Req :: req(), Counter :: integer()) -> string() | no_return().
+-spec ensure_unique_filename(RequestedPath :: binary(), Counter :: integer()) -> binary() | no_return().
 %% ====================================================================
 ensure_unique_filename(RequestedPath, 0) ->
-    Ans = logical_files_manager:create(RequestedPath),
-    case Ans of
+    case logical_files_manager:exists(gui_str:binary_to_unicode_list(RequestedPath)) of
         ok -> RequestedPath;
         _ -> ensure_unique_filename(RequestedPath, 1)
     end;
 
-ensure_unique_filename(_, 20) ->
+ensure_unique_filename(_, ?MAX_UNIEQUE_FILENAME_COUNTER) ->
     throw({"Error in ensure_unique_filename", counter_hit_20});
 
 ensure_unique_filename(RequestedPath, Counter) ->
