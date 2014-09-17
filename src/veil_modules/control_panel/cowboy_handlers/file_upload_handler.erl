@@ -311,6 +311,7 @@ parse_file(Req, Headers, Params) ->
     RequestedFullPath = filename:absname(OriginalFileName, TargetDir),
     FullPath = gui_str:binary_to_unicode_list(ensure_unique_filename(RequestedFullPath, 0)),
     NewReq = try
+        ok = logical_files_manager:create(FullPath),
         stream_file_to_fslogic(Req, FullPath, get_upload_buffer_size())
              catch Type:Message ->
                  logical_files_manager:delete(FullPath),
