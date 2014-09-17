@@ -314,7 +314,7 @@ parse_file(Req, Headers, Params) ->
         ok = logical_files_manager:create(FullPath),
         stream_file_to_fslogic(Req, FullPath, get_upload_buffer_size())
              catch Type:Message ->
-                 logical_files_manager:delete(FullPath),
+                 catch logical_files_manager:delete(FullPath),
                  throw({"Error in parse_file", Type, Message})
              end,
     {NewReq, {file, {OriginalFileName, FullPath}}}.
