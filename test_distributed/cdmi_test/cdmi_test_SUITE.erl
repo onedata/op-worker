@@ -203,7 +203,7 @@ metadata_test(_Config) ->
     ?assertEqual(6, length(Metadata1)),
 
     %%-- selective metadata read -----
-    {_Code2, _Headers2, Response2} = do_request(FileName++"?metadata:", get, RequestHeaders1, []),
+    {_Code2, _Headers2, Response2} = do_request(FileName++"?metadata", get, RequestHeaders1, []),
     {struct,CdmiResponse2} = mochijson2:decode(Response2),
     ?assertEqual(1, length(CdmiResponse2)),
     {struct, Metadata2} = proplists:get_value(<<"metadata">>,CdmiResponse2),

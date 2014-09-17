@@ -93,7 +93,7 @@ encode_to_json(Term) ->
 -spec decode_from_json(term()) -> binary().
 %% ====================================================================
 decode_from_json(JSON) ->
-    mochijson2:decode(JSON).
+    mochijson2:decode(JSON, [{format, proplist}]).
 
 
 %% success_reply/1
@@ -257,9 +257,7 @@ list_dir(Path, Offset, Count, Result) ->
 parse_body(RawBody) ->
     case gui_str:binary_to_unicode_list(RawBody) of
         "" -> [];
-        NonEmptyBody ->
-            {struct, Ans} = rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody)),
-            Ans
+        NonEmptyBody -> rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody))
     end.
 
 %% validate_body/1

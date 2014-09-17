@@ -133,11 +133,7 @@ get_cdmi_container(Req, #state{opts = Opts} = State) ->
 put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
     {ok, RawBody, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Body = rest_utils:parse_body(RawBody),
-    RequestedUserMetadata =
-        case proplists:get_value(<<"metadata">>, Body) of
-            {struct, UserMetadata} -> UserMetadata;
-            _ -> []
-        end,
+    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
     case logical_files_manager:mkdir(Filepath) of
         ok -> %todo check given body
             case logical_files_manager:getfileattr(Filepath) of
@@ -153,7 +149,7 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
             end;
         {error, dir_exists} ->
             URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
-            cdmi_metadata:update_user_metadata(Filepath, URIMetadataNames, RequestedUserMetadata),
+            cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};
         {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?error_not_found_code, "Parent dir not found",[]);
         Error -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Dir creation error: ~p",[Error])

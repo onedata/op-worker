@@ -254,11 +254,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
     Body = rest_utils:parse_body(RawBody),
     RequestedMimetype = proplists:get_value(<<"mimetype">>, Body),
     RequestedValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body),
-    RequestedUserMetadata =
-        case proplists:get_value(<<"metadata">>, Body) of
-            {struct, UserMetadata} -> UserMetadata;
-            _ -> []
-        end,
+    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
     ValueTransferEncoding = case RequestedValueTransferEncoding of undefined -> <<"utf-8">>; _ -> RequestedValueTransferEncoding end,
     Value = proplists:get_value(<<"value">>, Body),
     Range = case lists:keyfind(<<"value">>, 1, Opts) of
@@ -291,7 +287,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
             update_encoding(Filepath, RequestedValueTransferEncoding),
             update_mimetype(Filepath, RequestedMimetype),
             URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
-            cdmi_metadata:update_user_metadata(Filepath, URIMetadataNames, RequestedUserMetadata),
+            cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
             case Range of
                 {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
                     case logical_files_manager:write(Filepath, From, RawValue) of

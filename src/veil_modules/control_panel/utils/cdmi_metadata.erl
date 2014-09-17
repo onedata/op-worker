@@ -39,10 +39,12 @@ get_user_metadata(Filepath) ->
 %% update_user_metadata/2
 %% ====================================================================
 %% @doc Replaces user metadata associated with file.
+%% @equiv update_user_metadata(Filepath,UserMetadata,[])
+%% @end
 %% ====================================================================
 -spec update_user_metadata(Filepath :: string(), UserMetadata :: [{Name :: binary(), Value :: binary()}]) -> ok.
 update_user_metadata(Filepath, UserMetadata) ->
-    update_user_metadata(Filepath, [], UserMetadata).
+    update_user_metadata(Filepath, UserMetadata, []).
 
 %% update_user_metadata/3
 %% ====================================================================
@@ -50,9 +52,11 @@ update_user_metadata(Filepath, UserMetadata) ->
 %% If a matedata name specified in URIMetadataNames, but has no corresponding entry in UserMetadata, entry is removed
 %% from user metadata associated with a file,
 %% ====================================================================
--spec update_user_metadata(Filepath :: string(), URIMetadataNames :: [Name :: binary()] ,
-    UserMetadata :: [{Name :: binary(), Value :: binary()}]) -> ok.
-update_user_metadata(Filepath, URIMetadataNames, UserMetadata) ->
+-spec update_user_metadata(Filepath :: string(), UserMetadata :: [{Name :: binary(), Value :: binary()}] | undefined,
+    URIMetadataNames :: [Name :: binary()]) -> ok.
+update_user_metadata(Filepath, undefined, URIMetadataNames) ->
+    update_user_metadata(Filepath, [], URIMetadataNames);
+update_user_metadata(Filepath, UserMetadata, URIMetadataNames) ->
     UserMetadataFiltered = filter_user_metadata(UserMetadata),
     UserMetadataNamesFiltered = get_metadata_names(UserMetadataFiltered),
     case URIMetadataNames of
