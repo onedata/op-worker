@@ -194,7 +194,6 @@ parse_http_upload(Req, Params, Files) ->
                                     Path -> Path
                                 end,
                     RequestedFullPath = filename:absname(Filename, TargetDir),
-                    ?dump(RequestedFullPath),
                     FullPath = gui_str:binary_to_unicode_list(ensure_unique_filename(RequestedFullPath, 0)),
                     try
                         ok = logical_files_manager:create(FullPath),
