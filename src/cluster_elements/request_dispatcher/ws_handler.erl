@@ -18,6 +18,7 @@
 -include("messages_white_list.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
+-include("logging_pb.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/cluster_rengine/cluster_rengine.hrl").
