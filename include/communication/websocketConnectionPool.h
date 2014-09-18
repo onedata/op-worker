@@ -16,6 +16,7 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_client.hpp>
 
+#include <functional>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -50,13 +51,13 @@ public:
      * @param uri Server's URI to connect to.
      * @param verifyServerCertificate Determines whether to verify server's
      * certificate.
-     * @param additionalHeaders Additional HTTP headers to use for the connection.
+     * @param additionalHeaders A thread-safe function returning additional HTTP
+     * headers to use for the connection.
      * @param certificateData Certificate data to use for SSL authentication.
      */
-    WebsocketConnectionPool(
-            const unsigned int connectionsNumber,
+    WebsocketConnectionPool(const unsigned int connectionsNumber,
             std::string uri,
-            std::unordered_map<std::string, std::string> additionalHeaders,
+            std::function<const std::unordered_map<std::string, std::string>&()> additionalHeadersFun,
             std::shared_ptr<const CertificateData> certificateData,
             const bool verifyServerCertificate);
 
@@ -86,7 +87,7 @@ private:
 
     std::thread m_ioThread;
     endpoint_type m_endpoint;
-    const std::unordered_map<std::string, std::string> m_additionalHeaders;
+    const std::function<const std::unordered_map<std::string, std::string>&()> m_additionalHeadersFun;
     const std::shared_ptr<const CertificateData> m_certificateData;
     const bool m_verifyServerCertificate;
 };

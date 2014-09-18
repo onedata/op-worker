@@ -89,6 +89,11 @@ public:
             std::function<std::string()> handshake,
             std::function<std::string()> goodbye);
 
+    /**
+     * Gracefuly closes all connections and recreates them.
+     */
+    void recreate();
+
 protected:
     /**
      * Sends goodbyes and closes all connections.

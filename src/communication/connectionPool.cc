@@ -181,6 +181,14 @@ std::function<void()> ConnectionPool::addHandshake(std::function<std::string()> 
     };
 }
 
+void ConnectionPool::recreate()
+{
+    std::unique_lock<std::mutex> lock{m_connectionsMutex};
+    m_futureConnections.clear();
+    m_openConnections.clear();
+    addConnections();
+}
+
 std::function<void()> ConnectionPool::addHandshake(std::function<std::string()> handshake)
 {
     std::lock_guard<std::mutex> guard{m_connectionsMutex};

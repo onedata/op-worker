@@ -121,6 +121,11 @@ void Communicator::send(const ServerModule module,
     m_communicationHandler->send(*cmsg, poolType(msg), retries);
 }
 
+void Communicator::recreate()
+{
+    m_communicationHandler->recreate();
+}
+
 std::future<std::unique_ptr<Communicator::Answer>>
 Communicator::communicateAsync(const std::string &module,
                                const google::protobuf::Message &msg,
@@ -206,7 +211,7 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(const unsigned int dat
                                                           unsigned int port,
                                                           std::string endpoint,
                                                           const bool verifyServerCertificate,
-                                                          const std::unordered_map<std::string, std::string> &additionalHeaders,
+                                                          std::function<const std::unordered_map<std::string, std::string>&()> additionalHeadersFun,
                                                           std::shared_ptr<const CertificateData> certificateData)
 {
     const auto uri = "wss://"+hostname+":"+std::to_string(port)+endpoint;
@@ -219,7 +224,7 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(const unsigned int dat
 
     auto createDataPool = [&](const unsigned int poolSize) {
         return std::make_unique<WebsocketConnectionPool>(
-                    poolSize, uri, additionalHeaders,
+                    poolSize, uri, additionalHeadersFun,
                     certificateData, verifyServerCertificate);
     };
 

@@ -109,6 +109,12 @@ std::function<void()> CommunicationHandler::addHandshake(std::function<std::uniq
     return pool->addHandshake(std::move(h), std::move(g));
 }
 
+void CommunicationHandler::recreate()
+{
+    m_dataPool->recreate();
+    m_metaPool->recreate();
+}
+
 void CommunicationHandler::sendWithRetry(const google::protobuf::Message &message,
                                          const Pool poolType,
                                          const unsigned int retries)
