@@ -22,7 +22,7 @@
 % Worker behaviour
 -export([init/1, handle/2, cleanup/0]).
 % Utilities for client loglevel conversion
--export([client_loglevel_int_to_atom/1, client_loglevel_atom_to_int/1, change_remote_log_level/2]).
+-export([client_loglevel_int_to_atom/1, client_loglevel_atom_to_int/1, change_remote_loglevel/2]).
 
 % Subscribers ETS name
 -define(SUBSCRIBERS_ETS, subscribers_ets).
@@ -164,17 +164,17 @@ cleanup() ->
   ok.
 
 
-%% change_remote_log_level/2
+%% change_remote_loglevel/2
 %% ====================================================================
 %% @doc
 %% @end
--spec change_remote_log_level(FuseID :: string(), LogLevel :: atom() | integer()) -> Result when
+-spec change_remote_loglevel(FuseID :: string(), LogLevel :: atom() | integer()) -> Result when
   Result :: ok | term().
 %% ====================================================================
-change_remote_log_level(FuseID, LogLevel) when is_atom(LogLevel) ->
-  change_remote_log_level(FuseID, client_loglevel_atom_to_int(LogLevel));
+change_remote_loglevel(FuseID, LogLevel) when is_atom(LogLevel) ->
+  change_remote_loglevel(FuseID, client_loglevel_atom_to_int(LogLevel));
 
-change_remote_log_level(FuseID, LogLevel) ->
+change_remote_loglevel(FuseID, LogLevel) ->
   request_dispatcher:send_to_fuse(FuseID, #changeremoteloglevel{level = logging_pb:int_to_enum(loglevel, LogLevel)}, "logging").
 
 
