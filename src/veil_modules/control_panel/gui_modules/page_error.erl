@@ -99,13 +99,13 @@ id_to_reason_and_message(<<?error_login_dir_creation_error>>) ->
 id_to_reason_and_message(<<?error_login_dir_chown_error>>) -> {<<"User creation error">>,
     <<"Server could not change owner of user directories. Please contact the site administrator if the problem persists.">>};
 
-id_to_reason_and_message(?error_authentication) -> {<<"Authentication error">>,
+id_to_reason_and_message(<<?error_authentication>>) -> {<<"Authentication error">>,
     <<"Server could not authenticate you. Please try again to log in or contact the site administrator if the problem persists.">>};
 
-id_to_reason_and_message(?error_space_permission_denied) ->
+id_to_reason_and_message(<<?error_space_permission_denied>>) ->
     {<<"Invalid request">>, <<"You don't have permission to manage this Space.">>};
 
-id_to_reason_and_message(?error_space_not_found) ->
+id_to_reason_and_message(<<?error_space_not_found>>) ->
     {<<"Space not found">>, <<"Requested Space could not be found on the server.">>};
 
 id_to_reason_and_message(_) ->

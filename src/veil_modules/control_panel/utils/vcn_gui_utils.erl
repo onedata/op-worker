@@ -327,14 +327,15 @@ top_menu(ActiveTabID, SubMenuBody) ->
             {brand_tab, #li{body = #link{style = <<"padding: 18px;">>, url = "/",
                 body = [
                     #span{style = <<"font-size: xx-large;">>, class = <<"fui-home">>},
-                    #b{style = <<"font-size: x-large;">>, body = <<"OneData">>}
+                    #b{style = <<"font-size: x-large;">>, body = <<"onedata">>}
                 ]}
             }},
             {data_tab, #li{body = [
                 #link{style = "padding: 18px;", url = "/file_manager", body = "Data"},
                 #list{style = "top: 37px; width: 120px;", body = [
                     #li{body = #link{url = "/file_manager", body = "File manager"}},
-                    #li{body = #link{url = "/shared_files", body = "Shared files"}}
+                    #li{body = #link{url = "/shared_files", body = "Shared files"}},
+                    #li{body = #link{url = "/client_download", body = "Download oneclient"}}
                 ]}
             ]}},
             {spaces_tab, #li{body = [

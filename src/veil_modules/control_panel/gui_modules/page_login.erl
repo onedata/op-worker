@@ -43,7 +43,9 @@ body_production() ->
 % For development, you can choose whether to log in via GR or directly via PLGrid OpenID
 body_devel() ->
     case gui_ctx:user_logged_in() of
-        true -> gui_jq:redirect(<<"/">>);
+        true ->
+            gui_jq:redirect(<<"/">>),
+            [];
         false ->
             ErrorPanelStyle = case gui_ctx:url_param(<<"x">>) of
                                   undefined -> <<"display: none;">>;

@@ -34,6 +34,9 @@
 % Relative suffix of GUI address, leading to privacy policy page
 -define(privacy_policy_url, "/privacy_policy").
 
+% Relative suffix of GUI address, leading to the page where oneclient can be downloaded
+-define(client_download_page_url, "/client_download").
+
 % Name of parameter sent to logout page that verifies user logout
 -define(logout_token, <<"logout_token">>).
 

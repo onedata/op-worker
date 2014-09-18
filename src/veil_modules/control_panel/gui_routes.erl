@@ -35,6 +35,7 @@ route(<<"/cluster_logs">>) -> page_cluster_logs;
 route(<<"/client_logs">>) -> page_client_logs;
 route(<<"/manage_account">>) -> page_manage_account;
 route(<<"/about">>) -> page_about;
+route(<<"/client_download">>) -> page_client_download;
 route(<<"/privacy_policy">>) -> page_privacy_policy;
 route(<<"/validate_login">>) -> page_validate_login;
 route(<<"/openid/login">>) -> page_openid_login;
