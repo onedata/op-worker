@@ -65,7 +65,11 @@ body_devel() ->
     end.
 
 
-event(init) -> ok;
+event(init) ->
+    ok;
+
+event(terminate) ->
+    ok;
 
 % Login event handling
 event(globalregistry_login) ->
@@ -97,6 +101,4 @@ event(plgrid_login) ->
                 URL ->
                     gui_jq:redirect(URL)
             end
-    end;
-
-event(terminate) -> ok.
+    end.

@@ -42,7 +42,7 @@ body_production() ->
             gui_ctx:clear_session(),
             gui_jq:redirect(atom_to_binary(GlobalRegistryHostname, latin1));
         _ ->
-            gui_jq:redirect("/")
+            gui_jq:redirect(<<"/">>)
     end,
     [].
 
@@ -60,7 +60,7 @@ body_devel() ->
                 #panel{class = <<"alert alert-success login-page">>, body = [
                     #h3{class = <<"">>, body = <<"Logout successful">>},
                     #p{class = <<"login-info">>, body = <<"Come back soon.">>},
-                    #button{postback = to_login, class = <<"btn btn-primary btn-block">>, body = <<"Login page">>}
+                    #link{url = <<"/">>, class = <<"btn btn-primary btn-block">>, body = <<"Login page">>}
                 ]},
                 gui_utils:cookie_policy_popup_body(?privacy_policy_url)
             ]
@@ -68,10 +68,9 @@ body_devel() ->
                 ++ [#p{body = <<"<iframe src=\"https://openid.plgrid.pl/logout\" style=\"display:none\"></iframe>">>}]
             };
         _ ->
-            gui_jq:redirect("/"),
+            gui_jq:redirect(<<"/">>),
             []
     end.
 
 event(init) -> ok;
-event(to_login) -> gui_jq:redirect_to_login();
 event(terminate) -> ok.

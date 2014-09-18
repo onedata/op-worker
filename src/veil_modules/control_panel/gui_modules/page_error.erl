@@ -32,13 +32,12 @@ body() ->
             #h3{body = <<"Error">>},
             #p{class = <<"login-info">>, style = <<"font-weight: bold;">>, body = Reason},
             #p{class = <<"login-info">>, body = Description},
-            #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Main page">>}
+            #link{url = <<"/">>, class = <<"btn btn-warning btn-block">>, body = <<"Main page">>}
         ]},
         gui_utils:cookie_policy_popup_body(<<?privacy_policy_url>>)
     ] ++ vcn_gui_utils:logotype_footer(120)}.
 
 event(init) -> ok;
-event(to_login) -> gui_jq:redirect_to_login();
 event(terminate) -> ok.
 
 
