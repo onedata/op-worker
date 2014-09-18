@@ -102,7 +102,7 @@ websocket_init(TransportName, Req, _Opts) ->
             end;
 
         {error, no_peercert} ->
-            {GRUID, Req2} = cowboy_req:header(<<"global-user-id">>, Req),
+            {GRUID, Req2}  = cowboy_req:header(<<"global-user-id">>, Req),
             {Secret, Req3} = cowboy_req:header(<<"authentication-secret">>, Req2),
 
             case is_binary(GRUID) and is_binary(Secret) of
@@ -158,24 +158,21 @@ websocket_handle({binary, Data}, Req, #handler_state{peer_type = PeerType} = Sta
         Request =
             case PeerType of
                 provider -> decode_providermsg_pb(Data);
-                user -> decode_clustermsg_pb(Data)
+                user     -> decode_clustermsg_pb(Data)
             end,
         ?debug("Received request: ~p", [Request]),
 
         handle(Req, Request, State) %% Decode ClusterMsg and handle it
     catch
-        wrong_message_format -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
-        {wrong_internal_message_type, MsgId2} ->
-            {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
-        {message_not_supported, MsgId2} -> {reply, {binary, encode_answer(message_not_supported, MsgId2)}, Req, State};
-        {handshake_error, _HError, MsgId2} -> {reply, {binary, encode_answer(handshake_error, MsgId2)}, Req, State};
-        {no_credentials, MsgId2} -> {reply, {binary, encode_answer(no_credentials, MsgId2)}, Req, State};
-        {no_user_found_error, _HError, MsgId2} ->
-            {reply, {binary, encode_answer(no_user_found_error, MsgId2)}, Req, State};
-        {cert_confirmation_required, UserLogin, MsgId2} ->
-            {reply, {binary, encode_answer(cert_confirmation_required, MsgId2, UserLogin)}, Req, State};
-        {cert_denied_by_user, MsgId2} -> {reply, {binary, encode_answer(cert_denied_by_user, MsgId2)}, Req, State};
-        {AtomError, MsgId2} when is_atom(AtomError) -> {reply, {binary, encode_answer(AtomError, MsgId2)}, Req, State};
+        wrong_message_format                            -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
+        {wrong_internal_message_type, MsgId2}           -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
+        {message_not_supported, MsgId2}                 -> {reply, {binary, encode_answer(message_not_supported, MsgId2)}, Req, State};
+        {handshake_error, _HError, MsgId2}              -> {reply, {binary, encode_answer(handshake_error, MsgId2)}, Req, State};
+        {no_credentials, MsgId2}                        -> {reply, {binary, encode_answer(no_credentials, MsgId2)}, Req, State};
+        {no_user_found_error, _HError, MsgId2}          -> {reply, {binary, encode_answer(no_user_found_error, MsgId2)}, Req, State};
+        {cert_confirmation_required, UserLogin, MsgId2} -> {reply, {binary, encode_answer(cert_confirmation_required, MsgId2, UserLogin)}, Req, State};
+        {cert_denied_by_user, MsgId2}                   -> {reply, {binary, encode_answer(cert_denied_by_user, MsgId2)}, Req, State};
+        {AtomError, MsgId2} when is_atom(AtomError)     -> {reply, {binary, encode_answer(AtomError, MsgId2)}, Req, State};
         _:Reason ->
             ?error_stacktrace("WSHandler failed due to: ~p", [Reason]),
             {reply, {binary, encode_answer(ws_handler_error)}, Req, State}
@@ -193,45 +190,45 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     ?debug("Handshake request: ~p", [HReq]),
     NewFuseId = genFuseId(HReq),
     UID = case DnString =:= undefined of %% Fetch user's ID
-              false ->
-                  case user_logic:get_user({dn, DnString}) of
-                      {ok, #veil_document{uuid = UID1}} ->
-                          UID1;
-                      {error, Error} ->
-                          case user_logic:get_user({unverified_dn, DnString}) of
-                              {ok, #veil_document{uuid = UID1, record = #user{login = Login}} = UserDoc} ->
-                                  case CertConfirmation of
-                                      #handshakerequest_certconfirmation{login = Login, result = Result} ->
-                                          % Remove the DN from unverified DNs as it has been confirmed or declined
-                                          {ok, UserDoc2} = user_logic:update_unverified_dn_list(UserDoc, user_logic:get_unverified_dn_list(UserDoc) -- [DnString]),
-                                          case Result of
-                                              false ->
-                                                  ?alert("Private key owner denied having added a certificate with DN: ~p (added by ~p)", [DnString, Login]),
-                                                  throw({cert_denied_by_user, MsgId});
-                                              true ->
-                                                  {ok, _} = user_logic:update_dn_list(UserDoc2, user_logic:get_dn_list(UserDoc2) ++ [DnString]),
-                                                  ?debug("User ~p confirmed a certificate with DN: ~p", [Login, DnString]),
-                                                  UID1
-                                          end;
-                                      _ ->
-                                          ?debug("Handshake request is missing confirmation of certificate with DN: ~p. Denying connection.", [DnString]),
-                                          throw({cert_confirmation_required, Login, MsgId})
-                                  end;
-                              {error, _} ->
-                                  ?error("VeilClient handshake failed. User (DN: ~p) data is not available due to DAO error: ~p", [DnString, Error]),
-                                  throw({no_user_found_error, Error, MsgId})
-                          end
-                  end;
+        false ->
+            case user_logic:get_user({dn, DnString}) of
+                {ok, #veil_document{uuid = UID1}} ->
+                    UID1;
+                {error, Error} ->
+                    case user_logic:get_user({unverified_dn, DnString}) of
+                        {ok, #veil_document{uuid = UID1, record = #user{login = Login}} = UserDoc} ->
+                            case CertConfirmation of
+                                #handshakerequest_certconfirmation{login = Login, result = Result} ->
+                                    % Remove the DN from unverified DNs as it has been confirmed or declined
+                                    {ok, UserDoc2} = user_logic:update_unverified_dn_list(UserDoc, user_logic:get_unverified_dn_list(UserDoc) -- [DnString]),
+                                    case Result of
+                                        false ->
+                                            ?alert("Private key owner denied having added a certificate with DN: ~p (added by ~p)", [DnString, Login]),
+                                            throw({cert_denied_by_user, MsgId});
+                                        true ->
+                                            {ok, _} = user_logic:update_dn_list(UserDoc2, user_logic:get_dn_list(UserDoc2) ++ [DnString]),
+                                            ?debug("User ~p confirmed a certificate with DN: ~p", [Login, DnString]),
+                                            UID1
+                                    end;
+                                _ ->
+                                    ?debug("Handshake request is missing confirmation of certificate with DN: ~p. Denying connection.", [DnString]),
+                                    throw({cert_confirmation_required, Login, MsgId})
+                            end;
+                        {error, _} ->
+                            ?error("VeilClient handshake failed. User (DN: ~p) data is not available due to DAO error: ~p", [DnString, Error]),
+                            throw({no_user_found_error, Error, MsgId})
+                    end
+            end;
 
-              true ->
-                  case user_logic:get_user({global_id, vcn_utils:ensure_list(GRUID)}) of
-                      {ok, #veil_document{uuid = UID1}} ->
-                          UID1;
-                      {error, Error} ->
-                          ?error("VeilClient handshake failed. User (GRUID: ~p) data is not available due to DAO error: ~p", [GRUID, Error]),
-                          throw({no_user_found_error, Error, MsgId})
-                  end
-          end,
+        true ->
+            case user_logic:get_user({global_id, vcn_utils:ensure_list(GRUID)}) of
+                {ok, #veil_document{uuid = UID1}} ->
+                    UID1;
+                {error, Error} ->
+                    ?error("VeilClient handshake failed. User (GRUID: ~p) data is not available due to DAO error: ~p", [GRUID, Error]),
+                    throw({no_user_found_error, Error, MsgId})
+            end
+    end,
 
     %% Env Vars list. Entry format: {Name :: atom(), value :: string()}
     EnvVars = [{list_to_atom(string:to_lower(Name)), Value} || #handshakerequest_envvariable{name = Name, value = Value} <- Vars],
@@ -252,18 +249,18 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
 handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, {_GlobalId, _TokenHash}}, #handler_state{peer_dn = DnString, user_global_id = GRUID} = State) ->
     UserKey = case DnString =:= undefined of
-                  true -> {global_id, vcn_utils:ensure_list(GRUID)};
-                  false -> {dn, DnString}
-              end,
+        true  -> {global_id, vcn_utils:ensure_list(GRUID)};
+        false -> {dn, DnString}
+    end,
 
     {UID, AccessToken, UserGID} = %% Fetch user's ID
-    case dao_lib:apply(dao_users, get_user, [UserKey], ProtocolVersion) of
-        {ok, #veil_document{uuid = UID1, record = #user{access_token = AccessToken1, global_id = UserGID1}}} ->
-            {UID1, AccessToken1, UserGID1};
-        {error, Error} ->
-            ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [UserKey, Error]),
-            throw({no_user_found_error, Error, MsgId})
-    end,
+        case dao_lib:apply(dao_users, get_user, [UserKey], ProtocolVersion) of
+            {ok, #veil_document{uuid = UID1, record = #user{access_token = AccessToken1, global_id = UserGID1}}} ->
+                {UID1, AccessToken1, UserGID1};
+            {error, Error} ->
+                ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [UserKey, Error]),
+                throw({no_user_found_error, Error, MsgId})
+        end,
 
     %% Fetch session data (using FUSE ID)
     case dao_lib:apply(dao_cluster, get_fuse_session, [NewFuseId], ProtocolVersion) of
@@ -283,7 +280,7 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
             %% Session data found, and its user ID matches -> send OK status and update current connection state
             ?debug("User ~p assigned FUSE ID ~p to the connection (PID: ~p)", [UserKey, NewFuseId, self()]),
             {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req,
-                State#handler_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = vcn_utils:ensure_binary(AccessToken), user_global_id = vcn_utils:ensure_binary(UserGID)}};
+                        State#handler_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = vcn_utils:ensure_binary(AccessToken), user_global_id = vcn_utils:ensure_binary(UserGID)}};
 
         {ok, #veil_document{record = #fuse_session{uid = OtherUID}}} ->
             %% Current user does not match session owner
@@ -302,10 +299,10 @@ handle(Req, {push, FuseID, {Msg, MsgId, DecoderName1, MsgType}}, #handler_state{
     {reply, {binary, encode_answer(ok, MsgId)}, Req, State};
 handle(Req, {pull, FuseID, CLM}, #handler_state{peer_type = provider, provider_id = ProviderId} = State) ->
     ?debug("Got pull msg: ~p from ~p", [CLM, FuseID]),
-    handle(Req, CLM, State#handler_state{fuse_id = vcn_utils:ensure_list(fslogic_context:gen_global_fuse_id(ProviderId, FuseID))});
+    handle(Req, CLM, State#handler_state{fuse_id = vcn_utils:ensure_list( fslogic_context:gen_global_fuse_id(ProviderId, FuseID) )});
 handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = _CLM,
-    #handler_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
-        access_token = SessionAccessToken, user_global_id = SessionUserGID} = State) ->
+        #handler_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
+                      access_token = SessionAccessToken, user_global_id = SessionUserGID} = State) ->
     %% Check if received message requires FuseId
     MsgType = case Msg of
                   M0 when is_tuple(M0) -> erlang:element(1, M0); %% Record
@@ -341,7 +338,7 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         end,
 
     case DnString =/= undefined orelse UserGID =/= undefined of
-        true -> ok;
+        true  -> ok;
         false -> throw({no_credentials, MsgId})
     end,
 
@@ -492,10 +489,10 @@ decode_clustermsg_pb(MsgBytes) ->
         token_hash = TokenHash, global_user_id = GlobalId} = DecodedBytes,
 
     {Decoder, DecodingFun, ModuleNameAtom} = try
-        {list_to_existing_atom(Message_decoder_name ++ "_pb"), list_to_existing_atom("decode_" ++ Message_type), list_to_existing_atom(ModuleName)}
-                                             catch
-                                                 _:_ -> throw({message_not_supported, MsgId})
-                                             end,
+      {list_to_existing_atom(Message_decoder_name ++ "_pb"), list_to_existing_atom("decode_" ++ Message_type), list_to_existing_atom(ModuleName)}
+    catch
+      _:_ -> throw({message_not_supported, MsgId})
+    end,
 
     Msg =
         try
@@ -505,9 +502,9 @@ decode_clustermsg_pb(MsgBytes) ->
         end,
 
     TranslatedMsg = try
-        records_translator:translate(Msg, Message_decoder_name)
+      records_translator:translate(Msg, Message_decoder_name)
                     catch
-                        _:message_not_supported -> throw({message_not_supported, MsgId})
+                      _:message_not_supported -> throw({message_not_supported, MsgId})
                     end,
     {Synch, ModuleNameAtom, Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type, {GlobalId, TokenHash}}.
 
@@ -533,14 +530,14 @@ decode_answer_pb(MsgBytes) ->
 
     DecoderName1 = case DecoderName of
                        [] -> "fuse_messages";
-                       _ -> DecoderName
+                       _  -> DecoderName
                    end,
 
     {Decoder, DecodingFun} = try
-        {list_to_existing_atom(DecoderName1 ++ "_pb"), list_to_existing_atom("decode_" ++ MsgType)}
-                             catch
-                                 _:_ -> throw({message_not_supported, MsgId})
-                             end,
+      {list_to_existing_atom(DecoderName1 ++ "_pb"), list_to_existing_atom("decode_" ++ MsgType)}
+    catch
+      _:_ -> throw({message_not_supported, MsgId})
+    end,
 
     Msg = try
         erlang:apply(Decoder, DecodingFun, [Input])
@@ -549,10 +546,10 @@ decode_answer_pb(MsgBytes) ->
           end,
 
     TranslatedMsg = try
-        records_translator:translate(Msg, DecoderName1)
-                    catch
-                        _:message_not_supported -> throw({message_not_supported, MsgId})
-                    end,
+      records_translator:translate(Msg, DecoderName1)
+    catch
+      _:message_not_supported -> throw({message_not_supported, MsgId})
+    end,
     {TranslatedMsg, MsgId, DecoderName1, MsgType}.
 
 
@@ -646,25 +643,25 @@ encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker
                                    non -> #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId};
                                    _Type ->
                                        try
-                                           DecoderName = list_to_existing_atom(Answer_decoder_name ++ "_pb"),
-                                           EncodingFun = list_to_existing_atom("encode_" ++ AnswerType),
-                                           try
-                                               WAns = erlang:apply(DecoderName, EncodingFun, [records_translator:translate_to_record(Worker_Answer)]),
-                                               case Main_Answer2 of
-                                                   push ->
-                                                       #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, message_type = AnswerType, worker_answer = WAns};
-                                                   _ ->
-                                                       #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, worker_answer = WAns}
-                                               end
-                                           catch
-                                               Type:Error ->
-                                                   ?error("Ranch handler error during encoding worker answer: ~p:~p, answer type: ~p, decoder ~p, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
-                                                   #answer{answer_status = "worker_answer_encoding_error", message_id = MsgId}
-                                           end
+                                         DecoderName = list_to_existing_atom(Answer_decoder_name ++ "_pb"),
+                                         EncodingFun = list_to_existing_atom("encode_" ++ AnswerType),
+                                         try
+                                             WAns = erlang:apply(DecoderName, EncodingFun, [records_translator:translate_to_record(Worker_Answer)]),
+                                             case Main_Answer2 of
+                                                 push ->
+                                                     #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, message_type = AnswerType, worker_answer = WAns};
+                                                 _ ->
+                                                     #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, worker_answer = WAns}
+                                             end
+                                         catch
+                                             Type:Error ->
+                                                 ?error("Ranch handler error during encoding worker answer: ~p:~p, answer type: ~p, decoder ~p, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
+                                                 #answer{answer_status = "worker_answer_encoding_error", message_id = MsgId}
+                                         end
                                        catch
-                                           _:_ ->
-                                               ?error_stacktrace("Wrong decoder ~p or encoding function ~p", [Answer_decoder_name, AnswerType]),
-                                               #answer{answer_status = "not_supported_answer_decoder", message_id = MsgId}
+                                         _:_ ->
+                                           ?error_stacktrace("Wrong decoder ~p or encoding function ~p", [Answer_decoder_name, AnswerType]),
+                                           #answer{answer_status = "not_supported_answer_decoder", message_id = MsgId}
                                        end
                                end;
                        false ->
