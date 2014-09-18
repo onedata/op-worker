@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains n2o website code.
-%% The page contains information about the project, licence and contact for support.
+%% The page contains information about oneclinet and links for download.
 %% @end
 %% ===================================================================
 
