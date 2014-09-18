@@ -360,7 +360,10 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                     ok ->
                         receive
                             {worker_answer, MsgId, Ans2} ->
-                                {reply, {binary, encode_answer(Ans, MsgId, Answer_type, Answer_decoder_name, Ans2)}, Req, State}
+                              case Msg of
+                                #logmessage{} -> {ok, Req, State};
+                                _ -> {reply, {binary, encode_answer(Ans, MsgId, Answer_type, Answer_decoder_name, Ans2)}, Req, State}
+                              end
                         after DispatcherTimeout ->
                             {reply, {binary, encode_answer(dispatcher_timeout, MsgId)}, Req, State}
                         end;
