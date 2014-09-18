@@ -51,7 +51,7 @@ create_partial_user(GRUID, Spaces) ->
     case gr_spaces:get_user_details(provider, SpaceId, GRUID) of
         {ok, #user_details{name = Name0}} ->
             Login = openid_utils:get_user_login(GRUID),
-            Name = vcn_utils:ensure_list(Name0),
+            Name = unicode:characters_to_list(Name0),
             try user_logic:sign_in([{global_id, vcn_utils:ensure_list(GRUID)}, {name, Name}, {login, Login}], undefined) of
                 {_, UserDoc} ->
                     {ok, UserDoc}
