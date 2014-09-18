@@ -150,7 +150,12 @@ void CommunicationHandler::onMessage(const std::string &payload)
     std::lock_guard<std::mutex> guard{m_promisesMutex};
 
     auto answer = std::make_unique<Answer>();
-    answer->ParsePartialFromString(payload);
+    if(!answer->ParseFromString(payload))
+    {
+        DLOG(INFO) << "Received an invalid message from the server: '" <<
+                       payload.substr(0, 40) << "' (message trimmed to 40 chars).";
+        return;
+    }
 
     for(const auto &sub: m_subscriptions)
         if(sub.predicate(*answer))
@@ -165,8 +170,12 @@ void CommunicationHandler::onMessage(const std::string &payload)
     }
     else
     {
-        LOG(INFO) << "Received an unwarranted message from the server: '" <<
-                     payload.substr(0, 40) << "' (message trimmed to 40 chars)";
+        LOG(INFO) << "Received an unwarranted message from the server. "
+                     "status: '" << answer->answer_status() << "', "
+                     "message_id: '" << answer->message_id() << "', "
+                     "message_type: '" << answer->message_type() << "', " 
+                     "error_description: '" << answer->error_description() << "', "
+                     "message_decoder_name: '" << answer->message_decoder_name() + "'.";
     }
 }
 
