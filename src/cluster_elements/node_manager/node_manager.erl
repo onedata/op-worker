@@ -29,7 +29,7 @@
 % GUI and cowboy related defines
 
 % Paths in gui static directory
--define(static_paths, ["/css/", "/fonts/", "/icons/", "/images/", "/js/", "/n2o/"]).
+-define(static_paths, ["/css/", "/fonts/", "/images/", "/js/", "/n2o/"]).
 
 % Session logic module
 -define(session_logic_module, session_logic).
