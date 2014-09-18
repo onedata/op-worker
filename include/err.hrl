@@ -13,6 +13,9 @@
 %% @end
 %% ===================================================================
 
+-ifndef(ERR_HRL).
+-define(ERR_HRL, 1).
+
 % Note, logging.hrl is automaticaly included wherever err.hrl is.
 -include_lib("ctool/include/logging.hrl").
 
@@ -81,3 +84,5 @@
         #error_rec{status = alert, code = element(1, _ErrDesc), description = lists:flatten(io_lib:format(element(2, _ErrDesc), _Args))}
     end
 ).
+
+-endif. %% ERR_HRL

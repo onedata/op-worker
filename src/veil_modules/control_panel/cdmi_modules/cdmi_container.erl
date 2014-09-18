@@ -38,8 +38,10 @@ allowed_methods(Req, State) ->
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
 malformed_request(Req, #state{cdmi_version = Version, method = <<"PUT">>, filepath = Filepath} = State) when is_binary(Version) ->
-    {<<"application/cdmi-container">>, Req2} = cowboy_req:header(<<"content-type">>, Req),
-    {false, Req2, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
+    case cowboy_req:header(<<"content-type">>, Req) of
+        {<<"application/cdmi-container">>, Req1} -> {false, Req1, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
+        _ -> cdmi_error:error_reply(Req, State, invalid_content_type)
+    end;
 malformed_request(Req, #state{filepath = Filepath} = State) ->
     {false, Req, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}}.
 
@@ -136,9 +138,11 @@ get_cdmi_container(Req, #state{opts = Opts} = State) ->
 put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
     {ok, RawBody, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Body = rest_utils:parse_body(RawBody),
+    ok = rest_utils:validate_body(Body),
     RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
+
     case logical_files_manager:mkdir(Filepath) of
-        ok -> %todo check given body
+        ok ->
             case logical_files_manager:getfileattr(Filepath) of
                 {ok, Attr} ->
                     cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata),

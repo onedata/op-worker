@@ -27,12 +27,12 @@
 
 -export([list_dir_test/1, get_file_test/1, metadata_test/1, create_dir_test/1, create_file_test/1, update_file_test/1,
     delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1,
-    mimetype_and_encoding_test/1, moved_pemanently_test/1, errors_test/1, token_test/1, out_of_range_test/1]).
+    mimetype_and_encoding_test/1, moved_pemanently_test/1, errors_test/1, token_test/1, out_of_range_test/1, copy_move_test/1]).
 
 
 all() -> [list_dir_test, get_file_test, metadata_test, create_dir_test, create_file_test, update_file_test,
     delete_dir_test, delete_file_test, version_test, request_format_check_test, objectid_and_capabilities_test,
-    mimetype_and_encoding_test, moved_pemanently_test, errors_test, token_test, out_of_range_test].
+    mimetype_and_encoding_test, moved_pemanently_test, errors_test, token_test, out_of_range_test, copy_move_test].
 
 %% ====================================================================
 %% Test functions
@@ -802,7 +802,7 @@ moved_pemanently_test(_Config) ->
 errors_test(_Config) ->
     %%---- unauthorized access -----
     {Code1, _Headers1, Response1} = do_request(?Test_dir_name, get, [], [], false),
-    {struct, Error1} = rest_utils:decode_from_json(Response1),
+    Error1 = rest_utils:decode_from_json(Response1),
     ?assertEqual("401", Code1),
 
     %test if error responses are returned
@@ -825,7 +825,17 @@ errors_test(_Config) ->
     RequestHeaders4 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type","application/cdmi-object"}],
     RequestBody4 = rest_utils:encode_to_json([{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, <<"#$%">>}]),
     {Code4, _Headers4, _Response4} = do_request("some_file_b64", put, RequestHeaders4, RequestBody4),
-    ?assertEqual("400", Code4).
+    ?assertEqual("400", Code4),
+    %%------------------------------
+
+    %%----- duplicated fields ------
+    RawBody5 = [{<<"metadata">>, [{<<"a">>, <<"a">>}]}, {<<"metadata">>, [{<<"b">>, <<"b">>}]}],
+    RequestBody5 = rest_utils:encode_to_json(RawBody5),
+    RequestHeaders5 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type","application/cdmi-container"}],
+    {Code5, _Headers5, Response5} = do_request("dir_dupl/", put, RequestHeaders5, RequestBody5),
+    ?assertEqual("400", Code5),
+    CdmiResponse5 = rest_utils:decode_from_json(Response5),
+    ?assertMatch([{<<"BodyFieldsDuplicationError">>, _}], CdmiResponse5).
     %%------------------------------
 
 % tests authentication by token
@@ -873,6 +883,26 @@ out_of_range_test(_Config) ->
     ?assertEqual("204",Code3),
 
     ?assertEqual(<<100,97,116,97,0,0,0,0,0,0,100,97,116,97>>, get_file_content(FileName)). % "data(6x<0_byte>)data"
+    %%------------------------------
+
+%tests copy and move operations on dataobjects and containers
+copy_move_test(_Config) ->
+    FileName = "move_test_file.txt",
+    FileUri = list_to_binary(filename:join("/",FileName)),
+    FileData = <<"data">>,
+    create_file(FileName),
+    write_to_file(FileName, FileData),
+    NewMoveFileName = "new_move_test_file",
+
+    %%--- conflicting mv/cpy -------
+    ?assertEqual(FileData, get_file_content(FileName)),
+
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
+    RequestBody1 = rest_utils:encode_to_json([{<<"move">>, FileUri}, {<<"copy">>, FileUri}]),
+    {Code1, _Headers1, Response1} = do_request(NewMoveFileName, put, RequestHeaders1, RequestBody1),
+    ?assertEqual("400",Code1),
+    {struct, CdmiResponse1} = mochijson2:decode(Response1),
+    ?assertMatch([{<<"BodyFieldsInConflictError">>,_}],CdmiResponse1).
     %%------------------------------
 
 %% ====================================================================

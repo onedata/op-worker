@@ -15,6 +15,7 @@
 -include_lib("public_key/include/public_key.hrl").
 -include("err.hrl").
 -include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/cdmi.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
@@ -268,11 +269,15 @@ parse_body(RawBody) ->
 %% ====================================================================
 validate_body(Body) ->
     Keys = proplists:get_keys(Body),
+    KeySet = sets:from_list(Keys),
+    ExclusiveRequiredKeysSet = sets:from_list(?keys_required_to_be_exclusive),
     case length(Keys) =:= length(Body) of
-        true -> ok;
-        false ->
-            ?error("Request body contains duplicated fields."),
-            throw(duplicated_body_fields)
+        true ->
+            case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
+                N when N > 1 -> throw(conflicting_body_fields);
+                _ -> ok
+            end;
+        false -> throw(duplicated_body_fields)
     end.
 
 %% ensure_path_ends_with_slash/1

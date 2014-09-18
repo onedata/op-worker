@@ -37,8 +37,10 @@ allowed_methods(Req, State) ->
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
 malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version, filepath = Filepath } = State) when is_binary(Version) -> % put cdmi
-    {<<"application/cdmi-object">>, Req1} = cowboy_req:header(<<"content-type">>, Req),
-    {false,Req1,State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
+     case cowboy_req:header(<<"content-type">>, Req) of
+         {<<"application/cdmi-object">>, Req1} -> {false,Req1,State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
+         _ -> cdmi_error:error_reply(Req, State, invalid_content_type)
+     end;
 malformed_request(Req, #state{filepath = Filepath} = State) ->
     {false, Req, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}}.
 
@@ -250,9 +252,10 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
 %% @end
 -spec put_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo read body in chunks
+put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
     {ok, RawBody, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Body = rest_utils:parse_body(RawBody),
+    ok = rest_utils:validate_body(Body),
     RequestedMimetype = proplists:get_value(<<"mimetype">>, Body),
     RequestedValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body),
     RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),

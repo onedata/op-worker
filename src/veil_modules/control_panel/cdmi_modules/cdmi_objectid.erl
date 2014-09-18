@@ -48,7 +48,7 @@ malformed_request(Req, State = #state{filepath = Filepath}) ->
     % get uuid from objectid
     Uuid = case cdmi_id:objectid_to_uuid(Id) of
                Uuid_ when is_list(Uuid_) -> Uuid_;
-               _ -> throw(cdmi_error:error_reply(Req2, State, {invalid_objectid, Id}))
+               _ -> throw({invalid_objectid, Id})
            end,
 
     % get path of object with that uuid
@@ -62,7 +62,7 @@ malformed_request(Req, State = #state{filepath = Filepath}) ->
                                    [] -> "/";
                                    List -> filename:join(List)
                                end;
-                           _ -> throw(cdmi_error:error_reply(Req2, State, not_found))
+                           _ -> throw(not_found)
                        end
                end,
 

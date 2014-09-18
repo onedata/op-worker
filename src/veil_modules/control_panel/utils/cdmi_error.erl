@@ -45,8 +45,14 @@ error_reply(Req, State, ErrorCode, ReturnBody, ErrorDescription, DescriptionArgs
 %% ====================================================================
 error_value({moved_permanently, Filepath}) ->
     [?moved_pemanently_code, [], "Wrong slash at the end of path: ~p", [Filepath], debug];
+error_value(duplicated_body_fields) ->
+    [?error_bad_request_code, [{<<"BodyFieldsDuplicationError">>, <<"Body contains duplicated entries">>}], "Body contains duplicated entries", [], debug];
+error_value(conflicting_body_fields) ->
+    [?error_bad_request_code, [{<<"BodyFieldsInConflictError">>, <<"Body contains a pair of conflicting entries">>}], "Body contains a pair of conflicting entries", [], debug];
 error_value({invalid_objectid, Id}) ->
     [?error_bad_request_code, [{<<"InvalidObjectIDError">>, <<"Could not decode objectid">>}], "Could not decode objectid: ~p", [Id], debug];
+error_value(invalid_content_type) ->
+    [?error_bad_request_code, [{<<"InvalidContentTypeError">>, <<"Content type is invalid">>}], "Invalid content type", [], debug];
 error_value({invalid_range, RawRange}) ->
     [?error_bad_request_code, [{<<"InvalidRangeError">>, <<"Requested range is invalid">>}], "Invalid range: ~p", [RawRange], debug];
 error_value(no_version_given) ->
