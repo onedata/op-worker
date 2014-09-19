@@ -13,6 +13,7 @@
 
 -include("veil_modules/control_panel/cdmi.hrl").
 -include("veil_modules/control_panel/cdmi_capabilities.hrl").
+-include("veil_modules/control_panel/cdmi_error.hrl").
 
 %% API
 -export([allowed_methods/2,malformed_request/2,content_types_provided/2,resource_exists/2]).
@@ -35,7 +36,7 @@ allowed_methods(Req, State) ->
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
 malformed_request(Req, #state{cdmi_version = undefined } = State) ->
-    cdmi_error:error_reply(Req, State, no_version_given);
+    cdmi_error:error_reply(Req, State, ?no_version_given);
 malformed_request(Req,  State) ->
     {false,Req,State}.
 

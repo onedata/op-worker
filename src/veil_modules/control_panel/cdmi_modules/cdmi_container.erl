@@ -13,6 +13,7 @@
 -include("veil_modules/control_panel/cdmi.hrl").
 -include("veil_modules/control_panel/cdmi_capabilities.hrl").
 -include("veil_modules/control_panel/cdmi_container.hrl").
+-include("veil_modules/control_panel/cdmi_error.hrl").
 -include("files_common.hrl").
 
 %% API
@@ -55,7 +56,7 @@ resource_exists(Req, State = #state{filepath = Filepath}) ->
         {ok, #fileattributes{type = "DIR"} = Attr} -> {true, Req, State#state{attributes = Attr}};
         {ok, _} ->
             Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath), Req),
-            cdmi_error:error_reply(Req1,State,{moved_permanently, Filepath});
+            cdmi_error:error_reply(Req1,State,{?moved_permanently, Filepath});
         _ -> {false, Req, State}
     end.
 
@@ -108,9 +109,9 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
         false ->
             case fs_remove_dir(Filepath) of
                 ok -> {true, Req, State};
-                Error -> cdmi_error:error_reply(Req, State, {dir_delete_unknown_error, Error}) %todo handle dir error forbidden
+                Error -> cdmi_error:error_reply(Req, State, {?dir_delete_unknown_error, Error}) %todo handle dir error forbidden
             end;
-        true -> cdmi_error:error_reply(Req, State, group_dir_delete)
+        true -> cdmi_error:error_reply(Req, State, ?group_dir_delete)
     end.
 
 %% ====================================================================
@@ -152,14 +153,14 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
                     {true, Req2, State};
                 Error -> %todo handle getattr forbidden
                     logical_files_manager:rmdir(Filepath),
-                    cdmi_error:error_reply(Req1, State, {get_attr_unknown_error, Error})
+                    cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error})
             end;
         {error, dir_exists} ->
             URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
             cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};
-        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req1, State, parent_not_found);
-        Error -> cdmi_error:error_reply(Req1, State, {put_container_unknown_error, Error}) % todo handle dir error forbidden
+        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req1, State, ?parent_not_found);
+        Error -> cdmi_error:error_reply(Req1, State, {?put_container_unknown_error, Error}) % todo handle dir error forbidden
     end.
 
 %% put_binary/2
@@ -172,9 +173,9 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
 put_binary(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:mkdir(Filepath) of
         ok -> {true, Req, State};
-        {error, dir_exists} -> cdmi_error:error_reply(Req, State, put_container_conflict);
-        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, parent_not_found);
-        Error -> cdmi_error:error_reply(Req, State, {put_container_unknown_error, Error}) % todo handle dir error forbidden
+        {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?put_container_conflict);
+        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?parent_not_found);
+        Error -> cdmi_error:error_reply(Req, State, {?put_container_unknown_error, Error}) % todo handle dir error forbidden
     end.
 
 %% ====================================================================

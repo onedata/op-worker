@@ -16,6 +16,7 @@
 -include("err.hrl").
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/control_panel/cdmi.hrl").
+-include("veil_modules/control_panel/cdmi_error.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
@@ -138,7 +139,7 @@ verify_peer_cert(Req) ->
                                catch
                                    _:_ ->
                                        ?error("[REST] Peer connected but cerificate chain was not found. Please check if GSI validation is enabled."),
-                                       throw(no_certificate_chain_found)
+                                       throw(?no_certificate_chain_found)
                                end,
             case gsi_handler:call(gsi_nif, verify_cert_c,
                 [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate
@@ -152,13 +153,13 @@ verify_peer_cert(Req) ->
                     {ok, DnString, Req1};
                 {ok, 0, Errno} ->
                     ?error("[REST] Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
-                    throw(invalid_cert);
+                    throw(?invalid_cert);
                 {error, Reason} ->
                     ?error("[REST] GSI peer verification callback error: ~p", [Reason]),
-                    throw(invalid_cert);
+                    throw(?invalid_cert);
                 Other ->
                     ?error("[REST] GSI verification callback returned unknown response ~p", [Other]),
-                    throw(invalid_cert)
+                    throw(?invalid_cert)
             end;
         {Token, Req2} ->
             case binary:split(base64:decode(Token),<<";">>) of
@@ -166,7 +167,7 @@ verify_peer_cert(Req) ->
                     {ok, {token, AccessToken, GRUID}, Req2};
                 _ ->
                     ?error("[REST] Peer was rejected due to invalid token format"),
-                    throw(invalid_token)
+                    throw(?invalid_token)
             end
     end.
 
@@ -179,7 +180,7 @@ verify_peer_cert(Req) ->
     Identity :: DnString | Token,
     DnString :: string(),
     Token :: {token, AccessToken :: binary(), GRUID :: binary()},
-    Result :: ok | {error, {user_unknown, DnString :: string()}}.
+    Result :: ok | {error, {?user_unknown, DnString :: string()}}.
 %% ====================================================================
 prepare_context({token, Token, GRUID}) ->
     fslogic_context:set_gr_auth(GRUID,Token),
@@ -190,7 +191,7 @@ prepare_context(DnString) ->
             fslogic_context:set_user_dn(DnString),
             ?info("[REST] Peer connected using certificate with subject: ~p ~n", [DnString]),
             ok;
-        _ -> {error, {user_unknown, DnString}}
+        _ -> {error, {?user_unknown, DnString}}
     end.
 
 

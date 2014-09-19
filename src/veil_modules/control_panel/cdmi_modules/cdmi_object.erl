@@ -14,6 +14,7 @@
 -include("veil_modules/control_panel/cdmi.hrl").
 -include("veil_modules/control_panel/cdmi_capabilities.hrl").
 -include("veil_modules/control_panel/cdmi_object.hrl").
+-include("veil_modules/control_panel/cdmi_error.hrl").
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
@@ -55,7 +56,7 @@ resource_exists(Req, State = #state{filepath = Filepath}) ->
         {ok, #fileattributes{type = "REG"} = Attr} -> {true, Req, State#state{attributes = Attr}};
         {ok, _} ->
             Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath++"/"), Req),
-            cdmi_error:error_reply(Req1, State, {moved_permanently, Filepath});
+            cdmi_error:error_reply(Req1, State, {?moved_permanently, Filepath});
         _ -> {false, Req, State}
     end.
 
@@ -108,7 +109,7 @@ content_types_accepted(Req, State) ->
 delete_resource(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:delete(Filepath) of
         ok -> {true, Req, State};
-        Error -> cdmi_error:error_reply(Req, State, {file_delete_unknown_error,Error})
+        Error -> cdmi_error:error_reply(Req, State, {?file_delete_unknown_error,Error})
     end.
 
 %% ====================================================================
@@ -133,7 +134,7 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
 
     % return bad request if Range is invalid
     case Ranges of
-        invalid -> cdmi_error:error_reply(Req1, State, {invalid_range, RawRange});
+        invalid -> cdmi_error:error_reply(Req1, State, {?invalid_range, RawRange});
         _ ->
             % prepare data size and stream function
             StreamSize = lists:foldl(fun({From, To}, Acc) when To >= From -> Acc + To - From + 1 end, 0, Ranges),
@@ -238,11 +239,11 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
                             write_body_to_file(Req2, State, From, false);
                         _ ->
-                            cdmi_error:error_reply(Req2, State, {invalid_range, RawRange})
+                            cdmi_error:error_reply(Req2, State, {?invalid_range, RawRange})
                     end
             end;
         Error ->
-            cdmi_error:error_reply(Req, State, {put_object_unknown_error, Error}) %todo handle creation forbidden error
+            cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error}) %todo handle creation forbidden error
     end.
 
 %% put_cdmi_object/2
@@ -281,11 +282,11 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                             {true, Req2, State};
                         Error ->
                             logical_files_manager:delete(Filepath),
-                            cdmi_error:error_reply(Req1, State, {get_attr_unknown_error, Error})
+                            cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error})
                     end;
                 Error ->
                     logical_files_manager:delete(Filepath),
-                    cdmi_error:error_reply(Req1, State, {write_object_unknown_error, Error}) %todo handle create file forbidden
+                    cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error}) %todo handle create file forbidden
             end;
         {error, file_exists} ->
             update_encoding(Filepath, RequestedValueTransferEncoding),
@@ -297,19 +298,19 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     case logical_files_manager:write(Filepath, From, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             {true, Req1, State};
-                        Error -> cdmi_error:error_reply(Req1, State, {write_object_unknown_error, Error}) %todo handle write file forbidden
+                        Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error}) %todo handle write file forbidden
                     end;
                 undefined when is_binary(Value) ->
                     logical_files_manager:truncate(Filepath, 0),
                     case logical_files_manager:write(Filepath, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             {true, Req1, State};
-                        Error -> cdmi_error:error_reply(Req1, State, {write_object_unknown_error, Error}) %todo handle write file forbidden
+                        Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error}) %todo handle write file forbidden
                     end;
                 undefined -> {true, Req1, State};
-                MalformedRange -> cdmi_error:error_reply(Req1, State, {invalid_range, MalformedRange})
+                MalformedRange -> cdmi_error:error_reply(Req1, State, {?invalid_range, MalformedRange})
             end;
-        Error -> cdmi_error:error_reply(Req1, State, {put_object_unknown_error, Error})
+        Error -> cdmi_error:error_reply(Req1, State, {?put_object_unknown_error, Error})
     end.
 
 %% ====================================================================
@@ -395,7 +396,7 @@ write_body_to_file(Req, #state{filepath = Filepath} = State, Offset, RemoveIfFai
                 true -> logical_files_manager:delete(Filepath);
                 false -> ok
             end,
-            cdmi_error:error_reply(Req1, State, {write_object_unknown_error, Error})
+            cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error})
     end.
 
 %% stream_file/6
@@ -442,7 +443,7 @@ decode(undefined,_Encoding) ->
     <<>>;
 decode(Data, Encoding) when Encoding =:= <<"base64">> ->
     try base64:decode(Data)
-    catch _:_ -> throw(invalid_base64)
+    catch _:_ -> throw(?invalid_base64)
     end;
 decode(Data, _) ->
     Data.
