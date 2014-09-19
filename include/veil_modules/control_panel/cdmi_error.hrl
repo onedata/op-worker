@@ -10,7 +10,10 @@
 %% ===================================================================
 
 -define(moved_permanently, moved_permanently).
+-define(duplicated_body_fields, duplicated_body_fields).
+-define(conflicting_body_fields, conflicting_body_fields).
 -define(invalid_objectid, invalid_objectid).
+-define(invalid_content_type, invalid_content_type).
 -define(invalid_range, invalid_range).
 -define(no_version_given, no_version_given).
 -define(invalid_base64, invalid_base64).

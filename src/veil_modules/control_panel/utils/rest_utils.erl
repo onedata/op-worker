@@ -275,10 +275,10 @@ validate_body(Body) ->
     case length(Keys) =:= length(Body) of
         true ->
             case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
-                N when N > 1 -> throw(conflicting_body_fields);
+                N when N > 1 -> throw(?conflicting_body_fields);
                 _ -> ok
             end;
-        false -> throw(duplicated_body_fields)
+        false -> throw(?duplicated_body_fields)
     end.
 
 %% ensure_path_ends_with_slash/1

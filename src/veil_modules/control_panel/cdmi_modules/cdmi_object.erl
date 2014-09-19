@@ -40,7 +40,7 @@ allowed_methods(Req, State) ->
 malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version, filepath = Filepath } = State) when is_binary(Version) -> % put cdmi
      case cowboy_req:header(<<"content-type">>, Req) of
          {<<"application/cdmi-object">>, Req1} -> {false,Req1,State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
-         _ -> cdmi_error:error_reply(Req, State, invalid_content_type)
+         _ -> cdmi_error:error_reply(Req, State, ?invalid_content_type)
      end;
 malformed_request(Req, #state{filepath = Filepath} = State) ->
     {false, Req, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}}.
