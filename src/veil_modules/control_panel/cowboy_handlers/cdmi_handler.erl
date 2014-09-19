@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("veil_modules/control_panel/cdmi.hrl").
+-include("veil_modules/control_panel/cdmi_error.hrl").
 
 %% Callbacks
 -export([init/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
@@ -75,10 +76,10 @@ rest_init(ReqArg, _Opt) ->
 % because cowboy doesn't allow returning errors in rest_init.
 allowed_methods(Req, {error,Error}) ->
     case Error of
-        {user_unknown, DnString} -> cdmi_error:error_reply(Req, undefined, {user_unknown, DnString});
-        _ when Error =:= no_certificate_chain_found orelse Error =:= invalid_cert orelse Error =:= invalid_token ->
+        {?user_unknown, DnString} -> cdmi_error:error_reply(Req, undefined, {?user_unknown, DnString});
+        _ when Error =:= ?no_certificate_chain_found orelse Error =:= ?invalid_cert orelse Error =:= ?invalid_token ->
             cdmi_error:error_reply(Req, undefined, Error);
-        _ -> cdmi_error:error_reply(Req, undefined, {state_init_error, Error})
+        _ -> cdmi_error:error_reply(Req, undefined, {?state_init_error, Error})
     end;
 allowed_methods(Req, #state{handler_module = Handler} = State) ->
     Handler:allowed_methods(Req,State).
@@ -106,8 +107,8 @@ malformed_request(Req, #state{handler_module = Handler} = State) ->
         Handler:malformed_request(Req2,State#state{cdmi_version = CdmiVersion})
     catch
         throw:{halt,ErrReq,ErrState}  -> {halt,ErrReq,ErrState};
-        throw:unsupported_version -> cdmi_error:error_reply(Req, State, unsupported_version);
-        _Type:Error -> cdmi_error:error_reply(Req, State, {malformed_request, Error})
+        throw:?unsupported_version -> cdmi_error:error_reply(Req, State, ?unsupported_version);
+        _Type:Error -> cdmi_error:error_reply(Req, State, {?malformed_request, Error})
     end.
 
 %% resource_exists/2
@@ -175,7 +176,7 @@ put_binary(Req,State = #state{handler_module = Handler}) ->
     Handler:put_binary(Req,State).
 put_cdmi_object(Req,State = #state{handler_module = Handler}) ->
     try Handler:put_cdmi_object(Req,State)
-    catch _:invalid_base64 -> cdmi_error:error_reply(Req, State, invalid_base64)
+    catch _:?invalid_base64 -> cdmi_error:error_reply(Req, State, ?invalid_base64)
     end.
 
 %% ====================================================================
@@ -221,7 +222,7 @@ get_supported_version(undefined) -> undefined;
 get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
     VersionList = lists:map(fun rest_utils:trim_spaces/1, binary:split(VersionBinary,<<",">>,[global])),
     get_supported_version(VersionList);
-get_supported_version([]) -> throw(unsupported_version);
+get_supported_version([]) -> throw(?unsupported_version);
 get_supported_version([<<"1.0.2">> | _Rest]) -> <<"1.0.2">>;
 get_supported_version([<<"1.0.1">> | _Rest]) -> <<"1.0.1">>;
 get_supported_version([_Version | Rest]) -> get_supported_version(Rest).

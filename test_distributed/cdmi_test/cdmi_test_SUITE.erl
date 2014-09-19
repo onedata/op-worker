@@ -802,7 +802,7 @@ moved_pemanently_test(_Config) ->
 errors_test(_Config) ->
     %%---- unauthorized access -----
     {Code1, _Headers1, Response1} = do_request(?Test_dir_name, get, [], [], false),
-    {struct, Error1} = rest_utils:decode_from_json(Response1),
+    Error1 = rest_utils:decode_from_json(Response1),
     ?assertEqual("401", Code1),
 
     %test if error responses are returned
