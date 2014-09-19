@@ -1,6 +1,6 @@
 %% ===================================================================
 %% @author Malgorzata Plazek
-%% @copyright (C): 2013 ACK CYFRONET AGH
+%% @copyright (C): 2014 ACK CYFRONET AGH
 %% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
@@ -27,14 +27,11 @@
 %% @doc Gets user matadata associated with file, which are all xattrs
 %% without "cdmi_" prefix.
 %% @end
--spec get_user_metadata(Filepath :: string()) -> [{Name :: binary(), Value :: binary()}].
+-spec get_user_metadata(Filepath :: string()) -> [{Name :: binary(), Value :: binary()}] | no_return().
 %% ====================================================================
 get_user_metadata(Filepath) ->
-    case logical_files_manager:list_xattr(Filepath) of
-        {ok, XAttrs} ->
-            filter_user_metadata(XAttrs);
-        _ -> []
-    end.
+    {ok, XAttrs} = logical_files_manager:list_xattr(Filepath),
+    filter_user_metadata(XAttrs).
 
 %% update_user_metadata/2
 %% ====================================================================
@@ -53,7 +50,7 @@ update_user_metadata(Filepath, UserMetadata) ->
 %% from user metadata associated with a file,
 %% ====================================================================
 -spec update_user_metadata(Filepath :: string(), UserMetadata :: [{Name :: binary(), Value :: binary()}] | undefined,
-    URIMetadataNames :: [Name :: binary()]) -> ok.
+    URIMetadataNames :: [Name :: binary()]) -> ok | no_return().
 update_user_metadata(Filepath, undefined, URIMetadataNames) ->
     update_user_metadata(Filepath, [], URIMetadataNames);
 update_user_metadata(Filepath, UserMetadata, URIMetadataNames) ->
@@ -61,15 +58,15 @@ update_user_metadata(Filepath, UserMetadata, URIMetadataNames) ->
     UserMetadataNamesFiltered = get_metadata_names(UserMetadataFiltered),
     case URIMetadataNames of
         [] ->
-            lists:map(fun(Name) -> logical_files_manager:remove_xattr(Filepath, Name) end,
+            lists:map(fun(Name) -> ok = logical_files_manager:remove_xattr(Filepath, Name) end,
                 get_metadata_names(get_user_metadata(Filepath)) -- UserMetadataNamesFiltered),
-            lists:map(fun({Name, Value}) -> logical_files_manager:set_xattr(Filepath, Name, Value) end,
+            lists:map(fun({Name, Value}) -> ok = logical_files_manager:set_xattr(Filepath, Name, Value) end,
                 UserMetadataFiltered);
         _ ->
             RequestedNamesFiltered = filter_user_metadata(URIMetadataNames),
-            lists:map(fun(Name) -> logical_files_manager:remove_xattr(Filepath, Name) end,
+            lists:map(fun(Name) -> ok = logical_files_manager:remove_xattr(Filepath, Name) end,
                 RequestedNamesFiltered -- UserMetadataNamesFiltered),
-            lists:map(fun({Name, Value}) -> logical_files_manager:set_xattr(Filepath, Name, Value) end,
+            lists:map(fun({Name, Value}) -> ok = logical_files_manager:set_xattr(Filepath, Name, Value) end,
                 filter_URI_Names(UserMetadataFiltered, RequestedNamesFiltered))
     end,
     ok.
