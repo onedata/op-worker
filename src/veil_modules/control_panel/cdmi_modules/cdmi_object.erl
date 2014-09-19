@@ -254,44 +254,69 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
 -spec put_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
+    % parse body
     {ok, RawBody, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Body = rest_utils:parse_body(RawBody),
     ok = rest_utils:validate_body(Body),
+
+    % prepare body fields
     RequestedMimetype = proplists:get_value(<<"mimetype">>, Body),
     RequestedValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body),
+    RequestedCopyURI = proplists:get_value(<<"copy">>, Body),
+    RequestedMoveURI = proplists:get_value(<<"move">>, Body),
     RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
-    ValueTransferEncoding = case RequestedValueTransferEncoding of undefined -> <<"utf-8">>; _ -> RequestedValueTransferEncoding end,
+    URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
     Value = proplists:get_value(<<"value">>, Body),
     Range = case lists:keyfind(<<"value">>, 1, Opts) of
         {<<"value">>, From_, To_} -> {From_,To_};
         false -> undefined
     end,
-    RawValue = decode(Value,ValueTransferEncoding),
+    RawValue = decode(Value, RequestedValueTransferEncoding),
 
-    case logical_files_manager:create(Filepath) of
-        ok ->
-            case logical_files_manager:write(Filepath, RawValue) of
-                Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                    case logical_files_manager:getfileattr(Filepath) of
-                        {ok,Attrs} ->
-                            update_encoding(Filepath, RequestedValueTransferEncoding),
-                            update_mimetype(Filepath, RequestedMimetype),
-                            cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata),
-                            Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
-                            Req2 = cowboy_req:set_resp_body(Response, Req1),
-                            {true, Req2, State};
+    % make sure file is created
+    {Operation, OperationAns} =
+        case {RequestedCopyURI, RequestedMoveURI} of
+            {undefined, undefined} ->
+                case logical_files_manager:exists(Filepath) of
+                    true -> {update, ok};
+                    false -> {create, logical_files_manager:create(Filepath)};
+                    Error_ -> {update, Error_}
+                end;
+            {undefined, MoveURI} -> {move, logical_files_manager:mv(binary_to_list(MoveURI),Filepath)};
+            {_CopyURI, undefined} -> {copy, unimplemented}
+        end,
+
+    %check creation result, update value and metadata depending on creation type
+    case Operation of
+        create ->
+            case OperationAns of
+                ok ->
+                    case logical_files_manager:write(Filepath, RawValue) of
+                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
+                            ok;
                         Error ->
                             logical_files_manager:delete(Filepath),
-                            cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error})
+                            throw({?write_object_unknown_error, Error}) %todo handle create file forbidden
                     end;
-                Error ->
+                Error1 -> throw({?put_container_unknown_error, Error1})
+            end,
+
+            % return response
+            case logical_files_manager:getfileattr(Filepath) of
+                {ok,Attrs} ->
+                    update_encoding(Filepath, RequestedValueTransferEncoding),
+                    update_mimetype(Filepath, RequestedMimetype),
+                    cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata),
+                    Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
+                    Req2 = cowboy_req:set_resp_body(Response, Req1),
+                    {true, Req2, State};
+                Error2 ->
                     logical_files_manager:delete(Filepath),
-                    cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error}) %todo handle create file forbidden
+                    cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error2})
             end;
-        {error, file_exists} ->
+        update ->
             update_encoding(Filepath, RequestedValueTransferEncoding),
             update_mimetype(Filepath, RequestedMimetype),
-            URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
             cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
             case Range of
                 {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
@@ -310,7 +335,15 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                 undefined -> {true, Req1, State};
                 MalformedRange -> cdmi_error:error_reply(Req1, State, {?invalid_range, MalformedRange})
             end;
-        Error -> cdmi_error:error_reply(Req1, State, {?put_object_unknown_error, Error})
+        Other when Other =:= move orelse Other =:= copy ->
+            case OperationAns of
+                ok ->
+                    update_encoding(Filepath, RequestedValueTransferEncoding),
+                    update_mimetype(Filepath, RequestedMimetype),
+                    cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
+                    {true, Req1, State};
+                Error -> cdmi_error:error_reply(Req, State, {?put_container_unknown_error, Error})
+            end
     end.
 
 %% ====================================================================

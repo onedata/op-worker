@@ -137,12 +137,26 @@ get_cdmi_container(Req, #state{opts = Opts} = State) ->
 -spec put_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
+    % parse body
     {ok, RawBody, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Body = rest_utils:parse_body(RawBody),
     ok = rest_utils:validate_body(Body),
-    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
 
-    case logical_files_manager:mkdir(Filepath) of
+    % prepare body fields
+    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
+    RequestedCopyURI = proplists:get_value(<<"copy">>, Body),
+    RequestedMoveURI = proplists:get_value(<<"move">>, Body),
+
+    % make sure dir is created
+    OperationAns =
+        case {RequestedCopyURI, RequestedMoveURI} of
+            {undefined, undefined} -> logical_files_manager:mkdir(Filepath);
+            {undefined, MoveURI} -> logical_files_manager:mv(binary_to_list(MoveURI),Filepath);
+            {_CopyURI, undefined} -> unimplemented
+        end,
+
+    %check result and update metadata
+    case OperationAns of
         ok ->
             case logical_files_manager:getfileattr(Filepath) of
                 {ok, Attr} ->

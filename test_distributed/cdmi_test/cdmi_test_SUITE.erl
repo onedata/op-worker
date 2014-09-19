@@ -885,14 +885,17 @@ out_of_range_test(_Config) ->
     ?assertEqual(<<100,97,116,97,0,0,0,0,0,0,100,97,116,97>>, get_file_content(FileName)). % "data(6x<0_byte>)data"
     %%------------------------------
 
-%tests copy and move operations on dataobjects and containers
+% tests copy and move operations on dataobjects and containers
 copy_move_test(_Config) ->
     FileName = "move_test_file.txt",
+    DirName = "move_test_dir/",
     FileUri = list_to_binary(filename:join("/",FileName)),
     FileData = <<"data">>,
     create_file(FileName),
+    create_dir(DirName),
     write_to_file(FileName, FileData),
     NewMoveFileName = "new_move_test_file",
+    NewMoveDirName = "new_move_test_dir/",
 
     %%--- conflicting mv/cpy -------
     ?assertEqual(FileData, get_file_content(FileName)),
@@ -902,7 +905,36 @@ copy_move_test(_Config) ->
     {Code1, _Headers1, Response1} = do_request(NewMoveFileName, put, RequestHeaders1, RequestBody1),
     ?assertEqual("400",Code1),
     {struct, CdmiResponse1} = mochijson2:decode(Response1),
-    ?assertMatch([{<<"BodyFieldsInConflictError">>,_}],CdmiResponse1).
+    ?assertMatch([{<<"BodyFieldsInConflictError">>,_}],CdmiResponse1),
+
+    ?assertEqual(FileData, get_file_content(FileName)),
+    %%------------------------------
+
+    %%----------- dir mv -----------
+    ?assert(object_exists(DirName)),
+    ?assert(not object_exists(NewMoveDirName)),
+
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-container"}],
+    RequestBody2 = rest_utils:encode_to_json([{<<"move">>, list_to_binary(DirName)}]),
+    {Code2, _Headers2, _Response2} = do_request(NewMoveDirName, put, RequestHeaders2, RequestBody2),
+    ?assertEqual("201",Code2),
+
+    ?assert(not object_exists(DirName)),
+    ?assert(object_exists(NewMoveDirName)),
+    %%------------------------------
+
+    %%---------- file mv -----------
+    ?assert(object_exists(FileName)),
+    ?assert(not object_exists(NewMoveFileName)),
+    ?assertEqual(FileData, get_file_content(FileName)),
+    RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
+    RequestBody3 = rest_utils:encode_to_json([{<<"move">>, list_to_binary(FileName)}]),
+    {Code3, _Headers3, _Response3} = do_request(NewMoveFileName, put, RequestHeaders3, RequestBody3),
+    ?assertEqual("201",Code3),
+
+    ?assert(not object_exists(FileName)),
+    ?assert(object_exists(NewMoveFileName)),
+    ?assertEqual(FileData, get_file_content(NewMoveFileName)).
     %%------------------------------
 
 %% ====================================================================
