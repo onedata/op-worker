@@ -1001,7 +1001,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1,true),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
