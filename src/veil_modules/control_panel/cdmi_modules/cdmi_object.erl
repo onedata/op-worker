@@ -235,6 +235,7 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
             case RawRange of
                 undefined ->
                     case logical_files_manager:truncate(Filepath, 0) of
+                        ok -> ok;
                         {logical_file_system_error, ?VEPERM} -> throw(?forbidden);
                         {logical_file_system_error, ?VEACCES} -> throw(?forbidden);
                         Error -> throw({?put_object_unknown_error, Error})
