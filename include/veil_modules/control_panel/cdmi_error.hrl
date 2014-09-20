@@ -10,6 +10,7 @@
 %% ===================================================================
 
 -define(moved_permanently, moved_permanently).
+
 -define(duplicated_body_fields, duplicated_body_fields).
 -define(conflicting_body_fields, conflicting_body_fields).
 -define(invalid_objectid, invalid_objectid).
@@ -19,11 +20,16 @@
 -define(invalid_base64, invalid_base64).
 -define(unsupported_version, unsupported_version).
 -define(malformed_request, malformed_request).
+
+-define(invalid_json, invalid_json).
 -define(invalid_token, invalid_token).
 -define(invalid_cert, invalid_cert).
 -define(no_certificate_chain_found, no_certificate_chain_found).
 -define(user_unknown, user_unknown).
+
 -define(group_dir_delete, group_dir_delete).
+-define(forbidden, forbidden).
+
 -define(not_found, not_found).
 -define(parent_not_found, parent_not_found).
 -define(put_container_conflict, put_container_conflict).

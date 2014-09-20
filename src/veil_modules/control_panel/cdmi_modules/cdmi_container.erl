@@ -173,8 +173,10 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
             URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
             cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};
-        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req1, State, ?parent_not_found);
-        Error -> cdmi_error:error_reply(Req1, State, {?put_container_unknown_error, Error}) % todo handle dir error forbidden
+        {logical_file_system_error, ?VEPERM} -> cdmi_error:error_reply(Req, State, ?forbidden);
+        {logical_file_system_error, ?VEACCES} -> cdmi_error:error_reply(Req, State, ?forbidden);
+        {logical_file_system_error, ?VENOENT} -> cdmi_error:error_reply(Req1, State, ?parent_not_found);
+        Error -> cdmi_error:error_reply(Req1, State, {?put_container_unknown_error, Error})
     end.
 
 %% put_binary/2
@@ -188,8 +190,10 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:mkdir(Filepath) of
         ok -> {true, Req, State};
         {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?put_container_conflict);
-        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?parent_not_found);
-        Error -> cdmi_error:error_reply(Req, State, {?put_container_unknown_error, Error}) % todo handle dir error forbidden
+        {logical_file_system_error, ?VENOENT} -> cdmi_error:error_reply(Req, State, ?parent_not_found);
+        {logical_file_system_error, ?VEPERM} -> cdmi_error:error_reply(Req, State, ?forbidden);
+        {logical_file_system_error, ?VEACCES} -> cdmi_error:error_reply(Req, State, ?forbidden);
+        Error -> cdmi_error:error_reply(Req, State, {?put_container_unknown_error, Error})
     end.
 
 %% ====================================================================

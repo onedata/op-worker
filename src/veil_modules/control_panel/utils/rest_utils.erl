@@ -95,7 +95,7 @@ encode_to_json(Term) ->
 -spec decode_from_json(binary()) -> term().
 %% ====================================================================
 decode_from_json(JSON) ->
-    mochijson2:decode(JSON, [{format, proplist}]).
+    try mochijson2:decode(JSON, [{format, proplist}]) catch _:_ -> throw(?invalid_json) end.
 
 
 %% success_reply/1

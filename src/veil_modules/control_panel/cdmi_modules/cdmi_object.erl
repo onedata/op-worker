@@ -15,6 +15,7 @@
 -include("veil_modules/control_panel/cdmi_capabilities.hrl").
 -include("veil_modules/control_panel/cdmi_object.hrl").
 -include("veil_modules/control_panel/cdmi_error.hrl").
+-include("veil_modules/fslogic/fslogic.hrl").
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
@@ -109,6 +110,8 @@ content_types_accepted(Req, State) ->
 delete_resource(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:delete(Filepath) of
         ok -> {true, Req, State};
+        {logical_file_system_error, ?VEPERM} -> cdmi_error:error_reply(Req, State, ?forbidden);
+        {logical_file_system_error, ?VEACCES} -> cdmi_error:error_reply(Req, State, ?forbidden);
         Error -> cdmi_error:error_reply(Req, State, {?file_delete_unknown_error,Error})
     end.
 
@@ -231,7 +234,11 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
             {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
             case RawRange of
                 undefined ->
-                    logical_files_manager:truncate(Filepath, 0),
+                    case logical_files_manager:truncate(Filepath, 0) of
+                        {logical_file_system_error, ?VEPERM} -> throw(?forbidden);
+                        {logical_file_system_error, ?VEACCES} -> throw(?forbidden);
+                        Error -> throw({?put_object_unknown_error, Error})
+                    end,
                     write_body_to_file(Req1, State, 0, false);
                 _ ->
                     {Length, Req2} = cowboy_req:body_length(Req1),
@@ -242,8 +249,10 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
                             cdmi_error:error_reply(Req2, State, {?invalid_range, RawRange})
                     end
             end;
+        {logical_file_system_error, ?VEPERM} -> cdmi_error:error_reply(Req, State, ?forbidden);
+        {logical_file_system_error, ?VEACCES} -> cdmi_error:error_reply(Req, State, ?forbidden);
         Error ->
-            cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error}) %todo handle creation forbidden error
+            cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error})
     end.
 
 %% put_cdmi_object/2
@@ -294,6 +303,8 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     case logical_files_manager:write(Filepath, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             ok;
+                        {logical_file_system_error, ?VEPERM} -> throw(?forbidden);
+                        {logical_file_system_error, ?VEACCES} -> throw(?forbidden);
                         Error ->
                             logical_files_manager:delete(Filepath),
                             throw({?write_object_unknown_error, Error}) %todo handle create file forbidden
@@ -323,6 +334,8 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     case logical_files_manager:write(Filepath, From, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             {true, Req1, State};
+                        {logical_file_system_error, ?VEPERM} -> cdmi_error:error_reply(Req, State, ?forbidden);
+                        {logical_file_system_error, ?VEACCES} -> cdmi_error:error_reply(Req, State, ?forbidden);
                         Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error}) %todo handle write file forbidden
                     end;
                 undefined when is_binary(Value) ->
@@ -330,6 +343,8 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     case logical_files_manager:write(Filepath, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             {true, Req1, State};
+                        {logical_file_system_error, ?VEPERM} -> cdmi_error:error_reply(Req, State, ?forbidden);
+                        {logical_file_system_error, ?VEACCES} -> cdmi_error:error_reply(Req, State, ?forbidden);
                         Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error}) %todo handle write file forbidden
                     end;
                 undefined -> {true, Req1, State};

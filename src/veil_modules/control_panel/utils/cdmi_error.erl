@@ -46,6 +46,7 @@ error_reply(Req, State, ErrorCode, ReturnBody, ErrorDescription, DescriptionArgs
 %% ====================================================================
 error_value({?moved_permanently, Filepath}) ->
     [?moved_pemanently_code, [], "Wrong slash at the end of path: ~p", [Filepath], debug];
+
 error_value(?duplicated_body_fields) ->
     [?error_bad_request_code, [{<<"BodyFieldsDuplicationError">>, <<"Body contains duplicated entries">>}], "Body contains duplicated entries", [], debug];
 error_value(?conflicting_body_fields) ->
@@ -64,6 +65,9 @@ error_value(?unsupported_version) ->
     [?error_bad_request_code, [{<<"UnsupportedVersionError">>, <<"Version unsupported">>}], "Invalid version error.", [], debug];
 error_value({?malformed_request, Error}) ->
     [?error_bad_request_code, [{<<"MalformedRequestError">>, <<"The request is malformed">>}], "Malformed request error: ~p", [Error], debug];
+error_value({?invalid_json, Error}) ->
+    [?error_bad_request_code, [{<<"InvalidJsonError">>, <<"The json body could not be parsed">>}], "Malformed request error: ~p", [Error], debug];
+
 error_value(?invalid_token) ->
     [?error_unauthorized_code, [{<<"InvalidTokenError">>, <<"The token is invalid or expired">>}], "Invalid token error", [], debug];
 error_value(?invalid_cert) ->
@@ -72,14 +76,20 @@ error_value(?no_certificate_chain_found) ->
     [?error_unauthorized_code, [{<<"CertificateError">>, <<"Cannot find certificate chain">>}], "No certificate chain found error", [], debug];
 error_value({?user_unknown, DnString}) ->
     [?error_unauthorized_code, [{<<"NoUserFoundError">>, <<"Cannot find user">>}], "No user found with given DN: ~p", [DnString], debug];
+
 error_value(?group_dir_delete) ->
     [?error_forbidden_code, [{<<"SpaceDeleteError">>, <<"Deleting space directory, which is forbidden.">>}], "Deleting space dir", [], debug];
+error_value(?forbidden) ->
+    [?error_forbidden_code, [{<<"Forbidden">>, <<"Requested operation is forbidden.">>}], "Deleting space dir", [], debug];
+
 error_value(?not_found) ->
     [?error_not_found_code, [], "Object not found", []];
 error_value(?parent_not_found) ->
     [?error_not_found_code, [{<<"ParentNotFoundError">>, <<"Parent container could not be found">>}], "Parent container not found", [], debug];
+
 error_value(?put_container_conflict) ->
     [?error_conflict_code, [{<<"PutContainerError">>, <<"Container already exists">>}], "Dir already exists", [], debug];
+
 error_value({?get_attr_unknown_error, Error}) ->
     [?error_internal_code, [{<<"GetAttributesError">>, <<"Get attributes unknown error">>}], "Getting attributes end up with error: ~p", [Error], error];
 error_value({?file_delete_unknown_error, Error}) ->
