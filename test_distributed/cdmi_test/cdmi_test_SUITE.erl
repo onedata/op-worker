@@ -76,7 +76,44 @@ list_dir_test(_Config) ->
     {struct,CdmiResponse4} = mochijson2:decode(Response4),
     ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiResponse4)),
     ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiResponse4)),
-    ?assertEqual(2,length(CdmiResponse4)).
+    ?assertEqual(2,length(CdmiResponse4)),
+    %%------------------------------
+
+    %%---- childrenrange list ------
+    ChildrangeDir = "childrange/",
+    create_dir(ChildrangeDir),
+    Childs = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"],
+    ChildsBinaries = lists:map(fun(X) -> list_to_binary(X) end, Childs),
+    lists:foreach(fun(FileName) -> create_file(filename:join(ChildrangeDir, FileName)), timer:sleep(100) end, Childs),
+
+    RequestHeaders5 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code5, _Headers5, Response5} = do_request(ChildrangeDir ++ "?children", get, RequestHeaders5, []),
+    ?assertEqual("200", Code5),
+    {struct,CdmiResponse5} = mochijson2:decode(Response5),
+    ChildrenResponse1 = proplists:get_value(<<"children">>,CdmiResponse5),
+    ?assert(is_list(ChildrenResponse1)),
+    lists:foreach(fun(Name) -> ?assert(lists:member(Name, ChildrenResponse1)) end, ChildsBinaries),
+
+    {Code6, _, Response6} = do_request(ChildrangeDir ++ "?children:2-13", get, RequestHeaders5, []),
+    {Code7, _, Response7} = do_request(ChildrangeDir ++ "?children:0-1", get, RequestHeaders5, []),
+    {Code8, _, Response8} = do_request(ChildrangeDir ++ "?children:14-14", get, RequestHeaders5, []),
+    ?assertEqual("200", Code6),
+    ?assertEqual("200", Code7),
+    ?assertEqual("200", Code8),
+    {struct,CdmiResponse6} = mochijson2:decode(Response6),
+    {struct,CdmiResponse7} = mochijson2:decode(Response7),
+    {struct,CdmiResponse8} = mochijson2:decode(Response8),
+    ChildrenResponse6 = proplists:get_value(<<"children">>,CdmiResponse6),
+    ChildrenResponse7 = proplists:get_value(<<"children">>,CdmiResponse7),
+    ChildrenResponse8 = proplists:get_value(<<"children">>,CdmiResponse8),
+
+    ?assert(is_list(ChildrenResponse6)),
+    ?assert(is_list(ChildrenResponse7)),
+    ?assert(is_list(ChildrenResponse8)),
+    ?assertEqual(12, length(ChildrenResponse6)),
+    ?assertEqual(2, length(ChildrenResponse7)),
+    ?assertEqual(1, length(ChildrenResponse8)),
+    lists:foreach(fun(Name) -> ?assert(lists:member(Name, ChildrenResponse6 ++ ChildrenResponse7 ++ ChildrenResponse8)) end, ChildsBinaries).
     %%------------------------------
 
 % Tests cdmi object GET request. Request can be done without cdmi header (in that case
@@ -964,7 +1001,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1,true),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},

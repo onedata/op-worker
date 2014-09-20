@@ -21,7 +21,7 @@
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
--export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, parse_body/1,
+-export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, list_dir/3, parse_body/1,
          validate_body/1, ensure_path_ends_with_slash/1, get_path_leaf_with_ending_slash/1, trim_spaces/1]).
 
 %% ====================================================================
@@ -237,13 +237,28 @@ join_to_path(Path, [Binary|Tail]) ->
 -spec list_dir(string()) -> [#dir_entry{}].
 %% ====================================================================
 list_dir(Path) ->
-    list_dir(Path, 0, 10, []).
+    list_dir(Path, 0, 10, all, []).
 
-list_dir(Path, Offset, Count, Result) ->
-    case logical_files_manager:ls(Path, Count, Offset) of
+list_dir(Path, From, To) ->
+    list_dir(Path, From, 10, To - From + 1, []).
+
+list_dir(Path, Offset, ChunkSize, all, Result) ->
+    case logical_files_manager:ls(Path, ChunkSize, Offset) of
         {ok, FileList} ->
             case length(FileList) of
-                Count -> list_dir(Path, Offset + Count, Count * 10, Result ++ FileList);
+                ChunkSize -> list_dir(Path, Offset + ChunkSize, ChunkSize * 10, all, Result ++ FileList);
+                _ -> Result ++ FileList
+            end;
+        _ ->
+            {error, not_a_dir}
+    end;
+list_dir(_Path, _Offset, _ChunkSize, HowManyBytes, Result) when HowManyBytes =< 0 ->
+    Result;
+list_dir(Path, Offset, ChunkSize, HowManyBytes, Result) ->
+    case logical_files_manager:ls(Path, min(HowManyBytes, ChunkSize), Offset) of
+        {ok, FileList} ->
+            case length(FileList) of
+                ChunkSize -> list_dir(Path, Offset + ChunkSize, ChunkSize * 10, HowManyBytes - ChunkSize, Result ++ FileList);
                 _ -> Result ++ FileList
             end;
         _ ->

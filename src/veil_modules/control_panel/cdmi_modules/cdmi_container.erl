@@ -232,6 +232,15 @@ prepare_container_ans([<<"metadata">> | Tail], #state{filepath = Filepath, attri
     [{<<"metadata">>, cdmi_metadata:prepare_metadata(Filepath, Attrs)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([{<<"metadata">>, Prefix} | Tail], #state{filepath = Filepath, attributes = Attrs} = State) ->
     [{<<"metadata">>, cdmi_metadata:prepare_metadata(Filepath, Prefix, Attrs)} | prepare_container_ans(Tail, State)];
+prepare_container_ans([{<<"children">>, From, To} | Tail], #state{filepath = Filepath} = State) ->
+    Childs = lists:map(
+        fun(#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) ->
+            list_to_binary(rest_utils:ensure_path_ends_with_slash(Name));
+            (#dir_entry{name = Name, type = ?REG_TYPE_PROT}) ->
+                list_to_binary(Name)
+        end,
+        rest_utils:list_dir(Filepath, From, To)),
+    [{<<"children">>, Childs} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
     Childs = lists:map(
         fun(#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) ->
