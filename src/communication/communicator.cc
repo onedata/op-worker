@@ -205,14 +205,15 @@ CommunicationHandler::Pool Communicator::poolType(const google::protobuf::Messag
             : CommunicationHandler::Pool::META;
 }
 
-std::shared_ptr<Communicator> createWebsocketCommunicator(const unsigned int dataPoolSize,
-                                                          const unsigned int metaPoolSize,
-                                                          std::string hostname,
-                                                          unsigned int port,
-                                                          std::string endpoint,
-                                                          const bool verifyServerCertificate,
-                                                          std::function<const std::unordered_map<std::string, std::string>&()> additionalHeadersFun,
-                                                          std::shared_ptr<const CertificateData> certificateData)
+std::shared_ptr<Communicator> createWebsocketCommunicator(
+        const unsigned int dataPoolSize,
+        const unsigned int metaPoolSize,
+        std::string hostname,
+        unsigned int port,
+        std::string endpoint,
+        const bool verifyServerCertificate,
+        std::function<std::unordered_map<std::string, std::string>()> additionalHeadersFun,
+        std::shared_ptr<const CertificateData> certificateData)
 {
     const auto uri = "wss://"+hostname+":"+std::to_string(port)+endpoint;
 

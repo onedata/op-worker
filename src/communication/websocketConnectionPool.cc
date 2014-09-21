@@ -26,11 +26,12 @@ namespace communication
 
 class CertificateData;
 
-WebsocketConnectionPool::WebsocketConnectionPool(const unsigned int connectionsNumber,
-                                                 std::string uri,
-                                                 std::function<const std::unordered_map<std::string, std::string>&()> additionalHeadersFun,
-                                                 std::shared_ptr<const CertificateData> certificateData,
-                                                 const bool verifyServerCertificate)
+WebsocketConnectionPool::WebsocketConnectionPool(
+        const unsigned int connectionsNumber,
+        std::string uri,
+        std::function<std::unordered_map<std::string, std::string>()> additionalHeadersFun,
+        std::shared_ptr<const CertificateData> certificateData,
+        const bool verifyServerCertificate)
     : ConnectionPool{connectionsNumber, std::move(uri)}
     , m_additionalHeadersFun{std::move(additionalHeadersFun)}
     , m_certificateData{std::move(certificateData)}

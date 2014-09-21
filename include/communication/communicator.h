@@ -233,7 +233,7 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(
         const unsigned int dataPoolSize, const unsigned int metaPoolSize,
         std::string hostname, unsigned int port,
         std::string endpoint, const bool verifyServerCertificate,
-        std::function<const std::unordered_map<std::string, std::string>&()> additionalHeadersFun,
+        std::function<std::unordered_map<std::string, std::string>()> additionalHeadersFun,
         std::shared_ptr<const CertificateData> certificateData = nullptr);
 
 } // namespace communication

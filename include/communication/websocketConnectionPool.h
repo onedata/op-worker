@@ -57,7 +57,7 @@ public:
      */
     WebsocketConnectionPool(const unsigned int connectionsNumber,
             std::string uri,
-            std::function<const std::unordered_map<std::string, std::string>&()> additionalHeadersFun,
+            std::function<std::unordered_map<std::string, std::string>()> additionalHeadersFun,
             std::shared_ptr<const CertificateData> certificateData,
             const bool verifyServerCertificate);
 
@@ -87,7 +87,7 @@ private:
 
     std::thread m_ioThread;
     endpoint_type m_endpoint;
-    const std::function<const std::unordered_map<std::string, std::string>&()> m_additionalHeadersFun;
+    const std::function<std::unordered_map<std::string, std::string>()> m_additionalHeadersFun;
     const std::shared_ptr<const CertificateData> m_certificateData;
     const bool m_verifyServerCertificate;
 };
