@@ -16,6 +16,7 @@
 -define(invalid_objectid, invalid_objectid).
 -define(invalid_content_type, invalid_content_type).
 -define(invalid_range, invalid_range).
+-define(invalid_childrenrange, invalid_childrenrange).
 -define(no_version_given, no_version_given).
 -define(invalid_base64, invalid_base64).
 -define(unsupported_version, unsupported_version).

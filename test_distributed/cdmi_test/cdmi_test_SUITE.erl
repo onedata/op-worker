@@ -87,16 +87,17 @@ list_dir_test(_Config) ->
     lists:foreach(fun(FileName) -> create_file(filename:join(ChildrangeDir, FileName)), timer:sleep(100) end, Childs),
 
     RequestHeaders5 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code5, _Headers5, Response5} = do_request(ChildrangeDir ++ "?children", get, RequestHeaders5, []),
+    {Code5, _Headers5, Response5} = do_request(ChildrangeDir ++ "?children;childrenrange", get, RequestHeaders5, []),
     ?assertEqual("200", Code5),
     {struct,CdmiResponse5} = mochijson2:decode(Response5),
-    ChildrenResponse1 = proplists:get_value(<<"children">>,CdmiResponse5),
+    ChildrenResponse1 = proplists:get_value(<<"children">>, CdmiResponse5),
     ?assert(is_list(ChildrenResponse1)),
     lists:foreach(fun(Name) -> ?assert(lists:member(Name, ChildrenResponse1)) end, ChildsBinaries),
+    ?assertEqual(<<"0-14">>, proplists:get_value(<<"childrenrange">>, CdmiResponse5)),
 
-    {Code6, _, Response6} = do_request(ChildrangeDir ++ "?children:2-13", get, RequestHeaders5, []),
-    {Code7, _, Response7} = do_request(ChildrangeDir ++ "?children:0-1", get, RequestHeaders5, []),
-    {Code8, _, Response8} = do_request(ChildrangeDir ++ "?children:14-14", get, RequestHeaders5, []),
+    {Code6, _, Response6} = do_request(ChildrangeDir ++ "?children:2-13;childrenrange", get, RequestHeaders5, []),
+    {Code7, _, Response7} = do_request(ChildrangeDir ++ "?children:0-1;childrenrange", get, RequestHeaders5, []),
+    {Code8, _, Response8} = do_request(ChildrangeDir ++ "?children:14-14;childrenrange", get, RequestHeaders5, []),
     ?assertEqual("200", Code6),
     ?assertEqual("200", Code7),
     ?assertEqual("200", Code8),
@@ -113,6 +114,9 @@ list_dir_test(_Config) ->
     ?assertEqual(12, length(ChildrenResponse6)),
     ?assertEqual(2, length(ChildrenResponse7)),
     ?assertEqual(1, length(ChildrenResponse8)),
+    ?assertEqual(<<"2-13">>, proplists:get_value(<<"childrenrange">>, CdmiResponse6)),
+    ?assertEqual(<<"0-1">>, proplists:get_value(<<"childrenrange">>, CdmiResponse7)),
+    ?assertEqual(<<"14-14">>, proplists:get_value(<<"childrenrange">>, CdmiResponse8)),
     lists:foreach(fun(Name) -> ?assert(lists:member(Name, ChildrenResponse6 ++ ChildrenResponse7 ++ ChildrenResponse8)) end, ChildsBinaries).
     %%------------------------------
 
@@ -919,7 +923,15 @@ out_of_range_test(_Config) ->
     {Code3, _Headers3, _Response3} = do_request(FileName ++ "?value:10-13", put, RequestHeaders2, RequestBody3),
     ?assertEqual("204",Code3),
 
-    ?assertEqual(<<100,97,116,97,0,0,0,0,0,0,100,97,116,97>>, get_file_content(FileName)). % "data(6x<0_byte>)data"
+    ?assertEqual(<<100,97,116,97,0,0,0,0,0,0,100,97,116,97>>, get_file_content(FileName)), % "data(6x<0_byte>)data"
+    %%------------------------------
+
+    %%----- random childrange ------
+    {Code4, _Headers4, Response4} = do_request(?Test_dir_name ++ "/?children:100-132", get, RequestHeaders2, []),
+    ?assertEqual("400",Code4),
+    {struct, CdmiResponse4} = mochijson2:decode(Response4),
+
+    ?assertMatch([{<<"InvalidChildrenrangeError">>, _}], CdmiResponse4).
     %%------------------------------
 
 % tests copy and move operations on dataobjects and containers

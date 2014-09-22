@@ -10,4 +10,4 @@
 %% ===================================================================
 
 %% the default json response for container object will contain this entities, they can be choosed selectively by appending '?name1;name2' list to the requested url
--define(default_get_dir_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
+-define(default_get_dir_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"childrenrange">>, <<"children">>]).

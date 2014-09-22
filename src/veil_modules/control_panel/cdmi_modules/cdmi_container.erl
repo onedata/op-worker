@@ -127,7 +127,8 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
 -spec get_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_cdmi_container(Req, #state{opts = Opts} = State) ->
-    DirCdmi = prepare_container_ans(case Opts of [] -> ?default_get_dir_opts; _ -> Opts end, State),
+    NewOpts = case Opts of [] -> ?default_get_dir_opts; _ -> Opts end,
+    DirCdmi = prepare_container_ans(NewOpts, State#state{opts = NewOpts}),
     Response = rest_utils:encode_to_json({struct, DirCdmi}),
     {Response, Req, State}.
 
@@ -162,7 +163,7 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
                 {ok, Attr} ->
                     cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata),
                     Response = rest_utils:encode_to_json(
-                        {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr})}),
+                        {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr, opts = ?default_get_dir_opts})}),
                     Req2 = cowboy_req:set_resp_body(Response, Req1),
                     {true, Req2, State};
                 Error -> %todo handle getattr forbidden
@@ -232,14 +233,30 @@ prepare_container_ans([<<"metadata">> | Tail], #state{filepath = Filepath, attri
     [{<<"metadata">>, cdmi_metadata:prepare_metadata(Filepath, Attrs)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([{<<"metadata">>, Prefix} | Tail], #state{filepath = Filepath, attributes = Attrs} = State) ->
     [{<<"metadata">>, cdmi_metadata:prepare_metadata(Filepath, Prefix, Attrs)} | prepare_container_ans(Tail, State)];
+prepare_container_ans([<<"childrenrange">> | Tail], #state{opts = Opts, filepath = Filepath} = State) ->
+    ChildNum = length(rest_utils:list_dir(Filepath)), %todo get without listing dir
+    {From, To} = case lists:keyfind(<<"children">>, 1, Opts) of
+        {<<"children">>, Begin, End} -> normalize_childrenrange(Begin, End, ChildNum);
+        _ -> case ChildNum of
+                 0 -> {undefined, undefined};
+                 _ -> {0, ChildNum-1}
+             end
+    end,
+    BinaryRange = case {From,To} of
+                      {undefined, undefined} -> <<"">>;
+                      _ -> <<(integer_to_binary(From))/binary, "-", (integer_to_binary(To))/binary>>
+                  end,
+    [{<<"childrenrange">>, BinaryRange} | prepare_container_ans(Tail, State)];
 prepare_container_ans([{<<"children">>, From, To} | Tail], #state{filepath = Filepath} = State) ->
+    ChildNumber = length(rest_utils:list_dir(Filepath)), %todo get without listing dir
+    {From1, To1} = normalize_childrenrange(From, To, ChildNumber),
     Childs = lists:map(
         fun(#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) ->
             list_to_binary(rest_utils:ensure_path_ends_with_slash(Name));
             (#dir_entry{name = Name, type = ?REG_TYPE_PROT}) ->
                 list_to_binary(Name)
         end,
-        rest_utils:list_dir(Filepath, From, To)),
+        rest_utils:list_dir(Filepath, From1, To1)),
     [{<<"children">>, Childs} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
     Childs = lists:map(
@@ -285,3 +302,14 @@ is_group_dir(Path) ->
         [?SPACES_BASE_DIR_NAME , _GroupName] ->  true;
         _ -> false
     end.
+
+%% normalize_childrenrange/1
+%% ====================================================================
+%% @doc Checks if given childrange is correct according to child number. Tries to correct the result
+-spec normalize_childrenrange(From :: integer(), To :: integer(), ChildNum :: integer()) -> {NewFrom :: integer(), NewTo :: integer()} | no_return().
+%% ====================================================================
+normalize_childrenrange(From, To, _ChildNum) when From > To -> throw(?invalid_childrenrange);
+normalize_childrenrange(_From, To, ChildNum) when To >= ChildNum -> throw(?invalid_childrenrange);
+normalize_childrenrange(From, To, ChildNum)->
+    {From, min(ChildNum - 1, To)}.
+

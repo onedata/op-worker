@@ -57,6 +57,8 @@ error_value(?invalid_content_type) ->
     [?error_bad_request_code, [{<<"InvalidContentTypeError">>, <<"Content type is invalid">>}], "Invalid content type", [], debug];
 error_value({?invalid_range, RawRange}) ->
     [?error_bad_request_code, [{<<"InvalidRangeError">>, <<"Requested range is invalid">>}], "Invalid range: ~p", [RawRange], debug];
+error_value(?invalid_childrenrange) ->
+    [?error_bad_request_code, [{<<"InvalidChildrenrangeError">>, <<"Requested childrenrange is invalid">>}], "Invalid childrenrange", [], debug];
 error_value(?no_version_given) ->
     [?error_bad_request_code, [{<<"NoVersionError">>, <<"The request does not have required X-Cdmi-Version header">>}], "No version specified", [], debug];
 error_value(?invalid_base64) ->
