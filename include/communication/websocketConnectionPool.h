@@ -55,8 +55,10 @@ public:
      * headers to use for the connection.
      * @param certificateData Certificate data to use for SSL authentication.
      */
-    WebsocketConnectionPool(const unsigned int connectionsNumber,
+    WebsocketConnectionPool(
+            const unsigned int connectionsNumber,
             std::string uri,
+            std::shared_ptr<Scheduler> scheduler,
             std::function<std::unordered_map<std::string, std::string>()> additionalHeadersFun,
             std::shared_ptr<const CertificateData> certificateData,
             const bool verifyServerCertificate);

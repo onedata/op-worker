@@ -15,6 +15,7 @@
 #include "make_unique.h"
 #include "veilErrors.h"
 #include "remote_file_management.pb.h"
+#include "scheduler.h"
 
 #include <boost/algorithm/string.hpp>
 #include <google/protobuf/descriptor.h>
@@ -206,6 +207,7 @@ CommunicationHandler::Pool Communicator::poolType(const google::protobuf::Messag
 }
 
 std::shared_ptr<Communicator> createWebsocketCommunicator(
+        std::shared_ptr<Scheduler> scheduler,
         const unsigned int dataPoolSize,
         const unsigned int metaPoolSize,
         std::string hostname,
@@ -225,7 +227,7 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(
 
     auto createDataPool = [&](const unsigned int poolSize) {
         return std::make_unique<WebsocketConnectionPool>(
-                    poolSize, uri, additionalHeadersFun,
+                    poolSize, uri, scheduler, additionalHeadersFun,
                     certificateData, verifyServerCertificate);
     };
 

@@ -23,6 +23,9 @@
 
 namespace veil
 {
+
+class Scheduler;
+
 namespace communication
 {
 
@@ -230,6 +233,7 @@ private:
  * @return A new Communicator instance based on @c WebsocketConnectionPool .
  */
 std::shared_ptr<Communicator> createWebsocketCommunicator(
+        std::shared_ptr<Scheduler> scheduler,
         const unsigned int dataPoolSize, const unsigned int metaPoolSize,
         std::string hostname, unsigned int port,
         std::string endpoint, const bool verifyServerCertificate,

@@ -19,7 +19,7 @@
 struct ConnectionPoolMock: public veil::communication::ConnectionPool
 {
     ConnectionPoolMock()
-        : veil::communication::ConnectionPool{1, "uri"}
+        : veil::communication::ConnectionPool{1, "uri", {}}
     {
         using namespace ::testing;
 

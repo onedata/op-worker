@@ -29,10 +29,11 @@ class CertificateData;
 WebsocketConnectionPool::WebsocketConnectionPool(
         const unsigned int connectionsNumber,
         std::string uri,
+        std::shared_ptr<Scheduler> scheduler,
         std::function<std::unordered_map<std::string, std::string>()> additionalHeadersFun,
         std::shared_ptr<const CertificateData> certificateData,
         const bool verifyServerCertificate)
-    : ConnectionPool{connectionsNumber, std::move(uri)}
+    : ConnectionPool{connectionsNumber, std::move(uri), std::move(scheduler)}
     , m_additionalHeadersFun{std::move(additionalHeadersFun)}
     , m_certificateData{std::move(certificateData)}
     , m_verifyServerCertificate{verifyServerCertificate}
