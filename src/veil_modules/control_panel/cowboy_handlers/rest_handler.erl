@@ -226,11 +226,7 @@ handle_json_data(Req, #state{handler_module = Mod, version = Version, resource_i
     Data = case Binary of
                <<"">> ->
                    <<"">>;
-               _ ->
-                   case rest_utils:decode_from_json(Binary) of
-                       {_Type, Struct} -> Struct;
-                       Other -> Other
-                   end
+               _ -> rest_utils:decode_from_json(Binary)
            end,
     {Result, NewReq} = handle_data(Req2, Mod, Version, Id, Data),
     {Result, NewReq, State}.
