@@ -27,12 +27,14 @@
 
 -export([list_dir_test/1, get_file_test/1, metadata_test/1, create_dir_test/1, create_file_test/1, update_file_test/1,
     delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1,
-    mimetype_and_encoding_test/1, moved_pemanently_test/1, errors_test/1, token_test/1, out_of_range_test/1, copy_move_test/1]).
+    mimetype_and_encoding_test/1, moved_pemanently_test/1, errors_test/1, token_test/1, out_of_range_test/1, copy_move_test/1,
+    partial_upload_test/1]).
 
 
 all() -> [list_dir_test, get_file_test, metadata_test, create_dir_test, create_file_test, update_file_test,
     delete_dir_test, delete_file_test, version_test, request_format_check_test, objectid_and_capabilities_test,
-    mimetype_and_encoding_test, moved_pemanently_test, errors_test, token_test, out_of_range_test, copy_move_test].
+    mimetype_and_encoding_test, moved_pemanently_test, errors_test, token_test, out_of_range_test, copy_move_test,
+    partial_upload_test].
 
 %% ====================================================================
 %% Test functions
@@ -84,7 +86,7 @@ list_dir_test(_Config) ->
     create_dir(ChildrangeDir),
     Childs = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"],
     ChildsBinaries = lists:map(fun(X) -> list_to_binary(X) end, Childs),
-    lists:foreach(fun(FileName) -> create_file(filename:join(ChildrangeDir, FileName)), timer:sleep(100) end, Childs),
+    lists:map(fun(FileName) -> create_file(filename:join(ChildrangeDir, FileName)) end, Childs),
 
     RequestHeaders5 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code5, _Headers5, Response5} = do_request(ChildrangeDir ++ "?children;childrenrange", get, RequestHeaders5, []),
@@ -486,7 +488,7 @@ update_file_test(_Config) ->
     %%---- value update, cdmi ------
     UpdateValue = <<"123">>,
     RequestHeaders2 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
-    RequestBody2 = [{<<"value">>, UpdateValue}],
+    RequestBody2 = [{<<"value">>, base64:encode(UpdateValue)}],
     RawRequestBody2 = rest_utils:encode_to_json(RequestBody2),
     {Code2, _Headers2, _Response2} = do_request(FullName ++ "?value:0-2", put, RequestHeaders2, RawRequestBody2),
     ?assertEqual("204",Code2),
@@ -911,7 +913,7 @@ out_of_range_test(_Config) ->
     ?assertEqual(<<>>, get_file_content(FileName)),
 
     RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
-    RequestBody2 = rest_utils:encode_to_json([{<<"value">>, <<"data">>}]),
+    RequestBody2 = rest_utils:encode_to_json([{<<"value">>, base64:encode(<<"data">>)}]),
     {Code2, _Headers2, _Response2} = do_request(FileName ++ "?value:0-3", put, RequestHeaders2, RequestBody2),
     ?assertEqual("204",Code2),
 
@@ -919,7 +921,7 @@ out_of_range_test(_Config) ->
     %%------------------------------
 
     %%------ writing at random --------
-    RequestBody3 = rest_utils:encode_to_json([{<<"value">>, <<"data">>}]),
+    RequestBody3 = rest_utils:encode_to_json([{<<"value">>, base64:encode(<<"data">>)}]),
     {Code3, _Headers3, _Response3} = do_request(FileName ++ "?value:10-13", put, RequestHeaders2, RequestBody3),
     ?assertEqual("204",Code3),
 
@@ -984,6 +986,41 @@ copy_move_test(_Config) ->
     ?assert(not object_exists(FileName)),
     ?assert(object_exists(NewMoveFileName)),
     ?assertEqual(FileData, get_file_content(NewMoveFileName)).
+    %%------------------------------
+
+% tests cdmi and non-cdmi partial upload feature (requests with x-cdmi-partial flag set to true)
+partial_upload_test(_Config) ->
+    FileName = "partial.txt",
+    Chunk1 = <<"some">>,
+    Chunk2 = <<"_">>,
+    Chunk3 = <<"value">>,
+
+    %%------- cdmi partial ---------
+    ?assert(not object_exists(FileName)),
+
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}, {"X-CDMI-Partial", "true"}],
+    RequestBody1 = rest_utils:encode_to_json([{<<"value">>, Chunk1}]),
+    {Code1, _Headers1, Response1} = do_request(FileName, put, RequestHeaders1, RequestBody1),
+    ?assertEqual("201",Code1),
+    {struct, CdmiResponse1} = mochijson2:decode(Response1),
+    ?assertEqual(<<"Processing">>, proplists:get_value(<<"completionStatus">>, CdmiResponse1)),
+
+    RequestBody2 = rest_utils:encode_to_json([{<<"value">>, base64:encode(Chunk2)}]),
+    {Code2, _Headers2, _Response2} = do_request(FileName ++ "?value:4-4", put, RequestHeaders1, RequestBody2),
+    ?assertEqual("204",Code2),
+
+    RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
+    RequestBody3 = rest_utils:encode_to_json([{<<"value">>, base64:encode(Chunk3)}]),
+    {Code3, _Headers3, _Response3} = do_request(FileName ++ "?value:5-9", put, RequestHeaders3, RequestBody3),
+    ?assertEqual("204",Code3),
+
+    RequestHeaders4 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code4, _Headers4, Response4} = do_request(FileName, get, RequestHeaders4, []),
+    ?assertEqual("200",Code4),
+    {struct, CdmiResponse4} = mochijson2:decode(Response4),
+    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse4)),
+    ?assertEqual(<<"utf-8">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse4)),
+    ?assertEqual(<<Chunk1/binary, Chunk2/binary, Chunk3/binary>>, proplists:get_value(<<"value">>, CdmiResponse4)).
     %%------------------------------
 
 %% ====================================================================

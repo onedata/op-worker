@@ -234,9 +234,10 @@ get_xattr(FullFileName, Name) ->
 set_xattr(FullFileName, Name, Value, _Flags) ->
     {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
     {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
-    #veil_document{record = #file_meta{xattrs = XAttrs}} = FileMetaDoc,
+    #veil_document{record = FileMeta } = FileMetaDoc,
+    #file_meta{xattrs = XAttrs} = FileMeta,
     UpdatedXAttrs = [{Name,Value} | proplists:delete(Name,XAttrs)],
-    {ok, _} = dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#veil_document{record = #file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
+    {ok, _} = dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#veil_document{record = FileMeta#file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
     #atom{value = ?VOK}.
 
 %% remove_xattr/2
@@ -249,9 +250,10 @@ set_xattr(FullFileName, Name, Value, _Flags) ->
 remove_xattr(FullFileName,Name) ->
     {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
     {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
-    #veil_document{record = #file_meta{xattrs = XAttrs}} = FileMetaDoc,
+    #veil_document{record = FileMeta } = FileMetaDoc,
+    #file_meta{xattrs = XAttrs} = FileMeta,
     UpdatedXAttrs = proplists:delete(Name,XAttrs),
-    dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#veil_document{record = #file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
+    {ok, _} = dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#veil_document{record = FileMeta#file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
     #atom{value = ?VOK}.
 
 %% list_xattr/1
