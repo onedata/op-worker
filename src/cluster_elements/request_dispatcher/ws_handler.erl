@@ -229,6 +229,9 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
             end
     end,
 
+    %% Refresh user's access token and schedule future refreshes
+    gen_server:call(?Dispatcher_Name, {control_panel, {synch, 1, {request_refresh, {uuid, UID}, {fuse, self()}}}}),
+
     %% Env Vars list. Entry format: {Name :: atom(), value :: string()}
     EnvVars = [{list_to_atom(string:to_lower(Name)), Value} || #handshakerequest_envvariable{name = Name, value = Value} <- Vars],
 
@@ -395,6 +398,8 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
     Req :: term(),
     State :: #handler_state{}.
 %% ====================================================================
+websocket_info({new_access_token, AccessToken}, Req, State) ->
+    {ok, Req, State#handler_state{access_token = AccessToken}};
 websocket_info({Pid, get_session_id}, Req, State) ->
     Pid ! {ok, State#handler_state.fuse_id}, %% Response with assigned FuseID, when cluster asks
     {ok, Req, State};
@@ -418,9 +423,20 @@ websocket_info(_Msg, Req, State) ->
     Req :: term(),
     State :: #handler_state{}.
 %% ====================================================================
-websocket_terminate(_Reason, _Req, #handler_state{peer_serial = _Serial, connection_id = ConnID} = _State) ->
+websocket_terminate(_Reason, _Req, State) ->
+    #handler_state{peer_serial = _Serial, connection_id = ConnID, peer_dn = DN, user_global_id = GRUID} = State,
     ?debug("WebSocket connection  terminate for peer ~p with reason: ~p", [_Serial, _Reason]),
     dao_lib:apply(dao_cluster, remove_connection_info, [ConnID], 1),        %% Cleanup connection info.
+    if
+        DN =/= undefined ->
+            gen_server:call(?Dispatcher_Name, {control_panel, {asynch, 1, {fuse_session_close, {dn, DN}, self()}}});
+
+        GRUID =/= undefined ->
+            gen_server:call(?Dispatcher_Name, {control_panel, {asynch, 1, {fuse_session_close, {global_id, GRUID}, self()}}});
+
+        true -> %% provider
+            ok
+    end,
     gen_server:cast(?Node_Manager_Name, {delete_callback_by_pid, self()}),
     ok.
 

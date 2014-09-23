@@ -20,12 +20,14 @@
     login = "",
     name = "",
     teams = [],
-    spaces = [], %% [binary()]
+    spaces = [] :: [binary()],
     email_list = [],
     dn_list = [],
     unverified_dn_list = [],
     quota_doc,
-    access_token = <<>>, %% binary()
+    access_token = <<>> :: binary(),
+    refresh_token = <<>> :: binary(),
+    access_expiration_time = 0 :: non_neg_integer(),
     role = user}).
 
 %% This is the special value that denote default quota in DB (default quota is defined as default_quota in default.yml)
