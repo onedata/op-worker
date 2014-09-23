@@ -221,8 +221,11 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
 -spec put_binary(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 put_binary(ReqArg, #state{filepath = Filepath} = State) ->
-    {Content, Req} = cowboy_req:header(<<"content-type">>, ReqArg, ?mimetype_default_value),
+    % prepare request data
+    {Content, Req0} = cowboy_req:header(<<"content-type">>, ReqArg, ?mimetype_default_value),
+    {CdmiPartialFlag, Req} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
     {Mimetype, Encoding} = parse_content(Content),
+
     case logical_files_manager:create(Filepath) of
         ok ->
             update_mimetype(Filepath, Mimetype),
@@ -305,14 +308,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
         create ->
             case OperationAns of
                 ok ->
-                    WriteAns =
-                        case Range of
-                            {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
-                                logical_files_manager:write(Filepath, From, RawValue);
-                            undefined -> logical_files_manager:write(Filepath, RawValue);
-                            _ -> throw({?invalid_range, Range})
-                        end,
-                    case WriteAns of
+                    case logical_files_manager:write(Filepath, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             update_completion_status(Filepath, <<"Processing">>);
                         {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES ->
@@ -320,7 +316,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                             throw(?forbidden);
                         Error ->
                             logical_files_manager:delete(Filepath),
-                            throw({?write_object_unknown_error, Error})
+                            throw({?write_object_unknown_error, Error}) %todo handle create file forbidden
                     end;
                 {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> throw(?forbidden);
                 Error1 -> throw({?put_container_unknown_error, Error1})
