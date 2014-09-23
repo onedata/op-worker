@@ -11,9 +11,11 @@
 %% ===================================================================
 -module(cdmi_object).
 
+-include("registered_names.hrl").
 -include("veil_modules/control_panel/cdmi.hrl").
 -include("veil_modules/control_panel/cdmi_capabilities.hrl").
 -include("veil_modules/control_panel/cdmi_object.hrl").
+-include("veil_modules/control_panel/cdmi_error.hrl").
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
@@ -53,7 +55,7 @@ resource_exists(Req, State = #state{filepath = Filepath}) ->
         {ok, #fileattributes{type = "REG"} = Attr} -> {true, Req, State#state{attributes = Attr}};
         {ok, _} ->
             Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath++"/"), Req),
-            cdmi_error:error_reply(Req1,State,?moved_pemanently_code, "Filepath '~s' poins to directory but does not end with '/'",[Filepath]);
+            cdmi_error:error_reply(Req1, State, {?moved_permanently, Filepath});
         _ -> {false, Req, State}
     end.
 
@@ -106,7 +108,7 @@ content_types_accepted(Req, State) ->
 delete_resource(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:delete(Filepath) of
         ok -> {true, Req, State};
-        Error -> cdmi_error:error_reply(Req, State, ?error_bad_request_code, "Deleting cdmi object end up with error: ~p",[Error])
+        Error -> cdmi_error:error_reply(Req, State, {?file_delete_unknown_error,Error})
     end.
 
 %% ====================================================================
@@ -131,7 +133,7 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
 
     % return bad request if Range is invalid
     case Ranges of
-        invalid -> cdmi_error:error_reply(Req1,State,?error_bad_request_code,"Invalid range: ~p",[RawRange]);
+        invalid -> cdmi_error:error_reply(Req1, State, {?invalid_range, RawRange});
         _ ->
             % prepare data size and stream function
             StreamSize = lists:foldl(fun({From, To}, Acc) when To >= From -> Acc + To - From + 1 end, 0, Ranges),
@@ -139,7 +141,7 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
             StreamFun = fun(Socket, Transport) ->
                 try
                     fslogic_context:set_user_context(Context),
-                    {ok, BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
+                    {ok, BufferSize} = application:get_env(?APP_Name, control_panel_download_buffer),
                     lists:foreach(fun(Rng) ->
                         stream_file(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
                 catch Type:Message ->
@@ -191,7 +193,7 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
                 try
                     fslogic_context:set_user_context(Context),
                     Transport:send(Socket,JsonBodyPrefix),
-                    {ok,BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
+                    {ok,BufferSize} = application:get_env(?APP_Name, control_panel_download_buffer),
                     stream_file(Socket, Transport, State, Range, Encoding, BufferSize),
                     Transport:send(Socket,JsonBodySuffix)
                 catch Type:Message ->
@@ -236,11 +238,11 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
                             write_body_to_file(Req2, State, From, false);
                         _ ->
-                            cdmi_error:error_reply(Req2, State, ?error_bad_request_code, "Invalid range: ~p", [RawRange])
+                            cdmi_error:error_reply(Req2, State, {?invalid_range, RawRange})
                     end
             end;
         Error ->
-            cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Creating cdmi object end up with error: ~p", [Error])
+            cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error}) %todo handle creation forbidden error
     end.
 
 %% put_cdmi_object/2
@@ -255,6 +257,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
     Body = rest_utils:parse_body(RawBody),
     RequestedMimetype = proplists:get_value(<<"mimetype">>, Body),
     RequestedValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body),
+    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
     ValueTransferEncoding = case RequestedValueTransferEncoding of undefined -> <<"utf-8">>; _ -> RequestedValueTransferEncoding end,
     Value = proplists:get_value(<<"value">>, Body),
     Range = case lists:keyfind(<<"value">>, 1, Opts) of
@@ -271,38 +274,41 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo r
                         {ok,Attrs} ->
                             update_encoding(Filepath, RequestedValueTransferEncoding),
                             update_mimetype(Filepath, RequestedMimetype),
+                            cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata),
                             Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
                             Req2 = cowboy_req:set_resp_body(Response, Req1),
                             {true, Req2, State};
                         Error ->
                             logical_files_manager:delete(Filepath),
-                            cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Getting attributes end up with error: ~p",Error)
+                            cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error})
                     end;
                 Error ->
                     logical_files_manager:delete(Filepath),
-                    cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
+                    cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error}) %todo handle create file forbidden
             end;
         {error, file_exists} ->
             update_encoding(Filepath, RequestedValueTransferEncoding),
             update_mimetype(Filepath, RequestedMimetype),
+            URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
+            cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
             case Range of
                 {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
                     case logical_files_manager:write(Filepath, From, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             {true, Req1, State};
-                        Error -> cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p",Error)
+                        Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error}) %todo handle write file forbidden
                     end;
                 undefined when is_binary(Value) ->
                     logical_files_manager:truncate(Filepath, 0),
                     case logical_files_manager:write(Filepath, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             {true, Req1, State};
-                        Error -> cdmi_error:error_reply(Req1,State,?error_forbidden_code,"Writing to cdmi object end up with error: ~p", Error)
+                        Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error}) %todo handle write file forbidden
                     end;
                 undefined -> {true, Req1, State};
-                _ -> cdmi_error:error_reply(Req1, State, ?error_bad_request_code, "Updating cdmi object end up with error",[])
+                MalformedRange -> cdmi_error:error_reply(Req1, State, {?invalid_range, MalformedRange})
             end;
-        Error -> cdmi_error:error_reply(Req1, State, ?error_forbidden_code, "Creating cdmi object end up with error: ~p",[Error])
+        Error -> cdmi_error:error_reply(Req1, State, {?put_object_unknown_error, Error})
     end.
 
 %% ====================================================================
@@ -340,10 +346,10 @@ prepare_object_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"mimetype">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"mimetype">>, get_mimetype(Filepath)} | prepare_object_ans(Tail, State)];
-prepare_object_ans([<<"metadata">> | Tail], #state{attributes = Attrs} = State) ->
-    [{<<"metadata">>, rest_utils:prepare_metadata(Attrs)} | prepare_object_ans(Tail, State)];
-prepare_object_ans([{<<"metadata">>, Prefix} | Tail], #state{attributes = Attrs} = State) ->
-    [{<<"metadata">>, rest_utils:prepare_metadata(Prefix, Attrs)} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"metadata">> | Tail], #state{filepath = Filepath, attributes = Attrs} = State) ->
+    [{<<"metadata">>, cdmi_metadata:prepare_metadata(Filepath, Attrs)} | prepare_object_ans(Tail, State)];
+prepare_object_ans([{<<"metadata">>, Prefix} | Tail], #state{filepath = Filepath, attributes = Attrs} = State) ->
+    [{<<"metadata">>, cdmi_metadata:prepare_metadata(Filepath, Prefix, Attrs)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"valuetransferencoding">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"valuetransferencoding">>, get_encoding(Filepath)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"value">> | Tail], State) ->
@@ -383,12 +389,12 @@ write_body_to_file(Req, #state{filepath = Filepath} = State, Offset, RemoveIfFai
                 more -> write_body_to_file(Req1, State, Offset + Bytes);
                 ok -> {true, Req1, State}
             end;
-        Error ->
+        Error -> %todo handle write file forbidden
             case RemoveIfFails of
                 true -> logical_files_manager:delete(Filepath);
                 false -> ok
             end,
-            cdmi_error:error_reply(Req1, State, ?error_forbidden_code, "Writing to cdmi object end up with error: ~p", [Error])
+            cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error})
     end.
 
 %% stream_file/6
@@ -435,7 +441,7 @@ decode(undefined,_Encoding) ->
     <<>>;
 decode(Data, Encoding) when Encoding =:= <<"base64">> ->
     try base64:decode(Data)
-    catch _:_ -> throw(invalid_base64)
+    catch _:_ -> throw(?invalid_base64)
     end;
 decode(Data, _) ->
     Data.

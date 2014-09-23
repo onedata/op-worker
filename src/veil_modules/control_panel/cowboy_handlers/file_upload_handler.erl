@@ -285,7 +285,7 @@ write_to_file(Binary, FullPath) ->
 -spec get_upload_buffer_size() -> integer().
 %% ====================================================================
 get_upload_buffer_size() ->
-    _Size = case application:get_env(veil_cluster_node, control_panel_upload_buffer) of
+    _Size = case application:get_env(?APP_Name, control_panel_upload_buffer) of
                 {ok, Value} ->
                     Value;
                 _ ->

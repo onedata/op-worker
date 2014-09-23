@@ -34,7 +34,7 @@ init(_Type, Req, _Opts) ->
 %% ====================================================================
 handle(Req, State) ->
     %get data from ccm and env
-    {ok, Timeout} = application:get_env(veil_cluster_node, nagios_healtcheck_timeout),
+    {ok, Timeout} = application:get_env(?APP_Name, nagios_healtcheck_timeout),
     {Nodes, Workers, StateNum, CStateNum, CcmConnError} = get_data_from_ccm(Timeout),
 
     %check workers
@@ -109,7 +109,7 @@ get_data_from_ccm(Timeout) ->
 %% returns xmerl simple_xml output describing node health status. If state numbers don't match - assume "initializing"
 %% @end
 -spec node_status(Node :: atom(), CcmStateNum :: integer(), CcmCStateNum :: integer(), Timeout :: integer()) -> Result when
-    Result :: {veil_cluster_node, Attrs :: list(Atribute), []},
+    Result :: {?APP_Name, Attrs :: list(Atribute), []},
     Atribute :: {Name :: atom(), Value :: string()}.
 %% ====================================================================
 node_status(Node, CcmStateNum, CcmCStateNum, Timeout) ->
@@ -124,20 +124,20 @@ node_status(Node, CcmStateNum, CcmCStateNum, Timeout) ->
         AllStateNumbersOk = (CcmStateNum == DispStateNum) and (CcmCStateNum == DispCStateNum) and (CcmStateNum == ManagerStateNum) and (CcmCStateNum == ManagerCStateNum),
         case AllStateNumbersOk of
             true ->
-                {veil_cluster_node, [{name, atom_to_list(Node)}, {status, "ok"}], []};
+                {?APP_Name, [{name, atom_to_list(Node)}, {status, "ok"}], []};
             false ->
                 %log
                 ?warning("Healthcheck on node ~p, callbacks/state number of ccm doesn't match values from node_manager", [Node]),
                 ?warning("ccm_state_num: ~p, ccm_callback_num: ~p,disp_state_num: ~p, disp_callback_num: ~p,manager_state_num: ~p, manager_callback_num: ~p",
                     [CcmStateNum, CcmCStateNum, DispStateNum, DispCStateNum, ManagerStateNum, ManagerCStateNum]),
                 %return
-                {veil_cluster_node, [{name, atom_to_list(Node)}, {status, "out_of_sync"}], []}
+                {?APP_Name, [{name, atom_to_list(Node)}, {status, "out_of_sync"}], []}
         end
     catch
         Type:Error ->
             ?error("Node ~p connection error: ~p:~p", [Node, Type, Error]),
             ErrorString2 = io_lib:format("~p", [{error, Error}]),
-            {veil_cluster_node, [{name, atom_to_list(Node)}, {status, ErrorString2}], []}
+            {?APP_Name, [{name, atom_to_list(Node)}, {status, ErrorString2}], []}
     end.
 
 %% worker_status/2

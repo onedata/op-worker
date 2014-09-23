@@ -22,14 +22,14 @@
 -export([main/0, event/1]).
 
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
+main() -> #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
 
 %% Page title
 title() -> <<"Login page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    DisableThisPage = case application:get_env(veil_cluster_node, developer_mode) of
+    DisableThisPage = case application:get_env(?APP_Name, developer_mode) of
                           {ok, true} -> false;
                           _ -> true
                       end,
@@ -59,7 +59,7 @@ body() ->
                                 page_error:redirect_with_error(?error_openid_login_error);
                             {ok, Proplist} ->
                                 % If a user logs in directly via PLGrid Openid, then mock spaces synchronization
-                                case application:get_env(veil_cluster_node, spaces_mocked) of
+                                case application:get_env(?APP_Name, spaces_mocked) of
                                     {ok, true} ->
                                         % But dont do it twice
                                         ok;
@@ -108,7 +108,7 @@ event(terminate) -> ok.
 mock(NodesUp, Module, Method, Fun) ->
     meck:new(Module, [passthrough, non_strict, unstick, no_link]),
     meck:expect(Module, Method, Fun),
-    application:set_env(veil_cluster_node, spaces_mocked, true),
+    application:set_env(?APP_Name, spaces_mocked, true),
     {_, []} = rpc:multicall(NodesUp, meck, new, [Module, [passthrough, non_strict, unstick, no_link]]),
     {_, []} = rpc:multicall(NodesUp, meck, expect, [Module, Method, Fun]),
-    {_, []} = rpc:multicall(application, set_env, [veil_cluster_node, spaces_mocked, true]).
+    {_, []} = rpc:multicall(application, set_env, [?APP_Name, spaces_mocked, true]).

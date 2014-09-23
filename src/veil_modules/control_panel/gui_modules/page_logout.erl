@@ -18,14 +18,14 @@
 -export([main/0, event/1]).
 
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
+main() -> #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
 
 %% Page title
 title() -> <<"Logout page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    case application:get_env(veil_cluster_node, developer_mode) of
+    case application:get_env(?APP_Name, developer_mode) of
         {ok, true} -> body_devel();
         _ -> body_production()
     end.
@@ -35,7 +35,7 @@ body() ->
 body_production() ->
     Params = gui_ctx:form_params(),
     LogoutToken = vcn_gui_utils:get_logout_token(),
-    {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
+    {ok, GlobalRegistryHostname} = application:get_env(?APP_Name, global_registry_hostname),
     case proplists:get_value(?logout_token, Params) of
         LogoutToken ->
             ?debug("User ~p logged out", [gui_ctx:get_user_id()]),
