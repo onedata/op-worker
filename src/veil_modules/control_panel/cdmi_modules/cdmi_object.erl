@@ -294,7 +294,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                 case logical_files_manager:exists(Filepath) of
                     true -> {update, ok};
                     false -> {create, logical_files_manager:create(Filepath)};
-                    Error_ -> {update, Error_}
+                    Error_ -> {create, Error_}
                 end;
             {undefined, MoveURI} -> {move, logical_files_manager:mv(binary_to_list(MoveURI),Filepath)};
             {_CopyURI, undefined} -> {copy, unimplemented}
@@ -305,7 +305,14 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
         create ->
             case OperationAns of
                 ok ->
-                    case logical_files_manager:write(Filepath, RawValue) of
+                    WriteAns =
+                        case Range of
+                            {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
+                                logical_files_manager:write(Filepath, From, RawValue);
+                            undefined -> logical_files_manager:write(Filepath, RawValue);
+                            _ -> throw({?invalid_range, Range})
+                        end,
+                    case WriteAns of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             update_completion_status(Filepath, <<"Processing">>);
                         {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES ->
@@ -313,8 +320,9 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                             throw(?forbidden);
                         Error ->
                             logical_files_manager:delete(Filepath),
-                            throw({?write_object_unknown_error, Error}) %todo handle create file forbidden
+                            throw({?write_object_unknown_error, Error})
                     end;
+                {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> throw(?forbidden);
                 Error1 -> throw({?put_container_unknown_error, Error1})
             end,
 
@@ -346,6 +354,10 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                         Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error})
                     end;
                 undefined when is_binary(Value) ->
+                    case CdmiPartialFlag of
+                        <<"true">> -> throw(?creation_conflict_error);
+                        _ -> ok
+                    end,
                     logical_files_manager:truncate(Filepath, 0),
                     case logical_files_manager:write(Filepath, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->

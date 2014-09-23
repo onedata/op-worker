@@ -91,6 +91,8 @@ error_value(?parent_not_found) ->
 
 error_value(?put_container_conflict) ->
     [?error_conflict_code, [{<<"PutContainerError">>, <<"Container already exists">>}], "Dir already exists", [], debug];
+error_value(?creation_conflict_error) ->
+    [?error_conflict_code, [{<<"WriteInConflictError">>, <<"Object is in creation process. Specify write range and X-CDMI-Partial flag.">>}], "Object is in creation process", [], debug];
 
 error_value({?get_attr_unknown_error, Error}) ->
     [?error_internal_code, [{<<"GetAttributesError">>, <<"Get attributes unknown error">>}], "Getting attributes end up with error: ~p", [Error], error];

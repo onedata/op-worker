@@ -999,8 +999,8 @@ partial_upload_test(_Config) ->
     ?assert(not object_exists(FileName)),
 
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}, {"X-CDMI-Partial", "true"}],
-    RequestBody1 = rest_utils:encode_to_json([{<<"value">>, Chunk1}]),
-    {Code1, _Headers1, Response1} = do_request(FileName, put, RequestHeaders1, RequestBody1),
+    RequestBody1 = rest_utils:encode_to_json([{<<"value">>, base64:encode(Chunk1)}]),
+    {Code1, _Headers1, Response1} = do_request(FileName ++ "?value:0-3", put, RequestHeaders1, RequestBody1),
     ?assertEqual("201",Code1),
     {struct, CdmiResponse1} = mochijson2:decode(Response1),
     ?assertEqual(<<"Processing">>, proplists:get_value(<<"completionStatus">>, CdmiResponse1)),
