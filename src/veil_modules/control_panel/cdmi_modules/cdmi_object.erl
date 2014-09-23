@@ -226,12 +226,14 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
     {CdmiPartialFlag, Req} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
     {Mimetype, Encoding} = parse_content(Content),
 
-    case logical_files_manager:create(Filepath) of
+    Ans = case logical_files_manager:create(Filepath) of
         ok ->
+            update_completion_status(Filepath, <<"Processing">>),
             update_mimetype(Filepath, Mimetype),
             update_encoding(Filepath, Encoding),
             write_body_to_file(Req, State, 0);
         {error, file_exists} ->
+            update_completion_status(Filepath, <<"Processing">>),
             update_mimetype(Filepath, Mimetype),
             update_encoding(Filepath, Encoding),
             {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
@@ -239,9 +241,15 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
                 undefined ->
                     case logical_files_manager:truncate(Filepath, 0) of
                         ok -> ok;
-                        {logical_file_system_error, ?VEPERM} -> throw(?forbidden);
-                        {logical_file_system_error, ?VEACCES} -> throw(?forbidden);
-                        Error -> throw({?put_object_unknown_error, Error})
+                        {logical_file_system_error, ?VEPERM} ->
+                            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                            throw(?forbidden);
+                        {logical_file_system_error, ?VEACCES} ->
+                            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                            throw(?forbidden);
+                        Error ->
+                            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                            throw({?put_object_unknown_error, Error})
                     end,
                     write_body_to_file(Req1, State, 0, false);
                 _ ->
@@ -255,9 +263,10 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
             end;
         {logical_file_system_error, ?VEPERM} -> cdmi_error:error_reply(Req, State, ?forbidden);
         {logical_file_system_error, ?VEACCES} -> cdmi_error:error_reply(Req, State, ?forbidden);
-        Error ->
-            cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error})
-    end.
+        Error -> cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error})
+    end,
+    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+    Ans.
 
 %% put_cdmi_object/2
 %% ====================================================================
@@ -308,9 +317,10 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
         create ->
             case OperationAns of
                 ok ->
+                    update_completion_status(Filepath, <<"Processing">>),
                     case logical_files_manager:write(Filepath, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                            update_completion_status(Filepath, <<"Processing">>);
+                            ok;
                         {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES ->
                             logical_files_manager:delete(Filepath),
                             throw(?forbidden);
@@ -337,43 +347,43 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error2})
             end;
         update ->
+            update_completion_status(Filepath, <<"Processing">>),
             update_encoding(Filepath, RequestedValueTransferEncoding),
             update_mimetype(Filepath, RequestedMimetype),
             cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
             case Range of
                 {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
-                    case logical_files_manager:write(Filepath, From, RawValue) of
-                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
-                            {true, Req1, State};
+                    WriteAns = logical_files_manager:write(Filepath, From, RawValue),
+                    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                    case WriteAns of
+                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) -> {true, Req1, State};
                         {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> cdmi_error:error_reply(Req, State, ?forbidden);
                         Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error})
                     end;
                 undefined when is_binary(Value) ->
-                    case CdmiPartialFlag of
-                        <<"true">> -> throw(?creation_conflict_error);
-                        _ -> ok
-                    end,
                     logical_files_manager:truncate(Filepath, 0),
-                    case logical_files_manager:write(Filepath, RawValue) of
-                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
-                            {true, Req1, State};
+                    WriteAns = logical_files_manager:write(Filepath, RawValue),
+                    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                    case WriteAns of
+                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) -> {true, Req1, State};
                         {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> cdmi_error:error_reply(Req, State, ?forbidden);
                         Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error})
                     end;
                 undefined ->
                     set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
                     {true, Req1, State};
-                MalformedRange -> cdmi_error:error_reply(Req1, State, {?invalid_range, MalformedRange})
+                MalformedRange ->
+                    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                    cdmi_error:error_reply(Req1, State, {?invalid_range, MalformedRange})
             end;
         Other when Other =:= move orelse Other =:= copy ->
             case OperationAns of
                 ok ->
+                    update_completion_status(Filepath, <<"Processing">>),
                     update_encoding(Filepath, RequestedValueTransferEncoding),
                     update_mimetype(Filepath, RequestedMimetype),
                     cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
-                    update_completion_status(Filepath, <<"Complete">>),
+                    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
                     {true, Req1, State};
                 Error -> cdmi_error:error_reply(Req, State, {?put_container_unknown_error, Error})
             end
@@ -542,13 +552,12 @@ parse_byte_range(#state{attributes = #fileattributes{size = Size}} = State, [Fir
     Range = case binary:split(First, <<"-">>, [global]) of
                 [<<>>, FromEnd] -> {max(0, Size - binary_to_integer(FromEnd)), Size - 1};
                 [From, <<>>] -> {binary_to_integer(From), Size - 1};
-                [From_, To] -> {binary_to_integer(From_), min(Size - 1, binary_to_integer(To))};
+                [From_, To] -> {binary_to_integer(From_), binary_to_integer(To)};
                 _ -> [invalid]
             end,
     case Range of
         [invalid] -> [invalid];
         {Begin, End} when Begin > End -> [invalid];
-        {Begin_, _End} when Begin_ > Size -> parse_byte_range(State, Rest); % range is unsatisfiable and we ignore it
         ValidRange -> [ValidRange | parse_byte_range(State, Rest)]
     end.
 

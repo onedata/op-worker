@@ -991,6 +991,7 @@ copy_move_test(_Config) ->
 % tests cdmi and non-cdmi partial upload feature (requests with x-cdmi-partial flag set to true)
 partial_upload_test(_Config) ->
     FileName = "partial.txt",
+    FileName2 = "partial2.txt",
     Chunk1 = <<"some">>,
     Chunk2 = <<"_">>,
     Chunk3 = <<"value">>,
@@ -1020,8 +1021,37 @@ partial_upload_test(_Config) ->
     {struct, CdmiResponse4} = mochijson2:decode(Response4),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse4)),
     ?assertEqual(<<"utf-8">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse4)),
-    ?assertEqual(<<Chunk1/binary, Chunk2/binary, Chunk3/binary>>, proplists:get_value(<<"value">>, CdmiResponse4)).
+    ?assertEqual(<<Chunk1/binary, Chunk2/binary, Chunk3/binary>>, proplists:get_value(<<"value">>, CdmiResponse4)),
     %%------------------------------
+
+    %%----- non cdmi partial -------
+    ?assert(not object_exists(FileName2)),
+
+    RequestHeaders5 = [{"X-CDMI-Partial", "true"}],
+    {Code5, _Headers5, _Response5} = do_request(FileName2, put, RequestHeaders5, Chunk1),
+    ?assertEqual("201",Code5),
+
+    {Code5_1, _Headers5_1, Response5_1} = do_request(FileName2 ++ "?completionStatus", get, RequestHeaders4, Chunk1),
+    {struct, CdmiResponse5_1} = mochijson2:decode(Response5_1),
+    ?assertEqual("200",Code5_1),
+    ?assertEqual(<<"Processing">>, proplists:get_value(<<"completionStatus">>, CdmiResponse5_1)),
+
+    RequestHeaders6 = [{"content-range", "4-4"}, {"X-CDMI-Partial", "true"}],
+    {Code6, _Headers6, _Response6} = do_request(FileName2, put, RequestHeaders6, Chunk2),
+    ?assertEqual("204",Code6),
+
+    RequestHeaders7 = [{"content-range", "5-9"}, {"X-CDMI-Partial", "false"}],
+    {Code7, _Headers7, _Response7} = do_request(FileName2, put, RequestHeaders7, Chunk3),
+    ?assertEqual("204",Code7),
+
+    RequestHeaders8 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code8, _Headers8, Response8} = do_request(FileName2, get, RequestHeaders8, []),
+    ?assertEqual("200",Code8),
+    {struct, CdmiResponse8} = mochijson2:decode(Response8),
+    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse8)),
+    ?assertEqual(<<Chunk1/binary, Chunk2/binary, Chunk3/binary>>, base64:decode(proplists:get_value(<<"value">>, CdmiResponse8))).
+    %%------------------------------
+
 
 %% ====================================================================
 %% SetUp and TearDown functions

@@ -31,11 +31,11 @@
 -define(group_dir_delete, group_dir_delete).
 -define(forbidden, forbidden).
 
--define(creation_conflict_error, creation_conflict_error).
-
 -define(not_found, not_found).
 -define(parent_not_found, parent_not_found).
+
 -define(put_container_conflict, put_container_conflict).
+
 -define(get_attr_unknown_error, get_attr_unknown_error).
 -define(file_delete_unknown_error, file_delete_unknown_error).
 -define(put_container_unknown_error, put_container_unknown_error).
