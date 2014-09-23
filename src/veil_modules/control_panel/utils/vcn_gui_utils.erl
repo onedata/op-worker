@@ -15,7 +15,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 % Functions connected with user's session
--export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0, can_view_monitoring/0]).
+-export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0]).
 
 % Saving and retrieving information that does not change during one session
 -export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0, gen_logout_token/0, set_logout_token/1, get_logout_token/0,
@@ -187,26 +187,6 @@ dn_and_storage_defined() ->
     (get_user_dn() /= undefined) and storage_defined().
 
 
-%% can_view_logs/0
-%% ====================================================================
-%% @doc Determines if current user is allowed to view cluster logs.
-%% @end
--spec can_view_logs() -> boolean().
-%% ====================================================================
-can_view_logs() ->
-    get_user_role() /= user.
-
-
-%% can_view_monitoring/0
-%% ====================================================================
-%% @doc Determines if current user is allowed to view cluster monitoring.
-%% @end
--spec can_view_monitoring() -> boolean().
-%% ====================================================================
-can_view_monitoring() ->
-    get_user_role() /= user.
-
-
 %% maybe_redirect/3
 %% ====================================================================
 %% @doc Decides if user can view the page, depending on arguments.
@@ -299,29 +279,6 @@ top_menu(ActiveTabID) ->
 -spec top_menu(ActiveTabID :: any(), SubMenuBody :: any()) -> list().
 %% ====================================================================
 top_menu(ActiveTabID, SubMenuBody) ->
-    CanViewLogs = can_view_logs(),
-    LogsCaptions = case CanViewLogs of
-                       true -> [
-                           #li{body = #link{url = "/cluster_logs", body = "Cluster logs"}},
-                           #li{body = #link{url = "/client_logs", body = "Client logs"}}
-                       ];
-                       _ -> []
-                   end,
-
-    CanViewMonitoring = can_view_monitoring(),
-    MonitoringCaption = case CanViewMonitoring of
-                            true -> [#li{body = #link{url = "/monitoring", body = "Monitoring"}}];
-                            _ -> []
-                        end,
-
-    AdministrationURL = case CanViewLogs of
-                            true -> "/cluster_logs";
-                            _ -> case CanViewMonitoring of
-                                     true -> "/monitoring";
-                                     _ -> "javascript:void(0);"
-                                 end
-                        end,
-
     MenuCaptions =
         [
             {brand_tab, #li{body = #link{style = <<"padding: 18px;">>, url = "/",
@@ -345,14 +302,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
                     #li{body = #link{url = "/tokens", body = "Tokens"}}
                 ]}
             ]}}
-        ] ++ case CanViewLogs orelse CanViewMonitoring of
-                 true ->
-                     [{administration_tab, #li{body = [
-                         #link{style = "padding: 18px;", url = AdministrationURL, body = "Administration"},
-                         #list{style = "top: 37px; width: 120px;", body = LogsCaptions ++ MonitoringCaption}
-                     ]}}];
-                 _ -> []
-             end,
+        ],
 
     MenuIcons =
         [
@@ -383,8 +333,6 @@ top_menu(ActiveTabID, SubMenuBody) ->
                     ]
                 }}
             }
-%%                 #li{body = #link{style = <<"padding: 18px;">>, title = <<"Log out">>,
-%%                 url = <<"/logout">>, body = #span{class = <<"fui-power">>}}}}
         ],
 
     MenuCaptionsProcessed = lists:map(
