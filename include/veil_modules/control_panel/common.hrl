@@ -12,6 +12,9 @@
 -ifndef(CONTROL_PANEL_COMMON_HRL).
 -define(CONTROL_PANEL_COMMON_HRL, 1).
 
+
+-include("registered_names.hrl").
+
 %% Include common gui hrl from ctool
 -include_lib("ctool/include/gui/common.hrl").
 -include_lib("dao/include/common.hrl").

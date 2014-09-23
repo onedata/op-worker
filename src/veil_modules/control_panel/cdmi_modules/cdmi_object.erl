@@ -11,6 +11,7 @@
 %% ===================================================================
 -module(cdmi_object).
 
+-include("registered_names.hrl").
 -include("veil_modules/control_panel/cdmi.hrl").
 -include("veil_modules/control_panel/cdmi_capabilities.hrl").
 -include("veil_modules/control_panel/cdmi_object.hrl").
@@ -140,7 +141,7 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
             StreamFun = fun(Socket, Transport) ->
                 try
                     fslogic_context:set_user_context(Context),
-                    {ok, BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
+                    {ok, BufferSize} = application:get_env(?APP_Name, control_panel_download_buffer),
                     lists:foreach(fun(Rng) ->
                         stream_file(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
                 catch Type:Message ->
@@ -192,7 +193,7 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
                 try
                     fslogic_context:set_user_context(Context),
                     Transport:send(Socket,JsonBodyPrefix),
-                    {ok,BufferSize} = application:get_env(veil_cluster_node, control_panel_download_buffer),
+                    {ok,BufferSize} = application:get_env(?APP_Name, control_panel_download_buffer),
                     stream_file(Socket, Transport, State, Range, Encoding, BufferSize),
                     Transport:send(Socket,JsonBodySuffix)
                 catch Type:Message ->

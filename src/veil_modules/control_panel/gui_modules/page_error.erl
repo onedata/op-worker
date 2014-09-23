@@ -19,7 +19,7 @@
 -export([redirect_with_error/1, generate_redirect_request/2]).
 
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
+main() -> #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
 
 %% Page title
 title() -> <<"Error">>.

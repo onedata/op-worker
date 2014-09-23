@@ -283,7 +283,7 @@ stream_file(Socket, Transport, Filename, Size, BytesSent, BufferSize) ->
 -spec get_download_buffer_size() -> integer().
 %% ====================================================================
 get_download_buffer_size() ->
-    _Size = case application:get_env(veil_cluster_node, control_panel_download_buffer) of
+    _Size = case application:get_env(?APP_Name, control_panel_download_buffer) of
                 {ok, Value} ->
                     Value;
                 _ ->

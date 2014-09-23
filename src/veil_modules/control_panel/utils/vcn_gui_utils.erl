@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains useful functions commonly used in
-%% veil_cluster_node GUI modules.
+%% GUI modules.
 %% @end
 %% ===================================================================
 
