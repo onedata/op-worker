@@ -20,10 +20,16 @@
 % Postback functions and other
 -export([get_requested_hostname/0, comet_loop/1]).
 -export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
--export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0]).
--export([rename_item/2, create_directory/1, remove_selected/0, search/1, show_popup/1, hide_popup/0, path_navigator_body/1]).
+-export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0, confirm_paste/0]).
+-export([rename_item/2, create_directory/1, remove_selected/0, search/1, toggle_column/2, show_popup/1, hide_popup/0, path_navigator_body/1]).
 -export([fs_list_dir/1, fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
 
+
+% All file attributes that are supported
+-define(ALL_ATTRIBUTES, [mode, size, atime, mtime]).
+
+% Attributes displayed by default
+-define(DEFAULT_ATTRIBUTES, [size, atime, mtime]).
 
 % How often should comet process check for changes in current dir
 -define(AUTOREFRESH_PERIOD, 1000).
@@ -54,6 +60,7 @@ title() -> <<"File manager">>.
 %% This will be placed in the template instead of {{body}} tag
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
+    gui_jq:wire(#api{name = "confirm_paste", tag = "confirm_paste"}, false),
     Body = [
         #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
@@ -66,7 +73,8 @@ body() ->
 
 %% This will be placed in the template instead of {{custom}} tag
 custom() ->
-    <<"<script src='/js/veil_upload.js' type='text/javascript' charset='utf-8'></script>">>.
+    <<"<script src='/js/veil_upload.js' type='text/javascript' charset='utf-8'></script>\n",
+    "    <script src=\"/js/bootbox.min.js\"></script>">>.
 
 % Submenu that will be glued below the top menu
 manager_submenu() ->
@@ -77,7 +85,7 @@ manager_submenu() ->
                 tool_button_and_dummy(<<"tb_up_one_level">>, <<"Up one level">>, <<"padding: 10px 7px 10px 15px;">>,
                     <<"fui-arrow-left">>, {action, up_one_level})},
                 #panel{class = <<"breadcrumb-text breadcrumb-background">>, style = <<"overflow: hidden; margin-left: 15px;">>, body = [
-                    #p{id = <<"path_navigator">>, class = <<"breadcrumb-content">>, body = <<"~/">>}
+                    #p{id = <<"path_navigator">>, class = <<"breadcrumb-content">>, body = <<"~">>}
                 ]},
                 #panel{class = <<"control-group">>, style = <<"position: absolute; right: 15px; top: 0;">>, body = [
                     #panel{class = <<"input-append">>, style = <<"; margin-bottom: 0px;">>, body = [
@@ -105,8 +113,10 @@ manager_submenu() ->
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
                 tool_button_and_dummy(<<"tb_rename">>, <<"Rename">>, <<"padding: 18px 14px;">>,
                     <<"fui-new">>, {action, show_popup, [rename_item]}) ++
-                tool_button_and_dummy(<<"tb_remove">>, <<"Remove">>, <<"padding: 18px 14px;">>,
-                    <<"fui-trash">>, {action, show_popup, [remove_selected]})
+                    tool_button_and_dummy(<<"tb_chmod">>, <<"Change mode">>, <<"padding: 18px 14px;">>,
+                        <<"fui-lock">>, {action, show_popup, [chmod]}) ++
+                    tool_button_and_dummy(<<"tb_remove">>, <<"Remove">>, <<"padding: 18px 14px;">>,
+                        <<"fui-trash">>, {action, show_popup, [remove_selected]})
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
                 tool_button_and_dummy(<<"tb_cut">>, <<"Cut">>, <<"padding: 18px 14px;">>,
@@ -202,7 +212,10 @@ wire_enter(ID, ButtonToClickID) ->
 
 %% Handling events
 api_event("escape_pressed", _, _) ->
-    event({action, hide_popup}).
+    event({action, hide_popup});
+
+api_event("confirm_paste", _, _) ->
+    event({action, confirm_paste}).
 
 
 event(init) ->
@@ -253,7 +266,6 @@ comet_loop_init(UserId, GRUID, UserAccessToken, RequestedHostname) ->
     set_working_directory(<<"/">>),
     set_selected_items([]),
     set_display_style(list),
-    set_displayed_file_attributes([size, atime, mtime]),
     set_sort_by(name),
     set_sort_ascending(true),
     set_item_counter(1),
@@ -428,6 +440,7 @@ refresh_tool_buttons() ->
     enable_tool_button(<<"tb_up_one_level">>, get_working_directory() /= <<"/">>),
     enable_tool_button(<<"tb_share_file">>, (Count =:= 1) andalso (not IsDir)),
     enable_tool_button(<<"tb_rename">>, Count =:= 1),
+    enable_tool_button(<<"tb_chmod">>, Count > 0),
     enable_tool_button(<<"tb_remove">>, Count > 0),
     enable_tool_button(<<"tb_cut">>, Count > 0),
     enable_tool_button(<<"tb_copy">>, false),
@@ -519,14 +532,27 @@ put_to_clipboard(Type) ->
 
 
 paste_from_clipboard() ->
+    [{FirstPath, _} | _] = get_clipboard_items(),
+    % Check if mv is between different spaces
+    case is_the_same_space(FirstPath, get_working_directory()) of
+        false ->
+            gui_jq:confirm_popup(<<"Do you really want to move your file(s) between spaces and ",
+            "share them with all members of the target space?">>, <<"confirm_paste();">>);
+        true ->
+            confirm_paste()
+    end.
+
+
+confirm_paste() ->
     ClipboardItems = get_clipboard_items(),
     ClipboardType = get_clipboard_type(),
+    WorkingDirectory = get_working_directory(),
     clear_clipboard(),
     ErrorMessage = lists:foldl(
         fun({Path, Basename}, Acc) ->
             case ClipboardType of
                 cut ->
-                    case fs_mv(Path, get_working_directory()) of
+                    case fs_mv(Path, WorkingDirectory) of
                         ok ->
                             Acc;
                         {logical_file_system_error, "eperm"} ->
@@ -540,7 +566,7 @@ paste_from_clipboard() ->
                     end;
                 copy ->
                     % Not yet implemented
-                    fs_copy(Path, get_working_directory()),
+                    fs_copy(Path, WorkingDirectory),
                     Acc
             end
         end, <<"">>, ClipboardItems),
@@ -626,6 +652,17 @@ search(SearchString) ->
     end.
 
 
+toggle_column(Attr, Flag) ->
+    DisplayedAttrs = get_displayed_file_attributes(),
+    case Flag of
+        true ->
+            set_displayed_file_attributes(DisplayedAttrs ++ [Attr]);
+        false ->
+            set_displayed_file_attributes(DisplayedAttrs -- [Attr])
+    end,
+    refresh_workspace().
+
+
 % Shows popup with a prompt, form, etc.
 show_popup(Type) ->
     {FooterBody, Script, CloseButtonAction} =
@@ -687,6 +724,77 @@ show_popup(Type) ->
                                 {Body, FocusScript, {action, hide_popup}}
                         end
                 end;
+
+            chmod ->
+                [{FirstItem, _} | Items] = get_selected_items(),
+                CurrentMode = lists:foldl(
+                    fun({ItemPath, _}, Acc) ->
+                        case item_attr(mode, item_find(ItemPath)) of
+                            Acc -> Acc;
+                            _ -> 0
+                        end
+                    end, item_attr(mode, item_find(FirstItem)), Items),
+                ?dump(CurrentMode),
+                HasPerm = [
+                    CurrentMode band 2#100000000 /= 0,
+                    CurrentMode band 2#010000000 /= 0,
+                    CurrentMode band 2#001000000 /= 0,
+                    CurrentMode band 2#000100000 /= 0,
+                    CurrentMode band 2#000010000 /= 0,
+                    CurrentMode band 2#000001000 /= 0,
+                    CurrentMode band 2#000000100 /= 0,
+                    CurrentMode band 2#000000010 /= 0,
+                    CurrentMode band 2#000000001 /= 0],
+                lists:foreach(fun(ID) -> flatui_checkbox:init_checkbox(ID) end,
+                    [
+                        <<"chbx_ur">>, <<"chbx_uw">>, <<"chbx_ux">>,
+                        <<"chbx_gr">>, <<"chbx_gw">>, <<"chbx_gx">>,
+                        <<"chbx_or">>, <<"chbx_ow">>, <<"chbx_ox">>
+                    ]),
+                flatui_checkbox:init_checkbox(<<"auto_scroll_checkbox">>),
+                TDStyle = <<"border-color: rgb(82, 100, 118); width: 50px; text-align: center;">>,
+                Body = [
+                    #panel{style = <<"position: relative; text-align: center; overflow: hidden; ">>, body = [
+                        #p{body = <<"Change mode">>},
+                        #table{class = <<"table table-bordered">>,
+                            style = <<"margin: 0 auto 20px; table-layout: fixed; width: 200px; border-color: rgb(82, 100, 118);">>,
+                            header = [
+                                #tr{cells = [
+                                    #th{body = <<"">>, style = TDStyle},
+                                    #th{body = <<"read">>, style = TDStyle},
+                                    #th{body = <<"write">>, style = TDStyle},
+                                    #th{body = <<"execute">>, style = TDStyle}
+                                ]}
+                            ], body = [
+                                #tr{cells = [
+                                    #td{body = <<"user">>, style = <<TDStyle/binary, " font-weight: 700;">>},
+                                    #td{style = TDStyle, body = [
+                                        #flatui_checkbox{id = <<"chbx_ur">>, label_class = <<"checkbox no-label">>,
+                                            value = <<"">>, checked = true}
+                                    ]},
+                                    #td{body = <<"z">>, style = TDStyle},
+                                    #td{body = <<"z">>, style = TDStyle}
+                                ]},
+                                #tr{cells = [
+                                    #td{body = <<"group">>, style = <<TDStyle/binary, " font-weight: 700;">>},
+                                    #td{body = <<"z">>, style = TDStyle},
+                                    #td{body = <<"z">>, style = TDStyle},
+                                    #td{body = <<"z">>, style = TDStyle}
+                                ]},
+                                #tr{cells = [
+                                    #td{body = <<"other">>, style = <<TDStyle/binary, " font-weight: 700;">>},
+                                    #td{body = <<"z">>, style = TDStyle},
+                                    #td{body = <<"z">>, style = TDStyle},
+                                    #td{body = <<"z">>, style = TDStyle}
+                                ]}
+                            ]},
+                        #form{class = <<"control-group">>, body = [
+                            #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, postback = {action, remove_link, [a]}},
+                            #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}
+                        ]}
+                    ]}
+                ],
+                {Body, <<"$('#create_dir_textbox').focus();">>, {action, hide_popup}};
 
             share_file ->
                 case length(get_selected_items()) of
@@ -904,17 +1012,33 @@ grid_view_body() ->
 list_view_body() ->
     NumAttr = erlang:max(1, length(get_displayed_file_attributes())),
     CellWidth = <<"width: ", (integer_to_binary(round(90 * (2 + NumAttr) / NumAttr)))/binary, "px;">>,
+    HiddenAttrs = ?ALL_ATTRIBUTES -- get_displayed_file_attributes(),
     HeaderTable = [
         #table{class = <<"no-margin table">>, style = <<"position: fixed; top: 173px; z-index: 10;",
         "background: white; border: 2px solid #bbbdc0; border-collapse: collapse;">>, header = [
             #tr{cells =
             [
-                #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116);">>, body = <<"Name">>}
+                #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116); position: relative;">>, body = [
+                    <<"Name">>,
+                    #panel{style = <<"position: absolute; right: 3px; top: 3px; ">>, body =
+                    lists:map(fun(Attr) ->
+                        #span{style = <<"font-size: 12px; font-weight: normal; background-color: #EBEDEF; ",
+                        "border: 1px solid #34495E; padding: 1px 3px; margin-right: 4px; cursor: pointer;">>,
+                            id = wire_click(<<"toggle_column_", (gui_str:to_binary(Attr))/binary>>, {action, toggle_column, [Attr, true]}),
+                            body = attr_to_name(Attr)}
+                    end, HiddenAttrs)
+                    }
+                ]}
             ] ++
             lists:map(
                 fun(Attr) ->
-                    #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116); ", CellWidth/binary>>,
-                        body = attr_to_name(Attr)}
+                    #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116); position: relative;", CellWidth/binary>>,
+                        body = [
+                            attr_to_name(Attr),
+                            #link{id = wire_click(<<"toggle_column_", (gui_str:to_binary(Attr))/binary>>, {action, toggle_column, [Attr, false]}),
+                                class = <<"glyph-link">>, style = <<"font-size: 12px;", "position: absolute; top: 4px; right: 4px;">>,
+                                body = #span{class = <<"fui-cross">>}}
+                        ]}
                 end, get_displayed_file_attributes())
             }
         ]}
@@ -1084,7 +1208,6 @@ item_attr(uname, #item{attr = #fileattributes{uname = Value}}) -> Value;
 item_attr(gname, #item{attr = #fileattributes{gname = Value}}) -> Value.
 
 item_attr_value(name, Item) -> gui_str:to_binary(item_basename(Item));
-item_attr_value(mode, Item) -> gui_str:to_binary(lists:flatten(io_lib:format("~.8B", [item_attr(mode, Item)])));
 item_attr_value(uname, Item) -> gui_str:to_binary(item_attr(uname, Item));
 item_attr_value(atime, Item) -> gui_str:to_binary(time_to_string(item_attr(atime, Item)));
 item_attr_value(mtime, Item) -> gui_str:to_binary(time_to_string(item_attr(mtime, Item)));
@@ -1093,7 +1216,32 @@ item_attr_value(size, Item) ->
     case item_is_dir(Item) of
         true -> <<"">>;
         false -> size_to_printable(item_attr(size, Item))
-    end.
+    end;
+item_attr_value(mode, Item) ->
+    Mode = item_attr(mode, Item),
+    Format = [<<"r">>, <<"w">>, <<"x">>, <<"r">>, <<"w">>, <<"x">>, <<"r">>, <<"w">>, <<"x">>],
+    HasPerm = [
+        Mode band 2#100000000 /= 0,
+        Mode band 2#010000000 /= 0,
+        Mode band 2#001000000 /= 0,
+        Mode band 2#000100000 /= 0,
+        Mode band 2#000010000 /= 0,
+        Mode band 2#000001000 /= 0,
+        Mode band 2#000000100 /= 0,
+        Mode band 2#000000010 /= 0,
+        Mode band 2#000000001 /= 0
+    ],
+    ModeTiles = lists:zipwith(
+        fun(X, Y) ->
+            Char = case Y of
+                       true -> X;
+                       false -> <<"-">>
+                   end,
+            #span{style = <<"margin: 0 1px 0 0; display: inline-block; width: 10px; text-align: center;">>, body = Char}
+        end, Format, HasPerm),
+    #panel{style = <<"position: relative;">>, body = [ModeTiles, <<"&nbsp;", (gui_str:format_bin("[~.8B]", [Mode]))/binary>>]}.
+
+%gui_str:format_bin("~s&nbsp;&nbsp;[~.8B]", [lists:flatten(ModeString), Mode]).
 
 attr_to_name(name) -> <<"Name">>;
 attr_to_name(size) -> <<"Size">>;
@@ -1141,6 +1289,21 @@ is_space_dir(<<"/", Path/binary>>) ->
             end;
         _ ->
             false
+    end.
+
+
+is_the_same_space(Path1, Path2) ->
+    get_space_from_path(Path1) =:= get_space_from_path(Path2).
+
+
+get_space_from_path(<<"/", Path/binary>>) ->
+    case Path of
+        <<?SPACES_BASE_DIR_NAME, Rest/binary>> ->
+            Tokens = binary:split(Rest, <<"/">>, [global]),
+            lists:nth(2, Tokens);
+        _ ->
+            [#space_info{name = SpaceName} | _] = user_logic:get_spaces(fslogic_context:get_user_query()),
+            gui_str:unicode_list_to_binary(SpaceName)
     end.
 
 
@@ -1257,8 +1420,20 @@ get_selected_items() -> get(sel_items).
 set_display_style(Style) -> put(display_style, Style).
 get_display_style() -> get(display_style).
 
-set_displayed_file_attributes(Attrs) -> put(dfa, Attrs).
-get_displayed_file_attributes() -> get(dfa).
+% These preferences are saved in session memory for user convenience
+set_displayed_file_attributes(Attrs) ->
+    SortedAttrs = lists:filter(
+        fun(Attr) ->
+            lists:member(Attr, Attrs)
+        end, ?ALL_ATTRIBUTES),
+    gui_ctx:put(dfa, SortedAttrs).
+get_displayed_file_attributes() ->
+    case gui_ctx:get(dfa) of
+        undefined ->
+            ?DEFAULT_ATTRIBUTES;
+        Attrs ->
+            Attrs
+    end.
 
 set_sort_by(Type) -> put(sort_by, Type).
 get_sort_by() -> get(sort_by).
