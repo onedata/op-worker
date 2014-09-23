@@ -16,6 +16,7 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("err.hrl").
 -include("veil_modules/control_panel/global_registry_interfacing.hrl").
+-include("veil_modules/control_panel/cdmi_error.hrl").
 
 -record(state, {
     version = <<"latest">> :: binary(),
@@ -114,7 +115,7 @@ allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
 allowed_methods(Req, {error, Type}) ->
     NewReq = case Type of
                  path_invalid -> rest_utils:reply_with_error(Req, warning, ?error_path_invalid, []);
-                 {user_unknown, DnString} -> rest_utils:reply_with_error(Req, error, ?error_user_unknown, [DnString])
+                 {?user_unknown, DnString} -> rest_utils:reply_with_error(Req, error, ?error_user_unknown, [DnString])
              end,
     {halt, NewReq, error}.
 

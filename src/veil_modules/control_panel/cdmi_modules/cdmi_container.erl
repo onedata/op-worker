@@ -13,6 +13,7 @@
 -include("veil_modules/control_panel/cdmi.hrl").
 -include("veil_modules/control_panel/cdmi_capabilities.hrl").
 -include("veil_modules/control_panel/cdmi_container.hrl").
+-include("veil_modules/control_panel/cdmi_error.hrl").
 -include("files_common.hrl").
 
 %% API
@@ -53,7 +54,7 @@ resource_exists(Req, State = #state{filepath = Filepath}) ->
         {ok, #fileattributes{type = "DIR"} = Attr} -> {true, Req, State#state{attributes = Attr}};
         {ok, _} ->
             Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath), Req),
-            cdmi_error:error_reply(Req1,State,?moved_pemanently_code, "Filepath '~s' poins to regular file but does end with '/'",[Filepath]);
+            cdmi_error:error_reply(Req1,State,{?moved_permanently, Filepath});
         _ -> {false, Req, State}
     end.
 
@@ -104,9 +105,11 @@ content_types_accepted(Req, State) ->
 delete_resource(Req, #state{filepath = Filepath} = State) ->
     case is_group_dir(Filepath) of
         false ->
-            fs_remove_dir(Filepath),
-            {true, Req, State};
-        true -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Deleting group dir, which is forbidden",[])
+            case fs_remove_dir(Filepath) of
+                ok -> {true, Req, State};
+                Error -> cdmi_error:error_reply(Req, State, {?dir_delete_unknown_error, Error}) %todo handle dir error forbidden
+            end;
+        true -> cdmi_error:error_reply(Req, State, ?group_dir_delete)
     end.
 
 %% ====================================================================
@@ -142,18 +145,18 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
                     cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata),
                     Response = rest_utils:encode_to_json(
                         {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr})}),
-                    Req2 = cowboy_req:set_resp_body(Response, Req),
+                    Req2 = cowboy_req:set_resp_body(Response, Req1),
                     {true, Req2, State};
-                Error ->
+                Error -> %todo handle getattr forbidden
                     logical_files_manager:rmdir(Filepath),
-                    cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Cannot get dir attrs: ~p",[Error])
+                    cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error})
             end;
         {error, dir_exists} ->
             URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
             cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};
-        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?error_not_found_code, "Parent dir not found",[]);
-        Error -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Dir creation error: ~p",[Error])
+        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req1, State, ?parent_not_found);
+        Error -> cdmi_error:error_reply(Req1, State, {?put_container_unknown_error, Error}) % todo handle dir error forbidden
     end.
 
 %% put_binary/2
@@ -166,9 +169,9 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
 put_binary(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:mkdir(Filepath) of
         ok -> {true, Req, State};
-        {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?error_conflict_code, "Dir creation conflict",[]);
-        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?error_not_found_code, "Parent dir not found",[]);
-        Error -> cdmi_error:error_reply(Req, State, ?error_forbidden_code, "Dir creation error: ~p",[Error])
+        {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?put_container_conflict);
+        {logical_file_system_error, "enoent"} -> cdmi_error:error_reply(Req, State, ?parent_not_found);
+        Error -> cdmi_error:error_reply(Req, State, {?put_container_unknown_error, Error}) % todo handle dir error forbidden
     end.
 
 %% ====================================================================
@@ -246,6 +249,7 @@ fs_remove_dir(DirPath) ->
 %% ====================================================================
 is_group_dir(Path) ->
     case string:tokens(Path,"/") of
+        [] -> true;
         [?SPACES_BASE_DIR_NAME] -> true;
         [?SPACES_BASE_DIR_NAME , _GroupName] ->  true;
         _ -> false
