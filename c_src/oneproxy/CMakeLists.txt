@@ -33,8 +33,6 @@ add_executable(oneproxy ${SOURCE_FILES})
 set(CUSTOM_RPATH "\$ORIGIN:\$ORIGIN/..:.:..")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath,${CUSTOM_RPATH}")
 
-
-
 target_link_libraries(oneproxy
     ${Boost_LIBRARIES}
     ${Threads_LIBRARIES}
@@ -42,7 +40,7 @@ target_link_libraries(oneproxy
     ${BOTAN_LIBRARY}
     ${ONEPROXY_GSI_LIBRARIES}
     oneproxy_gsi
-
+    ${CMAKE_THREAD_LIBS_INIT}
 )
 
 install(TARGETS oneproxy DESTINATION .)
