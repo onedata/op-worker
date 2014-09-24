@@ -20,7 +20,8 @@
 % Postback functions and other
 -export([get_requested_hostname/0, comet_loop/1]).
 -export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
--export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0, confirm_paste/0]).
+-export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0]).
+-export([confirm_paste/0, confirm_chmod/2]).
 -export([rename_item/2, create_directory/1, remove_selected/0, search/1, toggle_column/2, show_popup/1, hide_popup/0, path_navigator_body/1]).
 -export([fs_list_dir/1, fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
 
@@ -61,6 +62,7 @@ title() -> <<"File manager">>.
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
     gui_jq:wire(#api{name = "confirm_paste", tag = "confirm_paste"}, false),
+    gui_jq:wire(#api{name = "submit_chmod_event", tag = "submit_chmod_event"}, false),
     Body = [
         #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
@@ -73,8 +75,9 @@ body() ->
 
 %% This will be placed in the template instead of {{custom}} tag
 custom() ->
-    <<"<script src='/js/veil_upload.js' type='text/javascript' charset='utf-8'></script>\n",
-    "    <script src=\"/flatui/bootbox.min.js\"></script>">>.
+    <<"<script src=\"/js/veil_upload.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
+    "    <script src=\"/flatui/bootbox.min.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
+    "    <script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>">>.
 
 % Submenu that will be glued below the top menu
 manager_submenu() ->
@@ -93,7 +96,7 @@ manager_submenu() ->
                             style = <<"width: 220px;">>, placeholder = <<"Search">>},
                         #panel{class = <<"btn-group">>, body = [
                             #button{id = wire_click(<<"search_button">>, {action, search, [{query_value, <<"search_textbox">>}]}, <<"search_textbox">>),
-                                class = <<"btn">>, type = <<"button">>, body = #span{class = <<"fui-search">>}}
+                                class = <<"btn">>, body = #span{class = <<"fui-search">>}}
                         ]}
                     ]}
                 ]}
@@ -215,7 +218,11 @@ api_event("escape_pressed", _, _) ->
     event({action, hide_popup});
 
 api_event("confirm_paste", _, _) ->
-    event({action, confirm_paste}).
+    event({action, confirm_paste});
+
+api_event("submit_chmod_event", Args, _Ctx) ->
+    [Mode, Recursive] = mochijson2:decode(Args),
+    event({action, confirm_chmod, [Mode, Recursive]}).
 
 
 event(init) ->
@@ -579,6 +586,31 @@ confirm_paste() ->
     clear_workspace().
 
 
+confirm_chmod(Mode, Recursive) ->
+    Failed = lists:foldl(
+        fun({Path, _Basename}, Acc) ->
+            {_Successful, Failed} = fs_chmod(Path, Mode, Recursive),
+            Acc ++ Failed
+        end, [], get_selected_items()),
+    case Failed of
+        [] ->
+            ok;
+        _ ->
+            FailedList = lists:foldl(
+                fun({Path, Reason}, Acc) ->
+                    ReasonBin = case Reason of
+                                    {logical_file_system_error, "eacces"} ->
+                                        <<"insufficient permissions">>;
+                                    _ ->
+                                        <<"error occured">>
+                                end,
+                    <<Acc/binary, Path/binary, ": ", ReasonBin/binary, "\r\n">>
+                end, <<"">>, Failed),
+            gui_jq:wire(#alert{text = <<"Unable to change permissions for following file(s):\r\n", FailedList/binary>>})
+    end,
+    clear_workspace().
+
+
 rename_item(OldPath, NewName) ->
     OldName = filename:basename(OldPath),
     case NewName of
@@ -735,14 +767,12 @@ show_popup(Type) ->
                         end
                     end, item_attr(mode, item_find(FirstItem)), Items),
                 ?dump(CurrentMode),
-                lists:foreach(fun(ID) -> flatui_checkbox:init_checkbox(ID) end,
-                    [
-                        <<"chbx_ur">>, <<"chbx_uw">>, <<"chbx_ux">>,
-                        <<"chbx_gr">>, <<"chbx_gw">>, <<"chbx_gx">>,
-                        <<"chbx_or">>, <<"chbx_ow">>, <<"chbx_ox">>,
-                        <<"chbx_recursive">>
-                    ]),
-                TDStyle = <<"border-color: rgb(82, 100, 118); width: 50px; text-align: center;">>,
+                gui_jq:wire(<<"init_chmod_table();">>),
+                TDStyle = <<"border-color: rgb(82, 100, 118); width: 60px; text-align: center;">>,
+                OctValue = case CurrentMode of
+                               0 -> <<"000">>;
+                               _ -> gui_str:format_bin("~.8B", [CurrentMode])
+                           end,
                 Body = [
                     #panel{style = <<"position: relative; text-align: center; overflow: hidden;">>, body = [
                         #p{body = <<"Change mode">>},
@@ -760,14 +790,17 @@ show_popup(Type) ->
                                     #td{body = <<"user">>, style = <<TDStyle/binary, " font-weight: 700;">>},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_ur">>, label_class = <<"checkbox no-label">>,
+                                            label_style = <<"margin: 0 auto; width: 20px;">>,
                                             value = <<"">>, checked = CurrentMode band 2#100000000 /= 0}
                                     ]},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_uw">>, label_class = <<"checkbox no-label">>,
+                                            label_style = <<"margin: 0 auto; width: 20px;">>,
                                             value = <<"">>, checked = CurrentMode band 2#010000000 /= 0}
                                     ]},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_ux">>, label_class = <<"checkbox no-label">>,
+                                            label_style = <<"margin: 0 auto; width: 20px;">>,
                                             value = <<"">>, checked = CurrentMode band 2#001000000 /= 0}
                                     ]}
                                 ]},
@@ -775,14 +808,17 @@ show_popup(Type) ->
                                     #td{body = <<"group">>, style = <<TDStyle/binary, " font-weight: 700;">>},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_gr">>, label_class = <<"checkbox no-label">>,
+                                            label_style = <<"margin: 0 auto; width: 20px;">>,
                                             value = <<"">>, checked = CurrentMode band 2#000100000 /= 0}
                                     ]},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_gw">>, label_class = <<"checkbox no-label">>,
+                                            label_style = <<"margin: 0 auto; width: 20px;">>,
                                             value = <<"">>, checked = CurrentMode band 2#000010000 /= 0}
                                     ]},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_gx">>, label_class = <<"checkbox no-label">>,
+                                            label_style = <<"margin: 0 auto; width: 20px;">>,
                                             value = <<"">>, checked = CurrentMode band 2#000001000 /= 0}
                                     ]}
                                 ]},
@@ -790,37 +826,47 @@ show_popup(Type) ->
                                     #td{body = <<"other">>, style = <<TDStyle/binary, " font-weight: 700;">>},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_or">>, label_class = <<"checkbox no-label">>,
-                                            value = <<"">>, checked = CurrentMode band 2#000000100 /= 0}
+                                            label_style = <<"margin: 0 auto; width: 20px;">>,
+                                            value = <<"">>, checked = CurrentMode band 2#000000100 /= 0,
+                                            postback = {action, dupa}}
                                     ]},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_ow">>, label_class = <<"checkbox no-label">>,
+                                            label_style = <<"margin: 0 auto; width: 20px;">>,
                                             value = <<"">>, checked = CurrentMode band 2#000000010 /= 0}
                                     ]},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_ox">>, label_class = <<"checkbox no-label">>,
+                                            label_style = <<"margin: 0 auto; width: 20px;">>,
                                             value = <<"">>, checked = CurrentMode band 2#000000001 /= 0}
                                     ]}
                                 ]}
                             ]},
-                        #panel{style = <<"position: relative; width: 100px; margin: 0 auto;">>, body = [
-                                #panel{class = <<"input-append">>, style = <<"position: relative; float: left;">>, body = [
-                                    #textbox{id = wire_enter(<<"search_textbox2">>, <<"search_button2">>), class = <<"span2">>,
-                                        style = <<"width: 220px;">>, placeholder = <<"Search">>},
-                                    #panel{class = <<"btn-group">>, body = [
-                                        #button{id = wire_click(<<"search_button2">>, {action, search, [{query_value, <<"search_textbox">>}]}, <<"search_textbox">>),
-                                            class = <<"btn">>, type = <<"button">>, body = #span{class = <<"fui-search">>}}
-                                    ]}
+                        #panel{style = <<"position: relative; width: 430px; margin: 0 auto;">>, body = [
+                            #p{style = <<"display: inline-block;float: left; ">>, body = <<"octal form:">>,
+                                title = <<"Type in octal representation of mode to automatically adjust checkboxes">>},
+                            #panel{class = <<"input-append">>, style = <<"position: relative; float: left; margin: -2px 50px 0 8px;">>, body = [
+                                #textbox{id = wire_enter(<<"octal_form_textbox">>, <<"octal_form_submit">>), class = <<"span2">>,
+                                    style = <<"width: 80px; padding: 5px 5px;">>, placeholder = <<"000">>,
+                                    value = OctValue},
+                                #panel{class = <<"btn-group">>, body = [
+                                    #button{id = <<"octal_form_submit">>, style = <<"height: 35px;">>, class = <<"btn">>,
+                                        body = #span{style = <<"margin-top: -3px;">>, class = <<"fui-check">>}}
+                                ]}
                             ]},
                             #flatui_checkbox{id = <<"chbx_recursive">>, label_class = <<"checkbox no-label">>,
-                                value = <<"">>, checked = false, body = <<"recursive">>, label_style = <<"position: relative; float: right;">>,
+                                value = <<"">>, checked = false, body = <<"recursive">>,
+                                label_style = <<"position: relative; float: right; margin-top: 6px;;">>,
                                 label_title = <<"Change mode in all subdirectories, recursively">>}
                         ]},
+                        #panel{style = <<"clear: both;  margin-bottom: 18px;">>},
                         #form{class = <<"control-group">>, body = [
-                            #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, postback = {action, remove_link, [a]}},
+                            #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
                             #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}
                         ]}
                     ]}
                 ],
+                gui_jq:bind_element_click(<<"ok_button">>, <<"function() { submit_chmod(); }">>),
                 {Body, <<"$('#create_dir_textbox').focus();">>, {action, hide_popup}};
 
             share_file ->
@@ -1185,10 +1231,11 @@ item_new(Dir, File) ->
     item_new(FullPath).
 
 item_new(FullPath) ->
-    FA = fs_get_attributes(FullPath),
-    FileAttr = case FA#fileattributes.type of
-                   "DIR" -> FA#fileattributes{size = -1};
-                   _ -> FA
+    #fileattributes{type = Type, mode = Mode} = FA = fs_get_attributes(FullPath),
+    % Set size to -1 if the file is a dir, and remove sticky bit from mode representation
+    FileAttr = case Type of
+                   "DIR" -> FA#fileattributes{size = -1, mode = Mode band 2#111111111};
+                   _ -> FA#fileattributes{mode = Mode band 2#111111111}
                end,
     IsShared = case fs_get_share_uuid_by_filepath(FullPath) of
                    undefined -> false;
@@ -1370,20 +1417,23 @@ fs_remove_dir(BinDirPath) ->
 
 
 fs_list_dir(BinDir) ->
-    Dir = gui_str:binary_to_unicode_list(BinDir),
-    DirContent = fs_list_dir(Dir, 0, 10, []),
-    _ItemList = lists:foldl(
-        fun(File, Acc) ->
-            try
-                Acc ++ [item_new(Dir, File)]
-            catch _:_ ->
-                Acc
-            end
-        end, [], DirContent).
+    case fs_list_dir(BinDir, 0, 10, []) of
+        DirContent when is_list(DirContent) ->
+            _ItemList = lists:foldl(
+                fun(File, Acc) ->
+                    try
+                        Acc ++ [item_new(BinDir, File)]
+                    catch _:_ ->
+                        Acc
+                    end
+                end, [], DirContent);
+        Other ->
+            Other
+    end.
 
 
-fs_list_dir(BinPath, Offset, Count, Result) ->
-    Path = gui_str:binary_to_unicode_list(BinPath),
+fs_list_dir(BinDir, Offset, Count, Result) ->
+    Path = gui_str:binary_to_unicode_list(BinDir),
     case logical_files_manager:ls(Path, Count, Offset) of
         {ok, FileList} ->
             FileList1 = lists:map(fun(#dir_entry{name = Name}) -> Name end, FileList),
@@ -1427,6 +1477,39 @@ fs_get_share_uuid_by_filepath(Filepath) ->
         _ ->
             undefined
     end.
+
+% Returns a tuple {Successful, Failed}, where Succesfull is a list of
+% paths for which command succeded and Failed is a list of tuples {Path, Reason}
+% for paths that the command failed .
+fs_chmod(Path, Mode, Recursive) ->
+    Result = fs_chmod(Path, Mode, Recursive, {[], []}), ?dump(Result), Result.
+
+fs_chmod(Path, Mode, Recursive, {Successful, Failed}) ->
+    {NewSuccessful, NewFailed} =
+        case Recursive of
+            false ->
+                case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Mode) of
+                    ok -> {[Path], []};
+                    Err1 -> {[], [{Path, Err1}]}
+                end;
+            true ->
+                case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Mode) of
+                    ok ->
+                        case item_is_dir(item_new(Path)) of
+                            false ->
+                                {[Path], []};
+                            true ->
+                                lists:foldl(
+                                    fun(#item{path = ItemPath}, {SuccAcc, FailAcc}) ->
+                                        {Succ, Fail} = fs_chmod(ItemPath, Mode, Recursive),
+                                        {SuccAcc ++ Succ, FailAcc ++ Fail}
+                                    end, {[Path], []}, fs_list_dir(Path))
+                        end;
+                    Err3 ->
+                        {[], [{Path, Err3}]}
+                end
+        end,
+    {Successful ++ NewSuccessful, Failed ++ NewFailed}.
 
 fs_has_perms(Path, CheckType) ->
     logical_files_manager:check_file_perm(gui_str:binary_to_unicode_list(Path), CheckType).
