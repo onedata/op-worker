@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_dir/2, get_file_children/4, create_link/2, get_link/1]).
+-export([create_dir/2, get_file_children_count/1, get_file_children/4, create_link/2, get_link/1]).
 
 %% ====================================================================
 %% API functions
@@ -62,6 +62,19 @@ create_dir(FullFileName, Mode) ->
             #atom{value = ?VEREMOTEIO}
     end.
 
+%% get_file_children_count/1
+%% ====================================================================
+%% @doc Counts first level childs of directory
+%% @end
+-spec get_file_children_count(FullFileName :: string()) ->
+    #filechildrencount{} | no_return().
+%% ====================================================================
+get_file_children_count(FullFileName) ->
+    ?debug("get_file_children_count(FullFileName ~p)", [FullFileName]),
+
+    {ok, #veil_document{uuid = Uuid}} = fslogic_objects:get_file(FullFileName),
+    {ok, Sum} = dao_lib:apply(dao_vfs, count_childs, [{uuid, Uuid}], fslogic_context:get_protocol_version()),
+    #filechildrencount{count = Sum}.
 
 %% get_file_children/3
 %% ====================================================================

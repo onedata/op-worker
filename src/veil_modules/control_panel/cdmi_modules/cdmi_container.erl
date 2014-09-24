@@ -234,7 +234,8 @@ prepare_container_ans([<<"metadata">> | Tail], #state{filepath = Filepath, attri
 prepare_container_ans([{<<"metadata">>, Prefix} | Tail], #state{filepath = Filepath, attributes = Attrs} = State) ->
     [{<<"metadata">>, cdmi_metadata:prepare_metadata(Filepath, Prefix, Attrs)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"childrenrange">> | Tail], #state{opts = Opts, filepath = Filepath} = State) ->
-    ChildNum = length(rest_utils:list_dir(Filepath)), %todo get without listing dir
+    {ok, ChildNum0} = logical_files_manager:get_file_children_count(Filepath),
+    ChildNum = case Filepath of "/" -> ChildNum0 + 1; _ -> ChildNum0 end,
     {From, To} = case lists:keyfind(<<"children">>, 1, Opts) of
         {<<"children">>, Begin, End} -> normalize_childrenrange(Begin, End, ChildNum);
         _ -> case ChildNum of
@@ -248,8 +249,9 @@ prepare_container_ans([<<"childrenrange">> | Tail], #state{opts = Opts, filepath
                   end,
     [{<<"childrenrange">>, BinaryRange} | prepare_container_ans(Tail, State)];
 prepare_container_ans([{<<"children">>, From, To} | Tail], #state{filepath = Filepath} = State) ->
-    ChildNumber = length(rest_utils:list_dir(Filepath)), %todo get without listing dir
-    {From1, To1} = normalize_childrenrange(From, To, ChildNumber),
+    {ok, ChildNum0} = logical_files_manager:get_file_children_count(Filepath),
+    ChildNum = case Filepath of "/" -> ChildNum0 + 1; _ -> ChildNum0 end,
+    {From1, To1} = normalize_childrenrange(From, To, ChildNum),
     Childs = lists:map(
         fun(#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) ->
             list_to_binary(rest_utils:ensure_path_ends_with_slash(Name));

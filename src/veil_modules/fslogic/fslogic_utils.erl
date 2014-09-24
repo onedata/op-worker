@@ -22,6 +22,7 @@
 -export([get_space_info_for_path/1, get_user_groups/2]).
 -export([random_ascii_lowercase_sequence/1, path_walk/3, list_dir/1]).
 -export([run_as_root/1, file_to_space_info/1]).
+-export([trim_spaces/1]).
 
 
 %% ====================================================================
@@ -232,6 +233,14 @@ get_user_groups(UserDocStatus, UserDoc) ->
         _ ->
             {error, UserDoc}
     end.
+
+%% trim_spaces/1
+%% ====================================================================
+%% @doc trims spaces from front and end of given binary
+-spec trim_spaces(binary()) -> binary().
+%% ====================================================================
+trim_spaces(Binary) when is_binary(Binary) ->
+    list_to_binary(string:strip(binary_to_list(Binary), both, $ )).
 
 %% ====================================================================
 %% Internal functions

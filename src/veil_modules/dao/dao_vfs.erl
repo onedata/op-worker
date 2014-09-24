@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API - File system management
--export([list_dir/3, count_subdirs/1, rename_file/2, lock_file/3, unlock_file/3, find_files/1]). %% High level API functions
+-export([list_dir/3, count_subdirs/1, count_childs/1, rename_file/2, lock_file/3, unlock_file/3, find_files/1]). %% High level API functions
 -export([save_descriptor/1, remove_descriptor/1, exist_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
 -export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
@@ -660,6 +660,28 @@ count_subdirs({uuid, Id}) ->
         inclusive_end = false
     },
     case dao_records:list_records(?FILE_SUBDIRS_VIEW, QueryArgs) of
+        {ok, #view_result{rows = [#view_row{value = Sum}]}} -> {ok, Sum};
+        {ok, #view_result{rows = []}} -> {ok, 0};
+        _Other ->
+            ?error("Invalid view response: ~p", [_Other]),
+            throw(invalid_data)
+    end.
+
+%% count_childs/1
+%% ====================================================================
+%% @doc Returns number of first level childs for specified directory.
+%% @end
+-spec count_childs({uuid, UUID :: uuid()}) -> {ok, non_neg_integer()}.
+%% ====================================================================
+count_childs({uuid, Id}) ->
+    NextId = uca_increment(Id),
+    QueryArgs = #view_query_args{
+        start_key = [dao_helper:name(Id), dao_helper:name("")],
+        end_key = [dao_helper:name(NextId), dao_helper:name("")],
+        view_type = reduce,
+        inclusive_end = false
+    },
+    case dao_records:list_records(?FILE_CHILDS_VIEW, QueryArgs) of
         {ok, #view_result{rows = [#view_row{value = Sum}]}} -> {ok, Sum};
         {ok, #view_result{rows = []}} -> {ok, 0};
         _Other ->

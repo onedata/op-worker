@@ -20,7 +20,7 @@
 
 %% API
 -export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
-    remove_xattr/2, list_xattr/1, delete_file/1, rename_file/2, get_statfs/0]).
+    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0]).
 
 %% ====================================================================
 %% API functions
@@ -267,6 +267,37 @@ list_xattr(FullFileName) ->
     {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
     {ok, #veil_document{record = #file_meta{xattrs = XAttrs}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
     #xattrlist{answer = ?VOK, attrs = [#xattrlist_xattrentry{name = Name, value = Value} || {Name,Value} <- XAttrs]}.
+
+%% get_acl/1
+%% ====================================================================
+%% @doc Gets file's access control list.
+%% @end
+-spec get_acl(FullFileName :: string()) ->
+    #acl{} | no_return().
+%% ====================================================================
+get_acl(FullFileName) ->
+    {ok, UserDoc} = fslogic_objects:get_user(),
+    {ok, FileDoc = #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, read),
+    {ok, #veil_document{record = #file_meta{acl = Acl}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+    #acl{answer = ?VOK, entities = Acl}.
+
+%% set_acl/1
+%% ====================================================================
+%% @doc Sets file's access control list.
+%% @end
+-spec set_acl(FullFileName :: string(),Entities :: [#accesscontrolentity{}]) ->
+    #atom{} | no_return().
+%% ====================================================================
+set_acl(FullFileName, Entities) ->
+    {ok, UserDoc} = fslogic_objects:get_user(),
+    {ok, FileDoc = #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner), %todo check ownership or write access?
+    true = lists:all(fun(X) -> is_record(X, accesscontrolentity) end, Entities),
+    {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+    #veil_document{record = FileMeta } = FileMetaDoc,
+    {ok, _} = dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#veil_document{record = FileMeta#file_meta{acl = Entities}}], fslogic_context:get_protocol_version()),
+    #atom{value = ?VOK}.
 
 %% delete_file/1
 %% ====================================================================

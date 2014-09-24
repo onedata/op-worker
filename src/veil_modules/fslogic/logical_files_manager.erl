@@ -27,10 +27,11 @@
 %% ====================================================================
 %% Logical file organization management (only db is used)
 
--export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, get_xattr/2, set_xattr/3, remove_xattr/2, list_xattr/1, rmlink/1, read_link/1, create_symlink/2]).
+-export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, get_xattr/2, set_xattr/3, remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, rmlink/1, read_link/1, create_symlink/2]).
 %% File access (db and helper are used)
 -export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
 -export([change_file_perm/2, check_file_perm/2]).
+-export([get_file_children_count/1]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
@@ -348,6 +349,42 @@ list_xattr(FullFileName) ->
         ok ->
             case TmpAns#xattrlist.answer of
                 ?VOK -> {ok, [{Name,Value} || #xattrlist_xattrentry{name = Name, value = Value} <- TmpAns#xattrlist.attrs]};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
+%% get_acl/1
+%% ====================================================================
+%% @doc Gets file's access controll list.
+%% @end
+-spec get_acl(FullFileName :: string()) ->
+    {ok, list(#accesscontrolentity{})} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+get_acl(FullFileName) ->
+    {Status, TmpAns} = contact_fslogic(#getacl{file_logic_name = FullFileName}),
+    case Status of
+        ok ->
+            case TmpAns#acl.answer of
+                ?VOK -> {ok, TmpAns#acl.entities};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
+%% set_acl/1
+%% ====================================================================
+%% @doc Sets file's access controll list.
+%% @end
+-spec set_acl(FullFileName :: string(), EntitiyList :: list(#accesscontrolentity{})) ->
+    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+set_acl(FullFileName, EntitiyList) ->
+    {Status, TmpAns} = contact_fslogic(#setacl{file_logic_name = FullFileName, entities = EntitiyList}),
+    case Status of
+        ok ->
+            case TmpAns#atom.value of
+                ?VOK -> ok;
                 Error -> {logical_file_system_error, Error}
             end;
         _ -> {Status, TmpAns}
@@ -714,6 +751,25 @@ exists(FileName) ->
     _ -> {full_name_finding_error, File}
   end.
 
+%% get_file_children_count/1
+%% ====================================================================
+%% @doc Counts first level childrens of directory.
+%% @end
+-spec get_file_children_count(DirName :: string()) -> Result when
+    Result :: {ok, non_neg_integer()} | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+get_file_children_count(DirName) ->
+    {Status, TmpAns} = contact_fslogic(#getfilechildrencount{dir_logic_name = DirName}),
+    case Status of
+        ok ->
+            case TmpAns#filechildrencount.answer of
+                ?VOK -> {ok, TmpAns#filechildrencount.count};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
 
 %% ====================================================================
 %% Internal functions

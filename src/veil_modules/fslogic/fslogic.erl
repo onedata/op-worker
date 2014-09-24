@@ -330,6 +330,14 @@ handle_fuse_message(Req = #listxattr{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:list_xattr(FullFileName);
 
+handle_fuse_message(Req = #getacl{file_logic_name = FName}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:get_acl(FullFileName);
+
+handle_fuse_message(Req = #setacl{file_logic_name = FName, entities = Entities}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_generic:set_acl(FullFileName, Entities);
+
 handle_fuse_message(Req = #getfileuuid{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_utility:get_file_uuid(FullFileName);
@@ -362,6 +370,10 @@ handle_fuse_message(Req = #getfilechildren{dir_logic_name = FName, offset = Offs
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     {ok, UserPathTokens} = fslogic_path:verify_file_name(FName),
     fslogic_req_special:get_file_children(FullFileName, UserPathTokens, Offset, Count);
+
+handle_fuse_message(Req = #getfilechildrencount{dir_logic_name = FName}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    fslogic_req_special:get_file_children_count(FullFileName);
 
 handle_fuse_message(Req = #deletefile{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
@@ -428,6 +440,10 @@ extract_logical_path(#removexattr{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#listxattr{file_logic_name = Path}) ->
     Path;
+extract_logical_path(#getacl{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#setacl{file_logic_name = Path}) ->
+    Path;
 extract_logical_path(#getfilelocation{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#deletefile{file_logic_name = Path}) ->
@@ -439,6 +455,8 @@ extract_logical_path(#getnewfilelocation{file_logic_name = Path}) ->
 extract_logical_path(#filenotused{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#renewfilelocation{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getfilechildrencount{dir_logic_name = Path}) ->
     Path;
 extract_logical_path(#getfilechildren{dir_logic_name = Path}) ->
     Path;
