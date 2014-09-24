@@ -22,7 +22,7 @@
 #define GPV_VALIDATE_ERROR              6
 
 // Types
-typedef unsigned char byte;
+typedef char byte;
 typedef unsigned int gpv_status;
 
 // GPV Context type

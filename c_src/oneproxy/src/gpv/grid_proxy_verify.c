@@ -98,12 +98,12 @@ int gpv_get_error(GPV_CTX *ctx) {
 }
 
 gpv_status gpv_set_leaf_cert(GPV_CTX *gpv_ctx, const byte *buff, int len) {
-    gpv_ctx->proxy_cert = d2i_X509(&gpv_ctx->proxy_cert, &buff, len);
+    gpv_ctx->proxy_cert = d2i_X509(&gpv_ctx->proxy_cert, (const unsigned char**)&buff, len);
     return gpv_ctx->proxy_cert != NULL ? GPV_SUCCESS : GPV_CERT_READ_ERROR;
 }
 
 gpv_status gpv_add_trusted_ca(GPV_CTX *gpv_ctx, const byte *buff, int len) {
-    X509 *tmp = d2i_X509(NULL, &buff, len);
+    X509 *tmp = d2i_X509(NULL, (const unsigned char**)&buff, len);
 
     if(tmp == NULL)
         return GPV_CERT_READ_ERROR;
@@ -118,7 +118,7 @@ gpv_status gpv_add_trusted_ca(GPV_CTX *gpv_ctx, const byte *buff, int len) {
 }
 
 gpv_status gpv_add_chain_cert(GPV_CTX *gpv_ctx, const byte *buff, int len) {
-    X509 *tmp = d2i_X509(NULL, &buff, len);
+    X509 *tmp = d2i_X509(NULL, (const unsigned char**)&buff, len);
 
     if(tmp == NULL)
         return GPV_CERT_READ_ERROR;
@@ -132,7 +132,7 @@ gpv_status gpv_add_chain_cert(GPV_CTX *gpv_ctx, const byte *buff, int len) {
 }
 
 gpv_status gpv_add_crl_cert(GPV_CTX *gpv_ctx, const byte *buff, int len) {
-    X509_CRL *tmp = d2i_X509_CRL(NULL, &buff, len);
+    X509_CRL *tmp = d2i_X509_CRL(NULL, (const unsigned char**)&buff, len);
 
     if(tmp == NULL)
         return GPV_CERT_READ_ERROR;
