@@ -137,6 +137,14 @@ message FileLocationValidity {
     optional int32 validity = 2;
 }
 
+message GetFileChildrenCount {
+  required string dir_logic_name = 1;
+}
+
+message FileChildrenCount {
+  optional string answer = 1 [default = "ok"];
+  required uint32 count = 2;
+}
 
 message GetFileChildren {
     required string dir_logic_name = 1;
