@@ -571,7 +571,7 @@ init_per_testcase(application_start_test2, Config) ->
 init_per_testcase(type1, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
 
-  NodesUp = test_node_starter:start_test_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1, true),
   [CCM | _] = NodesUp,
 
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
@@ -595,7 +595,7 @@ init_per_testcase(monitoring_test, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(4),
+  NodesUp = test_node_starter:start_test_nodes(4, true),
   [CCM | _] = NodesUp,
   DBNode = ?DB_NODE,
 
