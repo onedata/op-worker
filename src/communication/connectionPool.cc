@@ -193,6 +193,9 @@ void ConnectionPool::recreate()
     m_futureConnections.clear();
     m_closingConnections.splice(m_closingConnections.begin(), m_openConnections);
 
+    closingConnectionsLock.release();
+    addConnections();
+
     m_scheduler->schedule(WAIT_FOR_CONNECTION, [this]{
         std::lock_guard<std::mutex> guard{m_closingConnectionsMutex};
         m_closingConnections.clear();
