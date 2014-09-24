@@ -74,7 +74,7 @@ body() ->
 %% This will be placed in the template instead of {{custom}} tag
 custom() ->
     <<"<script src='/js/veil_upload.js' type='text/javascript' charset='utf-8'></script>\n",
-    "    <script src=\"/js/bootbox.min.js\"></script>">>.
+    "    <script src=\"/flatui/bootbox.min.js\"></script>">>.
 
 % Submenu that will be glued below the top menu
 manager_submenu() ->
@@ -735,23 +735,12 @@ show_popup(Type) ->
                         end
                     end, item_attr(mode, item_find(FirstItem)), Items),
                 ?dump(CurrentMode),
-                HasPerm = [
-                    CurrentMode band 2#100000000 /= 0,
-                    CurrentMode band 2#010000000 /= 0,
-                    CurrentMode band 2#001000000 /= 0,
-                    CurrentMode band 2#000100000 /= 0,
-                    CurrentMode band 2#000010000 /= 0,
-                    CurrentMode band 2#000001000 /= 0,
-                    CurrentMode band 2#000000100 /= 0,
-                    CurrentMode band 2#000000010 /= 0,
-                    CurrentMode band 2#000000001 /= 0],
                 lists:foreach(fun(ID) -> flatui_checkbox:init_checkbox(ID) end,
                     [
                         <<"chbx_ur">>, <<"chbx_uw">>, <<"chbx_ux">>,
                         <<"chbx_gr">>, <<"chbx_gw">>, <<"chbx_gx">>,
                         <<"chbx_or">>, <<"chbx_ow">>, <<"chbx_ox">>
                     ]),
-                flatui_checkbox:init_checkbox(<<"auto_scroll_checkbox">>),
                 TDStyle = <<"border-color: rgb(82, 100, 118); width: 50px; text-align: center;">>,
                 Body = [
                     #panel{style = <<"position: relative; text-align: center; overflow: hidden; ">>, body = [
@@ -770,22 +759,46 @@ show_popup(Type) ->
                                     #td{body = <<"user">>, style = <<TDStyle/binary, " font-weight: 700;">>},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_ur">>, label_class = <<"checkbox no-label">>,
-                                            value = <<"">>, checked = true}
+                                            value = <<"">>, checked = CurrentMode band 2#100000000 /= 0}
                                     ]},
-                                    #td{body = <<"z">>, style = TDStyle},
-                                    #td{body = <<"z">>, style = TDStyle}
+                                    #td{style = TDStyle, body = [
+                                        #flatui_checkbox{id = <<"chbx_uw">>, label_class = <<"checkbox no-label">>,
+                                            value = <<"">>, checked = CurrentMode band 2#010000000 /= 0}
+                                    ]},
+                                    #td{style = TDStyle, body = [
+                                        #flatui_checkbox{id = <<"chbx_ux">>, label_class = <<"checkbox no-label">>,
+                                            value = <<"">>, checked = CurrentMode band 2#001000000 /= 0}
+                                    ]}
                                 ]},
                                 #tr{cells = [
                                     #td{body = <<"group">>, style = <<TDStyle/binary, " font-weight: 700;">>},
-                                    #td{body = <<"z">>, style = TDStyle},
-                                    #td{body = <<"z">>, style = TDStyle},
-                                    #td{body = <<"z">>, style = TDStyle}
+                                    #td{style = TDStyle, body = [
+                                        #flatui_checkbox{id = <<"chbx_gr">>, label_class = <<"checkbox no-label">>,
+                                            value = <<"">>, checked = CurrentMode band 2#000100000 /= 0}
+                                    ]},
+                                    #td{style = TDStyle, body = [
+                                        #flatui_checkbox{id = <<"chbx_gw">>, label_class = <<"checkbox no-label">>,
+                                            value = <<"">>, checked = CurrentMode band 2#000010000 /= 0}
+                                    ]},
+                                    #td{style = TDStyle, body = [
+                                        #flatui_checkbox{id = <<"chbx_gx">>, label_class = <<"checkbox no-label">>,
+                                            value = <<"">>, checked = CurrentMode band 2#000001000 /= 0}
+                                    ]}
                                 ]},
                                 #tr{cells = [
                                     #td{body = <<"other">>, style = <<TDStyle/binary, " font-weight: 700;">>},
-                                    #td{body = <<"z">>, style = TDStyle},
-                                    #td{body = <<"z">>, style = TDStyle},
-                                    #td{body = <<"z">>, style = TDStyle}
+                                    #td{style = TDStyle, body = [
+                                        #flatui_checkbox{id = <<"chbx_or">>, label_class = <<"checkbox no-label">>,
+                                            value = <<"">>, checked = CurrentMode band 2#000000100 /= 0}
+                                    ]},
+                                    #td{style = TDStyle, body = [
+                                        #flatui_checkbox{id = <<"chbx_ow">>, label_class = <<"checkbox no-label">>,
+                                            value = <<"">>, checked = CurrentMode band 2#000000010 /= 0}
+                                    ]},
+                                    #td{style = TDStyle, body = [
+                                        #flatui_checkbox{id = <<"chbx_ox">>, label_class = <<"checkbox no-label">>,
+                                            value = <<"">>, checked = CurrentMode band 2#000000001 /= 0}
+                                    ]}
                                 ]}
                             ]},
                         #form{class = <<"control-group">>, body = [
