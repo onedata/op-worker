@@ -739,14 +739,15 @@ show_popup(Type) ->
                     [
                         <<"chbx_ur">>, <<"chbx_uw">>, <<"chbx_ux">>,
                         <<"chbx_gr">>, <<"chbx_gw">>, <<"chbx_gx">>,
-                        <<"chbx_or">>, <<"chbx_ow">>, <<"chbx_ox">>
+                        <<"chbx_or">>, <<"chbx_ow">>, <<"chbx_ox">>,
+                        <<"chbx_recursive">>
                     ]),
                 TDStyle = <<"border-color: rgb(82, 100, 118); width: 50px; text-align: center;">>,
                 Body = [
-                    #panel{style = <<"position: relative; text-align: center; overflow: hidden; ">>, body = [
+                    #panel{style = <<"position: relative; text-align: center; overflow: hidden;">>, body = [
                         #p{body = <<"Change mode">>},
                         #table{class = <<"table table-bordered">>,
-                            style = <<"margin: 0 auto 20px; table-layout: fixed; width: 200px; border-color: rgb(82, 100, 118);">>,
+                            style = <<"margin: 0 auto 15px; table-layout: fixed; width: 200px; border-color: rgb(82, 100, 118);">>,
                             header = [
                                 #tr{cells = [
                                     #th{body = <<"">>, style = TDStyle},
@@ -801,6 +802,19 @@ show_popup(Type) ->
                                     ]}
                                 ]}
                             ]},
+                        #panel{style = <<"position: relative; width: 100px; margin: 0 auto;">>, body = [
+                                #panel{class = <<"input-append">>, style = <<"position: relative; float: left;">>, body = [
+                                    #textbox{id = wire_enter(<<"search_textbox2">>, <<"search_button2">>), class = <<"span2">>,
+                                        style = <<"width: 220px;">>, placeholder = <<"Search">>},
+                                    #panel{class = <<"btn-group">>, body = [
+                                        #button{id = wire_click(<<"search_button2">>, {action, search, [{query_value, <<"search_textbox">>}]}, <<"search_textbox">>),
+                                            class = <<"btn">>, type = <<"button">>, body = #span{class = <<"fui-search">>}}
+                                    ]}
+                            ]},
+                            #flatui_checkbox{id = <<"chbx_recursive">>, label_class = <<"checkbox no-label">>,
+                                value = <<"">>, checked = false, body = <<"recursive">>, label_style = <<"position: relative; float: right;">>,
+                                label_title = <<"Change mode in all subdirectories, recursively">>}
+                        ]},
                         #form{class = <<"control-group">>, body = [
                             #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, postback = {action, remove_link, [a]}},
                             #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}
