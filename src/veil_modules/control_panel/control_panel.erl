@@ -20,6 +20,7 @@
 
 -define(REFRESH_CLIENTS_ETS, refresh_clients_ets).
 -define(REFRESH_CLIENTS_COUNTER_ETS, refresh_clients_counter_ets).
+-define(SECONDS_TO_REFRESH_AFTER_FAILURE, 60).
 
 %% ====================================================================
 %% API functions
@@ -133,11 +134,18 @@ handle(ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef}) ->
     [{UserId, Counter, Ref}] = ets:lookup(?REFRESH_CLIENTS_COUNTER_ETS, UserId),
     case {Counter > 0, Ref} of
         {true, ScheduleRef} ->
-            ?info("Refreshing access for user ~p", [UserId]),
-            {ok, TimeToExpiration} = refresh_access(UserId),
-            TimeToRefresh = timer:seconds(trunc(TimeToExpiration * 4 / 5)),
-            erlang:send_after(TimeToRefresh, control_panel, {timer, {asynch, ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef}}}),
-            ok;
+            TimeToRefresh =
+                try
+                    ?info("Refreshing access for user ~p", [UserId]),
+                    {ok, TimeToExpiration} = refresh_access(UserId),
+                    timer:seconds(trunc(TimeToExpiration * 4 / 5))
+                catch
+                    Error:Reason ->
+                        ?error("Failed to periodically refresh user token: ~p:~p", [Error, Reason]),
+                        timer:seconds(?SECONDS_TO_REFRESH_AFTER_FAILURE)
+                end,
+                erlang:send_after(TimeToRefresh, control_panel, {timer, {asynch, ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef}}}),
+                ok;
 
         {false, ScheduleRef} ->
             ?info("Unscheduling access refreshes for user ~p", [UserId]),
@@ -182,7 +190,7 @@ refresh_access(UserId) ->
             lists:foreach(fun(Consumer) ->
                 case Consumer of
                     {gui_session, GuiSession} ->
-                        case dao_lib:apply(dao_cookies, get_cookie, [GuiSession]) of
+                        case dao_lib:apply(dao_cookies, get_cookie, [GuiSession], 1) of
                             {ok, _} ->
                                 wf_context:context(Context#context{session = GuiSession}),
                                 vcn_gui_utils:set_access_token(NewAccessToken);
