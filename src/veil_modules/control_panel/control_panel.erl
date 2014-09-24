@@ -19,6 +19,7 @@
 -include_lib("ctool/include/global_registry/gr_openid.hrl").
 
 -define(REFRESH_CLIENTS_ETS, refresh_clients_ets).
+-define(REFRESH_CLIENTS_COUNTER_ETS, refresh_clients_counter_ets).
 
 %% ====================================================================
 %% API functions
@@ -46,6 +47,7 @@ init(_Args) ->
     {ok, ClearingInterval} = application:get_env(veil_cluster_node, control_panel_sessions_clearing_period),
     erlang:send_after(ClearingInterval * 1000, Pid, {timer, {asynch, 1, {clear_expired_sessions, Pid}}}),
     ets:new(?REFRESH_CLIENTS_ETS, [named_table, public, bag]),
+    ets:new(?REFRESH_CLIENTS_COUNTER_ETS, [named_table, public, set]),
     ok.
 
 
@@ -85,21 +87,29 @@ handle(ProtocolVersion, {clear_expired_sessions, Pid}) ->
     ok;
 
 handle(ProtocolVersion, {request_refresh, UserKey, Consumer}) ->
+    ?debug("Access refresh requested for user identified by ~p (requested by ~p)", [UserKey, Consumer]),
     try
-        #veil_document{uuid = UserId} = UserDoc = user_logic:get_user(UserKey),
+        {ok, #veil_document{uuid = UserId} = UserDoc} = user_logic:get_user(UserKey),
 
         ets:insert(?REFRESH_CLIENTS_ETS, {UserId, Consumer}),
-        case ets:lookup(?REFRESH_CLIENTS_ETS, UserId) of %% @todo: race condition
-            [{UserId, Consumer}] ->
+        ets:insert_new(?REFRESH_CLIENTS_COUNTER_ETS, {UserId, 0, undefined}),
+        Counter = ets:update_counter(?REFRESH_CLIENTS_COUNTER_ETS, UserId, {2, 1}),
+
+        case Counter of
+            1 ->
+                ?info("Scheduling refresh for user ~p (scheduled by ~p)", [UserId, Consumer]),
                 #veil_document{record = #user{access_expiration_time = ExpirationTime}} = UserDoc,
                 TimeToExpiration = ExpirationTime - vcn_utils:time(),
 
+                ScheduleRef = make_ref(),
+                ets:update_element(?REFRESH_CLIENTS_COUNTER_ETS, UserId, {3, ScheduleRef}),
+
                 case TimeToExpiration < 60 of
-                    true  ->
-                        handle(ProtocolVersion, {refresh_access, UserId});
+                    true ->
+                        handle(ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef});
                     false ->
                         TimeToRefresh = timer:seconds(trunc(TimeToExpiration * 4 / 5)),
-                        erlang:send_after(TimeToRefresh, control_panel, {timer, {asynch, ProtocolVersion, {run_scheduled_refresh, UserId}}}),
+                        erlang:send_after(TimeToRefresh, control_panel, {timer, {asynch, ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef}}}),
                         ok
                 end;
 
@@ -107,25 +117,35 @@ handle(ProtocolVersion, {request_refresh, UserKey, Consumer}) ->
                 ok
         end
     catch
-        Error -> Error
+        Error ->
+            ?error("Error scheduling access refresh for user identified by ~p: ~p", [UserKey, Error]),
+            Error
     end;
 
 handle(_ProtocolVersion, {fuse_session_close, UserKey, ConnectionPid}) ->
-    #veil_document{uuid = UserId} = user_logic:get_user(UserKey),
+    {ok, #veil_document{uuid = UserId}} = user_logic:get_user(UserKey),
+    ?debug("Removing refresh consumer ~p for user ~p", [{fuse, ConnectionPid}, UserId]),
     ets:delete_object(?REFRESH_CLIENTS_ETS, {UserId, {fuse, ConnectionPid}}),
+    ets:update_counter(?REFRESH_CLIENTS_COUNTER_ETS, UserId, {2, -1, 0, 0}),
     ok;
 
-handle(ProtocolVersion, {run_scheduled_refresh, UserId}) ->
-    case ets:member(?REFRESH_CLIENTS_ETS, UserId) of
-        true ->
-            TimeToExpiration = refresh_access(UserId),
+handle(ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef}) ->
+    [{UserId, Counter, Ref}] = ets:lookup(?REFRESH_CLIENTS_COUNTER_ETS, UserId),
+    case {Counter > 0, Ref} of
+        {true, ScheduleRef} ->
+            ?info("Refreshing access for user ~p", [UserId]),
+            {ok, TimeToExpiration} = refresh_access(UserId),
             TimeToRefresh = timer:seconds(trunc(TimeToExpiration * 4 / 5)),
-            erlang:send_after(TimeToRefresh, control_panel, {timer, {asynch, ProtocolVersion, {refresh_access, UserId}}}),
+            erlang:send_after(TimeToRefresh, control_panel, {timer, {asynch, ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef}}}),
             ok;
 
-        false -> ok
-    end;
+        {false, ScheduleRef} ->
+            ?info("Unscheduling access refreshes for user ~p", [UserId]),
+            ok;
 
+        _ ->
+            ok
+    end;
 
 handle(_ProtocolVersion, _Msg) ->
     ok.
@@ -142,19 +162,20 @@ handle(_ProtocolVersion, _Msg) ->
 %% ====================================================================
 cleanup() ->
     ets:delete(?REFRESH_CLIENTS_ETS),
+    ets:delete(?REFRESH_CLIENTS_COUNTER_ETS),
     ok.
 
 
 %% refresh_access/2
 %% ====================================================================
 %% @doc Refresh user's access and schedule a next refresh.
--spec refresh_access(UserDoc :: #veil_document{record :: #user{}}) ->
+-spec refresh_access(UserId :: string()) ->
     {ok, ExpiresIn :: non_neg_integer()} | {error, Reason :: any()}.
 %% ====================================================================
-refresh_access(#veil_document{uuid = UserId} = UserDoc) ->
-    case openid_utils:refresh_access(UserDoc) of
+refresh_access(UserId) ->
+    case openid_utils:refresh_access(UserId) of
         {ok, ExpiresIn, NewAccessToken} ->
-            Consumers = ets:lookup_element(?REFRESH_CLIENTS_ETS, UserId, 2),
+            Consumers = ets:select(?REFRESH_CLIENTS_ETS, [{{UserId, '$1'}, [], ['$1']}]),
 
             Context = wf_context:init_context([]),
 
@@ -167,7 +188,8 @@ refresh_access(#veil_document{uuid = UserId} = UserDoc) ->
                                 vcn_gui_utils:set_access_token(NewAccessToken);
 
                             _ ->
-                                ets:delete_object(?REFRESH_CLIENTS_ETS, {UserId, {gui_session, GuiSession}})
+                                ets:delete_object(?REFRESH_CLIENTS_ETS, {UserId, {gui_session, GuiSession}}),
+                                ets:update_counter(?REFRESH_CLIENTS_COUNTER_ETS, UserId, {2, -1, 0, 0})
                         end;
 
                     {fuse, ConnectionPid} ->

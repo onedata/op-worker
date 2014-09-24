@@ -98,11 +98,12 @@ validate_login() ->
 %% refresh_access/1
 %% ====================================================================
 %% @doc Refresh user's access.
--spec refresh_access(UserDoc :: #veil_document{record :: #user{}}) ->
+-spec refresh_access(UserId :: string()) ->
     {ok, ExpiresIn :: non_neg_integer(), NewAccessToken :: binary()} |
     {error, Reason :: any()}.
 %% ====================================================================
-refresh_access(#veil_document{uuid = UserId, record = User} = UserDoc) ->
+refresh_access(UserId) ->
+    {ok, #veil_document{record = User} = UserDoc} = user_logic:get_user({uuid, UserId}),
     #user{refresh_token = RefreshToken} = User,
     Request = [{<<"grant_type">>, <<"refresh_token">>},
                {<<"refresh_token">>, RefreshToken}],

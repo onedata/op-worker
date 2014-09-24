@@ -229,9 +229,6 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
             end
     end,
 
-    %% Refresh user's access token and schedule future refreshes
-    gen_server:call(?Dispatcher_Name, {control_panel, {synch, 1, {request_refresh, {uuid, UID}, {fuse, self()}}}}),
-
     %% Env Vars list. Entry format: {Name :: atom(), value :: string()}
     EnvVars = [{list_to_atom(string:to_lower(Name)), Value} || #handshakerequest_envvariable{name = Name, value = Value} <- Vars],
 
@@ -263,6 +260,9 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
                 ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [UserKey, Error]),
                 throw({no_user_found_error, Error, MsgId})
         end,
+
+    %% Refresh user's access token and schedule future refreshes
+    gen_server:call(?Dispatcher_Name, {control_panel, 1, {request_refresh, {uuid, UID}, {fuse, self()}}}),
 
     %% Fetch session data (using FUSE ID)
     case dao_lib:apply(dao_cluster, get_fuse_session, [NewFuseId], ProtocolVersion) of
@@ -424,19 +424,24 @@ websocket_info(_Msg, Req, State) ->
     State :: #handler_state{}.
 %% ====================================================================
 websocket_terminate(_Reason, _Req, State) ->
-    #handler_state{peer_serial = _Serial, connection_id = ConnID, peer_dn = DN, user_global_id = GRUID} = State,
+    #handler_state{peer_serial = _Serial, connection_id = ConnID, peer_dn = DN, user_global_id = GRUID, peer_type = PeerType} = State,
     ?debug("WebSocket connection  terminate for peer ~p with reason: ~p", [_Serial, _Reason]),
     dao_lib:apply(dao_cluster, remove_connection_info, [ConnID], 1),        %% Cleanup connection info.
-    if
-        DN =/= undefined ->
-            gen_server:call(?Dispatcher_Name, {control_panel, {asynch, 1, {fuse_session_close, {dn, DN}, self()}}});
 
-        GRUID =/= undefined ->
-            gen_server:call(?Dispatcher_Name, {control_panel, {asynch, 1, {fuse_session_close, {global_id, GRUID}, self()}}});
+    case PeerType of
+        user ->
+            UserIdentification =
+                if
+                    DN =/= undefined -> {dn, DN};
+                    GRUID =/= undefined -> {global_id, GRUID}
+                end,
 
-        true -> %% provider
+            gen_server:call(?Dispatcher_Name, {control_panel, 1, {fuse_session_close, UserIdentification, self()}});
+
+        provider ->
             ok
     end,
+
     gen_server:cast(?Node_Manager_Name, {delete_callback_by_pid, self()}),
     ok.
 

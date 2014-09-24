@@ -647,6 +647,15 @@ invert_dn_string(DNString) ->
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
 update_access_credentials(UserDoc, AccessToken, RefreshToken, ExpirationTime) ->
+    NewDoc = update_access_credentials_int(UserDoc, AccessToken, RefreshToken, ExpirationTime),
+
+    case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
+        {ok, _} -> ok;
+        {error, Reason} ->
+            ?error("Cannot update user ~p access credentials: ~p", [UserDoc#veil_document.uuid, Reason]),
+            {error, Reason}
+    end.
+update_access_credentials_int(UserDoc, AccessToken, RefreshToken, ExpirationTime) ->
     #veil_document{record = #user{global_id = GlobalId} = User} = UserDoc,
     fslogic_context:set_gr_auth(GlobalId, AccessToken),
     UserDoc#veil_document{record = User#user{
@@ -675,7 +684,7 @@ update_access_credentials(UserDoc, AccessToken, RefreshToken, ExpirationTime) ->
 %% ====================================================================
 synchronize_user_info(User, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime) ->
     %% Actual updates will probably happen so rarely, that there is no need to scoop those 3 DB updates into one.
-    User1 = update_access_credentials(User, AccessToken, RefreshToken, AccessExpirationTime),
+    User1 = update_access_credentials_int(User, AccessToken, RefreshToken, AccessExpirationTime),
     User2 = case (get_teams(User1) =:= Teams) or (Teams =:= []) of
                 true -> User1;
                 false ->
