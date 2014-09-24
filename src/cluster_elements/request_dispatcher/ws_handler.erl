@@ -77,17 +77,12 @@ websocket_init(TransportName, Req, _Opts) ->
     {ok, DispatcherTimeout} = application:get_env(veil_cluster_node, dispatcher_timeout),
     InitCtx = #handler_state{dispatcher_timeout = DispatcherTimeout},
 
-    case SessionId of
-        SessionId when is_binary(SessionId) ->
-            SessionData = oneproxy:get_session(oneproxy_dispatcher, SessionId),
-            ?info("SessionData ===========================> ~p", [SessionData]),
-            ClientCerts = base64:decode(SessionData),
-            [OtpCert | Certs] = [OTP || {'Certificate', OTP, _} <- public_key:pem_decode(ClientCerts)],
-
+    case gsi_handler:get_certs_from_req(oneproxy_dispatcher, Req) of
+        {ok, {OtpCert, Certs}} ->
             {ok, {Serial, _Issuer}} = public_key:pkix_issuer_id(OtpCert, self),
             InitCtx2 = InitCtx#handler_state{peer_serial = Serial},
             {ok, Req, setup_connection(InitCtx2, OtpCert, Certs, auth_handler:is_provider(OtpCert))};
-        undefined ->
+        {error, _} ->
             {GRUID, Req2}  = cowboy_req:header(<<"global-user-id">>, Req),
             {Secret, Req3} = cowboy_req:header(<<"authentication-secret">>, Req2),
 

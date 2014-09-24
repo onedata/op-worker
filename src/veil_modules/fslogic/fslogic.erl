@@ -74,21 +74,21 @@ handle(ProtocolVersion, is_write_enabled) ->
             %% there was no event handler for rm_event then it would need manual trigger to enable writing
             %% in most cases Exceeded == true so in most cases we will not call user_logic:quota_exceeded
             case Exceeded of
-              true -> not(user_logic:quota_exceeded({dn, fslogic_context:get_user_dn()}, ProtocolVersion));
+              true -> true;%not(user_logic:quota_exceeded({dn, fslogic_context:get_user_dn()}, ProtocolVersion));
               _ -> true
             end;
           Error ->
             ?warning("cannot get quota doc for user with dn: ~p, Error: ~p", [fslogic_context:get_user_dn(), Error]),
-            false
+              true
         end;
       Error ->
         ?warning("cannot get user with dn: ~p, Error: ~p", [fslogic_context:get_user_dn(), Error]),
-        false
+          true
     end
   catch
     E1:E2 ->
       ?warning("Error in is_write_enabled handler, Error: ~p:~p", [E1, E2]),
-      false
+      true
   end;
 
 

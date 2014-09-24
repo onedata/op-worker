@@ -91,9 +91,14 @@ cleanup() ->
 -spec maybe_handle_message(RequestBody :: tuple(), SpaceId :: binary()) -> Result :: term().
 %% ====================================================================
 maybe_handle_message(RequestBody, SpaceId) ->
+    put(t0, vcn_utils:mtime()),
     {ok, #space_info{providers = Providers}} = fslogic_objects:get_space({uuid, SpaceId}),
 
+    put(t1, vcn_utils:mtime()),
+
     Self = cluster_manager_lib:get_provider_id(),
+
+    put(t2, vcn_utils:mtime()),
 
     case lists:member(Self, Providers) of
         true ->
@@ -257,15 +262,20 @@ handle_message(Record) when is_record(Record, writefile) ->
   FileId = Record#writefile.file_id,
   Bytes = Record#writefile.data,
   Offset = Record#writefile.offset,
+    put(t3, vcn_utils:mtime()),
   SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
+    put(t4, vcn_utils:mtime()),
   case SH_And_ID of
     {Storage_helper_info, File} ->
       {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info),
+        put(t5, vcn_utils:mtime()),
       case PermsStatus of
         ok ->
           case Perms of
             true ->
               TmpAns = storage_files_manager:write(Storage_helper_info, File, Offset, Bytes),
+                put(t6, vcn_utils:mtime()),
+                ?info("Write ========================> ~p ~p ~p ~p ~p ~p", [get(t6)-get(t5), get(t5)-get(t4), get(t4)-get(t3), get(t3)-get(t2), get(t2)-get(t1), get(t1)-get(t0)]),
               case TmpAns of
                 BytesNum when is_integer(BytesNum) -> #writeinfo{answer_status = ?VOK, bytes_written = BytesNum};
                   {_, ErrorCode} when is_integer(ErrorCode) ->

@@ -119,7 +119,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
             end,
             start_dispatcher_listener(),
             {ok, Interval} = application:get_env(?APP_Name, initialization_time),
-            erlang:send_after(Interval * 1000, self(), {timer, init_listeners}),
+            erlang:send_after(0, self(), {timer, init_listeners}),
             {ok, MonitoringInitialization} = application:get_env(?APP_Name, node_monitoring_initialization),
             erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_node_monitoring});
         false -> ok
@@ -131,13 +131,11 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
     ets:new(?WRITE_DISABLED_USERS, [set, named_table, public]),
     ets:new(?ACK_HANDLERS, [set, named_table, public]),
 
-    process_flag(trap_exit, true),
     erlang:send_after(10, self(), {timer, do_heart_beat}),
 
     {ok, #node_state{node_type = Type, ccm_con_status = not_connected}};
 
 init([Type]) when Type =:= test_worker ->
-    process_flag(trap_exit, true),
     {ok, MonitoringInitialization} = application:get_env(?APP_Name, node_monitoring_initialization),
     erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_node_monitoring}),
     erlang:send_after(10, self(), {timer, do_heart_beat}),
@@ -1201,7 +1199,7 @@ start_dispatcher_listener() ->
     {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
     {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
 
-    LocalPort = 20000 + Port,
+    LocalPort = oneproxy:get_local_port(Port),
     Pid = spawn_link(fun() -> oneproxy:start(Port, LocalPort, CertFile, verify_peer) end),
     register(oneproxy_dispatcher, Pid),
 
@@ -1235,7 +1233,7 @@ start_gui_listener() ->
     {ok, MaxKeepAlive} = application:get_env(veil_cluster_node, control_panel_max_keepalive),
     {ok, Timeout} = application:get_env(veil_cluster_node, control_panel_socket_timeout),
 
-    LocalPort = 20000 + GuiPort,
+    LocalPort = oneproxy:get_local_port(GuiPort),
     spawn_link(fun() -> oneproxy:start(GuiPort, LocalPort, CertString, verify_none) end),
 
     % Setup GUI dispatch opts for cowboy
@@ -1358,8 +1356,9 @@ start_rest_listener() ->
     % Get REST port from env and setup dispatch opts for cowboy
     {ok, RestPort} = application:get_env(veil_cluster_node, rest_port),
 
-    LocalPort = 20000 + RestPort,
-    spawn_link(fun() -> oneproxy:start(RestPort, LocalPort, CertString, verify_peer) end),
+    LocalPort = oneproxy:get_local_port(RestPort),
+    Pid = spawn_link(fun() -> oneproxy:start(RestPort, LocalPort, CertString, verify_peer) end),
+    register(oneproxy_rest, Pid),
 
     RestDispatch = [
         {'_', [

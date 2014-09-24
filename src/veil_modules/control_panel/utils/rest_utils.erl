@@ -20,7 +20,7 @@
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
--export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, parse_body/1,
+-export([verify_peer_cert/2, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, parse_body/1,
          validate_body/1, prepare_metadata/1, prepare_metadata/2, ensure_path_ends_with_slash/1, get_path_leaf_with_ending_slash/1, trim_spaces/1]).
 
 %% ====================================================================
@@ -125,40 +125,20 @@ error_reply(Record) ->
 %% ====================================================================
 %% @doc Verifies peer certificate (obtained from given cowboy request)
 %% @end
--spec verify_peer_cert(Req :: req()) -> {ok, DnString :: string()} | no_return().
+-spec verify_peer_cert(Req :: req(), Certs :: false | {certs, {PeerCert :: term(), Chain :: [term()]}}) -> {ok, DnString :: string()} | no_return().
 %% ====================================================================
-verify_peer_cert(Req) ->
+verify_peer_cert(Req, Certs) ->
     case cowboy_req:header(<<"x-auth-token">>, Req) of
         {undefined, Req1} ->
-            {OtpCert, Certs} = try
-                {ok, PeerCert} = ssl:peercert(cowboy_req:get(socket, Req1)),
-                {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
-                [{_, [TryOtpCert | TryCerts], _}] = ets:lookup(gsi_state, {Serial, Issuer}),
-                {TryOtpCert, TryCerts}
-                               catch
-                                   _:_ ->
-                                       ?error("[REST] Peer connected but cerificate chain was not found. Please check if GSI validation is enabled."),
-                                       throw(invalid_cert)
-                               end,
-            case gsi_handler:call(gsi_nif, verify_cert_c,
-                [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate
-                    [public_key:pkix_encode('OTPCertificate', Cert, otp) || Cert <- Certs], %% peer CA chain
-                    [DER || [DER] <- ets:match(gsi_state, {{ca, '_'}, '$1', '_'})],         %% cluster CA store
-                    [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
-                {ok, 1} ->
+            case Certs of
+                {certs, {OtpCert, Certs}} ->
                     {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
                     {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
                     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
                     {ok, DnString, Req1};
-                {ok, 0, Errno} ->
-                    ?error("[REST] Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
-                    throw(invalid_cert);
-                {error, Reason} ->
-                    ?error("[REST] GSI peer verification callback error: ~p", [Reason]),
-                    throw(invalid_cert);
-                Other ->
-                    ?error("[REST] GSI verification callback returned unknown response ~p", [Other]),
-                    throw(invalid_cert)
+                _ ->
+                    ?error("[REST] Peer connected but cerificate chain was not found. Please check if GSI validation is enabled."),
+                     throw(invalid_cert)
             end;
         {Token, Req2} ->
             case binary:split(base64:decode(Token),<<";">>) of

@@ -19,8 +19,20 @@
 -record(oneproxy_state, {timeout = timer:minutes(1), endpoint}).
 
 %% API
--export([start/4, main_loop/2, get_session/2]).
+-export([start/4, main_loop/2, get_session/2, get_local_port/1]).
 
+
+get_session(OneProxyPid, SessionId) ->
+    exec(OneProxyPid, <<"get_session ", (vcn_utils:ensure_binary(SessionId))/binary>>).
+
+get_local_port(443) ->
+    12001;
+get_local_port(5555) ->
+    12002;
+get_local_port(8443) ->
+    12003;
+get_local_port(Port) ->
+    20000 + Port.
 
 start(ListenerPort, ForwardPort, CertFile, VerifyType) ->
     {ok, CWD} = file:get_cwd(),
@@ -33,7 +45,7 @@ start(ListenerPort, ForwardPort, CertFile, VerifyType) ->
     catch ca_crl_to_der(get_der_certs_dir()),
 
     Port = open_port({spawn_executable, ExecPath}, [
-        {line, 2 * 1024}, binary,
+        {line, 1024 * 1024}, binary,
         {args, [integer_to_list(ListenerPort), "127.0.0.1", integer_to_list(ForwardPort), CertFile, vcn_utils:ensure_list(VerifyType), filename:join(CADir, ?DER_CERTS_DIR)]}
     ]),
     try
@@ -68,7 +80,7 @@ main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = Sta
         {_Pid, reload_certs} ->
             case ca_crl_to_der(get_der_certs_dir()) of
                 ok ->
-                    port_command(Port, <<"reload_certs">>),
+                    port_command(Port, <<"reload_certs\n">>),
                     timer:send_after(timer:minutes(5), {self(), reload_certs}),
                     State;
                 {error, _} ->
@@ -76,7 +88,7 @@ main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = Sta
                     State
             end;
         {Pid, {command, CMD}} ->
-            port_command(Port, CMD),
+            port_command(Port, <<CMD/binary, "\n">>),
             receive
                 {Port, {data, {eol, SessionData}}} ->
                     Pid ! {ok, SessionData}
@@ -133,11 +145,6 @@ ca_crl_to_der(Dir) ->
                     {error, Reason1}
             end
     end.
-
-
-
-get_session(OneProxyPid, SessionId) ->
-    exec(OneProxyPid, <<"get_session ", (vcn_utils:ensure_binary(SessionId))/binary>>).
 
 exec(OneProxyPid, CMD) ->
     OneProxyPid ! {self(), {command, CMD}},

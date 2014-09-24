@@ -18,7 +18,7 @@
 
 -deprecated([proxy_subject/1]).
 
--export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3, get_ca_certs/0, get_ca_certs_from_all_cert_dirs/0, strip_self_signed_ca/1, get_ciphers/0]).
+-export([init/0, get_certs_from_req/2, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3, get_ca_certs/0, get_ca_certs_from_all_cert_dirs/0, strip_self_signed_ca/1, get_ciphers/0]).
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -74,6 +74,24 @@ init() ->
     end,
 
     ok.
+
+
+get_certs_from_req(OneProxyHandler, Req) ->
+    {SessionId, _} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
+    case SessionId of
+        undefined ->
+            {error, no_gsi_session};
+        SessionId ->
+            case oneproxy:get_session(OneProxyHandler, SessionId) of
+                {error, Reason} ->
+                    {error, Reason};
+                {ok, SessionData} ->
+                    ClientCerts = base64:decode(SessionData),
+                    [OtpCert | Certs] = lists:reverse([public_key:pkix_decode_cert(DER, otp) || {'Certificate', DER, _} <- public_key:pem_decode(ClientCerts)]),
+                    {ok, {OtpCert, Certs}}
+            end
+    end.
+
 
 %% get_ca_certs_from_all_cert_dirs/0
 %% ====================================================================

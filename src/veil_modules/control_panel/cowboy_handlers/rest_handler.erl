@@ -40,7 +40,16 @@
 %% @end
 -spec init(any(), any(), any()) -> {upgrade, protocol, cowboy_rest}.
 %% ====================================================================
-init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
+init(_, Req, Opts) ->
+    NewOpts =
+        case gsi_handler:get_certs_from_req(oneproxy_rest, Req) of
+            {ok, {OtpCert, Certs}} ->
+                [{certs, {OtpCert, Certs}}];
+            {error, _} ->
+                []
+        end,
+
+    {upgrade, protocol, cowboy_rest, Req, NewOpts ++ Opts}.
 
 %% rest_init/2
 %% ====================================================================
@@ -51,13 +60,13 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% @end
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
-rest_init(Req, _Opts) ->
+rest_init(Req, Opts) ->
     case cowboy_req:path_info(Req) of
         {[Endpoint], _} when Endpoint =:= ?connection_check_path orelse Endpoint =:= <<"token">> ->
             % when checking connection or generating token, continue without cert verification
             init_state(Req);
         _ ->
-            {ok, Identity, Req1} = rest_utils:verify_peer_cert(Req),
+            {ok, Identity, Req1} = rest_utils:verify_peer_cert(Req, lists:keyfind(certs, 1, Opts)),
             Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req1),
             case rest_utils:prepare_context(Identity) of
                 ok -> init_state(Req2);

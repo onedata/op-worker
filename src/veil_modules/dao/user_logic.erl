@@ -23,7 +23,7 @@
 %% API
 %% ====================================================================
 -export([sign_in/2, create_user/6, create_user/7, get_user/1, remove_user/1, list_all_users/0]).
--export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
+-export([get_login/1, get_name/1, get_teams/1, update_teams/2, get_space_ids/1]).
 -export([get_email_list/1, update_email_list/2, get_role/1, update_role/2]).
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
@@ -814,6 +814,22 @@ get_space_names(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
     get_space_names(UserDoc).
 
+
+%% get_space_ids/1
+%% ====================================================================
+%% @doc Returns list of space IDs (as list of binary()) for given user. UserQuery shall be either #user{} record
+%%      or query compatible with user_logic:get_user/1.
+%%      The method assumes that user exists therefore will fail with exception when it doesn't.
+%% @end
+-spec get_space_ids(UserQuery :: term()) -> [binary()] | no_return().
+%% ====================================================================
+get_space_ids(#veil_document{record = #user{} = User}) ->
+    get_space_ids(User);
+get_space_ids(#user{spaces = Spaces}) ->
+    [vcn_utils:ensure_binary(SpaceId) || SpaceId <- Spaces];
+get_space_ids(UserQuery) ->
+    {ok, UserDoc} = user_logic:get_user(UserQuery),
+    get_space_ids(UserDoc).
 
 %% get_spaces/1
 %% ====================================================================

@@ -79,6 +79,9 @@ int main(int argc, char *argv[])
                 } else if (command == "get_session") {
                     std::cin >> arg0;
                     std::cout << s->get_session(arg0) << std::endl;
+                    std::cout.flush();
+                } else {
+                    LOG(ERROR) << "Unknown command '" << command << "'";
                 }
             }
         }
