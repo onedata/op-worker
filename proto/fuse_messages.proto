@@ -62,6 +62,27 @@ message XAttrList {
   repeated XAttrEntry attrs = 2;
 }
 
+message AccessControlEntity {
+  required uint32 acetype = 1;
+  required string identifier = 2;
+  required uint32 aceflags = 3;
+  required uint32 acemask = 4;
+}
+
+message GetAcl {
+  required string file_logic_name = 1;
+}
+
+message Acl {
+  optional string answer = 1 [default = "ok"];
+  repeated AccessControlEntity entities = 2;
+}
+
+message SetAcl {
+  required string file_logic_name = 1;
+  repeated AccessControlEntity entities = 2;
+}
+
 message GetFileAttr {
     required string file_logic_name = 1;
 }
