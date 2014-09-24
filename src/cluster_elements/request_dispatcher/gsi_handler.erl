@@ -270,35 +270,16 @@ start_slaves(Count) when Count >= 0 ->
 %% ====================================================================
 initialize_node(NodeName) when is_atom(NodeName) ->
     ?info("Trying to start GSI slave node: ~p @ ~p", [NodeName, get_host()]),
-    NodeRes1 =
-        case slave:start(get_host(), NodeName, make_code_path() ++ " -setcookie \"" ++ atom_to_list(erlang:get_cookie()) ++ "\"", no_link, erl) of
-            {error, {already_running, Node}} ->
-                ?info("GSI slave node ~p is already running", [Node]),
-                Node;
-            {ok, Node} ->
-                ?info("GSI slave node ~p started", [Node]),
-                Node;
-            {error, Reason} ->
-                ?error("Could not start GSI slave node ~p @ ~p due to error: ~p", [NodeName, get_host(), Reason]),
-                'nonode@nohost'
-        end,
-    case NodeRes1 of
-        'nonode@nohost' -> {error, cannot_start_node};
-        NodeRes ->
-            {ok, Prefix} = application:get_env(?APP_Name, nif_prefix),
-            case rpc:call(NodeRes, gsi_nif, start, [atom_to_list(Prefix)]) of
-                ok ->
-                    ?info("NIF lib on node ~p was successfully loaded", [NodeRes]),
-                    ets:insert(gsi_state, {node, NodeName});
-                {error,{reload, _}} ->
-                    ?info("NIF lib on node ~p is already loaded", [NodeRes]),
-                    ets:insert(gsi_state, {node, NodeName});
-                {error, Reason1} ->
-                    ?error("Could not load NIF lib on node ~p due to: ~p. Killing node", [NodeRes, Reason1]),
-                    slave:stop(NodeRes);
-                {badrpc, Reason2} ->
-                    ?error("Could not load NIF lib on node ~p due to: ~p. Ignoring", [NodeRes, Reason2])
-            end
+    case slave:start(get_host(), NodeName, make_code_path() ++ " -setcookie \"" ++ atom_to_list(erlang:get_cookie()) ++ "\"", no_link, erl) of
+        {error, {already_running, Node}} ->
+            ?info("GSI slave node ~p is already running", [Node]),
+            ets:insert(gsi_state, {node, NodeName});
+        {ok, Node} ->
+            ?info("GSI slave node ~p started", [Node]),
+            ets:insert(gsi_state, {node, NodeName});
+        {error, Reason} ->
+            ?error("Could not start GSI slave node ~p @ ~p due to error: ~p", [NodeName, get_host(), Reason]),
+            {error, Reason}
     end.
 
 

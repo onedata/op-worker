@@ -18,6 +18,7 @@
 -include("messages_white_list.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
+-include("remote_file_management_pb.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/cluster_rengine/cluster_rengine.hrl").
@@ -68,39 +69,25 @@ init(_Proto, _Req, _Opts) ->
 websocket_init(TransportName, Req, _Opts) ->
     ?debug("WebSocket connection received. Transport: ~p", [TransportName]),
 
+    {ClientSubjectDN, _} = cowboy_req:header(<<"onedata-internal-client-subject-dn">>, Req),
+    {SessionId, _} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
+    ?info("ClientSubjectDN ===========================> ~p", [ClientSubjectDN]),
+    ?info("SessionId ===========================> ~p", [SessionId]),
+
     {ok, DispatcherTimeout} = application:get_env(veil_cluster_node, dispatcher_timeout),
     InitCtx = #handler_state{dispatcher_timeout = DispatcherTimeout},
 
-    case ssl:peercert(cowboy_req:get(socket, Req)) of
-        {ok, PeerCert} ->
-            {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
+    case SessionId of
+        SessionId when is_binary(SessionId) ->
+            SessionData = oneproxy:get_session(oneproxy_dispatcher, SessionId),
+            ?info("SessionData ===========================> ~p", [SessionData]),
+            ClientCerts = base64:decode(SessionData),
+            [OtpCert | Certs] = [OTP || {'Certificate', OTP, _} <- public_key:pem_decode(ClientCerts)],
 
-            case ets:lookup(gsi_state, {Serial, Issuer}) of
-                [{_, [OtpCert | Certs], _}] ->
-                    case gsi_handler:call(gsi_nif, verify_cert_c,
-                        [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate
-                            [public_key:pkix_encode('OTPCertificate', Cert, otp) || Cert <- Certs], %% peer CA chain
-                            [DER || [DER] <- ets:match(gsi_state, {{ca, '_'}, '$1', '_'})],         %% cluster CA store
-                            [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
-                        {ok, 1} ->
-                            InitCtx2 = InitCtx#handler_state{peer_serial = Serial},
-                            {ok, Req, setup_connection(InitCtx2, OtpCert, Certs, auth_handler:is_provider(OtpCert))};
-                        {ok, 0, Errno} ->
-                            ?info("Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
-                            {shutdown, Req};
-                        {error, Reason} ->
-                            ?error("GSI peer verification callback error: ~p", [Reason]),
-                            {shutdown, Req};
-                        Other ->
-                            ?error("GSI verification callback returned unknown response ~p", [Other]),
-                            {shutdown, Req}
-                    end;
-                _ ->
-                    ?error("Peer was conected but cerificate chain was not found. Please check if GSI validation is enabled."),
-                    {shutdown, Req}
-            end;
-
-        {error, no_peercert} ->
+            {ok, {Serial, _Issuer}} = public_key:pkix_issuer_id(OtpCert, self),
+            InitCtx2 = InitCtx#handler_state{peer_serial = Serial},
+            {ok, Req, setup_connection(InitCtx2, OtpCert, Certs, auth_handler:is_provider(OtpCert))};
+        undefined ->
             {GRUID, Req2}  = cowboy_req:header(<<"global-user-id">>, Req),
             {Secret, Req3} = cowboy_req:header(<<"authentication-secret">>, Req2),
 
@@ -154,14 +141,28 @@ setup_connection(InitCtx, OtpCert, _Certs, true) ->
 %% ====================================================================
 websocket_handle({binary, Data}, Req, #handler_state{peer_type = PeerType} = State) ->
     try
+        Time0 = vcn_utils:mtime(),
         Request =
             case PeerType of
                 provider -> decode_providermsg_pb(Data);
                 user     -> decode_clustermsg_pb(Data)
             end,
+        Time1 = vcn_utils:mtime(),
         ?debug("Received request: ~p", [Request]),
 
-        handle(Req, Request, State) %% Decode ClusterMsg and handle it
+        Res = case Request of
+            {Synch, Task, Answer_decoder_name, ProtocolVersion, #remotefilemangement{input = #writefile{offset = Offset, data = WriteData}}, MsgId, Answer_type, {GlobalId, TokenHash}} ->
+                %?info("WRITE ------------------> ~p ~p", [Offset, size(WriteData)]),
+                {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #writeinfo{answer_status = ?VOK, bytes_written = size(WriteData)})}, Req, State};
+            {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} ->
+            %?info("MSG ======================> ~p", [Msg]),
+
+            handle(Req, Request, State)
+        end,
+
+        Time2 = vcn_utils:mtime(),
+        %?info("HANDLE ============> ~p ~p ~p ~p", [Time2 - Time1, Time1 - Time0, res, size(Data)]),
+        Res
     catch
         wrong_message_format                            -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
         {wrong_internal_message_type, MsgId2}           -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
@@ -302,6 +303,9 @@ handle(Req, {pull, FuseID, CLM}, #handler_state{peer_type = provider, provider_i
 handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = _CLM,
         #handler_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
                       access_token = SessionAccessToken, user_global_id = SessionUserGID} = State) ->
+
+    Time0 = vcn_utils:mtime(),
+
     %% Check if received message requires FuseId
     MsgType = case Msg of
                   M0 when is_tuple(M0) -> erlang:element(1, M0); %% Record
@@ -312,6 +316,8 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         {[], true} -> throw({invalid_fuse_id, MsgId}); % Message requires FuseId which is not present
         {FID, _} when is_list(FID) -> ok                               % FuseId is present
     end,
+
+    Time1 = vcn_utils:mtime(),
 
     {UserGID, AccessToken} =
         case get({GlobalId, TokenHash}) of
@@ -341,6 +347,8 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         false -> throw({no_credentials, MsgId})
     end,
 
+    Time2 = vcn_utils:mtime(),
+
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->
                       #veil_request{subject = DnString, request =
@@ -351,6 +359,8 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                   _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
               end,
 
+    Time3 = vcn_utils:mtime(),
+
     case Synch of
         true ->
             try
@@ -360,6 +370,8 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                     ok ->
                         receive
                             {worker_answer, MsgId, Ans2} ->
+                                Time4 = vcn_utils:mtime(),
+                                ?info("Times ~p ~p: ~p ~p ~p ~p ~p", [ok, Ans2, Time4 - Time3, Time3 - Time2, Time2 - Time1, Time1 - Time0, Time4 - Time0]),
                                 {reply, {binary, encode_answer(Ans, MsgId, Answer_type, Answer_decoder_name, Ans2)}, Req, State}
                         after DispatcherTimeout ->
                             {reply, {binary, encode_answer(dispatcher_timeout, MsgId)}, Req, State}
