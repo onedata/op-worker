@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/enable_shared_from_this.hpp>
@@ -51,6 +52,9 @@ namespace proxy {
         std::vector<std::string> ca_certs_;
 
         std::map<std::string, std::string> sessions_;
+
+        std::mutex certs_mutex_;
+        std::mutex session_mutex_;
     };
 
 } // namespace proxy

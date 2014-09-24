@@ -26,7 +26,7 @@ namespace proxy {
         , acceptor_(client_io_service,
                     boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(),
                                                    server_port))
-        , context_(boost::asio::ssl::context::sslv3_server)
+        , context_(boost::asio::ssl::context::tlsv12_server)
         , listen_port_(server_port)
         , forward_host_(forward_host)
         , ca_dirs_(ca_dirs)
@@ -77,6 +77,7 @@ namespace proxy {
 
     void tls_server::load_certs()
     {
+        std::lock_guard<std::mutex> guard(certs_mutex_);
         std::vector<std::string> crls;
         std::vector<std::string> ca_certs;
 
@@ -132,27 +133,32 @@ namespace proxy {
 
     const std::vector<std::string> &tls_server::get_crl()
     {
+        std::lock_guard<std::mutex> guard(certs_mutex_);
         return crls_;
     }
 
     const std::vector<std::string> &tls_server::get_ca()
     {
+        std::lock_guard<std::mutex> guard(certs_mutex_);
         return ca_certs_;
     }
 
 
     void tls_server::register_session(const std::string &session_id, const std::string &session_data)
     {
+        std::lock_guard<std::mutex> guard(session_mutex_);
         sessions_[session_id] = session_data;
     }
 
     void tls_server::remove_session(const std::string &session_id)
     {
+        std::lock_guard<std::mutex> guard(session_mutex_);
         sessions_.erase(session_id);
     }
 
     std::string tls_server::get_session(const std::string &session_id)
     {
+        std::lock_guard<std::mutex> guard(session_mutex_);
         auto itr = sessions_.find(session_id);
         if(itr != sessions_.end()) {
             return itr->second;

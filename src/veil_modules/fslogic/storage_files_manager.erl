@@ -861,7 +861,7 @@ setup_ctx(File) ->
                     UserSpaceIds = user_logic:get_space_ids(UserRec),
                     T3 = vcn_utils:mtime(),
                     SelectedSpaceId = [X || X <- UserSpaceIds, vcn_utils:ensure_binary(SpaceId) =:= X],
-                    SelectedSpaceId1 =
+                    SelectedSpaceIdOrSpace =
                         case SelectedSpaceId of
                             [] ->
                                 UserSpaces0 =
@@ -878,7 +878,16 @@ setup_ctx(File) ->
                         end,
                     T4 = vcn_utils:mtime(),
 
-                    {ok, SelectedSpace} = fslogic_objects:get_space({uuid, SelectedSpaceId1}),
+                    SelectedSpace =
+                        case SelectedSpaceIdOrSpace of
+                            [] -> [];
+                            [MSpaceId | _] when is_binary(MSpaceId) ->
+                                {ok, SelectedSpace1} = fslogic_objects:get_space({uuid, MSpaceId}),
+                                [SelectedSpace1];
+                            [#space_info{} = SpaceInfo1 | _] ->
+                                [SpaceInfo1]
+                        end,
+
                     GIDs =
                         case SelectedSpace of
                             [] ->

@@ -119,7 +119,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
             end,
             start_dispatcher_listener(),
             {ok, Interval} = application:get_env(?APP_Name, initialization_time),
-            erlang:send_after(0, self(), {timer, init_listeners}),
+            erlang:send_after(Interval * 0, self(), {timer, init_listeners}),
             {ok, MonitoringInitialization} = application:get_env(?APP_Name, node_monitoring_initialization),
             erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_node_monitoring});
         false -> ok

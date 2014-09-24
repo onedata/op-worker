@@ -127,17 +127,17 @@ error_reply(Record) ->
 %% @end
 -spec verify_peer_cert(Req :: req(), Certs :: false | {certs, {PeerCert :: term(), Chain :: [term()]}}) -> {ok, DnString :: string()} | no_return().
 %% ====================================================================
-verify_peer_cert(Req, Certs) ->
+verify_peer_cert(Req, GSIState) ->
     case cowboy_req:header(<<"x-auth-token">>, Req) of
         {undefined, Req1} ->
-            case Certs of
+            case GSIState of
                 {certs, {OtpCert, Certs}} ->
                     {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
                     {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
                     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
                     {ok, DnString, Req1};
-                _ ->
-                    ?error("[REST] Peer connected but cerificate chain was not found. Please check if GSI validation is enabled."),
+                Unknown ->
+                    ?error("[REST] Peer connected but cerificate chain was not found (find result: ~p). Please check if GSI validation is enabled.", [Unknown]),
                      throw(invalid_cert)
             end;
         {Token, Req2} ->

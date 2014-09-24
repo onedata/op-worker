@@ -17,6 +17,7 @@ extern "C" {
 #include <boost/bind.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <string>
+#include <system_error>
 #include <openssl/x509.h>
 #include <openssl/pem.h>
 #include <openssl/rand.h>
@@ -47,6 +48,8 @@ namespace proxy {
         unsigned char session_id_bin[SESSION_ID_SIZE];
         if(RAND_bytes(session_id_bin, SESSION_ID_SIZE)) {
             session_id_ = utils::base64_encode(std::string((const char *) session_id_bin, SESSION_ID_SIZE));
+        } else {
+            //throw std::system_error("Could not generate session id");
         }
     }
 
@@ -190,7 +193,7 @@ namespace proxy {
                 X509_NAME_oneline(X509_get_subject_name(peer_cert),
                                   subject_name, 256);
                 LOG(INFO) << "Peer " << subject_name
-                          << " rejected due to SSL error code: " << error;
+                          << " rejected due to SSL error code: {" << result << ", " << error << "}";
             }
         }
 

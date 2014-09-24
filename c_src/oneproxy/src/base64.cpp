@@ -13,7 +13,8 @@ std::string base64_encode(const std::string &binary)
         <boost::archive::iterators::transform_width
          <std::string::const_iterator, 6, 8>> bin_to_base64;
 
-    const std::string padding(3 - (binary.size() % 3), '=');
+    auto last_block_size = binary.size() % 3;
+    const std::string padding(last_block_size ? 3 - (last_block_size) : 0, '=');
     return std::string(bin_to_base64(binary.begin()), bin_to_base64(binary.end())) + padding;
 }
 

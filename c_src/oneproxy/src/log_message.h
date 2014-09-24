@@ -4,6 +4,7 @@
 #include <ostream>
 #include <sstream>
 #include <iostream>
+#include <mutex>
 
 #ifdef NDEBUG
 #define LOG(SEVERITY)                                                          \
@@ -16,6 +17,8 @@
 namespace one {
 namespace proxy {
 
+    extern std::mutex stdout_mutex;
+
     class log_message : public std::ostream {
     public:
         enum Severity {
@@ -26,7 +29,10 @@ namespace proxy {
         };
 
         log_message(Severity s, std::ostream &sink, bool debug_enabled)
-            : sink_(sink), severity_(s), debug_enabled_(debug_enabled)
+            : sink_(sink)
+            , severity_(s)
+            , debug_enabled_(debug_enabled)
+            , stdout_lock(stdout_mutex)
         {
             if (should_log())
                 sink_ << severity() << " ";
@@ -78,6 +84,8 @@ namespace proxy {
         std::ostream &sink_;
         Severity severity_;
         bool debug_enabled_;
+
+        std::lock_guard<std::mutex> stdout_lock;
     };
 
 } // namespace proxy

@@ -49,6 +49,7 @@ init() ->
             case vcn_utils:ensure_running(inets) of
                 ok ->
                     update_crls(CADir),
+                    catch oneproxy:ca_crl_to_der(oneproxy:get_der_certs_dir()),
                     {ok, CRLUpdateInterval} = application:get_env(?APP_Name, crl_update_interval),
                     case timer:apply_interval(CRLUpdateInterval, ?MODULE, update_crls, [CADir]) of
                         {ok, _} -> ok;

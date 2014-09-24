@@ -35,6 +35,8 @@ static void gpv_activate(void) {
 gpv_status gpv_init(GPV_CTX *gpv_ctx) {
     gpv_activate();
 
+    gpv_ctx->last_error = 0;
+
     gpv_ctx->x509_context = X509_STORE_CTX_new();
     gpv_ctx->trusted_store = X509_STORE_new();
     gpv_ctx->chain_stack = sk_X509_new_null();
@@ -85,6 +87,7 @@ gpv_status gpv_verify(GPV_CTX *gpv_ctx) {
                                   globus_gsi_callback_create_proxy_callback);
 
     if(!X509_verify_cert(gpv_ctx->x509_context)) {
+        gpv_ctx->last_error = X509_STORE_CTX_get_error(gpv_ctx->x509_context);
         X509_STORE_CTX_cleanup(gpv_ctx->x509_context);
         return GPV_VALIDATE_ERROR;
     }
@@ -94,7 +97,7 @@ gpv_status gpv_verify(GPV_CTX *gpv_ctx) {
 }
 
 int gpv_get_error(GPV_CTX *ctx) {
-    return X509_STORE_CTX_get_error(ctx->x509_context);
+    return ctx->last_error;
 }
 
 gpv_status gpv_set_leaf_cert(GPV_CTX *gpv_ctx, const byte *buff, int len) {

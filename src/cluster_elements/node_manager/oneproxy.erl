@@ -19,11 +19,11 @@
 -record(oneproxy_state, {timeout = timer:minutes(1), endpoint}).
 
 %% API
--export([start/4, main_loop/2, get_session/2, get_local_port/1]).
+-export([start/4, main_loop/2, get_session/2, get_local_port/1, get_der_certs_dir/0, ca_crl_to_der/1]).
 
 
 get_session(OneProxyPid, SessionId) ->
-    exec(OneProxyPid, <<"get_session ", (vcn_utils:ensure_binary(SessionId))/binary>>).
+    exec(OneProxyPid, <<"get_session">>, <<(vcn_utils:ensure_binary(SessionId))/binary>>).
 
 get_local_port(443) ->
     12001;
@@ -84,15 +84,18 @@ main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = Sta
                     timer:send_after(timer:minutes(5), {self(), reload_certs}),
                     State;
                 {error, _} ->
-                    timer:send_after(timer:seconds(2), {self(), reload_certs}),
+                    timer:send_after(500, {self(), reload_certs}),
                     State
             end;
-        {Pid, {command, CMD}} ->
-            port_command(Port, <<CMD/binary, "\n">>),
+        {Pid, {command, CMD, Args}} ->
+            BinPid = base64:encode(term_to_binary(Pid)),
+            PidSize = size(BinPid),
+            FullCmd = <<CMD/binary, " ", BinPid/binary, " ", Args/binary, "\n">>,
+            port_command(Port, FullCmd),
             receive
-                {Port, {data, {eol, SessionData}}} ->
+                {Port, {data, {eol, <<BinPid:PidSize/binary, " ", SessionData/binary>>}}} ->
                     Pid ! {ok, SessionData}
-            after 500 ->
+            after 5000 ->
                 Pid ! {error, port_timeout}
             end,
             State
@@ -146,8 +149,8 @@ ca_crl_to_der(Dir) ->
             end
     end.
 
-exec(OneProxyPid, CMD) ->
-    OneProxyPid ! {self(), {command, CMD}},
+exec(OneProxyPid, CMD, Args) ->
+    OneProxyPid ! {self(), {command, CMD, Args}},
     receive
         Response -> Response
     after 5000 ->

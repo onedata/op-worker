@@ -3,11 +3,18 @@
 
 #include <iostream>
 #include <vector>
+#include <cstdio>
 
 #include <boost/thread/scoped_thread.hpp>
 #include <boost/thread.hpp>
 #include <boost/make_shared.hpp>
 #include <thread>
+
+namespace one {
+namespace proxy {
+    std::mutex stdout_mutex;
+}
+}
 
 constexpr uint16_t WORKER_COUNT = 8;
 
@@ -16,8 +23,25 @@ using std::atoi;
 
 using namespace one::proxy;
 
+void command_response(std::vector<std::string> tokens)
+{
+    if(tokens.size() == 0)
+        return;
+
+    std::lock_guard<std::mutex> guard(stdout_mutex);
+
+    std::cout << tokens[0];
+    for(int i = 1; i < tokens.size(); ++i) {
+        std::cout << " " << tokens[i];
+    }
+
+    std::cout << "\n";
+    std::cout.flush();
+}
+
 int main(int argc, char *argv[])
 {
+    std::ios_base::sync_with_stdio(false);
     try
     {
         if (argc < 6) {
@@ -69,17 +93,20 @@ int main(int argc, char *argv[])
                       << ":" << atoi(argv[3]) << " has started with "
                       << (worker_count * 2) << " workers";
 
-            std::string command, arg0;
+            std::string line;
+            std::string command, message_id, arg0;
             while (std::cin.good()) {
-                std::cin >> command;
+                std::getline(std::cin, line);
+                std::stringstream line_stream(line);
+
+                line_stream >> command;
                 if (command == "reload_certs") {
                     s->load_certs();
                 } else if (command == "q") {
                     break;
                 } else if (command == "get_session") {
-                    std::cin >> arg0;
-                    std::cout << s->get_session(arg0) << std::endl;
-                    std::cout.flush();
+                    line_stream >> message_id >> arg0;
+                    command_response({ message_id, s->get_session(arg0) });
                 } else {
                     LOG(ERROR) << "Unknown command '" << command << "'";
                 }
