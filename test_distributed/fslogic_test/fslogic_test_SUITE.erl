@@ -2433,10 +2433,10 @@ acl_test(Config) ->
     ?assertEqual({ok,[#accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_veilfstestuser">>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask}]}
         ,VirtualAclAns),
     {ok, VirtualAcl} = VirtualAclAns,
-    ?assertEqual([{<<"acetype">>,<<"ALLOW">>},
+    ?assertEqual([[{<<"acetype">>,<<"ALLOW">>},
         {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
-        {<<"acemask">>,<<"READ, WRITE">>}],
+        {<<"acemask">>,<<"READ, WRITE">>}]],
         fslogic_acl:from_acl_to_json_format(VirtualAcl)),
 
     % test setting and getting acl
