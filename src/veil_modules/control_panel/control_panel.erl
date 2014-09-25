@@ -110,7 +110,7 @@ handle(ProtocolVersion, {request_refresh, UserKey, Consumer}) ->
                         handle(ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef});
                     false ->
                         TimeToRefresh = timer:seconds(trunc(TimeToExpiration * 4 / 5)),
-                        erlang:send_after(TimeToRefresh, control_panel, {timer, {asynch, ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef}}}),
+                        erlang:send_after(TimeToRefresh, whereis(control_panel), {timer, {asynch, ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef}}}),
                         ok
                 end;
 
@@ -144,7 +144,7 @@ handle(ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef}) ->
                         ?error("Failed to periodically refresh user token: ~p:~p", [Error, Reason]),
                         timer:seconds(?SECONDS_TO_REFRESH_AFTER_FAILURE)
                 end,
-                erlang:send_after(TimeToRefresh, control_panel, {timer, {asynch, ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef}}}),
+                erlang:send_after(TimeToRefresh, whereis(control_panel), {timer, {asynch, ProtocolVersion, {run_scheduled_refresh, UserId, ScheduleRef}}}),
                 ok;
 
         {false, ScheduleRef} ->
