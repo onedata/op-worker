@@ -110,8 +110,7 @@ content_types_accepted(Req, State) ->
 delete_resource(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:delete(Filepath) of
         ok -> {true, Req, State};
-        {logical_file_system_error, ?VEPERM} -> cdmi_error:error_reply(Req, State, ?forbidden);
-        {logical_file_system_error, ?VEACCES} -> cdmi_error:error_reply(Req, State, ?forbidden);
+        {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> cdmi_error:error_reply(Req, State, ?forbidden);
         Error -> cdmi_error:error_reply(Req, State, {?file_delete_unknown_error,Error})
     end.
 
@@ -241,10 +240,7 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
                 undefined ->
                     case logical_files_manager:truncate(Filepath, 0) of
                         ok -> ok;
-                        {logical_file_system_error, ?VEPERM} ->
-                            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
-                            throw(?forbidden);
-                        {logical_file_system_error, ?VEACCES} ->
+                        {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES ->
                             set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
                             throw(?forbidden);
                         Error ->
@@ -261,8 +257,7 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
                             cdmi_error:error_reply(Req2, State, {?invalid_range, RawRange})
                     end
             end;
-        {logical_file_system_error, ?VEPERM} -> cdmi_error:error_reply(Req, State, ?forbidden);
-        {logical_file_system_error, ?VEACCES} -> cdmi_error:error_reply(Req, State, ?forbidden);
+        {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> cdmi_error:error_reply(Req, State, ?forbidden);
         Error -> cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error})
     end,
     set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),

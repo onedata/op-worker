@@ -13,6 +13,7 @@
 -module(cdmi_metadata).
 
 -include("veil_modules/control_panel/cdmi_metadata.hrl").
+-include("veil_modules/control_panel/cdmi_error.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 
 -export([get_user_metadata/1, update_user_metadata/2, update_user_metadata/3]).
@@ -88,9 +89,9 @@ prepare_metadata(Filepath, Attrs) ->
     [{CdmiName :: binary(), Value :: binary()}].
 %% ====================================================================
 prepare_metadata(Filepath, Prefix, Attrs) ->
-    StorageSystemMetadata = lists:map(fun(X) -> cdmi_metadata_to_attrs(X,Attrs) end, ?default_storage_system_metadata),
-    Metadata = lists:append(StorageSystemMetadata, get_user_metadata(Filepath)),
-    lists:filter(fun({Name, _Value}) -> binary_with_prefix(Name, Prefix) end, Metadata).
+    StorageSystemMetadata = prepare_cdmi_metadata(?default_storage_system_metadata, Filepath, Attrs, Prefix),
+    UserMetadata = lists:filter(fun({Name, _Value}) -> binary_with_prefix(Name, Prefix) end, get_user_metadata(Filepath)),
+    StorageSystemMetadata ++ UserMetadata.
 
 %% ====================================================================
 %% Internal Functions
@@ -140,24 +141,35 @@ filter_user_metadata(UserMetadata) ->
 filter_URI_Names(UserMetadata, URIMetadataNames) ->
     [{Name,Value} || URIName <- URIMetadataNames, {Name, Value} <- UserMetadata, URIName == Name].
 
-%% cdmi_metadata_to_attrs/2
+%% prepare_cdmi_metadata/4
 %% ====================================================================
-%% @doc Extracts cdmi metadata from file attributes.
+%% @doc Returns system metadata with given prefix, in mochijson parser format
 %% @end
--spec cdmi_metadata_to_attrs(CdmiName :: binary(), #fileattributes{}) -> {CdmiName :: binary(), Value :: binary()}.
+-spec prepare_cdmi_metadata(MetadataNames :: [binary()], Filepath :: string(), Attrs :: #fileattributes{}, Prefix :: binary()) -> list().
 %% ====================================================================
-%todo add cdmi_acl metadata
-%todo clarify what should be written to cdmi_size for directories
-cdmi_metadata_to_attrs(<<"cdmi_size">>, Attrs) ->
-    {<<"cdmi_size">>, integer_to_binary(Attrs#fileattributes.size)};
-%todo format times into yyyy-mm-ddThh-mm-ss.ssssssZ
-cdmi_metadata_to_attrs(<<"cdmi_ctime">>, Attrs) ->
-    {<<"cdmi_ctime">>, integer_to_binary(Attrs#fileattributes.ctime)};
-cdmi_metadata_to_attrs(<<"cdmi_atime">>, Attrs) ->
-    {<<"cdmi_atime">>, integer_to_binary(Attrs#fileattributes.atime)};
-cdmi_metadata_to_attrs(<<"cdmi_mtime">>, Attrs) ->
-    {<<"cdmi_mtime">>, integer_to_binary(Attrs#fileattributes.mtime)};
-cdmi_metadata_to_attrs(<<"cdmi_owner">>, Attrs) ->
-    {<<"cdmi_owner">>, list_to_binary(Attrs#fileattributes.uname)};
-cdmi_metadata_to_attrs(_,_Attrs) ->
-    {}.
+prepare_cdmi_metadata([], _Filepath, _Attrs, _Prefix) -> [];
+prepare_cdmi_metadata([Name | Rest], Filepath, Attrs, Prefix) ->
+    case binary_with_prefix(Name, Prefix) of
+        true ->
+            case Name of
+                <<"cdmi_size">> -> %todo clarify what should be written to cdmi_size for directories
+                    [{<<"cdmi_size">>, integer_to_binary(Attrs#fileattributes.size)} | prepare_cdmi_metadata(Rest, Filepath, Attrs, Prefix)];
+                <<"cdmi_ctime">> -> %todo format times into yyyy-mm-ddThh-mm-ss.ssssssZ
+                    [{<<"cdmi_ctime">>, integer_to_binary(Attrs#fileattributes.ctime)} | prepare_cdmi_metadata(Rest, Filepath, Attrs, Prefix)];
+                <<"cdmi_atime">> ->
+                    [{<<"cdmi_atime">>, integer_to_binary(Attrs#fileattributes.atime)} | prepare_cdmi_metadata(Rest, Filepath, Attrs, Prefix)];
+                <<"cdmi_mtime">> ->
+                    [{<<"cdmi_mtime">>, integer_to_binary(Attrs#fileattributes.mtime)} | prepare_cdmi_metadata(Rest, Filepath, Attrs, Prefix)];
+                <<"cdmi_owner">> ->
+                    [{<<"cdmi_owner">>, list_to_binary(Attrs#fileattributes.uname)} | prepare_cdmi_metadata(Rest, Filepath, Attrs, Prefix)];
+                <<"cdmi_acl">> ->
+                    case logical_files_manager:get_acl(Filepath) of
+                        {ok, Acl} ->
+                            [{<<"cdmi_acl">>, fslogic_acl:from_acl_to_json_format(Acl)} | prepare_cdmi_metadata(Rest, Filepath, Attrs, Prefix)];
+                        {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES ->
+                            throw(?forbidden);
+                        Error -> throw(Error)
+                    end
+            end;
+        false -> prepare_cdmi_metadata(Rest, Filepath, Attrs, Prefix)
+    end.
