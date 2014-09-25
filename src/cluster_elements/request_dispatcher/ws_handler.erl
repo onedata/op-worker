@@ -18,6 +18,7 @@
 -include("messages_white_list.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
+-include("logging_pb.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/cluster_rengine/cluster_rengine.hrl").
@@ -344,11 +345,12 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->
                       #veil_request{subject = DnString, request =
-                        #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}, access_token = {UserGID, AccessToken}};
+                      #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}, access_token = {UserGID, AccessToken}};
                   CallbackMsg2 when is_record(CallbackMsg2, channelclose) ->
                       #veil_request{subject = DnString, request =
-                        #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}, access_token = {UserGID, AccessToken}};
-                  _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
+                      #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}, access_token = {UserGID, AccessToken}};
+                  _ ->
+                      #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
               end,
 
     case Synch of
@@ -374,6 +376,10 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                 case Msg of
                     ack ->
                         gen_server:call(?Dispatcher_Name, {node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId, FuseID}}),
+                        {ok, Req, State};
+                    %% @todo This is a temporaary matching. It is necessary to avoid infinite logging loop.
+                    #logmessage{} ->
+                        gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
                         {ok, Req, State};
                     _ ->
                         Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
