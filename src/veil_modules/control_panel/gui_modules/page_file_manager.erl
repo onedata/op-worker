@@ -608,7 +608,7 @@ confirm_chmod(Mode, Recursive) ->
                 end, <<"">>, Failed),
             gui_jq:wire(#alert{text = <<"Unable to change permissions for following file(s):\r\n", FailedList/binary>>})
     end,
-    clear_workspace().
+    clear_manager().
 
 
 rename_item(OldPath, NewName) ->
@@ -766,7 +766,6 @@ show_popup(Type) ->
                             _ -> 0
                         end
                     end, item_attr(mode, item_find(FirstItem)), Items),
-                ?dump(CurrentMode),
                 gui_jq:wire(<<"init_chmod_table();">>),
                 TDStyle = <<"border-color: rgb(82, 100, 118); width: 60px; text-align: center;">>,
                 OctValue = case CurrentMode of
@@ -1482,20 +1481,21 @@ fs_get_share_uuid_by_filepath(Filepath) ->
 % paths for which command succeded and Failed is a list of tuples {Path, Reason}
 % for paths that the command failed .
 fs_chmod(Path, Mode, Recursive) ->
-    Result = fs_chmod(Path, Mode, Recursive, {[], []}), ?dump(Result), Result.
+    fs_chmod(Path, Mode, Recursive, {[], []}).
 
 fs_chmod(Path, Mode, Recursive, {Successful, Failed}) ->
+    IsDir = item_is_dir(item_new(Path)),
     {NewSuccessful, NewFailed} =
         case Recursive of
             false ->
-                case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Mode) of
+                case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Mode, not IsDir) of
                     ok -> {[Path], []};
                     Err1 -> {[], [{Path, Err1}]}
                 end;
             true ->
-                case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Mode) of
+                case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Mode, not IsDir) of
                     ok ->
-                        case item_is_dir(item_new(Path)) of
+                        case IsDir of
                             false ->
                                 {[Path], []};
                             true ->
