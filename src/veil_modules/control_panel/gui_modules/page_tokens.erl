@@ -46,11 +46,11 @@
 -spec main() -> #dtl{}.
 %% ====================================================================
 main() ->
-    case vcn_gui_utils:maybe_redirect(true, false, false, true) of
+    case vcn_gui_utils:maybe_redirect(true, false, false) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
     end.
 
 
@@ -68,7 +68,7 @@ title() -> <<"Manage tokens">>.
 -spec custom() -> binary().
 %% ====================================================================
 custom() ->
-    <<"<script src='/js/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
+    <<"<script src='/flatui/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
 
 
 %% body/0

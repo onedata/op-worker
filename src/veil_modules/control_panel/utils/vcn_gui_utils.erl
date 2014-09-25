@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains useful functions commonly used in
-%% veil_cluster_node GUI modules.
+%% GUI modules.
 %% @end
 %% ===================================================================
 
@@ -22,7 +22,7 @@
 set_access_token/1, get_access_token/0, set_global_user_id/1, get_global_user_id/0]).
 
 % Functions to check for user's session
--export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/4]).
+-export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/3]).
 
 % Functions to generate page elements
 -export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0, message/2, message/3,
@@ -187,20 +187,19 @@ dn_and_storage_defined() ->
     (get_user_dn() /= undefined) and storage_defined().
 
 
-%% maybe_redirect/4
+%% maybe_redirect/3
 %% ====================================================================
 %% @doc Decides if user can view the page, depending on arguments.
 %% Returns false if no redirection is needed.
 %% Otherwise, it issues a redirection and returns true.
-%% Setting "SaveSourcePage" on true will allow a redirect back from login.
 %% NOTE: Should be called from page:main().
 %% @end
--spec maybe_redirect(NeedLogin :: boolean(), NeedDN :: boolean(), NeedStorage :: boolean(), SaveSourcePage :: boolean()) -> ok.
+-spec maybe_redirect(NeedLogin :: boolean(), NeedDN :: boolean(), NeedStorage :: boolean()) -> ok.
 %% ====================================================================
-maybe_redirect(NeedLogin, NeedDN, NeedStorage, SaveSourcePage) ->
+maybe_redirect(NeedLogin, NeedDN, NeedStorage) ->
     case NeedLogin and (not gui_ctx:user_logged_in()) of
         true ->
-            gui_jq:redirect_to_login(SaveSourcePage),
+            gui_jq:redirect_to_login(),
             true;
         false ->
             case NeedDN and (vcn_gui_utils:get_user_dn() =:= undefined) of
@@ -241,7 +240,7 @@ apply_or_redirect(Module, Fun, Args, NeedDN) ->
     try
         case gui_ctx:user_logged_in() of
             false ->
-                gui_jq:redirect_to_login(true);
+                gui_jq:redirect_to_login();
             true ->
                 case NeedDN and (not dn_and_storage_defined()) of
                     true -> gui_jq:redirect(<<"/manage_account">>);
@@ -292,7 +291,8 @@ top_menu(ActiveTabID, SubMenuBody) ->
                 #link{style = "padding: 18px;", url = "/file_manager", body = "Data"},
                 #list{style = "top: 37px; width: 120px;", body = [
                     #li{body = #link{url = "/file_manager", body = "File manager"}},
-                    #li{body = #link{url = "/shared_files", body = "Shared files"}}
+                    #li{body = #link{url = "/shared_files", body = "Shared files"}},
+                    #li{body = #link{url = "/client_download", body = "Download oneclient"}}
                 ]}
             ]}},
             {spaces_tab, #li{body = [

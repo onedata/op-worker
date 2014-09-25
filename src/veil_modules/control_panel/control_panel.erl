@@ -14,6 +14,7 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("veil_modules/control_panel/common.hrl").
+-include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
@@ -39,7 +40,7 @@ init(_Args) ->
     % This job will run on every instance of control_panel, but since it is rare and lightweight
     % it won't cause performance problems.
     Pid = self(),
-    {ok, ClearingInterval} = application:get_env(veil_cluster_node, control_panel_sessions_clearing_period),
+    {ok, ClearingInterval} = application:get_env(?APP_Name, control_panel_sessions_clearing_period),
     erlang:send_after(ClearingInterval * 1000, Pid, {timer, {asynch, 1, {clear_expired_sessions, Pid}}}),
     ok.
 
@@ -75,7 +76,7 @@ handle(_ProtocolVersion, {spawn_handler, SocketPid}) ->
 handle(ProtocolVersion, {clear_expired_sessions, Pid}) ->
     NumSessionsCleared = gui_session_handler:clear_expired_sessions(),
     ?info("Expired GUI sessions cleared (~p tokens removed)", [NumSessionsCleared]),
-    {ok, ClearingInterval} = application:get_env(veil_cluster_node, control_panel_sessions_clearing_period),
+    {ok, ClearingInterval} = application:get_env(?APP_Name, control_panel_sessions_clearing_period),
     erlang:send_after(ClearingInterval * 1000, Pid, {timer, {asynch, ProtocolVersion, {clear_expired_sessions, Pid}}}),
     ok;
 
