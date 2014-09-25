@@ -54,21 +54,27 @@ update_user_metadata(Filepath, UserMetadata) ->
     URIMetadataNames :: [Name :: binary()]) -> ok | no_return().
 update_user_metadata(Filepath, undefined, URIMetadataNames) ->
     update_user_metadata(Filepath, [], URIMetadataNames);
-update_user_metadata(Filepath, UserMetadata, URIMetadataNames) ->
-    UserMetadataFiltered = filter_user_metadata(UserMetadata),
-    UserMetadataNamesFiltered = get_metadata_names(UserMetadataFiltered),
-    case URIMetadataNames of
+update_user_metadata(Filepath, UserMetadata, AllURIMetadataNames) ->
+    BodyMetadata = filter_user_metadata(UserMetadata),
+    BodyMetadataNames = get_metadata_names(BodyMetadata),
+    DeleteAttributeFunction =
+        fun
+            (<<"cdmi_acl">>) -> ok = logical_files_manager:set_acl(Filepath, []);
+            (Name) -> ok = logical_files_manager:remove_xattr(Filepath, Name)
+        end,
+    ReplaceAttributeFunction =
+        fun
+            ({<<"cdmi_acl">>, Value}) -> ok = logical_files_manager:set_acl(Filepath, fslogic_acl:from_json_fromat_to_acl(Value));
+            ({Name, Value}) -> ok = logical_files_manager:set_xattr(Filepath, Name, Value)
+        end,
+    case AllURIMetadataNames of
         [] ->
-            lists:map(fun(Name) -> ok = logical_files_manager:remove_xattr(Filepath, Name) end,
-                get_metadata_names(get_user_metadata(Filepath)) -- UserMetadataNamesFiltered),
-            lists:map(fun({Name, Value}) -> ok = logical_files_manager:set_xattr(Filepath, Name, Value) end,
-                UserMetadataFiltered);
+            lists:foreach(DeleteAttributeFunction, get_metadata_names(get_user_metadata(Filepath)) -- BodyMetadataNames),
+            lists:foreach(ReplaceAttributeFunction, BodyMetadata);
         _ ->
-            RequestedNamesFiltered = filter_user_metadata(URIMetadataNames),
-            lists:map(fun(Name) -> ok = logical_files_manager:remove_xattr(Filepath, Name) end,
-                RequestedNamesFiltered -- UserMetadataNamesFiltered),
-            lists:map(fun({Name, Value}) -> ok = logical_files_manager:set_xattr(Filepath, Name, Value) end,
-                filter_URI_Names(UserMetadataFiltered, RequestedNamesFiltered))
+            UriMetadataNames = filter_user_metadata(AllURIMetadataNames),
+            lists:foreach(DeleteAttributeFunction, UriMetadataNames -- BodyMetadataNames),
+            lists:foreach(ReplaceAttributeFunction, filter_URI_Names(BodyMetadata, UriMetadataNames))
     end,
     ok.
 
@@ -126,7 +132,9 @@ get_metadata_names(TupleList) ->
 filter_user_metadata(UserMetadata) ->
     lists:filter(
         fun
+            ({<<"cdmi_acl">>, _Value}) -> true;
             ({Name, _Value}) -> not binary_with_prefix(Name, ?user_metadata_forbidden_prefix);
+            (<<"cdmi_acl">>) -> true;
             (Name) -> not binary_with_prefix(Name, ?user_metadata_forbidden_prefix)
         end,
         UserMetadata).

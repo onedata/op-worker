@@ -342,8 +342,8 @@ metadata_test(_Config) ->
     %%------------------------------
 
     %%------ read acl metadata ----------
-    {_Code14, _Headers14, Response14} = do_request(DirName++"?metadata:cdmi_acl", get, RequestHeaders1, []),
-    ct:print("RAW_ACL: ~p", [Response14]),
+    {Code14, _Headers14, Response14} = do_request(DirName++"?metadata:cdmi_acl", get, RequestHeaders1, []),
+    ?assertEqual("200", Code14),
     {struct,CdmiResponse14} = mochijson2:decode(Response14),
     ?assertEqual(1, length(CdmiResponse14)),
     {struct, Metadata14}= proplists:get_value(<<"metadata">>,CdmiResponse14),
@@ -352,7 +352,40 @@ metadata_test(_Config) ->
             {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
             {<<"aceflags">>,<<"NO_FLAGS">>},
             {<<"acemask">>,<<"READ, WRITE">>}]}],
-    proplists:get_value(<<"cdmi_acl">>, Metadata14)).
+    proplists:get_value(<<"cdmi_acl">>, Metadata14)),
+    %%------------------------------
+
+    %%------ write acl metadata ----------
+    Ace1 = [
+        {<<"acetype">>,<<"ALLOW">>},
+        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"aceflags">>,<<"NO_FLAGS">>},
+        {<<"acemask">>,<<"READ">>}
+    ],
+    Ace2 = [
+        {<<"acetype">>,<<"DENY">>},
+        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"aceflags">>,<<"NO_FLAGS">>},
+        {<<"acemask">>,<<"READ, EXECUTE">>}
+    ],
+    Ace3 = [
+        {<<"acetype">>,<<"ALLOW">>},
+        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"aceflags">>,<<"NO_FLAGS">>},
+        {<<"acemask">>,<<"WRITE">>}
+    ],
+    RequestBody15 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace2, Ace3]}]}],
+    RawRequestBody15 = rest_utils:encode_to_json(RequestBody15),
+    RequestHeaders15 = [{"content-type", "application/cdmi-container"},{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code15, _Headers15, Response15} = do_request(DirName++"?metadata:cdmi_acl", put, RequestHeaders15, RawRequestBody15),
+    ?assertMatch({"204", _}, {Code15, Response15}),
+    {_Code16, _Headers16, Response16} = do_request(DirName++"?metadata", get, RequestHeaders1, []),
+
+    {struct,CdmiResponse16} = mochijson2:decode(Response16),
+    ?assertEqual(1, length(CdmiResponse16)),
+    {struct, Metadata16}= proplists:get_value(<<"metadata">>,CdmiResponse16),
+    ?assertEqual(7, length(Metadata16)),
+    ?assertEqual([{struct, Ace1}, {struct, Ace2}, {struct, Ace3}], proplists:get_value(<<"cdmi_acl">>, Metadata16)).
     %%------------------------------
 
 % Tests dir creation (cdmi container PUT), remember that every container URI ends
