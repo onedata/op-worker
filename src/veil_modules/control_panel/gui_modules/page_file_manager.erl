@@ -606,7 +606,7 @@ confirm_chmod(Mode, Recursive) ->
                                 end,
                     <<Acc/binary, Path/binary, ": ", ReasonBin/binary, "\r\n">>
                 end, <<"">>, Failed),
-            gui_jq:wire(#alert{text = <<"Unable to change permissions for following file(s):\r\n", FailedList/binary>>})
+            gui_jq:wire(#alert{text = <<"Unable to change permissions for following file(s):\r\n\r\n", FailedList/binary>>})
     end,
     clear_manager().
 
@@ -766,12 +766,9 @@ show_popup(Type) ->
                             _ -> 0
                         end
                     end, item_attr(mode, item_find(FirstItem)), Items),
-                gui_jq:wire(<<"init_chmod_table();">>),
+                gui_jq:wire(<<"init_chmod_table(", (integer_to_binary(CurrentMode))/binary, ");">>),
                 TDStyle = <<"border-color: rgb(82, 100, 118); width: 60px; text-align: center;">>,
-                OctValue = case CurrentMode of
-                               0 -> <<"000">>;
-                               _ -> gui_str:format_bin("~.8B", [CurrentMode])
-                           end,
+                LabelStyle = <<"margin: 0 auto; width: 20px;">>,
                 Body = [
                     #panel{style = <<"position: relative; text-align: center; overflow: hidden;">>, body = [
                         #p{body = <<"Change mode">>},
@@ -789,55 +786,45 @@ show_popup(Type) ->
                                     #td{body = <<"user">>, style = <<TDStyle/binary, " font-weight: 700;">>},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_ur">>, label_class = <<"checkbox no-label">>,
-                                            label_style = <<"margin: 0 auto; width: 20px;">>,
-                                            value = <<"">>, checked = CurrentMode band 2#100000000 /= 0}
+                                            label_style = LabelStyle, value = <<"">>}
                                     ]},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_uw">>, label_class = <<"checkbox no-label">>,
-                                            label_style = <<"margin: 0 auto; width: 20px;">>,
-                                            value = <<"">>, checked = CurrentMode band 2#010000000 /= 0}
+                                            label_style = LabelStyle, value = <<"">>}
                                     ]},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_ux">>, label_class = <<"checkbox no-label">>,
-                                            label_style = <<"margin: 0 auto; width: 20px;">>,
-                                            value = <<"">>, checked = CurrentMode band 2#001000000 /= 0}
+                                            label_style = LabelStyle, value = <<"">>}
                                     ]}
                                 ]},
                                 #tr{cells = [
                                     #td{body = <<"group">>, style = <<TDStyle/binary, " font-weight: 700;">>},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_gr">>, label_class = <<"checkbox no-label">>,
-                                            label_style = <<"margin: 0 auto; width: 20px;">>,
-                                            value = <<"">>, checked = CurrentMode band 2#000100000 /= 0}
+                                            label_style = LabelStyle, value = <<"">>}
                                     ]},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_gw">>, label_class = <<"checkbox no-label">>,
-                                            label_style = <<"margin: 0 auto; width: 20px;">>,
-                                            value = <<"">>, checked = CurrentMode band 2#000010000 /= 0}
+                                            label_style = LabelStyle, value = <<"">>}
                                     ]},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_gx">>, label_class = <<"checkbox no-label">>,
-                                            label_style = <<"margin: 0 auto; width: 20px;">>,
-                                            value = <<"">>, checked = CurrentMode band 2#000001000 /= 0}
+                                            label_style = LabelStyle, value = <<"">>}
                                     ]}
                                 ]},
                                 #tr{cells = [
                                     #td{body = <<"other">>, style = <<TDStyle/binary, " font-weight: 700;">>},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_or">>, label_class = <<"checkbox no-label">>,
-                                            label_style = <<"margin: 0 auto; width: 20px;">>,
-                                            value = <<"">>, checked = CurrentMode band 2#000000100 /= 0,
-                                            postback = {action, dupa}}
+                                            label_style = LabelStyle, value = <<"">>}
                                     ]},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_ow">>, label_class = <<"checkbox no-label">>,
-                                            label_style = <<"margin: 0 auto; width: 20px;">>,
-                                            value = <<"">>, checked = CurrentMode band 2#000000010 /= 0}
+                                            label_style = LabelStyle, value = <<"">>}
                                     ]},
                                     #td{style = TDStyle, body = [
                                         #flatui_checkbox{id = <<"chbx_ox">>, label_class = <<"checkbox no-label">>,
-                                            label_style = <<"margin: 0 auto; width: 20px;">>,
-                                            value = <<"">>, checked = CurrentMode band 2#000000001 /= 0}
+                                            label_style = LabelStyle, value = <<"">>}
                                     ]}
                                 ]}
                             ]},
@@ -847,7 +834,7 @@ show_popup(Type) ->
                             #panel{class = <<"input-append">>, style = <<"position: relative; float: left; margin: -2px 50px 0 8px;">>, body = [
                                 #textbox{id = wire_enter(<<"octal_form_textbox">>, <<"octal_form_submit">>), class = <<"span2">>,
                                     style = <<"width: 80px; padding: 5px 5px;">>, placeholder = <<"000">>,
-                                    value = OctValue},
+                                    value = <<"">>},
                                 #panel{class = <<"btn-group">>, body = [
                                     #button{id = <<"octal_form_submit">>, style = <<"height: 35px;">>, class = <<"btn">>,
                                         body = #span{style = <<"margin-top: -3px;">>, class = <<"fui-check">>}}

@@ -7,6 +7,9 @@
 // This file contains JS functions used on file_manager page.
 // ===================================================================
 
+// -----------------------------
+// chmod handling
+
 // IDs of checkboxes used to set mode
 var CHMOD_CHECKBOXES = ['chbx_ur', 'chbx_uw', 'chbx_ux',
     'chbx_gr', 'chbx_gw', 'chbx_gx',
@@ -16,20 +19,28 @@ var CHMOD_CHECKBOXES = ['chbx_ur', 'chbx_uw', 'chbx_ux',
 var user_event = true;
 
 // Initialize chmod table with checkboxes and add event listeners
-init_chmod_table = function () {
+init_chmod_table = function (current_mode) {
+    // Init checkboxes
     for (var i = 0; i < CHMOD_CHECKBOXES.length; i++) {
         var chbx = $('#' + CHMOD_CHECKBOXES[i]);
         chbx.checkbox();
         chbx.change(function (event) {
-                console.log("change");
-                if (user_event) {
-                    console.log("user_event");
-                    var mode = calculate_mode().toString(8);
-                    $('#octal_form_textbox').val((mode + "00").substring(0, 3));
-                }
-            });
+            if (user_event) {
+                var mode = calculate_mode().toString(8);
+                $('#octal_form_textbox').val((mode + "00").substring(0, 3));
+            }
+        });
     }
     $('#chbx_recursive').checkbox();
+
+    // Set checkboxes state and textbox value
+    // Make sure this doesn't trigger change events
+    user_event = false;
+    update_checkboxes(current_mode);
+    var mode_string = calculate_mode().toString(8);
+    $('#octal_form_textbox').val((mode_string + "00").substring(0, 3));
+    user_event = true;
+
     $('#octal_form_submit').click(function (event) {
         var textbox_value = $('#octal_form_textbox').val();
         var mode_oct = parseInt(textbox_value, 8);
@@ -37,16 +48,8 @@ init_chmod_table = function () {
             alert('This is not a valid octal representation of mode. Please type in a number between 000 and 777.');
         } else {
             // Make sure this doesn't trigger change events
-            console.log("asdasD");
             user_event = false;
-            for (var i = 0; i < CHMOD_CHECKBOXES.length; i++) {
-                var chbx = $('#' + CHMOD_CHECKBOXES[i]);
-                if ((mode_oct & Math.pow(2, 8 - i)) > 0) {
-                    chbx.checkbox('check');
-                } else {
-                    chbx.checkbox('uncheck');
-                }
-            }
+            update_checkboxes(mode_oct);
             user_event = true;
         }
     });
@@ -70,6 +73,16 @@ calculate_mode = function () {
     return mode;
 };
 
-
+// Update all checkboxes to represent given mode
+update_checkboxes = function (mode) {
+    for (var i = 0; i < CHMOD_CHECKBOXES.length; i++) {
+        var chbx = $('#' + CHMOD_CHECKBOXES[i]);
+        if ((mode & Math.pow(2, 8 - i)) > 0) {
+            chbx.checkbox('check');
+        } else {
+            chbx.checkbox('uncheck');
+        }
+    }
+};
 
 
