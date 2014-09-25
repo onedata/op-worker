@@ -34,7 +34,7 @@
 -define(NAVIGATION_COLUMN_STYLE, <<"border-left-width: 0; width: 20px; padding-left: 0;">>).
 -define(DESCRIPTION_STYLE, <<"border-width: 0; text-align: right; width: 10%; padding-left: 0; padding-right: 0;">>).
 -define(MAIN_STYLE, <<"border-width: 0;  text-align: left; padding-left: 1em; width: 90%;">>).
--define(LABEL_STYLE, <<"margin: 0 auto;">>).
+-define(LABEL_STYLE, <<"margin: 0 auto; cursor: auto;">>).
 -define(PARAGRAPH_STYLE, <<"margin: 0 auto;">>).
 -define(TABLE_STYLE, <<"border-width: 0; width: 100%; border-collapse: inherit;">>).
 
@@ -49,11 +49,11 @@
 -spec main() -> #dtl{}.
 %% ====================================================================
 main() ->
-    case vcn_gui_utils:maybe_redirect(true, false, false, true) of
+    case vcn_gui_utils:maybe_redirect(true, false, false) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
     end.
 
 
@@ -71,7 +71,7 @@ title() -> <<"Manage Space">>.
 -spec custom() -> binary().
 %% ====================================================================
 custom() ->
-    <<"<script src='/js/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
+    <<"<script src='/flatui/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
 
 
 %% body/0
@@ -179,7 +179,7 @@ space(#space_details{id = SpaceId, name = Name}) ->
                     body = #button{
                         id = <<"request_support">>,
                         postback = {request_support, SpaceId},
-                        class = <<"btn btn-primary btn-small">>,
+                        class = <<"btn btn-inverse btn-small">>,
                         body = <<"Request support">>
                     }
                 },
@@ -207,7 +207,7 @@ space(#space_details{id = SpaceId, name = Name}) ->
                     body = #button{
                         id = <<"invite_user">>,
                         postback = {invite_user, SpaceId},
-                        class = <<"btn btn-primary btn-small">>,
+                        class = <<"btn btn-inverse btn-small">>,
                         body = <<"Invite user">>
                     }
                 },
@@ -906,10 +906,11 @@ comet_loop(#?STATE{} = State) ->
             {request_support, SpaceId} ->
                 case gr_spaces:get_invite_provider_token({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                     {ok, Token} ->
-                        Message = <<"Give underlying token to any provider that is willing to support your Space.",
-                        "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", Token/binary, "\">">>,
-                        gui_jq:info_popup(<<"Request support">>, Message, <<"return true;">>),
-                        gui_comet:flush();
+                        Message = <<"Give the token below to a provider willing to support your Space.",
+                        "<input id=\"support_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
+                        " width: 80%;\" value=\"", Token/binary, "\">">>,
+                        gui_jq:info_popup(<<"Request support">>, Message, <<"return true;">>, <<"btn-inverse">>),
+                        gui_jq:wire(<<"box.on('shown',function(){ $(\"#support_token_textbox\").focus().select(); });">>);
                     Other ->
                         ?error("Cannot get support token for Space with ID ~p: ~p", [SpaceId, Other]),
                         vcn_gui_utils:message(<<"error_message">>, <<"Cannot get support token for Space with ID: <b>", SpaceId, "</b>."
@@ -922,10 +923,11 @@ comet_loop(#?STATE{} = State) ->
             {invite_user, SpaceId} ->
                 case gr_spaces:get_invite_user_token({user, vcn_gui_utils:get_access_token()}, SpaceId) of
                     {ok, Token} ->
-                        Message = <<"Give underlying token to any user that is willing to join your Space.",
-                        "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", Token/binary, "\">">>,
-                        gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>),
-                        gui_comet:flush();
+                        Message = <<"Give the token below to a user willing to join your Space.",
+                        "<input id=\"join_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
+                        " width: 80%;\" value=\"", Token/binary, "\">">>,
+                        gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>, <<"btn-inverse">>),
+                        gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_token_textbox\").focus().select(); });">>);
                     Other ->
                         ?error("Cannot get invitation token for Space with ID ~p: ~p", [SpaceId, Other]),
                         vcn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."

@@ -22,11 +22,11 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case vcn_gui_utils:maybe_redirect(true, true, true, true) of
+    case vcn_gui_utils:maybe_redirect(true, true, true) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
     end.
 
 %% Page title
@@ -62,7 +62,7 @@ about_table() ->
             #td{style = <<"padding: 15px; vertical-align: top;">>,
                 body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Privacy policy">>}},
             #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #link{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<"Learn about privacy policy">>, url = <<"/privacy_policy">>}}
+                body = #link{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<"Learn about privacy policy">>, url = <<?privacy_policy_url>>}}
         ]},
 
         #tr{cells = [

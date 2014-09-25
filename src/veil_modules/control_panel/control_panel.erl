@@ -15,8 +15,8 @@
 
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/dao/dao_users.hrl").
+-include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/global_registry/gr_openid.hrl").
 
 -define(REFRESH_CLIENTS_ETS, refresh_clients_ets).
 -define(REFRESH_CLIENTS_COUNTER_ETS, refresh_clients_counter_ets).
@@ -45,7 +45,7 @@ init(_Args) ->
     % This job will run on every instance of control_panel, but since it is rare and lightweight
     % it won't cause performance problems.
     Pid = self(),
-    {ok, ClearingInterval} = application:get_env(veil_cluster_node, control_panel_sessions_clearing_period),
+    {ok, ClearingInterval} = application:get_env(?APP_Name, control_panel_sessions_clearing_period),
     erlang:send_after(ClearingInterval * 1000, Pid, {timer, {asynch, 1, {clear_expired_sessions, Pid}}}),
     ets:new(?REFRESH_CLIENTS_ETS, [named_table, public, bag]),
     ets:new(?REFRESH_CLIENTS_COUNTER_ETS, [named_table, public, set]),
@@ -83,7 +83,7 @@ handle(_ProtocolVersion, {spawn_handler, SocketPid}) ->
 handle(ProtocolVersion, {clear_expired_sessions, Pid}) ->
     NumSessionsCleared = gui_session_handler:clear_expired_sessions(),
     ?info("Expired GUI sessions cleared (~p tokens removed)", [NumSessionsCleared]),
-    {ok, ClearingInterval} = application:get_env(veil_cluster_node, control_panel_sessions_clearing_period),
+    {ok, ClearingInterval} = application:get_env(?APP_Name, control_panel_sessions_clearing_period),
     erlang:send_after(ClearingInterval * 1000, Pid, {timer, {asynch, ProtocolVersion, {clear_expired_sessions, Pid}}}),
     ok;
 

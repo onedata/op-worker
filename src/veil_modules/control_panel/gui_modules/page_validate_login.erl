@@ -22,14 +22,18 @@
 -export([main/0, event/1]).
 
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
+main() -> #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
 
 %% Page title
 title() -> <<"Login page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    case gui_ctx:user_logged_in() of
+    DisableThisPage = case application:get_env(?APP_Name, developer_mode) of
+                          {ok, true} -> false;
+                          _ -> true
+                      end,
+    case gui_ctx:user_logged_in() orelse DisableThisPage of
         true -> gui_jq:redirect(<<"/">>);
         false ->
             LoginMessage = case plgrid_openid_utils:prepare_validation_parameters() of
@@ -55,14 +59,15 @@ body() ->
                                 page_error:redirect_with_error(?error_openid_login_error);
                             {ok, Proplist} ->
                                 % If a user logs in directly via PLGrid Openid, then mock spaces synchronization
-                                case application:get_env(veil_cluster_node, spaces_mocked) of
+                                case application:get_env(?APP_Name, spaces_mocked) of
                                     {ok, true} ->
                                         % But dont do it twice
                                         ok;
                                     _ ->
                                         Nodes = gen_server:call({global, central_cluster_manager}, get_nodes),
                                         AllNodes = Nodes -- [node()],
-                                        mock(AllNodes, cluster_manager_lib, get_provider_id, fun() -> <<"providerId">> end),
+                                        mock(AllNodes, cluster_manager_lib, get_provider_id, fun() ->
+                                            <<"providerId">> end),
                                         SpacesBinary = [<<"space1">>, <<"space2">>],
                                         mock(AllNodes, gr_users, get_spaces, fun(_) ->
                                             {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
@@ -103,7 +108,7 @@ event(terminate) -> ok.
 mock(NodesUp, Module, Method, Fun) ->
     meck:new(Module, [passthrough, non_strict, unstick, no_link]),
     meck:expect(Module, Method, Fun),
-    application:set_env(veil_cluster_node, spaces_mocked, true),
+    application:set_env(?APP_Name, spaces_mocked, true),
     {_, []} = rpc:multicall(NodesUp, meck, new, [Module, [passthrough, non_strict, unstick, no_link]]),
     {_, []} = rpc:multicall(NodesUp, meck, expect, [Module, Method, Fun]),
-    {_, []} = rpc:multicall(application, set_env, [veil_cluster_node, spaces_mocked, true]).
+    {_, []} = rpc:multicall(application, set_env, [?APP_Name, spaces_mocked, true]).

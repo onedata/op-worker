@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains n2o website code.
-%% The page allows user to manage Space access tokens.
+%% The page allows user to manage Space authorization tokens.
 %% @end
 %% ===================================================================
 
@@ -46,11 +46,11 @@
 -spec main() -> #dtl{}.
 %% ====================================================================
 main() ->
-    case vcn_gui_utils:maybe_redirect(true, false, false, true) of
+    case vcn_gui_utils:maybe_redirect(true, false, false) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
     end.
 
 
@@ -68,7 +68,7 @@ title() -> <<"Manage tokens">>.
 -spec custom() -> binary().
 %% ====================================================================
 custom() ->
-    <<"<script src='/js/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
+    <<"<script src='/flatui/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
 
 
 %% body/0
@@ -106,10 +106,10 @@ body() ->
                 #panel{
                     style = <<"margin: 0 auto; width: 50%; margin-top: 30px; text-align: center;">>,
                     body = #button{
-                        id = <<"access_code">>,
-                        postback = get_access_code,
-                        class = <<"btn btn-primary">>,
-                        body = <<"Get access code">>
+                        id = <<"authorization_code">>,
+                        postback = get_authorization_code,
+                        class = <<"btn btn-inverse btn-small">>,
+                        body = <<"Get authorization code">>
                     }
                 },
                 #table{
@@ -246,14 +246,16 @@ comet_loop({error, Reason}) ->
 comet_loop(#?STATE{} = State) ->
     NewCometLoopState = try
         receive
-            get_access_code ->
+            get_authorization_code ->
                 case gr_openid:get_client_authorization_code({user, vcn_gui_utils:get_access_token()}) of
-                    {ok, AccessCode} when is_binary(AccessCode) ->
-                        Message = <<"Enter underlying access code into FUSE client.",
-                        "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", AccessCode/binary, "\">">>,
-                        gui_jq:info_popup(<<"Access code">>, Message, <<"return true;">>);
+                    {ok, AuthorizationCode} when is_binary(AuthorizationCode) ->
+                        Message = <<"Use the authorization code below to log in with a FUSE client.",
+                        "<input id=\"authorization_code_textbox\" type=\"text\" style=\"margin-top: 1em;"
+                        " width: 80%;\" value=\"", AuthorizationCode/binary, "\">">>,
+                        gui_jq:info_popup(<<"Authorization code">>, Message, <<"return true;">>, <<"btn-inverse">>),
+                        gui_jq:wire(<<"box.on('shown',function(){ $(\"#authorization_code_textbox\").focus().select(); });">>);
                     _ ->
-                        vcn_gui_utils:message(<<"error_message">>, <<"Cannot get access code.">>)
+                        vcn_gui_utils:message(<<"error_message">>, <<"Cannot get authorization code.">>)
                 end,
                 gui_jq:hide(<<"main_spinner">>),
                 gui_comet:flush(),
@@ -291,8 +293,8 @@ event(init) ->
     {ok, Pid} = gui_comet:spawn(fun() -> comet_loop(#?STATE{}) end),
     put(?COMET_PID, Pid);
 
-event(get_access_code) ->
-    get(?COMET_PID) ! get_access_code,
+event(get_authorization_code) ->
+    get(?COMET_PID) ! get_authorization_code,
     gui_jq:show(<<"main_spinner">>);
 
 event({remove_token, AccessId, Name, SpinnerId, RowId}) ->

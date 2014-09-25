@@ -30,7 +30,7 @@ veil_attach_upload_handle_dragdrop = function (form, input) {
     if (typeof(form.$pending_files) == "undefined")
         form.$pending_files = [];
 
-    $.getScript("js/jquery.fileupload.min.js", function () {
+    $.getScript("/flatui/jquery.fileupload.min.js", function () {
         var dropzone = $(DROPZONE_ID);
 
         $(input).fileupload({

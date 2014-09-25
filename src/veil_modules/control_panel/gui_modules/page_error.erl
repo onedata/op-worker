@@ -19,7 +19,7 @@
 -export([redirect_with_error/1, generate_redirect_request/2]).
 
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
+main() -> #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
 
 %% Page title
 title() -> <<"Error">>.
@@ -32,13 +32,12 @@ body() ->
             #h3{body = <<"Error">>},
             #p{class = <<"login-info">>, style = <<"font-weight: bold;">>, body = Reason},
             #p{class = <<"login-info">>, body = Description},
-            #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Main page">>}
+            #link{url = <<"/">>, class = <<"btn btn-warning btn-block">>, body = <<"Main page">>}
         ]},
         gui_utils:cookie_policy_popup_body(<<?privacy_policy_url>>)
     ] ++ vcn_gui_utils:logotype_footer(120)}.
 
 event(init) -> ok;
-event(to_login) -> gui_jq:redirect_to_login(false);
 event(terminate) -> ok.
 
 
@@ -99,13 +98,13 @@ id_to_reason_and_message(<<?error_login_dir_creation_error>>) ->
 id_to_reason_and_message(<<?error_login_dir_chown_error>>) -> {<<"User creation error">>,
     <<"Server could not change owner of user directories. Please contact the site administrator if the problem persists.">>};
 
-id_to_reason_and_message(?error_authentication) -> {<<"Authentication error">>,
+id_to_reason_and_message(<<?error_authentication>>) -> {<<"Authentication error">>,
     <<"Server could not authenticate you. Please try again to log in or contact the site administrator if the problem persists.">>};
 
-id_to_reason_and_message(?error_space_permission_denied) ->
+id_to_reason_and_message(<<?error_space_permission_denied>>) ->
     {<<"Invalid request">>, <<"You don't have permission to manage this Space.">>};
 
-id_to_reason_and_message(?error_space_not_found) ->
+id_to_reason_and_message(<<?error_space_not_found>>) ->
     {<<"Space not found">>, <<"Requested Space could not be found on the server.">>};
 
 id_to_reason_and_message(_) ->

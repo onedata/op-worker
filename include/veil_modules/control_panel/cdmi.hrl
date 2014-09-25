@@ -34,7 +34,6 @@
 -define(error_unauthorized_code, 401).
 -define(error_forbidden_code, 403).
 -define(error_not_found_code, 404).
--define(error_not_acceptable_code, 406).
 -define(error_conflict_code, 409).
 
 -define(error_internal_code,500).
