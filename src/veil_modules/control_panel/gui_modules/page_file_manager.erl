@@ -1301,7 +1301,6 @@ item_attr_value(mode, Item) ->
         end, Format, HasPerm),
     #panel{style = <<"position: relative;">>, body = [ModeTiles, <<"&nbsp;", (gui_str:format_bin("[~.8B]", [Mode]))/binary>>]}.
 
-%gui_str:format_bin("~s&nbsp;&nbsp;[~.8B]", [lists:flatten(ModeString), Mode]).
 
 attr_to_name(name) -> <<"Name">>;
 attr_to_name(size) -> <<"Size">>;
@@ -1358,6 +1357,8 @@ is_the_same_space(Path1, Path2) ->
 
 get_space_from_path(<<"/", Path/binary>>) ->
     case Path of
+        <<?SPACES_BASE_DIR_NAME>> ->
+            <<?SPACES_BASE_DIR_NAME>>;
         <<?SPACES_BASE_DIR_NAME, Rest/binary>> ->
             Tokens = binary:split(Rest, <<"/">>, [global]),
             lists:nth(2, Tokens);
