@@ -94,7 +94,8 @@ public:
             std::function<std::string()> goodbye);
 
     /**
-     * Gracefuly closes all connections and recreates them.
+     * Recreates all connections, dropping the old ones after a short grace
+     * period.
      */
     void recreate();
 

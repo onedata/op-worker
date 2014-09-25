@@ -166,7 +166,7 @@ public:
             const Pool poolType);
 
     /**
-     * Gracefuly recreates all connections.
+     * * @copydoc ConnectionPool::recreate()
      */
     void recreate();
 
