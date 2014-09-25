@@ -280,7 +280,12 @@ get_acl(FullFileName) ->
     {ok, FileDoc = #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
     ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, read),
     {ok, #veil_document{record = #file_meta{acl = Acl}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
-    #acl{answer = ?VOK, entities = Acl}.
+    VirtualAcl =
+        case Acl of
+            [] -> fslogic_acl:get_virtual_acl(FullFileName, FileDoc);
+            _ -> Acl
+        end,
+    #acl{answer = ?VOK, entities = VirtualAcl}.
 
 %% set_acl/1
 %% ====================================================================

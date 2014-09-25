@@ -11,20 +11,67 @@
 %% ===================================================================
 -module(fslogic_acl).
 
+-include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/fslogic/fslogic_acl.hrl").
+-include("veil_modules/dao/dao.hrl").
 -include("fuse_messages_pb.hrl").
 
 %% API
--export([ace_to_proplist/1, proplist_to_ace/1, acl_to_json_format/1, from_json_fromat_to_acl/1]).
+-export([ace_to_proplist/1, proplist_to_ace/1, from_acl_to_json_format/1, from_json_fromat_to_acl/1, get_virtual_acl/2, check_permission/3]).
 
-%% acl_to_json_format/1
+%% get_virtual_acl/1
+%% ====================================================================
+%% @doc Converts posix permission of file, to ACL format. Such acl is called virtual
+%% because it is based only on file perms and it is not stored in db.
+%% @end
+-spec get_virtual_acl(FullfileName :: string(), FileDoc :: record(veil_document)) -> [#accesscontrolentity{}].
+%% ====================================================================
+get_virtual_acl(FullfileName, FileDoc) ->
+    #veil_document{record = #file{perms = Perms}} = FileDoc,
+    {ok, #space_info{users = Users}} = fslogic_utils:get_space_info_for_path(FullfileName),
+    {ok, #veil_document{record = #user{global_id = OwnerGlobalId}}} = fslogic_objects:get_user({uuid, FileDoc#veil_document.record#file.uid}),
+    OwnerPerms = posix_perms_to_acl_mask(Perms, true, true),
+    OwnerAce = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = vcn_utils:ensure_binary(OwnerGlobalId), acemask = OwnerPerms},
+    RestAceList = [ #accesscontrolentity{
+        acetype = ?allow_mask,
+        aceflags = ?no_flags_mask,
+        identifier = vcn_utils:ensure_binary(UserGlobalId),
+        acemask = posix_perms_to_acl_mask(Perms, false, true)
+    } || UserGlobalId <- Users -- [OwnerGlobalId]],
+    [OwnerAce | RestAceList].
+
+%% check_permission/1
+%% ====================================================================
+%% @doc Traverses given ACL in order to check if a Principal (in our case GRUID),
+%% has permissions specified in 'OperationMask' (according to this ACL)
+%% @end
+-spec check_permission(ACL :: [#accesscontrolentity{}], PrincipalName :: string(), OperationMask :: non_neg_integer()) -> ok | no_return().
+%% ====================================================================
+check_permission([], _PrincipalName, 16#00000000) -> ok;
+check_permission([], _PrincipalName, _OperationMask) -> throw(?VEPERM);
+check_permission([#accesscontrolentity{identifier = Name} | Rest], PrincipalName, Operation) when Name =/= PrincipalName ->
+    check_permission(Rest, PrincipalName, Operation);
+check_permission([#accesscontrolentity{acetype = ?allow_mask, acemask = AceMask} | Rest], PrincipalName, Operation) ->
+    case (Operation band AceMask) of
+        Operation -> ok;
+        OtherAllowedBits -> check_permission(Rest, PrincipalName, Operation bxor OtherAllowedBits)
+    end;
+check_permission([#accesscontrolentity{acetype = ?deny_mask, acemask = AceMask} | Rest], PrincipalName, Operation) ->
+    case (Operation band AceMask) of
+        16#00000000 -> check_permission(Rest, PrincipalName, Operation);
+        _ -> throw(?VEPERM)
+    end;
+check_permission([#accesscontrolentity{} | Rest], PrincipalName, Operation) ->
+    check_permission(Rest, PrincipalName, Operation).
+
+%% from_acl_to_json_format/1
 %% ====================================================================
 %% @doc Parses list of access control entities to format suitable for mochijson2:encode
 %% @end
--spec acl_to_json_format(Acl :: [#accesscontrolentity{}]) -> Result when
+-spec from_acl_to_json_format(Acl :: [#accesscontrolentity{}]) -> Result when
     Result :: list().
 %% ====================================================================
-acl_to_json_format(Acl) ->
+from_acl_to_json_format(Acl) ->
     [ace_to_proplist(Ace) || Ace <- Acl].
 
 %% from_json_fromat_to_acl/1
@@ -44,7 +91,8 @@ from_json_fromat_to_acl(JsonAcl) ->
 %% @end
 -spec ace_to_proplist(#accesscontrolentity{}) -> list().
 %% ====================================================================
-ace_to_proplist(#accesscontrolentity{acetype = Type, aceflags = Flags, identifier = Who, acemask = AccessMask}) ->
+ace_to_proplist(#accesscontrolentity{acetype = Type, aceflags = Flags, identifier = Who, acemask = AccessMask} = Ace) ->
+    ct:print("ace_to_proplist ~p", [Ace]),
     [
         {<<"acetype">>, bitmask_to_type(Type)},
         {<<"identifier">>, Who},
@@ -65,7 +113,7 @@ proplist_to_ace2([], Acc) -> Acc;
 proplist_to_ace2([{<<"acetype">>, Type} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{acetype = type_to_bitmask(Type)});
 proplist_to_ace2([{<<"identifier">>, Identifier} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{identifier = Identifier});
 proplist_to_ace2([{<<"aceflags">>, Flags} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{aceflags = flags_to_bitmask(Flags)});
-proplist_to_ace2([{<<"acemask">>, AceMask} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{acemask = acemask_to_bitmask(AceMask)}).
+proplist_to_ace2([{<<"acemask">>, AceMask} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{acemask = perm_list_to_bitmask(AceMask)}).
 
 %% bitmask_to_type/1
 %% ====================================================================
@@ -84,9 +132,11 @@ bitmask_to_type(_) -> undefined.
 %% @end
 -spec bitmask_to_flag_list(non_neg_integer()) -> [binary()].
 %% ====================================================================
-bitmask_to_flag_list(Hex) -> lists:reverse(bitmask_to_flag_list2(Hex, [])).
+bitmask_to_flag_list(Hex) ->
+    ct:print("bitmask_to_flag_list ~p",[bitmask_to_flag_list2(Hex, [])]),
+    lists:reverse(bitmask_to_flag_list2(Hex, [])).
 bitmask_to_flag_list2(Hex, List) when (Hex band ?identifier_group_mask) == ?identifier_group_mask  ->
-    bitmask_to_flag_list2(Hex xor ?identifier_group_mask, [?identifier_group | List]);
+    bitmask_to_flag_list2(Hex bxor ?identifier_group_mask, [?identifier_group | List]);
 bitmask_to_flag_list2(?no_flags_mask, []) -> [?no_flags];
 bitmask_to_flag_list2(?no_flags_mask, List) -> List;
 bitmask_to_flag_list2(_, _) -> undefined.
@@ -98,8 +148,12 @@ bitmask_to_flag_list2(_, _) -> undefined.
 -spec bitmask_to_perm_list(non_neg_integer()) -> [binary()].
 %% ====================================================================
 bitmask_to_perm_list(Hex) -> lists:reverse(bitmask_to_perm_list2(Hex, [])).
-bitmask_to_perm_list2(Hex, List) when (Hex band ?read_mask) == ?read_mask  -> bitmask_to_flag_list2(Hex xor ?read_mask, [?read | List]);
-bitmask_to_perm_list2(Hex, List) when (Hex band ?write_mask) == ?write_mask  -> bitmask_to_flag_list2(Hex xor ?write_mask, [?write | List]);
+bitmask_to_perm_list2(Hex, List) when (Hex band ?read_mask) == ?read_mask  ->
+    bitmask_to_perm_list2(Hex bxor ?read_mask, [?read | List]);
+bitmask_to_perm_list2(Hex, List) when (Hex band ?write_mask) == ?write_mask  ->
+    bitmask_to_perm_list2(Hex bxor ?write_mask, [?write | List]);
+bitmask_to_perm_list2(Hex, List) when (Hex band ?execute_mask) == ?execute_mask  ->
+    bitmask_to_perm_list2(Hex bxor ?execute_mask, [?execute | List]);
 bitmask_to_perm_list2(16#00000000, List) -> List;
 bitmask_to_perm_list2(_, _) -> undefined.
 
@@ -126,18 +180,19 @@ flags_to_bitmask([?no_flags | Rest]) -> ?no_flags_mask bor flags_to_bitmask(Rest
 flags_to_bitmask([?identifier_group | Rest]) -> ?identifier_group_mask bor flags_to_bitmask(Rest).
 
 
-%% acemask_to_bitmask/1
+%% perm_list_to_bitmask/1
 %% ====================================================================
 %% @doc maps coma separated binary of permissions to bitmask
 %% @end
--spec acemask_to_bitmask(binary()) -> non_neg_integer().
+-spec perm_list_to_bitmask(binary()) -> non_neg_integer().
 %% ====================================================================
-acemask_to_bitmask(MaskNames) when is_binary(MaskNames) ->
+perm_list_to_bitmask(MaskNames) when is_binary(MaskNames) ->
     FlagList = lists:map(fun fslogic_utils:trim_spaces/1, binary:split(MaskNames, <<",">>, [global])),
-    acemask_to_bitmask(FlagList);
-acemask_to_bitmask([]) -> 16#00000000;
-acemask_to_bitmask([?read | Rest]) -> ?read_mask bor acemask_to_bitmask(Rest);
-acemask_to_bitmask([?write | Rest]) -> ?write_mask bor acemask_to_bitmask(Rest).
+    perm_list_to_bitmask(FlagList);
+perm_list_to_bitmask([]) -> 16#00000000;
+perm_list_to_bitmask([?read | Rest]) -> ?read_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?write | Rest]) -> ?write_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?execute | Rest]) -> ?execute_mask bor perm_list_to_bitmask(Rest).
 
 %% binary_list_to_csv/1
 %% ====================================================================
@@ -161,3 +216,8 @@ binary_list_to_csv(List) ->
 %% ====================================================================
 csv_to_binary_list(BinaryCsv) ->
     lists:map(fun fslogic_utils:trim_spaces/1, binary:split(BinaryCsv, <<",">>, [global])).
+
+posix_perms_to_acl_mask(PosixPerms, FileOwner, GroupOwner) ->
+    (case fslogic_perms:has_permission(read, PosixPerms, FileOwner, GroupOwner) of true -> ?read_mask; false -> 16#00000000 end) bor
+    (case fslogic_perms:has_permission(write, PosixPerms, FileOwner, GroupOwner) of true -> ?write_mask; false -> 16#00000000 end) bor
+    (case fslogic_perms:has_permission(execute, PosixPerms, FileOwner, GroupOwner) of true -> ?execute_mask; false -> 16#00000000 end).

@@ -71,8 +71,8 @@
 
 % custom access flags
 -define(read, <<"READ">>).
--define(read_mask, ?read_object_mask bor ?read_metadata_mask bor ?read_attributes_mask bor ?read_acl_mask).
+-define(read_mask, (?read_object_mask bor ?read_metadata_mask bor ?read_attributes_mask bor ?read_acl_mask)).
 -define(write, <<"WRITE">>).
--define(write_mask, ?write_object_mask bor ?append_data_mask bor ?write_metadata_mask bor ?delete_object_mask bor ?write_attributes_mask bor ?delete_mask bor ?write_acl_mask).
+-define(write_mask, (?write_object_mask bor ?append_data_mask bor ?write_metadata_mask bor ?delete_object_mask bor ?write_attributes_mask bor ?delete_mask bor ?write_acl_mask)).
 
 -endif.

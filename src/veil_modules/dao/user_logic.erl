@@ -821,7 +821,7 @@ get_space_names(UserQuery) ->
 %%      or query compatible with user_logic:get_user/1.
 %%      The method assumes that user exists therefore will fail with exception when it doesnt.
 %% @end
--spec get_spaces(UserQuery :: term()) -> [string()] | no_return().
+-spec get_spaces(UserQuery :: term()) -> [#space_info{}] | no_return().
 %% ====================================================================
 get_spaces(#veil_document{record = #user{} = User}) ->
     get_spaces(User);
