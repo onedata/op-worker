@@ -26,14 +26,13 @@ namespace proxy {
         , acceptor_(client_io_service,
                     boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(),
                                                    server_port))
-        , context_(boost::asio::ssl::context::tlsv12_server)
+        , context_(boost::asio::ssl::context::sslv23_server)
         , listen_port_(server_port)
         , forward_host_(forward_host)
         , ca_dirs_(ca_dirs)
 
     {
         forward_port_ = std::to_string(forward_port);
-
         acceptor_.set_option(
             boost::asio::ip::tcp::acceptor::reuse_address(true));
         context_.set_options(boost::asio::ssl::context::default_workarounds

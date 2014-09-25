@@ -146,7 +146,7 @@ websocket_handle({binary, Data}, Req, #handler_state{peer_type = PeerType} = Sta
         ?debug("Received request: ~p", [Request]),
 
         Res = case Request of
-            {Synch, Task, Answer_decoder_name, ProtocolVersion, #remotefilemangement{input = #writefile{offset = Offset, data = WriteData}}, MsgId, Answer_type, {GlobalId, TokenHash}} ->
+            {omg, Task, Answer_decoder_name, ProtocolVersion, #remotefilemangement{input = #writefile{offset = Offset, data = WriteData}}, MsgId, Answer_type, {GlobalId, TokenHash}} ->
                 %?info("WRITE ------------------> ~p ~p", [Offset, size(WriteData)]),
                 {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #writeinfo{answer_status = ?VOK, bytes_written = size(WriteData)})}, Req, State};
             {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} ->
