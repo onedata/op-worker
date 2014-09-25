@@ -92,7 +92,6 @@ from_json_fromat_to_acl(JsonAcl) ->
 -spec ace_to_proplist(#accesscontrolentity{}) -> list().
 %% ====================================================================
 ace_to_proplist(#accesscontrolentity{acetype = Type, aceflags = Flags, identifier = Who, acemask = AccessMask} = Ace) ->
-    ct:print("ace_to_proplist ~p", [Ace]),
     [
         {<<"acetype">>, bitmask_to_type(Type)},
         {<<"identifier">>, Who},
@@ -132,9 +131,7 @@ bitmask_to_type(_) -> undefined.
 %% @end
 -spec bitmask_to_flag_list(non_neg_integer()) -> [binary()].
 %% ====================================================================
-bitmask_to_flag_list(Hex) ->
-    ct:print("bitmask_to_flag_list ~p",[bitmask_to_flag_list2(Hex, [])]),
-    lists:reverse(bitmask_to_flag_list2(Hex, [])).
+bitmask_to_flag_list(Hex) -> lists:reverse(bitmask_to_flag_list2(Hex, [])).
 bitmask_to_flag_list2(Hex, List) when (Hex band ?identifier_group_mask) == ?identifier_group_mask  ->
     bitmask_to_flag_list2(Hex bxor ?identifier_group_mask, [?identifier_group | List]);
 bitmask_to_flag_list2(?no_flags_mask, []) -> [?no_flags];
@@ -173,8 +170,7 @@ type_to_bitmask(?audit) -> ?audit_mask.
 %% @end
 -spec flags_to_bitmask(binary()) -> non_neg_integer().
 %% ====================================================================
-flags_to_bitmask(Flags) when is_binary(Flags) ->
-    flags_to_bitmask(csv_to_binary_list(Flags));
+flags_to_bitmask(Flags) when is_binary(Flags) -> flags_to_bitmask(csv_to_binary_list(Flags));
 flags_to_bitmask([]) -> ?no_flags_mask;
 flags_to_bitmask([?no_flags | Rest]) -> ?no_flags_mask bor flags_to_bitmask(Rest);
 flags_to_bitmask([?identifier_group | Rest]) -> ?identifier_group_mask bor flags_to_bitmask(Rest).
