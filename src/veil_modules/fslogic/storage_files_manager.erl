@@ -314,10 +314,8 @@ write(Storage_helper_info, File, Offset, Buf) ->
                   {ErrorCode2, FFI} = veilhelpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
                   case ErrorCode2 of
                     0 ->
-                        T1 = vcn_utils:mtime(),
                       BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
-                        T0 = vcn_utils:mtime(),
-                        ?info("write bytes: ~p", [T0 - T1]),
+
                       ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
                       case ErrorCode3 of
                         0 -> BytesWritten;
@@ -850,19 +848,17 @@ check_access_type(File) ->
 %% ====================================================================
 setup_ctx(File) ->
     ?debug("Setup storage ctx based on fslogc ctx -> DN: ~p, AccessToken: ~p", [fslogic_context:get_user_dn(), fslogic_context:get_gr_auth()]),
-    T0 = vcn_utils:mtime(),
+
     case fslogic_objects:get_user() of
         {ok, #veil_document{record = #user{login = UserName, global_id = GRUID} = UserRec}} ->
-            T1 = vcn_utils:mtime(),
             fslogic_context:set_fs_user_ctx(UserName),
             case check_access_type(File) of
                 {ok, {group, SpaceId}} ->
-                    T2 = vcn_utils:mtime(),
-                    UserSpaceIds = user_logic:get_space_ids(UserRec),
-                    T3 = vcn_utils:mtime(),
-                    SelectedSpaceId = [X || X <- UserSpaceIds, vcn_utils:ensure_binary(SpaceId) =:= X],
-                    SelectedSpaceIdOrSpace =
-                        case SelectedSpaceId of
+                    UserSpaces = user_logic:get_spaces(UserRec),
+
+                    SelectedSpace = [SP || #space_info{space_id = X} = SP <- UserSpaces, vcn_utils:ensure_binary(SpaceId) =:= X],
+                    {UserSpaces1, SelectedSpace1} =
+                        case SelectedSpace of
                             [] ->
                                 UserSpaces0 =
                                     case dao_lib:apply(vfs, get_space_files, [{gruid, vcn_utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()) of
@@ -872,31 +868,18 @@ setup_ctx(File) ->
                                             []
                                     end,
                                 SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, vcn_utils:ensure_binary(SpaceId) =:= X],
-                                SelectedSpace0;
+                                {UserSpaces0 ++ UserSpaces, SelectedSpace0};
                             _  ->
-                                SelectedSpaceId
-                        end,
-                    T4 = vcn_utils:mtime(),
-
-                    SelectedSpace =
-                        case SelectedSpaceIdOrSpace of
-                            [] -> [];
-                            [MSpaceId | _] when is_binary(MSpaceId) ->
-                                {ok, SelectedSpace1} = fslogic_objects:get_space({uuid, MSpaceId}),
-                                [SelectedSpace1];
-                            [#space_info{} = SpaceInfo1 | _] ->
-                                [SpaceInfo1]
+                                {UserSpaces, SelectedSpace}
                         end,
 
                     GIDs =
-                        case SelectedSpace of
+                        case SelectedSpace1 of
                             [] ->
-                                [];
+                                fslogic_spaces:map_to_grp_owner(UserSpaces1);
                             [#space_info{} = SpaceInfo] ->
-                                [fslogic_spaces:map_to_grp_owner(SpaceInfo)]
+                                [fslogic_spaces:map_to_grp_owner(SpaceInfo)] ++ fslogic_spaces:map_to_grp_owner(UserSpaces1)
                         end,
-                    T5 = vcn_utils:mtime(),
-                    ?info("setup ==================> ~p ~p ~p ~p ~p", [T5 - T4, T4 - T3, T3 - T2, T2 - T1, T1 - T0]),
                     fslogic_context:set_fs_group_ctx(GIDs),
                     ok;
                 _ ->
