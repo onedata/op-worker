@@ -1077,26 +1077,30 @@ list_view_body() ->
         "background: white; border: 2px solid #bbbdc0; border-collapse: collapse;">>, header = [
             #tr{cells =
             [
-                #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116); position: relative;">>, body = [
-                    <<"Name">>,
-                    #panel{style = <<"position: absolute; right: 3px; top: 3px; ">>, body =
-                    lists:map(fun(Attr) ->
-                        #span{style = <<"font-size: 12px; font-weight: normal; background-color: #EBEDEF; ",
-                        "border: 1px solid #34495E; padding: 1px 3px; margin-right: 4px; cursor: pointer;">>,
-                            id = wire_click(<<"toggle_column_", (gui_str:to_binary(Attr))/binary>>, {action, toggle_column, [Attr, true]}),
-                            body = attr_to_name(Attr)}
-                    end, HiddenAttrs)
-                    }
+                #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116);">>, body = [
+                    #panel{style = <<"position: relative;">>, body = [
+                        <<"Name">>,
+                        #panel{style = <<"position: absolute; right: -22px; top: 0; ">>, body =
+                        lists:map(fun(Attr) ->
+                            #span{style = <<"font-size: 12px; font-weight: normal; background-color: #EBEDEF; ",
+                            "border: 1px solid #34495E; padding: 1px 3px; margin-right: 4px; cursor: pointer;">>,
+                                id = wire_click(<<"toggle_column_", (gui_str:to_binary(Attr))/binary>>, {action, toggle_column, [Attr, true]}),
+                                body = attr_to_name(Attr)}
+                        end, HiddenAttrs)
+                        }
+                    ]}
                 ]}
             ] ++
             lists:map(
                 fun(Attr) ->
                     #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116); position: relative;", CellWidth/binary>>,
                         body = [
-                            attr_to_name(Attr),
-                            #link{id = wire_click(<<"toggle_column_", (gui_str:to_binary(Attr))/binary>>, {action, toggle_column, [Attr, false]}),
-                                class = <<"glyph-link">>, style = <<"font-size: 12px;", "position: absolute; top: 4px; right: 4px;">>,
-                                body = #span{class = <<"fui-cross">>}}
+                            #panel{style = <<"position: relative;">>, body = [
+                                attr_to_name(Attr),
+                                #link{id = wire_click(<<"toggle_column_", (gui_str:to_binary(Attr))/binary>>, {action, toggle_column, [Attr, false]}),
+                                    class = <<"glyph-link">>, style = <<"font-size: 12px;", "position: absolute; top: -2px; right: -20px;">>,
+                                    body = #span{class = <<"fui-cross">>}}
+                            ]}
                         ]}
                 end, get_displayed_file_attributes())
             }
