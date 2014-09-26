@@ -32,10 +32,10 @@
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
 %% @end
 -spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: root | owner | delete | read | write | execute | rdwr | '') -> Result when
-    Result :: ok | {error, ErrorDetail},
+    Result :: ok | {ok, by_acl} | {error, ErrorDetail},
     ErrorDetail :: term().
 %% ====================================================================
-check_file_perms(_FileName, _UserDoc, _FileDoc, '') -> %root, always return ok
+check_file_perms(_FileName, _UserDoc, _FileDoc, '') -> %undefined mode
     ok;
 check_file_perms(_FileName, #veil_document{uuid = ?CLUSTER_USER_ID}, _FileDoc, _CheckType) -> %root, always return ok
     ok;
@@ -57,15 +57,32 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
         ok -> check_file_perms(FileName, UserDoc, FileDoc, write);
         Error -> Error
     end;
-check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms}}, CheckType) -> %check read/write/execute perms
-    UserUid = UserDoc#veil_document.uuid,
+check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms, meta_doc = MetaUuid}}, CheckType) -> %check read/write/execute perms
+    #veil_document{uuid = UserUid, record = #user{global_id = GlobalId}} = UserDoc,
     FileSpace = get_group(FileName),
 
     UserOwnsFile = UserUid=:=FileOwnerUid,
     UserGroupOwnsFile = is_member_of_space(UserDoc, {name, FileSpace}),
-    case has_permission(CheckType,FilePerms,UserOwnsFile,UserGroupOwnsFile) of
-        true -> ok;
-        false -> ?permission_denied_error(UserDoc,FileName,CheckType)
+    RealAcl =
+        case FilePerms of
+            0 ->
+                {ok, #veil_document{record = #file_meta{acl = Acl}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+                Acl;
+            _ -> []
+        end,
+    case RealAcl of
+        [] ->
+            case has_permission(CheckType,FilePerms,UserOwnsFile,UserGroupOwnsFile) of
+                true -> ok;
+                false -> ?permission_denied_error(UserDoc,FileName,CheckType)
+            end;
+        _ ->
+            case (catch fslogic_acl:check_permission(RealAcl, vcn_utils:ensure_binary(GlobalId), CheckType)) of
+                ok ->
+                    put(acl_permission, [{FileName, [CheckType]}]),
+                    ok;
+                ?VEPERM -> ?permission_denied_error(UserDoc,FileName,CheckType)
+            end
     end.
 
 %% assert_group_access/3

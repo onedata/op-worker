@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([update_parent_ctime/2, update_meta_attr/3, update_user_files_size_view/1]).
+-export([update_parent_ctime/2, update_meta_attr/3, update_meta_attr/4, update_user_files_size_view/1]).
 
 -ifdef(TEST).
 -export([init_file_meta/1]).
@@ -59,10 +59,12 @@ update_user_files_size_view(ProtocolVersion) ->
 %%      In this case returned #file record will have #file.meta_doc field updated and shall be saved to DB after this call.
 %% @end
 -spec update_meta_attr(File :: #file{}, Attr, Value :: term()) -> Result :: #file{} when
-    Attr :: atime | mtime | ctime | size | times.
+    Attr :: atime | mtime | ctime | size | times | acl | xattrs.
 %% ====================================================================
 update_meta_attr(File, Attr, Value) ->
-    update_meta_attr(File, Attr, Value, 5).
+    update_meta_attr(File, Attr, Value, false).
+update_meta_attr(File, Attr, Value, ForceSynch) ->
+    update_meta_attr(File, Attr, Value, 5, ForceSynch).
 
 %% update_parent_ctime/2
 %% ====================================================================
@@ -88,13 +90,13 @@ update_parent_ctime(Dir, CTime) ->
 %% ====================================================================
 
 
-%% update_meta_attr/4
+%% update_meta_attr/5
 %% ====================================================================
 %% @doc Internal implementation of update_meta_attr/3. See update_meta_attr/3 for more information.
 %% @end
--spec update_meta_attr(File :: #file{}, Attr, Value :: term(), RetryCount :: integer()) -> Result :: #file{} when
+-spec update_meta_attr(File :: #file{}, Attr, Value :: term(), RetryCount :: integer(), ForceSynch :: boolean()) -> Result :: #file{} when
     Attr :: atime | mtime | ctime | size | times.
-update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount) ->
+update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount, ForceSynch) ->
     {File1, #veil_document{record = MetaRec} = MetaDoc} = init_file_meta(File),
     MetaDocChanged = MetaUUID =/= MetaDoc#veil_document.uuid,
     FileOwnerChanged = File#file.uid =/= MetaRec#file_meta.uid,
@@ -117,10 +119,10 @@ update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount) ->
                 ctime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, ctime = max(Value, MetaRec#file_meta.ctime)};
                 mtime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, mtime = max(Value, MetaRec#file_meta.mtime)};
                 atime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, atime = max(Value, MetaRec#file_meta.atime)};
-                size when Value >= 0 ->
-                    MetaRec#file_meta{uid = File#file.uid, size = Value};
-                _ ->
-                    MetaRec
+                size when Value >= 0 -> MetaRec#file_meta{uid = File#file.uid, size = Value};
+                acl -> MetaRec#file_meta{uid = File#file.uid, acl = Value};
+                xattrs -> MetaRec#file_meta{uid = File#file.uid, xattrs = Value};
+                _ -> MetaRec
             end,
         case MetaRec of
             NewMeta -> File1;
@@ -138,7 +140,7 @@ update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount) ->
                 end
         end
     end, %% SyncTask = fun()
-    case RunSync of
+    case (ForceSynch orelse RunSync) of
         true -> SyncTask();
         false ->
             spawn(SyncTask),

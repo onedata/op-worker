@@ -16,6 +16,7 @@
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("registered_names.hrl").
 
 
 %% API
@@ -232,12 +233,10 @@ get_xattr(FullFileName, Name) ->
     #atom{} | no_return().
 %% ====================================================================
 set_xattr(FullFileName, Name, Value, _Flags) ->
-    {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
-    {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
-    #veil_document{record = FileMeta } = FileMetaDoc,
-    #file_meta{xattrs = XAttrs} = FileMeta,
+    {ok, #veil_document{record = #file{meta_doc = MetaUuid} = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    {ok, #veil_document{record = #file_meta{xattrs = XAttrs}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
     UpdatedXAttrs = [{Name,Value} | proplists:delete(Name,XAttrs)],
-    {ok, _} = dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#veil_document{record = FileMeta#file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
+    #file{} = fslogic_meta:update_meta_attr(FileDoc, xattrs, UpdatedXAttrs, true),
     #atom{value = ?VOK}.
 
 %% remove_xattr/2
@@ -248,12 +247,10 @@ set_xattr(FullFileName, Name, Value, _Flags) ->
     #atom{} | no_return().
 %% ====================================================================
 remove_xattr(FullFileName,Name) ->
-    {ok, #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
-    {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
-    #veil_document{record = FileMeta } = FileMetaDoc,
-    #file_meta{xattrs = XAttrs} = FileMeta,
+    {ok, #veil_document{record = #file{meta_doc = MetaUuid} = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    {ok, #veil_document{record = #file_meta{xattrs = XAttrs}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
     UpdatedXAttrs = proplists:delete(Name,XAttrs),
-    {ok, _} = dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#veil_document{record = FileMeta#file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
+    #file{} = fslogic_meta:update_meta_attr(FileDoc, xattrs, UpdatedXAttrs, true),
     #atom{value = ?VOK}.
 
 %% list_xattr/1
@@ -295,13 +292,13 @@ get_acl(FullFileName) ->
     #atom{} | no_return().
 %% ====================================================================
 set_acl(FullFileName, Entities) ->
-    {ok, UserDoc} = fslogic_objects:get_user(),
-    {ok, FileDoc = #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner), %todo check ownership or write access?
     true = lists:all(fun(X) -> is_record(X, accesscontrolentity) end, Entities),
-    {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
-    #veil_document{record = FileMeta } = FileMetaDoc,
-    {ok, _} = dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#veil_document{record = FileMeta#file_meta{acl = Entities}}], fslogic_context:get_protocol_version()),
+    {ok, #veil_document{record = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    case Entities of
+        [] -> fslogic_req_generic:change_file_perms(FullFileName, application:get_env(?APP_Name, new_file_logic_mode));
+        _ -> fslogic_req_generic:change_file_perms(FullFileName, 0)
+    end,
+    #file{} = fslogic_meta:update_meta_attr(FileDoc, acl, Entities, true),
     #atom{value = ?VOK}.
 
 %% delete_file/1

@@ -45,8 +45,11 @@ get_virtual_acl(FullfileName, FileDoc) ->
 %% @doc Traverses given ACL in order to check if a Principal (in our case GRUID),
 %% has permissions specified in 'OperationMask' (according to this ACL)
 %% @end
--spec check_permission(ACL :: [#accesscontrolentity{}], PrincipalName :: string(), OperationMask :: non_neg_integer()) -> ok | no_return().
+-spec check_permission(ACL :: [#accesscontrolentity{}], PrincipalName :: string(), OperationMask :: non_neg_integer() | read | write | execute) -> ok | no_return().
 %% ====================================================================
+check_permission(ACL, _PrincipalName, read) -> check_permission(ACL, _PrincipalName, ?read_mask);
+check_permission(ACL, _PrincipalName, write) -> check_permission(ACL, _PrincipalName, ?write_mask);
+check_permission(ACL, _PrincipalName, execute) -> check_permission(ACL, _PrincipalName, ?execute_mask);
 check_permission([], _PrincipalName, 16#00000000) -> ok;
 check_permission([], _PrincipalName, _OperationMask) -> throw(?VEPERM);
 check_permission([#accesscontrolentity{identifier = Name} | Rest], PrincipalName, Operation) when Name =/= PrincipalName ->

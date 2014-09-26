@@ -139,7 +139,10 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
         invalid -> cdmi_error:error_reply(Req1, State, {?invalid_range, RawRange});
         _ ->
             % prepare data size and stream function
-            StreamSize = lists:foldl(fun({From, To}, Acc) when To >= From -> Acc + To - From + 1 end, 0, Ranges),
+            StreamSize = lists:foldl(fun
+                ({From, To}, Acc) when To >= From -> max(0, Acc + To - From + 1);
+                ({_, _}, Acc)  -> Acc
+            end, 0, Ranges),
             Context = fslogic_context:get_user_context(),
             StreamFun = fun(Socket, Transport) ->
                 try
