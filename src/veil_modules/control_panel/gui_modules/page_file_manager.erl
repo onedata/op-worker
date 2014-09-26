@@ -853,7 +853,7 @@ show_popup(Type) ->
                     ]}
                 ],
                 gui_jq:bind_element_click(<<"ok_button">>, <<"function() { submit_chmod(); }">>),
-                {Body, <<"$('#create_dir_textbox').focus();">>, {action, hide_popup}};
+                {Body, undefined, {action, hide_popup}};
 
             share_file ->
                 case length(get_selected_items()) of
