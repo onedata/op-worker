@@ -81,11 +81,6 @@ event(globalregistry_login) ->
     gui_jq:redirect(RedirectURL);
 
 event(plgrid_login) ->
-    % Collect redirect param if present
-    RedirectParam = case gui_ctx:url_param(<<"x">>) of
-                        undefined -> <<"">>;
-                        Val -> <<"?x=", Val/binary>>
-                    end,
     % Resolve hostname, which was requested by a client
     Hostname = gui_ctx:get_requested_hostname(),
     case Hostname of
@@ -94,7 +89,7 @@ event(plgrid_login) ->
             gui_jq:fade_in(<<"error_message">>, 300);
         Host ->
             % Get redirect URL and redirect to OpenID login
-            case plgrid_openid_utils:get_login_url(Host, RedirectParam) of
+            case plgrid_openid_utils:get_login_url(Host) of
                 {error, _} ->
                     gui_jq:update(<<"error_message">>, <<"Unable to reach OpenID Provider. Please try again later.">>),
                     gui_jq:fade_in(<<"error_message">>, 300);
