@@ -72,7 +72,7 @@ validate_login() ->
 
             #veil_document{uuid = UserId} = UserDoc,
             #context{session = Session} = ?CTX,
-            control_panel ! {timer, {asynch, 1, {request_refresh, {uuid, UserId}, {gui_session, Session}}}},
+            gen_server:cast(control_panel, {asynch, 1, {request_refresh, {uuid, UserId}, {gui_session, Session}}}),
             ok
         catch
             throw:dir_creation_error ->
