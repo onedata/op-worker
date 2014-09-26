@@ -20,25 +20,25 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([get_login_url/2, prepare_validation_parameters/0, validate_openid_login/1, retrieve_user_info/0]).
+-export([get_login_url/1, prepare_validation_parameters/0, validate_openid_login/1, retrieve_user_info/0]).
 
 
-%% get_login_url/2
+%% get_login_url/1
 %% ====================================================================
 %% @doc
 %% Produces an URL with proper GET parameters,
 %% used to redirect the user to OpenID Provider login page.
 %% RedirectParams are parameters concatenated to return_to field.
 %% @end
--spec get_login_url(HostName :: binary(), RedirectParams :: binary()) -> binary() | {error, endpoint_unavailable}.
+-spec get_login_url(HostName :: binary()) -> binary() | {error, endpoint_unavailable}.
 %% ====================================================================
-get_login_url(HostName, RedirectParams) ->
+get_login_url(HostName) ->
     try
         Endpoint = discover_op_endpoint(?xrds_url),
         <<Endpoint/binary,
         "?", ?openid_checkid_mode,
         "&", ?openid_ns,
-        "&", ?openid_return_to_prefix, HostName/binary, ?openid_return_to_suffix, RedirectParams/binary,
+        "&", ?openid_return_to_prefix, HostName/binary, ?openid_return_to_suffix,
         "&", ?openid_claimed_id,
         "&", ?openid_identity,
         "&", ?openid_realm_prefix, HostName/binary,

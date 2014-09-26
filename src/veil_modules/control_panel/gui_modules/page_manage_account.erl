@@ -26,7 +26,7 @@ main() ->
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()},
-                {custom, <<"<script src=\"/flatui/bootbox.min.js\"></script>">>}]}
+                {custom, <<"<script src=\"/flatui/bootbox.min.js\" type=\"text/javascript\" charset=\"utf-8\"></script>">>}]}
     end.
 
 %% Page title
