@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains useful functions commonly used in
-%% veil_cluster_node GUI modules.
+%% GUI modules.
 %% @end
 %% ===================================================================
 
@@ -15,14 +15,14 @@
 -include_lib("ctool/include/logging.hrl").
 
 % Functions connected with user's session
--export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0, can_view_monitoring/0]).
+-export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0]).
 
 % Saving and retrieving information that does not change during one session
 -export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0, gen_logout_token/0, set_logout_token/1, get_logout_token/0,
 set_access_token/1, get_access_token/0, set_global_user_id/1, get_global_user_id/0]).
 
 % Functions to check for user's session
--export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/4]).
+-export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/3]).
 
 % Functions to generate page elements
 -export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0, message/2, message/3,
@@ -187,40 +187,19 @@ dn_and_storage_defined() ->
     (get_user_dn() /= undefined) and storage_defined().
 
 
-%% can_view_logs/0
-%% ====================================================================
-%% @doc Determines if current user is allowed to view cluster logs.
-%% @end
--spec can_view_logs() -> boolean().
-%% ====================================================================
-can_view_logs() ->
-    get_user_role() /= user.
-
-
-%% can_view_monitoring/0
-%% ====================================================================
-%% @doc Determines if current user is allowed to view cluster monitoring.
-%% @end
--spec can_view_monitoring() -> boolean().
-%% ====================================================================
-can_view_monitoring() ->
-    get_user_role() /= user.
-
-
-%% maybe_redirect/4
+%% maybe_redirect/3
 %% ====================================================================
 %% @doc Decides if user can view the page, depending on arguments.
 %% Returns false if no redirection is needed.
 %% Otherwise, it issues a redirection and returns true.
-%% Setting "SaveSourcePage" on true will allow a redirect back from login.
 %% NOTE: Should be called from page:main().
 %% @end
--spec maybe_redirect(NeedLogin :: boolean(), NeedDN :: boolean(), NeedStorage :: boolean(), SaveSourcePage :: boolean()) -> ok.
+-spec maybe_redirect(NeedLogin :: boolean(), NeedDN :: boolean(), NeedStorage :: boolean()) -> ok.
 %% ====================================================================
-maybe_redirect(NeedLogin, NeedDN, NeedStorage, SaveSourcePage) ->
+maybe_redirect(NeedLogin, NeedDN, NeedStorage) ->
     case NeedLogin and (not gui_ctx:user_logged_in()) of
         true ->
-            gui_jq:redirect_to_login(SaveSourcePage),
+            gui_jq:redirect_to_login(),
             true;
         false ->
             case NeedDN and (vcn_gui_utils:get_user_dn() =:= undefined) of
@@ -261,7 +240,7 @@ apply_or_redirect(Module, Fun, Args, NeedDN) ->
     try
         case gui_ctx:user_logged_in() of
             false ->
-                gui_jq:redirect_to_login(true);
+                gui_jq:redirect_to_login();
             true ->
                 case NeedDN and (not dn_and_storage_defined()) of
                     true -> gui_jq:redirect(<<"/manage_account">>);
@@ -300,42 +279,20 @@ top_menu(ActiveTabID) ->
 -spec top_menu(ActiveTabID :: any(), SubMenuBody :: any()) -> list().
 %% ====================================================================
 top_menu(ActiveTabID, SubMenuBody) ->
-    CanViewLogs = can_view_logs(),
-    LogsCaptions = case CanViewLogs of
-                       true -> [
-                           #li{body = #link{url = "/cluster_logs", body = "Cluster logs"}},
-                           #li{body = #link{url = "/client_logs", body = "Client logs"}}
-                       ];
-                       _ -> []
-                   end,
-
-    CanViewMonitoring = can_view_monitoring(),
-    MonitoringCaption = case CanViewMonitoring of
-                            true -> [#li{body = #link{url = "/monitoring", body = "Monitoring"}}];
-                            _ -> []
-                        end,
-
-    AdministrationURL = case CanViewLogs of
-                            true -> "/cluster_logs";
-                            _ -> case CanViewMonitoring of
-                                     true -> "/monitoring";
-                                     _ -> "javascript:void(0);"
-                                 end
-                        end,
-
     MenuCaptions =
         [
             {brand_tab, #li{body = #link{style = <<"padding: 18px;">>, url = "/",
                 body = [
                     #span{style = <<"font-size: xx-large;">>, class = <<"fui-home">>},
-                    #b{style = <<"font-size: x-large;">>, body = <<"OneData">>}
+                    #b{style = <<"font-size: x-large;">>, body = <<"onedata">>}
                 ]}
             }},
             {data_tab, #li{body = [
                 #link{style = "padding: 18px;", url = "/file_manager", body = "Data"},
                 #list{style = "top: 37px; width: 120px;", body = [
                     #li{body = #link{url = "/file_manager", body = "File manager"}},
-                    #li{body = #link{url = "/shared_files", body = "Shared files"}}
+                    #li{body = #link{url = "/shared_files", body = "Shared files"}},
+                    #li{body = #link{url = "/client_download", body = "Download oneclient"}}
                 ]}
             ]}},
             {spaces_tab, #li{body = [
@@ -345,14 +302,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
                     #li{body = #link{url = "/tokens", body = "Tokens"}}
                 ]}
             ]}}
-        ] ++ case CanViewLogs orelse CanViewMonitoring of
-                 true ->
-                     [{administration_tab, #li{body = [
-                         #link{style = "padding: 18px;", url = AdministrationURL, body = "Administration"},
-                         #list{style = "top: 37px; width: 120px;", body = LogsCaptions ++ MonitoringCaption}
-                     ]}}];
-                 _ -> []
-             end,
+        ],
 
     MenuIcons =
         [
@@ -383,8 +333,6 @@ top_menu(ActiveTabID, SubMenuBody) ->
                     ]
                 }}
             }
-%%                 #li{body = #link{style = <<"padding: 18px;">>, title = <<"Log out">>,
-%%                 url = <<"/logout">>, body = #span{class = <<"fui-power">>}}}}
         ],
 
     MenuCaptionsProcessed = lists:map(

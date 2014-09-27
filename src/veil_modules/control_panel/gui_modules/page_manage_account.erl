@@ -17,19 +17,16 @@
 % n2o API
 -export([main/0, event/1]).
 % Postback functions
--export([api_event/3, update_email/2, update_dn/2, show_email_adding/1, show_dn_adding/1]).
-
-% URLs for client packages download
--define(CLIENT_RPM_URL, "http://packages.onedata.org/VeilClient-Linux.rpm").
--define(CLIENT_DEB_URL, "http://packages.onedata.org/VeilClient-Linux.deb").
+-export([api_event/3, update_email/2, update_dn/2, show_email_adding/1, show_dn_adding/1, show_dn_info/0]).
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case vcn_gui_utils:maybe_redirect(true, false, false, true) of
+    case vcn_gui_utils:maybe_redirect(true, false, false) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()},
+                {custom, <<"<script src=\"/flatui/bootbox.min.js\" type=\"text/javascript\" charset=\"utf-8\"></script>">>}]}
     end.
 
 %% Page title
@@ -41,29 +38,16 @@ body() ->
     #panel{style = <<"position: relative;">>, body = [
         vcn_gui_utils:top_menu(manage_account_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
-            #panel{id = <<"dn_error_panel">>, style = <<"display: none;">>,
-                class = <<"dialog dialog-danger">>, body = [
-                    #p{body = <<"You have no registered certificates. You can use the web application, but you ",
-                    "will not be able to use VeilClient. To register a certificate, do one of the following:">>},
-                    #panel{style = <<"margin-left: auto; margin-right: auto; text-align: left; display: inline-block;">>, body = [
-                        #list{body = [
-                            #li{style = <<"padding: 10px 0 0;">>,
-                                body = <<"Enable certificate DN retrieval from your OpenID provider and log in again">>},
-                            #li{style = <<"padding: 7px 0 0;">>,
-                                body = <<"Add your .pem certificate manually below">>}
-                        ]}
-                    ]}
-                ]},
             #panel{id = <<"unverified_dns_panel">>, style = <<"display: none;">>,
-                class = <<"dialog dialog-danger">>, body = [
-                    #p{body = <<"Some of certificates you added are not verified. To verify them, connect to the system with VeilClient ",
+                class = <<"dialog dialog-warning">>, body = [
+                    #p{body = <<"Some of certificates you added are not verified. To verify them, connect to the system with OneClient ",
                     "using matching credentials.">>}
                 ]},
             #panel{id = <<"helper_error_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-danger">>, body = [
                     #p{body = <<"To be able to use any functionalities, there must be at least one storage helper defined.">>}
                 ]},
-            #h6{style = <<" text-align: center;">>, body = <<"Manage account">>},
+            #h6{style = <<"text-align: center;">>, body = <<"Manage account">>},
             #panel{id = <<"main_table">>, body = main_table()}
         ]}
     ] ++ vcn_gui_utils:logotype_footer(20)}.
@@ -95,7 +79,7 @@ maybe_display_helper_message() ->
 
 % Snippet generating account management table
 main_table() ->
-    {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
+    {ok, GlobalRegistryHostname} = application:get_env(?APP_Name, global_registry_hostname),
     {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
     maybe_display_dn_message(UserDoc),
     maybe_display_verify_dn_message(UserDoc),
@@ -146,17 +130,9 @@ main_table() ->
 
         #tr{cells = [
             #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Access via fuse client">>}},
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Access via oneclient">>}},
             #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #panel{body = [
-                    #p{body = <<"Download and install preferred package to mount onedata storage on your computer:">>},
-                    #list{style = <<"margin-top: -3px;">>, numbered = true, body = [
-                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
-                        #link{body = <<"RPM package">>, url = <<?CLIENT_RPM_URL>>}},
-                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
-                        #link{body = <<"DEB package">>, url = <<?CLIENT_DEB_URL>>}}
-                    ]}
-                ]}}
+                body = #link{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<"Learn about oneclient">>, url = <<?client_download_page_url>>}}
         ]}
     ]}.
 
@@ -211,7 +187,7 @@ main_table() ->
 % HTML list with DNs printed
 dn_list_body(UserDoc) ->
     Login = user_logic:get_login(UserDoc),
-    {CurrentDNs, Counter} = lists:mapfoldl(
+    {CurrentDNsUnfiltered, Counter} = lists:mapfoldl(
         fun(DN, Acc) ->
             case DN of
                 Login ->
@@ -227,6 +203,10 @@ dn_list_body(UserDoc) ->
                     {Body, Acc + 1}
             end
         end, 1, user_logic:get_dn_list(UserDoc)),
+    CurrentDNs = case CurrentDNsUnfiltered of
+                     [<<"">>] -> []; % This will happen when no DN is added (only login DN on list)
+                     Other -> Other
+                 end,
     {UnverifiedDNs, _} = lists:mapfoldl(
         fun(DN, Acc) ->
             Body = #li{style = <<"font-size: 18px; padding: 5px 0; color: #90A5C0;">>, body = #span{body =
@@ -251,7 +231,15 @@ dn_list_body(UserDoc) ->
                 body = #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
             #link{id = <<"new_dn_cancel">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
                 postback = {action, show_dn_adding, [false]}, body =
-                #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
+                #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}},
+            case length(CurrentDNs ++ UnverifiedDNs) of
+                0 ->
+                    #link{id = <<"dn_warning">>, class = <<"glyph-link">>, style = <<"margin-left: 30px;">>,
+                        postback = {action, show_dn_info}, body =
+                        #span{class = <<"fui-question">>, style = <<"font-size: 16px;">>}};
+                _ ->
+                    []
+            end
         ]}
     ],
     #list{style = <<"margin-top: -3px;">>, numbered = true, body = CurrentDNs ++ UnverifiedDNs ++ NewDN}.
@@ -367,3 +355,23 @@ show_dn_adding(Flag) ->
             gui_jq:hide(<<"new_dn_cancel">>),
             gui_jq:hide(<<"new_dn_submit">>)
     end.
+
+
+% Show info about ceritficates' DN
+show_dn_info() ->
+    gui_jq:info_popup(
+        <<"Certificates info">>,
+        gui_str:js_escape(wf:render([
+            #p{body = <<"You have no registered certificates. Certificates are used for access via oneclient and ",
+            "REST API. With oneclient, you can also use <b>access tokens</b>. To register a certificate, do one of the following:">>},
+            #panel{style = <<"margin-left: auto; margin-right: auto; text-align: left; display: inline-block;">>, body = [
+                #list{body = [
+                    #li{style = <<"padding: 10px 0 0;">>,
+                        body = <<"Enable certificate DN retrieval from your OpenID provider and log in again">>},
+                    #li{style = <<"padding: 7px 0 0;">>,
+                        body = <<"Add your .pem certificate manually below">>}
+                ]}
+            ]}
+        ])),
+        <<"">>
+    ).

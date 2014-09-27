@@ -31,6 +31,12 @@ veil_cluster_node_env:
 
   # GENERAL
   - parameter:
+      name: developer_mode
+      description: Developer mode unlocks functionalities like logging in without Global Registry
+      value: false
+
+  # GENERAL
+  - parameter:
       name: node_type
       description: Node type (worker or ccm)
       value: ccm

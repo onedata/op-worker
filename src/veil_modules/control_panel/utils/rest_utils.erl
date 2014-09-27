@@ -14,14 +14,14 @@
 
 -include_lib("public_key/include/public_key.hrl").
 -include("err.hrl").
--include("veil_modules/control_panel/cdmi_metadata.hrl").
 -include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/cdmi_error.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
 -export([verify_peer_cert/2, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, parse_body/1,
-         validate_body/1, prepare_metadata/1, prepare_metadata/2, ensure_path_ends_with_slash/1, get_path_leaf_with_ending_slash/1, trim_spaces/1]).
+         validate_body/1, ensure_path_ends_with_slash/1, get_path_leaf_with_ending_slash/1, trim_spaces/1]).
 
 %% ====================================================================
 %% API functions
@@ -94,7 +94,7 @@ encode_to_json(Term) ->
 -spec decode_from_json(binary()) -> term().
 %% ====================================================================
 decode_from_json(JSON) ->
-    mochijson2:decode(JSON).
+    mochijson2:decode(JSON, [{format, proplist}]).
 
 
 %% success_reply/1
@@ -138,7 +138,7 @@ verify_peer_cert(Req, GSIState) ->
                     {ok, DnString, Req1};
                 Unknown ->
                     ?error("[REST] Peer connected but cerificate chain was not found (find result: ~p). Please check if GSI validation is enabled.", [Unknown]),
-                     throw(invalid_cert)
+                     throw(?invalid_cert)
             end;
         {Token, Req2} ->
             case binary:split(base64:decode(Token),<<";">>) of
@@ -146,7 +146,7 @@ verify_peer_cert(Req, GSIState) ->
                     {ok, {token, AccessToken, GRUID}, Req2};
                 _ ->
                     ?error("[REST] Peer was rejected due to invalid token format"),
-                    throw(invalid_token)
+                    throw(?invalid_token)
             end
     end.
 
@@ -159,7 +159,7 @@ verify_peer_cert(Req, GSIState) ->
     Identity :: DnString | Token,
     DnString :: string(),
     Token :: {token, AccessToken :: binary(), GRUID :: binary()},
-    Result :: ok | {error, {user_unknown, DnString :: string()}}.
+    Result :: ok | {error, {?user_unknown, DnString :: string()}}.
 %% ====================================================================
 prepare_context({token, Token, GRUID}) ->
     fslogic_context:set_gr_auth(GRUID,Token),
@@ -170,7 +170,7 @@ prepare_context(DnString) ->
             fslogic_context:set_user_dn(DnString),
             ?info("[REST] Peer connected using certificate with subject: ~p ~n", [DnString]),
             ok;
-        _ -> {error, {user_unknown, DnString}}
+        _ -> {error, {?user_unknown, DnString}}
     end.
 
 
@@ -238,9 +238,7 @@ list_dir(Path, Offset, Count, Result) ->
 parse_body(RawBody) ->
     case gui_str:binary_to_unicode_list(RawBody) of
         "" -> [];
-        NonEmptyBody ->
-            {struct, Ans} = rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody)),
-            Ans
+        NonEmptyBody -> rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody))
     end.
 
 %% validate_body/1
@@ -257,60 +255,6 @@ validate_body(Body) ->
             ?error("Request body contains duplicated fields."),
             throw(duplicated_body_fields)
     end.
-
-%% prepare_metadata/1
-%% ====================================================================
-%% @doc Prepares cdmi metadata based on file attributes.
-%% @end
--spec prepare_metadata(#fileattributes{}) -> [{CdmiName :: binary(), Value :: binary()}].
-%% ====================================================================
-prepare_metadata(Attrs) ->
-    prepare_metadata(<<"">>, Attrs).
-
-%% prepare_metadata/2
-%% ====================================================================
-%% @doc Prepares cdmi metadata with given prefix based on file attributes.
-%% @end
--spec prepare_metadata(Prefix :: binary(), #fileattributes{}) -> [{CdmiName :: binary(), Value :: binary()}].
-%% ====================================================================
-prepare_metadata(Prefix, Attrs) ->
-    WithPrefix = lists:filter(fun(X) -> metadata_with_prefix(X, Prefix) end, ?default_storage_system_metadata),
-    lists:map(fun(X) -> cdmi_metadata_to_attrs(X,Attrs) end, WithPrefix).
-
-%% ====================================================================
-%% Internal Functions
-%% ====================================================================
-
-%% metadata_with_prefix/2
-%% ====================================================================
-%% @doc Predicate that tells whether a binary starts with given prefix.
-%% @end
--spec metadata_with_prefix(Name :: binary(), Prefix :: binary()) -> true | false.
-%% ====================================================================
-metadata_with_prefix(Name, Prefix) ->
-    binary:longest_common_prefix([Name, Prefix]) =:= size(Prefix).
-
-%% cdmi_metadata_to_attrs/2
-%% ====================================================================
-%% @doc Extracts cdmi metadata from file attributes.
-%% @end
--spec cdmi_metadata_to_attrs(CdmiName :: binary(), #fileattributes{}) -> {CdmiName :: binary(), Value :: binary()}.
-%% ====================================================================
-%todo add cdmi_acl metadata
-%todo clarify what should be written to cdmi_size for directories
-cdmi_metadata_to_attrs(<<"cdmi_size">>, Attrs) ->
-    {<<"cdmi_size">>, integer_to_binary(Attrs#fileattributes.size)};
-%todo format times into yyyy-mm-ddThh-mm-ss.ssssssZ
-cdmi_metadata_to_attrs(<<"cdmi_ctime">>, Attrs) ->
-    {<<"cdmi_ctime">>, integer_to_binary(Attrs#fileattributes.ctime)};
-cdmi_metadata_to_attrs(<<"cdmi_atime">>, Attrs) ->
-    {<<"cdmi_atime">>, integer_to_binary(Attrs#fileattributes.atime)};
-cdmi_metadata_to_attrs(<<"cdmi_mtime">>, Attrs) ->
-    {<<"cdmi_mtime">>, integer_to_binary(Attrs#fileattributes.mtime)};
-cdmi_metadata_to_attrs(<<"cdmi_owner">>, Attrs) ->
-    {<<"cdmi_owner">>, list_to_binary(Attrs#fileattributes.uname)};
-cdmi_metadata_to_attrs(_,_Attrs) ->
-    {}.
 
 %% ensure_path_ends_with_slash/1
 %% ====================================================================

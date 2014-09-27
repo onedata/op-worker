@@ -21,11 +21,11 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case vcn_gui_utils:maybe_redirect(true, true, true, true) of
+    case vcn_gui_utils:maybe_redirect(true, true, true) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
     end.
 
 %% Page title

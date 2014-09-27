@@ -18,6 +18,7 @@
 -include("messages_white_list.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
+-include("logging_pb.hrl").
 -include("remote_file_management_pb.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
@@ -140,8 +141,9 @@ websocket_handle({binary, Data}, Req, #handler_state{peer_type = PeerType} = Sta
                 provider -> decode_providermsg_pb(Data);
                 user     -> decode_clustermsg_pb(Data)
             end,
+        ?debug("Received request: ~p", [Request]),
 
-        handle(Req, Request, State)
+        handle(Req, Request, State) %% Decode ClusterMsg and handle it
     catch
         wrong_message_format                            -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
         {wrong_internal_message_type, MsgId2}           -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
@@ -282,7 +284,6 @@ handle(Req, {pull, FuseID, CLM}, #handler_state{peer_type = provider, provider_i
 handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = _CLM,
         #handler_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
                       access_token = SessionAccessToken, user_global_id = SessionUserGID} = State) ->
-
     %% Check if received message requires FuseId
     MsgType = case Msg of
                   M0 when is_tuple(M0) -> erlang:element(1, M0); %% Record
@@ -325,11 +326,12 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->
                       #veil_request{subject = DnString, request =
-                        #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}, access_token = {UserGID, AccessToken}};
+                      #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}, access_token = {UserGID, AccessToken}};
                   CallbackMsg2 when is_record(CallbackMsg2, channelclose) ->
                       #veil_request{subject = DnString, request =
-                        #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}, access_token = {UserGID, AccessToken}};
-                  _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
+                      #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}, access_token = {UserGID, AccessToken}};
+                  _ ->
+                      #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
               end,
 
     case Synch of
@@ -355,6 +357,10 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                 case Msg of
                     ack ->
                         gen_server:call(?Dispatcher_Name, {node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId, FuseID}}),
+                        {ok, Req, State};
+                    %% @todo This is a temporaary matching. It is necessary to avoid infinite logging loop.
+                    #logmessage{} ->
+                        gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
                         {ok, Req, State};
                     _ ->
                         Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
