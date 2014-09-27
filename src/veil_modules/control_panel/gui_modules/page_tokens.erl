@@ -22,7 +22,7 @@
 -define(MESSAGE_STYLE, <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>).
 -define(CONTENT_COLUMN_STYLE, <<"padding-right: 0">>).
 -define(NAVIGATION_COLUMN_STYLE, <<"border-left-width: 0; width: 20px; padding-left: 0;">>).
--define(PARAGRAPH_STYLE, <<"margin: 0 auto;">>).
+-define(PARAGRAPH_STYLE, <<"margin: 0 auto; font-weight: normal;">>).
 
 %$ Table names
 -define(CLIENT_TOKENS_TABLE_NAME, <<"Client tokens">>).
@@ -80,12 +80,12 @@ body() ->
     [
         #panel{
             id = <<"main_spinner">>,
-            style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px; display: none;">>,
+            style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>,
             body = #image{
                 image = <<"/images/spinner.gif">>
             }
         },
-        vcn_gui_utils:top_menu(spaces_tab),
+        vcn_gui_utils:top_menu(tokens_tab),
         #panel{
             id = <<"ok_message">>,
             style = ?MESSAGE_STYLE,
@@ -198,7 +198,7 @@ tokens_table(TableName, TokensDetails, NavigationBody, RenderRowFun) ->
     [Header | Rows].
 
 
-%% token_row_collapsed/2
+%% token_row_collapsed/3
 %% ====================================================================
 %% @doc Renders collapsed token settings row.
 %% @end
@@ -221,7 +221,7 @@ token_row_collapsed(TableName, RowId, #token_details{access_id = AccessId, clien
     ].
 
 
-%% token_row_expanded/2
+%% token_row_expanded/3
 %% ====================================================================
 %% @doc Renders expanded token settings row.
 %% @end
@@ -274,7 +274,7 @@ token_row_expanded(TableName, RowId, #token_details{access_id = AccessId} = Toke
 %% ====================================================================
 token_detail(Content, Title, Postback, Class) ->
     #span{
-        style = <<"font-size: large; vertical-align: -webkit-baseline-middle;">>,
+        style = <<"font-size: large; font-weight: normal; fivertical-align: -webkit-baseline-middle;">>,
         body = [
             Content,
             #link{
@@ -353,114 +353,111 @@ comet_loop({error, Reason}) ->
 
 comet_loop(#?STATE{client_tokens = ClientTokens, provider_tokens = ProviderTokens} = State) ->
     NewCometLoopState = try
-        receive
-            render_tokens_tables ->
-                lists:foreach(fun({TableId, TableName, TokensDetails}) ->
-                    gui_jq:update(TableId, tokens_table_collapsed(TableId, TableName, TokensDetails)),
-                    gui_jq:fade_in(TableId, 500)
-                end, [
-                    {<<"client_tokens">>, ?CLIENT_TOKENS_TABLE_NAME, ClientTokens},
-                    {<<"provider_tokens">>, ?PROVIDER_TOKENS_TABLE_NAME, ProviderTokens}
-                ]),
-                gui_jq:wire(<<"$('#main_spinner').delay(500).hide(0);">>, false),
-                State;
+                            receive
+                                render_tokens_tables ->
+                                    lists:foreach(fun({TableId, TableName, TokensDetails}) ->
+                                        gui_jq:update(TableId, tokens_table_collapsed(TableId, TableName, TokensDetails)),
+                                        gui_jq:fade_in(TableId, 500)
+                                    end, [
+                                        {<<"client_tokens">>, ?CLIENT_TOKENS_TABLE_NAME, ClientTokens},
+                                        {<<"provider_tokens">>, ?PROVIDER_TOKENS_TABLE_NAME, ProviderTokens}
+                                    ]),
+                                    State;
 
-            get_authorization_code ->
-                case gr_openid:get_client_authorization_code({user, vcn_gui_utils:get_access_token()}) of
-                    {ok, AuthorizationCode} when is_binary(AuthorizationCode) ->
-                        Message = <<"Use the authorization code below to log in with a FUSE client.",
-                        "<input id=\"authorization_code_textbox\" type=\"text\" style=\"margin-top: 1em;"
-                        " width: 80%;\" value=\"", AuthorizationCode/binary, "\">">>,
-                        gui_jq:info_popup(<<"Authorization code">>, Message, <<"return true;">>, <<"btn-inverse">>),
-                        gui_jq:wire(<<"box.on('shown',function(){ $(\"#authorization_code_textbox\").focus().select(); });">>);
-                    _ ->
-                        vcn_gui_utils:message(<<"error_message">>, <<"Cannot get authorization code.">>)
-                end,
-                gui_jq:hide(<<"main_spinner">>),
-                State;
+                                get_authorization_code ->
+                                    case gr_openid:get_client_authorization_code({user, vcn_gui_utils:get_access_token()}) of
+                                        {ok, AuthorizationCode} when is_binary(AuthorizationCode) ->
+                                            Message = <<"Use the authorization code below to log in with a FUSE client.",
+                                            "<input id=\"authorization_code_textbox\" type=\"text\" style=\"margin-top: 1em;"
+                                            " width: 80%;\" value=\"", AuthorizationCode/binary, "\">">>,
+                                            gui_jq:info_popup(<<"Authorization code">>, Message, <<"return true;">>, <<"btn-inverse">>),
+                                            gui_jq:wire(<<"box.on('shown',function(){ $(\"#authorization_code_textbox\").focus().select(); });">>);
+                                        _ ->
+                                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot get authorization code.">>)
+                                    end,
+                                    State;
 
-            {change_client_name, TableName, RowId, #token_details{access_id = AccessId} = TokenDetails, NewClientName} ->
-                NewTokenDetailsFun = fun(Details) ->
-                    lists:filtermap(fun({Id, Detail}) ->
-                        case Id of
-                            RowId -> {true, {Id, Detail#token_details{client_name = NewClientName}}};
-                            _ -> {true, {Id, Detail}}
-                        end
-                    end, Details)
-                end,
+                                {change_client_name, TableName, RowId, #token_details{access_id = AccessId} = TokenDetails, NewClientName} ->
+                                    NewTokenDetailsFun = fun(Details) ->
+                                        lists:filtermap(fun({Id, Detail}) ->
+                                            case Id of
+                                                RowId ->
+                                                    {true, {Id, Detail#token_details{client_name = NewClientName}}};
+                                                _ -> {true, {Id, Detail}}
+                                            end
+                                        end, Details)
+                                    end,
 
-                {ChangeClientNameFun, SuccessfulState} =
-                    case TableName of
-                        ?CLIENT_TOKENS_TABLE_NAME ->
-                            {fun gr_openid:modify_client_token_details/3, State#?STATE{client_tokens = NewTokenDetailsFun(ClientTokens)}};
-                        ?PROVIDER_TOKENS_TABLE_NAME ->
-                            {fun gr_openid:modify_provider_token_details/3, State#?STATE{provider_tokens = NewTokenDetailsFun(ProviderTokens)}}
-                    end,
+                                    {ChangeClientNameFun, SuccessfulState} =
+                                        case TableName of
+                                            ?CLIENT_TOKENS_TABLE_NAME ->
+                                                {fun gr_openid:modify_client_token_details/3, State#?STATE{client_tokens = NewTokenDetailsFun(ClientTokens)}};
+                                            ?PROVIDER_TOKENS_TABLE_NAME ->
+                                                {fun gr_openid:modify_provider_token_details/3, State#?STATE{provider_tokens = NewTokenDetailsFun(ProviderTokens)}}
+                                        end,
 
-                NextState =
-                    case ChangeClientNameFun({user, vcn_gui_utils:get_access_token()}, AccessId, [{<<"clientName">>, NewClientName}]) of
-                        ok ->
-                            NewTokenDetails = client_name(TableName, RowId, TokenDetails#token_details{client_name = NewClientName}),
-                            gui_jq:update(<<RowId/binary, "_client_name">>, NewTokenDetails),
-                            SuccessfulState;
-                        Other ->
-                            ?error("Cannot change client name for token ~p: ~p", [AccessId, Other]),
-                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot change name for token: <b>", AccessId/binary, "</b>."
-                            "<br>Please try again later.">>),
-                            gui_jq:update(<<RowId/binary, "_client_name">>, client_name(TableName, RowId, TokenDetails)),
-                            State
-                    end,
-                gui_jq:hide(<<"main_spinner">>),
-                NextState;
+                                    NextState =
+                                        case ChangeClientNameFun({user, vcn_gui_utils:get_access_token()}, AccessId, [{<<"clientName">>, NewClientName}]) of
+                                            ok ->
+                                                NewTokenDetails = client_name(TableName, RowId, TokenDetails#token_details{client_name = NewClientName}),
+                                                gui_jq:update(<<RowId/binary, "_client_name">>, NewTokenDetails),
+                                                SuccessfulState;
+                                            Other ->
+                                                ?error("Cannot change client name for token ~p: ~p", [AccessId, Other]),
+                                                vcn_gui_utils:message(<<"error_message">>, <<"Cannot change name for token: <b>", AccessId/binary, "</b>."
+                                                "<br>Please try again later.">>),
+                                                gui_jq:update(<<RowId/binary, "_client_name">>, client_name(TableName, RowId, TokenDetails)),
+                                                State
+                                        end,
+                                    NextState;
 
-            {revoke_token, TableName, AccessId, RowId} ->
-                {RevokeTokenFun, SuccessfulState} =
-                    case TableName of
-                        ?CLIENT_TOKENS_TABLE_NAME ->
-                            {fun gr_openid:revoke_client_token/2, State#?STATE{client_tokens = proplists:delete(RowId, ClientTokens)}};
-                        ?PROVIDER_TOKENS_TABLE_NAME ->
-                            {fun gr_openid:revoke_provider_token/2, State#?STATE{provider_tokens = proplists:delete(RowId, ProviderTokens)}}
-                    end,
-                NextState =
-                    case RevokeTokenFun({user, vcn_gui_utils:get_access_token()}, AccessId) of
-                        ok ->
-                            vcn_gui_utils:message(<<"ok_message">>, <<"Token: <b>", AccessId/binary, "</b> has been successfully revoked.">>),
-                            gui_jq:remove(RowId),
-                            SuccessfulState;
-                        Other ->
-                            ?error("Cannot revoke token ~p: ~p", [AccessId, Other]),
-                            vcn_gui_utils:message(<<"error_message">>, <<"Cannot revoke token: <b>", AccessId/binary, "</b>."
-                            "<br>Please try again later.">>),
-                            State
-                    end,
-                gui_jq:hide(<<"main_spinner">>),
-                NextState;
+                                {revoke_token, TableName, AccessId, RowId} ->
+                                    {RevokeTokenFun, SuccessfulState} =
+                                        case TableName of
+                                            ?CLIENT_TOKENS_TABLE_NAME ->
+                                                {fun gr_openid:revoke_client_token/2, State#?STATE{client_tokens = proplists:delete(RowId, ClientTokens)}};
+                                            ?PROVIDER_TOKENS_TABLE_NAME ->
+                                                {fun gr_openid:revoke_provider_token/2, State#?STATE{provider_tokens = proplists:delete(RowId, ProviderTokens)}}
+                                        end,
+                                    NextState =
+                                        case RevokeTokenFun({user, vcn_gui_utils:get_access_token()}, AccessId) of
+                                            ok ->
+                                                vcn_gui_utils:message(<<"ok_message">>, <<"Token: <b>", AccessId/binary, "</b> has been successfully revoked.">>),
+                                                gui_jq:remove(RowId),
+                                                SuccessfulState;
+                                            Other ->
+                                                ?error("Cannot revoke token ~p: ~p", [AccessId, Other]),
+                                                vcn_gui_utils:message(<<"error_message">>, <<"Cannot revoke token: <b>", AccessId/binary, "</b>."
+                                                "<br>Please try again later.">>),
+                                                State
+                                        end,
+                                    NextState;
 
-            Event ->
-                case Event of
-                    {collapse_tokens_table, <<"client_tokens">>, TableName} ->
-                        gui_jq:update(<<"client_tokens">>, tokens_table_collapsed(<<"client_tokens">>, TableName, ClientTokens));
-                    {collapse_tokens_table, <<"provider_tokens">>, TableName} ->
-                        gui_jq:update(<<"provider_tokens">>, tokens_table_collapsed(<<"provider_tokens">>, TableName, ProviderTokens));
-                    {expand_tokens_table, <<"client_tokens">>, TableName} ->
-                        gui_jq:update(<<"client_tokens">>, tokens_table_expanded(<<"client_tokens">>, TableName, ClientTokens));
-                    {expand_tokens_table, <<"provider_tokens">>, TableName} ->
-                        gui_jq:update(<<"provider_tokens">>, tokens_table_expanded(<<"provider_tokens">>, TableName, ProviderTokens));
-                    {collapse_token_row, TableName, RowId, TokenDetails} ->
-                        gui_jq:update(RowId, token_row_collapsed(TableName, RowId, TokenDetails));
-                    {expand_token_row, TableName, RowId, TokenDetails} ->
-                        gui_jq:update(RowId, token_row_expanded(TableName, RowId, TokenDetails));
-                    _ ->
-                        ok
-                end,
-                gui_jq:hide(<<"main_spinner">>),
-                State
-        end
+                                Event ->
+                                    case Event of
+                                        {collapse_tokens_table, <<"client_tokens">>, TableName} ->
+                                            gui_jq:update(<<"client_tokens">>, tokens_table_collapsed(<<"client_tokens">>, TableName, ClientTokens));
+                                        {collapse_tokens_table, <<"provider_tokens">>, TableName} ->
+                                            gui_jq:update(<<"provider_tokens">>, tokens_table_collapsed(<<"provider_tokens">>, TableName, ProviderTokens));
+                                        {expand_tokens_table, <<"client_tokens">>, TableName} ->
+                                            gui_jq:update(<<"client_tokens">>, tokens_table_expanded(<<"client_tokens">>, TableName, ClientTokens));
+                                        {expand_tokens_table, <<"provider_tokens">>, TableName} ->
+                                            gui_jq:update(<<"provider_tokens">>, tokens_table_expanded(<<"provider_tokens">>, TableName, ProviderTokens));
+                                        {collapse_token_row, TableName, RowId, TokenDetails} ->
+                                            gui_jq:update(RowId, token_row_collapsed(TableName, RowId, TokenDetails));
+                                        {expand_token_row, TableName, RowId, TokenDetails} ->
+                                            gui_jq:update(RowId, token_row_expanded(TableName, RowId, TokenDetails));
+                                        _ ->
+                                            ok
+                                    end,
+                                    State
+                            end
                         catch Type:Reason ->
                             ?error_stacktrace("Comet process exception: ~p:~p", [Type, Reason]),
                             vcn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
                             {error, Reason}
                         end,
+    gui_jq:wire(<<"$('#main_spinner').delay(300).hide(0);">>, false),
     gui_comet:flush(),
     ?MODULE:comet_loop(NewCometLoopState).
 
@@ -472,23 +469,22 @@ comet_loop(#?STATE{client_tokens = ClientTokens, provider_tokens = ProviderToken
 %% ====================================================================
 event(init) ->
     try
+        TokensFun = fun(RowPrefix, Tokens) ->
+            lists:foldl(fun(Token, {Rows, It}) ->
+                {
+                    [{<<RowPrefix/binary, (integer_to_binary(It + 1))/binary>>, Token} | Rows],
+                    It + 1
+                }
+            end, {[], 0}, Tokens)
+        end,
+
         {ok, ClientTokens} = gr_openid:get_client_tokens({user, vcn_gui_utils:get_access_token()}),
+        {NewClientTokens, _} = TokensFun(<<"client_token_">>, ClientTokens),
         {ok, ProviderTokens} = gr_openid:get_provider_tokens({user, vcn_gui_utils:get_access_token()}),
-        {NewClientTokens, _} = lists:foldl(fun(ClientToken, {ClientTokensAcc, Id}) ->
-            {
-                [{<<"client_token_", (integer_to_binary(Id))/binary>>, ClientToken} | ClientTokensAcc],
-                Id + 1
-            }
-        end, {[], 1}, ClientTokens),
-        {NewProviderTokens, _} = lists:foldl(fun(ProviderToken, {ProviderTokensAcc, Id}) ->
-            {
-                [{<<"provider_token_", (integer_to_binary(Id))/binary>>, ProviderToken} | ProviderTokensAcc],
-                Id + 1
-            }
-        end, {[], 1}, ProviderTokens),
+        {NewProviderTokens, _} = TokensFun(<<"provider_token_">>, ProviderTokens),
 
         gui_jq:wire(#api{name = "revokeToken", tag = "revokeToken"}, false),
-        gui_jq:show(<<"main_spinner">>),
+        gui_jq:bind_key_to_click_on_class(<<"13">>, <<"confirm">>),
 
         {ok, Pid} = gui_comet:spawn(fun() ->
             comet_loop(#?STATE{provider_tokens = NewProviderTokens, client_tokens = NewClientTokens})
@@ -515,11 +511,9 @@ event({cancel_new_client_name_submit, TableName, RowId, TokenDetails}) ->
     gui_jq:update(<<RowId/binary, "_client_name">>, client_name(TableName, RowId, TokenDetails));
 
 event({revoke_token, TableName, RowId, #token_details{access_id = AccessId}}) ->
-    Title = <<"Revoke token">>,
     Message = <<"Are you sure you want to revoke token: <b>", AccessId/binary, "</b>?<br>This operation cannot be undone.">>,
     Script = <<"revokeToken(['", TableName/binary, "','", AccessId/binary, "','", RowId/binary, "']);">>,
-    ConfirmButtonClass = <<"btn-inverse">>,
-    gui_jq:dialog_popup(Title, Message, Script, ConfirmButtonClass);
+    gui_jq:dialog_popup(<<"Revoke token">>, Message, Script, <<"btn-inverse">>);
 
 event({message, Message}) ->
     get(?COMET_PID) ! Message,

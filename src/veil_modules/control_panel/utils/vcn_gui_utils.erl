@@ -19,7 +19,7 @@
 
 % Saving and retrieving information that does not change during one session
 -export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0, gen_logout_token/0, set_logout_token/1, get_logout_token/0,
-set_access_token/1, get_access_token/0, set_global_user_id/1, get_global_user_id/0]).
+    set_access_token/1, get_access_token/0, set_global_user_id/1, get_global_user_id/0]).
 
 % Functions to check for user's session
 -export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/3]).
@@ -279,84 +279,72 @@ top_menu(ActiveTabID) ->
 -spec top_menu(ActiveTabID :: any(), SubMenuBody :: any()) -> list().
 %% ====================================================================
 top_menu(ActiveTabID, SubMenuBody) ->
-    MenuCaptions =
-        [
-            {brand_tab, #li{body = #link{style = <<"padding: 18px;">>, url = "/",
+    Process = fun(ActiveItem, List) ->
+        lists:map(fun({ItemID, ListItem}) ->
+            case ItemID of
+                ActiveItem -> ListItem#li{class = <<"active">>};
+                _ -> ListItem
+            end
+        end, List)
+    end,
+
+    MenuCaptions = Process(ActiveTabID, [
+        {brand_tab, #li{body = #link{style = <<"padding: 18px;">>, url = "/",
+            body = [
+                #span{style = <<"font-size: xx-large;">>, class = <<"fui-home">>},
+                #b{style = <<"font-size: x-large;">>, body = <<"onedata">>}
+            ]}
+        }},
+        {data_tab, #li{body = [
+            #link{style = "padding: 18px;", url = "/file_manager", body = "Data"},
+            #list{style = "top: 37px; width: 120px;", body = [
+                #li{body = #link{url = "/file_manager", body = "File manager"}},
+                #li{body = #link{url = "/shared_files", body = "Shared files"}},
+                #li{body = #link{url = "/client_download", body = "Download oneclient"}}
+            ]}
+        ]}},
+        {spaces_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Spaces">>,
+            url = <<"/spaces">>, body = <<"Spaces">>}}},
+        {tokens_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Spaces">>,
+            url = <<"/tokens">>, body = <<"Tokens">>}}}
+    ]),
+
+    MenuIcons = Process(ActiveTabID, [
+        {manage_account_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Manage account">>,
+            url = <<"/manage_account">>, body = [gui_str:unicode_list_to_binary(get_user_fullname()), #span{class = <<"fui-user">>,
+                style = <<"margin-left: 10px;">>}]}}},
+        {about_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"About">>,
+            url = <<"/about">>, body = #span{class = <<"fui-info">>}}}},
+        {logout_button, #li{
+            body = #form{
+                id = <<"logout_form">>,
+                style = <<"margin: 0; padding: 18px;">>,
+                method = "post",
+                action = <<"/logout">>,
                 body = [
-                    #span{style = <<"font-size: xx-large;">>, class = <<"fui-home">>},
-                    #b{style = <<"font-size: x-large;">>, body = <<"onedata">>}
-                ]}
-            }},
-            {data_tab, #li{body = [
-                #link{style = "padding: 18px;", url = "/file_manager", body = "Data"},
-                #list{style = "top: 37px; width: 120px;", body = [
-                    #li{body = #link{url = "/file_manager", body = "File manager"}},
-                    #li{body = #link{url = "/shared_files", body = "Shared files"}},
-                    #li{body = #link{url = "/client_download", body = "Download oneclient"}}
-                ]}
-            ]}},
-            {spaces_tab, #li{body = [
-                #link{style = "padding: 18px;", url = "/spaces", body = "Spaces"},
-                #list{style = "top: 37px; width: 120px;", body = [
-                    #li{body = #link{url = "/spaces", body = "Settings"}},
-                    #li{body = #link{url = "/tokens", body = "Tokens"}}
-                ]}
-            ]}}
-        ],
-
-    MenuIcons =
-        [
-            {manage_account_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Manage account">>,
-                url = <<"/manage_account">>, body = [gui_str:unicode_list_to_binary(get_user_fullname()), #span{class = <<"fui-user">>,
-                    style = <<"margin-left: 10px;">>}]}}},
-            {about_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"About">>,
-                url = <<"/about">>, body = #span{class = <<"fui-info">>}}}},
-            {logout_button, #li{
-                body = #form{
-                    id = <<"logout_form">>,
-                    style = <<"margin: 0; padding: 18px;">>,
-                    method = "post",
-                    action = <<"/logout">>,
-                    body = [
-                        #textbox{
-                            style = <<"display: none">>,
-                            name = ?logout_token,
-                            value = vcn_gui_utils:get_logout_token()
-                        },
-                        #link{
-                            style = <<"font-size: 24px;">>,
-                            class = <<"glyph-link">>,
-                            data_fields = [{<<"onclick">>, <<"document.getElementById('logout_form').submit(); return false;">>}],
-                            title = <<"Log out">>,
-                            body = #span{class = <<"fui-power">>}
-                        }
-                    ]
-                }}
-            }
-        ],
-
-    MenuCaptionsProcessed = lists:map(
-        fun({TabID, ListItem}) ->
-            case TabID of
-                ActiveTabID -> ListItem#li{class = <<"active">>};
-                _ -> ListItem
-            end
-        end, MenuCaptions),
-
-    MenuIconsProcessed = lists:map(
-        fun({TabID, ListItem}) ->
-            case TabID of
-                ActiveTabID -> ListItem#li{class = <<"active">>};
-                _ -> ListItem
-            end
-        end, MenuIcons),
+                    #textbox{
+                        style = <<"display: none">>,
+                        name = ?logout_token,
+                        value = vcn_gui_utils:get_logout_token()
+                    },
+                    #link{
+                        style = <<"font-size: 24px;">>,
+                        class = <<"glyph-link">>,
+                        data_fields = [{<<"onclick">>, <<"document.getElementById('logout_form').submit(); return false;">>}],
+                        title = <<"Log out">>,
+                        body = #span{class = <<"fui-power">>}
+                    }
+                ]
+            }}
+        }
+    ]),
 
     [
         #panel{class = <<"navbar navbar-fixed-top">>, body = [
-            #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 2px solid gray;">>, body = [
-                #panel{class = <<"container">>, style = <<"margin: 0px 50px;">>, body = [
-                    #list{class = <<"nav pull-left">>, body = MenuCaptionsProcessed},
-                    #list{class = <<"nav pull-right">>, body = MenuIconsProcessed}
+            #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 1px solid gray;">>, body = [
+                #panel{class = <<"container">>, body = [
+                    #list{class = <<"nav pull-left">>, body = MenuCaptions},
+                    #list{class = <<"nav pull-right">>, body = MenuIcons}
                 ]}
             ]}
         ] ++ SubMenuBody}
