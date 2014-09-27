@@ -41,7 +41,7 @@ validate_login() ->
             id_token = #id_token{
                 sub = GRUID,
                 name = Name,
-                email = EmailList}
+                emails = EmailList}
         }} = gr_openid:get_token_response(
             provider,
             [{<<"code">>, AuthorizationCode}, {<<"grant_type">>, <<"authorization_code">>}]
