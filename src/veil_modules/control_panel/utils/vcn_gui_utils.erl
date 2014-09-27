@@ -354,7 +354,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
     [
         #panel{class = <<"navbar navbar-fixed-top">>, body = [
             #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 2px solid gray;">>, body = [
-                #panel{class = <<"container">>, body = [
+                #panel{class = <<"container">>, style = <<"margin: 0px 50px;">>, body = [
                     #list{class = <<"nav pull-left">>, body = MenuCaptionsProcessed},
                     #list{class = <<"nav pull-right">>, body = MenuIconsProcessed}
                 ]}
