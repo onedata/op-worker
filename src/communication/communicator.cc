@@ -15,6 +15,7 @@
 #include "make_unique.h"
 #include "veilErrors.h"
 #include "remote_file_management.pb.h"
+#include "scheduler.h"
 
 #include <boost/algorithm/string.hpp>
 #include <google/protobuf/descriptor.h>
@@ -121,6 +122,11 @@ void Communicator::send(const ServerModule module,
     m_communicationHandler->send(*cmsg, poolType(msg), retries);
 }
 
+void Communicator::recreate()
+{
+    m_communicationHandler->recreate();
+}
+
 std::future<std::unique_ptr<Communicator::Answer>>
 Communicator::communicateAsync(const std::string &module,
                                const google::protobuf::Message &msg,
@@ -200,14 +206,16 @@ CommunicationHandler::Pool Communicator::poolType(const google::protobuf::Messag
             : CommunicationHandler::Pool::META;
 }
 
-std::shared_ptr<Communicator> createWebsocketCommunicator(const unsigned int dataPoolSize,
-                                                          const unsigned int metaPoolSize,
-                                                          std::string hostname,
-                                                          unsigned int port,
-                                                          std::string endpoint,
-                                                          const bool verifyServerCertificate,
-                                                          const std::unordered_map<std::string, std::string> &additionalHeaders,
-                                                          std::shared_ptr<const CertificateData> certificateData)
+std::shared_ptr<Communicator> createWebsocketCommunicator(
+        std::shared_ptr<Scheduler> scheduler,
+        const unsigned int dataPoolSize,
+        const unsigned int metaPoolSize,
+        std::string hostname,
+        unsigned int port,
+        std::string endpoint,
+        const bool verifyServerCertificate,
+        std::function<std::unordered_map<std::string, std::string>()> additionalHeadersFun,
+        std::shared_ptr<const CertificateData> certificateData)
 {
     const auto uri = "wss://"+hostname+":"+std::to_string(port)+endpoint;
 
@@ -219,7 +227,7 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(const unsigned int dat
 
     auto createDataPool = [&](const unsigned int poolSize) {
         return std::make_unique<WebsocketConnectionPool>(
-                    poolSize, uri, additionalHeaders,
+                    poolSize, uri, scheduler, additionalHeadersFun,
                     certificateData, verifyServerCertificate);
     };
 

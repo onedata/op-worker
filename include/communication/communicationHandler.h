@@ -165,6 +165,11 @@ public:
             std::function<std::unique_ptr<Message>()> goodbye,
             const Pool poolType);
 
+    /**
+     * * @copydoc ConnectionPool::recreate()
+     */
+    void recreate();
+
 private:
     MsgId nextId();
     void sendWithRetry(const google::protobuf::Message &message,

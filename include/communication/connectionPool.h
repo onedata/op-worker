@@ -19,6 +19,9 @@
 
 namespace veil
 {
+
+class Scheduler;
+
 namespace communication
 {
 
@@ -43,7 +46,8 @@ public:
      * @param uri Server's URI to connect to.
      */
     ConnectionPool(const unsigned int connectionsNumber,
-                   std::string uri);
+                   std::string uri,
+                   std::shared_ptr<Scheduler> scheduler);
 
     /**
      * Destructor.
@@ -88,6 +92,12 @@ public:
     virtual std::function<void()> addHandshake(
             std::function<std::string()> handshake,
             std::function<std::string()> goodbye);
+
+    /**
+     * Recreates all connections, dropping the old ones after a short grace
+     * period.
+     */
+    void recreate();
 
 protected:
     /**
@@ -160,11 +170,14 @@ private:
 
     const unsigned int m_connectionsNumber;
     std::mutex m_connectionsMutex;
+    std::mutex m_closingConnectionsMutex;
     std::condition_variable m_connectionStatusChanged;
     std::list<std::unique_ptr<Connection>> m_futureConnections;
     std::list<std::unique_ptr<Connection>> m_openConnections;
+    std::list<std::unique_ptr<Connection>> m_closingConnections;
     std::list<std::function<std::string()>> m_handshakes;
     std::list<std::function<std::string()>> m_goodbyes;
+    std::shared_ptr<Scheduler> m_scheduler;
 };
 
 } // namespace communication

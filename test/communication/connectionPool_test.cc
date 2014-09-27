@@ -69,6 +69,12 @@ decltype(ConnectionMock::connectionOpened) ConnectionMock::connectionOpened;
 
 struct ConnectionPoolProxy: public veil::communication::ConnectionPool
 {
+    ConnectionPoolProxy(const unsigned int connectionsNumber, std::string uri)
+        : ConnectionPool{connectionsNumber, std::move(uri), {}}
+    {
+    }
+
+
     using veil::communication::ConnectionPool::ConnectionPool;
     using veil::communication::ConnectionPool::addConnections;
     using veil::communication::ConnectionPool::onFail;

@@ -10,6 +10,7 @@
 #include "communication/connection.h"
 #include "communication/exception.h"
 #include "logging.h"
+#include "scheduler.h"
 
 #include <algorithm>
 #include <cassert>
@@ -33,9 +34,11 @@ namespace communication
 {
 
 ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
-                               std::string uri)
+                               std::string uri,
+                               std::shared_ptr<Scheduler> scheduler)
     : m_uri{std::move(uri)}
     , m_connectionsNumber{connectionsNumber}
+    , m_scheduler{std::move(scheduler)}
 {
 }
 
@@ -179,6 +182,24 @@ std::function<void()> ConnectionPool::addHandshake(std::function<std::string()> 
         m_handshakes.erase(handshakeIt);
         m_goodbyes.erase(goodbyeIt);
     };
+}
+
+void ConnectionPool::recreate()
+{
+    std::unique_lock<std::mutex> connectionsLock{m_connectionsMutex, std::defer_lock};
+    std::unique_lock<std::mutex> closingConnectionsLock{m_closingConnectionsMutex, std::defer_lock};
+    std::lock(connectionsLock, closingConnectionsLock);
+
+    m_futureConnections.clear();
+    m_closingConnections.splice(m_closingConnections.begin(), m_openConnections);
+
+    closingConnectionsLock.release();
+    addConnections();
+
+    m_scheduler->schedule(WAIT_FOR_CONNECTION, [this]{
+        std::lock_guard<std::mutex> guard{m_closingConnectionsMutex};
+        m_closingConnections.clear();
+    });
 }
 
 std::function<void()> ConnectionPool::addHandshake(std::function<std::string()> handshake)
