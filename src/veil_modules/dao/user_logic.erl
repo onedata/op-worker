@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Lukasz Opiola
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -22,9 +22,9 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([sign_in/2, create_user/6, create_user/7, get_user/1, remove_user/1, list_all_users/0]).
+-export([sign_in/4, create_user/6, create_user/9, get_user/1, remove_user/1, list_all_users/0]).
 -export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
--export([get_email_list/1, update_email_list/2, get_role/1, update_role/2]).
+-export([get_email_list/1, update_email_list/2, get_role/1, update_role/2, update_access_credentials/4]).
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
@@ -52,7 +52,7 @@ create_partial_user(GRUID, Spaces) ->
         {ok, #user_details{name = Name0}} ->
             Login = openid_utils:get_user_login(GRUID),
             Name = unicode:characters_to_list(Name0),
-            try user_logic:sign_in([{global_id, vcn_utils:ensure_list(GRUID)}, {name, Name}, {login, Login}], undefined) of
+            try user_logic:sign_in([{global_id, vcn_utils:ensure_list(GRUID)}, {name, Name}, {login, Login}], <<>>, <<>>, 0) of
                 {_, UserDoc} ->
                     {ok, UserDoc}
             catch
@@ -66,19 +66,22 @@ create_partial_user(GRUID, Spaces) ->
     end.
 
 
-%% sign_in/1
+%% sign_in/4
 %% ====================================================================
 %% @doc
-%% This function should be called after a user has logged in via OpenID. 
+%% This function should be called after a user has logged in via OpenID.
 %% It looks the user up in database by login. If he is not there, it creates a proper document.
 %% If the user already exists, synchronization is made between document
 %% in the database and info received from OpenID provider.
 %% @end
--spec sign_in(Proplist, AuthorizationCode :: binary()) -> Result when
+-spec sign_in(Proplist, AccessToken :: binary(),
+              RefreshToken :: binary(),
+              AccessExpirationTime :: non_neg_integer()) ->
+    Result when
     Proplist :: list(),
     Result :: {string(), user_doc()} | no_return().
 %% ====================================================================
-sign_in(Proplist, AccessToken) ->
+sign_in(Proplist, AccessToken, RefreshToken, AccessExpirationTime) ->
     GlobalId = case proplists:get_value(global_id, Proplist, "") of
                    "" -> throw(no_global_id_specified);
                    GID -> GID
@@ -91,14 +94,12 @@ sign_in(Proplist, AccessToken) ->
 
     ?debug("Login with token: ~p", [AccessToken]),
 
-    fslogic_context:set_gr_auth(GlobalId, AccessToken),
-
     User = case get_user({global_id, GlobalId}) of
                {ok, ExistingUser} ->
-                   User1 = synchronize_user_info(ExistingUser, Teams, Emails, DnList, AccessToken),
+                   User1 = synchronize_user_info(ExistingUser, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime),
                    synchronize_spaces_info(User1, AccessToken);
                {error, user_not_found} ->
-                   case create_user(GlobalId, Login, Name, Teams, Emails, DnList, AccessToken) of
+                   case create_user(GlobalId, Login, Name, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime) of
                        {ok, NewUser} ->
                            synchronize_spaces_info(NewUser, AccessToken);
                        {error, Error} ->
@@ -126,8 +127,8 @@ sign_in(Proplist, AccessToken) ->
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
 create_user(GlobalId, Login, Name, Teams, Email, DnList) ->
-    create_user(GlobalId, Login, Name, Teams, Email, DnList, <<>>).
-create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken) ->
+    create_user(GlobalId, Login, Name, Teams, Email, DnList, <<>>, <<>>, 0).
+create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime) ->
     ?debug("Creating user: ~p", [{GlobalId, Login, Name, Teams, Email, DnList}]),
     Quota = #quota{},
     {QuotaAns, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
@@ -153,7 +154,9 @@ create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken) ->
                   end,
         quota_doc = QuotaUUID,
 
-        access_token = AccessToken
+        access_token = AccessToken,
+        refresh_token = RefreshToken,
+        access_expiration_time = AccessExpirationTime
     },
     {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
     GetUserAns = get_user({uuid, UUID}),
@@ -632,26 +635,56 @@ invert_dn_string(DNString) ->
     string:join(lists:reverse(Entries), ",").
 
 
+%% update_access_credentials/4
+%% ====================================================================
+%% @doc
+%% Update #veil_document encapsulating #user record with new access token,
+%% refresh token and access expiration time.
+%% @end
+-spec update_access_credentials(User, AccessToken :: binary(), RefreshToken :: binary(),
+    ExpirationTime :: non_neg_integer()) -> Result when
+    User :: user_doc(),
+    Result :: {ok, user_doc()} | {error, any()}.
+%% ====================================================================
+update_access_credentials(UserDoc, AccessToken, RefreshToken, ExpirationTime) ->
+    NewDoc = update_access_credentials_int(UserDoc, AccessToken, RefreshToken, ExpirationTime),
+
+    case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
+        {ok, _} -> ok;
+        {error, Reason} ->
+            ?error("Cannot update user ~p access credentials: ~p", [UserDoc#veil_document.uuid, Reason]),
+            {error, Reason}
+    end.
+update_access_credentials_int(UserDoc, AccessToken, RefreshToken, ExpirationTime) ->
+    #veil_document{record = #user{global_id = GlobalId} = User} = UserDoc,
+    fslogic_context:set_gr_auth(GlobalId, AccessToken),
+    UserDoc#veil_document{record = User#user{
+        access_token = AccessToken,
+        refresh_token = RefreshToken,
+        access_expiration_time = ExpirationTime}}.
+
+
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
 
-%% synchronize_user_info/5
+%% synchronize_user_info/7
 %% ====================================================================
 %% @doc
 %% This function synchronizes data from database with the information
 %% received from OpenID provider.
 %% @end
--spec synchronize_user_info(User, Teams, Emails, DnList, AccessToken :: binary()) -> Result when
+-spec synchronize_user_info(User, Teams, Emails, DnList, AccessToken :: binary(),
+                            RefreshToken :: binary(), AccessExpiration :: non_neg_integer()) -> Result when
     User :: user_doc(),
     Teams :: string(),
     Emails :: [string()],
     DnList :: [string()],
     Result :: user_doc().
 %% ====================================================================
-synchronize_user_info(User, Teams, Emails, DnList, AccessToken) ->
+synchronize_user_info(User, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime) ->
     %% Actual updates will probably happen so rarely, that there is no need to scoop those 3 DB updates into one.
-    User1 = update_access_token(User, AccessToken),
+    User1 = update_access_credentials_int(User, AccessToken, RefreshToken, AccessExpirationTime),
     User2 = case (get_teams(User1) =:= Teams) or (Teams =:= []) of
                 true -> User1;
                 false ->
@@ -682,19 +715,6 @@ synchronize_user_info(User, Teams, Emails, DnList, AccessToken) ->
                     NewUser4
             end,
     User4.
-
-
-%% update_access_token/2
-%% ====================================================================
-%% @doc
-%% Update #veil_document encapsulating #user record with new access token.
-%% @end
--spec update_access_token(User, AccessToken :: binary()) -> Result when
-    User :: user_doc(),
-    Result :: {ok, user_doc()} | {error, any()}.
-%% ====================================================================
-update_access_token(#veil_document{record = #user{} = User} = UserDoc, AccessToken) ->
-    UserDoc#veil_document{record = User#user{access_token = AccessToken}}.
 
 
 %% oid_code_to_shortname/1
