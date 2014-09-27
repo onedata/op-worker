@@ -106,7 +106,7 @@ authenticate_user_by_secret(GRUID, Secret) ->
             undefined
     end,
 
-    %% Asynchronically clear expired tokens
+    %% Asynchronously clear expired tokens
     spawn(fun() ->
         ets:select_delete(?TOKEN_AUTHENTICATION_CACHE,
             [{{'_', {'$1', '_', '_'}}, [{'<', '$1', Now}], [true]}])
