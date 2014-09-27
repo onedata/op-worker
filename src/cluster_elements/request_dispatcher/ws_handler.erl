@@ -71,8 +71,7 @@ websocket_init(TransportName, Req, _Opts) ->
 
     {ClientSubjectDN, _} = cowboy_req:header(<<"onedata-internal-client-subject-dn">>, Req),
     {SessionId, _} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
-    ?info("ClientSubjectDN ===========================> ~p", [ClientSubjectDN]),
-    ?info("SessionId ===========================> ~p", [SessionId]),
+    ?debug("New connection with SessionId ~p, ClientSubjectDN: ~p", [SessionId, ClientSubjectDN]),
 
     {ok, DispatcherTimeout} = application:get_env(veil_cluster_node, dispatcher_timeout),
     InitCtx = #handler_state{dispatcher_timeout = DispatcherTimeout},
@@ -136,28 +135,13 @@ setup_connection(InitCtx, OtpCert, _Certs, true) ->
 %% ====================================================================
 websocket_handle({binary, Data}, Req, #handler_state{peer_type = PeerType} = State) ->
     try
-        Time0 = vcn_utils:mtime(),
         Request =
             case PeerType of
                 provider -> decode_providermsg_pb(Data);
                 user     -> decode_clustermsg_pb(Data)
             end,
-        Time1 = vcn_utils:mtime(),
-        ?debug("Received request: ~p", [Request]),
 
-        Res = case Request of
-            {omg, Task, Answer_decoder_name, ProtocolVersion, #remotefilemangement{input = #writefile{offset = Offset, data = WriteData}}, MsgId, Answer_type, {GlobalId, TokenHash}} ->
-                %?info("WRITE ------------------> ~p ~p", [Offset, size(WriteData)]),
-                {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #writeinfo{answer_status = ?VOK, bytes_written = size(WriteData)})}, Req, State};
-            {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} ->
-            %?info("MSG ======================> ~p", [Msg]),
-
-            handle(Req, Request, State)
-        end,
-
-        Time2 = vcn_utils:mtime(),
-        %?info("HANDLE ============> ~p ~p ~p ~p", [Time2 - Time1, Time1 - Time0, res, size(Data)]),
-        Res
+        handle(Req, Request, State)
     catch
         wrong_message_format                            -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
         {wrong_internal_message_type, MsgId2}           -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
@@ -299,8 +283,6 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         #handler_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
                       access_token = SessionAccessToken, user_global_id = SessionUserGID} = State) ->
 
-    Time0 = vcn_utils:mtime(),
-
     %% Check if received message requires FuseId
     MsgType = case Msg of
                   M0 when is_tuple(M0) -> erlang:element(1, M0); %% Record
@@ -311,8 +293,6 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         {[], true} -> throw({invalid_fuse_id, MsgId}); % Message requires FuseId which is not present
         {FID, _} when is_list(FID) -> ok                               % FuseId is present
     end,
-
-    Time1 = vcn_utils:mtime(),
 
     {UserGID, AccessToken} =
         case get({GlobalId, TokenHash}) of
@@ -342,8 +322,6 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         false -> throw({no_credentials, MsgId})
     end,
 
-    Time2 = vcn_utils:mtime(),
-
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->
                       #veil_request{subject = DnString, request =
@@ -354,8 +332,6 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                   _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
               end,
 
-    Time3 = vcn_utils:mtime(),
-
     case Synch of
         true ->
             try
@@ -365,8 +341,6 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                     ok ->
                         receive
                             {worker_answer, MsgId, Ans2} ->
-                                Time4 = vcn_utils:mtime(),
-                                ?info("Times ~p ~p: ~p ~p ~p ~p ~p", [ok, Ans2, Time4 - Time3, Time3 - Time2, Time2 - Time1, Time1 - Time0, Time4 - Time0]),
                                 {reply, {binary, encode_answer(Ans, MsgId, Answer_type, Answer_decoder_name, Ans2)}, Req, State}
                         after DispatcherTimeout ->
                             {reply, {binary, encode_answer(dispatcher_timeout, MsgId)}, Req, State}

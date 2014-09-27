@@ -91,7 +91,7 @@ start(ListenerPort, ForwardPort, CertFile, VerifyType) ->
 %% ====================================================================
 %% @doc Returns directory (path) used by oneproxy to save DER CAs and CRLs.
 %% @end
--spec start(ListenerPort :: non_neg_integer(), ForwardPort :: non_neg_integer(), CertFile :: string() | binary(), VerifyType :: verify_peer | verify_none) -> no_return().
+-spec get_der_certs_dir() -> string().
 %% ====================================================================
 get_der_certs_dir() ->
     {ok, CertDir1} = application:get_env(?APP_Name, ca_dir),
@@ -151,7 +151,7 @@ ca_crl_to_der(Dir) ->
 %% ====================================================================
 %% @doc oneproxy port dirver's main loop.
 %% @end
--spec start(Port :: term(), State :: #oneproxy_state{}) -> no_return().
+-spec exec(OneProxy :: pid() | atom(), CMD :: binary(), Args :: [binary()]) -> term().
 %% ====================================================================
 exec(OneProxy, CMD, Args) when is_atom(OneProxy) ->
     exec(whereis(OneProxy), CMD, Args);
@@ -169,7 +169,7 @@ exec(OneProxyPid, CMD, Args) when is_pid(OneProxyPid) ->
 %% ====================================================================
 %% @doc oneproxy port dirver's main loop.
 %% @end
--spec start(Port :: term(), State :: #oneproxy_state{}) -> no_return().
+-spec main_loop(Port :: term(), State :: #oneproxy_state{}) -> no_return().
 %% ====================================================================
 main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = State) ->
     NewState =

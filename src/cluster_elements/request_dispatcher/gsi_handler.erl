@@ -77,6 +77,14 @@ init() ->
     ok.
 
 
+%% get_certs_from_req/2
+%% ====================================================================
+%% @doc Returns client's certificates based on cowboy's request.
+%%      If there is not valid GSI session, {error, no_gsi_session} is returned.
+%% @end
+-spec get_certs_from_req(OneProxyHandler :: pid() | atom(), Req :: term()) ->
+    {ok, {OtpCert :: #'OTPCertificate'{}, Chain :: [#'OTPCertificate'{}]}} | {error, no_gsi_session} | {error, Reason :: any()}.
+%% ====================================================================
 get_certs_from_req(OneProxyHandler, Req) ->
     {SessionId, _} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
     case SessionId of
