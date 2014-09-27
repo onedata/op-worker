@@ -677,7 +677,7 @@ init_per_testcase(_, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(4, true),
+  NodesUp = test_node_starter:start_test_nodes(4),
   [CCM | _] = NodesUp,
   DBNode = ?DB_NODE,
 
