@@ -43,7 +43,7 @@
 %% ====================================================================
 init(_, Req, Opts) ->
     NewOpts =
-        case gsi_handler:get_certs_from_req(oneproxy_rest, Req) of
+        case gsi_handler:get_certs_from_req(?ONEPROXY_REST, Req) of
             {ok, {OtpCert, Certs}} ->
                 [{certs, {OtpCert, Certs}}];
             {error, _} ->

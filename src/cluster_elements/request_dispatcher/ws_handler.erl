@@ -77,7 +77,7 @@ websocket_init(TransportName, Req, _Opts) ->
     {ok, DispatcherTimeout} = application:get_env(veil_cluster_node, dispatcher_timeout),
     InitCtx = #handler_state{dispatcher_timeout = DispatcherTimeout},
 
-    case gsi_handler:get_certs_from_req(oneproxy_dispatcher, Req) of
+    case gsi_handler:get_certs_from_req(?ONEPROXY_DISPATCHER, Req) of
         {ok, {OtpCert, Certs}} ->
             {ok, {Serial, _Issuer}} = public_key:pkix_issuer_id(OtpCert, self),
             InitCtx2 = InitCtx#handler_state{peer_serial = Serial},

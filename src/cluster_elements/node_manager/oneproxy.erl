@@ -15,7 +15,12 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
--define(DER_CERTS_DIR, "der_certs").
+-define(DER_CERTS_DIR,      "der_certs").
+-define(LOG_DEBUG_PREFIX,   "[ DEBUG ] ").
+-define(LOG_INFO_PREFIX,    "[ INFO ] ").
+-define(LOG_WARNING_PREFIX, "[ WARNING ] ").
+-define(LOG_ERROR_PREFIX,   "[ ERROR ] ").
+
 -record(oneproxy_state, {timeout = timer:minutes(1), endpoint}).
 
 %% API
@@ -174,16 +179,16 @@ exec(OneProxyPid, CMD, Args) when is_pid(OneProxyPid) ->
 main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = State) ->
     NewState =
         receive
-            {Port, {data, {eol, <<"[ DEBUG ] ", Log/binary>>}}} ->
+            {Port, {data, {eol, <<?LOG_DEBUG_PREFIX, Log/binary>>}}} ->
                 ?debug("[ oneproxy ~p ] ~s", [EnpointPort, vcn_utils:ensure_list(Log)]),
                 State;
-            {Port, {data, {eol, <<"[ INFO ] ", Log/binary>>}}} ->
+            {Port, {data, {eol, <<?LOG_INFO_PREFIX, Log/binary>>}}} ->
                 ?info("[ oneproxy ~p ] ~s", [EnpointPort, vcn_utils:ensure_list(Log)]),
                 State;
-            {Port, {data, {eol, <<"[ WARNING ] ", Log/binary>>}}} ->
+            {Port, {data, {eol, <<?LOG_WARNING_PREFIX, Log/binary>>}}} ->
                 ?warning("[ oneproxy ~p ] ~s", [EnpointPort, vcn_utils:ensure_list(Log)]),
                 State;
-            {Port, {data, {eol, <<"[ ERROR ] ", Log/binary>>}}} ->
+            {Port, {data, {eol, <<?LOG_ERROR_PREFIX, Log/binary>>}}} ->
                 ?error("[ oneproxy ~p ] ~s", [EnpointPort, vcn_utils:ensure_list(Log)]),
                 State;
             {'EXIT', Port, Reason} ->

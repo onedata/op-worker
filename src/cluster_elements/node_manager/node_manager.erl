@@ -1201,7 +1201,7 @@ start_dispatcher_listener() ->
 
     LocalPort = oneproxy:get_local_port(Port),
     Pid = spawn_link(fun() -> oneproxy:start(Port, LocalPort, CertFile, verify_peer) end),
-    register(oneproxy_dispatcher, Pid),
+    register(?ONEPROXY_DISPATCHER, Pid),
 
     Dispatch = cowboy_router:compile([{'_', [{?VEILCLIENT_URI_PATH, ws_handler, []}]}]),
 
@@ -1360,7 +1360,7 @@ start_rest_listener() ->
 
     LocalPort = oneproxy:get_local_port(RestPort),
     Pid = spawn_link(fun() -> oneproxy:start(RestPort, LocalPort, CertString, verify_peer) end),
-    register(oneproxy_rest, Pid),
+    register(?ONEPROXY_REST, Pid),
 
     RestDispatch = [
         {'_', [
