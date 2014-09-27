@@ -12,10 +12,11 @@
 
 namespace one {
 namespace proxy {
-    std::mutex stdout_mutex;
+std::mutex stdout_mutex;
 }
 }
 
+/// Default threads count. Used only when automatic core-count detection failes.
 constexpr uint16_t WORKER_COUNT = 8;
 
 typedef boost::scoped_thread<boost::interrupt_and_join_if_joinable> auto_thread;
@@ -23,15 +24,20 @@ using std::atoi;
 
 using namespace one::proxy;
 
+
+/**
+ * Write erlang-port response.
+ * @param tokens String tokens that shall be returned to erlang port driver
+ */
 void command_response(std::vector<std::string> tokens)
 {
-    if(tokens.size() == 0)
+    if (tokens.size() == 0)
         return;
 
     std::lock_guard<std::mutex> guard(stdout_mutex);
 
     std::cout << tokens[0];
-    for(int i = 1; i < tokens.size(); ++i) {
+    for (auto i = 1u; i < tokens.size(); ++i) {
         std::cout << " " << tokens[i];
     }
 
@@ -93,6 +99,7 @@ int main(int argc, char *argv[])
                       << ":" << atoi(argv[3]) << " has started with "
                       << (worker_count * 2) << " workers";
 
+            // Simple erlang port dirver
             std::string line;
             std::string command, message_id, arg0;
             while (std::cin.good()) {
@@ -106,7 +113,9 @@ int main(int argc, char *argv[])
                     break;
                 } else if (command == "get_session") {
                     line_stream >> message_id >> arg0;
-                    command_response({ message_id, s->get_session(arg0) });
+                    command_response({message_id, s->get_session(arg0)});
+                } else if (command == "heartbeat") {
+                    // Do basically nothing
                 } else {
                     LOG(ERROR) << "Unknown command '" << command << "'";
                 }
@@ -121,6 +130,7 @@ int main(int argc, char *argv[])
     catch (std::exception &e)
     {
         LOG(ERROR) << "Proxy failed due to exception: " << e.what();
+        return EXIT_FAILURE;
     }
 
     return EXIT_SUCCESS;

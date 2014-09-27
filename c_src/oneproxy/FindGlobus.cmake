@@ -1,8 +1,8 @@
-# - Try to find the Globus library
+# - Try to find the globus-gsi-callback library
 #
 # Once done this will define
 #
-# GLOBUS_FOUND - System has Globus
+# GLOBUS_FOUND - System has globus-gsi-callback
 # GLOBUS_INCLUDE_DIR - The Globus include directory
 # GLOBUS_LIBRARIES - The libraries needed to use Globus
 # GLOBUS_DEFINITIONS - Compiler switches required for using Globus
@@ -11,12 +11,7 @@
 IF (NOT WIN32)
     FIND_PACKAGE(PkgConfig)
     PKG_SEARCH_MODULE(PC_GLOBUS_GSI_CALLBACK globus-gsi-callback)
-    PKG_SEARCH_MODULE(PC_GLOBUS_OPENSSL globus-openssl-module)
-    PKG_SEARCH_MODULE(PC_GLOBUS_GSI_SSL globus-gsi-proxy-ssl)
-    PKG_SEARCH_MODULE(PC_GLOBUS_CORE globus-core)
     PKG_SEARCH_MODULE(PC_GLOBUS_COMMON globus-common)
-    PKG_SEARCH_MODULE(PC_GLOBUS_GSI_SYSCONFIG globus-gsi-sysconfig)
-    PKG_SEARCH_MODULE(PC_GLOBUS_GSI_UTILS globus-gsi-cert-utils)
 
     SET(GLOBUS_DEFINITIONS ${PC_GLOBUS_GSI_CALLBACK_CFLAGS})
 ENDIF (NOT WIN32)

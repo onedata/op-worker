@@ -4,8 +4,22 @@
 namespace one {
 namespace proxy {
 namespace utils {
-    std::string base64_encode(const std::string &binary);
-    std::string base64_decode(const std::string &base);
+
+/**
+ * @brief Encodes given binary data with using Base64 format.
+ * @param binary Binary data to encode
+ * @return Base64 encoded string
+ */
+std::string base64_encode(const std::string &binary);
+
+
+/**
+ * @brief Decodes given Base64 string.
+ * @param base Base64 encoded string
+ * @return Encoded binary
+ */
+std::string base64_decode(const std::string &base);
+
 } // namespace utils
 } // namespace proxy
 } // namespace one

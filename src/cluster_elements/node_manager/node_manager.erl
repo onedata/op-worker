@@ -1207,6 +1207,7 @@ start_dispatcher_listener() ->
 
     {ok, _} = cowboy:start_http(?dispatcher_listener, DispatcherPoolSize,
         [
+            {ip, {127, 0, 0, 1}},
             {port, LocalPort}
         ],
         [
@@ -1296,6 +1297,7 @@ start_gui_listener() ->
     % Start the listener for web gui and nagios handler
     {ok, _} = cowboy:start_http(?https_listener, GuiNbAcceptors,
         [
+            {ip, {127, 0, 0, 1}},
             {port, LocalPort}
         ],
         [
@@ -1380,6 +1382,7 @@ start_rest_listener() ->
     % Start the listener for REST handler
     {ok, _} = cowboy:start_http(?rest_listener, NbAcceptors,
         [
+            {ip, {127, 0, 0, 1}},
             {port, LocalPort}
         ],
         [

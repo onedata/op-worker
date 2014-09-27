@@ -7,3 +7,4 @@ PenaltyReturnTypeOnItsOwnLine: 200
 PointerBindsToType: false
 Cpp11BracedListStyle: true
 Standard:        Cpp11
+NamespaceIndentation: None

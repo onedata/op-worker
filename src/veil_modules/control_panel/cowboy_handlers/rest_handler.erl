@@ -60,7 +60,6 @@ init(_, Req, Opts) ->
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
 rest_init(Req, Opts) ->
-    ?info("Opts ~p", [Opts]),
     case cowboy_req:path_info(Req) of
         {[Endpoint], _} when Endpoint =:= ?connection_check_path orelse Endpoint =:= <<"token">> ->
             % when checking connection or generating token, continue without cert verification
