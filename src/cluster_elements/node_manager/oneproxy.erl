@@ -207,7 +207,7 @@ main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = Sta
                 case ca_crl_to_der(get_der_certs_dir()) of
                     ok ->
                         port_command(Port, <<"reload_certs\n">>),
-                        timer:send_after(timer:minutes(5), {self(), reload_certs}),
+                        timer:send_after(timer:minutes(5), reload_certs),
                         State;
                     {error, Reason1} ->
                         ?warning("Could not reload certificates for oneproxy due to: ~p", [Reason1]),
