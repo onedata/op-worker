@@ -76,8 +76,8 @@ body() ->
 %% This will be placed in the template instead of {{custom}} tag
 custom() ->
     <<"<script src=\"/js/veil_upload.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
-    "    <script src=\"/flatui/bootbox.min.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
-    "    <script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>">>.
+    "    <script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>",
+    "    <script src=\"/flatui/bootbox.min.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n">>.
 
 % Submenu that will be glued below the top menu
 manager_submenu() ->
@@ -85,8 +85,8 @@ manager_submenu() ->
         #panel{class = <<"navbar-inner">>, style = <<"padding-top: 10px;">>, body = [
             #panel{class = <<"container">>, style = <<"position: relative; overflow: hidden;">>, body = [
                 #list{class = <<"nav">>, body =
-                tool_button_and_dummy(<<"tb_up_one_level">>, <<"Up one level">>, <<"padding: 10px 7px 10px 15px;">>,
-                    <<"fui-arrow-left">>, {action, up_one_level})},
+                tool_button_and_dummy(<<"tb_up_one_level">>, <<"Up one level">>, <<"padding: 10px 7px 10px 15px; font-size: 28px; margin: -4px 8px 0 -8px;">>,
+                    <<"icomoon-arrow-left">>, {action, up_one_level})},
                 #panel{class = <<"breadcrumb-text breadcrumb-background">>, style = <<"overflow: hidden; margin-left: 15px;">>, body = [
                     #p{id = <<"path_navigator">>, class = <<"breadcrumb-content">>, body = <<"~">>}
                 ]},
@@ -96,7 +96,7 @@ manager_submenu() ->
                             style = <<"width: 220px;">>, placeholder = <<"Search">>},
                         #panel{class = <<"btn-group">>, body = [
                             #button{id = wire_click(<<"search_button">>, {action, search, [{query_value, <<"search_textbox">>}]}, <<"search_textbox">>),
-                                class = <<"btn">>, body = #span{class = <<"fui-search">>}}
+                                class = <<"btn">>, body = #span{class = <<"icomoon-search">>, style = <<"font-size: 18px; margin: 1px 2px -1px -2px;">>}}
                         ]}
                     ]}
                 ]}
@@ -106,39 +106,39 @@ manager_submenu() ->
             #panel{class = <<"container">>, body = [
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
                 tool_button(<<"tb_create_dir">>, <<"Create directory">>, <<"padding: 18px 14px;">>,
-                    <<"fui-folder">>, {action, show_popup, [create_directory]}) ++
+                    <<"icomoon-folder-open">>, {action, show_popup, [create_directory]}) ++
                     tool_button(<<"tb_upload_files">>, <<"Upload file(s)">>, <<"padding: 18px 14px;">>,
-                        <<"fui-plus-inverted">>, {action, show_popup, [file_upload]}) ++
+                        <<"icomoon-cloud-upload">>, {action, show_popup, [file_upload]}) ++
                     tool_button_and_dummy(<<"tb_share_file">>, <<"Share">>, <<"padding: 18px 14px;">>,
-                        <<"fui-link">>, {action, show_popup, [share_file]})
+                        <<"icomoon-share">>, {action, show_popup, [share_file]})
 
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
                 tool_button_and_dummy(<<"tb_rename">>, <<"Rename">>, <<"padding: 18px 14px;">>,
-                    <<"fui-new">>, {action, show_popup, [rename_item]}) ++
+                    <<"icomoon-pencil2">>, {action, show_popup, [rename_item]}) ++
                     tool_button_and_dummy(<<"tb_chmod">>, <<"Change mode">>, <<"padding: 18px 14px;">>,
-                        <<"fui-lock">>, {action, show_popup, [chmod]}) ++
+                        <<"icomoon-lock">>, {action, show_popup, [chmod]}) ++
                     tool_button_and_dummy(<<"tb_remove">>, <<"Remove">>, <<"padding: 18px 14px;">>,
-                        <<"fui-trash">>, {action, show_popup, [remove_selected]})
+                        <<"icomoon-remove">>, {action, show_popup, [remove_selected]})
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
                 tool_button_and_dummy(<<"tb_cut">>, <<"Cut">>, <<"padding: 18px 14px;">>,
-                    <<"fui-window">>, {action, put_to_clipboard, [cut]}) ++
+                    <<"icomoon-scissors">>, {action, put_to_clipboard, [cut]}) ++
                 %tool_button_and_dummy(<<"tb_copy">>, <<"Copy">>, <<"padding: 18px 14px;">>,
                 %    <<"fui-windows">>, {action, put_to_clipboard, [copy]}) ++
 
                 [#li{id = wire_click(<<"tb_paste">>, {action, paste_from_clipboard}), body = #link{title = <<"Paste">>, style = <<"padding: 18px 14px;">>,
-                    body = #span{class = <<"fui-upload">>, body = #span{id = <<"clipboard_size_label">>, class = <<"iconbar-unread">>,
-                        style = <<"right: -12px; top: -10px; background-color: rgb(26, 188, 156);">>,
+                    body = #span{class = <<"icomoon-copy2">>, body = #span{id = <<"clipboard_size_label">>, class = <<"iconbar-unread">>,
+                        style = <<"right: -5px; top: 7px; background-color: rgb(26, 188, 156);">>,
                         body = <<"0">>}}}},
                     #li{id = <<"tb_paste_dummy">>, class = <<"disabled hidden">>, body = #link{title = <<"Paste">>, style = <<"padding: 18px 14px;">>,
-                        body = #span{style = <<"color: rgb(200, 200, 200);">>, class = <<"fui-upload">>}}}]
+                        body = #span{style = <<"color: rgb(200, 200, 200); font-size: 24px;">>, class = <<"icomoon-copy2 ">>}}}]
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
                 tool_button_and_dummy(<<"tb_select_all">>, <<"Select all">>, <<"padding: 18px 14px;">>,
-                    <<"fui-checkbox-checked">>, {action, select_all}) ++
+                    <<"icomoon-checkbox-checked">>, {action, select_all}) ++
                 tool_button_and_dummy(<<"tb_deselect_all">>, <<"Deselect all">>, <<"padding: 18px 14px;">>,
-                    <<"fui-checkbox-unchecked">>, {action, deselect_all})
+                    <<"icomoon-checkbox-unchecked">>, {action, deselect_all})
                 },
 
                 #panel{class = <<"btn-toolbar pull-right no-margin">>, style = <<"padding: 12px 15px; overflow: hidden;">>, body = [
@@ -181,7 +181,7 @@ footer_popup() ->
 tool_button(ID, Title, Style, Icon, Postback) ->
     [
         #li{id = wire_click(ID, Postback), body = #link{title = Title, style = Style,
-            body = #span{class = Icon}}}
+            body = #span{class = Icon, style = <<"font-size: 24px;">>}}}
     ].
 
 
@@ -190,7 +190,7 @@ tool_button_and_dummy(ID, Title, Style, Icon, Postback) ->
     tool_button(ID, Title, Style, Icon, Postback) ++
     [
         #li{id = <<ID/binary, "_dummy">>, class = <<"disabled hidden">>, body = #link{title = Title, style = Style,
-            body = #span{style = <<"color: rgb(200, 200, 200);">>, class = Icon}}}
+            body = #span{style = <<"color: rgb(200, 200, 200); font-size: 24px;">>, class = Icon}}}
     ].
 
 
@@ -541,7 +541,7 @@ put_to_clipboard(Type) ->
 paste_from_clipboard() ->
     [{FirstPath, _} | _] = get_clipboard_items(),
     % Check if mv is between different spaces
-    case is_the_same_space(FirstPath, get_working_directory()) of
+    case is_the_same_space(filename:dirname(FirstPath), get_working_directory()) of
         false ->
             gui_jq:confirm_popup(<<"Do you really want to move your file(s) between spaces and ",
             "share them with all members of the target space?">>, <<"confirm_paste();">>);
@@ -1362,7 +1362,8 @@ is_the_same_space(Path1, Path2) ->
 get_space_from_path(<<"/", Path/binary>>) ->
     case Path of
         <<?SPACES_BASE_DIR_NAME>> ->
-            <<?SPACES_BASE_DIR_NAME>>;
+            [#space_info{name = SpaceName} | _] = user_logic:get_spaces(fslogic_context:get_user_query()),
+            gui_str:unicode_list_to_binary(SpaceName);
         <<?SPACES_BASE_DIR_NAME, Rest/binary>> ->
             Tokens = binary:split(Rest, <<"/">>, [global]),
             lists:nth(2, Tokens);
