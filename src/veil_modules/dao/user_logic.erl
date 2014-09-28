@@ -317,6 +317,8 @@ get_login(UserDoc) ->
     vcn_utils:ensure_list(Login).
 
 
+get_login_with_uid(#veil_document{uuid = ?CLUSTER_USER_ID}) ->
+{"root" ,0};
 get_login_with_uid(#veil_document{uuid = "0"}) ->
     {"root" ,0};
 get_login_with_uid(#veil_document{record = #user{logins = Logins0}, uuid = VCUID}) ->

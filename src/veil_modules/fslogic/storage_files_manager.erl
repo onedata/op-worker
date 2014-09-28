@@ -59,7 +59,7 @@
 %% ====================================================================
 %% @doc Creates hard-link on storage
 %% @end
--spec mkdir(Storage_helper_info :: record(), FileId :: string(), LinkId :: string()) -> Result when
+-spec link(Storage_helper_info :: record(), FileId :: string(), LinkId :: string()) -> Result when
     Result :: ok | {ErrorGeneral, ErrorDetail},
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
