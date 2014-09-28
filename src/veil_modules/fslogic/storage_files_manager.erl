@@ -412,7 +412,7 @@ write(Storage_helper_info, File, Buf) ->
 create(Storage_helper_info, File) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
              {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-                 case fslogic_perms:check_file_perms(get_logical_path(File), delete) of
+                 case fslogic_perms:check_file_perms(get_logical_path(File), create) of
                      ok -> ok;
                      _ -> setup_ctx(File)
                  end;

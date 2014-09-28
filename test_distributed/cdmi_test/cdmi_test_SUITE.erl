@@ -381,10 +381,12 @@ metadata_test(_Config) ->
     RequestBody15 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace2, Ace3]}]}],
     RawRequestBody15 = rest_utils:encode_to_json(RequestBody15),
     RequestHeaders15 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
+
     {Code15, _Headers15, Response15} = do_request(FileName2++"?metadata:cdmi_acl", put, RequestHeaders15, RawRequestBody15),
     ?assertMatch({"204", _}, {Code15, Response15}),
-    {_Code16, _Headers16, Response16} = do_request(FileName2++"?metadata", get, RequestHeaders1, []),
 
+    {Code16, _Headers16, Response16} = do_request(FileName2++"?metadata", get, RequestHeaders1, []),
+    ?assertEqual("200",Code16),
     {struct,CdmiResponse16} = mochijson2:decode(Response16),
     ?assertEqual(1, length(CdmiResponse16)),
     {struct, Metadata16}= proplists:get_value(<<"metadata">>,CdmiResponse16),

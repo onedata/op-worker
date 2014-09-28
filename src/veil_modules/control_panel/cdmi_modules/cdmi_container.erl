@@ -126,7 +126,11 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
 %% @doc Callback function for cdmi container GET operation (list dir)
 -spec get_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-get_cdmi_container(Req, #state{opts = Opts} = State) ->
+get_cdmi_container(Req, #state{opts = Opts, filepath = Filepath} = State) ->
+    case logical_files_manager:check_file_perm(Filepath, read) of
+        true -> ok;
+        false -> throw(?forbidden)
+    end,
     NewOpts = case Opts of [] -> ?default_get_dir_opts; _ -> Opts end,
     DirCdmi = prepare_container_ans(NewOpts, State#state{opts = NewOpts}),
     Response = rest_utils:encode_to_json({struct, DirCdmi}),
@@ -171,6 +175,11 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
                     cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error})
             end;
         {error, dir_exists} ->
+            % check write permission
+            case logical_files_manager:check_file_perm(Filepath, write) of
+                true -> ok;
+                false -> throw(?forbidden)
+            end,
             URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
             cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};

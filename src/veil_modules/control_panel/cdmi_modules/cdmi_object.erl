@@ -127,6 +127,12 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
 -spec get_binary(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = Size}} = State) ->
+    % check read permission
+    case logical_files_manager:check_file_perm(Filepath, read) of
+        true -> ok;
+        false -> throw(?forbidden)
+    end,
+
     % get optional 'Range' header
     {RawRange, Req1} = cowboy_req:header(<<"range">>, Req),
     Ranges = case RawRange of
@@ -177,6 +183,10 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
 -spec get_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Size}, filepath = Filepath} = State) ->
+    case logical_files_manager:check_file_perm(Filepath, read) of
+        true -> ok;
+        false -> throw(?forbidden)
+    end,
     DirCdmi = prepare_object_ans(case Opts of [] -> ?default_get_file_opts; _ -> Opts end, State),
     case proplists:get_value(<<"value">>, DirCdmi) of
         {range, Range} ->
@@ -235,6 +245,10 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
             update_encoding(Filepath, Encoding),
             write_body_to_file(Req, State, 0);
         {error, file_exists} ->
+            case logical_files_manager:check_file_perm(Filepath, write) of
+                true -> ok;
+                false -> throw(?forbidden)
+            end,
             update_completion_status(Filepath, <<"Processing">>),
             update_mimetype(Filepath, Mimetype),
             update_encoding(Filepath, Encoding),
@@ -345,6 +359,10 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error2})
             end;
         update ->
+            case logical_files_manager:check_file_perm(Filepath, write) of
+                true -> ok;
+                false -> throw(?forbidden)
+            end,
             update_completion_status(Filepath, <<"Processing">>),
             update_encoding(Filepath, RequestedValueTransferEncoding),
             update_mimetype(Filepath, RequestedMimetype),

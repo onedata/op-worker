@@ -32,7 +32,7 @@
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
 %% UserDoc and FileDoc is based on current context.
 %% @end
--spec check_file_perms(FileName :: string(), CheckType :: root | owner | delete | read | write | execute | rdwr | '') -> Result when
+-spec check_file_perms(FileName :: string(), CheckType :: root | owner | create | delete | read | write | execute | rdwr | '') -> Result when
     Result :: ok | {error, ErrorDetail},
     ErrorDetail :: term().
 %% ====================================================================
@@ -59,6 +59,10 @@ check_file_perms(_FileName, #veil_document{uuid = UserUid}, #veil_document{recor
     ok;
 check_file_perms(FileName, UserDoc, _FileDoc, owner = CheckType) ->
     ?permission_denied_error(UserDoc,FileName,CheckType);
+check_file_perms(FileName, UserDoc, _FileDoc, create) ->
+    {ok, {_,ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName,fslogic_context:get_protocol_version()),
+    ParentFileName = fslogic_path:strip_path_leaf(FileName),
+    check_file_perms(ParentFileName,UserDoc,ParentFileDoc,write);
 check_file_perms(FileName, UserDoc, FileDoc, delete) ->
     {ok, {_,ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName,fslogic_context:get_protocol_version()),
     ParentFileName = fslogic_path:strip_path_leaf(FileName),
