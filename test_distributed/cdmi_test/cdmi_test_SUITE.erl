@@ -392,11 +392,30 @@ metadata_test(_Config) ->
     {struct, Metadata16}= proplists:get_value(<<"metadata">>,CdmiResponse16),
     ?assertEqual(6, length(Metadata16)),
     ?assertEqual([{struct, Ace1}, {struct, Ace2}, {struct, Ace3}], proplists:get_value(<<"cdmi_acl">>, Metadata16)),
-    %%------------------------------
 
     {Code17, _Headers17, Response17} = do_request(FileName2, get, [], []),
     ?assertEqual("200", Code17),
-    ?assertEqual("data", Response17).
+    ?assertEqual("data", Response17),
+    %%------------------------------
+
+
+    %%-- create forbidden by acl ---
+    Ace4 = [
+        {<<"acetype">>,<<"DENY">>},
+        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"aceflags">>,<<"NO_FLAGS">>},
+        {<<"acemask">>,<<"READ, WRITE, EXECUTE">>}],
+    RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace4]}]}],
+    RawRequestBody18 = rest_utils:encode_to_json(RequestBody18),
+    RequestHeaders18 = [{"content-type", "application/cdmi-container"},{"X-CDMI-Specification-Version", "1.0.2"}],
+
+    {Code18, _Headers18, _Response18} = do_request(DirName++"?metadata:cdmi_acl", put, RequestHeaders18, RawRequestBody18),
+    ?assertEqual("204", Code18),
+
+    {Code19, _Headers19, _Response19} = do_request(filename:join(DirName,"some_file"), put, [], []),
+    ?assertEqual("403", Code19).
+    %%------------------------------
+
 
 % Tests dir creation (cdmi container PUT), remember that every container URI ends
 % with '/'
@@ -1137,7 +1156,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1, true),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
