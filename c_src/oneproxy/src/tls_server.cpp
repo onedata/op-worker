@@ -20,10 +20,10 @@ namespace proxy {
 
 tls_server::tls_server(boost::asio::io_service &client_io_service,
                        boost::asio::io_service &proxy_io_service,
-                       int verify_type, std::string cert_path,
+                       int verify_type, const std::string &cert_path,
                        uint16_t server_port, std::string forward_host,
                        uint16_t forward_port,
-                       const std::vector<std::string> &ca_dirs)
+                       std::vector<std::string> ca_dirs)
     : client_io_service_(client_io_service)
     , proxy_io_service_(proxy_io_service)
     , verify_type_(verify_type)
@@ -31,11 +31,10 @@ tls_server::tls_server(boost::asio::io_service &client_io_service,
                                        boost::asio::ip::tcp::v4(), server_port))
     , context_(boost::asio::ssl::context::sslv23_server)
     , listen_port_(server_port)
-    , forward_host_(forward_host)
-    , ca_dirs_(ca_dirs)
-
+    , forward_host_(std::move(forward_host))
+    , forward_port_(std::to_string(forward_port))
+    , ca_dirs_(std::move(ca_dirs))
 {
-    forward_port_ = std::to_string(forward_port);
     acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
     context_.set_options(boost::asio::ssl::context::default_workarounds
                          | boost::asio::ssl::context::no_sslv2
@@ -147,10 +146,10 @@ const std::vector<std::string> &tls_server::get_ca() const
 }
 
 void tls_server::register_session(const std::string &session_id,
-                                  const std::string &session_data)
+                                  std::string session_data)
 {
     std::lock_guard<std::mutex> guard(session_mutex_);
-    sessions_[session_id] = session_data;
+    sessions_[session_id] = std::move(session_data);
 }
 
 void tls_server::remove_session(const std::string &session_id)
@@ -165,9 +164,9 @@ std::string tls_server::get_session(const std::string &session_id) const
     auto itr = sessions_.find(session_id);
     if (itr != sessions_.end()) {
         return itr->second;
-    } else {
-        return "";
     }
+
+    return {};
 }
 
 } // namespace proxy

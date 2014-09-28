@@ -42,10 +42,10 @@ tls2tcp_session::tls2tcp_session(std::weak_ptr<tls_server> server,
     , forward_port_(std::move(forward_port))
     , peer_cert_(nullptr)
 {
-    unsigned char session_id_bin[SESSION_ID_SIZE];
-    if (RAND_bytes(session_id_bin, SESSION_ID_SIZE)) {
-        session_id_ = utils::base64_encode(
-            std::string((const char *)session_id_bin, SESSION_ID_SIZE));
+    std::string session_id_bin(SESSION_ID_SIZE, '\0');
+    if (RAND_bytes(reinterpret_cast<unsigned int *>(&session_id_bin[0]),
+                   session_id_bin.size())) {
+        session_id_ = utils::base64_encode(session_id_bin);
     } else {
         LOG(ERROR) << "Could not generate session id";
         throw std::runtime_error("Could not generate session id");
@@ -73,34 +73,36 @@ ssl_socket &tls2tcp_session::sslsocket()
     return client_socket_;
 }
 
-bool tls2tcp_session::handle_verify_certificate(bool preverified,
-                                                boost::asio::ssl::verify_context
-                                                &ctx)
+bool tls2tcp_session::handle_verify_certificate(
+    bool preverified, boost::asio::ssl::verify_context &ctx)
 {
     char *x509_buf = nullptr;
     X509 *cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
-    size_t der_size = i2d_X509(cert, (unsigned char **)&x509_buf);
+    size_t der_size
+        = i2d_X509(cert, reinterpret_cast<unsigned char **>(&x509_buf));
 
     std::string der_cert(x509_buf, der_size);
     delete x509_buf;
 
     client_cert_chain_.push_back(der_cert);
 
-    char subject_name[256];
-    X509_NAME_oneline(X509_get_subject_name(cert), subject_name, 256);
+#ifndef NDEBUG
+    std::array<char, 256> subject_name;
+    X509_NAME_oneline(X509_get_subject_name(cert), subject_name.data(),
+                      subject_name.size());
     LOG(DEBUG) << "Verifying " << subject_name;
+#endif
 
     return true;
 }
 
 std::string tls2tcp_session::gen_session_data()
 {
-    auto der_2_pem = [](std::string der)->std::string
-    {
+    auto der_2_pem = [](const std::string &der) {
         std::string pem;
 
         X509 *peer_cert = nullptr;
-        const unsigned char *p = (const unsigned char *)der.data();
+        auto p = reinterpret_cast<const unsigned char *>(der.data());
         if (d2i_X509(&peer_cert, &p, der.size())) {
             BIO *mem = BIO_new(BIO_s_mem());
             auto buff = BUF_MEM_new();
@@ -126,14 +128,14 @@ std::string tls2tcp_session::gen_session_data()
 void tls2tcp_session::start()
 {
     sslsocket().set_verify_callback(
-        std::bind(&tls2tcp_session::handle_verify_certificate,
-                    this, std::placeholders::_1, std::placeholders::_2));
+        std::bind(&tls2tcp_session::handle_verify_certificate, this,
+                  std::placeholders::_1, std::placeholders::_2));
 
     client_cert_chain_.clear();
-    client_socket_.async_handshake(
-        boost::asio::ssl::stream_base::server,
-        std::bind(&tls2tcp_session::handle_handshake, shared_from_this(),
-                    std::placeholders::_1));
+    client_socket_.async_handshake(boost::asio::ssl::stream_base::server,
+                                   std::bind(&tls2tcp_session::handle_handshake,
+                                             shared_from_this(),
+                                             std::placeholders::_1));
 }
 
 bool tls2tcp_session::do_verify_peer()
@@ -147,18 +149,16 @@ bool tls2tcp_session::do_verify_peer()
         auto &cas = server->get_ca();
 
         GPV_CTX ctx;
-        gpv_status result;
 
         // Init gpv_ctx
-        result = gpv_init(&ctx);
-        if (result != GPV_SUCCESS) {
+        if (gpv_init(&ctx) != GPV_SUCCESS) {
             LOG(ERROR) << "Cannot initialize GPV CTX";
             return false;
         }
 
-        result = gpv_set_leaf_cert(&ctx, client_cert_chain_.back().data(),
-                                   client_cert_chain_.back().size());
-        if (result != GPV_SUCCESS) {
+        if (gpv_set_leaf_cert(&ctx, client_cert_chain_.back().data(),
+                              client_cert_chain_.back().size())
+            != GPV_SUCCESS) {
             LOG(ERROR) << "Cannot setup peer cert for GPV CTX";
             return false;
         }
@@ -175,14 +175,14 @@ bool tls2tcp_session::do_verify_peer()
             gpv_add_trusted_ca(&ctx, ca.data(), ca.size());
         }
 
-        result = gpv_verify(&ctx);
+        auto result = gpv_verify(&ctx);
         auto error = gpv_get_error(&ctx);
 
         gpv_cleanup(&ctx);
 
-        X509 *peer_cert = 0;
-        const unsigned char *p
-            = (const unsigned char *)client_cert_chain_.back().data();
+        X509 *peer_cert = nullptr;
+        auto p = reinterpret_cast<const unsigned char *>(
+            client_cert_chain_.back().data());
         if (!d2i_X509(&peer_cert, &p, client_cert_chain_.back().size())) {
             LOG(ERROR) << "Could not convert peer cert to internal format";
             return false;
@@ -192,10 +192,10 @@ bool tls2tcp_session::do_verify_peer()
             peer_cert_ = peer_cert;
             return true;
         } else {
-            char subject_name[256];
-            X509_NAME_oneline(X509_get_subject_name(peer_cert), subject_name,
-                              256);
-            LOG(INFO) << "Peer " << subject_name
+            std::array<char, 256> subject_name;
+            X509_NAME_oneline(X509_get_subject_name(peer_cert),
+                              subject_name.data(), subject_name.size());
+            LOG(INFO) << "Peer " << subject_name.data()
                       << " rejected due to SSL error code: {" << result << ", "
                       << error << "}";
             X509_free(peer_cert);
@@ -284,12 +284,12 @@ void tls2tcp_session::handle_handshake(const boost::system::error_code &error)
             while ((header_size = boost::asio::read_until(
                         client_socket_, request, "\r\n")) > 2) {
                 requestStream.getline(
-                    client_data_.data(), std::min((size_t)client_data_.size(), header_size),
-                    ':');
+                    client_data_.data(),
+                    std::min((size_t)client_data_.size(), header_size), ':');
                 key = string(client_data_.data());
                 requestStream.getline(
-                    client_data_.data(), std::min((size_t)client_data_.size(), header_size),
-                    '\r');
+                    client_data_.data(),
+                    std::min((size_t)client_data_.size(), header_size), '\r');
                 value = string(client_data_.data());
                 request.consume(1); // Consume '\n'
 
@@ -306,9 +306,9 @@ void tls2tcp_session::handle_handshake(const boost::system::error_code &error)
 
             std::vector<std::tuple<std::string, std::string>> custom_headers;
             if (verified) {
-                char subject_name[2048];
+                std::array<char, 2048> subject_name;
                 X509_NAME_oneline(X509_get_subject_name(peer_cert_),
-                                  subject_name, 2048);
+                                  subject_name.data(), subject_name.size());
                 custom_headers.push_back(std::tuple<string, string>{
                     std::string(INTERNAL_HEADER_PREFIX) + "client-subject-dn",
                     subject_name});
@@ -338,14 +338,14 @@ void tls2tcp_session::handle_handshake(const boost::system::error_code &error)
             proxy_socket_.async_read_some(
                 boost::asio::buffer(proxy_data_.data(), proxy_data_.size()),
                 std::bind(&tls2tcp_session::handle_proxy_read,
-                            shared_from_this(),
-                            std::placeholders::_1, std::placeholders::_2));
+                          shared_from_this(), std::placeholders::_1,
+                          std::placeholders::_2));
 
             client_socket_.async_read_some(
                 boost::asio::buffer(client_data_.data(), client_data_.size()),
                 std::bind(&tls2tcp_session::handle_client_read,
-                            shared_from_this(),
-                            std::placeholders::_1, std::placeholders::_2));
+                          shared_from_this(), std::placeholders::_1,
+                          std::placeholders::_2));
         }
         catch (boost::system::error_code &e)
         {
@@ -366,10 +366,10 @@ void tls2tcp_session::handle_client_read(const boost::system::error_code &error,
 {
     if (!error) {
         boost::asio::async_write(
-            proxy_socket_,
-            boost::asio::const_buffers_1(client_data_.data(), bytes_transferred),
-            std::bind(&tls2tcp_session::handle_proxy_write,
-                        shared_from_this(), std::placeholders::_1));
+            proxy_socket_, boost::asio::const_buffers_1(client_data_.data(),
+                                                        bytes_transferred),
+            std::bind(&tls2tcp_session::handle_proxy_write, shared_from_this(),
+                      std::placeholders::_1));
     } else {
         handle_error("handle_client_read", error);
     }
@@ -382,21 +382,22 @@ void tls2tcp_session::handle_proxy_read(const boost::system::error_code &error,
         boost::asio::async_write(
             client_socket_,
             boost::asio::const_buffers_1(proxy_data_.data(), bytes_transferred),
-            std::bind(&tls2tcp_session::handle_client_write,
-                        shared_from_this(), std::placeholders::_1));
+            std::bind(&tls2tcp_session::handle_client_write, shared_from_this(),
+                      std::placeholders::_1));
     } else {
         handle_error("handle_proxy_read", error);
     }
 }
 
-void tls2tcp_session::handle_client_write(const boost::system::error_code
-                                          &error)
+void tls2tcp_session::handle_client_write(
+    const boost::system::error_code &error)
 {
     if (!error) {
         proxy_socket_.async_read_some(
-            boost::asio::mutable_buffers_1(proxy_data_.data(), proxy_data_.size()),
+            boost::asio::mutable_buffers_1(proxy_data_.data(),
+                                           proxy_data_.size()),
             std::bind(&tls2tcp_session::handle_proxy_read, shared_from_this(),
-                        std::placeholders::_1, std::placeholders::_2));
+                      std::placeholders::_1, std::placeholders::_2));
     } else {
         handle_error("handle_client_write", error);
     }
@@ -406,9 +407,10 @@ void tls2tcp_session::handle_proxy_write(const boost::system::error_code &error)
 {
     if (!error) {
         client_socket_.async_read_some(
-            boost::asio::mutable_buffers_1(client_data_.data(), client_data_.size()),
-            std::bind(&tls2tcp_session::handle_client_read,
-                        shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+            boost::asio::mutable_buffers_1(client_data_.data(),
+                                           client_data_.size()),
+            std::bind(&tls2tcp_session::handle_client_read, shared_from_this(),
+                      std::placeholders::_1, std::placeholders::_2));
     } else {
         handle_error("handle_proxy_write", error);
     }

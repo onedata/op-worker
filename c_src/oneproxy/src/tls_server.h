@@ -16,7 +16,6 @@
 #include <mutex>
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
-#include <boost/enable_shared_from_this.hpp>
 
 namespace one {
 namespace proxy {
@@ -41,16 +40,12 @@ public:
      */
     tls_server(boost::asio::io_service &client_io_service,
                boost::asio::io_service &proxy_io_service, int verify_type,
-               std::string cert_path, uint16_t server_port,
+               const std::string &cert_path, uint16_t server_port,
                std::string forward_host, uint16_t forward_port,
-               const std::vector<std::string> &ca_crl_paths);
+               std::vector<std::string> ca_crl_paths);
 
-    /**
-     * Starts proxy server.
-     */
+    /// Starts proxy server.
     void start_accept();
-
-
 
     /// Getter for CRL DERs
     const std::vector<std::string> &get_crl() const;
@@ -64,7 +59,7 @@ public:
      * @param session_data Session's arbitrary data.
      */
     void register_session(const std::string &session_id,
-                          const std::string &session_data);
+                          std::string session_data);
 
     /**
      * Returns session data.
@@ -93,7 +88,7 @@ private:
 
     const uint16_t listen_port_;
     const std::string forward_host_;
-    std::string forward_port_;
+    const std::string forward_port_;
 
     const std::vector<std::string> ca_dirs_;
 

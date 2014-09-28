@@ -17,14 +17,13 @@
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
-#include <boost/enable_shared_from_this.hpp>
 #include <boost/asio/buffer.hpp>
 
 namespace one {
 namespace proxy {
 
 constexpr const char *INTERNAL_HEADER_PREFIX = "onedata-internal-";
-constexpr const size_t SESSION_ID_SIZE = 16; // in bytes
+constexpr const size_t SESSION_ID_SIZE = 64; // in bytes
 
 class tls_server;
 
