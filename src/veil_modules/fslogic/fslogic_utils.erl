@@ -29,10 +29,17 @@
 %% ====================================================================
 
 
+%% gen_storage_uid/1
+%% ====================================================================
+%% @doc Generates storage UID/GID based arbitrary binary (e.g. user's global id, space id, etc)
+%% @end
+-spec gen_storage_uid(ID :: binary()) -> non_neg_integer().
+%% ====================================================================
 gen_storage_uid(ID) ->
     <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, ID),
     {ok, LowestGID} = veil_cluster_node_app:get_env(lowest_generated_storage_gid),
     LowestGID + GID0 rem 1000000.
+
 
 %% file_to_space_info/1
 %% ====================================================================
