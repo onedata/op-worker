@@ -43,7 +43,7 @@ tls2tcp_session::tls2tcp_session(std::weak_ptr<tls_server> server,
     , peer_cert_(nullptr)
 {
     std::string session_id_bin(SESSION_ID_SIZE, '\0');
-    if (RAND_bytes(reinterpret_cast<unsigned int *>(&session_id_bin[0]),
+    if (RAND_bytes(reinterpret_cast<unsigned char *>(&session_id_bin[0]),
                    session_id_bin.size())) {
         session_id_ = utils::base64_encode(session_id_bin);
     } else {
@@ -311,7 +311,7 @@ void tls2tcp_session::handle_handshake(const boost::system::error_code &error)
                                   subject_name.data(), subject_name.size());
                 custom_headers.push_back(std::tuple<string, string>{
                     std::string(INTERNAL_HEADER_PREFIX) + "client-subject-dn",
-                    subject_name});
+                    subject_name.data()});
 
                 custom_headers.push_back(std::tuple<string, string>{
                     std::string(INTERNAL_HEADER_PREFIX) + "client-session-id",
