@@ -224,7 +224,7 @@ main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = Sta
                 receive
                     {Port, {data, {eol, <<BinPid:PidSize/binary, " ", SessionData/binary>>}}} ->
                         Pid ! {{self(), Id}, {ok, SessionData}}
-                after 5000 ->
+                after timer:seconds(5) ->
                     Pid ! {{self(), Id}, {error, port_timeout}}
                 end,
                 State

@@ -153,7 +153,7 @@ init(Type, Req, Opts) ->
     set_handler_module(HandlerModule),
     set_delegation(Delegation),
 
-    DoDelagate =
+    DoDelegate=
         fun() ->
             case delegate(init, [Type, Req, HandlerOpts], 3) of
                 {upgrade, protocol, Module, Req2, HandlerOpts2} ->
@@ -167,12 +167,12 @@ init(Type, Req, Opts) ->
         true ->
             case spawn_handling_process() of
                 ok ->
-                    DoDelagate();
+                    DoDelegate();
                 _ ->
                     {shutdown, Req}
             end;
         false ->
-            DoDelagate()
+            DoDelegate()
     end.
 
 
