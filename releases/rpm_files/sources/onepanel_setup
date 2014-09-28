@@ -20,7 +20,7 @@ sed -i -e s/"^-setcookie .*"/"-setcookie veil_cluster_node"/g $1/nodes/onepanel/
 if [[ -n "$ONEPANEL_MULTICAST_ADDRESS" ]]
 then
     multicast_address=`echo $ONEPANEL_MULTICAST_ADDRESS | sed s/"\."/", "/g`
-    sed -i -e s/"{multicast_address, .*"/"{multicast_address, {$multicast_address} }"/g $1/nodes/onepanel/etc/app.config
+    sed -i -e s/"{multicast_address, [^}]*"/"{multicast_address, {$multicast_address"/g $1/nodes/onepanel/etc/app.config
 fi
 
 exit 0
