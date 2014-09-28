@@ -375,19 +375,26 @@ metadata_test(_Config) ->
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"WRITE">>}
     ],
+
+    create_file(FileName2),
+    write_to_file(FileName2, <<"data">>),
     RequestBody15 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace2, Ace3]}]}],
     RawRequestBody15 = rest_utils:encode_to_json(RequestBody15),
     RequestHeaders15 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code15, _Headers15, Response15} = do_request(FileName2++"?metadata:cdmi_acl", put, RequestHeaders15, RawRequestBody15),
-    ?assertMatch({"201", _}, {Code15, Response15}),
+    ?assertMatch({"204", _}, {Code15, Response15}),
     {_Code16, _Headers16, Response16} = do_request(FileName2++"?metadata", get, RequestHeaders1, []),
 
     {struct,CdmiResponse16} = mochijson2:decode(Response16),
     ?assertEqual(1, length(CdmiResponse16)),
     {struct, Metadata16}= proplists:get_value(<<"metadata">>,CdmiResponse16),
     ?assertEqual(6, length(Metadata16)),
-    ?assertEqual([{struct, Ace1}, {struct, Ace2}, {struct, Ace3}], proplists:get_value(<<"cdmi_acl">>, Metadata16)).
+    ?assertEqual([{struct, Ace1}, {struct, Ace2}, {struct, Ace3}], proplists:get_value(<<"cdmi_acl">>, Metadata16)),
     %%------------------------------
+
+    {Code17, _Headers17, Response17} = do_request(FileName2, get, [], []),
+    ?assertEqual("200", Code17),
+    ?assertEqual("data", Response17).
 
 % Tests dir creation (cdmi container PUT), remember that every container URI ends
 % with '/'

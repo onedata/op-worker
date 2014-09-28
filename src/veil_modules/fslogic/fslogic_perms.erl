@@ -19,13 +19,27 @@
 -define(permission_denied_error(UserDoc,FileName,CheckType), {error, {permission_denied, {{user, UserDoc}, {file, FileName}, {check, CheckType}}}}).
 
 %% API
--export([check_file_perms/4]).
+-export([check_file_perms/2, check_file_perms/4]).
 -export([assert_group_access/3]).
 -export([has_permission/4]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+%% check_file_perms/2
+%% ====================================================================
+%% @doc Checks if the user has permission to modify file (e,g. change owner).
+%% UserDoc and FileDoc is based on current context.
+%% @end
+-spec check_file_perms(FileName :: string(), CheckType :: root | owner | delete | read | write | execute | rdwr | '') -> Result when
+    Result :: ok | {error, ErrorDetail},
+    ErrorDetail :: term().
+%% ====================================================================
+check_file_perms(FileName, Mode) ->
+    {ok, UserDoc} = fslogic_objects:get_user(),
+    {ok, FileDoc} = fslogic_objects:get_file(FileName),
+    check_file_perms(FileName, UserDoc, FileDoc, Mode).
 
 %% check_file_perms/4
 %% ====================================================================
