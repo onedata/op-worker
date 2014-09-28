@@ -1,8 +1,8 @@
 /*********************************************************************
-*  @author Rafal Slota
-*  @copyright (C): 2014 ACK CYFRONET AGH
-*  This software is released under the MIT license
-*  cited in 'LICENSE.txt'.
+ * @author Rafal Slota
+ * @copyright (C): 2014 ACK CYFRONET AGH
+ * This software is released under the MIT license
+ * cited in 'LICENSE.txt'.
 *********************************************************************/
 
 
@@ -12,9 +12,8 @@
 #include <iostream>
 #include <vector>
 #include <cstdio>
+#include <thread>
 
-#include <boost/thread/scoped_thread.hpp>
-#include <boost/thread.hpp>
 #include <boost/make_shared.hpp>
 #include <thread>
 
@@ -27,9 +26,7 @@ std::mutex stdout_mutex;
 /// Default threads count. Used only when automatic core-count detection failes.
 constexpr uint16_t WORKER_COUNT = 8;
 
-typedef boost::scoped_thread<boost::interrupt_and_join_if_joinable> auto_thread;
 using std::atoi;
-
 using namespace one::proxy;
 
 
@@ -49,8 +46,7 @@ void command_response(std::vector<std::string> tokens)
         std::cout << " " << tokens[i];
     }
 
-    std::cout << "\n";
-    std::cout.flush();
+    std::cout << std::endl;
 }
 
 int main(int argc, char *argv[])
@@ -59,24 +55,21 @@ int main(int argc, char *argv[])
     try
     {
         if (argc < 6) {
-            LOG(INFO) << "Invalid argument. Usage: " << argv[0]
-                      << " <listen_port> <forward_host> <forward_port> "
-                      << "cert_path verify_peer|verify_none [ca|crl_dir...]";
+            LOG(ERROR) << "Invalid argument. Usage: " << argv[0]
+                       << " <listen_port> <forward_host> <forward_port> "
+                       << "cert_path verify_peer|verify_none [ca|crl_dir...]";
             return EXIT_FAILURE;
         }
 
         boost::asio::io_service client_io_service;
         boost::asio::io_service proxy_io_service;
-        std::vector<auto_thread> workers;
+        std::vector<std::thread> workers;
 
         {
             auto verify_type = (std::string(argv[5]) == "verify_peer"
                                     ? boost::asio::ssl::verify_peer
                                     : boost::asio::ssl::verify_none);
-            std::vector<std::string> ca_dirs;
-            for (int i = 6; i < argc; ++i) {
-                ca_dirs.push_back(argv[i]);
-            }
+            std::vector<std::string> ca_dirs{argv + 6, argv + argc};
 
             auto s = boost::make_shared<tls_server>(
                 client_io_service, proxy_io_service, verify_type, argv[4],
@@ -96,11 +89,11 @@ int main(int argc, char *argv[])
                 return EXIT_FAILURE;
             }
 
-            for (uint16_t i = 0; i < WORKER_COUNT; ++i) {
+            for (auto i = 0u; i < WORKER_COUNT; ++i) {
                 workers.push_back(
-                    auto_thread{[&]() { client_io_service.run(); }});
+                    std::thread{[&]() { client_io_service.run(); }});
                 workers.push_back(
-                    auto_thread{[&]() { proxy_io_service.run(); }});
+                    std::thread{[&]() { proxy_io_service.run(); }});
             }
 
             LOG(INFO) << "Proxy 0.0.0.0:" << atoi(argv[1]) << " -> " << argv[2]
@@ -134,6 +127,10 @@ int main(int argc, char *argv[])
 
         client_io_service.stop();
         proxy_io_service.stop();
+
+        for (auto &worker : workers) {
+            worker.join();
+        }
     }
     catch (std::exception &e)
     {

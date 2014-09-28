@@ -1,13 +1,13 @@
 /*********************************************************************
-*  @author Rafal Slota
-*  @copyright (C): 2014 ACK CYFRONET AGH
-*  This software is released under the MIT license
-*  cited in 'LICENSE.txt'.
+ * @author Rafal Slota
+ * @copyright (C): 2014 ACK CYFRONET AGH
+ * This software is released under the MIT license
+ * cited in 'LICENSE.txt'.
 *********************************************************************/
 
 
-#ifndef log_message_h
-#define log_message_h
+#ifndef LOG_MESSAGE_H
+#define LOG_MESSAGE_H
 
 #include <ostream>
 #include <sstream>
@@ -16,10 +16,10 @@
 
 #ifdef NDEBUG
 #define LOG(SEVERITY)                                                          \
-    one::proxy::log_message(one::proxy::log_message::SEVERITY, std::cout, false)
+    one::proxy::log_message(one::proxy::log_message::SEVERITY, std::cout, stdout_mutex, false)
 #else
 #define LOG(SEVERITY)                                                          \
-    one::proxy::log_message(one::proxy::log_message::SEVERITY, std::cout, true)
+    one::proxy::log_message(one::proxy::log_message::SEVERITY, std::cout, stdout_mutex, true)
 #endif
 
 namespace one {
@@ -30,13 +30,13 @@ extern std::mutex stdout_mutex;
 
 /**
  * The log_message class.
- * Single instance handles signle log message.
+ * Single instance handles single log message.
  */
 class log_message : public std::ostream {
 public:
 
     /// Log severity
-    enum Severity {
+    enum severity {
         DEBUG,
         INFO,
         WARNING,
@@ -49,44 +49,37 @@ public:
      * @param sink Output ostream
      * @param debug_enabled Tells whether debug logs shall be logged
      */
-    log_message(Severity s, std::ostream &sink, bool debug_enabled)
+    log_message(severity s, std::ostream &sink, std::mutex &sink_mutex, bool debug_enabled = false)
         : sink_(sink)
         , severity_(s)
         , debug_enabled_(debug_enabled)
-        , stdout_lock(stdout_mutex)
+        , stdout_lock(sink_mutex)
     {
         if (should_log())
-            sink_ << severity() << " ";
+            sink_ << severity_prefix() << " ";
     };
 
     /// Tells whether current log should be logged
-    inline bool should_log()
+    bool should_log()
     {
         return (severity_ == DEBUG && debug_enabled_) || severity_ != DEBUG;
     }
 
     /// Converts log severity to string log prefix
-    inline std::string severity()
+    std::string severity_prefix()
     {
-        std::string severity_str;
         switch (severity_) {
             case DEBUG:
-                severity_str = "[ DEBUG ]";
-                break;
+                return "[ DEBUG ]";
             case INFO:
-                severity_str = "[ INFO ]";
-                break;
+                return "[ INFO ]";
             case WARNING:
-                severity_str = "[ WARNING ]";
-                break;
+                return "[ WARNING ]";
             case ERROR:
-                severity_str = "[ ERROR ]";
-                break;
+                return "[ ERROR ]";
             default:
-                severity_str = std::to_string(severity_);
+                return std::to_string(severity_);
         }
-
-        return severity_str;
     }
 
     /// Logs given object
@@ -107,7 +100,7 @@ public:
 
 private:
     std::ostream &sink_;
-    Severity severity_;
+    severity severity_;
     bool debug_enabled_;
 
     std::lock_guard<std::mutex> stdout_lock;
@@ -116,4 +109,4 @@ private:
 } // namespace proxy
 } // namespace one
 
-#endif // log_message_h
+#endif // LOG_MESSAGE_H

@@ -1,13 +1,13 @@
 /*********************************************************************
-*  @author Rafal Slota
-*  @copyright (C): 2014 ACK CYFRONET AGH
-*  This software is released under the MIT license
-*  cited in 'LICENSE.txt'.
+ * @author Rafal Slota
+ * @copyright (C): 2014 ACK CYFRONET AGH
+ * This software is released under the MIT license
+ * cited in 'LICENSE.txt'.
 *********************************************************************/
 
 
-#ifndef tls2tcp_session_h
-#define tls2tcp_session_h
+#ifndef TLS2TCP_SESSION_H
+#define TLS2TCP_SESSION_H
 
 #include "tls2tcp_session.h"
 
@@ -159,4 +159,4 @@ private:
 } // namespace proxy
 } // namespace one
 
-#endif // tls2tcp_session_h
+#endif // TLS2TCP_SESSION_H
