@@ -35,7 +35,7 @@ typedef boost::asio::ssl::stream<tcp_socket> ssl_socket;
  * The tls2tcp_session class.
  * tls2tcp_session object represents single proxy connection between client and provider
  */
-class tls2tcp_session : public boost::enable_shared_from_this<tls2tcp_session> {
+class tls2tcp_session : public std::enable_shared_from_this<tls2tcp_session> {
 public:
 
     /**
@@ -52,8 +52,8 @@ public:
                     boost::asio::io_service &client_io_service,
                     boost::asio::io_service &proxy_io_service,
                     boost::asio::ssl::context &context,
-                    const std::string &forward_host,
-                    const std::string &forward_port);
+                    std::string forward_host,
+                    std::string forward_port);
 
     ~tls2tcp_session();
 
@@ -71,9 +71,7 @@ public:
 
 
 private:
-    enum {
-        buffer_size = 1024 * 1024
-    };
+    static constexpr size_t buffer_size = 1024 * 1024;
 
     std::weak_ptr<tls_server> server_;
 
@@ -84,10 +82,8 @@ private:
     const std::string forward_host_;
     const std::string forward_port_;
 
-    char client_data_[buffer_size];
-    char proxy_data_[buffer_size];
-    boost::asio::mutable_buffers_1 client_buffer_;
-    boost::asio::mutable_buffers_1 proxy_buffer_;
+    std::array<char, buffer_size> client_data_;
+    std::array<char, buffer_size> proxy_data_;
 
     std::vector<std::string> client_cert_chain_;
 

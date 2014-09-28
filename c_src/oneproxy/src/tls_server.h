@@ -105,7 +105,7 @@ private:
     mutable std::mutex certs_mutex_;
     mutable std::mutex session_mutex_;
 
-    void handle_accept(boost::shared_ptr<tls2tcp_session> new_session,
+    void handle_accept(std::shared_ptr<tls2tcp_session> new_session,
                        const boost::system::error_code &error);
 };
 

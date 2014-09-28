@@ -57,17 +57,17 @@ tls_server::tls_server(boost::asio::io_service &client_io_service,
 
 void tls_server::start_accept()
 {
-    auto new_session = boost::make_shared<tls2tcp_session>(
+    auto new_session = std::make_shared<tls2tcp_session>(
         shared_from_this(), client_io_service_, proxy_io_service_, context_,
         forward_host_, forward_port_);
 
     acceptor_.async_accept(new_session->socket(),
-                           boost::bind(&tls_server::handle_accept,
+                           std::bind(&tls_server::handle_accept,
                                        shared_from_this(), new_session,
-                                       boost::asio::placeholders::error));
+                                       std::placeholders::_1));
 }
 
-void tls_server::handle_accept(boost::shared_ptr<tls2tcp_session> new_session,
+void tls_server::handle_accept(std::shared_ptr<tls2tcp_session> new_session,
                                const boost::system::error_code &error)
 {
     if (!error) {
