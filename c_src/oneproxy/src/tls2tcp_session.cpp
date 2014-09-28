@@ -50,8 +50,6 @@ tls2tcp_session::tls2tcp_session(std::weak_ptr<tls_server> server,
         LOG(ERROR) << "Could not generate session id";
         throw std::runtime_error("Could not generate session id");
     }
-
-
 }
 
 tls2tcp_session::~tls2tcp_session()
