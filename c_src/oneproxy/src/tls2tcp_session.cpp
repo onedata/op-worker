@@ -40,7 +40,7 @@ tls2tcp_session::tls2tcp_session(std::weak_ptr<tls_server> server,
     , proxy_io_service_(proxy_io_service)
     , forward_host_(std::move(forward_host))
     , forward_port_(std::move(forward_port))
-    , peer_cert_(0)
+    , peer_cert_(nullptr)
 {
     unsigned char session_id_bin[SESSION_ID_SIZE];
     if (RAND_bytes(session_id_bin, SESSION_ID_SIZE)) {
@@ -79,7 +79,7 @@ bool tls2tcp_session::handle_verify_certificate(bool preverified,
                                                 boost::asio::ssl::verify_context
                                                 &ctx)
 {
-    char *x509_buf = 0;
+    char *x509_buf = nullptr;
     X509 *cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
     size_t der_size = i2d_X509(cert, (unsigned char **)&x509_buf);
 
@@ -101,7 +101,7 @@ std::string tls2tcp_session::gen_session_data()
     {
         std::string pem;
 
-        X509 *peer_cert = 0;
+        X509 *peer_cert = nullptr;
         const unsigned char *p = (const unsigned char *)der.data();
         if (d2i_X509(&peer_cert, &p, der.size())) {
             BIO *mem = BIO_new(BIO_s_mem());
