@@ -20,7 +20,7 @@
 
 %% API
 -export([normalize_file_type/2]).
--export([update_file_size/1, update_file_size/2, get_real_file_size/1, get_file_owner/1, get_file_local_location/1]).
+-export([update_file_size/1, update_file_size/2, get_real_file_size_and_uid/1, get_file_owner/1, get_file_local_location/1]).
 
 %% ====================================================================
 %% API functions
@@ -28,19 +28,20 @@
 
 %% get_file_owner/1
 %% ====================================================================
-%% @doc Fetches owner's username and UID for given file.
+%% @doc Fetches owner's username, provider's UID and current correct storage UID for given file.
 %%      Returns {"", -1} on error.
 -spec get_file_owner(File :: file_doc() | file_info() | file()) ->
-    {Login :: string(), UID :: integer()} |
-    {[], -1}.
+    {Login :: string(), VCUID :: integer(), SUID :: integer()} |
+    {[], -1, -1}.
 %% ====================================================================
 get_file_owner(#file{} = File) ->
     case user_logic:get_user({uuid, File#file.uid}) of
         {ok, #veil_document{record = #user{}} = UserDoc} ->
-            {user_logic:get_login(UserDoc), list_to_integer(UserDoc#veil_document.uuid)};
+            {Login, SUID} = user_logic:get_login_with_uid(UserDoc),
+            {Login, list_to_integer(UserDoc#veil_document.uuid), SUID};
         {error, UError} ->
             ?error("Owner of file ~p not found due to error: ~p", [File, UError]),
-            {"", -1}
+            {"", -1, -1}
     end;
 get_file_owner(FilePath) ->
     {ok, #veil_document{record = #file{} = File}} = fslogic_objects:get_file(FilePath),
@@ -61,29 +62,29 @@ get_file_local_location(#file_location{} = FLoc) ->
     FLoc.
 
 
-%% get_real_file_size/1
+%% get_real_file_size_and_uid/1
 %% ====================================================================
-%% @doc Fetches real file size from underlying storage. Returns 0 for non-regular file.
-%%      Also errors are silently dropped (return value 0).
--spec get_real_file_size(File :: file() | file_doc() | file_info()) -> FileSize :: non_neg_integer().
+%% @doc Fetches real file size and uid from underlying storage. Returns {0, -1} for non-regular file.
+%%      Also errors are silently dropped (return value {0, -1}).
+-spec get_real_file_size_and_uid(File :: file() | file_doc() | file_info()) -> FileSize :: non_neg_integer().
 %% ====================================================================
-get_real_file_size(#file{type = ?REG_TYPE} = File) ->
+get_real_file_size_and_uid(#file{type = ?REG_TYPE} = File) ->
     FileLoc = get_file_local_location(File#file.location),
     {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
 
     {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
     case veilhelpers:exec(getattr, SH, [File_id]) of
-        {0, #st_stat{st_size = ST_Size} = _Stat} ->
+        {0, #st_stat{st_size = ST_Size, st_uid = UID} = _Stat} ->
             ST_Size;
         {Errno, _} ->
             ?error("Cannot fetch attributes for file: ~p, errno: ~p", [File, Errno]),
-            0
+            {0, -1}
     end;
-get_real_file_size(#file{}) ->
-    0;
-get_real_file_size(FileDocOrPath) ->
+get_real_file_size_and_uid(#file{}) ->
+    {0, -1};
+get_real_file_size_and_uid(FileDocOrPath) ->
     {ok, #veil_document{record = #file{} = File}} = fslogic_objects:get_file(FileDocOrPath),
-    get_real_file_size(File).
+    get_real_file_size_and_uid(File).
 
 
 %% update_file_size/1
@@ -95,7 +96,7 @@ get_real_file_size(FileDocOrPath) ->
     UpdatedFile :: file_info().
 %% ====================================================================
 update_file_size(#file{type = ?REG_TYPE} = File) ->
-    Size = get_real_file_size(File),
+    {Size, _} = get_real_file_size_and_uid(File),
     update_file_size(File, Size);
 update_file_size(#file{} = File) ->
     File.

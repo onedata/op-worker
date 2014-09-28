@@ -196,7 +196,8 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
                     UID1;
                 {error, Error} ->
                     case user_logic:get_user({unverified_dn, DnString}) of
-                        {ok, #veil_document{uuid = UID1, record = #user{login = Login}} = UserDoc} ->
+                        {ok, #veil_document{uuid = UID1} = UserDoc} ->
+                            Login = user_logic:get_login(UserDoc),
                             case CertConfirmation of
                                 #handshakerequest_certconfirmation{login = Login, result = Result} ->
                                     % Remove the DN from unverified DNs as it has been confirmed or declined

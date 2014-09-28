@@ -17,6 +17,7 @@
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_registry/gr_openid.hrl").
 
 
 %% ====================================================================
@@ -31,7 +32,7 @@
 -export([get_space_names/1, create_space_dir/1, get_spaces/1]).
 -export([create_dirs_at_storage/2, create_dirs_at_storage/1]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
--export([synchronize_spaces_info/2, create_partial_user/2]).
+-export([synchronize_spaces_info/2, create_partial_user/2, get_login_with_uid/1]).
 
 
 %% ====================================================================
@@ -135,7 +136,7 @@ create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken, RefreshTok
     User = #user
     {
         global_id = GlobalId,
-        login = Login,
+        logins = Login,
         name = Name,
         teams = case Teams of
                     Teams when is_list(Teams) -> Teams;
@@ -265,7 +266,6 @@ remove_user(Key) ->
     case GetUserFirstAns of
         ok ->
             UserRec2 = UserRec#veil_document.record,
-            dao_lib:apply(dao_vfs, remove_file, [UserRec2#user.login], 1),
             dao_lib:apply(dao_users, remove_quota, [UserRec2#user.quota_doc], 1);
         _ -> error
     end,
@@ -310,10 +310,53 @@ list_all_users(N, Offset, Actual) ->
 %% @end
 -spec get_login(User) -> Result when
     User :: user_doc(),
-    Result :: string().
+    Result :: string() | non_neg_integer().
 %% ====================================================================
-get_login(User) ->
-    User#veil_document.record#user.login.
+get_login(UserDoc) ->
+    {Login, _} = get_login_with_uid(UserDoc),
+    vcn_utils:ensure_list(Login).
+
+
+get_login_with_uid(#veil_document{uuid = "0"}) ->
+    {"root" ,0};
+get_login_with_uid(#veil_document{record = #user{logins = Logins0}, uuid = VCUID}) ->
+    Logins = [Login || #id_token_login{login = LoginName, provider_id = Provider} = Login <- Logins0, size(LoginName) > 0, is_trusted_openid_provider(Provider)],
+
+    StorageNameToUID =
+        fun(Name) ->
+            MaybeUID = os:cmd("id " ++ Name) -- "\n",
+            UID =
+                try
+                    list_to_integer(MaybeUID)
+                catch
+                    _:_ ->
+                        -1
+                end,
+            case UID of
+                UID when UID < 500 -> -1;
+                _ -> UID
+            end
+        end,
+
+    LoginNamesWithUID = lists:map(
+        fun(#id_token_login{login = LoginName}) ->
+            {LoginName, StorageNameToUID(LoginName)}
+        end, Logins),
+
+    LoginNamesWithUID1 = [{LoginName, UID} || {LoginName, UID} <- LoginNamesWithUID, UID >= 500],
+
+    case LoginNamesWithUID1 of
+        [] -> {<<"Unknown_", (vcn_utils:ensure_binary(VCUID))/binary>>, fslogic_utils:gen_storage_uid(VCUID)};
+        [{LoginName, UID} | _] ->
+            {vcn_utils:ensure_binary(LoginName), UID}
+    end.
+
+is_trusted_openid_provider(internal) ->
+    true;
+is_trusted_openid_provider(plgrid) ->
+    true;
+is_trusted_openid_provider(_) ->
+    false.
 
 
 %% get_name/1

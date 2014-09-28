@@ -44,15 +44,19 @@ validate_login() ->
             id_token = #id_token{
                 sub = GRUID,
                 name = Name,
+                logins = Logins,
                 emails = EmailList}
         }} = gr_openid:get_token_response(
             provider,
             [{<<"code">>, AuthorizationCode}, {<<"grant_type">>, <<"authorization_code">>}]
         ),
+
+        ?info("====================================================> ~p", [Logins]),
+
         Login = get_user_login(gui_str:binary_to_unicode_list(GRUID)),
         LoginProplist = [
             {global_id, gui_str:binary_to_unicode_list(GRUID)},
-            {login, Login},
+            {login, Logins},
             {name, gui_str:binary_to_unicode_list(Name)},
             {teams, []},
             {emails, lists:map(fun(Email) -> gui_str:binary_to_unicode_list(Email) end, EmailList)},
@@ -137,7 +141,7 @@ refresh_access(UserId) ->
 %% ====================================================================
 get_user_login(GRUID) ->
     case user_logic:get_user({global_id, GRUID}) of
-        {ok, #veil_document{record = #user{login = Login}}} -> Login;
+        {ok, #veil_document{} = UserDoc} -> user_logic:get_login(UserDoc);
         _ -> next_free_user_login(1)
     end.
 

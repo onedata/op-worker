@@ -165,12 +165,27 @@ check_file_perms(FullFileName, Type) ->
 get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     #veil_document{record = #file{} = File, uuid = FileUUID} = FileDoc,
     Type = fslogic_file:normalize_file_type(protocol, File#file.type),
-    Size = fslogic_file:get_real_file_size(File),
+    {Size, SUID} = fslogic_file:get_real_file_size_and_uid(File),
 
     fslogic_file:update_file_size(File, Size),
 
     %% Get owner
-    {UName, UID} = fslogic_file:get_file_owner(File),
+    {UName, VCUID, RSUID} = fslogic_file:get_file_owner(File),
+
+    case SUID =:= RSUID of
+        true -> ok;
+        false ->
+            ?info("SUID missmatch on file ~p (~p vs correct ~p) - fixing", [FileUUID, SUID, RSUID]),
+            FileLoc = fslogic_file:get_file_local_location(File#file.location),
+            {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+            {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+            case storage_files_manager:chown(SH, File_id, RSUID, -1) of
+                ok -> ok;
+                SReason ->
+                    ?error("Could not fix SUID of file ~p due to: ~p", [FileUUID, SReason]),
+                    error
+            end
+    end,
 
     {ok, FilePath} = logical_files_manager:get_file_full_name_by_uuid(FileUUID),
     {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
@@ -198,7 +213,7 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
             end,
 
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = UID, gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links};
+        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID, gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links};
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
     case fslogic_objects:get_file(FullFileName) of

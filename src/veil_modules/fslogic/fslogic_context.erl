@@ -24,7 +24,6 @@
 -export([clear_user_ctx/0, clear_gr_auth/0]).
 -export([get_user_context/0, set_user_context/1]).
 -export([get_user_query/0]).
--export([get_user_context/0, set_user_context/1]).
 
 %% ====================================================================
 %% API functions
@@ -184,7 +183,7 @@ get_user_id() ->
 %% ====================================================================
 %% @doc Sets user name that shall be used for file system permissions checks.
 %% @end
--spec set_fs_user_ctx(UName :: string()) -> OldValue :: term().
+-spec set_fs_user_ctx(UName :: non_neg_integer()) -> OldValue :: term().
 %% ====================================================================
 set_fs_user_ctx(UName) ->
     put(fsctx_uname, UName).

@@ -75,7 +75,7 @@ bool check_common_args(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     if(argc < 2)
         return false;
 
-    return !get_string(env, argv[0]).empty() && is_int(env, argv[1]);
+    return is_int(env, argv[0]) && is_int(env, argv[1]);
 }
 
 struct fuse_file_info get_ffi(ErlNifEnv* env, ERL_NIF_TERM term)
