@@ -37,7 +37,7 @@ get_virtual_acl(FullfileName, FileDoc) ->
         aceflags = ?no_flags_mask,
         identifier = vcn_utils:ensure_binary(UserGlobalId),
         acemask = posix_perms_to_acl_mask(Perms, false, true)
-    } || UserGlobalId <- Users -- [OwnerGlobalId]],
+    } || UserGlobalId <- Users -- [vcn_utils:ensure_binary(OwnerGlobalId)]],
     [OwnerAce | RestAceList].
 
 %% check_permission/1
