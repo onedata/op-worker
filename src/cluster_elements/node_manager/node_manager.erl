@@ -1360,7 +1360,7 @@ start_rest_listener() ->
 
     LocalPort = oneproxy:get_local_port(RestPort),
     Pid = spawn_link(fun() -> oneproxy:start(RestPort, LocalPort, CertString, verify_peer) end),
-    register(?ONEPROXY_REST, Pid),
+    register(oneproxy_rest, Pid),
 
     RestDispatch = [
         {'_', [

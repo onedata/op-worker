@@ -179,6 +179,7 @@ exec(OneProxyPid, CMD, Args) when is_pid(OneProxyPid) ->
 main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = State) ->
     NewState =
         receive
+            %% Handle oneproxy logs
             {Port, {data, {eol, <<?LOG_DEBUG_PREFIX, Log/binary>>}}} ->
                 ?debug("[ oneproxy ~p ] ~s", [EnpointPort, vcn_utils:ensure_list(Log)]),
                 State;
@@ -194,10 +195,13 @@ main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = Sta
             {'EXIT', Port, Reason} ->
                 ?error("oneproxy port terminated due to: ~p", [Reason]),
                 error({terminated, Reason});
+
+            %% Checks if port is still alive
             heartbeat ->
                 timer:send_after(timer:seconds(3), heartbeat),
                 port_command(Port, <<"heartbeat\n">>),
                 State;
+            %% Reloads GSI CAs and CRLs in oneproxy port
             reload_certs ->
                 case ca_crl_to_der(get_der_certs_dir()) of
                     ok ->
@@ -209,6 +213,7 @@ main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = Sta
                         timer:send_after(500, {self(), reload_certs}),
                         State
                 end;
+            %% Executes given command on oneproxy and replays with {ok, Response} or {error, Reason}
             {{Pid, Id}, {command, CMD, Args}} ->
                 BinPid = base64:encode(term_to_binary(Pid)),
                 PidSize = size(BinPid),
