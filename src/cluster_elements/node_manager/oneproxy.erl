@@ -62,7 +62,8 @@ get_local_port(Port) ->
 %% ====================================================================
 %% @doc Starts oneproxy. This function either does not return or throws exception.
 %% @end
--spec start(ListenerPort :: non_neg_integer(), ForwardPort :: non_neg_integer(), CertFile :: string() | binary(), VerifyType :: verify_peer | verify_none) -> no_return().
+-spec start(ListenerPort :: non_neg_integer(), ForwardPort :: non_neg_integer(), 
+            CertFile :: string() | binary(), VerifyType :: verify_peer | verify_none) -> no_return().
 %% ====================================================================
 start(ListenerPort, ForwardPort, CertFile, VerifyType) ->
     {ok, CWD} = file:get_cwd(),
@@ -165,7 +166,7 @@ exec(OneProxyPid, CMD, Args) when is_pid(OneProxyPid) ->
     OneProxyPid ! {{self(), Id}, {command, CMD, Args}},
     receive
         {{OneProxyPid, Id}, Response} -> Response
-    after 5000 ->
+    after timer:seconds(5) ->
         {error, timeout}
     end.
 
@@ -210,7 +211,7 @@ main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = Sta
                         State;
                     {error, Reason1} ->
                         ?warning("Could not reload certificates for oneproxy due to: ~p", [Reason1]),
-                        timer:send_after(500, {self(), reload_certs}),
+                        timer:send_after(500, reload_certs),
                         State
                 end;
             %% Executes given command on oneproxy and replays with {ok, Response} or {error, Reason}

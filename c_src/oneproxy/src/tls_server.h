@@ -90,7 +90,7 @@ private:
     const std::string forward_host_;
     const std::string forward_port_;
 
-    const std::vector<std::string> ca_dirs_;
+    const std::vector<std::string> ca_crl_dirs_;
 
     std::vector<std::string> crls_;
     std::vector<std::string> ca_certs_;

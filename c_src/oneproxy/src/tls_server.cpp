@@ -23,7 +23,7 @@ tls_server::tls_server(boost::asio::io_service &client_io_service,
                        int verify_type, const std::string &cert_path,
                        uint16_t server_port, std::string forward_host,
                        uint16_t forward_port,
-                       std::vector<std::string> ca_dirs)
+                       std::vector<std::string> ca_crl_dirs)
     : client_io_service_(client_io_service)
     , proxy_io_service_(proxy_io_service)
     , verify_type_(verify_type)
@@ -33,7 +33,7 @@ tls_server::tls_server(boost::asio::io_service &client_io_service,
     , listen_port_(server_port)
     , forward_host_(std::move(forward_host))
     , forward_port_(std::to_string(forward_port))
-    , ca_dirs_(std::move(ca_dirs))
+    , ca_crl_dirs_(std::move(ca_crl_dirs))
 {
     acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
     context_.set_options(boost::asio::ssl::context::default_workarounds
@@ -85,7 +85,7 @@ void tls_server::load_certs()
     try
     {
         using namespace boost::filesystem;
-        for (auto dir_name : ca_dirs_) {
+        for (auto dir_name : ca_crl_dirs_) {
             if (!exists(dir_name) || !is_directory(dir_name)) {
                 LOG(WARNING) << "CA directory " << dir_name
                              << " does not exist!";
