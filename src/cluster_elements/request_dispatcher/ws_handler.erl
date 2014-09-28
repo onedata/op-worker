@@ -262,6 +262,9 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
                 throw({no_user_found_error, Error, MsgId})
         end,
 
+    %% Refresh user's access token and schedule future refreshes
+    gen_server:call(?Dispatcher_Name, {control_panel, 1, {request_refresh, {uuid, UID}, {fuse, self()}}}),
+
     %% Fetch session data (using FUSE ID)
     case dao_lib:apply(dao_cluster, get_fuse_session, [NewFuseId], ProtocolVersion) of
         {ok, #veil_document{uuid = SessID, record = #fuse_session{uid = UID}}} ->
@@ -401,6 +404,8 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
     Req :: term(),
     State :: #handler_state{}.
 %% ====================================================================
+websocket_info({new_access_token, AccessToken}, Req, State) ->
+    {ok, Req, State#handler_state{access_token = AccessToken}};
 websocket_info({Pid, get_session_id}, Req, State) ->
     Pid ! {ok, State#handler_state.fuse_id}, %% Response with assigned FuseID, when cluster asks
     {ok, Req, State};
@@ -424,9 +429,25 @@ websocket_info(_Msg, Req, State) ->
     Req :: term(),
     State :: #handler_state{}.
 %% ====================================================================
-websocket_terminate(_Reason, _Req, #handler_state{peer_serial = _Serial, connection_id = ConnID} = _State) ->
+websocket_terminate(_Reason, _Req, State) ->
+    #handler_state{peer_serial = _Serial, connection_id = ConnID, peer_dn = DN, user_global_id = GRUID, peer_type = PeerType} = State,
     ?debug("WebSocket connection  terminate for peer ~p with reason: ~p", [_Serial, _Reason]),
     dao_lib:apply(dao_cluster, remove_connection_info, [ConnID], 1),        %% Cleanup connection info.
+
+    case PeerType of
+        user ->
+            UserIdentification =
+                if
+                    DN =/= undefined -> {dn, DN};
+                    GRUID =/= undefined -> {global_id, GRUID}
+                end,
+
+            gen_server:call(?Dispatcher_Name, {control_panel, 1, {fuse_session_close, UserIdentification, self()}});
+
+        provider ->
+            ok
+    end,
+
     gen_server:cast(?Node_Manager_Name, {delete_callback_by_pid, self()}),
     ok.
 

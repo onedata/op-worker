@@ -115,7 +115,8 @@ signing_in_test_() ->
         [
             {"new user -> create_user",
                 fun() ->
-                    AccessToken = <<"test_token">>,
+                    AccessToken = RefreshToken = <<"test_token">>,
+                    ExpirationTime = 1234,
 
                     % Possible info gathered from OpenID provider
                     NewUserInfoProplist =
@@ -136,7 +137,9 @@ signing_in_test_() ->
                         email_list = ["new@email.com"],
                         dn_list = ["new_user", "O=new-dn"],
                         quota_doc = "quota_uuid",
-                        access_token = AccessToken
+                        access_token = AccessToken,
+                        refresh_token = RefreshToken,
+                        access_expiration_time = ExpirationTime
                     },
                     % #veil_document encapsulating user record
                     NewUserRecord = #veil_document{record = NewUser},
@@ -169,13 +172,14 @@ signing_in_test_() ->
                     Tim = 12345677,
                     meck:expect(vcn_utils, time, fun() -> Tim end),
                     meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {Tim2, Tim2, Tim2}) -> File end),
-                    ?assertEqual({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist, AccessToken)),
+                    ?assertEqual({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist, AccessToken, RefreshToken, ExpirationTime)),
                     ?assert(meck:validate(dao_lib))
                 end},
 
             {"existing user -> synchronize + update functions",
                 fun() ->
-                    AccessToken = <<"test_token">>,
+                    AccessToken = RefreshToken = <<"test_token">>,
+                    ExpirationTime = 12345,
 
                     % Existing record in database
                     ExistingUser = #veil_document{record = #user{
@@ -185,7 +189,9 @@ signing_in_test_() ->
                         teams = ["Existing team"],
                         email_list = ["existing@email.com"],
                         dn_list = ["existing_user", "O=existing-dn"],
-                        access_token = AccessToken
+                        access_token = AccessToken,
+                        refresh_token = RefreshToken,
+                        access_expiration_time = ExpirationTime
                     }},
                     % Possible info gathered from OpenID provider
                     ExistingUserInfoProplist =
@@ -205,7 +211,9 @@ signing_in_test_() ->
                         teams = ["Updated team"],
                         email_list = ["existing@email.com"],
                         dn_list = ["existing_user", "O=existing-dn"],
-                        access_token = AccessToken
+                        access_token = AccessToken,
+                        refresh_token = RefreshToken,
+                        access_expiration_time = ExpirationTime
                     }},
                     % User record after updating emails
                     UserWithUpdatedEmailList = #veil_document{record = #user{
@@ -215,7 +223,9 @@ signing_in_test_() ->
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
                         dn_list = ["existing_user", "O=existing-dn"],
-                        access_token = AccessToken
+                        access_token = AccessToken,
+                        refresh_token = RefreshToken,
+                        access_expiration_time = ExpirationTime
                     }},
                     % How should user end up after synchronization
                     SynchronizedUser = #veil_document{record = #user{
@@ -225,7 +235,9 @@ signing_in_test_() ->
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
                         dn_list = ["existing_user", "O=existing-dn", "O=new-dn"],
-                        access_token = AccessToken
+                        access_token = AccessToken,
+                        refresh_token = RefreshToken,
+                        access_expiration_time = ExpirationTime
                     }},
 
                     % These uuids should be the same, but this way we can simulate DB updates of the record
@@ -257,7 +269,7 @@ signing_in_test_() ->
                     meck:expect(vcn_utils, time, fun() -> Tim end),
                     meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {Tim2, Tim2, Tim2}) -> File end),
 
-                    ?assertEqual({"existing_user", SynchronizedUser}, user_logic:sign_in(ExistingUserInfoProplist, AccessToken)),
+                    ?assertEqual({"existing_user", SynchronizedUser}, user_logic:sign_in(ExistingUserInfoProplist, AccessToken, RefreshToken, ExpirationTime)),
                     ?assert(meck:validate(dao_lib))
                 end}
         ]}.
