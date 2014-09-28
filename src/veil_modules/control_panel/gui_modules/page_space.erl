@@ -31,7 +31,7 @@
 
 %% Comet process state
 -define(STATE, comet_state).
--record(?STATE, {providers_details, users_details, group_details}).
+-record(?STATE, {providers_details, users_details, groups_details}).
 
 %% ====================================================================
 %% API functions
@@ -583,7 +583,7 @@ row_expanded(Details, NavigationBody) ->
 comet_loop({error, Reason}) ->
     {error, Reason};
 
-comet_loop(#?STATE{providers_details = ProvidersDetails, users_details = UsersDetails, group_details = GroupsDetails} = State) ->
+comet_loop(#?STATE{providers_details = ProvidersDetails, users_details = UsersDetails, groups_details = GroupsDetails} = State) ->
     NewState = try
                    receive
                        render_tables ->
@@ -724,7 +724,7 @@ event(init) ->
         gui_jq:bind_key_to_click_on_class(<<"13">>, <<"confirm">>),
 
         {ok, Pid} = gui_comet:spawn(fun() ->
-            comet_loop(#?STATE{providers_details = ProvidersDetails, users_details = UsersDetails, group_details = GroupsDetails})
+            comet_loop(#?STATE{providers_details = ProvidersDetails, users_details = UsersDetails, groups_details = GroupsDetails})
         end),
         put(?COMET_PID, Pid),
         Pid ! render_tables
