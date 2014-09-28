@@ -48,7 +48,7 @@ public:
      * @param forward_host Privider's hostname
      * @param forward_port Provider's port
      */
-    tls2tcp_session(boost::weak_ptr<tls_server> server,
+    tls2tcp_session(std::weak_ptr<tls_server> server,
                     boost::asio::io_service &client_io_service,
                     boost::asio::io_service &proxy_io_service,
                     boost::asio::ssl::context &context,
@@ -75,7 +75,7 @@ private:
         buffer_size = 1024 * 1024
     };
 
-    boost::weak_ptr<tls_server> server_;
+    std::weak_ptr<tls_server> server_;
 
     ssl_socket client_socket_;
     tcp_socket proxy_socket_;

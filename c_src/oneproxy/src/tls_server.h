@@ -25,7 +25,7 @@ namespace proxy {
  * The tls_server class.
  * Represents single proxy server instance.
  */
-class tls_server : public boost::enable_shared_from_this<tls_server> {
+class tls_server : public std::enable_shared_from_this<tls_server> {
 public:
 
     /**

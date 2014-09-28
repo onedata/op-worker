@@ -34,7 +34,7 @@ using std::string;
 namespace one {
 namespace proxy {
 
-tls2tcp_session::tls2tcp_session(boost::weak_ptr<tls_server> server,
+tls2tcp_session::tls2tcp_session(std::weak_ptr<tls_server> server,
                                  boost::asio::io_service &client_io_service,
                                  boost::asio::io_service &proxy_io_service,
                                  boost::asio::ssl::context &context,

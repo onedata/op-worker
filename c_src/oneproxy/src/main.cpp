@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
                                     : boost::asio::ssl::verify_none);
             std::vector<std::string> ca_dirs{argv + 6, argv + argc};
 
-            auto s = boost::make_shared<tls_server>(
+            auto s = std::make_shared<tls_server>(
                 client_io_service, proxy_io_service, verify_type, argv[4],
                 atoi(argv[1]), argv[2], atoi(argv[3]), ca_dirs);
 
@@ -101,9 +101,8 @@ int main(int argc, char *argv[])
                       << (worker_count * 2) << " workers";
 
             // Simple erlang port dirver
-            std::string line;
             std::string command, message_id, arg0;
-            while (std::cin.good()) {
+            for(std::string line; std::getline(std::cin, line); ) {
                 std::getline(std::cin, line);
                 std::stringstream line_stream(line);
 
