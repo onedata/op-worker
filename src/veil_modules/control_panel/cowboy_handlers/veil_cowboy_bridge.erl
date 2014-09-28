@@ -152,16 +152,27 @@ init(Type, Req, Opts) ->
     Delegation = proplists:get_value(delegation, Opts, true),
     set_handler_module(HandlerModule),
     set_delegation(Delegation),
+
+    DoDelegate=
+        fun() ->
+            case delegate(init, [Type, Req, HandlerOpts], 3) of
+                {upgrade, protocol, Module, Req2, HandlerOpts2} ->
+                    Opts1 = proplists:delete(handler_opts, Opts),
+                    {upgrade, protocol, Module, Req2, [{handler_opts, HandlerOpts2} | Opts1]};
+                Other -> Other
+            end
+        end,
+
     case Delegation of
         true ->
             case spawn_handling_process() of
                 ok ->
-                    delegate(init, [Type, Req, HandlerOpts], 3);
+                    DoDelegate();
                 _ ->
                     {shutdown, Req}
             end;
         false ->
-            delegate(init, [Type, Req, HandlerOpts], 3)
+            DoDelegate()
     end.
 
 

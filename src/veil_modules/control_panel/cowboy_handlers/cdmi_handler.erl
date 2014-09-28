@@ -33,7 +33,15 @@
 %% @end
 -spec init(any(), any(), any()) -> {upgrade, protocol, cowboy_rest}.
 %% ====================================================================
-init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
+init(_, Req, Opts) ->
+    NewOpts =
+        case gsi_handler:get_certs_from_req(?ONEPROXY_REST, Req) of
+            {ok, {OtpCert, Certs}} ->
+                [{certs, {OtpCert, Certs}}];
+            {error, _} ->
+                []
+        end,
+    {upgrade, protocol, cowboy_rest, Req, NewOpts ++ Opts}.
 
 %% rest_init/2
 %% ====================================================================
@@ -44,9 +52,9 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% @end
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
-rest_init(ReqArg, _Opt) ->
+rest_init(ReqArg, Opts) ->
     try
-        {ok, Identity, Req} = rest_utils:verify_peer_cert(ReqArg),
+        {ok, Identity, Req} = rest_utils:verify_peer_cert(ReqArg, lists:keyfind(certs, 1, Opts)),
         ok = rest_utils:prepare_context(Identity),
         {Method, Req1} = cowboy_req:method(Req),
         {PathInfo, Req2} = cowboy_req:path_info(Req1),
