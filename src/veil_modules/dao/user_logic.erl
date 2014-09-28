@@ -13,6 +13,7 @@
 
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("registered_names.hrl").
+-include("veil_modules/dao/dao_types.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
@@ -87,7 +88,7 @@ sign_in(Proplist, AccessToken, RefreshToken, AccessExpirationTime) ->
                    "" -> throw(no_global_id_specified);
                    GID -> GID
                end,
-    Login = proplists:get_value(login, Proplist, ""),
+    Logins = proplists:get_value(logins, Proplist, []),
     Name = proplists:get_value(name, Proplist, ""),
     Teams = proplists:get_value(teams, Proplist, []),
     Emails = proplists:get_value(emails, Proplist, []),
@@ -97,10 +98,10 @@ sign_in(Proplist, AccessToken, RefreshToken, AccessExpirationTime) ->
 
     User = case get_user({global_id, GlobalId}) of
                {ok, ExistingUser} ->
-                   User1 = synchronize_user_info(ExistingUser, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime),
+                   User1 = synchronize_user_info(ExistingUser, Logins, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime),
                    synchronize_spaces_info(User1, AccessToken);
                {error, user_not_found} ->
-                   case create_user(GlobalId, Login, Name, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime) of
+                   case create_user(GlobalId, Logins, Name, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime) of
                        {ok, NewUser} ->
                            synchronize_spaces_info(NewUser, AccessToken);
                        {error, Error} ->
@@ -110,7 +111,7 @@ sign_in(Proplist, AccessToken, RefreshToken, AccessExpirationTime) ->
                Error ->
                    throw({1, Error})
            end,
-    {Login, User}.
+    {get_login(User), User}.
 
 
 %% create_user/6
@@ -317,16 +318,22 @@ get_login(UserDoc) ->
     vcn_utils:ensure_list(Login).
 
 
+%% get_login_with_uid/1
+%% ====================================================================
+%% @doc Returns username and storage uid of the user.
+%% @end
+-spec get_login_with_uid(User :: user_doc()) -> {UserName :: binary(), SUID :: integer()}.
+%% ====================================================================
 get_login_with_uid(#veil_document{uuid = ?CLUSTER_USER_ID}) ->
-{"root" ,0};
+    {<<"root">>, 0};
 get_login_with_uid(#veil_document{uuid = "0"}) ->
-    {"root" ,0};
+    {<<"root">>, 0};
 get_login_with_uid(#veil_document{record = #user{logins = Logins0}, uuid = VCUID}) ->
     Logins = [Login || #id_token_login{login = LoginName, provider_id = Provider} = Login <- Logins0, size(LoginName) > 0, is_trusted_openid_provider(Provider)],
 
     StorageNameToUID =
         fun(Name) ->
-            MaybeUID = os:cmd("id " ++ Name) -- "\n",
+            MaybeUID = os:cmd("id -u " ++ vcn_utils:ensure_list(Name)) -- "\n",
             UID =
                 try
                     list_to_integer(MaybeUID)
@@ -353,12 +360,18 @@ get_login_with_uid(#veil_document{record = #user{logins = Logins0}, uuid = VCUID
             {vcn_utils:ensure_binary(LoginName), UID}
     end.
 
+
+%% is_trusted_openid_provider/1
+%% ====================================================================
+%% @doc Checks if given openid provider is trusted by this provider (i.e. OpenID login can be used as OS username).
+%% @end
+-spec is_trusted_openid_provider(ProviderId :: atom()) -> boolean().
+%% ====================================================================
 is_trusted_openid_provider(internal) ->
     true;
-is_trusted_openid_provider(plgrid) ->
-    true;
-is_trusted_openid_provider(_) ->
-    false.
+is_trusted_openid_provider(Provider) when is_atom(Provider) ->
+    {ok, Trusted} = veil_cluster_node_app:get_env(trusted_openid_providers),
+    lists:member(Provider, Trusted).
 
 
 %% get_name/1
@@ -719,15 +732,16 @@ update_access_credentials_int(UserDoc, AccessToken, RefreshToken, ExpirationTime
 %% This function synchronizes data from database with the information
 %% received from OpenID provider.
 %% @end
--spec synchronize_user_info(User, Teams, Emails, DnList, AccessToken :: binary(),
+-spec synchronize_user_info(User, Logins, Teams, Emails, DnList, AccessToken :: binary(),
                             RefreshToken :: binary(), AccessExpiration :: non_neg_integer()) -> Result when
     User :: user_doc(),
+    Logins :: [#id_token_login{}],
     Teams :: string(),
     Emails :: [string()],
     DnList :: [string()],
     Result :: user_doc().
 %% ====================================================================
-synchronize_user_info(User, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime) ->
+synchronize_user_info(User, Logins, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime) ->
     %% Actual updates will probably happen so rarely, that there is no need to scoop those 3 DB updates into one.
     User1 = update_access_credentials_int(User, AccessToken, RefreshToken, AccessExpirationTime),
     User2 = case (get_teams(User1) =:= Teams) or (Teams =:= []) of
@@ -759,7 +773,10 @@ synchronize_user_info(User, Teams, Emails, DnList, AccessToken, RefreshToken, Ac
                     {ok, NewUser4} = update_unverified_dn_list(NewUser3, get_unverified_dn_list(NewUser3) -- NewDns),
                     NewUser4
             end,
-    User4.
+
+    User5 = User4#veil_document{record = User4#veil_document.record#user{logins = Logins}},
+
+    User5.
 
 
 %% oid_code_to_shortname/1

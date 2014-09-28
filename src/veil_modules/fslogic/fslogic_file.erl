@@ -20,11 +20,42 @@
 
 %% API
 -export([normalize_file_type/2]).
--export([update_file_size/1, update_file_size/2, get_real_file_size_and_uid/1, get_file_owner/1, get_file_local_location/1]).
+-export([update_file_size/1, update_file_size/2, get_real_file_size_and_uid/1, get_file_owner/1, get_file_local_location/1, fix_storage_owner/1]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+
+%% fix_storage_owner/1
+%% ====================================================================
+%% @doc Fixes storage file (user) owner for given file.
+-spec fix_storage_owner(File :: file_doc() | file()) -> ok | {error, Reason :: any()}.
+%% ====================================================================
+fix_storage_owner(#veil_document{record = #file{type = ?REG_TYPE} = File, uuid = FileUUID}) ->
+    {_UName, _VCUID, RSUID} = fslogic_file:get_file_owner(File),
+    {_Size, SUID} = fslogic_file:get_real_file_size_and_uid(File),
+
+    case SUID =:= RSUID of
+        true -> ok;
+        false ->
+            ?info("SUID missmatch on file ~p (~p vs correct ~p) - fixing", [FileUUID, SUID, RSUID]),
+            FileLoc = fslogic_file:get_file_local_location(File#file.location),
+            {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+            {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+            case storage_files_manager:chown(SH, File_id, RSUID, -1) of
+                ok -> ok;
+                SReason ->
+                    ?error("Could not fix SUID of file ~p due to: ~p", [FileUUID, SReason]),
+                    {error, SReason}
+            end
+    end;
+fix_storage_owner(#veil_document{record = #file{}}) ->
+    ok;
+fix_storage_owner(FileQuery) ->
+    {ok, #veil_document{record = #file{}} = FileDoc} = fslogic_objects:get_file(FileQuery),
+    fix_storage_owner(FileDoc).
+
 
 %% get_file_owner/1
 %% ====================================================================
@@ -74,8 +105,8 @@ get_real_file_size_and_uid(#file{type = ?REG_TYPE} = File) ->
 
     {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
     case veilhelpers:exec(getattr, SH, [File_id]) of
-        {0, #st_stat{st_size = ST_Size, st_uid = UID} = _Stat} ->
-            ST_Size;
+        {0, #st_stat{st_size = ST_Size, st_uid = SUID} = _Stat} ->
+            {ST_Size, SUID};
         {Errno, _} ->
             ?error("Cannot fetch attributes for file: ~p, errno: ~p", [File, Errno]),
             {0, -1}

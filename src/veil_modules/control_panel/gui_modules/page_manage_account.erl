@@ -80,7 +80,7 @@ maybe_display_helper_message() ->
 % Snippet generating account management table
 main_table() ->
     {ok, GlobalRegistryHostname} = application:get_env(?APP_Name, global_registry_hostname),
-    {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+    {ok, UserDoc} = user_logic:get_user({uuid, gui_ctx:get_user_id()}),
     maybe_display_dn_message(UserDoc),
     maybe_display_verify_dn_message(UserDoc),
     maybe_display_helper_message(),

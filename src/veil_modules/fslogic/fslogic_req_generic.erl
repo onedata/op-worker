@@ -172,20 +172,7 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     %% Get owner
     {UName, VCUID, RSUID} = fslogic_file:get_file_owner(File),
 
-    case SUID =:= RSUID of
-        true -> ok;
-        false ->
-            ?info("SUID missmatch on file ~p (~p vs correct ~p) - fixing", [FileUUID, SUID, RSUID]),
-            FileLoc = fslogic_file:get_file_local_location(File#file.location),
-            {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
-            {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-            case storage_files_manager:chown(SH, File_id, RSUID, -1) of
-                ok -> ok;
-                SReason ->
-                    ?error("Could not fix SUID of file ~p due to: ~p", [FileUUID, SReason]),
-                    error
-            end
-    end,
+    fslogic_file:fix_storage_owner(FileDoc),
 
     {ok, FilePath} = logical_files_manager:get_file_full_name_by_uuid(FileUUID),
     {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
