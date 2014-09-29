@@ -68,7 +68,7 @@ fix_storage_owner(FileQuery) ->
 get_file_owner(#file{} = File) ->
     case user_logic:get_user({uuid, File#file.uid}) of
         {ok, #veil_document{record = #user{}} = UserDoc} ->
-            {Login, SUID} = user_logic:get_login_with_uid(UserDoc),
+            {{_, Login}, SUID} = user_logic:get_login_with_uid(UserDoc),
             {Login, list_to_integer(UserDoc#veil_document.uuid), SUID};
         {error, UError} ->
             ?error("Owner of file ~p not found due to error: ~p", [File, UError]),

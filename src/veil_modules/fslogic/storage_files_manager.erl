@@ -850,7 +850,6 @@ setup_ctx(File) ->
     case fslogic_objects:get_user() of
         {ok, #veil_document{record = #user{global_id = GRUID} = UserRec} = UserDoc} ->
             {_Login, UID} = user_logic:get_login_with_uid(UserDoc),
-            T1 = vcn_utils:mtime(),
             fslogic_context:set_fs_user_ctx(UID),
             case check_access_type(File) of
                 {ok, {group, SpaceId}} ->

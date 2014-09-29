@@ -314,7 +314,7 @@ list_all_users(N, Offset, Actual) ->
     Result :: string() | non_neg_integer().
 %% ====================================================================
 get_login(UserDoc) ->
-    {Login, _} = get_login_with_uid(UserDoc),
+    {{_, Login}, _} = get_login_with_uid(UserDoc),
     vcn_utils:ensure_list(Login).
 
 
@@ -322,12 +322,12 @@ get_login(UserDoc) ->
 %% ====================================================================
 %% @doc Returns username and storage uid of the user.
 %% @end
--spec get_login_with_uid(User :: user_doc()) -> {UserName :: binary(), SUID :: integer()}.
+-spec get_login_with_uid(User :: user_doc()) -> {{OpenidProvider :: atom(), UserName :: binary()}, SUID :: integer()}.
 %% ====================================================================
 get_login_with_uid(#veil_document{uuid = ?CLUSTER_USER_ID}) ->
-    {<<"root">>, 0};
+    {{internal, <<"root">>}, 0};
 get_login_with_uid(#veil_document{uuid = "0"}) ->
-    {<<"root">>, 0};
+    {{internal, <<"root">>}, 0};
 get_login_with_uid(#veil_document{record = #user{logins = Logins0}, uuid = VCUID}) ->
     Logins = [Login || #id_token_login{login = LoginName, provider_id = Provider} = Login <- Logins0, size(LoginName) > 0, is_trusted_openid_provider(Provider)],
 
@@ -348,16 +348,16 @@ get_login_with_uid(#veil_document{record = #user{logins = Logins0}, uuid = VCUID
         end,
 
     LoginNamesWithUID = lists:map(
-        fun(#id_token_login{login = LoginName}) ->
-            {LoginName, StorageNameToUID(LoginName)}
+        fun(#id_token_login{login = LoginName, provider_id = ProviderId}) ->
+            {{ProviderId, LoginName}, StorageNameToUID(LoginName)}
         end, Logins),
 
     LoginNamesWithUID1 = [{LoginName, UID} || {LoginName, UID} <- LoginNamesWithUID, UID >= 500],
 
     case LoginNamesWithUID1 of
-        [] -> {<<"Unknown_", (vcn_utils:ensure_binary(VCUID))/binary>>, fslogic_utils:gen_storage_uid(VCUID)};
-        [{LoginName, UID} | _] ->
-            {vcn_utils:ensure_binary(LoginName), UID}
+        [] -> {{internal, <<"Unknown_", (vcn_utils:ensure_binary(VCUID))/binary>>}, fslogic_utils:gen_storage_uid(VCUID)};
+        [{{ProviderId, LoginName}, UID} | _] ->
+            {{ProviderId, vcn_utils:ensure_binary(LoginName)}, UID}
     end.
 
 
