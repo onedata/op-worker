@@ -134,7 +134,7 @@ update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount, For
                         ?warning("Conflict when saveing file_meta record for file (name = ~p, parent = ~p). Retring...", [File#file.name, File#file.parent]),
                         {_, _, M} = now(),
                         timer:sleep(M rem ?MAX_SLEEP_TIME_CONFLICT_RESOLUTION), %% If case of conflict we should wait a little bit before next try (max 100ms)
-                        update_meta_attr(File1, Attr, Value, RetryCount - 1);
+                        update_meta_attr(File1, Attr, Value, RetryCount - 1, ForceSynch);
                     {error, Error} ->
                         ?warning("Cannot save file_meta record for file (name = ~p, parent = ~p) due to error: ~p", [File#file.name, File#file.parent, Error])
                 end

@@ -28,13 +28,13 @@
 -export([list_dir_test/1, get_file_test/1, metadata_test/1, create_dir_test/1, create_file_test/1, update_file_test/1,
     delete_dir_test/1, delete_file_test/1, version_test/1, request_format_check_test/1, objectid_and_capabilities_test/1,
     mimetype_and_encoding_test/1, moved_pemanently_test/1, errors_test/1, token_test/1, out_of_range_test/1, copy_move_test/1,
-    partial_upload_test/1]).
+    partial_upload_test/1, acl_test/1]).
 
 
 all() -> [list_dir_test, get_file_test, metadata_test, create_dir_test, create_file_test, update_file_test,
     delete_dir_test, delete_file_test, version_test, request_format_check_test, objectid_and_capabilities_test,
     mimetype_and_encoding_test, moved_pemanently_test, errors_test, token_test, out_of_range_test, copy_move_test,
-    partial_upload_test].
+    partial_upload_test, acl_test].
 
 %% ====================================================================
 %% Test functions
@@ -1128,6 +1128,58 @@ partial_upload_test(_Config) ->
     ?assertEqual(<<Chunk1/binary, Chunk2/binary, Chunk3/binary>>, base64:decode(proplists:get_value(<<"value">>, CdmiResponse8))).
     %%------------------------------
 
+% tests access common lists
+acl_test(_Console) ->
+    Filename1 = "acl_test_file1",
+    Dirname1 = "acl_test_dir1",
+    Read = [
+        {<<"acetype">>,<<"ALLOW">>},
+        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"aceflags">>,<<"NO_FLAGS">>},
+        {<<"acemask">>,<<"READ">>}
+    ],
+    Write = [
+        {<<"acetype">>,<<"ALLOW">>},
+        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"aceflags">>,<<"NO_FLAGS">>},
+        {<<"acemask">>,<<"WRITE">>}
+    ],
+    Execute = [
+        {<<"acetype">>,<<"ALLOW">>},
+        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"aceflags">>,<<"NO_FLAGS">>},
+        {<<"acemask">>,<<"EXECUTE">>}
+    ],
+
+    %%----- read file test ---------
+    ?assert(not object_exists(Filename1)),
+    create_file(filename:join("/", Filename1)),
+    write_to_file(Filename1, <<"data">>),
+
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
+    RequestBody1 = rest_utils:encode_to_json([{<<"metadata">>, [{<<"cdmi_acl">>, [Write]}]}]),
+    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, RequestBody1),
+    {"403", _, _} = do_request(Filename1, get, RequestHeaders1, []),
+    ?assertEqual({wrong_open_return_code,-13}, get_file_content(Filename1)),
+    RequestBody2 = rest_utils:encode_to_json([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read]}]}]),
+    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, RequestBody2),
+    {"200", _, _} = do_request(Filename1, get, RequestHeaders1, []),
+    %%------------------------------
+
+    %%------- write file test ------
+    RequestBody3 = rest_utils:encode_to_json([{<<"metadata">>, [{<<"cdmi_acl">>, [Read, Write]}]}]),
+    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, RequestBody3),
+    RequestBody4 = rest_utils:encode_to_json([{<<"value">>, <<"new_data">>}]),
+    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, RequestBody4),
+    ?assertEqual(<<"new_data">>, get_file_content(Filename1)),
+    RequestBody5 = rest_utils:encode_to_json([{<<"metadata">>, [{<<"cdmi_acl">>, [Read]}]}]),
+    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, RequestBody5),
+    RequestBody6 = rest_utils:encode_to_json([{<<"value">>, <<"new_data2">>}]),
+    {"403", _, _} = do_request(Filename1, put, RequestHeaders1, RequestBody6),
+    ?assertEqual(<<"new_data">>, get_file_content(Filename1)),
+    ?assertEqual({wrong_open_return_code,-13}, write_to_file(Filename1, <<"some_data">>)),
+    ?assertEqual(<<"new_data">>, get_file_content(Filename1)).
+    %%------------------------------
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -1156,7 +1208,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1, true),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
@@ -1230,11 +1282,15 @@ get_file_content(Path) ->
 
     rpc_call_node(fun() ->
         GetFile = fun F(Filename, Size, BytesSent, BufferSize, Ans) ->
-            {ok, BytesRead} = logical_files_manager:read(Filename, BytesSent, BufferSize),
-            NewSent = BytesSent + size(BytesRead),
-            if
-                NewSent =:= Size -> <<Ans/binary,BytesRead/binary>>;
-                true -> F(Filename, Size, NewSent, BufferSize,<<Ans/binary,BytesRead/binary>>)
+            case logical_files_manager:read(Filename, BytesSent, BufferSize) of
+                {ok, BytesRead} ->
+                    NewSent = BytesSent + size(BytesRead),
+                    if
+                        NewSent =:= Size -> <<Ans/binary,BytesRead/binary>>;
+                        true -> F(Filename, Size, NewSent, BufferSize,<<Ans/binary,BytesRead/binary>>)
+                    end;
+                Error ->
+                    Error
             end
         end,
 

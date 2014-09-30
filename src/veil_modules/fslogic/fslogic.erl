@@ -38,12 +38,47 @@
 -spec init(Args :: term()) -> list().
 %% ====================================================================
 init(_Args) ->
-  Pid = self(),
-  {ok, CleaningInterval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
-  erlang:send_after(CleaningInterval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
-  {ok, FilesSizeUpdateInterval} = application:get_env(veil_cluster_node, user_files_size_view_update_period),
-  erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
-  [].
+    Pid = self(),
+    {ok, CleaningInterval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
+    erlang:send_after(CleaningInterval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
+    {ok, FilesSizeUpdateInterval} = application:get_env(veil_cluster_node, user_files_size_view_update_period),
+    erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
+
+    % Create acl permission cache
+    ProcFun = fun
+        (_ProtocolVersion, {grant_permission, StorageFileName, GRUID, Permission}) ->
+            put({StorageFileName, GRUID, Permission}, true),
+            ok;
+        (_ProtocolVersion, {has_permission, StorageFileName, GRUID, Permission}) ->
+            GrantedPerm = get({StorageFileName, GRUID, Permission}),
+            {ok, GrantedPerm == true};
+        (_ProtocolVersion, {invalidate_cache, StorageFileName}) ->
+            {AllKeys, _} = lists:unzip(get()),
+            GivenFileKeys = lists:filter(
+                fun({StorageFileName, _, _}) -> true;
+                    (_) -> false
+                end, AllKeys),
+            lists:foreach(fun erase/1, GivenFileKeys)
+    end,
+    MapFun = fun({_, StorageFileName, _, _}) ->
+        lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, StorageFileName)
+    end,
+    SubProcList = worker_host:generate_sub_proc_list(pemission_cache, 6, 10, ProcFun, MapFun),
+    RequestMap = fun
+        ({grant_permission, _, _, _}) -> pemission_cache;
+        ({has_permission, _, _, _}) -> pemission_cache;
+        ({invalidate_cache, _}) -> pemission_cache;
+        (_) -> non
+    end,
+    DispMapFun = fun
+        ({invalidate_cache, StorageFileName}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, StorageFileName);
+        ({_, StorageFileName, _, _}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, StorageFileName);
+        (_) -> non
+    end,
+
+    #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispMapFun, sub_procs = SubProcList, plug_in_state = ok}.
 
 %% handle/2
 %% ====================================================================

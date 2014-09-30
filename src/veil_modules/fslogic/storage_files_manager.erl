@@ -251,9 +251,9 @@ chown(Storage_helper_info, File, User, Group) ->
 read(Storage_helper_info, File, Offset, Size) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
         {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-            case fslogic_perms:check_file_perms(get_logical_path(File), read) of
-                ok -> ok;
-                _ -> setup_ctx(File)
+            case has_permission(File, read) of
+                true -> ok;
+                false -> setup_ctx(File)
             end;
         _ -> setup_ctx(File)
     end,
@@ -311,9 +311,9 @@ read(Storage_helper_info, File, Offset, Size) ->
 write(Storage_helper_info, File, Offset, Buf) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
         {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-            case fslogic_perms:check_file_perms(get_logical_path(File), write) of
-                ok -> ok;
-                _ -> setup_ctx(File)
+            case has_permission(File, write) of
+                true -> ok;
+                false -> setup_ctx(File)
             end;
         _ -> setup_ctx(File)
     end,
@@ -362,9 +362,9 @@ write(Storage_helper_info, File, Offset, Buf) ->
 write(Storage_helper_info, File, Buf) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
         {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-            case fslogic_perms:check_file_perms(get_logical_path(File), write) of
-                ok -> ok;
-                _ -> setup_ctx(File)
+            case has_permission(File, write) of
+                true -> ok;
+                false -> setup_ctx(File)
             end;
         _ -> setup_ctx(File)
     end,
@@ -412,9 +412,9 @@ write(Storage_helper_info, File, Buf) ->
 create(Storage_helper_info, File) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
              {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-                 case fslogic_perms:check_file_perms(get_logical_path(File), create) of
-                     ok -> ok;
-                     _ -> setup_ctx(File)
+                 case has_permission(File, create) of
+                     true -> ok;
+                     false -> setup_ctx(File)
                  end;
              _ -> setup_ctx(File)
          end,
@@ -437,9 +437,9 @@ create(Storage_helper_info, File) ->
 create(Storage_helper_info, File, Mode) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
              {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-                 case fslogic_perms:check_file_perms(get_logical_path(File), delete) of
-                     ok -> ok;
-                     _ -> setup_ctx(File)
+                 case has_permission(File, create) of
+                     true -> ok;
+                     false -> setup_ctx(File)
                  end;
              _ -> setup_ctx(File)
          end,
@@ -499,9 +499,9 @@ create(Storage_helper_info, File, Mode) ->
 truncate(Storage_helper_info, File, Size) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
              {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-                 case fslogic_perms:check_file_perms(get_logical_path(File), write) of
-                     ok -> ok;
-                     _ -> setup_ctx(File)
+                 case has_permission(File, write) of
+                     true -> ok;
+                     false -> setup_ctx(File)
                  end;
              _ -> setup_ctx(File)
          end,
@@ -536,9 +536,9 @@ truncate(Storage_helper_info, File, Size) ->
 delete(Storage_helper_info, File) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
              {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-                 case fslogic_perms:check_file_perms(get_logical_path(File), delete) of
-                     ok -> ok;
-                     _ -> setup_ctx(File)
+                 case has_permission(File, delete) of
+                     true -> ok;
+                     false -> setup_ctx(File)
                  end;
              _ -> setup_ctx(File)
          end,
@@ -953,12 +953,16 @@ clear_cache(File) ->
     erase({File, stats}),
     ok.
 
-%% get_logical_path/1
+%% has_permission/1
 %% ====================================================================
-%% @doc Gets logical path from storage path
+%% @doc Checks file permission in cache
 %% @end
--spec get_logical_path(StoragePath :: string()) -> string().
-get_logical_path(StoragePath) -> %todo this probably won't work in some cases due to different name format
-    ["spaces", _SpaceName | Rest] = string:tokens(StoragePath, "/"),
-    [_Uuid | LogicalPathList] = binary:split(list_to_binary(lists:last(Rest)), <<"___">>, [global]),
-    binary_to_list(filename:join([<<"spaces">> | LogicalPathList])).
+-spec has_permission(StorageFilePath :: string(), PermissionAtom :: create | delete | read | write | execute) -> boolean() | {error, timeout}.
+has_permission(StorageFilePath, PermissionAtom) ->
+    {ok, #veil_document{record = #user{global_id = GRUID}}} = fslogic_objects:get_user(),
+    MsgID = 0, % todo generate random number
+    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), self(), MsgID, {has_permission, StorageFilePath, vcn_utils:ensure_binary(GRUID), PermissionAtom}}, 500),
+    receive
+        {worker_answer, MsgID, {ok, Resp}} -> Resp
+    after 500 -> {error, timeout}
+    end.

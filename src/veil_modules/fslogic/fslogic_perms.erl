@@ -11,6 +11,7 @@
 -module(fslogic_perms).
 -author("Rafal Slota").
 
+-include("registered_names.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_types.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
@@ -45,7 +46,7 @@ check_file_perms(FileName, Mode) ->
 %% ====================================================================
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
 %% @end
--spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: root | owner | delete | read | write | execute | rdwr | '') -> Result when
+-spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: root | owner | create | delete | read | write | execute | rdwr | '') -> Result when
     Result :: ok | {ok, by_acl} | {error, ErrorDetail},
     ErrorDetail :: term().
 %% ====================================================================
@@ -63,11 +64,19 @@ check_file_perms(FileName, UserDoc, _FileDoc, create) ->
     {ok, {_,ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName,fslogic_context:get_protocol_version()),
     ParentFileName = fslogic_path:strip_path_leaf(FileName),
     check_file_perms(ParentFileName,UserDoc,ParentFileDoc,write);
-check_file_perms(FileName, UserDoc, FileDoc, delete) ->
+check_file_perms(FileName, UserDoc = #veil_document{record = #user{global_id = GlobalId}}, #veil_document{record = #file{location = FileLoc}} = FileDoc, delete) ->
     {ok, {_,ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName,fslogic_context:get_protocol_version()),
     ParentFileName = fslogic_path:strip_path_leaf(FileName),
     case check_file_perms(ParentFileName,UserDoc,ParentFileDoc,write) of
-        ok -> check_file_perms(FileName,UserDoc,FileDoc,owner);
+        ok ->
+            case check_file_perms(FileName,UserDoc,FileDoc,owner) of
+                ok ->
+                    {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+                    {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+                    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), delete}}, 500),
+                    ok;
+                Error -> Error
+            end;
         Error -> Error
     end;
 check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
@@ -75,7 +84,7 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
         ok -> check_file_perms(FileName, UserDoc, FileDoc, write);
         Error -> Error
     end;
-check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms, meta_doc = MetaUuid}}, CheckType) -> %check read/write/execute perms
+check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms, meta_doc = MetaUuid, location = FileLoc}}, CheckType) -> %check read/write/execute perms
     #veil_document{uuid = UserUid, record = #user{global_id = GlobalId}} = UserDoc,
     FileSpace = get_group(FileName),
 
@@ -97,7 +106,10 @@ check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwne
         _ ->
             case (catch fslogic_acl:check_permission(RealAcl, vcn_utils:ensure_binary(GlobalId), CheckType)) of
                 ok ->
-                    put(acl_permission, [{FileName, [CheckType]}]),
+                    % cache permissions for storage_files_manager use
+                    {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+                    {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+                    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), CheckType}}, 500),
                     ok;
                 ?VEPERM -> ?permission_denied_error(UserDoc,FileName,CheckType)
             end
