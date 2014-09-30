@@ -47,7 +47,10 @@ exec(Method, SHInfo = #storage_helper_info{}, Args) ->
     {error, Reason :: term()} | Response when Response :: term().
 %% ====================================================================
 exec(Method, Args) when is_atom(Method), is_list(Args) ->
-    [EGroup | _] = fslogic_context:get_fs_group_ctx(),
+    EGroup = case fslogic_context:get_fs_group_ctx() of
+                 [MGroup | _] -> MGroup;
+                 _            -> -1
+             end,
     exec(fslogic_context:get_fs_user_ctx(), EGroup, Method, Args).
 
 

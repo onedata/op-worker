@@ -853,11 +853,10 @@ setup_ctx(File) ->
             fslogic_context:set_fs_user_ctx(UID),
             case check_access_type(File) of
                 {ok, {group, SpaceId}} ->
-                    UserSpaces = user_logic:get_spaces(UserRec),
-
-                    SelectedSpace = [SP || #space_info{space_id = X} = SP <- UserSpaces, vcn_utils:ensure_binary(SpaceId) =:= X],
-                    {UserSpaces1, SelectedSpace1} =
-                        case SelectedSpace of
+                    UserSpaceIds = user_logic:get_space_ids(UserRec),
+                    SelectedSpaceId = [X || X <- UserSpaceIds, vcn_utils:ensure_binary(SpaceId) =:= X],
+                    SelectedSpaceIdOrSpace =
+                        case SelectedSpaceId of
                             [] ->
                                 UserSpaces0 =
                                     case dao_lib:apply(vfs, get_space_files, [{gruid, vcn_utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()) of
@@ -867,17 +866,27 @@ setup_ctx(File) ->
                                             []
                                     end,
                                 SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, vcn_utils:ensure_binary(SpaceId) =:= X],
-                                {UserSpaces0 ++ UserSpaces, SelectedSpace0};
+                                SelectedSpace0;
                             _  ->
-                                {UserSpaces, SelectedSpace}
+                                SelectedSpaceId
+                        end,
+
+                    SelectedSpace =
+                        case SelectedSpaceIdOrSpace of
+                            [] -> [];
+                            [MSpaceId | _] when is_binary(MSpaceId) ->
+                                {ok, SelectedSpace1} = fslogic_objects:get_space({uuid, MSpaceId}),
+                                [SelectedSpace1];
+                            [#space_info{} = SpaceInfo1 | _] ->
+                                [SpaceInfo1]
                         end,
 
                     GIDs =
-                        case SelectedSpace1 of
+                        case SelectedSpace of
                             [] ->
-                                fslogic_spaces:map_to_grp_owner(UserSpaces1);
+                                [];
                             [#space_info{} = SpaceInfo] ->
-                                [fslogic_spaces:map_to_grp_owner(SpaceInfo)] ++ fslogic_spaces:map_to_grp_owner(UserSpaces1)
+                                [fslogic_spaces:map_to_grp_owner(SpaceInfo)]
                         end,
                     fslogic_context:set_fs_group_ctx(GIDs),
                     ok;
