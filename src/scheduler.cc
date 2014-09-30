@@ -42,12 +42,18 @@ Scheduler::~Scheduler()
         t.join();
 }
 
-void Scheduler::schedule(const std::chrono::milliseconds after,
-                         std::function<void()> task)
+std::function<void()> Scheduler::schedule(const std::chrono::milliseconds after,
+                                          std::function<void()> task)
 {
     using namespace std::placeholders;
     const auto timer = std::make_shared<steady_timer>(m_ioService, after);
     timer->async_wait(std::bind(handle, _1, std::move(task), timer));
+
+    std::weak_ptr<steady_timer> weakTimer;
+    return [weakTimer]{
+        if(auto t = weakTimer.lock())
+            t->cancel();
+    };
 }
 
 } // namespace veil

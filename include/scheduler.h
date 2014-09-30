@@ -9,12 +9,12 @@
 #define VEILHELPERS_SCHEDULER_H
 
 
+#include <boost/asio/io_service.hpp>
+
 #include <chrono>
 #include <functional>
 #include <vector>
 #include <thread>
-
-#include <boost/asio/io_service.hpp>
 
 namespace veil
 {
@@ -40,12 +40,13 @@ public:
     ~Scheduler();
 
     /**
-     * Schedules a task tu be run after some time.
+     * Schedules a task to be run after some time.
      * @param after The duration after which the task should be executed.
      * @param task The task to execute.
+     * @return A function to cancel the scheduled task.
      */
-    void schedule(const std::chrono::milliseconds after,
-                  std::function<void()> task);
+    std::function<void()> schedule(const std::chrono::milliseconds after,
+                                   std::function<void()> task);
 
 private:
     std::vector<std::thread> m_workers;
