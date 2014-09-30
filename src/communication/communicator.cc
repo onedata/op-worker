@@ -106,7 +106,7 @@ void Communicator::reply(const Answer &originalMsg, const ServerModule module,
                          const unsigned int retries)
 {
     auto cmsg = createMessage(toString(module), false,
-                              one::clproto::communication_clproto::Atom::default_instance(),
+                              one::clproto::communication_protocol::Atom::default_instance(),
                               msg);
 
     m_communicationHandler->reply(originalMsg, *cmsg, poolType(msg), retries);
@@ -117,7 +117,7 @@ void Communicator::send(const ServerModule module,
                         const unsigned int retries)
 {
     auto cmsg = createMessage(toString(module), false,
-                              one::clproto::communication_clproto::Atom::default_instance(),
+                              one::clproto::communication_protocol::Atom::default_instance(),
                               msg);
     m_communicationHandler->send(*cmsg, poolType(msg), retries);
 }

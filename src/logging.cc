@@ -90,7 +90,7 @@ void RemoteLogWriter::buffer(const RemoteLogLevel level,
     pushMessage(log);
 }
 
-bool RemoteLogWriter::handleThresholdChange(const clproto::communication_clproto::Answer &answer)
+bool RemoteLogWriter::handleThresholdChange(const clproto::communication_protocol::Answer &answer)
 {
     if(!boost::algorithm::iequals(answer.message_type(), "ChangeRemoteLogLevel"))
         return true;

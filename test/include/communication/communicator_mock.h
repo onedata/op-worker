@@ -18,8 +18,8 @@
 
 class MockCommunicator: public one::communication::Communicator
 {
-    using Answer = one::clproto::communication_clproto::Answer;
-    using Atom = one::clproto::communication_clproto::Atom;
+    using Answer = one::clproto::communication_protocol::Answer;
+    using Atom = one::clproto::communication_protocol::Atom;
     using ServerModule = one::communication::ServerModule;
 
 public:

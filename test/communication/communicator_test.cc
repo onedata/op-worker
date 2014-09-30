@@ -179,7 +179,7 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnSend)
     msg.set_input(randomString());
     msg.set_message_type(randomString());
 
-    one::clproto::communication_clproto::ClusterMsg wrapper;
+    one::clproto::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, send(_, _, _)).WillOnce(SaveArg<0>(&wrapper));
     communicator->send(randomModule, msg);
 
@@ -204,7 +204,7 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnCommunicate)
     msg.set_dir_logic_name(randomString());
     msg.set_mode(666);
 
-    one::clproto::communication_clproto::ClusterMsg wrapper;
+    one::clproto::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, communicateMock(_, _)).WillOnce(SaveArg<0>(&wrapper));
     communicator->communicate<one::clproto::fuse_messages::ChannelClose>(randomModule, msg, 0, std::chrono::milliseconds{0});
 
@@ -228,7 +228,7 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnCommunicateAsync)
     one::clproto::logging::ChangeRemoteLogLevel msg;
     msg.set_level(one::clproto::logging::INFO);
 
-    one::clproto::communication_clproto::ClusterMsg wrapper;
+    one::clproto::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, communicateMock(_, _)).WillOnce(SaveArg<0>(&wrapper));
     communicator->communicateAsync<one::clproto::remote_file_management::DeleteFileAtStorage>(randomModule, msg);
 
@@ -250,7 +250,7 @@ TEST_F(CommunicatorTest, shouldAskForAtomAnswerByDefault)
     one::clproto::fuse_messages::ChannelRegistration msg;
     msg.set_fuse_id(fuseId);
 
-    one::clproto::communication_clproto::ClusterMsg wrapper;
+    one::clproto::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, communicateMock(_, _)).WillRepeatedly(SaveArg<0>(&wrapper));
 
     communicator->communicate(randomModule, msg);
@@ -321,10 +321,10 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnReply)
     one::clproto::fuse_messages::ChannelClose msg;
     msg.set_fuse_id(fuseId);
 
-    one::clproto::communication_clproto::Answer replyTo;
+    one::clproto::communication_protocol::Answer replyTo;
     replyTo.set_message_id(randomInt());
 
-    one::clproto::communication_clproto::ClusterMsg wrapper;
+    one::clproto::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, reply(_, _, _, _)).WillOnce(SaveArg<1>(&wrapper));
     communicator->reply(replyTo, randomModule, msg);
 
@@ -343,7 +343,7 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnReply)
 
 TEST_F(CommunicatorTest, shouldReplaceSubscriptionOnSetupPushChannel)
 {
-    using one::clproto::communication_clproto::Answer;
+    using one::clproto::communication_protocol::Answer;
 
     bool unsubscribeCalled = false;
     bool rightCallbackCalled = false;
@@ -367,8 +367,8 @@ TEST_F(CommunicatorTest, shouldReplaceSubscriptionOnSetupPushChannel)
 
 TEST_F(CommunicatorTest, shouldReplaceHandshakeOnSetupPushChannel)
 {
-    using one::clproto::communication_clproto::ClusterMsg;
-    using one::clproto::communication_clproto::Answer;
+    using one::clproto::communication_protocol::ClusterMsg;
+    using one::clproto::communication_protocol::Answer;
 
     bool removeCalled = false;
     std::function<std::unique_ptr<ClusterMsg>()> handshake;
@@ -393,8 +393,8 @@ TEST_F(CommunicatorTest, shouldReplaceHandshakeOnSetupPushChannel)
 
 TEST_F(CommunicatorTest, shouldReplaceHandshakeOnSetupHandshakeAck)
 {
-    using one::clproto::communication_clproto::ClusterMsg;
-    using one::clproto::communication_clproto::Answer;
+    using one::clproto::communication_protocol::ClusterMsg;
+    using one::clproto::communication_protocol::Answer;
 
     int removeCalled = 0;
     std::function<std::unique_ptr<ClusterMsg>()> metaHandshake;

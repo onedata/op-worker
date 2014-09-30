@@ -75,15 +75,15 @@ inline std::string toString(ServerModule module)
 /**
  * The Communicator class is responsible for managing communication on
  * the layer of concrete protobuf messages that are later wrapped in
- * @c one::clproto::communication_clproto::ClusterMsg.
+ * @c one::clproto::communication_protocol::ClusterMsg.
  * It contains high-level functions built on
  * @c one::communication::CommunicationHandler layer's capabilities.
  */
 class Communicator
 {
-    using Answer = clproto::communication_clproto::Answer;
-    using ClusterMsg = clproto::communication_clproto::ClusterMsg;
-    using Atom = one::clproto::communication_clproto::Atom;
+    using Answer = clproto::communication_protocol::Answer;
+    using ClusterMsg = clproto::communication_protocol::ClusterMsg;
+    using Atom = one::clproto::communication_protocol::Atom;
 
 public:
     /**

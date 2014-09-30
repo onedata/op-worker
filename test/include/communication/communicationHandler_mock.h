@@ -21,8 +21,8 @@
 
 struct MockCommunicationHandler: public one::communication::CommunicationHandler
 {
-    using Message = one::clproto::communication_clproto::ClusterMsg;
-    using Answer = one::clproto::communication_clproto::Answer;
+    using Message = one::clproto::communication_protocol::ClusterMsg;
+    using Answer = one::clproto::communication_protocol::Answer;
 
     bool autoFulfillPromise = true;
     std::unique_ptr<std::promise<std::unique_ptr<Answer>>> promise;

@@ -31,8 +31,8 @@ class ConnectionPool;
 
 /**
  * The CommunicationHandler class is responsible for managing communication on
- * the layer of @c one::clproto::communication_clproto::ClusterMsg and
- * @c one::clproto::communication_clproto::Answer messages.
+ * the layer of @c one::clproto::communication_protocol::ClusterMsg and
+ * @c one::clproto::communication_protocol::Answer messages.
  * The CommunicationHandler uses @c one::communication::ConnectionPool as the
  * underlying layer and manages multiple @c ConnectionPool instances allowing
  * clients to send messages through any of them.
@@ -40,8 +40,8 @@ class ConnectionPool;
 class CommunicationHandler
 {
     using MsgId = int32_t;
-    using Answer = clproto::communication_clproto::Answer;
-    using Message = clproto::communication_clproto::ClusterMsg;
+    using Answer = clproto::communication_protocol::Answer;
+    using Message = clproto::communication_protocol::ClusterMsg;
 
 public:
     /**

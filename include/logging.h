@@ -119,7 +119,7 @@ public:
      * @param answer A push message from the cluster.
      * @return true.
      */
-    virtual bool handleThresholdChange(const clproto::communication_clproto::Answer &answer);
+    virtual bool handleThresholdChange(const clproto::communication_protocol::Answer &answer);
 
 private:
     void pushMessage(const clproto::logging::LogMessage &msg);

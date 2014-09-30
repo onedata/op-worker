@@ -19,7 +19,7 @@ public:
     MOCK_METHOD5(buffer, void(const one::logging::RemoteLogLevel, const std::string&,
                               const int, const time_t, const std::string&));
 
-    MOCK_METHOD1(handleThresholdChange, bool(const one::clproto::communication_clproto::Answer&));
+    MOCK_METHOD1(handleThresholdChange, bool(const one::clproto::communication_protocol::Answer&));
 };
 
 
