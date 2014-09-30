@@ -14,6 +14,7 @@
 #include <fuse.h>
 #include <sys/types.h>
 
+#include <atomic>
 #include <condition_variable>
 #include <functional>
 #include <list>
@@ -173,7 +174,7 @@ public:
 
 private:
 
-    volatile bool                                   m_agentActive; ///< Status of worker threads. Setting this to false exits workers' main loop.
+    std::atomic<bool>                               m_agentActive; ///< Status of worker threads. Setting this to false exits workers' main loop.
     std::vector<std::shared_ptr<std::thread>>       m_workers;     ///< Worker threads list
 
     // State holders and job queues for write operations
