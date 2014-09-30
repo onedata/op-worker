@@ -102,7 +102,7 @@ execute_process(COMMAND ${GIT_EXECUTABLE} submodule foreach git checkout
                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 # Compile .proto files
-file(GLOB PROTO_FILES protocol/proto/*.proto)
+file(GLOB PROTO_FILES clproto/proto/*.proto)
 PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
@@ -133,12 +133,12 @@ add_definitions(${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -D_WEBSOCKETPP_CPP11_S
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
 
 # Define targets
-add_library(protocol STATIC ${PROTO_SRCS})
+add_library(clproto STATIC ${PROTO_SRCS})
 add_library(helpers_obj OBJECT ${HELPER_SOURCES})
 add_library(helpers STATIC $<TARGET_OBJECTS:helpers_obj>)
 add_library(helpersShared SHARED $<TARGET_OBJECTS:helpers_obj>)
 
-add_dependencies(helpers_obj glog protocol websocketpp)
+add_dependencies(helpers_obj glog clproto websocketpp)
 
 set_target_properties(helpersShared PROPERTIES OUTPUT_NAME helpers)
 
@@ -148,15 +148,15 @@ set(COMMON_LIBRARIES
     ${PROTOBUF_LIBRARY}
     ${OPENSSL_LIBRARIES}
     ${GLOG_LIBRARIES}
-    protocol
+    clproto
     ${PLATFORM_EXTRA_LIBS}
 )
 
 target_link_libraries(helpers ${COMMON_LIBRARIES})
 target_link_libraries(helpersShared ${COMMON_LIBRARIES})
-target_link_libraries(protocol ${PROTOBUF_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(clproto ${PROTOBUF_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
 
-install(TARGETS helpers helpersShared protocol
+install(TARGETS helpers helpersShared clproto
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
 )
