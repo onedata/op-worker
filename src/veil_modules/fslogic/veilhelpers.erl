@@ -56,7 +56,7 @@ exec(Method, Args) when is_atom(Method), is_list(Args) ->
 
 %% exec/5
 %% ====================================================================
-%% @doc Same as exec/3 but allows to set UserName and GroupId for file system permissions check.
+%% @doc Same as exec/3 but allows to set storage user and group ID for file system permissions check.
 %%
 %% @end
 -spec exec(SUID :: non_neg_integer(), GroupId :: integer(), Method :: atom(), SHInfo :: #storage_helper_info{}, [Arg :: term()]) ->
@@ -69,7 +69,7 @@ exec(SUID, GroupId, Method, SHInfo = #storage_helper_info{}, Args) ->
 
 %% exec/4
 %% ====================================================================
-%% @doc Same as exec/2 but allows to set UserName and GroupId for file system permissions check.
+%% @doc Same as exec/2 but allows to set storage user and group ID for file system permissions check.
 %%
 %% @end
 -spec exec(SUID :: non_neg_integer(), GroupId :: integer(), Method :: atom(), [Arg :: term()]) ->
