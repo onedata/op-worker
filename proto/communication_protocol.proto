@@ -1,4 +1,4 @@
-package veil.protocol.communication_protocol;
+package one.protocol.communication_protocol;
 
 message ClusterMsg {
     required string module_name = 1;

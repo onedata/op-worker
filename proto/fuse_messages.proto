@@ -1,4 +1,4 @@
-package veil.protocol.fuse_messages;
+package one.protocol.fuse_messages;
 
 message ChannelRegistration {
     required string fuse_id = 1;
