@@ -707,7 +707,7 @@ change_file_perm(FileName, NewPerms) ->
     _ -> {Status, TmpAns}
   end.
 
-%% check_file_perms/2
+%% check_file_perm/2
 %% ====================================================================
 %% @doc Checks permissions to open the file in chosen mode.
 %% @end
