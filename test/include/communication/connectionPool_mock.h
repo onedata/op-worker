@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATION_CONNECTION_POOL_MOCK_H
-#define VEILHELPERS_COMMUNICATION_CONNECTION_POOL_MOCK_H
+#ifndef HELPERS_COMMUNICATION_CONNECTION_POOL_MOCK_H
+#define HELPERS_COMMUNICATION_CONNECTION_POOL_MOCK_H
 
 
 #include "communication/communicator.h"
@@ -16,10 +16,10 @@
 #include <functional>
 #include <string>
 
-struct ConnectionPoolMock: public veil::communication::ConnectionPool
+struct ConnectionPoolMock: public one::communication::ConnectionPool
 {
     ConnectionPoolMock()
-        : veil::communication::ConnectionPool{1, "uri", {}}
+        : one::communication::ConnectionPool{1, "uri", {}}
     {
         using namespace ::testing;
 
@@ -38,8 +38,8 @@ struct ConnectionPoolMock: public veil::communication::ConnectionPool
     MOCK_METHOD2(addHandshake, std::function<void()>(std::function<std::string()> handshake,
                                                      std::function<std::string()> goodbye));
 
-    MOCK_METHOD0(createConnection, std::unique_ptr<veil::communication::Connection>());
+    MOCK_METHOD0(createConnection, std::unique_ptr<one::communication::Connection>());
 };
 
 
-#endif // VEILHELPERS_COMMUNICATION_CONNECTION_POOL_MOCK_H
+#endif // HELPERS_COMMUNICATION_CONNECTION_POOL_MOCK_H

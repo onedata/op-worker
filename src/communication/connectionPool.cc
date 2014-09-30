@@ -21,14 +21,14 @@ static constexpr std::chrono::seconds WAIT_FOR_CONNECTION{5};
 
 namespace
 {
-bool eq(const std::unique_ptr<veil::communication::Connection> &u,
-        const veil::communication::Connection &r)
+bool eq(const std::unique_ptr<one::communication::Connection> &u,
+        const one::communication::Connection &r)
 {
     return u.get() == &r;
 }
 }
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -234,4 +234,4 @@ void ConnectionPool::addConnections()
 }
 
 } // namespace communication
-} // namespace veil
+} // namespace one

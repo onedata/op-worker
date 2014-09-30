@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATION_HANDLER_MOCK_H
-#define VEILHELPERS_COMMUNICATION_HANDLER_MOCK_H
+#ifndef HELPERS_COMMUNICATION_HANDLER_MOCK_H
+#define HELPERS_COMMUNICATION_HANDLER_MOCK_H
 
 
 #include "communicationHandler_mock.h"
@@ -19,10 +19,10 @@
 
 #include <memory>
 
-struct MockCommunicationHandler: public veil::communication::CommunicationHandler
+struct MockCommunicationHandler: public one::communication::CommunicationHandler
 {
-    using Message = veil::protocol::communication_protocol::ClusterMsg;
-    using Answer = veil::protocol::communication_protocol::Answer;
+    using Message = one::clproto::communication_clproto::ClusterMsg;
+    using Answer = one::clproto::communication_clproto::Answer;
 
     bool autoFulfillPromise = true;
     std::unique_ptr<std::promise<std::unique_ptr<Answer>>> promise;
@@ -63,4 +63,4 @@ struct MockCommunicationHandler: public veil::communication::CommunicationHandle
 };
 
 
-#endif // VEILHELPERS_COMMUNICATION_HANDLER_MOCK_H
+#endif // HELPERS_COMMUNICATION_HANDLER_MOCK_H

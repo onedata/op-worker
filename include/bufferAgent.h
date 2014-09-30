@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_BUFFER_AGENT_H
-#define VEILHELPERS_BUFFER_AGENT_H
+#ifndef HELPERS_BUFFER_AGENT_H
+#define HELPERS_BUFFER_AGENT_H
 
 
 #include "helpers/storageHelperFactory.h"
@@ -26,7 +26,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace veil
+namespace one
 {
 namespace helpers
 {
@@ -222,7 +222,7 @@ private:
 };
 
 } // namespace helpers
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_BUFFER_AGENT_H
+#endif // HELPERS_BUFFER_AGENT_H

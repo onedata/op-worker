@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_CLUSTER_PROXY_HELPER_H
-#define VEILHELPERS_CLUSTER_PROXY_HELPER_H
+#ifndef HELPERS_CLUSTER_PROXY_HELPER_H
+#define HELPERS_CLUSTER_PROXY_HELPER_H
 
 
 #include "helpers/IStorageHelper.h"
@@ -23,7 +23,7 @@
 #include <memory>
 
 
-namespace veil
+namespace one
 {
 
 namespace communication{ class Communicator; }
@@ -35,13 +35,13 @@ struct BufferLimits;
 
 /**
  * The ClusterProxyHelper class
- * Storage helper used to access files through VeilCluster (accessed over TLS protocol).
+ * Storage helper used to access files through oneprovider (accessed over TLS protocol).
  */
 class ClusterProxyHelper: public IStorageHelper
 {
 public:
     /**
-     * This storage helper uses either 0 or 3 arguments. If no arguments are passed, default Veilhelpers connetion pooling will be used.
+     * This storage helper uses either 0 or 3 arguments. If no arguments are passed, default Helpers connection pooling will be used.
      * Otherwise first argument shall be cluster's hostname, second - cluster's port and third one - path to peer certificate.
      */
     ClusterProxyHelper(std::shared_ptr<communication::Communicator>,
@@ -114,7 +114,7 @@ private:
 };
 
 } // namespace helpers
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_CLUSTER_PROXY_HELPER_H
+#endif // HELPERS_CLUSTER_PROXY_HELPER_H

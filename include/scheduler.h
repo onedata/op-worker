@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_SCHEDULER_H
-#define VEILHELPERS_SCHEDULER_H
+#ifndef HELPERS_SCHEDULER_H
+#define HELPERS_SCHEDULER_H
 
 
 #include <chrono>
@@ -16,7 +16,7 @@
 
 #include <boost/asio/io_service.hpp>
 
-namespace veil
+namespace one
 {
 
 /**
@@ -53,6 +53,6 @@ private:
     boost::asio::io_service::work m_idleWork;
 };
 
-} // namespace veil
+} // namespace one
 
-#endif // VEILHELPERS_SCHEDULER_H
+#endif // HELPERS_SCHEDULER_H

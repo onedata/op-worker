@@ -13,13 +13,13 @@
 
 #include <gmock/gmock.h>
 
-class MockRemoteLogWriter: public veil::logging::RemoteLogWriter
+class MockRemoteLogWriter: public one::logging::RemoteLogWriter
 {
 public:
-    MOCK_METHOD5(buffer, void(const veil::logging::RemoteLogLevel, const std::string&,
+    MOCK_METHOD5(buffer, void(const one::logging::RemoteLogLevel, const std::string&,
                               const int, const time_t, const std::string&));
 
-    MOCK_METHOD1(handleThresholdChange, bool(const veil::protocol::communication_protocol::Answer&));
+    MOCK_METHOD1(handleThresholdChange, bool(const one::clproto::communication_clproto::Answer&));
 };
 
 

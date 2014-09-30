@@ -5,13 +5,13 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATION_EXCEPTION_H
-#define VEILHELPERS_COMMUNICATION_EXCEPTION_H
+#ifndef HELPERS_COMMUNICATION_EXCEPTION_H
+#define HELPERS_COMMUNICATION_EXCEPTION_H
 
 
 #include <stdexcept>
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -54,7 +54,7 @@ public:
 };
 
 } // namespace communication
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_COMMUNICATION_EXCEPTION_H
+#endif // HELPERS_COMMUNICATION_EXCEPTION_H

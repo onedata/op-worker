@@ -13,16 +13,16 @@
 
 #include <memory>
 
-class ProxyClusterProxyHelper: public veil::helpers::ClusterProxyHelper {
+class ProxyClusterProxyHelper: public one::helpers::ClusterProxyHelper {
 public:
-    ProxyClusterProxyHelper(std::shared_ptr<veil::communication::Communicator> communicator,
+    ProxyClusterProxyHelper(std::shared_ptr<one::communication::Communicator> communicator,
                             const ArgsMap &args)
-        : ClusterProxyHelper{std::move(communicator), veil::helpers::BufferLimits{}, args}
+        : ClusterProxyHelper{std::move(communicator), one::helpers::BufferLimits{}, args}
     {
     }
 
-    using veil::helpers::ClusterProxyHelper::doWrite;
-    using veil::helpers::ClusterProxyHelper::doRead;
+    using one::helpers::ClusterProxyHelper::doWrite;
+    using one::helpers::ClusterProxyHelper::doRead;
 };
 
 

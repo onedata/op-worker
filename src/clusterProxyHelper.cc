@@ -20,10 +20,10 @@
 
 using namespace std;
 using namespace std::placeholders;
-using namespace veil::protocol::remote_file_management;
-using namespace veil::protocol::communication_protocol;
+using namespace one::clproto::remote_file_management;
+using namespace one::clproto::communication_protocol;
 
-namespace veil {
+namespace one {
 namespace helpers {
 
 std::unique_ptr<RemoteFileMangement> wrap(const google::protobuf::Message &msg, const std::string spaceId)
@@ -379,4 +379,4 @@ ClusterProxyHelper::ClusterProxyHelper(std::shared_ptr<communication::Communicat
 }
 
 } // namespace helpers
-} // namespace veil
+} // namespace one

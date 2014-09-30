@@ -19,7 +19,7 @@
 static constexpr unsigned int MAX_PENDING_PROMISES = 10000;
 static constexpr unsigned int PENDING_PROMISES_CUTOFF = 5000;
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -193,4 +193,4 @@ CommunicationHandler::SubscriptionData::SubscriptionData(std::function<bool(cons
 }
 
 } // namespace communication
-} // namespace veil
+} // namespace one

@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_POOL_H
-#define VEILHELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_POOL_H
+#ifndef HELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_POOL_H
+#define HELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_POOL_H
 
 
 #include "connectionPool.h"
@@ -24,7 +24,7 @@
 
 extern template class websocketpp::client<websocketpp::config::asio_tls_client>;
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -32,7 +32,7 @@ namespace communication
 class WebsocketConnection;
 
 /**
- * A @c veil::communication::ConnectionPool specialization for managing
+ * A @c one::communication::ConnectionPool specialization for managing
  * TLS WebSocket++ based connections.
  */
 class WebsocketConnectionPool: public ConnectionPool
@@ -72,7 +72,7 @@ public:
 
 protected:
     /**
-     * Creates a new instance of @c veil::communication::WebsocketConnection .
+     * Creates a new instance of @c one::communication::WebsocketConnection .
      * @return A new instance of @c WebsocketConnection .
      */
     std::unique_ptr<Connection> createConnection() override;
@@ -95,7 +95,7 @@ private:
 };
 
 } // namespace communication
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_POOL_H
+#endif // HELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_POOL_H
