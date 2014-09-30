@@ -960,7 +960,7 @@ clear_cache(File) ->
 -spec has_permission(StorageFilePath :: string(), PermissionAtom :: create | delete | read | write | execute) -> boolean() | {error, timeout}.
 has_permission(StorageFilePath, PermissionAtom) ->
     {ok, #veil_document{record = #user{global_id = GRUID}}} = fslogic_objects:get_user(),
-    MsgID = 0, % todo generate random number
+    MsgID = make_ref(),
     gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), self(), MsgID, {has_permission, StorageFilePath, vcn_utils:ensure_binary(GRUID), PermissionAtom}}, 500),
     receive
         {worker_answer, MsgID, {ok, Resp}} -> Resp
