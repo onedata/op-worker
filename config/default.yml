@@ -9,7 +9,7 @@ vm_arguments:
   - argument:
       name: cookie
       description: Erlang cookie
-      value: -setcookie veil_cluster_node
+      value: -setcookie oneprovider_node
 
   - argument:
       name: error_logger_warnings
@@ -27,7 +27,7 @@ vm_arguments:
       value: +P 1000000
 
 
-veil_cluster_node_env:
+oneprovider_node_env:
 
   # GENERAL
   - parameter:
@@ -61,8 +61,8 @@ veil_cluster_node_env:
       name: storage_config_path
       description: Path to storage config file
       value: |
-        "\'/opt/veil/worker/bin/storage_info.cfg\'"
-      erlang_term: "'/opt/veil/nodes/worker/bin/storage_info.cfg'"
+        "\'/opt/oneprovider/worker/bin/storage_info.cfg\'"
+      erlang_term: "'/opt/oneprovider/nodes/worker/bin/storage_info.cfg'"
 
   - parameter:
       name: initialization_time
@@ -89,7 +89,7 @@ veil_cluster_node_env:
       description: Path to certificate used by ranch_ssl in gui handler
       value: |
         "\'./certs/VeilFSServerWeb.pem\'"
-      erlang_term: "'./certs/VeilFSServerWeb.pem'"
+      erlang_term: "'./certs/onedataServerWeb.pem'"
       # this has to be in double quotes so that single quotes are preserved after
       # conversion to list and it ends up correct in app.src
 
@@ -98,7 +98,7 @@ veil_cluster_node_env:
       description: Path to certificate used by ranch_ssl in fuse clients handler
       value: |
         "\'./certs/VeilFSServerFuse.pem\'"
-      erlang_term: "'./certs/VeilFSServerFuse.pem'"
+      erlang_term: "'./certs/onedataServerFuse.pem'"
       # this has to be in double quotes so that single quotes are preserved after
       # conversion to list and it ends up correct in app.src
 
@@ -166,7 +166,7 @@ veil_cluster_node_env:
 
   - parameter:
       name: ports_in_use
-      description: Ports used by application, that need to be free before veil can start
+      description: Ports used by application, that need to be free before oneprovider node can start
       value: |
           ["control_panel_port","control_panel_redirect_port","dns_port","dispatcher_port","rest_port"]
       erlang_term: |

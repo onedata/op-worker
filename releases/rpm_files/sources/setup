@@ -1,5 +1,5 @@
 #!/bin/bash
 
-/opt/veil/scripts/erl_launcher escript /opt/veil/scripts/setup.escript $@
+/opt/oneprovider/scripts/erl_launcher escript /opt/oneprovider/scripts/setup.escript $@
 
 

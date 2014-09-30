@@ -11,7 +11,7 @@
 %% ===================================================================
 -module(gr_adapter).
 
--include("veil_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
 
@@ -34,7 +34,7 @@
 synchronize_user_spaces({UserGID, AccessToken}) ->
     case user_logic:get_user({global_id, UserGID}) of
         {ok, UserDoc} ->
-            #veil_document{record = #user{spaces = Spaces}} = user_logic:synchronize_spaces_info(UserDoc, AccessToken),
+            #db_document{record = #user{spaces = Spaces}} = user_logic:synchronize_spaces_info(UserDoc, AccessToken),
             {ok, Spaces};
         {error, Reason} ->
             ?error("Cannot synchronize Spaces of user with ID ~p: ~p", [UserGID, Reason]),

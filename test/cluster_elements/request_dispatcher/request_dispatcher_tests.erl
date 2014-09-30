@@ -34,7 +34,7 @@
 
 %% This test checks if dispatcher uses protocol buffer correctly.
 protocol_buffers_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -139,7 +139,7 @@ recursive_not_supported_message_decoding_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_wrong_request_structure_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   Ans = try
     ws_handler:decode_clustermsg_pb(some_atom),
@@ -152,7 +152,7 @@ protocol_buffers_wrong_request_structure_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_wrong_request_message_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -200,7 +200,7 @@ protocol_buffers_wrong_request_message_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_wrong_request_decoder_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -221,7 +221,7 @@ protocol_buffers_wrong_request_decoder_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_wrong_request_module_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -242,7 +242,7 @@ protocol_buffers_wrong_request_module_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_wrong_answer_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   EncodedPong = ws_handler:encode_answer("wrong_main_answer", 0, "atom", "communication_protocol", pong),
   Pong = communication_protocol_pb:decode_answer(EncodedPong),
@@ -254,7 +254,7 @@ protocol_buffers_wrong_answer_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_answer_encoding_error_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   EncodedAnswer = ws_handler:encode_answer(ok, 0, "atom", "not_existing_decoder", pong),
   Answer = communication_protocol_pb:decode_answer(EncodedAnswer),

@@ -1,0 +1,150 @@
+#!/bin/sh
+#
+# chkconfig: 2345 80 30
+# description: oneprovider service
+
+### BEGIN INIT INFO
+# Provides:		    oneprovider_init
+# Required-Start:	$local_fs $remote_fs $network $time
+# Required-Stop:	$local_fs $remote_fs $network $time
+# Should-Start:		$syslog
+# Should-Stop:		$syslog
+# Default-Start:	2 3 4 5
+# Default-Stop:		0 1 6
+# Short-Description:	oneprovider service
+# Description:	Start oneprovider nodes that are configured on this machine
+### END INIT INFO
+
+# Source function library.
+. /etc/init.d/functions
+
+# Needed for erlexec to run
+export HOME=/
+
+# Default installation path
+PREFIX=/opt/oneprovider/
+
+start() {
+	start_db ; ret1=$?
+	start_oneprovider ; ret2=$?
+	return `[ $ret1 -a $ret2 ]`
+}
+
+start_oneprovider() {
+	status_oneprovider_silent ; status=$?
+	if [ $status -eq 3 ]; then
+		echo -n "Starting oneprovider: "
+		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript start_oneprovider
+		ret=$?
+		[ $ret -eq 0 ] && success || failure
+		echo
+		return $ret
+	fi
+}
+start_db() {
+	status_db_silent ; status=$?
+	if [ $status -eq 3 ]; then
+		echo -n "Starting db: "
+		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript start_db
+		ret=$?
+		[ $ret -eq 0 ] && success || failure
+		echo
+		return $ret
+	fi
+}
+
+stop() {
+	stop_oneprovider ; ret1=$?
+	stop_db ; ret2=$?
+	return `[ $ret1 -a $ret2 ]`
+}
+
+stop_oneprovider() {
+	status_oneprovider_silent ; status=$?
+	if [ $status -eq 0 ]; then
+		echo -n "Stopping oneprovider: "
+		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript stop_oneprovider
+		ret=$?
+		[ $ret -eq 0 ] && success || failure
+		echo
+		return $ret
+	fi
+}
+stop_db() {
+	status_db_silent ; status=$?
+	if [ $status -eq 0 ]; then
+		echo -n "Stopping db: "
+		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript stop_db
+		ret=$?
+		[ $ret -eq 0 ] && success || failure
+		echo
+		return $ret
+	fi
+}
+restart() {
+	stop
+	start
+}
+status() {
+	status_oneprovider ; ret1=$?
+    status_db ; ret2=$?
+	[[ $ret1 -eq 0 || $ret1 -eq 4 ]] && [[ $ret2 -eq 0 || $ret2 -eq 4 ]] || return 3
+}
+status_oneprovider() {
+	status_oneprovider_silent ; ret=$?
+	echo -n "oneprovider: "
+	if [ $ret -eq 0 ]; then
+		 echo "running"
+	elif [ $ret -eq 4 ]; then
+		echo "not present on host"
+	else
+		echo "not running."
+	fi
+	return $ret
+}
+status_db() {
+	status_db_silent ; ret=$?
+	echo -n "db: "
+	if [ $ret -eq 0 ]; then
+		 echo "Running."
+	elif [ $ret -eq 4 ]; then
+		echo "Not present on host."
+	else
+		echo "Not running."
+	fi
+	return $ret
+}
+status_oneprovider_silent() {
+	${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript status_oneprovider
+}
+status_db_silent() {
+	${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript status_db
+}
+
+
+case "$1" in
+    start|start_oneprovider|start_db)
+		# Execute function and create a lock file (required by red-hat based systems)
+		$1 && touch /var/lock/subsys/oneprovider
+		;;
+
+	restart|force-reload)
+		restart && touch /var/lock/subsys/oneprovider
+		;;
+
+    stop|stop_oneprovider|stop_db)
+		$1
+		status_oneprovider_silent || status_db_silent || rm -f /var/lock/subsys/oneprovider
+		;;
+
+	status|status_oneprovider|status_db)
+		$1
+		;;
+
+    *)
+        echo "Usage: $0 {start|start_oneprovider|start_db|stop|stop_oneprovider|stop_db|restart|force-reload|status|status_oneprovider|status_db}"
+        exit 1
+		;;
+esac
+
+exit $?

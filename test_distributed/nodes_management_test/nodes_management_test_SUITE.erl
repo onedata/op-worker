@@ -19,7 +19,7 @@
 -include("fuse_messages_pb.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("veil_modules/dao/dao.hrl").
+-include_lib("oneprovider_modules/dao/dao.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
 
@@ -152,7 +152,7 @@ fuse_ack_routing_test(Config) ->
   end,
 
   MsgAtom = #atom{value = "some_message"},
-  ?assertEqual(ok, rpc:call(Worker2, worker_host, send_to_user_with_ack, [{uuid, UserDoc#veil_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(Worker2, worker_host, send_to_user_with_ack, [{uuid, UserDoc#db_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
 
   MsgId1 = gen_server:call({global, ?CCM}, {node_for_ack, node()}) + 1,
 
@@ -189,10 +189,10 @@ fuse_ack_routing_test(Config) ->
 
   ?assertEqual([Worker2], check_answers(1)),
 
-  ?assertEqual(ok, rpc:call(Worker2, worker_host, send_to_user_with_ack, [{uuid, UserDoc#veil_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(Worker2, worker_host, send_to_user_with_ack, [{uuid, UserDoc#veil_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(Worker1, worker_host, send_to_user_with_ack, [{uuid, UserDoc#veil_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(Worker3, worker_host, send_to_user_with_ack, [{uuid, UserDoc#veil_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(Worker2, worker_host, send_to_user_with_ack, [{uuid, UserDoc#db_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(Worker2, worker_host, send_to_user_with_ack, [{uuid, UserDoc#db_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(Worker1, worker_host, send_to_user_with_ack, [{uuid, UserDoc#db_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(Worker3, worker_host, send_to_user_with_ack, [{uuid, UserDoc#db_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
   MsgId2 = MsgId1 - 2,
   MsgId3 = MsgId2 - 1,
   MsgId4 = MsgId3 - 1,
@@ -667,7 +667,7 @@ callbacks_test(Config) ->
   CheckDispatcherAns(DispatcherCorrectAns3, CCMTest3),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns3, lists:zip(NodesUp, FuseInfo3)),
 
-  rpc:call(Worker1, user_logic, remove_user, [{global_id, UserDoc#veil_document{record = #user.global_id}}], 2000).
+  rpc:call(Worker1, user_logic, remove_user, [{global_id, UserDoc#db_document{record = #user.global_id}}], 2000).
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -681,7 +681,7 @@ init_per_testcase(_, Config) ->
   [CCM | _] = NodesUp,
   DBNode = ?DB_NODE,
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, NodesUp, [
     [{node_type, ccm_test}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
     [{node_type, worker}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8444}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
     [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8445}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
@@ -691,7 +691,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node().
 

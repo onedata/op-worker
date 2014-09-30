@@ -12,7 +12,7 @@
 -ifndef(MESSAGES_WHITE_LIST_HRL).
 -define(MESSAGES_WHITE_LIST_HRL, 1).
 
-%% white lists of messages that can be processed by VeilCluster
+%% white lists of messages that can be processed by oneprovider
 -define(MessagesWhiteList, [
   clustermsg, answer, atom, channelregistration, channelclose, fusemessage, getfilelocation,
   getnewfilelocation, getfileattr, fileattr, filelocation, createfileack, filenotused, renewfilelocation,

@@ -14,8 +14,8 @@
 -include("registered_names.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
--include("veil_modules/control_panel/cdmi_capabilities.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/control_panel/cdmi_capabilities.hrl").
 
 -define(SH, "DirectIO").
 -define(Test_dir_name, "dir").
@@ -198,7 +198,7 @@ metadata_test(_Config) ->
     ?assert(CTime1 =< After),
     ?assert(CTime1 =< ATime1),
     ?assert(CTime1 =< MTime1),
-    ?assertEqual(<<"veilfstestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
+    ?assertEqual(<<"onedatatestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
     ?assertEqual(<<"my_value">>, proplists:get_value(<<"my_metadata">>, Metadata1)),
     ?assertEqual(6, length(Metadata1)),
 
@@ -221,7 +221,7 @@ metadata_test(_Config) ->
     {struct,CdmiResponse4} = mochijson2:decode(Response4),
     ?assertEqual(1, length(CdmiResponse4)),
     {struct, Metadata4} = proplists:get_value(<<"metadata">>,CdmiResponse4),
-    ?assertEqual(<<"veilfstestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
+    ?assertEqual(<<"onedatatestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
     ?assertEqual(1, length(Metadata4)),
 
     {_Code5, _Headers5, Response5} = do_request(FileName++"?metadata:cdmi_size", get, RequestHeaders1, []),
@@ -527,7 +527,7 @@ delete_dir_test(_Config) ->
 % Tests cdmi object DELETE requests
 delete_file_test(_Config) ->
     FileName = "/toDelete",
-    GroupFileName = "/spaces/veilfstestgroup/groupFile",
+    GroupFileName = "/spaces/onedatatestgroup/groupFile",
 
     %%----- basic delete -----------
     create_file(FileName),
@@ -904,7 +904,7 @@ init_per_suite(Config) ->
 
     [CCM] = Nodes = test_node_starter:start_test_nodes(1),
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
+    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes,
         [[{node_type, ccm_test},
             {initialization_time, 1},
             {dispatcher_port, 5055},
@@ -937,7 +937,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     Nodes = ?config(nodes, Config),
-    test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+    test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
     test_node_starter:stop_test_nodes(Nodes).
 
 %% ====================================================================
@@ -1016,7 +1016,7 @@ setup_user_in_db(Cert, Config) ->
     [CCM | _] = ?config(nodes, Config),
 
     UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_GROUP]),
-    [DN | _] = UserDoc#veil_document.record#user.dn_list,
+    [DN | _] = UserDoc#db_document.record#user.dn_list,
 
     {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?ARG_TEST_ROOT]),
     ?assertEqual(ok, Ans1),
@@ -1049,7 +1049,7 @@ do_request(RestSubpath, Method, Headers, Body, UseCert) ->
     Cert = get(cert),
     CCM = get(ccm),
 
-    {ok, Port} = rpc:call(CCM, application, get_env, [veil_cluster_node, rest_port]),
+    {ok, Port} = rpc:call(CCM, application, get_env, [oneprovider_node, rest_port]),
     Hostname = case (Port =:= 80) or (Port =:= 443) of
                    true -> "https://localhost";
                    false -> "https://localhost:" ++ integer_to_list(Port)

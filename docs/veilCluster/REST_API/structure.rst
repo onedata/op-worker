@@ -1,7 +1,7 @@
 Structure of the REST URIs
 ==========================
 
-	VeilFS's REST APIs provide access to resources (data entities) via URI paths. To use a REST API, your application will make an HTTP request and parse the response. The VeilFS REST API uses JSON as its communication format, and the standard HTTP methods like GET, PUT, POST and DELETE. URIs for VeilFS's REST API resource have the following structure:
+	onedata's REST APIs provide access to resources (data entities) via URI paths. To use a REST API, your application will make an HTTP request and parse the response. The onedata REST API uses JSON as its communication format, and the standard HTTP methods like GET, PUT, POST and DELETE. URIs for onedata's REST API resource have the following structure:
 
 	.. sourcecode:: http
 

@@ -1,10 +1,10 @@
 
 
 % Default cookie used for communication with cluster 
--define(default_cookie, veil_cluster_node).
+-define(default_cookie, oneprovider_node).
 
-% Installation directory of veil RPM
--define(prefix, filename:join([filename:absname("/"), "opt", "veil"])).
+% Installation directory of oneprovider RPM
+-define(prefix, filename:join([filename:absname("/"), "opt", "oneprovider"])).
 
 % Location of error_dump.txt
 -define(error_dump_file, filename:join([?prefix, "error_dump.txt"])).
@@ -15,10 +15,10 @@
 % Location of erl_launcher
 -define(erl_launcher_script_path, filename:join([?prefix, "scripts", "erl_launcher"])).
 
-% Paths relative to veil_cluster_node release
+% Paths relative to oneprovider_node release
 -define(config_args_path, filename:join(["bin", "config.args"])).
--define(veil_cluster_script_path, filename:join(["bin", "veil_cluster"])).
--define(start_command_suffix, filename:join(["bin", "veil_cluster_node"]) ++ " start").
+-define(oneprovider_script_path, filename:join(["bin", "oneprovider"])).
+-define(start_command_suffix, filename:join(["bin", "oneprovider_node"]) ++ " start").
 
 %Paths relative to database_node release
 -define(db_start_command_suffix, filename:join(["bin", "bigcouch"])).
@@ -51,15 +51,15 @@ main(Args) ->
     get_ulimits_from_config(),
     try
         try lists:nth(1, Args) of
-            "start_veil" -> start_veil_nodes();
+            "start_oneprovider" -> start_oneprovider_nodes();
 
-            "stop_veil" -> stop_veil_nodes();
+            "stop_oneprovider" -> stop_oneprovider_nodes();
 
             "start_db" -> start_db_node();
 
             "stop_db" -> stop_db_node();
 
-            "status_veil" -> halt(status(veil));
+            "status_oneprovider" -> halt(status(oneprovider));
 
             "status_db" -> halt(status(database));
             Unknown ->
@@ -126,8 +126,8 @@ start_db({db_node, _Name, Path}) ->
 stop_db({db_node, _Name, Path}) ->
     os:cmd("kill -TERM `ps aux | grep beam | grep " ++ Path ++ " | cut -d'\t' -f2 | awk '{print $2}'`").
 
-start_veil_nodes() ->
-    case get_nodes_from_config(veil) of
+start_oneprovider_nodes() ->
+    case get_nodes_from_config(oneprovider) of
         {none, []} ->
             nothing_to_start;
 
@@ -139,8 +139,8 @@ start_veil_nodes() ->
     end.
 
 
-stop_veil_nodes() ->
-    case get_nodes_from_config(veil) of
+stop_oneprovider_nodes() ->
+    case get_nodes_from_config(oneprovider) of
         {none, []} ->
             nothing_to_stop;
 
@@ -249,7 +249,7 @@ reconfigure_node(Name, Path, MainCCM, OptCCMs, DBNodes) ->
     overwrite_config_args(ConfigArgsPath, "main_ccm", atom_to_list(MainCCM)),
     overwrite_config_args(ConfigArgsPath, "opt_ccms", to_space_delimited_list(OptCCMs)),
     overwrite_config_args(ConfigArgsPath, "db_nodes", to_space_delimited_list(DBNodes)),
-    os:cmd(filename:join([Path, atom_to_list(Name), ?veil_cluster_script_path])).
+    os:cmd(filename:join([Path, atom_to_list(Name), ?oneprovider_script_path])).
 
 
 % Reconfigure remote worker's ccm and/or db_node list
@@ -267,8 +267,8 @@ reconfigure_remote_worker(NodeName, MainCCM, OptCCMs, DBNodes) ->
 
     ReconfCmd = "./bin/node_reconf -reconfigure" ++ MainCCMString ++ OptCCMsString ++ DBNodesString ++ " &",
     rpc:call(NodeName, os, cmd, [ReconfCmd]),
-    rpc:call(NodeName, application, set_env, [veil_cluster_node, ccm_nodes, [MainCCM | OptCCMs]]),
-    rpc:call(NodeName, application, set_env, [veil_cluster_node, db_nodes, DBNodes]).
+    rpc:call(NodeName, application, set_env, [oneprovider_node, ccm_nodes, [MainCCM | OptCCMs]]),
+    rpc:call(NodeName, application, set_env, [oneprovider_node, db_nodes, DBNodes]).
 
 
 % Order a remote ccm node to change its configuration and restart itself
@@ -330,8 +330,8 @@ discover_cluster(NodeList) ->
 % Try to connect to a node and retrieve CCM and DB nodes
 discover_node(Node) ->
     try
-        {ok, CCMNodes} = rpc:call(list_to_atom(Node), application, get_env, [veil_cluster_node, ccm_nodes]),
-        {ok, DBNodes} = rpc:call(list_to_atom(Node), application, get_env, [veil_cluster_node, db_nodes]),
+        {ok, CCMNodes} = rpc:call(list_to_atom(Node), application, get_env, [oneprovider_node, ccm_nodes]),
+        {ok, DBNodes} = rpc:call(list_to_atom(Node), application, get_env, [oneprovider_node, db_nodes]),
         WorkerList = rpc:call(list_to_atom(Node), gen_server, call, [{global, central_cluster_manager}, get_nodes]),
 
         {CCMNodes, DBNodes, WorkerList}
@@ -342,13 +342,13 @@ discover_node(Node) ->
 
 
 % Read contigured_nodes.cfg
-% WhichCluster = veil | database
+% WhichCluster = oneprovider | database
 get_nodes_from_config(WhichCluster) ->
     try
         {ok, Entries} = file:consult(?configured_nodes_path),
         case WhichCluster of
             database -> get_database_node_from_config(Entries);
-            veil -> get_veil_nodes_from_config(Entries)
+            oneprovider -> get_oneprovider_nodes_from_config(Entries)
         end
     catch _:_ ->
         ?error("Error while reading ~s", [?configured_nodes_path])
@@ -364,7 +364,7 @@ get_database_node_from_config(Entries) ->
 
 
 % Do not use directly
-get_veil_nodes_from_config(Entries) ->
+get_oneprovider_nodes_from_config(Entries) ->
     case lists:keyfind(worker_node, 1, Entries) of
         false -> {none, []};
         Worker ->

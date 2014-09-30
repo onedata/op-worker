@@ -13,7 +13,7 @@
 -author("Rafal Slota").
 
 -include("registered_names.hrl").
--include("veil_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -35,7 +35,7 @@ get_access_token(undefined) ->
     {undefined, undefined};
 get_access_token(GlobalId) ->
     case user_logic:get_user({global_id, GlobalId}) of
-        {ok, #veil_document{record = #user{access_token = AccessToken}}} ->
+        {ok, #db_document{record = #user{access_token = AccessToken}}} ->
             {GlobalId, AccessToken};
         {error, Reason} ->
             ?error("Cannot find user ~p due to: ~p", [GlobalId, Reason]),

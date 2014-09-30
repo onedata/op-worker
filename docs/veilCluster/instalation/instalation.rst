@@ -34,9 +34,9 @@ RPM build and installation
 
 	.. sourcecode:: guess
 
-		$ make rpm (create .rpm in ./releases/veil-0.0.6-1.x86_64.rpm)
-		$ yum localinstall ./releases/veil-0.0.6-1.x86_64.rpm (start RPM installation)
-		$ veil_setup (start installation script)
+		$ make rpm (create .rpm in ./releases/oneprovider-0.0.6-1.x86_64.rpm)
+		$ yum localinstall ./releases/oneprovider-0.0.6-1.x86_64.rpm (start RPM installation)
+		$ oneprovider_setup (start installation script)
 
 	.. warning:: 
 
@@ -52,17 +52,17 @@ Useful commands
 
 	.. sourcecode:: guess
 
-		$ /opt/veil/nodes/ccm/bin/veil_cluster_node attach (connect to local CCM. Warning! to terminate press Ctrl+D, not Ctrl+C!)
-		$ /opt/veil/nodes/worker/bin/veil_cluster_node attach (connect to local worker. Warning! to terminate press Ctrl+D, not Ctrl+C!)
-		$ yum remove veil (clean deletion of RPM)
+		$ /opt/oneprovider/nodes/ccm/bin/oneprovider_node attach (connect to local CCM. Warning! to terminate press Ctrl+D, not Ctrl+C!)
+		$ /opt/oneprovider/nodes/worker/bin/oneprovider_node attach (connect to local worker. Warning! to terminate press Ctrl+D, not Ctrl+C!)
+		$ yum remove oneprovider (clean deletion of RPM)
 
 Vocabulary
 ~~~~~~~~~~
 
 	* *database node* - installed Bigcouch instance
-	* *veil node* - installed CCM and worker or only worker
+	* *oneprovider node* - installed CCM and worker or only worker
 	* *db cluster* - connected and cooperating database nodes group 
-	* *veil cluster, cluster, veil* - connected and cooperating veil nodes group
+	* *oneprovider cluster, cluster, onedata* - connected and cooperating oneprovider nodes group
 	* *storage* - it is composed of group name that use it and mount point
 	* *group name* - fuse client group name that use storage
 	* *storage directory* - storage mount point 

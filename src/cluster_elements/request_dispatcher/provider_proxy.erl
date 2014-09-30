@@ -13,7 +13,7 @@
 
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("remote_file_management_pb.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_providers.hrl").
