@@ -1,4 +1,4 @@
-package one.protocol.remote_file_management;
+package one.clproto.remote_file_management;
 
 message RemoteFileMangement {
     required string message_type = 1;

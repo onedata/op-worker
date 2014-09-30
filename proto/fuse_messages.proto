@@ -1,4 +1,4 @@
-package one.protocol.fuse_messages;
+package one.clproto.fuse_messages;
 
 message ChannelRegistration {
     required string fuse_id = 1;

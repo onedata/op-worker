@@ -1,20 +1,20 @@
-Protocol
-========
+ClientProtocol
+==============
 
-*Protocol* is a part of *onedata* system that unifies access to files stored at heterogeneous data storage systems 
+*ClientProtocol* is a part of *onedata* system that unifies access to files stored at heterogeneous data storage systems 
 that belong to geographically distributed organizations.
 
 Goals
 -----
 
-The goal of *protocol* is provision of a protocol between *oneprovider* (self-scalable cluster that will is a central 
-point of each data centre that uses *onedata*) and *oneclient* (a user space file system that that frees users from 
-problems related to data access in heterogeneous environments).
+The goal of *ClientProtocol* is provision of a protocol between *oneprovider* (self-scalable cluster that will is a 
+central point of each data centre that uses *onedata*) and *oneclient* (a user space file system that that frees users
+from problems related to data access in heterogeneous environments).
 
 Getting Started
 ---------------
 
-*Protocol* is NOT a standalone project. It shouldn't be built separately. It should be build only with 
+*ClientProtocol* is **not** a standalone project. It shouldn't be built separately. It should be build only with 
 *oneprovider* or *oneclient*.
 
 Support
