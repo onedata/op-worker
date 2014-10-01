@@ -109,7 +109,7 @@ map_to_grp_owner(#space_info{name = SpaceName, space_id = SpaceId}) ->
             <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, SpaceId),
             {ok, LowestGID} = veil_cluster_node_app:get_env(lowest_generated_storage_gid),
             LowestGID + GID0 rem 1000000;
-        [GID] ->
+        [{_, GID}] ->
             GID
     end.
 
