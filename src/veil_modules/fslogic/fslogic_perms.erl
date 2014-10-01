@@ -76,7 +76,7 @@ check_file_perms(FileName, UserDoc = #veil_document{record = #user{global_id = G
                 true ->
                     {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
                     {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-                    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), delete}}, 500);
+                    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), delete}}, ?CACHE_REQUEST_TIMEOUT);
                 false -> ok
             end,
             Ans;
@@ -114,7 +114,7 @@ check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwne
                         ?REG_TYPE ->
                             {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
                             {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-                            gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), CheckType}}, 500),
+                            gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), CheckType}}, ?CACHE_REQUEST_TIMEOUT),
                             ok;
                         _ -> ok
                     end;
