@@ -310,13 +310,15 @@ top_menu(ActiveTabID, SubMenuBody) ->
     ]),
 
     MenuIcons = Process(ActiveTabID, [
-        {manage_account_tab, #li{body = #link{style = <<"padding: 14px 13px; ">>, title = <<"Manage account">>,
+        {manage_account_tab, #li{body = #link{style = <<"padding: 13px 11px 14px;">>, title = <<"Manage account">>,
             url = <<"/manage_account">>, body = [
                 #panel{style = <<"line-height: 24px; height: 24px;">>, body = [
                     #span{style = <<"display: inline; font-size: 15px; vertical-align:middle;">>, body = gui_str:unicode_list_to_binary(get_user_fullname())},
                     #span{class = <<"icomoon-user">>, style = <<"margin-left: 10px; font-size: 24px; vertical-align:middle;">>}
                 ]}
             ]}}},
+        {client_download_tab, #li{body = #link{style = <<"padding: 14px 13px;">>, title = <<"Download oneclient">>,
+            url = <<"/client_download">>, body = #span{class = <<"icomoon-box-add">>, style = <<"font-size: 24px;">>}}}},
         {about_tab, #li{body = #link{style = <<"padding: 14px 13px;">>, title = <<"About">>,
             url = <<"/about">>, body = #span{class = <<"icomoon-info2">>, style = <<"font-size: 24px;">>}}}},
         {logout_button, #li{

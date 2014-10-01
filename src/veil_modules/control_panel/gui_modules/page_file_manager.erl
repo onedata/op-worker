@@ -85,7 +85,7 @@ manager_submenu() ->
         #panel{class = <<"navbar-inner">>, style = <<"padding-top: 10px;">>, body = [
             #panel{class = <<"container">>, style = <<"position: relative; overflow: hidden;">>, body = [
                 #list{class = <<"nav">>, body =
-                tool_button_and_dummy(<<"tb_up_one_level">>, <<"Up one level">>, <<"padding: 10px 7px 10px 15px; font-size: 28px; margin: -4px 8px 0 -8px;">>,
+                tool_button_and_dummy(<<"tb_up_one_level">>, <<"Up one level">>, <<"padding: 10px 7px 10px 15px; font-size: 28px; margin: -2px 0 2px -8px;">>,
                     <<"icomoon-arrow-left">>, {action, up_one_level})},
                 #panel{class = <<"breadcrumb-text breadcrumb-background">>, style = <<"overflow: hidden; margin-left: 15px;">>, body = [
                     #p{id = <<"path_navigator">>, class = <<"breadcrumb-content">>, body = <<"~">>}
@@ -96,7 +96,7 @@ manager_submenu() ->
                             style = <<"width: 220px;">>, placeholder = <<"Search">>},
                         #panel{class = <<"btn-group">>, body = [
                             #button{id = wire_click(<<"search_button">>, {action, search, [{query_value, <<"search_textbox">>}]}, <<"search_textbox">>),
-                                class = <<"btn">>, body = #span{class = <<"icomoon-search">>, style = <<"font-size: 18px;">>}}
+                                class = <<"btn">>, body = #span{class = <<"fui-search">>}}
                         ]}
                     ]}
                 ]}
@@ -105,42 +105,42 @@ manager_submenu() ->
         #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 1px solid gray; padding-bottom: 5px;">>, body = [
             #panel{class = <<"container">>, body = [
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-%%                 tool_button(<<"tb_create_dir">>, <<"Create directory">>, <<"padding: 18px 12px;">>,
+%%                 tool_button(<<"tb_create_dir">>, <<"Create directory">>, <<"padding: 16px 12px;">>,
 %%                     <<"icomoon-folder-open">>, {action, show_popup, [create_directory]}) ++
                 [#li{id = wire_click(<<"tb_create_dir">>, {action, show_popup, [create_directory]}), body = #link{title = <<"Create directory">>,
-                    style =  <<"padding: 18px 12px;">>, body = #span{class = <<"icomoon-folder-open">>, style = <<"font-size: 24px;">>,
+                    style =  <<"padding: 16px 12px;">>, body = #span{class = <<"icomoon-folder-open">>, style = <<"font-size: 24px;">>,
                         body = #span{class = <<"icomoon-plus">>, style = <<"position: absolute; font-size: 10px; right: 5px; top: 16px;">>}}}}] ++
-                    tool_button(<<"tb_upload_files">>, <<"Upload file(s)">>, <<"padding: 18px 12px;">>,
+                    tool_button(<<"tb_upload_files">>, <<"Upload file(s)">>, <<"padding: 16px 12px;">>,
                         <<"icomoon-upload">>, {action, show_popup, [file_upload]}) ++
-                    tool_button_and_dummy(<<"tb_share_file">>, <<"Share">>, <<"padding: 18px 12px;">>,
+                    tool_button_and_dummy(<<"tb_share_file">>, <<"Share">>, <<"padding: 16px 12px;">>,
                         <<"icomoon-share">>, {action, show_popup, [share_file]})
 
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-                tool_button_and_dummy(<<"tb_rename">>, <<"Rename">>, <<"padding: 18px 12px;">>,
+                tool_button_and_dummy(<<"tb_rename">>, <<"Rename">>, <<"padding: 16px 12px;">>,
                     <<"icomoon-pencil2">>, {action, show_popup, [rename_item]}) ++
-                    tool_button_and_dummy(<<"tb_chmod">>, <<"Change mode">>, <<"padding: 18px 12px;">>,
+                    tool_button_and_dummy(<<"tb_chmod">>, <<"Change mode">>, <<"padding: 16px 12px;">>,
                         <<"icomoon-lock">>, {action, show_popup, [chmod]}) ++
-                    tool_button_and_dummy(<<"tb_remove">>, <<"Remove">>, <<"padding: 18px 12px;">>,
+                    tool_button_and_dummy(<<"tb_remove">>, <<"Remove">>, <<"padding: 16px 12px;">>,
                         <<"icomoon-remove">>, {action, show_popup, [remove_selected]})
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-                tool_button_and_dummy(<<"tb_cut">>, <<"Cut">>, <<"padding: 18px 12px;">>,
+                tool_button_and_dummy(<<"tb_cut">>, <<"Cut">>, <<"padding: 16px 12px;">>,
                     <<"icomoon-scissors">>, {action, put_to_clipboard, [cut]}) ++
-                %tool_button_and_dummy(<<"tb_copy">>, <<"Copy">>, <<"padding: 18px 12px;">>,
+                %tool_button_and_dummy(<<"tb_copy">>, <<"Copy">>, <<"padding: 16px 12px;">>,
                 %    <<"fui-windows">>, {action, put_to_clipboard, [copy]}) ++
 
-                [#li{id = wire_click(<<"tb_paste">>, {action, paste_from_clipboard}), body = #link{title = <<"Paste">>, style = <<"padding: 18px 12px;">>,
+                [#li{id = wire_click(<<"tb_paste">>, {action, paste_from_clipboard}), body = #link{title = <<"Paste">>, style = <<"padding: 16px 12px;">>,
                     body = #span{class = <<"icomoon-copy2">>, style = <<"font-size: 24px;">>, body = #span{id = <<"clipboard_size_label">>, class = <<"iconbar-unread">>,
                         style = <<"right: -2px; top: 9px; background-color: rgb(26, 188, 156);">>,
                         body = <<"0">>}}}},
-                    #li{id = <<"tb_paste_dummy">>, class = <<"disabled hidden">>, body = #link{title = <<"Paste">>, style = <<"padding: 18px 12px;">>,
+                    #li{id = <<"tb_paste_dummy">>, class = <<"disabled hidden">>, body = #link{title = <<"Paste">>, style = <<"padding: 16px 12px;">>,
                         body = #span{style = <<"color: rgb(200, 200, 200); font-size: 24px;">>, class = <<"icomoon-copy2 ">>}}}]
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-                tool_button_and_dummy(<<"tb_select_all">>, <<"Select all">>, <<"padding: 18px 12px;">>,
+                tool_button_and_dummy(<<"tb_select_all">>, <<"Select all">>, <<"padding: 16px 12px;">>,
                     <<"icomoon-checkbox-checked">>, {action, select_all}) ++
-                tool_button_and_dummy(<<"tb_deselect_all">>, <<"Deselect all">>, <<"padding: 18px 12px;">>,
+                tool_button_and_dummy(<<"tb_deselect_all">>, <<"Deselect all">>, <<"padding: 16px 12px;">>,
                     <<"icomoon-checkbox-unchecked">>, {action, deselect_all})
                 },
 
