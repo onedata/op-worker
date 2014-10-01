@@ -1,14 +1,14 @@
 Helpers
 =======
 
-*Helpers* is a part of *onedata* system that unifies access to files stored at heterogeneous data storage systems that belong
+*Helpers* is a part of *Onedata* system that unifies access to files stored at heterogeneous data storage systems that belong
 to geographically distributed organizations.
 
 Goals
 -----
 
-The goal of *Helpers* is provision of a "storage helpers" - libraries allowing access to all supported by *onedata* 
-(self-scalable cluster that will is a central point of each data centre that uses *onedata*) filesystems.
+The goal of *Helpers* is provision of a "storage helpers" - libraries allowing access to all supported by *Onedata* 
+(self-scalable cluster that will is a central point of each data centre that uses *Onedata*) filesystems.
 
 Getting Started
 ---------------
