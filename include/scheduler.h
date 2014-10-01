@@ -53,12 +53,21 @@ public:
      * @param args Arguments to pass to the member.
      */
     template<class R, class T, class... Args>
-    void post(R (T::*member), std::weak_ptr<T> subject, Args&&... args)
+    void post(R (T::*member), const std::weak_ptr<T> &subject, Args&&... args)
     {
         post([=]{
             if(auto s = subject.lock())
                 ((*s).*member)(args...);
         });
+    }
+
+    /**
+     * A convenience overload for @c post taking a @c std::shared_ptr.
+     */
+    template<class R, class T, class... Args>
+    void post(R (T::*member), const std::shared_ptr<T> &subject, Args&&... args)
+    {
+        post(member, std::weak_ptr<T>{subject}, std::forward<Args>(args)...);
     }
 
     /**
@@ -89,6 +98,19 @@ public:
             if(auto s = subject.lock())
                 ((*s).*member)(args...);
         });
+    }
+
+    /**
+     * A convenience overload for @c schedule taking a @c std::shared_ptr.
+     */
+    template<class R, class T, class... Args>
+    std::function<void()> schedule(const std::chrono::milliseconds after,
+                                   R (T::*member),
+                                   std::shared_ptr<T> subject,
+                                   Args&&... args)
+    {
+        return schedule(after, member,
+                        std::weak_ptr<T>{subject}, std::forward<Args>(args)...);
     }
 
 private:

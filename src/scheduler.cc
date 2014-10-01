@@ -58,6 +58,7 @@ std::function<void()> Scheduler::schedule(const std::chrono::milliseconds after,
         if(auto t = weakTimer.lock())
             t->cancel();
     };
+
 }
 
 } // namespace veil
