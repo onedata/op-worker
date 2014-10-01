@@ -382,6 +382,7 @@ handle_cast({update_ports_stats, PortsStats}, State) ->
 handle_cast(reload_storage_users, State) ->
     {ok, Data} = file:read_file("/etc/passwd"),
     UserTokens = binary:split(Data, [<<10>>, <<13>>], [global, trim]),
+    ets:delete_all_objects(?STORAGE_USER_IDS_CACHE),
     lists:foreach(
         fun(Elem) ->
             [UserName, _, UID | _] = binary:split(Elem, [<<":">>], [global, trim]),
@@ -394,6 +395,7 @@ handle_cast(reload_storage_users, State) ->
 handle_cast(reload_storage_groups, State) ->
     {ok, Data} = file:read_file("/etc/group"),
     GroupTokens = binary:split(Data, [<<10>>, <<13>>], [global, trim]),
+    ets:delete_all_objects(?STORAGE_GROUP_IDS_CACHE),
     lists:foreach(
         fun(Elem) ->
             [GroupName, _, GID | _] = binary:split(Elem, [<<":">>], [global, trim]),
