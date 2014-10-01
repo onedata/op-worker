@@ -59,7 +59,7 @@
 %% ====================================================================
 %% @doc Creates hard-link on storage
 %% @end
--spec mkdir(Storage_helper_info :: record(), FileId :: string(), LinkId :: string()) -> Result when
+-spec link(Storage_helper_info :: record(), FileId :: string(), LinkId :: string()) -> Result when
     Result :: ok | {ErrorGeneral, ErrorDetail},
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
@@ -117,9 +117,8 @@ mkdir(Storage_helper_info, Dir, Mode) ->
                             {GetUserAns, User} = user_logic:get_user(Query),
                             case GetUserAns of
                                 ok ->
-                                    UserRecord = User#veil_document.record,
-                                    Login = UserRecord#user.login,
-                                    ChownAns = chown(Storage_helper_info, Dir, Login, ""),
+                                    {_Login, UID} = user_logic:get_login_with_uid(User),
+                                    ChownAns = chown(Storage_helper_info, Dir, UID, -1),
                                     case ChownAns of
                                         ok -> ok;
                                         _ ->  {cannot_change_dir_owner, ChownAns}
@@ -314,10 +313,8 @@ write(Storage_helper_info, File, Offset, Buf) ->
                   {ErrorCode2, FFI} = veilhelpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
                   case ErrorCode2 of
                     0 ->
-                        T1 = vcn_utils:mtime(),
                       BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
-                        T0 = vcn_utils:mtime(),
-                        ?info("write bytes: ~p", [T0 - T1]),
+
                       ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
                       case ErrorCode3 of
                         0 -> BytesWritten;
@@ -431,9 +428,8 @@ create(Storage_helper_info, File, Mode) ->
                   {GetUserAns, User} = user_logic:get_user(Query),
                   case GetUserAns of
                     ok ->
-                      UserRecord = User#veil_document.record,
-                      Login = UserRecord#user.login,
-                      ChownAns = chown(Storage_helper_info, File, Login, ""),
+                      {_Login, UID} = user_logic:get_login_with_uid(User),
+                      ChownAns = chown(Storage_helper_info, File, UID, -1),
                       case ChownAns of
                         ok ->
                           ok;
@@ -850,16 +846,14 @@ check_access_type(File) ->
 %% ====================================================================
 setup_ctx(File) ->
     ?debug("Setup storage ctx based on fslogc ctx -> DN: ~p, AccessToken: ~p", [fslogic_context:get_user_dn(), fslogic_context:get_gr_auth()]),
-    T0 = vcn_utils:mtime(),
+
     case fslogic_objects:get_user() of
-        {ok, #veil_document{record = #user{login = UserName, global_id = GRUID} = UserRec}} ->
-            T1 = vcn_utils:mtime(),
-            fslogic_context:set_fs_user_ctx(UserName),
+        {ok, #veil_document{record = #user{global_id = GRUID} = UserRec} = UserDoc} ->
+            {_Login, UID} = user_logic:get_login_with_uid(UserDoc),
+            fslogic_context:set_fs_user_ctx(UID),
             case check_access_type(File) of
                 {ok, {group, SpaceId}} ->
-                    T2 = vcn_utils:mtime(),
                     UserSpaceIds = user_logic:get_space_ids(UserRec),
-                    T3 = vcn_utils:mtime(),
                     SelectedSpaceId = [X || X <- UserSpaceIds, vcn_utils:ensure_binary(SpaceId) =:= X],
                     SelectedSpaceIdOrSpace =
                         case SelectedSpaceId of
@@ -876,7 +870,6 @@ setup_ctx(File) ->
                             _  ->
                                 SelectedSpaceId
                         end,
-                    T4 = vcn_utils:mtime(),
 
                     SelectedSpace =
                         case SelectedSpaceIdOrSpace of
@@ -895,8 +888,6 @@ setup_ctx(File) ->
                             [#space_info{} = SpaceInfo] ->
                                 [fslogic_spaces:map_to_grp_owner(SpaceInfo)]
                         end,
-                    T5 = vcn_utils:mtime(),
-                    ?info("setup ==================> ~p ~p ~p ~p ~p", [T5 - T4, T4 - T3, T3 - T2, T2 - T1, T1 - T0]),
                     fslogic_context:set_fs_group_ctx(GIDs),
                     ok;
                 _ ->

@@ -15,6 +15,7 @@
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_registry/gr_openid.hrl").
 
 %% ===================================================================
 %% API functions
@@ -195,7 +196,7 @@ exist_user_in_db({Key, Value}) ->
 -spec get_user_from_db(Key :: user_key()) -> {ok, user_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_user_from_db({uuid, "0"}) ->
-    {ok, #veil_document{uuid = "0", record = #user{login = "root", name = "root"}}}; %% Return virtual "root" user
+    {ok, #veil_document{uuid = "0", record = #user{logins = [#id_token_login{provider_id = internal, login = "root"}], name = "root"}}}; %% Return virtual "root" user
 get_user_from_db({uuid, UUID}) ->
     dao_external:set_db(?USERS_DB_NAME),
     dao_records:get_record(UUID);
@@ -230,7 +231,7 @@ get_user_from_db({Key, Value}) ->
         {ok, #view_result{rows = [#view_row{doc = FDoc} | Tail] = AllRows}} ->
             case length(lists:usort(AllRows)) of
                 Count when Count > 1 ->
-                    ?warning("User ~p is duplicated. Returning first copy. Others: ~p", [FDoc#veil_document.record#user.login, Tail]);
+                    ?warning("User ~p is duplicated. Returning first copy. Others: ~p", [FDoc#veil_document.record#user.logins, Tail]);
                 _ -> ok
             end,
             {ok, FDoc};

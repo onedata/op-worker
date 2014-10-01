@@ -41,7 +41,7 @@
 %% ====================================================================
 get_user_dn() ->
     try
-        {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+        {ok, UserDoc} = user_logic:get_user({uuid, gui_ctx:get_user_id()}),
         case user_logic:get_dn_list(UserDoc) of
             [] -> undefined;
             L when is_list(L) -> lists:nth(1, L);

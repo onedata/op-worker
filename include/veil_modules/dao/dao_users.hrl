@@ -17,7 +17,7 @@
 %% This record defines a user and is handled as a database document
 -record(user, {
     global_id = "",
-    login = "",
+    logins = [],
     name = "",
     teams = [],
     spaces = [] :: [binary()],
