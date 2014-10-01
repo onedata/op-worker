@@ -60,7 +60,7 @@ get_space_file1(InitArg) ->
         [{_, Value}] -> {ok, Value};
         _ ->
             case get_file(InitArg) of
-                {ok, #db_document{record = #file{extensions = Ext}, uuid = UUID} = Doc} ->
+                {ok, #db_document{record = #file{extensions = Ext}, uuid = _UUID} = Doc} ->
                     case lists:keyfind(?file_space_info_extestion, 1, Ext) of
                         false ->
                             {error, invalid_space_file};

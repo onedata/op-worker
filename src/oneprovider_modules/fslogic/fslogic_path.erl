@@ -63,7 +63,7 @@ get_user_file_name(FullFileName) ->
 -spec get_user_file_name(FullFileName :: string(), UserDoc :: #db_document{}) -> Result when
     Result :: UserFileName :: string() | no_return().
 %% ====================================================================
-get_user_file_name(FullFileName, UserDoc) ->
+get_user_file_name(FullFileName, _UserDoc) ->
     {ok, Tokens} = verify_file_name(FullFileName),
     case Tokens of
         [] -> "";

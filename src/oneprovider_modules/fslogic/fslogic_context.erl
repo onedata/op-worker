@@ -24,7 +24,6 @@
 -export([clear_user_ctx/0, clear_gr_auth/0]).
 -export([get_user_context/0, set_user_context/1]).
 -export([get_user_query/0]).
--export([get_user_context/0, set_user_context/1]).
 
 %% ====================================================================
 %% API functions

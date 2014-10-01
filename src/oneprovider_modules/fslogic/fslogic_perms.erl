@@ -131,7 +131,7 @@ is_member_of_space3(#db_document{record = #user{}} = UserDoc, {name, SpaceName},
 %% ====================================================================
 assert_grp_access(_UserDoc, Request, [?SPACES_BASE_DIR_NAME]) ->
     lists:member(Request, ?GROUPS_BASE_ALLOWED_ACTIONS);
-assert_grp_access(#db_document{record = #user{}} = UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail] = PathTokens) ->
+assert_grp_access(#db_document{record = #user{}} = UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail] = _PathTokens) ->
     TailCheck = case Tail of
                     [_GroupName] ->
                         lists:member(Request, ?GROUPS_ALLOWED_ACTIONS);
