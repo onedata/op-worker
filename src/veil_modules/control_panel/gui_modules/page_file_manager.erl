@@ -105,8 +105,6 @@ manager_submenu() ->
         #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 1px solid gray; padding-bottom: 5px;">>, body = [
             #panel{class = <<"container">>, body = [
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-%%                 tool_button(<<"tb_create_dir">>, <<"Create directory">>, <<"padding: 16px 12px;">>,
-%%                     <<"icomoon-folder-open">>, {action, show_popup, [create_directory]}) ++
                 [#li{id = wire_click(<<"tb_create_dir">>, {action, show_popup, [create_directory]}), body = #link{title = <<"Create directory">>,
                     style =  <<"padding: 16px 12px;">>, body = #span{class = <<"icomoon-folder-open">>, style = <<"font-size: 24px;">>,
                         body = #span{class = <<"icomoon-plus">>, style = <<"position: absolute; font-size: 10px; right: 5px; top: 16px;">>}}}}] ++
