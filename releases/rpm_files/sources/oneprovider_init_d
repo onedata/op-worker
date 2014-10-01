@@ -106,11 +106,11 @@ status_db() {
 	status_db_silent ; ret=$?
 	echo -n "db: "
 	if [ $ret -eq 0 ]; then
-		 echo "Running."
+		 echo "running"
 	elif [ $ret -eq 4 ]; then
-		echo "Not present on host."
+		echo "not present on host"
 	else
-		echo "Not running."
+		echo "not running"
 	fi
 	return $ret
 }
