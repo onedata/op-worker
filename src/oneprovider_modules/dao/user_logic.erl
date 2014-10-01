@@ -52,7 +52,7 @@ create_partial_user(GRUID, Spaces) ->
         {ok, #user_details{name = Name0}} ->
             Login = openid_utils:get_user_login(GRUID),
             Name = unicode:characters_to_list(Name0),
-            try user_logic:sign_in([{global_id, vcn_utils:ensure_list(GRUID)}, {name, Name}, {login, Login}], <<>>, <<>>, 0) of
+            try user_logic:sign_in([{global_id, opn_utils:ensure_list(GRUID)}, {name, Name}, {login, Login}], <<>>, <<>>, 0) of
                 {_, UserDoc} ->
                     {ok, UserDoc}
             catch
@@ -846,7 +846,7 @@ get_space_names(UserQuery) ->
 get_space_ids(#db_document{record = #user{} = User}) ->
     get_space_ids(User);
 get_space_ids(#user{spaces = Spaces}) ->
-    [vcn_utils:ensure_binary(SpaceId) || SpaceId <- Spaces];
+    [opn_utils:ensure_binary(SpaceId) || SpaceId <- Spaces];
 get_space_ids(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
     get_space_ids(UserDoc).
@@ -878,7 +878,7 @@ get_spaces(UserQuery) ->
 -spec create_space_dir(SpaceInfo :: #space_info{}) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
 %% ====================================================================
 create_space_dir(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
-    CTime = vcn_utils:time(),
+    CTime = opn_utils:time(),
 
     SpaceDirName = unicode:characters_to_list(SpaceName),
 

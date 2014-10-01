@@ -105,12 +105,12 @@ signing_in_test_() ->
         fun() ->
             meck:new(dao_lib),
             meck:new(fslogic_utils),
-            meck:new(vcn_utils)
+            meck:new(opn_utils)
         end,
         fun(_) ->
             ok = meck:unload(dao_lib),
             ok = meck:unload(fslogic_utils),
-            ok = meck:unload(vcn_utils)
+            ok = meck:unload(opn_utils)
         end,
         [
             {"new user -> create_user",
@@ -170,7 +170,7 @@ signing_in_test_() ->
                         fun("new_user", _) -> {ok, {"some", #db_document{}}} end),
 
                     Tim = 12345677,
-                    meck:expect(vcn_utils, time, fun() -> Tim end),
+                    meck:expect(opn_utils, time, fun() -> Tim end),
                     meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {Tim2, Tim2, Tim2}) -> File end),
                     ?assertEqual({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist, AccessToken, RefreshToken, ExpirationTime)),
                     ?assert(meck:validate(dao_lib))
@@ -266,7 +266,7 @@ signing_in_test_() ->
                         end),
 
                     Tim = 12345677,
-                    meck:expect(vcn_utils, time, fun() -> Tim end),
+                    meck:expect(opn_utils, time, fun() -> Tim end),
                     meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {Tim2, Tim2, Tim2}) -> File end),
 
                     ?assertEqual({"existing_user", SynchronizedUser}, user_logic:sign_in(ExistingUserInfoProplist, AccessToken, RefreshToken, ExpirationTime)),

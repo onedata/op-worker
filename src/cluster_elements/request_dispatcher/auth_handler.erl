@@ -56,12 +56,12 @@ get_provider_id(#'OTPCertificate'{} = Cert) ->
         case Attribute#'AttributeTypeAndValue'.type of
             ?'id-at-commonName' ->
                 {_, Id} = Attribute#'AttributeTypeAndValue'.value,
-                {true, vcn_utils:ensure_binary(Id)};
+                {true, opn_utils:ensure_binary(Id)};
             _ -> false
         end
     end, Attrs),
 
-    vcn_utils:ensure_binary(ProviderId).
+    opn_utils:ensure_binary(ProviderId).
 
 
 %% is_provider/1
@@ -80,7 +80,7 @@ is_provider(#'OTPCertificate'{} = Cert) ->
             case Attribute#'AttributeTypeAndValue'.type of
                 ?'id-at-organizationalUnitName' ->
                     {_, Id} = Attribute#'AttributeTypeAndValue'.value,
-                    {true, vcn_utils:ensure_binary(Id)};
+                    {true, opn_utils:ensure_binary(Id)};
                 _ -> false
             end
         end, Attrs),
@@ -97,7 +97,7 @@ is_provider(#'OTPCertificate'{} = Cert) ->
     {true, AccessToken :: binary()} | false.
 %% ====================================================================
 authenticate_user_by_secret(GRUID, Secret) ->
-    Now = vcn_utils:time(),
+    Now = opn_utils:time(),
 
     CachedData = case ets:lookup(?TOKEN_AUTHENTICATION_CACHE, Secret) of
         [{Secret, {Expiration, CachedGRUID, CachedAccessToken}}] when Expiration > Now ->
@@ -119,7 +119,7 @@ authenticate_user_by_secret(GRUID, Secret) ->
                 false -> false;
                 true ->
                     {GRUID, AccessToken} = auth_handler:get_access_token(GRUID),
-                    ExpirationTime = vcn_utils:time() + timer:minutes(?AUTH_CACHE_EXPIRATION_MINUTES),
+                    ExpirationTime = opn_utils:time() + timer:minutes(?AUTH_CACHE_EXPIRATION_MINUTES),
                     ets:insert(?TOKEN_AUTHENTICATION_CACHE, {Secret, {ExpirationTime, GRUID, AccessToken}}),
                     {true, AccessToken}
             end

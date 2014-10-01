@@ -99,7 +99,7 @@ is_member_of_space(#db_document{record = #user{}} = UserDoc, SpaceReq) ->
             false
     end.
 is_member_of_space3(#db_document{record = #user{global_id = GRUID}} = UserDoc, #space_info{users = Users} = SpaceInfo, Retry) ->
-    case lists:member(vcn_utils:ensure_binary(GRUID), Users) of
+    case lists:member(opn_utils:ensure_binary(GRUID), Users) of
         true -> true;
         false when Retry ->
             fslogic_spaces:sync_all_supported_spaces(),

@@ -91,7 +91,7 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
                 ?error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
                 throw(?VEREMOTEIO)
         end,
-    NewFile1 = fslogic_meta:update_meta_attr(NewFile, ctime, vcn_utils:time()),
+    NewFile1 = fslogic_meta:update_meta_attr(NewFile, ctime, opn_utils:time()),
 
     {ok, _} = fslogic_objects:save_file(FileDoc#db_document{record = NewFile1}),
 
@@ -126,7 +126,7 @@ change_file_perms(FullFileName, Perms) ->
 
     ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner),
 
-    NewFile = fslogic_meta:update_meta_attr(File, ctime, vcn_utils:time()),
+    NewFile = fslogic_meta:update_meta_attr(File, ctime, opn_utils:time()),
     NewFile1 = FileDoc#db_document{record = NewFile#file{perms = Perms}},
     {ok, _} = fslogic_objects:save_file(NewFile1),
 
@@ -292,7 +292,7 @@ delete_file(FullFileName) ->
         0 ->
             ok = dao_lib:apply(dao_vfs, remove_file, [FullFileName], fslogic_context:get_protocol_version()),
 
-            fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullFileName), vcn_utils:time()),
+            fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullFileName), opn_utils:time()),
             #atom{value = ?VOK};
         _Other ->
             ?error("Error: can not remove directory (it's not empty): ~s", [FullFileName]),

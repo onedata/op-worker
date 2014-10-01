@@ -77,7 +77,7 @@ exec(UserName, GroupId, Method, SHInfo = #storage_helper_info{}, Args) ->
 %% ====================================================================
 exec(UserName, GroupId, Method, Args) when is_atom(Method), is_list(Args) ->
     Args1 = [UserName, GroupId] ++ Args,
-    ?debug("VeilHelpers Storage CTX ~p ~p", [UserName, GroupId]),
+    ?debug("Helpers storage CTX ~p ~p", [UserName, GroupId]),
     ?debug("helpers:exec with args: ~p ~p", [Method, Args1]),
 
     case Args of
@@ -168,7 +168,7 @@ do_reroute(SpaceId, RequestBody) ->
     {ok, #space_info{providers = Providers}} = fslogic_objects:get_space({uuid, SpaceId}),
 
     [RerouteToProvider | _] = Providers,
-    ?debug("VeilHelper Reroute to: ~p", [RerouteToProvider]),
+    ?debug("Helper reroute to: ~p", [RerouteToProvider]),
     try
         Response = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_gr_auth(),
             fslogic_context:get_fuse_id(), #remotefilemangement{space_id = SpaceId, input = RequestBody, message_type = atom_to_list(element(1, RequestBody))}),

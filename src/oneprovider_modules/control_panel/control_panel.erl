@@ -100,7 +100,7 @@ handle(ProtocolVersion, {request_refresh, UserKey, Consumer}) ->
             1 ->
                 ?info("Scheduling refresh for user ~p (scheduled by ~p)", [UserId, Consumer]),
                 #db_document{record = #user{access_expiration_time = ExpirationTime}} = UserDoc,
-                TimeToExpiration = ExpirationTime - vcn_utils:time(),
+                TimeToExpiration = ExpirationTime - opn_utils:time(),
 
                 ScheduleRef = make_ref(),
                 ets:update_element(?REFRESH_CLIENTS_COUNTER_ETS, UserId, {3, ScheduleRef}),

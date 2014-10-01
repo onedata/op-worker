@@ -80,7 +80,7 @@ get_space_file1(InitArg) ->
 -spec get_space_files({gruid, GRUID :: binary() | string()}) -> {ok, [file_doc()]} | {error, term()}.
 %% ====================================================================
 get_space_files({gruid, GRUID}) when is_binary(GRUID) ->
-    get_space_files({gruid, ?RECORD_FIELD_BINARY_PREFIX ++ vcn_utils:ensure_list(GRUID)});
+    get_space_files({gruid, ?RECORD_FIELD_BINARY_PREFIX ++ opn_utils:ensure_list(GRUID)});
 get_space_files({gruid, GRUID}) when is_list(GRUID) ->
     QueryArgs = #view_query_args{keys = [dao_helper:name(GRUID)], include_docs = true},
     case dao_records:list_records(?SPACES_BY_GRUID_VIEW, QueryArgs) of

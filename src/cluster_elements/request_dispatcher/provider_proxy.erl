@@ -52,7 +52,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
     {AnswerDecoderName, AnswerType} = records_translator:get_answer_decoder_and_type(Message),
     MsgBytes = encode(Message),
 
-    TokenHash = vcn_utils:access_token_hash(AccessToken),
+    TokenHash = opn_utils:access_token_hash(AccessToken),
 
     MsgId = provider_proxy_con:get_msg_id(),
 
@@ -64,7 +64,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
 
     CLMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(ClusterMessage)),
 
-    ProviderMsg = #providermsg{message_type = "clustermsg", input = CLMBin, fuse_id = vcn_utils:ensure_binary(FuseId)},
+    ProviderMsg = #providermsg{message_type = "clustermsg", input = CLMBin, fuse_id = opn_utils:ensure_binary(FuseId)},
     PRMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_providermsg(ProviderMsg)),
 
     provider_proxy_con:send(URL, MsgId, PRMBin),
@@ -112,7 +112,7 @@ reroute_push_message({ProviderId, FuseId}, Message, MessageDecoder) ->
 
     CLMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Answer)),
 
-    ProviderMsg = #providermsg{message_type = "answer", input = CLMBin, fuse_id = vcn_utils:ensure_binary(FuseId)},
+    ProviderMsg = #providermsg{message_type = "answer", input = CLMBin, fuse_id = opn_utils:ensure_binary(FuseId)},
     PRMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_providermsg(ProviderMsg)),
 
     provider_proxy_con:send(URL, 0, PRMBin).
@@ -144,7 +144,7 @@ encode(#remotefilemangement{input = Input, message_type = MType} = RFM) ->
 -spec get_message_type(Msg :: tuple()) -> Type :: atom().
 %% ====================================================================
 get_message_type(Msg) when is_tuple(Msg) ->
-    vcn_utils:record_type(Msg).
+    opn_utils:record_type(Msg).
 
 
 %% get_message_decoder/1
@@ -193,7 +193,7 @@ decoder_method(MType) when is_list(MType) ->
 -spec pb_module(ModuleName :: atom() | list()) -> PBModule :: atom().
 %% ====================================================================
 pb_module(ModuleName) ->
-    list_to_atom(vcn_utils:ensure_list(ModuleName) ++ "_pb").
+    list_to_atom(opn_utils:ensure_list(ModuleName) ++ "_pb").
 
 
 %% a2l/1

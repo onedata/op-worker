@@ -29,7 +29,7 @@
 %% @doc Convinience method that returns protobuf answer message that is build base on given error code
 %%      and type of request.
 %% @end
--spec gen_error_message(RecordName :: atom(), VeilError :: string()) -> tuple() | no_return().
+-spec gen_error_message(RecordName :: atom(), Error :: string()) -> tuple() | no_return().
 %% ====================================================================
 gen_error_message(readfile, Error) ->
     #filedata{answer_status = Error};

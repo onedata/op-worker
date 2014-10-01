@@ -65,7 +65,7 @@ get_user() ->
 
 
 update_file_descriptor_test() ->
-    Time = vcn_utils:time(),
+    Time = opn_utils:time(),
     Desc = fslogic_objects:update_file_descriptor(#file_descriptor{}, 123),
     ?assert(Time =< Desc#file_descriptor.create_time),
     ?assertEqual(123, Desc#file_descriptor.validity_time).

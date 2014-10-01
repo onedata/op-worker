@@ -120,4 +120,4 @@ map_to_grp_owner(#space_info{name = SpaceName, space_id = SpaceId}) ->
 -spec get_storage_space_name(SpaceInfo :: #space_info{}) -> SpaceStorageName :: string().
 %% ====================================================================
 get_storage_space_name(#space_info{space_id = SpaceId}) ->
-    vcn_utils:ensure_list(SpaceId).
+    opn_utils:ensure_list(SpaceId).

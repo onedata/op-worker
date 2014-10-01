@@ -43,7 +43,7 @@ get_user_query() ->
                 DN        -> {dn, DN}
             end;
         {GRUID, _} ->
-            {global_id, vcn_utils:ensure_list(GRUID)}
+            {global_id, opn_utils:ensure_list(GRUID)}
     end.
 
 
@@ -240,8 +240,8 @@ get_fs_group_ctx() ->
 gen_global_fuse_id(_, undefined) ->
     undefined;
 gen_global_fuse_id(ProviderId, FuseId) ->
-    ProviderId1 = vcn_utils:ensure_binary(ProviderId),
-    FuseId1 = vcn_utils:ensure_binary(FuseId),
+    ProviderId1 = opn_utils:ensure_binary(ProviderId),
+    FuseId1 = opn_utils:ensure_binary(FuseId),
     <<ProviderId1/binary, "::", FuseId1/binary>>.
 
 
@@ -253,7 +253,7 @@ gen_global_fuse_id(ProviderId, FuseId) ->
 -spec read_global_fuse_id(GlobalFuseId :: iolist()) -> {ProviderId :: binary(), FuseId :: binary()} | no_return().
 %% ====================================================================
 read_global_fuse_id(GlobalFuseId) ->
-    GlobalFuseId1 = vcn_utils:ensure_binary(GlobalFuseId),
+    GlobalFuseId1 = opn_utils:ensure_binary(GlobalFuseId),
     [ProviderId, FuseId] = binary:split(GlobalFuseId1, <<"::">>),
     {ProviderId, FuseId}.
 
@@ -265,7 +265,7 @@ read_global_fuse_id(GlobalFuseId) ->
 -spec is_global_fuse_id(GlobalFuseId :: iolist()) -> boolean().
 %% ====================================================================
 is_global_fuse_id(GlobalFuseId) ->
-    GlobalFuseId1 = vcn_utils:ensure_binary(GlobalFuseId),
+    GlobalFuseId1 = opn_utils:ensure_binary(GlobalFuseId),
     length(binary:split(GlobalFuseId1, <<"::">>)) =:= 2.
 
 

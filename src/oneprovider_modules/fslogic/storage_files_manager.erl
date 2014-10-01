@@ -314,9 +314,9 @@ write(Storage_helper_info, File, Offset, Buf) ->
                   {ErrorCode2, FFI} = helpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
                   case ErrorCode2 of
                     0 ->
-                        T1 = vcn_utils:mtime(),
+                        T1 = opn_utils:mtime(),
                       BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
-                        T0 = vcn_utils:mtime(),
+                        T0 = opn_utils:mtime(),
                         ?info("write bytes: ~p", [T0 - T1]),
                       ErrorCode3 = helpers:exec(release, Storage_helper_info, [File, FFI]),
                       case ErrorCode3 of
@@ -850,33 +850,33 @@ check_access_type(File) ->
 %% ====================================================================
 setup_ctx(File) ->
     ?debug("Setup storage ctx based on fslogc ctx -> DN: ~p, AccessToken: ~p", [fslogic_context:get_user_dn(), fslogic_context:get_gr_auth()]),
-    T0 = vcn_utils:mtime(),
+    T0 = opn_utils:mtime(),
     case fslogic_objects:get_user() of
         {ok, #db_document{record = #user{login = UserName, global_id = GRUID} = UserRec}} ->
-            T1 = vcn_utils:mtime(),
+            T1 = opn_utils:mtime(),
             fslogic_context:set_fs_user_ctx(UserName),
             case check_access_type(File) of
                 {ok, {group, SpaceId}} ->
-                    T2 = vcn_utils:mtime(),
+                    T2 = opn_utils:mtime(),
                     UserSpaceIds = user_logic:get_space_ids(UserRec),
-                    T3 = vcn_utils:mtime(),
-                    SelectedSpaceId = [X || X <- UserSpaceIds, vcn_utils:ensure_binary(SpaceId) =:= X],
+                    T3 = opn_utils:mtime(),
+                    SelectedSpaceId = [X || X <- UserSpaceIds, opn_utils:ensure_binary(SpaceId) =:= X],
                     SelectedSpaceIdOrSpace =
                         case SelectedSpaceId of
                             [] ->
                                 UserSpaces0 =
-                                    case dao_lib:apply(vfs, get_space_files, [{gruid, vcn_utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()) of
+                                    case dao_lib:apply(vfs, get_space_files, [{gruid, opn_utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()) of
                                         {ok, SpaceFiles} ->
                                             [fslogic_utils:file_to_space_info(SpaceFile) || #db_document{record = #file{}} = SpaceFile <- SpaceFiles];
                                         _ ->
                                             []
                                     end,
-                                SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, vcn_utils:ensure_binary(SpaceId) =:= X],
+                                SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, opn_utils:ensure_binary(SpaceId) =:= X],
                                 SelectedSpace0;
                             _  ->
                                 SelectedSpaceId
                         end,
-                    T4 = vcn_utils:mtime(),
+                    T4 = opn_utils:mtime(),
 
                     SelectedSpace =
                         case SelectedSpaceIdOrSpace of
@@ -895,7 +895,7 @@ setup_ctx(File) ->
                             [#space_info{} = SpaceInfo] ->
                                 [fslogic_spaces:map_to_grp_owner(SpaceInfo)]
                         end,
-                    T5 = vcn_utils:mtime(),
+                    T5 = opn_utils:mtime(),
                     ?info("setup ==================> ~p ~p ~p ~p ~p", [T5 - T4, T4 - T3, T3 - T2, T2 - T1, T1 - T0]),
                     fslogic_context:set_fs_group_ctx(GIDs),
                     ok;
