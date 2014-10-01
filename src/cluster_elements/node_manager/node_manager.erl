@@ -118,8 +118,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
                 _:_ -> ok
             end,
             start_dispatcher_listener(),
-            {ok, Interval} = application:get_env(?APP_Name, initialization_time),
-            erlang:send_after(Interval * 1000, self(), {timer, init_listeners}),
+            erlang:send_after(0, self(), {timer, init_listeners}),
             {ok, MonitoringInitialization} = application:get_env(?APP_Name, node_monitoring_initialization),
             erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_node_monitoring});
         false -> ok
@@ -131,13 +130,11 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
     ets:new(?WRITE_DISABLED_USERS, [set, named_table, public]),
     ets:new(?ACK_HANDLERS, [set, named_table, public]),
 
-    process_flag(trap_exit, true),
     erlang:send_after(10, self(), {timer, do_heart_beat}),
 
     {ok, #node_state{node_type = Type, ccm_con_status = not_connected}};
 
 init([Type]) when Type =:= test_worker ->
-    process_flag(trap_exit, true),
     {ok, MonitoringInitialization} = application:get_env(?APP_Name, node_monitoring_initialization),
     erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_node_monitoring}),
     erlang:send_after(10, self(), {timer, do_heart_beat}),
@@ -1201,17 +1198,16 @@ start_dispatcher_listener() ->
     {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
     {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
 
+    LocalPort = oneproxy:get_local_port(Port),
+    Pid = spawn_link(fun() -> oneproxy:start(Port, LocalPort, CertFile, verify_peer) end),
+    register(?ONEPROXY_DISPATCHER, Pid),
+
     Dispatch = cowboy_router:compile([{'_', [{?VEILCLIENT_URI_PATH, ws_handler, []}]}]),
 
-    {ok, _} = cowboy:start_https(?dispatcher_listener, DispatcherPoolSize,
+    {ok, _} = cowboy:start_http(?dispatcher_listener, DispatcherPoolSize,
         [
-            {port, Port},
-            {certfile, atom_to_list(CertFile)},
-            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs_from_all_cert_dirs())},
-            {keyfile, atom_to_list(CertFile)},
-            {password, ""},
-            {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}},
-            {ciphers, gsi_handler:get_ciphers()}
+            {ip, {127, 0, 0, 1}},
+            {port, LocalPort}
         ],
         [
             {env, [{dispatch, Dispatch}]}
@@ -1236,6 +1232,9 @@ start_gui_listener() ->
     {ok, GuiNbAcceptors} = application:get_env(veil_cluster_node, control_panel_number_of_acceptors),
     {ok, MaxKeepAlive} = application:get_env(veil_cluster_node, control_panel_max_keepalive),
     {ok, Timeout} = application:get_env(veil_cluster_node, control_panel_socket_timeout),
+
+    LocalPort = oneproxy:get_local_port(GuiPort),
+    spawn_link(fun() -> oneproxy:start(GuiPort, LocalPort, CertString, verify_none) end),
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
@@ -1295,14 +1294,10 @@ start_gui_listener() ->
     gui_utils:init_n2o_ets_and_envs(GuiPort, ?gui_routing_module, ?session_logic_module, ?cowboy_bridge_module),
 
     % Start the listener for web gui and nagios handler
-    {ok, _} = cowboy:start_https(?https_listener, GuiNbAcceptors,
+    {ok, _} = cowboy:start_http(?https_listener, GuiNbAcceptors,
         [
-            {port, GuiPort},
-            {certfile, CertString},
-            {keyfile, CertString},
-            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs_from_all_cert_dirs())},
-            {password, ""},
-            {ciphers, gsi_handler:get_ciphers()}
+            {ip, {127, 0, 0, 1}},
+            {port, LocalPort}
         ],
         [
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
@@ -1362,6 +1357,10 @@ start_rest_listener() ->
     % Get REST port from env and setup dispatch opts for cowboy
     {ok, RestPort} = application:get_env(veil_cluster_node, rest_port),
 
+    LocalPort = oneproxy:get_local_port(RestPort),
+    Pid = spawn_link(fun() -> oneproxy:start(RestPort, LocalPort, CertString, verify_peer) end),
+    register(oneproxy_rest, Pid),
+
     RestDispatch = [
         {'_', [
             {"/rest/:version/[...]", veil_cowboy_bridge,
@@ -1380,15 +1379,10 @@ start_rest_listener() ->
     ],
 
     % Start the listener for REST handler
-    {ok, _} = cowboy:start_https(?rest_listener, NbAcceptors,
+    {ok, _} = cowboy:start_http(?rest_listener, NbAcceptors,
         [
-            {port, RestPort},
-            {certfile, CertString},
-            {keyfile, CertString},
-            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs_from_all_cert_dirs())},
-            {password, ""},
-            {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}},
-            {ciphers, gsi_handler:get_ciphers()}
+            {ip, {127, 0, 0, 1}},
+            {port, LocalPort}
         ],
         [
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},

@@ -56,4 +56,8 @@
 %% name of ETS which caches details about token-based user authentication.
 -define(TOKEN_AUTHENTICATION_CACHE, ws_token_authentication).
 
+%% oneproxy listeners
+-define(ONEPROXY_DISPATCHER, oneproxy_dispatcher).
+-define(ONEPROXY_REST, oneproxy_rest).
+
 -endif.

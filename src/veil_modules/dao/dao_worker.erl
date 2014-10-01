@@ -97,6 +97,7 @@ init(Args) ->
     ClearFun = fun() -> cache_guard() end,
     ClearFun2 = fun() -> ets:delete_all_objects(storage_cache) end,
     ClearFun3 = fun() -> ets:delete_all_objects(users_cache) end,
+    ClearFun4 = fun() -> ets:delete_all_objects(spaces_cache) end,
     %% TODO - check if simple cache is enough for users and fuses; if not, change to advanced cache (sub processes)
     %% We assume that cached data do not change!
     Cache1 = worker_host:create_simple_cache(dao_fuse_cache, dao_fuse_cache_loop_time, ClearFun),
@@ -108,7 +109,12 @@ init(Args) ->
             Cache3 = worker_host:create_simple_cache(users_cache, users_cache_loop_time, ClearFun3),
             case Cache3 of
               ok ->
-                init({Args, {init_status, ets:info(db_host_store)}});
+                  Cache4 = worker_host:create_simple_cache(spaces_cache, users_cache_loop_time, ClearFun4),
+                  case Cache4 of
+                      ok ->
+                          init({Args, {init_status, ets:info(db_host_store)}});
+                      _ -> throw({error, {spaces_cache_error, Cache4}})
+                  end;
               _ -> throw({error, {users_cache_error, Cache3}})
             end;
           _ -> throw({error, {storage_cache_error, Cache2}})
