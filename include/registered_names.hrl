@@ -60,4 +60,8 @@
 -define(ONEPROXY_DISPATCHER, oneproxy_dispatcher).
 -define(ONEPROXY_REST, oneproxy_rest).
 
+%% Storage UID and GID mappings caches
+-define(STORAGE_USER_IDS_CACHE, storage_user_ids_cache).
+-define(STORAGE_GROUP_IDS_CACHE, storage_group_ids_cache).
+
 -endif.

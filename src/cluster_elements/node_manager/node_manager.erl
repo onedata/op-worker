@@ -46,6 +46,9 @@
 -define(rest_listener, rest).
 -define(http_redirector_listener, http).
 
+%% Reload time for storage UIDs and GIDs.
+-define(storage_ids_reload_time, timer:seconds(20)).
+
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -129,8 +132,12 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
     ets:new(?LFM_EVENT_PRODUCTION_ENABLED_ETS, [set, named_table, public]),
     ets:new(?WRITE_DISABLED_USERS, [set, named_table, public]),
     ets:new(?ACK_HANDLERS, [set, named_table, public]),
+    ets:new(?STORAGE_USER_IDS_CACHE, [set, named_table, protected, {read_concurrency, true}]),
+    ets:new(?STORAGE_GROUP_IDS_CACHE, [set, named_table, protected, {read_concurrency, true}]),
 
     erlang:send_after(10, self(), {timer, do_heart_beat}),
+    erlang:send_after(0, self(), {timer, reload_storage_users}),
+    erlang:send_after(0, self(), {timer, reload_storage_groups}),
 
     {ok, #node_state{node_type = Type, ccm_con_status = not_connected}};
 
@@ -370,6 +377,31 @@ handle_cast({update_network_stats, NetworkStats}, State) ->
 
 handle_cast({update_ports_stats, PortsStats}, State) ->
     {noreply, State#node_state{ports_stats = PortsStats}};
+
+
+handle_cast(reload_storage_users, State) ->
+    {ok, Data} = file:read_file("/etc/passwd"),
+    UserTokens = binary:split(Data, [<<10>>, <<13>>], [global, trim]),
+    lists:foreach(
+        fun(Elem) ->
+            [UserName, _, UID | _] = binary:split(Elem, [<<":">>], [global, trim]),
+            ets:insert(?STORAGE_USER_IDS_CACHE, {vcn_utils:ensure_binary(UserName), binary_to_integer(UID)})
+        end, UserTokens),
+
+    erlang:send_after(timer:seconds(20), self(), {timer, reload_storage_users}),
+    {noreply, State};
+
+handle_cast(reload_storage_groups, State) ->
+    {ok, Data} = file:read_file("/etc/group"),
+    GroupTokens = binary:split(Data, [<<10>>, <<13>>], [global, trim]),
+    lists:foreach(
+        fun(Elem) ->
+            [GroupName, _, GID | _] = binary:split(Elem, [<<":">>], [global, trim]),
+            ets:insert(?STORAGE_GROUP_IDS_CACHE, {vcn_utils:ensure_binary(GroupName), binary_to_integer(GID)})
+        end, GroupTokens),
+
+    erlang:send_after(timer:seconds(20), self(), {timer, reload_storage_groups}),
+    {noreply, State};
 
 handle_cast(_Msg, State) ->
     ?warning("Wrong cast: ~p", [_Msg]),

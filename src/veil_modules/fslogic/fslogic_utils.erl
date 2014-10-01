@@ -28,7 +28,6 @@
 %% API functions
 %% ====================================================================
 
-
 %% file_to_space_info/1
 %% ====================================================================
 %% @doc Extracts space_info() from file_doc(). If given file is not an space's root file, fails with error:{badarg, file_info()}.
