@@ -24,6 +24,11 @@ Scheduler::~Scheduler()
         t.join();
 }
 
+void Scheduler::post(std::function<void()> task)
+{
+    m_ioService.post(task);
+}
+
 void Scheduler::handle(const boost::system::error_code &error,
                        std::function<void()> callback,
                        std::shared_ptr<steady_timer> /*timer*/)

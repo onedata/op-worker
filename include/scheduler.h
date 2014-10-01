@@ -43,6 +43,12 @@ public:
     ~Scheduler();
 
     /**
+     * Runs a task asynchronously in @c Scheduler's thread pool.
+     * @param task The task to execute.
+     */
+    void post(std::function<void()> task);
+
+    /**
      * Schedules a task to be run after some time.
      * @param after The duration after which the task should be executed.
      * @param task The task to execute.
