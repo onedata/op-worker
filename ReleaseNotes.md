@@ -1,7 +1,7 @@
 ClientProtocol 1.0
 ==================
 
-*ClientProtocol 1.0* is a part of *onedata 1.0*. *onedata 1.0* is a system that provides a unified and efficient access
+*ClientProtocol 1.0* is a part of *Onedata 1.0*. *Onedata 1.0* is a system that provides a unified and efficient access
 to data stored at various storage systems in one site. *ClientProtocol* contains definition of protocol between 
 *oneprovider* and *oneclient*.
 

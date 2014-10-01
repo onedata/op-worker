@@ -1,14 +1,14 @@
 ClientProtocol
 ==============
 
-*ClientProtocol* is a part of *onedata* system that unifies access to files stored at heterogeneous data storage systems 
+*ClientProtocol* is a part of *Onedata* system that unifies access to files stored at heterogeneous data storage systems 
 that belong to geographically distributed organizations.
 
 Goals
 -----
 
 The goal of *ClientProtocol* is to provide a communication contract between *oneprovider* (self-scalable cluster that
-will is a central point of each data centre that uses *onedata*) and *oneclient* (a user space file system that that
+will is a central point of each data centre that uses *Onedata*) and *oneclient* (a user space file system that that
 frees users from problems related to data access in heterogeneous environments).
 
 Getting Started
