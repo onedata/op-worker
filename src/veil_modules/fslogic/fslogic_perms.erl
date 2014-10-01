@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 
 -include("registered_names.hrl").
+-include("files_common.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_types.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
@@ -55,28 +56,30 @@ check_file_perms(_FileName, _UserDoc, _FileDoc, '') -> %undefined mode
 check_file_perms(_FileName, #veil_document{uuid = ?CLUSTER_USER_ID}, _FileDoc, _CheckType) -> %root, always return ok
     ok;
 check_file_perms(FileName, UserDoc, _FileDoc, root = CheckType) -> % check if root
-    ?permission_denied_error(UserDoc,FileName,CheckType);
+    ?permission_denied_error(UserDoc, FileName, CheckType);
 check_file_perms(_FileName, #veil_document{uuid = UserUid}, #veil_document{record = #file{uid = UserUid}}, owner) -> % check if owner
     ok;
 check_file_perms(FileName, UserDoc, _FileDoc, owner = CheckType) ->
-    ?permission_denied_error(UserDoc,FileName,CheckType);
+    ?permission_denied_error(UserDoc, FileName, CheckType);
 check_file_perms(FileName, UserDoc, _FileDoc, create) ->
-    {ok, {_,ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName,fslogic_context:get_protocol_version()),
+    {ok, {_, ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName, fslogic_context:get_protocol_version()),
     ParentFileName = fslogic_path:strip_path_leaf(FileName),
-    check_file_perms(ParentFileName,UserDoc,ParentFileDoc,write);
-check_file_perms(FileName, UserDoc = #veil_document{record = #user{global_id = GlobalId}}, #veil_document{record = #file{location = FileLoc}} = FileDoc, delete) ->
-    {ok, {_,ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName,fslogic_context:get_protocol_version()),
+    check_file_perms(ParentFileName, UserDoc, ParentFileDoc, write);
+check_file_perms(FileName, UserDoc = #veil_document{record = #user{global_id = GlobalId}}, #veil_document{record = #file{location = FileLoc, type = Type, perms = FilePerms}} = FileDoc, delete) ->
+    {ok, {_, ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName, fslogic_context:get_protocol_version()),
     ParentFileName = fslogic_path:strip_path_leaf(FileName),
-    case check_file_perms(ParentFileName,UserDoc,ParentFileDoc,write) of
+    case check_file_perms(ParentFileName, UserDoc, ParentFileDoc, write) of
         ok ->
-            case check_file_perms(FileName,UserDoc,FileDoc,owner) of
-                ok ->
+            Ans = check_file_perms(FileName, UserDoc, FileDoc, owner),
+            % cache file perms
+            case FilePerms == 0 andalso Type == ?REG_TYPE andalso Ans == ok of
+                true ->
                     {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
                     {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-                    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), delete}}, 500),
-                    ok;
-                Error -> Error
-            end;
+                    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), delete}}, 500);
+                false -> ok
+            end,
+            Ans;
         Error -> Error
     end;
 check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
@@ -84,11 +87,11 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
         ok -> check_file_perms(FileName, UserDoc, FileDoc, write);
         Error -> Error
     end;
-check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms, meta_doc = MetaUuid, location = FileLoc}}, CheckType) -> %check read/write/execute perms
+check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms, type = Type, meta_doc = MetaUuid, location = FileLoc}}, CheckType) -> %check read/write/execute perms
     #veil_document{uuid = UserUid, record = #user{global_id = GlobalId}} = UserDoc,
     FileSpace = get_group(FileName),
 
-    UserOwnsFile = UserUid=:=FileOwnerUid,
+    UserOwnsFile = UserUid =:= FileOwnerUid,
     UserGroupOwnsFile = is_member_of_space(UserDoc, {name, FileSpace}),
     RealAcl =
         case FilePerms of
@@ -99,19 +102,23 @@ check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwne
         end,
     case RealAcl of
         [] ->
-            case has_permission(CheckType,FilePerms,UserOwnsFile,UserGroupOwnsFile) of
+            case has_permission(CheckType, FilePerms, UserOwnsFile, UserGroupOwnsFile) of
                 true -> ok;
-                false -> ?permission_denied_error(UserDoc,FileName,CheckType)
+                false -> ?permission_denied_error(UserDoc, FileName, CheckType)
             end;
         _ ->
             case (catch fslogic_acl:check_permission(RealAcl, vcn_utils:ensure_binary(GlobalId), CheckType)) of
                 ok ->
                     % cache permissions for storage_files_manager use
-                    {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
-                    {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-                    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), CheckType}}, 500),
-                    ok;
-                ?VEPERM -> ?permission_denied_error(UserDoc,FileName,CheckType)
+                    case Type of
+                        ?REG_TYPE ->
+                            {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+                            {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+                            gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), CheckType}}, 500),
+                            ok;
+                        _ -> ok
+                    end;
+                ?VEPERM -> ?permission_denied_error(UserDoc, FileName, CheckType)
             end
     end.
 

@@ -410,14 +410,7 @@ write(Storage_helper_info, File, Buf) ->
     ErrorDetail :: term().
 %% ====================================================================
 create(Storage_helper_info, File) ->
-    ok = case get_cached_value(File, mode, Storage_helper_info) of
-             {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-                 case has_permission(File, create) of
-                     true -> ok;
-                     false -> setup_ctx(File)
-                 end;
-             _ -> setup_ctx(File)
-         end,
+    ok = setup_ctx(File),
     {ModeStatus, NewFileStorageMode} = get_mode(File),
     case ModeStatus of
         ok -> create(Storage_helper_info, File, NewFileStorageMode);
@@ -435,14 +428,7 @@ create(Storage_helper_info, File) ->
     ErrorDetail :: term().
 %% ====================================================================
 create(Storage_helper_info, File, Mode) ->
-    ok = case get_cached_value(File, mode, Storage_helper_info) of
-             {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-                 case has_permission(File, create) of
-                     true -> ok;
-                     false -> setup_ctx(File)
-                 end;
-             _ -> setup_ctx(File)
-         end,
+    ok = setup_ctx(File),
     {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
     case ErrorCode of
         0 -> {error, file_exists};

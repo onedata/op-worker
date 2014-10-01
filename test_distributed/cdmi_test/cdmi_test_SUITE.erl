@@ -1131,7 +1131,7 @@ partial_upload_test(_Config) ->
 % tests access common lists
 acl_test(_Console) ->
     Filename1 = "acl_test_file1",
-    Dirname1 = "acl_test_dir1",
+    Dirname1 = "acl_test_dir1/",
     Read = [
         {<<"acetype">>,<<"ALLOW">>},
         {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
@@ -1144,41 +1144,110 @@ acl_test(_Console) ->
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"WRITE">>}
     ],
-    Execute = [
+    _Execute = [
         {<<"acetype">>,<<"ALLOW">>},
         {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"EXECUTE">>}
     ],
 
+    MetadataAclRead = rest_utils:encode_to_json([{<<"metadata">>, [{<<"cdmi_acl">>, [Read]}]}]),
+    MetadataAclWrite = rest_utils:encode_to_json([{<<"metadata">>, [{<<"cdmi_acl">>, [Write]}]}]),
+    MetadataAclReadWrite = rest_utils:encode_to_json([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read]}]}]),
+
     %%----- read file test ---------
+    % create test file with dummy data
     ?assert(not object_exists(Filename1)),
     create_file(filename:join("/", Filename1)),
     write_to_file(Filename1, <<"data">>),
 
+    % set acl to 'write' and test cdmi/non-cdmi get request (should return 403 forbidden)
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
-    RequestBody1 = rest_utils:encode_to_json([{<<"metadata">>, [{<<"cdmi_acl">>, [Write]}]}]),
-    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, RequestBody1),
+    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, MetadataAclWrite),
     {"403", _, _} = do_request(Filename1, get, RequestHeaders1, []),
+    {"403", _, _} = do_request(Filename1, get, [], []),
     ?assertEqual({wrong_open_return_code,-13}, get_file_content(Filename1)),
-    RequestBody2 = rest_utils:encode_to_json([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read]}]}]),
-    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, RequestBody2),
+
+
+    % set acl to 'read&write' and test cdmi/non-cdmi get request (should succeed)
+    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, MetadataAclReadWrite),
     {"200", _, _} = do_request(Filename1, get, RequestHeaders1, []),
+    {"200", _, _} = do_request(Filename1, get, [], []),
     %%------------------------------
 
     %%------- write file test ------
-    RequestBody3 = rest_utils:encode_to_json([{<<"metadata">>, [{<<"cdmi_acl">>, [Read, Write]}]}]),
-    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, RequestBody3),
+    % set acl to 'read&write' and test cdmi/non-cdmi put request (should succeed)
+    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, MetadataAclReadWrite),
     RequestBody4 = rest_utils:encode_to_json([{<<"value">>, <<"new_data">>}]),
     {"204", _, _} = do_request(Filename1, put, RequestHeaders1, RequestBody4),
     ?assertEqual(<<"new_data">>, get_file_content(Filename1)),
-    RequestBody5 = rest_utils:encode_to_json([{<<"metadata">>, [{<<"cdmi_acl">>, [Read]}]}]),
-    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, RequestBody5),
-    RequestBody6 = rest_utils:encode_to_json([{<<"value">>, <<"new_data2">>}]),
+    write_to_file(Filename1,<<"1">>),
+    ?assertEqual(<<"new_data1">>, get_file_content(Filename1)),
+    {"204", _, _} = do_request(Filename1, put, [], <<"new_data2">>),
+    ?assertEqual(<<"new_data2">>, get_file_content(Filename1)),
+
+    % set acl to 'read' and test cdmi/non-cdmi put request (should return 403 forbidden)
+    {"204", _, _} = do_request(Filename1, put, RequestHeaders1, MetadataAclRead),
+    RequestBody6 = rest_utils:encode_to_json([{<<"value">>, <<"new_data3">>}]),
     {"403", _, _} = do_request(Filename1, put, RequestHeaders1, RequestBody6),
-    ?assertEqual(<<"new_data">>, get_file_content(Filename1)),
+    {"403", _, _} = do_request(Filename1, put, [], <<"new_data4">>),
+    ?assertEqual(<<"new_data2">>, get_file_content(Filename1)),
     ?assertEqual({wrong_open_return_code,-13}, write_to_file(Filename1, <<"some_data">>)),
-    ?assertEqual(<<"new_data">>, get_file_content(Filename1)).
+    ?assertEqual(<<"new_data2">>, get_file_content(Filename1)),
+    %%------------------------------
+
+    %%------ delete file test ------
+    {"204", _, _} = do_request(Filename1, delete, [], []),
+    ?assert(not object_exists(Filename1)),
+    %%------------------------------
+
+    %%--- read write dir test ------
+    ?assert(not object_exists(Dirname1)),
+    create_dir(filename:join("/", Dirname1)),
+    File1 = filename:join(Dirname1, "1"),
+    File2 = filename:join(Dirname1, "2"),
+    File3 = filename:join(Dirname1, "3"),
+    File4 = filename:join(Dirname1, "4"),
+
+    % set acl to 'read&write' and test cdmi get request (should succeed)
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-container"}],
+    {"204", _, _} = do_request(Dirname1, put, RequestHeaders2, MetadataAclReadWrite),
+    {"200", _, _} = do_request(Dirname1, get, RequestHeaders2, []),
+
+    % create files in directory (shoul succeed)
+    {"201", _, _} = do_request(File1, put, [], []),
+    ?assert(object_exists(File1)),
+    {"201", _, _} = do_request(File2, put, RequestHeaders1, <<"{\"value\":\"val\"}">>),
+    ?assert(object_exists(File2)),
+    create_file(File3),
+    ?assert(object_exists(File3)),
+
+    % delete files (should succeed)
+    {"204", _, _} = do_request(File1, delete, [], []),
+    ?assert(not object_exists(File1)),
+    {"204", _, _} = do_request(File2, delete, [], []),
+    ?assert(not object_exists(File2)),
+
+    % set acl to 'write' and test cdmi get request (should return 403 forbidden)
+    {"204", _, _} = do_request(Dirname1, put, RequestHeaders2, MetadataAclWrite),
+    {"403", _, _} = do_request(Dirname1, get, RequestHeaders2, []),
+
+    % set acl to 'read' and test cdmi put request (should return 403 forbidden)
+    {"204", _, _} = do_request(Dirname1, put, RequestHeaders2, MetadataAclRead),
+    {"200", _, _} = do_request(Dirname1, get, RequestHeaders2, []),
+    {"403", _, _} = do_request(Dirname1, put, RequestHeaders2, rest_utils:encode_to_json([{<<"metadata">>, [{<<"my_meta">>, <<"value">>}]}])),
+
+    % create files (should return 403 forbidden)
+    {"403", _, _} = do_request(File1, put, [], []),
+    ?assert(not object_exists(File1)),
+    {"403", _, _} = do_request(File2, put, RequestHeaders1, <<"{\"value\":\"val\"}">>),
+    ?assert(not object_exists(File2)),
+    ?assertEqual({logical_file_system_error,"eacces"},create_file(File4)),
+    ?assert(not object_exists(File4)),
+
+    % delete files (should return 403 forbidden)
+    {"403", _, _} = do_request(File3, delete, [], []),
+    ?assert(object_exists(File3)).
     %%------------------------------
 
 %% ====================================================================
@@ -1271,11 +1340,10 @@ create_dir(Path) ->
 
 create_file(Path) ->
     DN=get(dn),
-    Ans = rpc_call_node(fun() ->
+    rpc_call_node(fun() ->
         fslogic_context:set_user_dn(DN),
         logical_files_manager:create(Path)
-    end),
-    ?assertEqual(ok, Ans).
+    end).
 
 get_file_content(Path) ->
     DN=get(dn),

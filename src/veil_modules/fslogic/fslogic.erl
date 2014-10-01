@@ -46,24 +46,21 @@ init(_Args) ->
 
     % Create acl permission cache
     ProcFun = fun
-        (_ProtocolVersion, {grant_permission, StorageFileName, GRUID, Permission}) ->
-            put({StorageFileName, GRUID, Permission}, true),
+        (_ProtocolVersion, {grant_permission, StorageFileName, GRUID, Permission}, CacheName) ->
+            ets:insert(CacheName, {{StorageFileName, GRUID, Permission}, true}),
             ok;
-        (_ProtocolVersion, {has_permission, StorageFileName, GRUID, Permission}) ->
-            GrantedPerm = get({StorageFileName, GRUID, Permission}),
-            {ok, GrantedPerm == true};
-        (_ProtocolVersion, {invalidate_cache, StorageFileName}) ->
-            {AllKeys, _} = lists:unzip(get()),
-            GivenFileKeys = lists:filter(
-                fun({StorageFileName, _, _}) -> true;
-                    (_) -> false
-                end, AllKeys),
-            lists:foreach(fun erase/1, GivenFileKeys)
+        (_ProtocolVersion, {has_permission, StorageFileName, GRUID, Permission}, CacheName) ->
+            case ets:lookup(CacheName, {StorageFileName, GRUID, Permission}) of
+                [{_,true}] -> {ok, true};
+                _ -> {ok, false}
+            end;
+        (_ProtocolVersion, {invalidate_cache, StorageFileName}, CacheName) ->
+            ets:match_delete(CacheName,{{StorageFileName, '_', '_'}, '_'})
     end,
     MapFun = fun({_, StorageFileName, _, _}) ->
         lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, StorageFileName)
     end,
-    SubProcList = worker_host:generate_sub_proc_list(pemission_cache, 6, 10, ProcFun, MapFun),
+    SubProcList = worker_host:generate_sub_proc_list(pemission_cache, 6, 10, ProcFun, MapFun, simple),
     RequestMap = fun
         ({grant_permission, _, _, _}) -> pemission_cache;
         ({has_permission, _, _, _}) -> pemission_cache;

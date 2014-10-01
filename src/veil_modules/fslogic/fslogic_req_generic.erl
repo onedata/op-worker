@@ -294,17 +294,21 @@ get_acl(FullFileName) ->
 %% ====================================================================
 set_acl(FullFileName, Entities) ->
     true = lists:all(fun(X) -> is_record(X, accesscontrolentity) end, Entities),
-    {ok, #veil_document{record = #file{location = FileLoc} = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    {ok, #veil_document{record = #file{location = FileLoc, type = Type} = FileDoc}} = fslogic_objects:get_file(FullFileName),
     case Entities of
         [] -> fslogic_req_generic:change_file_perms(FullFileName, application:get_env(?APP_Name, new_file_logic_mode));
         _ -> fslogic_req_generic:change_file_perms(FullFileName, 0)
     end,
     #file{} = fslogic_meta:update_meta_attr(FileDoc, acl, Entities, true),
 
-    % invalidate permission cache
-    {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
-    {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {invalidate_cache, StorageFileName}}, 500),
+    % invalidate file permission cache
+    case Type of
+        ?REG_TYPE ->
+            {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+            {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+            gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {invalidate_cache, StorageFileName}}, 500);
+        _ -> ok
+    end,
 
     #atom{value = ?VOK}.
 
