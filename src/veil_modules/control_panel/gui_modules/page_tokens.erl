@@ -255,7 +255,7 @@ token_row_expanded(TableName, RowId, #token_details{access_id = AccessId} = Toke
                 end, [
                     {<<"Name">>, <<RowId/binary, "_client_name">>, client_name(TableName, RowId, TokenDetails)},
                     {<<"Access ID">>, <<RowId/binary, "_revoke_token">>, token_detail(AccessId, <<"Revoke token">>,
-                        {revoke_token, TableName, RowId, TokenDetails}, <<"fui-trash">>)}
+                        {revoke_token, TableName, RowId, TokenDetails}, <<"icomoon-remove">>)}
                 ])
             }
         },
@@ -297,7 +297,7 @@ token_detail(Content, Title, Postback, Class) ->
     Result :: #span{}.
 %% ====================================================================
 client_name(TableName, RowId, #token_details{client_name = ClientName} = TokenDetails) ->
-    token_detail(ClientName, <<"Edit">>, {change_client_name, TableName, RowId, TokenDetails}, <<"fui-new">>).
+    token_detail(ClientName, <<"Edit">>, {change_client_name, TableName, RowId, TokenDetails}, <<"icomoon-pencil2">>).
 
 
 %% change_client_name/3

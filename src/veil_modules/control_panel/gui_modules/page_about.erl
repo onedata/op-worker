@@ -40,7 +40,7 @@ body() ->
             #h6{style = <<" text-align: center;">>, body = <<"About">>},
             #panel{id = <<"about_table">>, body = about_table()}
         ]}
-    ] ++ vcn_gui_utils:logotype_footer(20)}.
+    ]}.
 
 about_table() ->
     #table{style = <<"border-width: 0px; width: auto">>, body = [
@@ -77,13 +77,13 @@ about_table() ->
                 body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"License">>}},
             #td{style = <<"padding: 15px; vertical-align: top;">>,
                 body = #p{style = <<"white-space: pre; font-size: 100%; line-height: normal">>, body = get_license()}}
-        ]},
-
-        #tr{cells = [
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Team">>}},
-            #td{style = <<"padding: 15px; vertical-align: top;">>, body = get_team()}
         ]}
+%%
+%%         #tr{cells = [
+%%             #td{style = <<"padding: 15px; vertical-align: top;">>,
+%%                 body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Team">>}},
+%%             #td{style = <<"padding: 15px; vertical-align: top;">>, body = get_team()}
+%%         ]}
     ]}.
 
 % content of LICENSE.txt file
@@ -93,18 +93,18 @@ get_license() ->
         {error, _Error} -> <<"">>
     end.
 
-% HTML list with team members
-get_team() ->
-    Members = [<<"Łukasz Dutka"/utf8>>, <<"Jacek Kitowski"/utf8>>, <<"Dariusz Król"/utf8>>, <<"Tomasz Lichoń"/utf8>>, <<"Darin Nikolow"/utf8>>,
-        <<"Łukasz Opioła"/utf8>>, <<"Tomasz Pałys"/utf8>>, <<"Bartosz Polnik"/utf8>>, <<"Paweł Salata"/utf8>>, <<"Michał Sitko"/utf8>>,
-        <<"Rafał Słota"/utf8>>, <<"Renata Słota"/utf8>>, <<"Beata Skiba"/utf8>>, <<"Krzysztof Trzepla"/utf8>>, <<"Michał Wrzeszcz"/utf8>>,
-        <<"Konrad Zemek"/utf8>>],
-    #list{style = <<"margin-top: -3px;">>, numbered = false, body =
-    lists:map(
-        fun(Member) ->
-            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = Member}
-        end, Members)
-    }.
+%% % HTML list with team members
+%% get_team() ->
+%%     Members = [<<"Łukasz Dutka"/utf8>>, <<"Jacek Kitowski"/utf8>>, <<"Dariusz Król"/utf8>>, <<"Tomasz Lichoń"/utf8>>, <<"Darin Nikolow"/utf8>>,
+%%         <<"Łukasz Opioła"/utf8>>, <<"Tomasz Pałys"/utf8>>, <<"Bartosz Polnik"/utf8>>, <<"Paweł Salata"/utf8>>, <<"Michał Sitko"/utf8>>,
+%%         <<"Rafał Słota"/utf8>>, <<"Renata Słota"/utf8>>, <<"Beata Skiba"/utf8>>, <<"Krzysztof Trzepla"/utf8>>, <<"Michał Wrzeszcz"/utf8>>,
+%%         <<"Konrad Zemek"/utf8>>],
+%%     #list{style = <<"margin-top: -3px;">>, numbered = false, body =
+%%     lists:map(
+%%         fun(Member) ->
+%%             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = Member}
+%%         end, Members)
+%%     }.
 
 event(init) -> ok;
 event(terminate) -> ok.

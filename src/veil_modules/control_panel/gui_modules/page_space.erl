@@ -200,7 +200,7 @@ space_name(#space_details{name = SpaceName} = SpaceDetails) ->
                 class = <<"glyph-link">>,
                 postback = {change_space_name, SpaceDetails},
                 body = #span{
-                    class = <<"fui-new">>
+                    class = <<"icomoon-pencil2">>
                 }
             }
         ]

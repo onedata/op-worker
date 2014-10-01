@@ -50,7 +50,7 @@ body() ->
             #h6{style = <<"text-align: center;">>, body = <<"Manage account">>},
             #panel{id = <<"main_table">>, body = main_table()}
         ]}
-    ] ++ vcn_gui_utils:logotype_footer(20)}.
+    ]}.
 
 
 % Info to register a DN
@@ -236,7 +236,7 @@ dn_list_body(UserDoc) ->
                 0 ->
                     #link{id = <<"dn_warning">>, class = <<"glyph-link">>, style = <<"margin-left: 30px;">>,
                         postback = {action, show_dn_info}, body =
-                        #span{class = <<"fui-question">>, style = <<"font-size: 16px;">>}};
+                        #span{class = <<"icomoon-help">>, style = <<"font-size: 16px;">>}};
                 _ ->
                     []
             end

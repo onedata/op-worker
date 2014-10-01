@@ -74,13 +74,12 @@ main_panel() ->
                         ]}
                 ]}},
                 #td{style = <<"width: 80px;">>, body = #span{class = <<"table-cell">>, body = [
-                    #panel{style = <<"margin: 5px 0; display: inline-block; vertical-align: middle;">>, body = [
+                    #panel{style = <<"margin: 4px 0 0;">>, body = [
                         #link{class = <<"glyph-link">>, style = <<"margin-right: 25px;">>,
-                            postback = {action, show_link, [UUID]}, body = #span{class = <<"fui-link">>,
-                                style = <<"font-size: 24px; margin: -4px 0px 0px; position: relative; top: 4px;">>}},
+                            postback = {action, show_link, [UUID]}, body = #span{class = <<"icomoon-link">>,
+                                style = <<"font-size: 24px;">>}},
                         #link{class = <<"glyph-link">>, postback = {action, remove_link_prompt, [UUID, Filename]},
-                            body = #span{class = <<"fui-cross">>, style = <<"font-size: 24px;",
-                            "margin: -4px 0px 0px; position: relative; top: 4px;">>}}
+                            body = #span{class = <<"fui-cross">>, style = <<"font-size: 24px;">>}}
                     ]}
                 ]}}
             ]}
