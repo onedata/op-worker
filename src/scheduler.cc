@@ -7,24 +7,6 @@
 
 #include "scheduler.h"
 
-#include <boost/asio.hpp>
-
-/// Force boost's steady_timer to use std::chrono.
-using steady_timer = boost::asio::basic_waitable_timer<std::chrono::steady_clock>;
-
-namespace
-{
-// The Timer argument serves to preserve timer's life until the handle
-// function is called.
-void handle(const boost::system::error_code &error,
-            std::function<void()> callback,
-            std::shared_ptr<steady_timer> /*timer*/)
-{
-    if(!error)
-        callback();
-}
-}
-
 namespace veil
 {
 
@@ -42,18 +24,12 @@ Scheduler::~Scheduler()
         t.join();
 }
 
-std::function<void()> Scheduler::schedule(const std::chrono::milliseconds after,
-                                          std::function<void()> task)
+void Scheduler::handle(const boost::system::error_code &error,
+                       std::function<void()> callback,
+                       std::shared_ptr<steady_timer> /*timer*/)
 {
-    using namespace std::placeholders;
-    const auto timer = std::make_shared<steady_timer>(m_ioService, after);
-    timer->async_wait(std::bind(handle, _1, std::move(task), timer));
-
-    std::weak_ptr<steady_timer> weakTimer;
-    return [weakTimer]{
-        if(auto t = weakTimer.lock())
-            t->cancel();
-    };
+    if(!error)
+        callback();
 }
 
 } // namespace veil
