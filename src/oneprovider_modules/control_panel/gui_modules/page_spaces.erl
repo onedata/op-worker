@@ -486,6 +486,7 @@ event(init) ->
     catch
         _:Reason ->
             ?error("Cannot initialize page ~p: ~p", [?MODULE, Reason]),
+            gui_jq:hide(<<"main_spinner">>),
             opn_gui_utils:message(<<"error_message">>, <<"Cannot fetch Spaces.<br>Please try again later.">>)
     end;
 
