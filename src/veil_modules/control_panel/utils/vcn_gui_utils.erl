@@ -25,7 +25,7 @@
 -export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/3]).
 
 % Functions to generate page elements
--export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0, message/2, message/3,
+-export([top_menu/1, top_menu/2, empty_page/0, message/2, message/3,
     spinner/0, expand_button/1, expand_button/2, collapse_button/1, collapse_button/2]).
 
 
@@ -355,26 +355,6 @@ top_menu(ActiveTabID, SubMenuBody) ->
             ]}
         ] ++ SubMenuBody}
     ] ++ gui_utils:cookie_policy_popup_body(<<?privacy_policy_url>>).
-
-
-%% logotype_footer/1
-%% ====================================================================
-%% @doc Convienience function to render logotype footer, coming after page content.
-%% @end
--spec logotype_footer(MarginTop :: integer()) -> list().
-%% ====================================================================
-logotype_footer(MarginTop) ->
-    Height = integer_to_binary(MarginTop + 82),
-    Margin = integer_to_binary(MarginTop),
-    [
-        #panel{style = <<"position: relative; height: ", Height/binary, "px;">>, body = [
-            #panel{style = <<"text-align: center; z-index: -1; margin-top: ", Margin/binary, "px;">>, body = [
-                #image{style = <<"margin: 10px 100px;">>, image = <<"/images/innow-gosp-logo.png">>},
-                #image{style = <<"margin: 10px 100px;">>, image = <<"/images/plgrid-plus-logo.png">>},
-                #image{style = <<"margin: 10px 100px;">>, image = <<"/images/unia-logo.png">>}
-            ]}
-        ]}
-    ].
 
 
 %% message/2
