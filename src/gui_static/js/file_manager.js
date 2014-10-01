@@ -45,6 +45,22 @@ init_chmod_table = function (current_mode) {
             update_chmod_checkboxes(mode_oct);
         }
     });
+
+    $('#octal_form_textbox').keyup(function (event) {
+        var textbox_value = $('#octal_form_textbox').val();
+        if (textbox_value.length == 3) {
+            var digit_1 = parseInt(textbox_value[0]);
+            var digit_2 = parseInt(textbox_value[1]);
+            var digit_3 = parseInt(textbox_value[2]);
+            if (!isNaN(digit_1) && !isNaN(digit_2) && !isNaN(digit_3) &&
+                digit_1 >= 0 && digit_1 <= 7 &&
+                digit_2 >= 0 && digit_2 <= 7 &&
+                digit_3 >= 0 && digit_3 <= 7) {
+                var mode_oct = parseInt(textbox_value, 8);
+                update_chmod_checkboxes(mode_oct);
+            }
+        }
+    });
 };
 
 // Submit newly chosen mode to the server

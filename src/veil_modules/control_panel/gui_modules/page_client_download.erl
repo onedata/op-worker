@@ -41,7 +41,7 @@ body() ->
             #h6{style = <<" text-align: center;">>, body = <<"Download oneclient">>},
             #panel{id = <<"main_panel">>, body = main_panel()}
         ]}
-    ] ++ vcn_gui_utils:logotype_footer(20)}.
+    ]}.
 
 main_panel() ->
     [

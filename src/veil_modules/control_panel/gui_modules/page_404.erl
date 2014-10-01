@@ -31,7 +31,7 @@ body() ->
             #link{url = <<"/">>, class = <<"btn btn-warning btn-block">>, body = <<"Main page">>}
         ]},
         gui_utils:cookie_policy_popup_body(<<?privacy_policy_url>>)
-    ] ++ vcn_gui_utils:logotype_footer(120)}.
+    ]}.
 
 event(init) -> ok;
 event(terminate) -> ok.

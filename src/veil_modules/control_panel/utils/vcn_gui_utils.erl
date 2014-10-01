@@ -289,18 +289,18 @@ top_menu(ActiveTabID, SubMenuBody) ->
     end,
 
     MenuCaptions = Process(ActiveTabID, [
-        {brand_tab, #li{body = #link{style = <<"padding: 18px;">>, url = "/",
+        {brand_tab, #li{body = #link{style = <<"padding: 13px;">>, url = <<"/">>,
             body = [
-                #span{style = <<"font-size: xx-large;">>, class = <<"fui-home">>},
-                #b{style = <<"font-size: x-large;">>, body = <<"onedata">>}
+                #span{style = <<"font-size: 23px;">>, class = <<"icomoon-home">>},
+                #b{style = <<"margin-left: 5px; font-size: 20px;">>, body = <<"onedata">>}
             ]}
         }},
         {data_tab, #li{body = [
-            #link{style = "padding: 18px;", url = "/file_manager", body = "Data"},
-            #list{style = "top: 37px; width: 120px;", body = [
-                #li{body = #link{url = "/file_manager", body = "File manager"}},
-                #li{body = #link{url = "/shared_files", body = "Shared files"}},
-                #li{body = #link{url = "/client_download", body = "Download oneclient"}}
+            #link{style = <<"padding: 18px;">>, url = <<"/file_manager">>, body = <<"Data">>},
+            #list{style = <<"top: 37px; width: 120px;">>, body = [
+                #li{body = #link{url = <<"/file_manager">>, body = <<"File manager">>}},
+                #li{body = #link{url = <<"/shared_files">>, body = <<"Shared files">>}},
+                #li{body = #link{url = <<"/client_download">>, body = <<"Download oneclient">>}}
             ]}
         ]}},
         {spaces_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Spaces">>,
@@ -310,15 +310,19 @@ top_menu(ActiveTabID, SubMenuBody) ->
     ]),
 
     MenuIcons = Process(ActiveTabID, [
-        {manage_account_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Manage account">>,
-            url = <<"/manage_account">>, body = [gui_str:unicode_list_to_binary(get_user_fullname()), #span{class = <<"fui-user">>,
-                style = <<"margin-left: 10px;">>}]}}},
-        {about_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"About">>,
-            url = <<"/about">>, body = #span{class = <<"fui-info">>}}}},
+        {manage_account_tab, #li{body = #link{style = <<"padding: 14px 13px; ">>, title = <<"Manage account">>,
+            url = <<"/manage_account">>, body = [
+                #panel{style = <<"line-height: 24px; height: 24px;">>, body = [
+                    #span{style = <<"display: inline; font-size: 15px; vertical-align:middle;">>, body = gui_str:unicode_list_to_binary(get_user_fullname())},
+                    #span{class = <<"icomoon-user">>, style = <<"margin-left: 10px; font-size: 24px; vertical-align:middle;">>}
+                ]}
+            ]}}},
+        {about_tab, #li{body = #link{style = <<"padding: 14px 13px;">>, title = <<"About">>,
+            url = <<"/about">>, body = #span{class = <<"icomoon-info2">>, style = <<"font-size: 24px;">>}}}},
         {logout_button, #li{
             body = #form{
                 id = <<"logout_form">>,
-                style = <<"margin: 0; padding: 18px;">>,
+                style = <<"margin: 0; padding: 14px 13px;">>,
                 method = "post",
                 action = <<"/logout">>,
                 body = [
@@ -332,7 +336,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
                         class = <<"glyph-link">>,
                         data_fields = [{<<"onclick">>, <<"document.getElementById('logout_form').submit(); return false;">>}],
                         title = <<"Log out">>,
-                        body = #span{class = <<"fui-power">>}
+                        body = #span{class = <<"icomoon-switch">>}
                     }
                 ]
             }}
