@@ -9,7 +9,6 @@
 
 #include "communication/websocketConnection.h"
 #include "logging.h"
-#include "make_unique.h"
 
 #include <openssl/ssl.h>
 

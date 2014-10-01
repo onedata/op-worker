@@ -53,10 +53,9 @@ std::function<void()> Scheduler::schedule(const std::chrono::milliseconds after,
     const auto timer = std::make_shared<steady_timer>(m_ioService, after);
     timer->async_wait(std::bind(handle, _1, std::move(task), timer));
 
-    std::weak_ptr<steady_timer> weakTimer{timer};
-    return [weakTimer]{
-        if(auto t = weakTimer.lock())
-            t->cancel();
+    return [t = std::weak_ptr<steady_timer>{timer}]{
+        if(auto timer = t.lock())
+            timer->cancel();
     };
 
 }

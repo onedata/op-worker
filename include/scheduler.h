@@ -53,11 +53,12 @@ public:
      * @param args Arguments to pass to the member.
      */
     template<class R, class T, class... Args>
-    void post(R (T::*member), const std::weak_ptr<T> &subject, Args&&... args)
+    void post(R (T::*member), std::weak_ptr<T> subject, Args&&... args)
     {
-        post([=]{
-            if(auto s = subject.lock())
-                ((*s).*member)(args...);
+        auto task = std::bind(member, std::placeholders::_1, std::forward<Args>(args)...);
+        post([s = std::move(subject), t = std::move(task)]{
+            if(auto subject = s.lock())
+                t(subject.get());
         });
     }
 
@@ -94,9 +95,10 @@ public:
                                    std::weak_ptr<T> subject,
                                    Args&&... args)
     {
-        return schedule(after, [=]{
-            if(auto s = subject.lock())
-                ((*s).*member)(args...);
+        auto task = std::bind(member, std::placeholders::_1, std::forward<Args>(args)...);
+        return schedule(after, [s = std::move(subject), t = std::move(task)]{
+            if(auto subject = s.lock())
+                t(subject.get());
         });
     }
 
@@ -106,11 +108,11 @@ public:
     template<class R, class T, class... Args>
     std::function<void()> schedule(const std::chrono::milliseconds after,
                                    R (T::*member),
-                                   std::shared_ptr<T> subject,
+                                   const std::shared_ptr<T> &subject,
                                    Args&&... args)
     {
-        return schedule(after, member,
-                        std::weak_ptr<T>{subject}, std::forward<Args>(args)...);
+        return schedule(after, member, std::weak_ptr<T>{subject},
+                        std::forward<Args>(args)...);
     }
 
 private:

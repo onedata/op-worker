@@ -12,7 +12,6 @@
 #include "communication/websocketConnectionPool.h"
 #include "fuse_messages.pb.h"
 #include "logging.h"
-#include "make_unique.h"
 #include "veilErrors.h"
 #include "remote_file_management.pb.h"
 #include "scheduler.h"

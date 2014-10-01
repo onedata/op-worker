@@ -12,7 +12,6 @@
 #include "communication/communicator.h"
 
 #include "communication/communicationHandler_mock.h"
-#include "make_unique.h"
 
 #include <gmock/gmock.h>
 

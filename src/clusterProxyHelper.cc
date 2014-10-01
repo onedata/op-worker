@@ -10,7 +10,6 @@
 #include "communication/communicator.h"
 #include "communication/exception.h"
 #include "logging.h"
-#include "make_unique.h"
 #include "remote_file_management.pb.h"
 
 #include <boost/algorithm/string/case_conv.hpp>

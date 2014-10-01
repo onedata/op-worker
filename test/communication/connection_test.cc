@@ -7,8 +7,6 @@
 
 #include "communication/connection.h"
 
-#include "make_unique.h"
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 

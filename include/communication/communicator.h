@@ -10,7 +10,6 @@
 
 
 #include "communication/communicationHandler.h"
-#include "make_unique.h"
 #include "veilErrors.h"
 
 #include <google/protobuf/message.h>

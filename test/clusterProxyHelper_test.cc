@@ -8,7 +8,6 @@
 #include "clusterProxyHelper_proxy.h"
 #include "communication/communicator_mock.h"
 #include "helpers/storageHelperFactory.h"
-#include "make_unique.h"
 #include "veilErrors.h"
 
 #include <boost/algorithm/string.hpp>
