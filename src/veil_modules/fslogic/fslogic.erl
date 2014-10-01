@@ -60,7 +60,7 @@ init(_Args) ->
     MapFun = fun({_, StorageFileName, _, _}) ->
         lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, StorageFileName)
     end,
-    SubProcList = worker_host:generate_sub_proc_list(pemission_cache, 6, 10, ProcFun, MapFun, simple),
+    SubProcList = worker_host:generate_sub_proc_list(pemission_cache, ?CACHE_TREE_MAX_DEPTH, ?CACHE_TREE_MAX_WIDTH, ProcFun, MapFun, simple),
     RequestMap = fun
         ({grant_permission, _, _, _}) -> pemission_cache;
         ({has_permission, _, _, _}) -> pemission_cache;

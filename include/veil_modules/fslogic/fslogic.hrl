@@ -100,4 +100,8 @@
 %% Default permissions for space directory (i.e. /spaces/SpaceName)
 -define(SpaceDirPerm, 8#1770).
 
+%% Maximum size of cache process tree
+-define(CACHE_TREE_MAX_DEPTH, 6).
+-define(CACHE_TREE_MAX_WIDTH, 10).
+
 -endif.
