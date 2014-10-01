@@ -17,11 +17,11 @@ class MockScheduler: public veil::Scheduler
 {
 public:
     MockScheduler()
-        : veil::Scheduler{1}
+        : veil::Scheduler{0}
     {
     }
 
-    MOCK_METHOD1(post, void(std::function<void()>));
+    MOCK_METHOD1(post, void(const std::function<void()>&));
     MOCK_METHOD2(schedule, std::function<void()>(const std::chrono::milliseconds,
                                                  std::function<void()>));
 };
