@@ -75,7 +75,7 @@ body() ->
 
 %% This will be placed in the template instead of {{custom}} tag
 custom() ->
-    <<"<script src=\"/js/veil_upload.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
+    <<"<script src=\"/js/oneprovider_upload.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
     "    <script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>",
     "    <script src=\"/flatui/bootbox.min.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n">>.
 

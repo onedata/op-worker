@@ -37,7 +37,7 @@
 %% ====================================================================
 gen_storage_uid(ID) ->
     <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, ID),
-    {ok, LowestGID} = veil_cluster_node_app:get_env(lowest_generated_storage_gid),
+    {ok, LowestGID} = oneprovider_node_app:get_env(lowest_generated_storage_gid),
     LowestGID + GID0 rem 1000000.
 
 

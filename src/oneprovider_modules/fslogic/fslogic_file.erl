@@ -32,7 +32,7 @@
 %% @doc Fixes storage file (user) owner for given file.
 -spec fix_storage_owner(File :: file_doc() | file()) -> ok | {error, Reason :: any()}.
 %% ====================================================================
-fix_storage_owner(#veil_document{record = #file{type = ?REG_TYPE} = File, uuid = FileUUID}) ->
+fix_storage_owner(#db_document{record = #file{type = ?REG_TYPE} = File, uuid = FileUUID}) ->
     {_UName, _VCUID, RSUID} = fslogic_file:get_file_owner(File),
     {_Size, SUID} = fslogic_file:get_real_file_size_and_uid(File),
 
@@ -41,7 +41,7 @@ fix_storage_owner(#veil_document{record = #file{type = ?REG_TYPE} = File, uuid =
         false ->
             ?info("SUID missmatch on file ~p (~p vs correct ~p) - fixing", [FileUUID, SUID, RSUID]),
             FileLoc = fslogic_file:get_file_local_location(File#file.location),
-            {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+            {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
             {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
             case storage_files_manager:chown(SH, File_id, RSUID, -1) of
                 ok -> ok;
@@ -50,10 +50,10 @@ fix_storage_owner(#veil_document{record = #file{type = ?REG_TYPE} = File, uuid =
                     {error, SReason}
             end
     end;
-fix_storage_owner(#veil_document{record = #file{}}) ->
+fix_storage_owner(#db_document{record = #file{}}) ->
     ok;
 fix_storage_owner(FileQuery) ->
-    {ok, #veil_document{record = #file{}} = FileDoc} = fslogic_objects:get_file(FileQuery),
+    {ok, #db_document{record = #file{}} = FileDoc} = fslogic_objects:get_file(FileQuery),
     fix_storage_owner(FileDoc).
 
 
@@ -67,9 +67,9 @@ fix_storage_owner(FileQuery) ->
 %% ====================================================================
 get_file_owner(#file{} = File) ->
     case user_logic:get_user({uuid, File#file.uid}) of
-        {ok, #veil_document{record = #user{}} = UserDoc} ->
+        {ok, #db_document{record = #user{}} = UserDoc} ->
             {{_, Login}, SUID} = user_logic:get_login_with_uid(UserDoc),
-            {Login, list_to_integer(UserDoc#veil_document.uuid), SUID};
+            {Login, list_to_integer(UserDoc#db_document.uuid), SUID};
         {error, UError} ->
             ?error("Owner of file ~p not found due to error: ~p", [File, UError]),
             {"", -1, -1}
@@ -104,7 +104,7 @@ get_real_file_size_and_uid(#file{type = ?REG_TYPE} = File) ->
     {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
 
     {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-    case veilhelpers:exec(getattr, SH, [File_id]) of
+    case helpers:exec(getattr, SH, [File_id]) of
         {0, #st_stat{st_size = ST_Size, st_uid = SUID} = _Stat} ->
             {ST_Size, SUID};
         {Errno, _} ->
@@ -114,7 +114,7 @@ get_real_file_size_and_uid(#file{type = ?REG_TYPE} = File) ->
 get_real_file_size_and_uid(#file{}) ->
     {0, -1};
 get_real_file_size_and_uid(FileDocOrPath) ->
-    {ok, #veil_document{record = #file{} = File}} = fslogic_objects:get_file(FileDocOrPath),
+    {ok, #db_document{record = #file{} = File}} = fslogic_objects:get_file(FileDocOrPath),
     get_real_file_size_and_uid(File).
 
 

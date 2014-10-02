@@ -40,9 +40,9 @@ create_storage_test_file(StorageId) ->
     random:seed(A, B, C),
     Text = list_to_binary(fslogic_utils:random_ascii_lowercase_sequence(Length)),
     {ok, DeleteStorageTestFileTime} = application:get_env(?APP_Name, delete_storage_test_file_time),
-    {ok, #veil_document{} = UserDoc} = fslogic_objects:get_user(),
+    {ok, #db_document{} = UserDoc} = fslogic_objects:get_user(),
     Login = user_logic:get_login(UserDoc),
-    {ok, #veil_document{record = StorageInfo}} = fslogic_objects:get_storage({id, StorageId}),
+    {ok, #db_document{record = StorageInfo}} = fslogic_objects:get_storage({id, StorageId}),
     StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
     {ok, Path} = do_create_storage_test_file(StorageHelperInfo, Login),
     % Delete storage test file after 'delete_storage_test_file_time' seconds

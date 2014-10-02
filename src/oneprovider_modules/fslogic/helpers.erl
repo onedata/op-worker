@@ -77,8 +77,8 @@ exec(SUID, GroupId, Method, SHInfo = #storage_helper_info{}, Args) ->
 %% ====================================================================
 exec(SUID, GroupId, Method, Args) when is_atom(Method), is_list(Args) ->
     Args1 = [SUID, GroupId] ++ Args,
-    ?debug("VeilHelpers Storage CTX ~p ~p", [SUID, GroupId]),
-    ?debug("veilhelpers:exec with args: ~p ~p", [Method, Args1]),
+    ?debug("Helpers Storage CTX ~p ~p", [SUID, GroupId]),
+    ?debug("helpers:exec with args: ~p ~p", [Method, Args1]),
 
     case Args of
         ["ClusterProxy", HelperArgs | MethodArgs] ->

@@ -63,7 +63,7 @@ validate_login() ->
             ExpirationTime = opn_utils:time() + ExpiresIn,
             {Login, UserDoc} = user_logic:sign_in(LoginProplist, AccessToken, RefreshToken, ExpirationTime),
             gui_ctx:create_session(),
-            gui_ctx:set_user_id(UserDoc#veil_document.uuid),
+            gui_ctx:set_user_id(UserDoc#db_document.uuid),
             vcn_gui_utils:set_global_user_id(gui_str:binary_to_unicode_list(GRUID)),
             vcn_gui_utils:set_access_token(AccessToken),
             vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
@@ -138,7 +138,7 @@ refresh_access(UserId) ->
 %% ====================================================================
 get_user_login(GRUID) ->
     case user_logic:get_user({global_id, GRUID}) of
-        {ok, #veil_document{} = UserDoc} -> user_logic:get_login(UserDoc);
+        {ok, #db_document{} = UserDoc} -> user_logic:get_login(UserDoc);
         _ -> next_free_user_login(1)
     end.
 

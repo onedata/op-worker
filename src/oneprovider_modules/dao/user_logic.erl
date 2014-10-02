@@ -13,9 +13,9 @@
 
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("registered_names.hrl").
--include("veil_modules/dao/dao_types.hrl").
--include_lib("veil_modules/dao/dao.hrl").
--include_lib("veil_modules/dao/dao_types.hrl").
+-include("oneprovider_modules/dao/dao_types.hrl").
+-include_lib("oneprovider_modules/dao/dao.hrl").
+-include_lib("oneprovider_modules/dao/dao_types.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_openid.hrl").
@@ -266,7 +266,7 @@ remove_user(Key) ->
     {GetUserFirstAns, UserRec} = GetUserAns,
     case GetUserFirstAns of
         ok ->
-            UserRec2 = UserRec#veil_document.record,
+            UserRec2 = UserRec#db_document.record,
             dao_lib:apply(dao_users, remove_quota, [UserRec2#user.quota_doc], 1);
         _ -> error
     end,
@@ -315,7 +315,7 @@ list_all_users(N, Offset, Actual) ->
 %% ====================================================================
 get_login(UserDoc) ->
     {{_, Login}, _} = get_login_with_uid(UserDoc),
-    vcn_utils:ensure_list(Login).
+    opn_utils:ensure_list(Login).
 
 
 %% get_login_with_uid/1
@@ -324,16 +324,16 @@ get_login(UserDoc) ->
 %% @end
 -spec get_login_with_uid(User :: user_doc()) -> {{OpenidProvider :: atom(), UserName :: binary()}, SUID :: integer()}.
 %% ====================================================================
-get_login_with_uid(#veil_document{uuid = ?CLUSTER_USER_ID}) ->
+get_login_with_uid(#db_document{uuid = ?CLUSTER_USER_ID}) ->
     {{internal, <<"root">>}, 0};
-get_login_with_uid(#veil_document{uuid = "0"}) ->
+get_login_with_uid(#db_document{uuid = "0"}) ->
     {{internal, <<"root">>}, 0};
-get_login_with_uid(#veil_document{record = #user{logins = Logins0}, uuid = VCUID}) ->
+get_login_with_uid(#db_document{record = #user{logins = Logins0}, uuid = VCUID}) ->
     Logins = [Login || #id_token_login{login = LoginName, provider_id = Provider} = Login <- Logins0, size(LoginName) > 0, is_trusted_openid_provider(Provider)],
 
     StorageNameToUID =
         fun(Name) ->
-            MaybeUID = os:cmd("id -u " ++ vcn_utils:ensure_list(Name)) -- "\n",
+            MaybeUID = os:cmd("id -u " ++ opn_utils:ensure_list(Name)) -- "\n",
             UID =
                 try
                     list_to_integer(MaybeUID)
@@ -355,9 +355,9 @@ get_login_with_uid(#veil_document{record = #user{logins = Logins0}, uuid = VCUID
     LoginNamesWithUID1 = [{LoginName, UID} || {LoginName, UID} <- LoginNamesWithUID, UID >= 500],
 
     case LoginNamesWithUID1 of
-        [] -> {{internal, <<"Unknown_", (vcn_utils:ensure_binary(VCUID))/binary>>}, fslogic_utils:gen_storage_uid(VCUID)};
+        [] -> {{internal, <<"Unknown_", (opn_utils:ensure_binary(VCUID))/binary>>}, fslogic_utils:gen_storage_uid(VCUID)};
         [{{ProviderId, LoginName}, UID} | _] ->
-            {{ProviderId, vcn_utils:ensure_binary(LoginName)}, UID}
+            {{ProviderId, opn_utils:ensure_binary(LoginName)}, UID}
     end.
 
 
@@ -370,7 +370,7 @@ get_login_with_uid(#veil_document{record = #user{logins = Logins0}, uuid = VCUID
 is_trusted_openid_provider(internal) ->
     true;
 is_trusted_openid_provider(Provider) when is_atom(Provider) ->
-    {ok, Trusted} = veil_cluster_node_app:get_env(trusted_openid_providers),
+    {ok, Trusted} = oneprovider_node_app:get_env(trusted_openid_providers),
     lists:member(Provider, Trusted).
 
 
@@ -774,7 +774,7 @@ synchronize_user_info(User, Logins, Teams, Emails, DnList, AccessToken, RefreshT
                     NewUser4
             end,
 
-    User5 = User4#veil_document{record = User4#veil_document.record#user{logins = Logins}},
+    User5 = User4#db_document{record = User4#db_document.record#user{logins = Logins}},
 
     User5.
 

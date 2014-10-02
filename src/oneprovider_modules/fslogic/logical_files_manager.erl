@@ -841,7 +841,7 @@ get_file_user_dependent_name_by_uuid(UUID) ->
                     {ok, FullPath};
                 UserDN ->
                     case dao_lib:apply(dao_users, get_user, [{dn, UserDN}], 1) of
-                        {ok, #veil_document{} = UserDoc} ->
+                        {ok, #db_document{} = UserDoc} ->
                             Login = user_logic:get_login(UserDoc),
                             case string:str(FullPath, Login ++ "/") of
                                 1 -> {ok, string:sub_string(FullPath, length(Login ++ "/") + 1)};

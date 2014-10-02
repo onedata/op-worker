@@ -315,7 +315,7 @@ write(Storage_helper_info, File, Offset, Buf) ->
                     0 ->
                       BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
 
-                      ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
+                      ErrorCode3 = helpers:exec(release, Storage_helper_info, [File, FFI]),
                       case ErrorCode3 of
                         0 -> BytesWritten;
                         {error, 'NIF_not_loaded'} -> ErrorCode3;
@@ -848,13 +848,13 @@ setup_ctx(File) ->
     ?debug("Setup storage ctx based on fslogc ctx -> DN: ~p, AccessToken: ~p", [fslogic_context:get_user_dn(), fslogic_context:get_gr_auth()]),
 
     case fslogic_objects:get_user() of
-        {ok, #veil_document{record = #user{global_id = GRUID} = UserRec} = UserDoc} ->
+        {ok, #db_document{record = #user{global_id = GRUID} = UserRec} = UserDoc} ->
             {_Login, UID} = user_logic:get_login_with_uid(UserDoc),
             fslogic_context:set_fs_user_ctx(UID),
             case check_access_type(File) of
                 {ok, {group, SpaceId}} ->
                     UserSpaceIds = user_logic:get_space_ids(UserRec),
-                    SelectedSpaceId = [X || X <- UserSpaceIds, vcn_utils:ensure_binary(SpaceId) =:= X],
+                    SelectedSpaceId = [X || X <- UserSpaceIds, opn_utils:ensure_binary(SpaceId) =:= X],
                     SelectedSpaceIdOrSpace =
                         case SelectedSpaceId of
                             [] ->
