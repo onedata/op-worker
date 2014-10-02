@@ -165,12 +165,12 @@ check_file_perms(FullFileName, Type) ->
 get_file_attr(FileDoc = #db_document{record = #file{}}) ->
     #db_document{record = #file{} = File, uuid = FileUUID} = FileDoc,
     Type = fslogic_file:normalize_file_type(protocol, File#file.type),
-    {Size, SUID} = fslogic_file:get_real_file_size_and_uid(File),
+    {Size, _SUID} = fslogic_file:get_real_file_size_and_uid(File),
 
     fslogic_file:update_file_size(File, Size),
 
     %% Get owner
-    {UName, VCUID, RSUID} = fslogic_file:get_file_owner(File),
+    {UName, VCUID, _RSUID} = fslogic_file:get_file_owner(File),
 
     fslogic_file:fix_storage_owner(FileDoc),
 
