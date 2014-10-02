@@ -31,6 +31,6 @@ Authentication
 
 		.. warning:: 
 
-			onedata REST API doesn't work with every version of **curl** tool. It has to be linked to *OpenSSL* library. To check it use *curl --version* command.
+			Onedata REST API doesn't work with every version of **curl** tool. It has to be linked to *OpenSSL* library. To check it use *curl --version* command.
 
 

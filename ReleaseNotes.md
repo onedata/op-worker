@@ -1,7 +1,7 @@
 oneprovider 1.6
 ===============
 
-*oneprovider 1.6* is a part of *onedata 1.6*. This is mainly a bug-fix release. See further details below.
+*Oneprovider 1.6* is a part of *Onedata 1.6*. This is mainly a bug-fix release. See further details below.
 
 New features
 ------------
@@ -16,7 +16,7 @@ Fixed Bugs
 oneprovider 1.5
 ===============
 
-*oneprovider 1.5* is a part of *onedata 1.5*. This is mainly a bug-fix release. See further details below. *onedata 1.5*
+*Oneprovider 1.5* is a part of *Onedata 1.5*. This is mainly a bug-fix release. See further details below. *Onedata 1.5*
 updates only *oneclient* and *oneprovider* so it links version 1.0 of other modules.
 
 New features
@@ -33,8 +33,8 @@ Fixed Bugs
 oneprovider 1.0
 ===============
 
-*oneprovider 1.0* is a part of *onedata* 1.0. *onedata* 1.0 is a system that provides a unified and efficient access to
-data stored at various storage systems in one site. *oneprovider* 1.0 is management component of the system. It provides
+*Oneprovider 1.0* is a part of *Onedata 1.0*. *Onedata 1.0* is a system that provides a unified and efficient access to
+data stored at various storage systems in one site. *oneprovider 1.0* is management component of the system. It provides
 fully functional cluster of cooperating nodes and offers basic functionality (Web GUI, support for FUSE clients, rule
 management subsystem 1.0).
 

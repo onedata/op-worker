@@ -19,7 +19,7 @@
 -record(file_location, {storage_id = "", file_id = ""}).
 %% Files' locks. Designed for use within #file record (`locks` field).
 -record(file_lock, {type = ?REG_TYPE, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
-%% onedata file
+%% Onedata file
 -record(file, {
     type = 1, name = "", uid = "", perms = 0, parent = "", ref_file = "", location = #file_location{},
     locks = [], meta_doc, created = true,

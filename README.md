@@ -1,13 +1,17 @@
 About
 =====
 
-*oneprovider* is a part of *onedata* system that unifies access to files stored at heterogeneous data storage systems that belong to geographically distributed organizations.
+*Oneprovider* is a part of *Onedata* system that unifies access to files stored at heterogeneous data storage systems 
+that belong to geographically distributed organizations.
 
 
 Goals
 -----
 
-The main goal of *oneprovider* is to provision a self-scalable cluster, which manages the *onedata* system in a single data centre, i.e. it stores meta-data about actual users' data from the data centre, decides how to distribute users' files among available storage systems, and executes data management rules, which can be defined by administrators or users.
+The main goal of *oneprovider* is to provision a self-scalable cluster, which manages the *Onedata* system in a single
+data centre, i.e. it stores meta-data about actual users' data from the data centre, decides how to distribute users'
+files among available storage systems, and executes data management rules, which can be defined by administrators or
+users.
 
 
 Getting Started
@@ -36,7 +40,8 @@ Use the following command to install the *oneprovider* software and the required
         
         /opt/oneprovider/setup
 
-The script will guide you through the setup procedure of the *oneprovider*. To start the work you should start at least one instance of the CCM component and one worker component instance. 
+The script will guide you through the setup procedure of the *oneprovider*. To start the work you should start at least
+one instance of the CCM component and one worker component instance. 
 
 A sample session of starting *oneprovider* from scratch is as follows:
 
@@ -151,7 +156,8 @@ After starting the nodes you have a complete *oneprovider* running :) You can no
 
 Note:
 
-* To have a fully working *onedata* installation, we should also start a BigCouch instance on the same machine, with its cookie set to *oneprovider_node* and hostname set to 'db'. 
+* To have a fully working *Onedata* installation, we should also start a BigCouch instance on the same machine, with its
+cookie set to *oneprovider_node* and hostname set to 'db'. 
 
 
 -------------------------------------------------------------------------------

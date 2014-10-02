@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module gives high level DB API which contain onedata file system specific methods.
+%% @doc: This module gives high level DB API which contain Onedata file system specific methods.
 %% All DAO API functions should not be called directly. Call dao_worker:handle(_, {vfs, MethodName, ListOfArgs) instead.
 %% See dao_worker:handle/2 for more details.
 %% @end
