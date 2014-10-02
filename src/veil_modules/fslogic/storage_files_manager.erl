@@ -59,7 +59,7 @@
 %% ====================================================================
 %% @doc Creates hard-link on storage
 %% @end
--spec mkdir(Storage_helper_info :: record(), FileId :: string(), LinkId :: string()) -> Result when
+-spec link(Storage_helper_info :: record(), FileId :: string(), LinkId :: string()) -> Result when
     Result :: ok | {ErrorGeneral, ErrorDetail},
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
@@ -117,9 +117,8 @@ mkdir(Storage_helper_info, Dir, Mode) ->
                             {GetUserAns, User} = user_logic:get_user(Query),
                             case GetUserAns of
                                 ok ->
-                                    UserRecord = User#veil_document.record,
-                                    Login = UserRecord#user.login,
-                                    ChownAns = chown(Storage_helper_info, Dir, Login, ""),
+                                    {_Login, UID} = user_logic:get_login_with_uid(User),
+                                    ChownAns = chown(Storage_helper_info, Dir, UID, -1),
                                     case ChownAns of
                                         ok -> ok;
                                         _ -> {cannot_change_dir_owner, ChownAns}
@@ -444,33 +443,32 @@ create(Storage_helper_info, File, Mode) ->
 
                             Query = fslogic_context:get_user_query(),
 
-                            case Query of
-                                undefined -> ok;
-                                _ ->
-                                    {GetUserAns, User} = user_logic:get_user(Query),
-                                    case GetUserAns of
-                                        ok ->
-                                            UserRecord = User#veil_document.record,
-                                            Login = UserRecord#user.login,
-                                            ChownAns = chown(Storage_helper_info, File, Login, ""),
-                                            case ChownAns of
-                                                ok ->
-                                                    ok;
-                                                _ ->
-                                                    {cannot_change_file_owner, ChownAns}
-                                            end;
-                                        _ -> {cannot_change_file_owner, get_user_error}
-                                    end
-                            end;
-                        {error, 'NIF_not_loaded'} -> ErrorCode3;
-                        _ -> {wrong_truncate_return_code, ErrorCode3}
-                    end;
-                {error, 'NIF_not_loaded'} -> ErrorCode2;
+              case Query of
+                undefined -> ok;
                 _ ->
-                    ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p, CTX: ~p / ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG, fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
-                    {wrong_mknod_return_code, ErrorCode2}
-            end
-    end.
+                  {GetUserAns, User} = user_logic:get_user(Query),
+                  case GetUserAns of
+                    ok ->
+                      {_Login, UID} = user_logic:get_login_with_uid(User),
+                      ChownAns = chown(Storage_helper_info, File, UID, -1),
+                      case ChownAns of
+                        ok ->
+                          ok;
+                        _ ->
+                          {cannot_change_file_owner, ChownAns}
+                      end;
+                    _ -> {cannot_change_file_owner, get_user_error}
+                  end
+              end;
+            {error, 'NIF_not_loaded'} -> ErrorCode3;
+            _ -> {wrong_truncate_return_code, ErrorCode3}
+          end;
+        {error, 'NIF_not_loaded'} -> ErrorCode2;
+        _ ->
+          ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p, CTX: ~p / ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG, fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
+          {wrong_mknod_return_code, ErrorCode2}
+      end
+  end.
 
 %% truncate/3
 %% ====================================================================
@@ -886,15 +884,15 @@ setup_ctx(File) ->
     ?debug("Setup storage ctx based on fslogc ctx -> DN: ~p, AccessToken: ~p", [fslogic_context:get_user_dn(), fslogic_context:get_gr_auth()]),
 
     case fslogic_objects:get_user() of
-        {ok, #veil_document{record = #user{login = UserName, global_id = GRUID} = UserRec}} ->
-            fslogic_context:set_fs_user_ctx(UserName),
+        {ok, #veil_document{record = #user{global_id = GRUID} = UserRec} = UserDoc} ->
+            {_Login, UID} = user_logic:get_login_with_uid(UserDoc),
+            fslogic_context:set_fs_user_ctx(UID),
             case check_access_type(File) of
                 {ok, {group, SpaceId}} ->
-                    UserSpaces = user_logic:get_spaces(UserRec),
-
-                    SelectedSpace = [SP || #space_info{space_id = X} = SP <- UserSpaces, vcn_utils:ensure_binary(SpaceId) =:= X],
-                    {UserSpaces1, SelectedSpace1} =
-                        case SelectedSpace of
+                    UserSpaceIds = user_logic:get_space_ids(UserRec),
+                    SelectedSpaceId = [X || X <- UserSpaceIds, vcn_utils:ensure_binary(SpaceId) =:= X],
+                    SelectedSpaceIdOrSpace =
+                        case SelectedSpaceId of
                             [] ->
                                 UserSpaces0 =
                                     case dao_lib:apply(vfs, get_space_files, [{gruid, vcn_utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()) of
@@ -904,17 +902,27 @@ setup_ctx(File) ->
                                             []
                                     end,
                                 SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, vcn_utils:ensure_binary(SpaceId) =:= X],
-                                {UserSpaces0 ++ UserSpaces, SelectedSpace0};
-                            _ ->
-                                {UserSpaces, SelectedSpace}
+                                SelectedSpace0;
+                            _  ->
+                                SelectedSpaceId
+                        end,
+
+                    SelectedSpace =
+                        case SelectedSpaceIdOrSpace of
+                            [] -> [];
+                            [MSpaceId | _] when is_binary(MSpaceId) ->
+                                {ok, SelectedSpace1} = fslogic_objects:get_space({uuid, MSpaceId}),
+                                [SelectedSpace1];
+                            [#space_info{} = SpaceInfo1 | _] ->
+                                [SpaceInfo1]
                         end,
 
                     GIDs =
-                        case SelectedSpace1 of
+                        case SelectedSpace of
                             [] ->
-                                fslogic_spaces:map_to_grp_owner(UserSpaces1);
+                                [];
                             [#space_info{} = SpaceInfo] ->
-                                [fslogic_spaces:map_to_grp_owner(SpaceInfo)] ++ fslogic_spaces:map_to_grp_owner(UserSpaces1)
+                                [fslogic_spaces:map_to_grp_owner(SpaceInfo)]
                         end,
                     fslogic_context:set_fs_group_ctx(GIDs),
                     ok;

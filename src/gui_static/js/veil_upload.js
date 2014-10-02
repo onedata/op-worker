@@ -1,3 +1,12 @@
+// ===================================================================
+// Author: Lukasz Opiola
+// Copyright (C): 2013 ACK CYFRONET AGH
+// This software is released under the MIT license
+// cited in 'LICENSE.txt'.
+// ===================================================================
+// This file contains JS functions used for file upload handling.
+// ===================================================================
+
 // Must be the same as macros in veil_upload.erl
 var SUBMIT_BUTTON_ID = '#upload_submit';
 var DROPZONE_ID = '#drop_zone_container';
@@ -30,7 +39,7 @@ veil_attach_upload_handle_dragdrop = function (form, input) {
     if (typeof(form.$pending_files) == "undefined")
         form.$pending_files = [];
 
-    $.getScript("js/jquery.fileupload.min.js", function () {
+    $.getScript("/flatui/jquery.fileupload.min.js", function () {
         var dropzone = $(DROPZONE_ID);
 
         $(input).fileupload({

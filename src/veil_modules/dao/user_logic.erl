@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Lukasz Opiola
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -13,25 +13,27 @@
 
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("registered_names.hrl").
+-include("veil_modules/dao/dao_types.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_registry/gr_openid.hrl").
 
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([sign_in/2, create_user/6, create_user/7, get_user/1, remove_user/1, list_all_users/0]).
--export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
--export([get_email_list/1, update_email_list/2, get_role/1, update_role/2]).
+-export([sign_in/4, create_user/6, create_user/9, get_user/1, remove_user/1, list_all_users/0]).
+-export([get_login/1, get_name/1, get_teams/1, update_teams/2, get_space_ids/1]).
+-export([get_email_list/1, update_email_list/2, get_role/1, update_role/2, update_access_credentials/4]).
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_space_names/1, create_space_dir/1, get_spaces/1]).
 -export([create_dirs_at_storage/2, create_dirs_at_storage/1]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
--export([synchronize_spaces_info/2, create_partial_user/2]).
+-export([synchronize_spaces_info/2, create_partial_user/2, get_login_with_uid/1]).
 
 
 %% ====================================================================
@@ -52,7 +54,7 @@ create_partial_user(GRUID, Spaces) ->
         {ok, #user_details{name = Name0}} ->
             Login = openid_utils:get_user_login(GRUID),
             Name = unicode:characters_to_list(Name0),
-            try user_logic:sign_in([{global_id, vcn_utils:ensure_list(GRUID)}, {name, Name}, {login, Login}], undefined) of
+            try user_logic:sign_in([{global_id, vcn_utils:ensure_list(GRUID)}, {name, Name}, {login, Login}], <<>>, <<>>, 0) of
                 {_, UserDoc} ->
                     {ok, UserDoc}
             catch
@@ -66,24 +68,27 @@ create_partial_user(GRUID, Spaces) ->
     end.
 
 
-%% sign_in/1
+%% sign_in/4
 %% ====================================================================
 %% @doc
-%% This function should be called after a user has logged in via OpenID. 
+%% This function should be called after a user has logged in via OpenID.
 %% It looks the user up in database by login. If he is not there, it creates a proper document.
 %% If the user already exists, synchronization is made between document
 %% in the database and info received from OpenID provider.
 %% @end
--spec sign_in(Proplist, AuthorizationCode :: binary()) -> Result when
+-spec sign_in(Proplist, AccessToken :: binary(),
+              RefreshToken :: binary(),
+              AccessExpirationTime :: non_neg_integer()) ->
+    Result when
     Proplist :: list(),
     Result :: {string(), user_doc()} | no_return().
 %% ====================================================================
-sign_in(Proplist, AccessToken) ->
+sign_in(Proplist, AccessToken, RefreshToken, AccessExpirationTime) ->
     GlobalId = case proplists:get_value(global_id, Proplist, "") of
                    "" -> throw(no_global_id_specified);
                    GID -> GID
                end,
-    Login = proplists:get_value(login, Proplist, ""),
+    Logins = proplists:get_value(logins, Proplist, []),
     Name = proplists:get_value(name, Proplist, ""),
     Teams = proplists:get_value(teams, Proplist, []),
     Emails = proplists:get_value(emails, Proplist, []),
@@ -91,14 +96,12 @@ sign_in(Proplist, AccessToken) ->
 
     ?debug("Login with token: ~p", [AccessToken]),
 
-    fslogic_context:set_gr_auth(GlobalId, AccessToken),
-
     User = case get_user({global_id, GlobalId}) of
                {ok, ExistingUser} ->
-                   User1 = synchronize_user_info(ExistingUser, Teams, Emails, DnList, AccessToken),
+                   User1 = synchronize_user_info(ExistingUser, Logins, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime),
                    synchronize_spaces_info(User1, AccessToken);
                {error, user_not_found} ->
-                   case create_user(GlobalId, Login, Name, Teams, Emails, DnList, AccessToken) of
+                   case create_user(GlobalId, Logins, Name, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime) of
                        {ok, NewUser} ->
                            synchronize_spaces_info(NewUser, AccessToken);
                        {error, Error} ->
@@ -108,7 +111,7 @@ sign_in(Proplist, AccessToken) ->
                Error ->
                    throw({1, Error})
            end,
-    {Login, User}.
+    {get_login(User), User}.
 
 
 %% create_user/6
@@ -126,15 +129,15 @@ sign_in(Proplist, AccessToken) ->
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
 create_user(GlobalId, Login, Name, Teams, Email, DnList) ->
-    create_user(GlobalId, Login, Name, Teams, Email, DnList, <<>>).
-create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken) ->
+    create_user(GlobalId, Login, Name, Teams, Email, DnList, <<>>, <<>>, 0).
+create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime) ->
     ?debug("Creating user: ~p", [{GlobalId, Login, Name, Teams, Email, DnList}]),
     Quota = #quota{},
     {QuotaAns, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
     User = #user
     {
         global_id = GlobalId,
-        login = Login,
+        logins = Login,
         name = Name,
         teams = case Teams of
                     Teams when is_list(Teams) -> Teams;
@@ -153,7 +156,9 @@ create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken) ->
                   end,
         quota_doc = QuotaUUID,
 
-        access_token = AccessToken
+        access_token = AccessToken,
+        refresh_token = RefreshToken,
+        access_expiration_time = AccessExpirationTime
     },
     {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
     GetUserAns = get_user({uuid, UUID}),
@@ -262,7 +267,6 @@ remove_user(Key) ->
     case GetUserFirstAns of
         ok ->
             UserRec2 = UserRec#veil_document.record,
-            dao_lib:apply(dao_vfs, remove_file, [UserRec2#user.login], 1),
             dao_lib:apply(dao_users, remove_quota, [UserRec2#user.quota_doc], 1);
         _ -> error
     end,
@@ -307,10 +311,67 @@ list_all_users(N, Offset, Actual) ->
 %% @end
 -spec get_login(User) -> Result when
     User :: user_doc(),
-    Result :: string().
+    Result :: string() | non_neg_integer().
 %% ====================================================================
-get_login(User) ->
-    User#veil_document.record#user.login.
+get_login(UserDoc) ->
+    {{_, Login}, _} = get_login_with_uid(UserDoc),
+    vcn_utils:ensure_list(Login).
+
+
+%% get_login_with_uid/1
+%% ====================================================================
+%% @doc Returns username and storage uid of the user.
+%% @end
+-spec get_login_with_uid(User :: user_doc()) -> {{OpenidProvider :: atom(), UserName :: binary()}, SUID :: integer()}.
+%% ====================================================================
+get_login_with_uid(#veil_document{uuid = ?CLUSTER_USER_ID}) ->
+    {{internal, <<"root">>}, 0};
+get_login_with_uid(#veil_document{uuid = "0"}) ->
+    {{internal, <<"root">>}, 0};
+get_login_with_uid(#veil_document{record = #user{logins = Logins0}, uuid = VCUID}) ->
+    Logins = [Login || #id_token_login{login = LoginName, provider_id = Provider} = Login <- Logins0, size(LoginName) > 0, is_trusted_openid_provider(Provider)],
+
+    StorageNameToUID =
+        fun(Name) ->
+            MaybeUID = os:cmd("id -u " ++ vcn_utils:ensure_list(Name)) -- "\n",
+            UID =
+                try
+                    list_to_integer(MaybeUID)
+                catch
+                    _:_ ->
+                        -1
+                end,
+            case UID of
+                UID when UID < 500 -> -1;
+                _ -> UID
+            end
+        end,
+
+    LoginNamesWithUID = lists:map(
+        fun(#id_token_login{login = LoginName, provider_id = ProviderId}) ->
+            {{ProviderId, LoginName}, StorageNameToUID(LoginName)}
+        end, Logins),
+
+    LoginNamesWithUID1 = [{LoginName, UID} || {LoginName, UID} <- LoginNamesWithUID, UID >= 500],
+
+    case LoginNamesWithUID1 of
+        [] -> {{internal, <<"Unknown_", (vcn_utils:ensure_binary(VCUID))/binary>>}, fslogic_utils:gen_storage_uid(VCUID)};
+        [{{ProviderId, LoginName}, UID} | _] ->
+            {{ProviderId, vcn_utils:ensure_binary(LoginName)}, UID}
+    end.
+
+
+%% is_trusted_openid_provider/1
+%% ====================================================================
+%% @doc Checks if given openid provider is trusted by this provider (i.e. OpenID login can be used as OS username).
+%% @end
+-spec is_trusted_openid_provider(ProviderId :: atom()) -> boolean().
+%% ====================================================================
+is_trusted_openid_provider(internal) ->
+    true;
+is_trusted_openid_provider(Provider) when is_atom(Provider) ->
+    {ok, Trusted} = veil_cluster_node_app:get_env(trusted_openid_providers),
+    lists:member(Provider, Trusted).
 
 
 %% get_name/1
@@ -632,26 +693,57 @@ invert_dn_string(DNString) ->
     string:join(lists:reverse(Entries), ",").
 
 
+%% update_access_credentials/4
+%% ====================================================================
+%% @doc
+%% Update #veil_document encapsulating #user record with new access token,
+%% refresh token and access expiration time.
+%% @end
+-spec update_access_credentials(User, AccessToken :: binary(), RefreshToken :: binary(),
+    ExpirationTime :: non_neg_integer()) -> Result when
+    User :: user_doc(),
+    Result :: {ok, user_doc()} | {error, any()}.
+%% ====================================================================
+update_access_credentials(UserDoc, AccessToken, RefreshToken, ExpirationTime) ->
+    NewDoc = update_access_credentials_int(UserDoc, AccessToken, RefreshToken, ExpirationTime),
+
+    case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
+        {ok, _} -> ok;
+        {error, Reason} ->
+            ?error("Cannot update user ~p access credentials: ~p", [UserDoc#veil_document.uuid, Reason]),
+            {error, Reason}
+    end.
+update_access_credentials_int(UserDoc, AccessToken, RefreshToken, ExpirationTime) ->
+    #veil_document{record = #user{global_id = GlobalId} = User} = UserDoc,
+    fslogic_context:set_gr_auth(GlobalId, AccessToken),
+    UserDoc#veil_document{record = User#user{
+        access_token = AccessToken,
+        refresh_token = RefreshToken,
+        access_expiration_time = ExpirationTime}}.
+
+
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
 
-%% synchronize_user_info/5
+%% synchronize_user_info/7
 %% ====================================================================
 %% @doc
 %% This function synchronizes data from database with the information
 %% received from OpenID provider.
 %% @end
--spec synchronize_user_info(User, Teams, Emails, DnList, AccessToken :: binary()) -> Result when
+-spec synchronize_user_info(User, Logins, Teams, Emails, DnList, AccessToken :: binary(),
+                            RefreshToken :: binary(), AccessExpiration :: non_neg_integer()) -> Result when
     User :: user_doc(),
+    Logins :: [#id_token_login{}],
     Teams :: string(),
     Emails :: [string()],
     DnList :: [string()],
     Result :: user_doc().
 %% ====================================================================
-synchronize_user_info(User, Teams, Emails, DnList, AccessToken) ->
+synchronize_user_info(User, Logins, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime) ->
     %% Actual updates will probably happen so rarely, that there is no need to scoop those 3 DB updates into one.
-    User1 = update_access_token(User, AccessToken),
+    User1 = update_access_credentials_int(User, AccessToken, RefreshToken, AccessExpirationTime),
     User2 = case (get_teams(User1) =:= Teams) or (Teams =:= []) of
                 true -> User1;
                 false ->
@@ -681,20 +773,10 @@ synchronize_user_info(User, Teams, Emails, DnList, AccessToken) ->
                     {ok, NewUser4} = update_unverified_dn_list(NewUser3, get_unverified_dn_list(NewUser3) -- NewDns),
                     NewUser4
             end,
-    User4.
 
+    User5 = User4#veil_document{record = User4#veil_document.record#user{logins = Logins}},
 
-%% update_access_token/2
-%% ====================================================================
-%% @doc
-%% Update #veil_document encapsulating #user record with new access token.
-%% @end
--spec update_access_token(User, AccessToken :: binary()) -> Result when
-    User :: user_doc(),
-    Result :: {ok, user_doc()} | {error, any()}.
-%% ====================================================================
-update_access_token(#veil_document{record = #user{} = User} = UserDoc, AccessToken) ->
-    UserDoc#veil_document{record = User#user{access_token = AccessToken}}.
+    User5.
 
 
 %% oid_code_to_shortname/1
@@ -814,6 +896,22 @@ get_space_names(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
     get_space_names(UserDoc).
 
+
+%% get_space_ids/1
+%% ====================================================================
+%% @doc Returns list of space IDs (as list of binary()) for given user. UserQuery shall be either #user{} record
+%%      or query compatible with user_logic:get_user/1.
+%%      The method assumes that user exists therefore will fail with exception when it doesn't.
+%% @end
+-spec get_space_ids(UserQuery :: term()) -> [binary()] | no_return().
+%% ====================================================================
+get_space_ids(#veil_document{record = #user{} = User}) ->
+    get_space_ids(User);
+get_space_ids(#user{spaces = Spaces}) ->
+    [vcn_utils:ensure_binary(SpaceId) || SpaceId <- Spaces];
+get_space_ids(UserQuery) ->
+    {ok, UserDoc} = user_logic:get_user(UserQuery),
+    get_space_ids(UserDoc).
 
 %% get_spaces/1
 %% ====================================================================

@@ -22,7 +22,7 @@
 #define GPV_VALIDATE_ERROR              6
 
 // Types
-typedef unsigned char byte;
+typedef char byte;
 typedef unsigned int gpv_status;
 
 // GPV Context type
@@ -35,6 +35,7 @@ typedef struct {
 
     globus_gsi_callback_data_t      callback_data;
     int                             callback_data_index; // bonus CTX data index
+    int                             last_error;
 } GPV_CTX;
 
 // Initializes static data used by globus and openssl

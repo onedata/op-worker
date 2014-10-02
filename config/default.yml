@@ -31,6 +31,20 @@ veil_cluster_node_env:
 
   # GENERAL
   - parameter:
+      name: developer_mode
+      description: Developer mode unlocks functionalities like logging in without Global Registry
+      value: false
+
+  - parameter:
+      name: trusted_openid_providers
+      description: List of trusted OpenID providers that can provide user's login that can be associated with OS username.
+      value: |
+        ["\'plgrid\'"]
+      erlang_term: |
+        ['plgrid']
+
+  # GENERAL
+  - parameter:
       name: node_type
       description: Node type (worker or ccm)
       value: ccm

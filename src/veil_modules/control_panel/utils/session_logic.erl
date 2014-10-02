@@ -179,7 +179,7 @@ clear_expired_sessions(TotalDeleted) ->
 -spec get_cookie_ttl() -> integer() | no_return().
 %% ====================================================================
 get_cookie_ttl() ->
-    case application:get_env(veil_cluster_node, control_panel_sessions_cookie_ttl) of
+    case application:get_env(?APP_Name, control_panel_sessions_cookie_ttl) of
         {ok, Val} when is_integer(Val) ->
             Val;
         _ ->

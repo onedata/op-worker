@@ -21,13 +21,25 @@
 -export([get_sh_and_id/3, get_sh_and_id/4, get_sh_and_id/5, get_files_number/3]).
 -export([get_space_info_for_path/1, get_user_groups/2]).
 -export([random_ascii_lowercase_sequence/1, path_walk/3, list_dir/1]).
--export([run_as_root/1, file_to_space_info/1]).
+-export([run_as_root/1, file_to_space_info/1, gen_storage_uid/1]).
 -export([trim_spaces/1]).
 
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+
+%% gen_storage_uid/1
+%% ====================================================================
+%% @doc Generates storage UID/GID based arbitrary binary (e.g. user's global id, space id, etc)
+%% @end
+-spec gen_storage_uid(ID :: binary()) -> non_neg_integer().
+%% ====================================================================
+gen_storage_uid(ID) ->
+    <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, ID),
+    {ok, LowestGID} = veil_cluster_node_app:get_env(lowest_generated_storage_gid),
+    LowestGID + GID0 rem 1000000.
 
 
 %% file_to_space_info/1

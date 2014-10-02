@@ -4,7 +4,7 @@ DIST_TESTS_SRC_DIR = "test_distributed"
 
 .PHONY: releases deps test docs
 
-all: deps generate docs
+all: generate docs
 
 compile:
 	-@if [ -f ebin/.test ]; then rm -rf ebin; fi 
@@ -32,7 +32,7 @@ eunit: deps compile
 ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
-ct:
+ct: deps compile
 	-@if [ ! -f ebin/.test ]; then rm -rf ebin; fi
 	-@mkdir -p ebin ; touch ebin/.test 
 	./gen_config
@@ -48,7 +48,7 @@ ct:
 test: eunit ct
 
 
-generate: compile
+generate: deps compile
 	./rebar generate
 	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster
 	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
@@ -65,7 +65,7 @@ upgrade:
 	./rebar generate-upgrade previous_release=${PREV}
 
 rpm: deps generate
-	make -C onepanel rel
+	make -C onepanel rel CONFIG=config/provider.config
 	./releases/rpm_files/create_rpm
 
 

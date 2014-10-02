@@ -48,7 +48,7 @@
 
 -define(USER_BY_GLOBAL_ID_VIEW, #view_info{name = "user_by_global_id", db_name = ?USERS_DB_NAME, version = 1}).
 -define(USER_BY_EMAIL_VIEW, #view_info{name = "user_by_email", db_name = ?USERS_DB_NAME, version = 1}).
--define(USER_BY_LOGIN_VIEW, #view_info{name = "user_by_login", db_name = ?USERS_DB_NAME, version = 1}).
+-define(USER_BY_LOGIN_VIEW, #view_info{name = "user_by_login", db_name = ?USERS_DB_NAME, version = 2}).
 -define(USER_BY_DN_VIEW, #view_info{name = "user_by_dn", db_name = ?USERS_DB_NAME, version = 1}).
 -define(USER_BY_UNVERIFIED_DN_VIEW, #view_info{name = "user_by_unverified_dn", db_name = ?USERS_DB_NAME, version = 1}).
 -define(USER_BY_UID_VIEW, #view_info{name = "user_by_uid", db_name = ?USERS_DB_NAME, version = 1}).

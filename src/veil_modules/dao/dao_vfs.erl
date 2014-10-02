@@ -56,13 +56,20 @@ get_space_file(SpacePath) ->
 
 -spec get_space_file1(Space :: file()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
 get_space_file1(InitArg) ->
-    case get_file(InitArg) of
-        {ok, #veil_document{record = #file{extensions = Ext}} = Doc} ->
-            case lists:keyfind(?file_space_info_extestion, 1, Ext) of
-                false -> {error, invalid_space_file};
-                _     -> {ok, Doc}
-            end;
-        {error, Reason} -> {error, Reason}
+    case ets:lookup(spaces_cache, InitArg) of
+        [{_, Value}] -> {ok, Value};
+        _ ->
+            case get_file(InitArg) of
+                {ok, #veil_document{record = #file{extensions = Ext}, uuid = UUID} = Doc} ->
+                    case lists:keyfind(?file_space_info_extestion, 1, Ext) of
+                        false ->
+                            {error, invalid_space_file};
+                        _     ->
+                            ets:insert(spaces_cache, {InitArg, Doc}),
+                            {ok, Doc}
+                    end;
+                {error, Reason} -> {error, Reason}
+            end
     end.
 
 
@@ -388,7 +395,11 @@ save_new_not_reg_file(FilePath, #file{type = Type} = File) when Type > ?REG_TYPE
 %% ====================================================================
 save_file(#file{} = File) ->
     save_file(#veil_document{record = File});
-save_file(#veil_document{record = #file{name = {unicode_string, _FName}} = FileRec} = FileDoc) ->
+save_file(#veil_document{record = #file{name = {unicode_string, _FName}, extensions = Exts} = FileRec} = FileDoc) ->
+    case length(Exts) of
+        0 -> ok;
+        _ -> ets:delete_all_objects(spaces_cache)
+    end,
     dao_external:set_db(?FILES_DB_NAME),
     dao_records:save_record(FileDoc#veil_document{record = FileRec});
 save_file(#veil_document{record = #file{name = FName} = FileRec} = FileDoc) when is_list(FName) ->

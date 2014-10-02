@@ -19,15 +19,33 @@
 -export([main/0, event/1]).
 
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
+main() -> #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
 
 %% Page title
 title() -> <<"Login page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
+    case application:get_env(?APP_Name, developer_mode) of
+        {ok, true} -> body_devel();
+        _ -> body_production()
+    end.
+
+
+% In production, the user will be redirected straight to Global Registry
+body_production() ->
     case gui_ctx:user_logged_in() of
         true -> gui_jq:redirect(<<"/">>);
+        false -> event(globalregistry_login)
+    end.
+
+
+% For development, you can choose whether to log in via GR or directly via PLGrid OpenID
+body_devel() ->
+    case gui_ctx:user_logged_in() of
+        true ->
+            gui_jq:redirect(<<"/">>),
+            [];
         false ->
             ErrorPanelStyle = case gui_ctx:url_param(<<"x">>) of
                                   undefined -> <<"display: none;">>;
@@ -43,17 +61,19 @@ body() ->
                     #button{postback = globalregistry_login, class = <<"btn btn-warning">>, body = <<"Log in via Global Registry">>}
                 ]},
                 gui_utils:cookie_policy_popup_body(?privacy_policy_url)
-            ] ++ vcn_gui_utils:logotype_footer(120)
-                % Logout from PLGrid if there is no active session - the user might still have a session there
-                ++ [#p{body = <<"<iframe src=\"https://openid.plgrid.pl/logout\" style=\"display:none\"></iframe>">>}]}
+            ]}
     end.
 
 
-event(init) -> ok;
+event(init) ->
+    ok;
+
+event(terminate) ->
+    ok;
 
 % Login event handling
 event(globalregistry_login) ->
-    {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
+    {ok, GlobalRegistryHostname} = application:get_env(?APP_Name, global_registry_hostname),
     ProviderID = try cluster_manager_lib:get_provider_id() catch _:_ -> <<"">> end,
     RedirectURL =
         <<(atom_to_binary(GlobalRegistryHostname, latin1))/binary, ?gr_login_endpoint,
@@ -61,11 +81,6 @@ event(globalregistry_login) ->
     gui_jq:redirect(RedirectURL);
 
 event(plgrid_login) ->
-    % Collect redirect param if present
-    RedirectParam = case gui_ctx:url_param(<<"x">>) of
-                        undefined -> <<"">>;
-                        Val -> <<"?x=", Val/binary>>
-                    end,
     % Resolve hostname, which was requested by a client
     Hostname = gui_ctx:get_requested_hostname(),
     case Hostname of
@@ -74,13 +89,11 @@ event(plgrid_login) ->
             gui_jq:fade_in(<<"error_message">>, 300);
         Host ->
             % Get redirect URL and redirect to OpenID login
-            case plgrid_openid_utils:get_login_url(Host, RedirectParam) of
+            case plgrid_openid_utils:get_login_url(Host) of
                 {error, _} ->
                     gui_jq:update(<<"error_message">>, <<"Unable to reach OpenID Provider. Please try again later.">>),
                     gui_jq:fade_in(<<"error_message">>, 300);
                 URL ->
                     gui_jq:redirect(URL)
             end
-    end;
-
-event(terminate) -> ok.
+    end.

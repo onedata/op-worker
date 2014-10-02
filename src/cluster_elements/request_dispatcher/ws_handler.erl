@@ -19,6 +19,7 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("logging_pb.hrl").
+-include("remote_file_management_pb.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/cluster_rengine/cluster_rengine.hrl").
@@ -69,39 +70,19 @@ init(_Proto, _Req, _Opts) ->
 websocket_init(TransportName, Req, _Opts) ->
     ?debug("WebSocket connection received. Transport: ~p", [TransportName]),
 
+    {ClientSubjectDN, _} = cowboy_req:header(<<"onedata-internal-client-subject-dn">>, Req),
+    {SessionId, _} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
+    ?debug("New connection with SessionId ~p, ClientSubjectDN: ~p", [SessionId, ClientSubjectDN]),
+
     {ok, DispatcherTimeout} = application:get_env(veil_cluster_node, dispatcher_timeout),
     InitCtx = #handler_state{dispatcher_timeout = DispatcherTimeout},
 
-    case ssl:peercert(cowboy_req:get(socket, Req)) of
-        {ok, PeerCert} ->
-            {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
-
-            case ets:lookup(gsi_state, {Serial, Issuer}) of
-                [{_, [OtpCert | Certs], _}] ->
-                    case gsi_handler:call(gsi_nif, verify_cert_c,
-                        [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate
-                            [public_key:pkix_encode('OTPCertificate', Cert, otp) || Cert <- Certs], %% peer CA chain
-                            [DER || [DER] <- ets:match(gsi_state, {{ca, '_'}, '$1', '_'})],         %% cluster CA store
-                            [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
-                        {ok, 1} ->
-                            InitCtx2 = InitCtx#handler_state{peer_serial = Serial},
-                            {ok, Req, setup_connection(InitCtx2, OtpCert, Certs, auth_handler:is_provider(OtpCert))};
-                        {ok, 0, Errno} ->
-                            ?info("Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
-                            {shutdown, Req};
-                        {error, Reason} ->
-                            ?error("GSI peer verification callback error: ~p", [Reason]),
-                            {shutdown, Req};
-                        Other ->
-                            ?error("GSI verification callback returned unknown response ~p", [Other]),
-                            {shutdown, Req}
-                    end;
-                _ ->
-                    ?error("Peer was conected but cerificate chain was not found. Please check if GSI validation is enabled."),
-                    {shutdown, Req}
-            end;
-
-        {error, no_peercert} ->
+    case gsi_handler:get_certs_from_req(?ONEPROXY_DISPATCHER, Req) of
+        {ok, {OtpCert, Certs}} ->
+            {ok, {Serial, _Issuer}} = public_key:pkix_issuer_id(OtpCert, self),
+            InitCtx2 = InitCtx#handler_state{peer_serial = Serial},
+            {ok, Req, setup_connection(InitCtx2, OtpCert, Certs, auth_handler:is_provider(OtpCert))};
+        {error, _} ->
             {GRUID, Req2}  = cowboy_req:header(<<"global-user-id">>, Req),
             {Secret, Req3} = cowboy_req:header(<<"authentication-secret">>, Req2),
 
@@ -196,7 +177,9 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
                     UID1;
                 {error, Error} ->
                     case user_logic:get_user({unverified_dn, DnString}) of
-                        {ok, #veil_document{uuid = UID1, record = #user{login = Login}} = UserDoc} ->
+                        {ok, #veil_document{uuid = UID1} = UserDoc} ->
+                            {{OpenIdProvider, UserName}, _} = user_logic:get_login_with_uid(UserDoc),
+                            Login = vcn_utils:ensure_list(OpenIdProvider) ++ "_" ++ vcn_utils:ensure_list(UserName),
                             case CertConfirmation of
                                 #handshakerequest_certconfirmation{login = Login, result = Result} ->
                                     % Remove the DN from unverified DNs as it has been confirmed or declined
@@ -261,6 +244,9 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
                 ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [UserKey, Error]),
                 throw({no_user_found_error, Error, MsgId})
         end,
+
+    %% Refresh user's access token and schedule future refreshes
+    gen_server:call(?Dispatcher_Name, {control_panel, 1, {request_refresh, {uuid, UID}, {fuse, self()}}}),
 
     %% Fetch session data (using FUSE ID)
     case dao_lib:apply(dao_cluster, get_fuse_session, [NewFuseId], ProtocolVersion) of
@@ -401,6 +387,8 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
     Req :: term(),
     State :: #handler_state{}.
 %% ====================================================================
+websocket_info({new_access_token, AccessToken}, Req, State) ->
+    {ok, Req, State#handler_state{access_token = AccessToken}};
 websocket_info({Pid, get_session_id}, Req, State) ->
     Pid ! {ok, State#handler_state.fuse_id}, %% Response with assigned FuseID, when cluster asks
     {ok, Req, State};
@@ -424,9 +412,25 @@ websocket_info(_Msg, Req, State) ->
     Req :: term(),
     State :: #handler_state{}.
 %% ====================================================================
-websocket_terminate(_Reason, _Req, #handler_state{peer_serial = _Serial, connection_id = ConnID} = _State) ->
+websocket_terminate(_Reason, _Req, State) ->
+    #handler_state{peer_serial = _Serial, connection_id = ConnID, peer_dn = DN, user_global_id = GRUID, peer_type = PeerType} = State,
     ?debug("WebSocket connection  terminate for peer ~p with reason: ~p", [_Serial, _Reason]),
     dao_lib:apply(dao_cluster, remove_connection_info, [ConnID], 1),        %% Cleanup connection info.
+
+    case PeerType of
+        user ->
+            UserIdentification =
+                if
+                    DN =/= undefined -> {dn, DN};
+                    GRUID =/= undefined -> {global_id, GRUID}
+                end,
+
+            gen_server:call(?Dispatcher_Name, {control_panel, 1, {fuse_session_close, UserIdentification, self()}});
+
+        provider ->
+            ok
+    end,
+
     gen_server:cast(?Node_Manager_Name, {delete_callback_by_pid, self()}),
     ok.
 

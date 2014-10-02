@@ -12,6 +12,9 @@
 -ifndef(CONTROL_PANEL_COMMON_HRL).
 -define(CONTROL_PANEL_COMMON_HRL, 1).
 
+
+-include("registered_names.hrl").
+
 %% Include common gui hrl from ctool
 -include_lib("ctool/include/gui/common.hrl").
 -include_lib("dao/include/common.hrl").
@@ -33,6 +36,9 @@
 
 % Relative suffix of GUI address, leading to privacy policy page
 -define(privacy_policy_url, "/privacy_policy").
+
+% Relative suffix of GUI address, leading to the page where oneclient can be downloaded
+-define(client_download_page_url, "/client_download").
 
 % Name of parameter sent to logout page that verifies user logout
 -define(logout_token, <<"logout_token">>).

@@ -33,6 +33,7 @@ route(<<"/space">>) -> page_space;
 route(<<"/tokens">>) -> page_tokens;
 route(<<"/manage_account">>) -> page_manage_account;
 route(<<"/about">>) -> page_about;
+route(<<"/client_download">>) -> page_client_download;
 route(<<"/privacy_policy">>) -> page_privacy_policy;
 route(<<"/validate_login">>) -> page_validate_login;
 route(<<"/openid/login">>) -> page_openid_login;

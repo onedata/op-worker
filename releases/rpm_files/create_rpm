@@ -7,7 +7,7 @@ RPM_BUILD_DIRECTORY=/tmp/veil_rpmbuild
 BIGCOUCH_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/bigcouchdb
 
 # Onepanel release submodule
-ONEPANEL_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/onepanel/rel/onepanel
+ONEPANEL_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/onepanel/rel_provider/onepanel
 
 ##############################
 # Exit on any failure

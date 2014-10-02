@@ -93,7 +93,7 @@ get_file_children(FullFileName, UserPathTokens, ROffset, RCount) ->
             {0 = Off0, []} -> %% First iteration over "/" dir has to contain "groups" folder, so fetch `num - 1` files instead `num`
                 {RCount - 1, Off0};
             {Off1, []} -> %% Next iteration over "/" dir has start one entry earlier, so fetch `num` files starting on `offset - 1`
-                {ROffset, Off1 - 1};
+                {RCount, Off1 - 1};
             {Off2, _} -> %% Non-root dir -> proceed normally
                 {RCount, Off2}
         end,
@@ -113,7 +113,7 @@ get_file_children(FullFileName, UserPathTokens, ROffset, RCount) ->
             {Ret, _} = lists:split(min(Num, length(Tail)), Tail),
             Entries = lists:map(fun(Elem) -> #filechildren_direntry{name = Elem, type = ?DIR_TYPE_PROT} end, Ret),
             #filechildren{entry = Entries};
-        Other ->
+        _Other ->
             #filechildren{entry = Children}
     end.
 

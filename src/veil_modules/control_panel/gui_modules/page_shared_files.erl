@@ -21,11 +21,11 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case vcn_gui_utils:maybe_redirect(true, true, true, true) of
+    case vcn_gui_utils:maybe_redirect(true, true, true) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
     end.
 
 %% Page title
@@ -74,13 +74,12 @@ main_panel() ->
                         ]}
                 ]}},
                 #td{style = <<"width: 80px;">>, body = #span{class = <<"table-cell">>, body = [
-                    #panel{style = <<"margin: 5px 0; display: inline-block; vertical-align: middle;">>, body = [
+                    #panel{style = <<"margin: 4px 0 0;">>, body = [
                         #link{class = <<"glyph-link">>, style = <<"margin-right: 25px;">>,
-                            postback = {action, show_link, [UUID]}, body = #span{class = <<"fui-link">>,
-                                style = <<"font-size: 24px; margin: -4px 0px 0px; position: relative; top: 4px;">>}},
+                            postback = {action, show_link, [UUID]}, body = #span{class = <<"icomoon-link">>,
+                                style = <<"font-size: 24px;">>}},
                         #link{class = <<"glyph-link">>, postback = {action, remove_link_prompt, [UUID, Filename]},
-                            body = #span{class = <<"fui-cross">>, style = <<"font-size: 24px;",
-                            "margin: -4px 0px 0px; position: relative; top: 4px;">>}}
+                            body = #span{class = <<"fui-cross">>, style = <<"font-size: 24px;">>}}
                     ]}
                 ]}}
             ]}
@@ -100,7 +99,7 @@ main_panel() ->
 
 % Get list of user's shared files from database
 get_shared_files() ->
-    {ok, #veil_document{uuid = UUID}} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+    {ok, #veil_document{uuid = UUID}} = user_logic:get_user({uuid, gui_ctx:get_user_id()}),
     _ShareList = case logical_files_manager:get_share({user, UUID}) of
                      {ok, List} when is_list(List) -> List;
                      {ok, Doc} -> [Doc];
