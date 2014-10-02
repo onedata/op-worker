@@ -9,9 +9,9 @@
 #define HELPERS_VERSION_H
 
 
-#define Helpers_VERSION_MAJOR    @Helpers_VERSION_MAJOR@
-#define Helpers_VERSION_MINOR    @Helpers_VERSION_MINOR@
-#define Helpers_VERSION_PATCH    @Helpers_VERSION_PATCH@
+#define helpers_VERSION_MAJOR    @helpers_VERSION_MAJOR@
+#define helpers_VERSION_MINOR    @helpers_VERSION_MINOR@
+#define helpers_VERSION_PATCH    @helpers_VERSION_PATCH@
 
 
 #endif // HELPERS_VERSION_H

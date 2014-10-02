@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 2.8.0)
-project(Helpers C CXX)
+project(helpers C CXX)
 
 # The version number.
-set(Helpers_VERSION_MAJOR 0)
-set(Helpers_VERSION_MINOR 2)
-set(Helpers_VERSION_PATCH 0)
-set(Helpers_VERSION $(Helpers_VERSION_MAJOR).$(Helpers_VERSION_MINOR).$(Helpers_VERSION_PATCH))
+set(helpers_VERSION_MAJOR 0)
+set(helpers_VERSION_MINOR 2)
+set(helpers_VERSION_PATCH 0)
+set(helpers_VERSION $(helpers_VERSION_MAJOR).$(helpers_VERSION_MINOR).$(helpers_VERSION_PATCH))
 
 # CMake config
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})

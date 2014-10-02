@@ -1,18 +1,18 @@
-Helpers
+helpers
 =======
 
-*Helpers* is a part of *Onedata* system that unifies access to files stored at heterogeneous data storage systems that belong
+*helpers* is a part of *onedata* system that unifies access to files stored at heterogeneous data storage systems that belong
 to geographically distributed organizations.
 
 Goals
 -----
 
-The goal of *Helpers* is provision of a "storage helpers" - libraries allowing access to all supported by *Onedata* 
-(self-scalable cluster that will is a central point of each data centre that uses *Onedata*) filesystems.
+The goal of *helpers* is provision of a "storage helpers" - libraries allowing access to all supported by *onedata* 
+(self-scalable cluster that will is a central point of each data centre that uses *onedata*) filesystems.
 
 Getting Started
 ---------------
-*Helpers* is built with CMake. More information about compiling the project in "Compilation" section.
+*helpers* is built with CMake. More information about compiling the project in "Compilation" section.
 
 Prerequisites
 -------------

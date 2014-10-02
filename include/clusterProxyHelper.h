@@ -41,7 +41,7 @@ class ClusterProxyHelper: public IStorageHelper
 {
 public:
     /**
-     * This storage helper uses either 0 or 3 arguments. If no arguments are passed, default Helpers connection pooling will be used.
+     * This storage helper uses either 0 or 3 arguments. If no arguments are passed, default helpers connection pooling will be used.
      * Otherwise first argument shall be cluster's hostname, second - cluster's port and third one - path to peer certificate.
      */
     ClusterProxyHelper(std::shared_ptr<communication::Communicator>,
