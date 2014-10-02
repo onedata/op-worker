@@ -382,12 +382,16 @@ handle_cast({update_ports_stats, PortsStats}, State) ->
 handle_cast(reload_storage_users, State) ->
     {ok, Data} = file:read_file("/etc/passwd"),
     UserTokens = binary:split(Data, [<<10>>, <<13>>], [global, trim]),
-    ets:delete_all_objects(?STORAGE_USER_IDS_CACHE),
-    lists:foreach(
-        fun(Elem) ->
-            [UserName, _, UID | _] = binary:split(Elem, [<<":">>], [global, trim]),
-            ets:insert(?STORAGE_USER_IDS_CACHE, {vcn_utils:ensure_binary(UserName), binary_to_integer(UID)})
-        end, UserTokens),
+    EtsMap = maps:from_list(ets:tab2list(?STORAGE_USER_IDS_CACHE)),
+    UnusedMap =
+        lists:foldl(
+            fun(Elem, CurrMap) ->
+                [UserName, _, UID | _] = binary:split(Elem, [<<":">>], [global, trim]),
+                ets:insert(?STORAGE_USER_IDS_CACHE, {UserName, binary_to_integer(UID)}),
+                maps:remove(UserName, CurrMap)
+            end, EtsMap, UserTokens),
+
+    [ets:delete(?STORAGE_USER_IDS_CACHE, Key) || Key <- maps:keys(UnusedMap)],
 
     erlang:send_after(timer:seconds(20), self(), {timer, reload_storage_users}),
     {noreply, State};
@@ -395,12 +399,16 @@ handle_cast(reload_storage_users, State) ->
 handle_cast(reload_storage_groups, State) ->
     {ok, Data} = file:read_file("/etc/group"),
     GroupTokens = binary:split(Data, [<<10>>, <<13>>], [global, trim]),
-    ets:delete_all_objects(?STORAGE_GROUP_IDS_CACHE),
-    lists:foreach(
-        fun(Elem) ->
-            [GroupName, _, GID | _] = binary:split(Elem, [<<":">>], [global, trim]),
-            ets:insert(?STORAGE_GROUP_IDS_CACHE, {vcn_utils:ensure_binary(GroupName), binary_to_integer(GID)})
-        end, GroupTokens),
+    EtsMap = maps:from_list(ets:tab2list(?STORAGE_GROUP_IDS_CACHE)),
+    UnusedMap =
+        lists:foldl(
+            fun(Elem, CurrMap) ->
+                [GroupName, _, GID | _] = binary:split(Elem, [<<":">>], [global, trim]),
+                ets:insert(?STORAGE_GROUP_IDS_CACHE, {GroupName, binary_to_integer(GID)}),
+                maps:remove(GroupName, CurrMap)
+            end, EtsMap, GroupTokens),
+
+    [ets:delete(?STORAGE_GROUP_IDS_CACHE, Key) || Key <- maps:keys(UnusedMap)],
 
     erlang:send_after(timer:seconds(20), self(), {timer, reload_storage_groups}),
     {noreply, State};
