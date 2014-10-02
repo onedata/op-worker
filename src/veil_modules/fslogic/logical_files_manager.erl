@@ -30,7 +30,7 @@
 -export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, get_xattr/2, set_xattr/3, remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, rmlink/1, read_link/1, create_symlink/2]).
 %% File access (db and helper are used)
 -export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
--export([change_file_perm/2, check_file_perm/2]).
+-export([change_file_perm/3, check_file_perm/2]).
 -export([get_file_children_count/1]).
 
 %% File sharing
