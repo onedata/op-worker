@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATION_COMMUNICATION_HANDLER_H
-#define VEILHELPERS_COMMUNICATION_COMMUNICATION_HANDLER_H
+#ifndef HELPERS_COMMUNICATION_COMMUNICATION_HANDLER_H
+#define HELPERS_COMMUNICATION_COMMUNICATION_HANDLER_H
 
 
 #include "communication_protocol.pb.h"
@@ -22,7 +22,7 @@
 #include <mutex>
 #include <string>
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -31,17 +31,17 @@ class ConnectionPool;
 
 /**
  * The CommunicationHandler class is responsible for managing communication on
- * the layer of @c veil::protocol::communication_protocol::ClusterMsg and
- * @c veil::protocol::communication_protocol::Answer messages.
- * The CommunicationHandler uses @c veil::communication::ConnectionPool as the
+ * the layer of @c one::clproto::communication_protocol::ClusterMsg and
+ * @c one::clproto::communication_protocol::Answer messages.
+ * The CommunicationHandler uses @c one::communication::ConnectionPool as the
  * underlying layer and manages multiple @c ConnectionPool instances allowing
  * clients to send messages through any of them.
  */
 class CommunicationHandler
 {
     using MsgId = int32_t;
-    using Answer = protocol::communication_protocol::Answer;
-    using Message = protocol::communication_protocol::ClusterMsg;
+    using Answer = clproto::communication_protocol::Answer;
+    using Message = clproto::communication_protocol::ClusterMsg;
 
 public:
     /**
@@ -73,7 +73,7 @@ public:
     };
 
     /**
-     * The Pool enum enumerates possible @c veil::communication::ConnectionPool
+     * The Pool enum enumerates possible @c one::communication::ConnectionPool
      * instances for message sending purposes.
      */
     enum class Pool
@@ -185,7 +185,7 @@ private:
 };
 
 } // namespace communication
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_COMMUNICATION_COMMUNICATION_HANDLER_H
+#endif // HELPERS_COMMUNICATION_COMMUNICATION_HANDLER_H

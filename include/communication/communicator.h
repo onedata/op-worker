@@ -5,13 +5,13 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATION_COMMUNICATOR_H
-#define VEILHELPERS_COMMUNICATION_COMMUNICATOR_H
+#ifndef HELPERS_COMMUNICATION_COMMUNICATOR_H
+#define HELPERS_COMMUNICATION_COMMUNICATOR_H
 
 
 #include "communication/communicationHandler.h"
 #include "make_unique.h"
-#include "veilErrors.h"
+#include "oneErrors.h"
 
 #include <google/protobuf/message.h>
 
@@ -21,7 +21,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace veil
+namespace one
 {
 
 class Scheduler;
@@ -37,7 +37,7 @@ class CertificateData;
 static constexpr int PROTOCOL_VERSION = 1;
 
 /**
- * The default timeout for @c veil::communication::Communicator::communicate .
+ * The default timeout for @c one::communication::Communicator::communicate .
  */
 static constexpr std::chrono::seconds RECV_TIMEOUT{2};
 
@@ -75,15 +75,15 @@ inline std::string toString(ServerModule module)
 /**
  * The Communicator class is responsible for managing communication on
  * the layer of concrete protobuf messages that are later wrapped in
- * @c veil::protocol::communication_protocol::ClusterMsg.
+ * @c one::clproto::communication_protocol::ClusterMsg.
  * It contains high-level functions built on
- * @c veil::communication::CommunicationHandler layer's capabilities.
+ * @c one::communication::CommunicationHandler layer's capabilities.
  */
 class Communicator
 {
-    using Answer = protocol::communication_protocol::Answer;
-    using ClusterMsg = protocol::communication_protocol::ClusterMsg;
-    using Atom = veil::protocol::communication_protocol::Atom;
+    using Answer = clproto::communication_protocol::Answer;
+    using ClusterMsg = clproto::communication_protocol::ClusterMsg;
+    using Atom = one::clproto::communication_protocol::Atom;
 
 public:
     /**
@@ -221,8 +221,8 @@ private:
 };
 
 /**
- * Creates a @c veil::communication::Communicator instance built on
- * @c veil::communication::WebsocketConnectionPool connection pools.
+ * Creates a @c one::communication::Communicator instance built on
+ * @c one::communication::WebsocketConnectionPool connection pools.
  * @param dataPoolSize Number of connections to maintain in a data pool.
  * @param metaPoolSize Number of connections to maintain in a metadata pool
  * @param uri Server's URI to connect to.
@@ -241,7 +241,7 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(
         std::shared_ptr<const CertificateData> certificateData = nullptr);
 
 } // namespace communication
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_COMMUNICATION_COMMUNICATOR_H
+#endif // HELPERS_COMMUNICATION_COMMUNICATOR_H

@@ -36,20 +36,20 @@ using namespace std::placeholders;
 
 struct CommunicatorTest: public ::testing::Test
 {
-    std::unique_ptr<veil::communication::Communicator> communicator;
+    std::unique_ptr<one::communication::Communicator> communicator;
     MockCommunicationHandler *handlerMock;
     std::string fuseId;
-    veil::communication::ServerModule randomModule;
+    one::communication::ServerModule randomModule;
 
     CommunicatorTest()
     {
         fuseId = randomString();
-        randomModule = veil::communication::ServerModule::CLUSTER_RENGINE;
+        randomModule = one::communication::ServerModule::CLUSTER_RENGINE;
 
         auto p = std::make_unique<NiceMock<MockCommunicationHandler>>();
         handlerMock = p.get();
 
-        communicator = std::make_unique<veil::communication::Communicator>(
+        communicator = std::make_unique<one::communication::Communicator>(
                     std::move(p));
 
         communicator->setFuseId(fuseId);
@@ -61,14 +61,14 @@ TEST_F(CommunicatorTest, shouldAddHandshakeAndGoodbyeOnSetupPushChannels)
     std::function<std::unique_ptr<MockCommunicationHandler::Message>()> addedHandshake;
     std::function<std::unique_ptr<MockCommunicationHandler::Message>()> addedGoodbye;
 
-    EXPECT_CALL(*handlerMock, addHandshake(_, _, veil::communication::CommunicationHandler::Pool::META)).
+    EXPECT_CALL(*handlerMock, addHandshake(_, _, one::communication::CommunicationHandler::Pool::META)).
             WillOnce(DoAll(SaveArg<0>(&addedHandshake), SaveArg<1>(&addedGoodbye),
                            Return([]{})));
 
     communicator->setupPushChannels({});
 
-    veil::protocol::fuse_messages::ChannelRegistration reg;
-    veil::protocol::fuse_messages::ChannelClose close;
+    one::clproto::fuse_messages::ChannelRegistration reg;
+    one::clproto::fuse_messages::ChannelClose close;
 
     ASSERT_TRUE(reg.ParseFromString(addedHandshake()->input()));
     ASSERT_EQ(fuseId, reg.fuse_id());
@@ -126,7 +126,7 @@ TEST_F(CommunicatorTest, shouldAddHandshakeOnSetupHandshakeACK)
 
     communicator->setupHandshakeAck();
 
-    veil::protocol::fuse_messages::HandshakeAck ack;
+    one::clproto::fuse_messages::HandshakeAck ack;
     ASSERT_TRUE(ack.ParseFromString(addedMetaHandshake()->input()));
     ASSERT_EQ(fuseId, ack.fuse_id());
 
@@ -137,7 +137,7 @@ TEST_F(CommunicatorTest, shouldAddHandshakeOnSetupHandshakeACK)
 
 TEST_F(CommunicatorTest, shouldCallDataPoolOnSendingRemoteFileManagementMessages)
 {
-    veil::protocol::remote_file_management::ChangePermsAtStorage msg;
+    one::clproto::remote_file_management::ChangePermsAtStorage msg;
     msg.set_file_id(randomString());
     msg.set_perms(666);
 
@@ -156,7 +156,7 @@ TEST_F(CommunicatorTest, shouldCallDataPoolOnSendingRemoteFileManagementMessages
 
 TEST_F(CommunicatorTest, shouldCallDataPoolOnSendingOtherMessages)
 {
-    veil::protocol::fuse_messages::ChannelClose msg;
+    one::clproto::fuse_messages::ChannelClose msg;
     msg.set_fuse_id(fuseId);
 
     EXPECT_CALL(*handlerMock, send(_, MockCommunicationHandler::Pool::META, _));
@@ -173,13 +173,13 @@ TEST_F(CommunicatorTest, shouldCallDataPoolOnSendingOtherMessages)
 
 TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnSend)
 {
-    std::string module = veil::communication::toString(randomModule);
+    std::string module = one::communication::toString(randomModule);
 
-    veil::protocol::remote_file_management::RemoteFileMangement msg;
+    one::clproto::remote_file_management::RemoteFileMangement msg;
     msg.set_input(randomString());
     msg.set_message_type(randomString());
 
-    veil::protocol::communication_protocol::ClusterMsg wrapper;
+    one::clproto::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, send(_, _, _)).WillOnce(SaveArg<0>(&wrapper));
     communicator->send(randomModule, msg);
 
@@ -198,15 +198,15 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnSend)
 
 TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnCommunicate)
 {
-    std::string module = veil::communication::toString(randomModule);
+    std::string module = one::communication::toString(randomModule);
 
-    veil::protocol::fuse_messages::CreateDir msg;
+    one::clproto::fuse_messages::CreateDir msg;
     msg.set_dir_logic_name(randomString());
     msg.set_mode(666);
 
-    veil::protocol::communication_protocol::ClusterMsg wrapper;
+    one::clproto::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, communicateMock(_, _)).WillOnce(SaveArg<0>(&wrapper));
-    communicator->communicate<veil::protocol::fuse_messages::ChannelClose>(randomModule, msg, 0, std::chrono::milliseconds{0});
+    communicator->communicate<one::clproto::fuse_messages::ChannelClose>(randomModule, msg, 0, std::chrono::milliseconds{0});
 
     ASSERT_EQ("createdir", wrapper.message_type());
     ASSERT_EQ("fuse_messages", wrapper.message_decoder_name());
@@ -223,14 +223,14 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnCommunicate)
 
 TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnCommunicateAsync)
 {
-    std::string module = veil::communication::toString(randomModule);
+    std::string module = one::communication::toString(randomModule);
 
-    veil::protocol::logging::ChangeRemoteLogLevel msg;
-    msg.set_level(veil::protocol::logging::INFO);
+    one::clproto::logging::ChangeRemoteLogLevel msg;
+    msg.set_level(one::clproto::logging::INFO);
 
-    veil::protocol::communication_protocol::ClusterMsg wrapper;
+    one::clproto::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, communicateMock(_, _)).WillOnce(SaveArg<0>(&wrapper));
-    communicator->communicateAsync<veil::protocol::remote_file_management::DeleteFileAtStorage>(randomModule, msg);
+    communicator->communicateAsync<one::clproto::remote_file_management::DeleteFileAtStorage>(randomModule, msg);
 
     ASSERT_EQ("changeremoteloglevel", wrapper.message_type());
     ASSERT_EQ("logging", wrapper.message_decoder_name());
@@ -247,10 +247,10 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnCommunicateAsync)
 
 TEST_F(CommunicatorTest, shouldAskForAtomAnswerByDefault)
 {
-    veil::protocol::fuse_messages::ChannelRegistration msg;
+    one::clproto::fuse_messages::ChannelRegistration msg;
     msg.set_fuse_id(fuseId);
 
-    veil::protocol::communication_protocol::ClusterMsg wrapper;
+    one::clproto::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, communicateMock(_, _)).WillRepeatedly(SaveArg<0>(&wrapper));
 
     communicator->communicate(randomModule, msg);
@@ -279,7 +279,7 @@ TEST_F(CommunicatorTest, shouldWaitForAnswerOnCommunicate)
         ASSERT_TRUE(communicationDone);
     };
 
-    veil::protocol::fuse_messages::ChannelRegistration msg;
+    one::clproto::fuse_messages::ChannelRegistration msg;
     msg.set_fuse_id(fuseId);
 
     std::thread t{fulfilPromise};
@@ -294,18 +294,18 @@ TEST_F(CommunicatorTest, shouldThrowOnCommunicateReceiveTimeout)
 {
     handlerMock->autoFulfillPromise = false;
 
-    veil::protocol::fuse_messages::ChannelRegistration msg;
+    one::clproto::fuse_messages::ChannelRegistration msg;
     msg.set_fuse_id(fuseId);
 
     ASSERT_THROW(communicator->communicate(randomModule, msg, 0,std::chrono::seconds{0}),
-                 veil::communication::ReceiveError);
+                 one::communication::ReceiveError);
 }
 
 TEST_F(CommunicatorTest, shouldReturnAFullfilableFutureOnCommunicateAsync)
 {
     handlerMock->autoFulfillPromise = false;
 
-    veil::protocol::fuse_messages::ChannelRegistration msg;
+    one::clproto::fuse_messages::ChannelRegistration msg;
     msg.set_fuse_id(fuseId);
     auto future = communicator->communicateAsync(randomModule, msg);
 
@@ -316,15 +316,15 @@ TEST_F(CommunicatorTest, shouldReturnAFullfilableFutureOnCommunicateAsync)
 
 TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnReply)
 {
-    std::string module = veil::communication::toString(randomModule);
+    std::string module = one::communication::toString(randomModule);
 
-    veil::protocol::fuse_messages::ChannelClose msg;
+    one::clproto::fuse_messages::ChannelClose msg;
     msg.set_fuse_id(fuseId);
 
-    veil::protocol::communication_protocol::Answer replyTo;
+    one::clproto::communication_protocol::Answer replyTo;
     replyTo.set_message_id(randomInt());
 
-    veil::protocol::communication_protocol::ClusterMsg wrapper;
+    one::clproto::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, reply(_, _, _, _)).WillOnce(SaveArg<1>(&wrapper));
     communicator->reply(replyTo, randomModule, msg);
 
@@ -343,7 +343,7 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnReply)
 
 TEST_F(CommunicatorTest, shouldReplaceSubscriptionOnSetupPushChannel)
 {
-    using veil::protocol::communication_protocol::Answer;
+    using one::clproto::communication_protocol::Answer;
 
     bool unsubscribeCalled = false;
     bool rightCallbackCalled = false;
@@ -367,8 +367,8 @@ TEST_F(CommunicatorTest, shouldReplaceSubscriptionOnSetupPushChannel)
 
 TEST_F(CommunicatorTest, shouldReplaceHandshakeOnSetupPushChannel)
 {
-    using veil::protocol::communication_protocol::ClusterMsg;
-    using veil::protocol::communication_protocol::Answer;
+    using one::clproto::communication_protocol::ClusterMsg;
+    using one::clproto::communication_protocol::Answer;
 
     bool removeCalled = false;
     std::function<std::unique_ptr<ClusterMsg>()> handshake;
@@ -386,15 +386,15 @@ TEST_F(CommunicatorTest, shouldReplaceHandshakeOnSetupPushChannel)
 
     ASSERT_TRUE(removeCalled);
 
-    veil::protocol::fuse_messages::ChannelRegistration reg;
+    one::clproto::fuse_messages::ChannelRegistration reg;
     ASSERT_TRUE(reg.ParseFromString(handshake()->input()));
     ASSERT_EQ(expectedFuseId, reg.fuse_id());
 }
 
 TEST_F(CommunicatorTest, shouldReplaceHandshakeOnSetupHandshakeAck)
 {
-    using veil::protocol::communication_protocol::ClusterMsg;
-    using veil::protocol::communication_protocol::Answer;
+    using one::clproto::communication_protocol::ClusterMsg;
+    using one::clproto::communication_protocol::Answer;
 
     int removeCalled = 0;
     std::function<std::unique_ptr<ClusterMsg>()> metaHandshake;
@@ -417,7 +417,7 @@ TEST_F(CommunicatorTest, shouldReplaceHandshakeOnSetupHandshakeAck)
 
     ASSERT_EQ(2, removeCalled);
 
-    veil::protocol::fuse_messages::HandshakeAck ack;
+    one::clproto::fuse_messages::HandshakeAck ack;
 
     ASSERT_TRUE(ack.ParseFromString(metaHandshake()->input()));
     ASSERT_EQ(expectedFuseId, ack.fuse_id());

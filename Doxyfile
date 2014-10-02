@@ -3,9 +3,9 @@
 # Project related configuration options
 #---------------------------------------------------------------------------
 DOXYFILE_ENCODING      = UTF-8
-PROJECT_NAME           = VeilHelpers
+PROJECT_NAME           = helpers
 PROJECT_NUMBER         = 
-PROJECT_BRIEF          = "The goal of VeilHelpers is provision of a "storage helpers" - liblaries allowing access to all supported by VeilFS filesystems. It is a part of VeilFS project."
+PROJECT_BRIEF          = "The goal of helpers is to provide a "storage helpers" - libraries allowing access to all supported by onedata filesystems. It is a part of onedata project."
 PROJECT_LOGO           = 
 OUTPUT_DIRECTORY       = ./doc
 CREATE_SUBDIRS         = NO

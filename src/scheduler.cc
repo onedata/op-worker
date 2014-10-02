@@ -25,7 +25,7 @@ void handle(const boost::system::error_code &error,
 }
 }
 
-namespace veil
+namespace one
 {
 
 Scheduler::Scheduler(const unsigned int threadNumber)
@@ -50,4 +50,4 @@ void Scheduler::schedule(const std::chrono::milliseconds after,
     timer->async_wait(std::bind(handle, _1, std::move(task), timer));
 }
 
-} // namespace veil
+} // namespace one

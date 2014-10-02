@@ -28,7 +28,7 @@
 
 using namespace std;
 
-namespace veil
+namespace one
 {
 namespace helpers
 {
@@ -305,4 +305,4 @@ DirectIOHelper::DirectIOHelper(const ArgsMap &args)
 
 
 } // namespace helpers
-} // namespace veil
+} // namespace one

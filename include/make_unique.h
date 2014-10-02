@@ -5,8 +5,8 @@
  * @link https://isocpp.org/files/papers/N3656.txt
  */
 
-#ifndef VEILHELPERS_MAKE_UNIQUE_H
-#define VEILHELPERS_MAKE_UNIQUE_H
+#ifndef HELPERS_MAKE_UNIQUE_H
+#define HELPERS_MAKE_UNIQUE_H
 
 
 #include <cstddef>
@@ -46,4 +46,4 @@ namespace std {
 }
 
 
-#endif // VEILHELPERS_MAKE_UNIQUE_H
+#endif // HELPERS_MAKE_UNIQUE_H

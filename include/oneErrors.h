@@ -1,17 +1,17 @@
 /**
- * @file veilErrors.h
+ * @file oneErrors.h
  * @author Rafal Slota
  * @copyright (C) 2013 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_VEIL_ERRORS_H
-#define VEILHELPERS_VEIL_ERRORS_H
+#ifndef HELPERS_ONE_ERRORS_H
+#define HELPERS_ONE_ERRORS_H
 
 
 #include <string>
 
-/// VeilClient error codes
+/// oneclient error codes
 static constexpr const char
     *VOK        = "ok",            // Everything is just great
     *VPUSH      = "push",          // Everything is even better - PUSH message from cluster. This error code is used as Answer::answer_status for PUSH messages.
@@ -32,7 +32,7 @@ static constexpr const char
     *NO_CONNECTION_FOR_HANDSHAKE        = "no_connection_for_handshake",
     *CERT_CONFIRMATION_REQUIRED_ERROR   = "cert_confirmation_required";
 
-namespace veil
+namespace one
 {
 namespace error
 {
@@ -46,7 +46,7 @@ enum Error
 
 /**
  * errno translator.
- * Translates internal VeilClient error codes (strings) to
+ * Translates internal oneclient error codes (strings) to
  * POSIX error codes. If given string is not valid,
  * EIO is returned.
  * @param verr literal name of POSIX error code
@@ -54,7 +54,7 @@ enum Error
  */
 int translateError(const std::string &verr);
 
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_VEIL_ERRORS_H
+#endif // HELPERS_ONE_ERRORS_H

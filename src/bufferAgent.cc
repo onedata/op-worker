@@ -14,7 +14,7 @@
 #include <functional>
 #include <thread>
 
-namespace veil
+namespace one
 {
 namespace helpers
 {
@@ -500,5 +500,5 @@ std::shared_ptr<FileCache> BufferAgent::newFileCache(bool isBuffer)
 }
 
 } // namespace helpers
-} // namespace veil
+} // namespace one
 

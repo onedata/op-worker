@@ -24,7 +24,7 @@
 static constexpr std::chrono::seconds AFTER_FAIL_DELAY(2);
 static constexpr std::chrono::seconds MAX_FLUSH_DELAY{10};
 
-namespace veil
+namespace one
 {
 namespace logging
 {
@@ -33,11 +33,11 @@ static RemoteLogLevel glogToLevel(google::LogSeverity glevel)
 {
     switch(glevel)
     {
-        case google::INFO: return protocol::logging::INFO;
-        case google::WARNING: return protocol::logging::WARNING;
-        case google::ERROR: return protocol::logging::ERROR;
-        case google::FATAL: return protocol::logging::FATAL;
-        default: return protocol::logging::NONE;
+        case google::INFO: return clproto::logging::INFO;
+        case google::WARNING: return clproto::logging::WARNING;
+        case google::ERROR: return clproto::logging::ERROR;
+        case google::FATAL: return clproto::logging::FATAL;
+        default: return clproto::logging::NONE;
     }
 }
 
@@ -79,7 +79,7 @@ void RemoteLogWriter::buffer(const RemoteLogLevel level,
     if(m_thresholdLevel > level) // nothing to log
         return;
 
-    protocol::logging::LogMessage log;
+    clproto::logging::LogMessage log;
     log.set_level(level);
     log.set_pid(m_pid);
     log.set_file_name(fileName);
@@ -90,12 +90,12 @@ void RemoteLogWriter::buffer(const RemoteLogLevel level,
     pushMessage(log);
 }
 
-bool RemoteLogWriter::handleThresholdChange(const protocol::communication_protocol::Answer &answer)
+bool RemoteLogWriter::handleThresholdChange(const clproto::communication_protocol::Answer &answer)
 {
     if(!boost::algorithm::iequals(answer.message_type(), "ChangeRemoteLogLevel"))
         return true;
 
-    protocol::logging::ChangeRemoteLogLevel req;
+    clproto::logging::ChangeRemoteLogLevel req;
     req.ParseFromString(answer.worker_answer());
     m_thresholdLevel = req.level();
 
@@ -105,7 +105,7 @@ bool RemoteLogWriter::handleThresholdChange(const protocol::communication_protoc
     return true;
 }
 
-void RemoteLogWriter::pushMessage(const protocol::logging::LogMessage &msg)
+void RemoteLogWriter::pushMessage(const clproto::logging::LogMessage &msg)
 {
     std::lock_guard<std::mutex> guard(m_bufferMutex);
 
@@ -117,16 +117,16 @@ void RemoteLogWriter::pushMessage(const protocol::logging::LogMessage &msg)
     m_bufferChanged.notify_all();
 }
 
-protocol::logging::LogMessage RemoteLogWriter::popMessage()
+clproto::logging::LogMessage RemoteLogWriter::popMessage()
 {
     std::unique_lock<std::mutex> lock(m_bufferMutex);
     while(m_buffer.empty() && !m_stopWriteLoop)
         m_bufferChanged.wait_for(lock, MAX_FLUSH_DELAY);
 
     if(m_stopWriteLoop)
-        return protocol::logging::LogMessage{};
+        return clproto::logging::LogMessage{};
 
-    const protocol::logging::LogMessage msg = m_buffer.front();
+    const clproto::logging::LogMessage msg = m_buffer.front();
     m_buffer.pop();
     return msg;
 }
@@ -142,7 +142,7 @@ void RemoteLogWriter::writeLoop()
 
 bool RemoteLogWriter::sendNextMessage()
 {
-    const protocol::logging::LogMessage msg = popMessage();
+    const clproto::logging::LogMessage msg = popMessage();
     if(m_stopWriteLoop)
         return true;
 
@@ -172,8 +172,8 @@ void RemoteLogWriter::dropExcessMessages()
            << " messages as the limit of " << m_maxBufferSize
            << " buffered messages has been exceeded";
 
-    protocol::logging::LogMessage log;
-    log.set_level(protocol::logging::WARNING);
+    clproto::logging::LogMessage log;
+    log.set_level(clproto::logging::WARNING);
     log.set_pid(m_pid);
     log.set_file_name("logging.cc");
     log.set_line(__LINE__),
@@ -196,7 +196,7 @@ void RemoteLogSink::send(google::LogSeverity severity,
                          const char *message, size_t message_len)
 {
     const time_t timestamp = std::mktime(const_cast<tm*>(tm_time));
-    const RemoteLogLevel level = m_forcedLevel != protocol::logging::NONE
+    const RemoteLogLevel level = m_forcedLevel != clproto::logging::NONE
             ? m_forcedLevel : glogToLevel(severity);
 
     m_writer->buffer(level, base_filename, line, timestamp,
@@ -214,4 +214,4 @@ void setLogSinks(const std::shared_ptr<RemoteLogSink> &logSink,
 }
 
 } // namespace logging
-} // namespace veil
+} // namespace one

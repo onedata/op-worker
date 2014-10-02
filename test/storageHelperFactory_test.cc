@@ -13,8 +13,8 @@
 
 #include <memory>
 
-using namespace veil;
-using namespace veil::helpers;
+using namespace one;
+using namespace one::helpers;
 
 TEST(StorageHelperFactoryTest, ObjectBuild)
 {

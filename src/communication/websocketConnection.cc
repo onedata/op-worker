@@ -11,7 +11,7 @@
 #include "communication/exception.h"
 #include "logging.h"
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -193,4 +193,4 @@ void WebsocketConnection::onInterrupt()
 }
 
 } // namespace communication
-} // namespace veil
+} // namespace one

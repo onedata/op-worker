@@ -11,7 +11,7 @@
 
 using namespace std::placeholders;
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -37,4 +37,4 @@ Connection::~Connection()
 }
 
 } // namespace communication
-} // namespace veil
+} // namespace one

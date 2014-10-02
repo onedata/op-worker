@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_DIRECT_IO_HELPER_H
-#define VEILHELPERS_DIRECT_IO_HELPER_H
+#ifndef HELPERS_DIRECT_IO_HELPER_H
+#define HELPERS_DIRECT_IO_HELPER_H
 
 
 #include "helpers/IStorageHelper.h"
@@ -16,7 +16,7 @@
 #include <fuse.h>
 #include <sys/types.h>
 
-namespace veil
+namespace one
 {
 namespace helpers
 {
@@ -81,7 +81,7 @@ private:
 };
 
 } // namespace helpers
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_DIRECT_IO_HELPER_H
+#endif // HELPERS_DIRECT_IO_HELPER_H

@@ -13,7 +13,7 @@
 
 #include <boost/algorithm/string/case_conv.hpp>
 
-namespace veil
+namespace one
 {
 namespace helpers
 {
@@ -61,4 +61,4 @@ std::string srvArg(const int argno)
 }
 
 } // namespace helpers
-} // namespace veil
+} // namespace one

@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_H
-#define VEILHELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_H
+#ifndef HELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_H
+#define HELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_H
 
 
 #include "connection.h"
@@ -24,7 +24,7 @@
 
 extern template class websocketpp::client<websocketpp::config::asio_tls_client>;
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -32,7 +32,7 @@ namespace communication
 class CertificateData;
 
 /**
- * An @c veil::communication::ConnectionError specialization for connection
+ * An @c one::communication::ConnectionError specialization for connection
  * errors occuring due to invalid server certificate.
  */
 class InvalidServerCertificate: public ConnectionError
@@ -42,7 +42,7 @@ public:
 };
 
 /**
- * The WebsocketConnection class is a @c veil::communication::Connection
+ * The WebsocketConnection class is a @c one::communication::Connection
  * specialization for TLS WebSocket++ based connections.
  */
 class WebsocketConnection: public Connection
@@ -112,7 +112,7 @@ private:
 };
 
 } // namespace communication
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_H
+#endif // HELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_H

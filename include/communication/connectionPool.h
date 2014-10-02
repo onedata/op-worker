@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATION_CONNECTION_POOL_H
-#define VEILHELPERS_COMMUNICATION_CONNECTION_POOL_H
+#ifndef HELPERS_COMMUNICATION_CONNECTION_POOL_H
+#define HELPERS_COMMUNICATION_CONNECTION_POOL_H
 
 
 #include <condition_variable>
@@ -17,7 +17,7 @@
 #include <mutex>
 #include <string>
 
-namespace veil
+namespace one
 {
 
 class Scheduler;
@@ -181,7 +181,7 @@ private:
 };
 
 } // namespace communication
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_COMMUNICATION_CONNECTION_POOL_H
+#endif // HELPERS_COMMUNICATION_CONNECTION_POOL_H

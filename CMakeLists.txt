@@ -1,19 +1,19 @@
 cmake_minimum_required(VERSION 2.8.0)
-project(VeilHelpers C CXX)
+project(helpers C CXX)
 
 # The version number.
-set(VeilHelpers_VERSION_MAJOR 0)
-set(VeilHelpers_VERSION_MINOR 2)
-set(VeilHelpers_VERSION_PATCH 0)
-set(VeilHelpers_VERSION $(VeilHelpers_VERSION_MAJOR).$(VeilHelpers_VERSION_MINOR).$(VeilHelpers_VERSION_PATCH))
+set(helpers_VERSION_MAJOR 0)
+set(helpers_VERSION_MINOR 2)
+set(helpers_VERSION_PATCH 0)
+set(helpers_VERSION $(helpers_VERSION_MAJOR).$(helpers_VERSION_MINOR).$(helpers_VERSION_PATCH))
 
 # CMake config
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 link_directories(${PROJECT_BINARY_DIR})
 
 configure_file (
-    include/veilConfig.h.in
-    ${PROJECT_BINARY_DIR}/veilConfig.h
+    include/version.h.in
+    ${PROJECT_BINARY_DIR}/version.h
 )
 
 # Deps
@@ -102,7 +102,7 @@ execute_process(COMMAND ${GIT_EXECUTABLE} submodule foreach git checkout
                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 # Compile .proto files
-file(GLOB PROTO_FILES veilprotocol/proto/*.proto)
+file(GLOB PROTO_FILES clproto/proto/*.proto)
 PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
@@ -133,14 +133,14 @@ add_definitions(${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -D_WEBSOCKETPP_CPP11_S
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
 
 # Define targets
-add_library(veilprotocol STATIC ${PROTO_SRCS})
-add_library(veilhelpers_obj OBJECT ${HELPER_SOURCES})
-add_library(veilhelpers STATIC $<TARGET_OBJECTS:veilhelpers_obj>)
-add_library(veilhelpersShared SHARED $<TARGET_OBJECTS:veilhelpers_obj>)
+add_library(clproto STATIC ${PROTO_SRCS})
+add_library(helpers_obj OBJECT ${HELPER_SOURCES})
+add_library(helpers STATIC $<TARGET_OBJECTS:helpers_obj>)
+add_library(helpersShared SHARED $<TARGET_OBJECTS:helpers_obj>)
 
-add_dependencies(veilhelpers_obj glog veilprotocol websocketpp)
+add_dependencies(helpers_obj glog clproto websocketpp)
 
-set_target_properties(veilhelpersShared PROPERTIES OUTPUT_NAME veilhelpers)
+set_target_properties(helpersShared PROPERTIES OUTPUT_NAME helpers)
 
 set(COMMON_LIBRARIES
     ${Boost_LIBRARIES}
@@ -148,15 +148,15 @@ set(COMMON_LIBRARIES
     ${PROTOBUF_LIBRARY}
     ${OPENSSL_LIBRARIES}
     ${GLOG_LIBRARIES}
-    veilprotocol
+    clproto
     ${PLATFORM_EXTRA_LIBS}
 )
 
-target_link_libraries(veilhelpers ${COMMON_LIBRARIES})
-target_link_libraries(veilhelpersShared ${COMMON_LIBRARIES})
-target_link_libraries(veilprotocol ${PROTOBUF_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(helpers ${COMMON_LIBRARIES})
+target_link_libraries(helpersShared ${COMMON_LIBRARIES})
+target_link_libraries(clproto ${PROTOBUF_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
 
-install(TARGETS veilhelpers veilhelpersShared veilprotocol
+install(TARGETS helpers helpersShared clproto
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
 )
@@ -197,7 +197,7 @@ foreach(TEST_FILE ${HELPER_TEST_SOURCES})
         ${Boost_LIBRARIES_SHARED}
         ${GMOCK_LIBRARIES}
         ${FUSE_LIBRARIES}
-        veilhelpers
+        helpers
         ${PLATFORM_EXTRA_LIBS}
     )
     add_test(${TEST_NAME} ${TEST_NAME})

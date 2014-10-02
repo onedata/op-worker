@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_I_STORAGE_HELPER_H
-#define VEILHELPERS_I_STORAGE_HELPER_H
+#ifndef HELPERS_I_STORAGE_HELPER_H
+#define HELPERS_I_STORAGE_HELPER_H
 
 
 #include <fuse.h>
@@ -16,7 +16,7 @@
 
 #include <unordered_map>
 
-namespace veil
+namespace one
 {
 namespace helpers
 {
@@ -74,7 +74,7 @@ public:
 };
 
 } // namespace helpers
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_I_STORAGE_HELPER_H
+#endif // HELPERS_I_STORAGE_HELPER_H

@@ -10,8 +10,8 @@
 #include <gtest/gtest.h>
 
 using namespace ::testing;
-using namespace veil;
-using namespace veil::helpers;
+using namespace one;
+using namespace one::helpers;
 
 class FileCacheTest: public ::testing::Test
 {
