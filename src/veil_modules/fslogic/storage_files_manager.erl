@@ -249,13 +249,13 @@ chown(Storage_helper_info, File, User, Group) ->
 %% ====================================================================
 read(Storage_helper_info, File, Offset, Size) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
-        {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-            case has_permission(File, read) of
-                true -> ok;
-                false -> setup_ctx(File)
-            end;
-        _ -> setup_ctx(File)
-    end,
+             {ok, Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0 ->
+                 case has_permission(File, read) of
+                     true -> ok;
+                     false -> setup_ctx(File)
+                 end;
+             _ -> setup_ctx(File)
+         end,
     {ErrorCode, CValue} = get_cached_value(File, size, Storage_helper_info),
     case ErrorCode of
         ok ->
@@ -309,13 +309,13 @@ read(Storage_helper_info, File, Offset, Size) ->
 %% ====================================================================
 write(Storage_helper_info, File, Offset, Buf) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
-        {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-            case has_permission(File, write) of
-                true -> ok;
-                false -> setup_ctx(File)
-            end;
-        _ -> setup_ctx(File)
-    end,
+             {ok, Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0 ->
+                 case has_permission(File, write) of
+                     true -> ok;
+                     false -> setup_ctx(File)
+                 end;
+             _ -> setup_ctx(File)
+         end,
     {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
     case ErrorCode of
         ok ->
@@ -360,13 +360,13 @@ write(Storage_helper_info, File, Offset, Buf) ->
 %% ====================================================================
 write(Storage_helper_info, File, Buf) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
-        {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-            case has_permission(File, write) of
-                true -> ok;
-                false -> setup_ctx(File)
-            end;
-        _ -> setup_ctx(File)
-    end,
+             {ok, Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0 ->
+                 case has_permission(File, write) of
+                     true -> ok;
+                     false -> setup_ctx(File)
+                 end;
+             _ -> setup_ctx(File)
+         end,
     {ErrorCode, CValue} = get_cached_value(File, size, Storage_helper_info),
     case ErrorCode of
         ok ->
@@ -443,32 +443,32 @@ create(Storage_helper_info, File, Mode) ->
 
                             Query = fslogic_context:get_user_query(),
 
-              case Query of
-                undefined -> ok;
+                            case Query of
+                                undefined -> ok;
+                                _ ->
+                                    {GetUserAns, User} = user_logic:get_user(Query),
+                                    case GetUserAns of
+                                        ok ->
+                                            {_Login, UID} = user_logic:get_login_with_uid(User),
+                                            ChownAns = chown(Storage_helper_info, File, UID, -1),
+                                            case ChownAns of
+                                                ok ->
+                                                    ok;
+                                                _ ->
+                                                    {cannot_change_file_owner, ChownAns}
+                                            end;
+                                        _ -> {cannot_change_file_owner, get_user_error}
+                                    end
+                            end;
+                        {error, 'NIF_not_loaded'} -> ErrorCode3;
+                        _ -> {wrong_truncate_return_code, ErrorCode3}
+                    end;
+                {error, 'NIF_not_loaded'} -> ErrorCode2;
                 _ ->
-                  {GetUserAns, User} = user_logic:get_user(Query),
-                  case GetUserAns of
-                    ok ->
-                      {_Login, UID} = user_logic:get_login_with_uid(User),
-                      ChownAns = chown(Storage_helper_info, File, UID, -1),
-                      case ChownAns of
-                        ok ->
-                          ok;
-                        _ ->
-                          {cannot_change_file_owner, ChownAns}
-                      end;
-                    _ -> {cannot_change_file_owner, get_user_error}
-                  end
-              end;
-            {error, 'NIF_not_loaded'} -> ErrorCode3;
-            _ -> {wrong_truncate_return_code, ErrorCode3}
-          end;
-        {error, 'NIF_not_loaded'} -> ErrorCode2;
-        _ ->
-          ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p, CTX: ~p / ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG, fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
-          {wrong_mknod_return_code, ErrorCode2}
-      end
-  end.
+                    ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p, CTX: ~p / ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG, fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
+                    {wrong_mknod_return_code, ErrorCode2}
+            end
+    end.
 
 %% truncate/3
 %% ====================================================================
@@ -482,7 +482,7 @@ create(Storage_helper_info, File, Mode) ->
 %% ====================================================================
 truncate(Storage_helper_info, File, Size) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
-             {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
+             {ok, Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0 ->
                  case has_permission(File, write) of
                      true -> ok;
                      false -> setup_ctx(File)
@@ -519,7 +519,7 @@ truncate(Storage_helper_info, File, Size) ->
 %% ====================================================================
 delete(Storage_helper_info, File) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
-             {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
+             {ok, Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0 ->
                  case has_permission(File, delete) of
                      true -> ok;
                      false -> setup_ctx(File)
@@ -903,7 +903,7 @@ setup_ctx(File) ->
                                     end,
                                 SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, vcn_utils:ensure_binary(SpaceId) =:= X],
                                 SelectedSpace0;
-                            _  ->
+                            _ ->
                                 SelectedSpaceId
                         end,
 
