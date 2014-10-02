@@ -904,7 +904,9 @@ init_per_suite(Config) ->
 
     [CCM] = Nodes = test_node_starter:start_test_nodes(1),
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes,
+    ct:print("CCM: ~p~n", [CCM]),
+
+    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes,
         [[{node_type, ccm_test},
             {initialization_time, 1},
             {dispatcher_port, 5055},
@@ -925,7 +927,12 @@ init_per_suite(Config) ->
 
     ibrowse:start(),
     Cert = ?COMMON_FILE("peer.pem"),
+
+    ct:print("Cert: ~p~n", [Cert]),
+
     DN = get_dn_from_cert(Cert,CCM),
+
+    ct:print("DN: ~p~n", [DN]),
 
     Config1 = lists:append([{nodes, Nodes}], Config),
 
@@ -937,7 +944,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     Nodes = ?config(nodes, Config),
-    test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
+    test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes),
     test_node_starter:stop_test_nodes(Nodes).
 
 %% ====================================================================

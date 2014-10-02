@@ -25,7 +25,7 @@
 -export([ct_mock/4, wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0,
          wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
 
--export([add_user/4, add_user/5]).
+-export([add_user/4, add_user/7]).
 
 
 %% add_user/4
@@ -39,17 +39,18 @@
     #db_document{} | no_return().
 %% ====================================================================
 add_user(Config, Login, Cert, Spaces) ->
-    add_user(Config, Login, Cert, Spaces, <<"access_token">>).
+    add_user(Config, Login, Cert, Spaces, <<"access_token">>, <<>>, 0).
 
 
 %% add_user/5
 %% ====================================================================
 %% @doc Same as add_user/4 but also allows to explicitly set AccessToken for created user.
 %% @end
--spec add_user(Config :: list(), Login :: string(), Cert :: string(), Spaces :: [string() | binary()], AccessToken :: binary()) ->
+-spec add_user(Config :: list(), Login :: string(), Cert :: string(), Spaces :: [string() | binary()],
+    AccessToken :: binary(), RefreshToken :: binary(), AccessExpirationTime :: integer()) ->
     #db_document{} | no_return().
 %% ====================================================================
-add_user(Config, Login, Cert, Spaces, AccessToken) ->
+add_user(Config, Login, Cert, Spaces, AccessToken, RefreshToken, AccessExpirationTime) ->
 
     [CCM | _] = ?config(nodes, Config),
 
@@ -75,7 +76,8 @@ add_user(Config, Login, Cert, Spaces, AccessToken) ->
         Ctx -> put(ct_spaces, lists:usort(SpacesBinary ++ Ctx))
     end,
 
-    {CreateUserAns, NewUserDoc} = rpc:call(CCM, user_logic, create_user, ["global_id_for_" ++ Login, Login, Name, Teams, Email, DnList, AccessToken]),
+    {CreateUserAns, NewUserDoc} = rpc:call(CCM, user_logic, create_user,
+        ["global_id_for_" ++ Login, Login, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime]),
     ?assertMatch({ok, _}, {CreateUserAns, NewUserDoc}),
 
     test_utils:ct_mock(Config, gr_users, get_spaces, fun(_) -> {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),

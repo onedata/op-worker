@@ -85,7 +85,7 @@ basic_test_() ->
                 fun() ->
                     ExistingUser = #db_document{record = #user{
                         global_id = "global_id",
-                        login = "existing_user",
+                        logins = ["existing_user"],
                         name = "Existing User",
                         teams = "Existing team",
                         email_list = ["existing@email.com"],
@@ -131,7 +131,7 @@ signing_in_test_() ->
                     % New user record that should be generated from above
                     NewUser = #user{
                         global_id = "global_id",
-                        login = "new_user",
+                        logins = ["new_user"],
                         name = "New User",
                         teams = ["New team(team desc)", "Another team(another desc)"],
                         email_list = ["new@email.com"],
@@ -169,9 +169,9 @@ signing_in_test_() ->
                     meck:expect(fslogic_path, get_parent_and_name_from_path,
                         fun("new_user", _) -> {ok, {"some", #db_document{}}} end),
 
-                    Tim = 12345677,
-                    meck:expect(utils, time, fun() -> Tim end),
-                    meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {Tim2, Tim2, Tim2}) -> File end),
+                    Time = 12345677,
+                    meck:expect(utils, time, fun() -> Time end),
+                    meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {__Time2, __Time2, __Time2}) -> File end),
                     ?assertEqual({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist, AccessToken, RefreshToken, ExpirationTime)),
                     ?assert(meck:validate(dao_lib))
                 end},
@@ -184,7 +184,7 @@ signing_in_test_() ->
                     % Existing record in database
                     ExistingUser = #db_document{record = #user{
                         global_id = "global_id",
-                        login = "existing_user",
+                        logins = ["existing_user"],
                         name = "Existing User",
                         teams = ["Existing team"],
                         email_list = ["existing@email.com"],
@@ -197,7 +197,7 @@ signing_in_test_() ->
                     ExistingUserInfoProplist =
                         [
                             {global_id, "global_id"},
-                            {login, "existing_user"},
+                            {logins, ["existing_user"]},
                             {name, "Existing User"},
                             {teams, ["Updated team"]},
                             {emails, ["some.other@email.com"]},
@@ -206,7 +206,7 @@ signing_in_test_() ->
                     % User record after updating teams
                     UserWithUpdatedTeams = #db_document{record = #user{
                         global_id = "global_id",
-                        login = "existing_user",
+                        logins = ["existing_user"],
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com"],
@@ -218,7 +218,7 @@ signing_in_test_() ->
                     % User record after updating emails
                     UserWithUpdatedEmailList = #db_document{record = #user{
                         global_id = "global_id",
-                        login = "existing_user",
+                        logins = ["existing_user"],
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
@@ -230,7 +230,7 @@ signing_in_test_() ->
                     % How should user end up after synchronization
                     SynchronizedUser = #db_document{record = #user{
                         global_id = "global_id",
-                        login = "existing_user",
+                        logins = ["existing_user"],
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
@@ -265,9 +265,9 @@ signing_in_test_() ->
 	                        (dao_vfs, get_file,["/" ++ ?SPACES_BASE_DIR_NAME],_) -> {ok,#db_document{uuid="group_dir_uuid"}}
                         end),
 
-                    Tim = 12345677,
-                    meck:expect(utils, time, fun() -> Tim end),
-                    meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {Tim2, Tim2, Tim2}) -> File end),
+                    Time = 12345677,
+                    meck:expect(utils, time, fun() -> Time end),
+                    meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {_Time2, _Time2, _Time2}) -> File end),
 
                     ?assertEqual({"existing_user", SynchronizedUser}, user_logic:sign_in(ExistingUserInfoProplist, AccessToken, RefreshToken, ExpirationTime)),
                     ?assert(meck:validate(dao_lib))
