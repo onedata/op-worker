@@ -20,7 +20,7 @@ class Main(Sphinx):
 
 		docs = ['oneclient', 'oneprovider']
 		with open(self.path + '/index.rst', 'w') as index:
-			self.w_section(index, 'Onedata', '=')
+			self.w_section(index, 'onedata', '=')
 			self.w_toctree(index, 1)
 			for doc in docs:
 				index.write('\t\t' + doc + '/index\n')

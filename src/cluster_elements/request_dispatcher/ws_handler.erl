@@ -179,7 +179,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
                     case user_logic:get_user({unverified_dn, DnString}) of
                         {ok, #db_document{uuid = UID1} = UserDoc} ->
                             {{OpenIdProvider, UserName}, _} = user_logic:get_login_with_uid(UserDoc),
-                            Login = opn_utils:ensure_list(OpenIdProvider) ++ "_" ++ opn_utils:ensure_list(UserName),
+                            Login = utils:ensure_list(OpenIdProvider) ++ "_" ++ utils:ensure_list(UserName),
                             case CertConfirmation of
                                 #handshakerequest_certconfirmation{login = Login, result = Result} ->
                                     % Remove the DN from unverified DNs as it has been confirmed or declined
@@ -204,7 +204,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
             end;
 
         true ->
-            case user_logic:get_user({global_id, opn_utils:ensure_list(GRUID)}) of
+            case user_logic:get_user({global_id, utils:ensure_list(GRUID)}) of
                 {ok, #db_document{uuid = UID1}} ->
                     UID1;
                 {error, Error} ->
@@ -232,7 +232,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
 handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, {_GlobalId, _TokenHash}}, #handler_state{peer_dn = DnString, user_global_id = GRUID} = State) ->
     UserKey = case DnString =:= undefined of
-        true  -> {global_id, opn_utils:ensure_list(GRUID)};
+        true  -> {global_id, utils:ensure_list(GRUID)};
         false -> {dn, DnString}
     end,
 
@@ -266,7 +266,7 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
             %% Session data found, and its user ID matches -> send OK status and update current connection state
             ?debug("User ~p assigned FUSE ID ~p to the connection (PID: ~p)", [UserKey, NewFuseId, self()]),
             {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req,
-                        State#handler_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = opn_utils:ensure_binary(AccessToken), user_global_id = opn_utils:ensure_binary(UserGID)}};
+                        State#handler_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = utils:ensure_binary(AccessToken), user_global_id = utils:ensure_binary(UserGID)}};
 
         {ok, #db_document{record = #fuse_session{uid = OtherUID}}} ->
             %% Current user does not match session owner
@@ -281,11 +281,11 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
 %% Handle other messages
 handle(Req, {push, FuseID, {Msg, MsgId, DecoderName1, MsgType}}, #handler_state{peer_type = provider} = State) ->
     ?debug("Got push msg for ~p: ~p ~p ~p", [FuseID, Msg, DecoderName1, MsgType]),
-    request_dispatcher:send_to_fuse(opn_utils:ensure_list(FuseID), Msg, DecoderName1),
+    request_dispatcher:send_to_fuse(utils:ensure_list(FuseID), Msg, DecoderName1),
     {reply, {binary, encode_answer(ok, MsgId)}, Req, State};
 handle(Req, {pull, FuseID, CLM}, #handler_state{peer_type = provider, provider_id = ProviderId} = State) ->
     ?debug("Got pull msg: ~p from ~p", [CLM, FuseID]),
-    handle(Req, CLM, State#handler_state{fuse_id = opn_utils:ensure_list( fslogic_context:gen_global_fuse_id(ProviderId, FuseID) )});
+    handle(Req, CLM, State#handler_state{fuse_id = utils:ensure_list( fslogic_context:gen_global_fuse_id(ProviderId, FuseID) )});
 handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = _CLM,
         #handler_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
                       access_token = SessionAccessToken, user_global_id = SessionUserGID} = State) ->

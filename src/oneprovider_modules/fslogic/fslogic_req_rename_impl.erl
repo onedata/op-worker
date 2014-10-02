@@ -76,12 +76,12 @@ rename_file_trivial(SourceFilePath, TargetFilePath, {OldFile, OldFileDoc, NewPar
     RenamedFileInit =
         OldFile#file{parent = NewParentUUID, name = fslogic_path:basename(TargetFilePath)},
 
-    RenamedFile = fslogic_meta:update_meta_attr(RenamedFileInit, ctime, opn_utils:time()),
+    RenamedFile = fslogic_meta:update_meta_attr(RenamedFileInit, ctime, utils:time()),
     Renamed = OldFileDoc#db_document{record = RenamedFile},
 
     {ok, _} = fslogic_objects:save_file(Renamed),
 
-    CTime = opn_utils:time(),
+    CTime = utils:time(),
     fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(SourceFilePath), CTime),
     fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(TargetFilePath), CTime),
 

@@ -1,7 +1,7 @@
 Resources
 =========
 
-	REST-ish endpoint for interacting with Onedata.
+	REST-ish endpoint for interacting with onedata.
 
 
 Index

@@ -14,8 +14,8 @@ This document intends to provide essential information for oneprovider developer
 * include             # TODO uzupelnic
 * releases            # folder for generated oneprovider releases
 * src
-    * cluster_elements  # includes directories that contain code of Erlang modules that enable cluster management and host 'proper' modules of *Onedata*
-    * oneprovider_modules      # includes directories that contain code of 'proper' modules of *Onedata*
+    * cluster_elements  # includes directories that contain code of Erlang modules that enable cluster management and host 'proper' modules of *onedata*
+    * oneprovider_modules      # includes directories that contain code of 'proper' modules of *onedata*
     * proto             # definitions of protocol buffer messages used by clients during the communication with oneprovider
 * test
 * test_distributed    # TODO uzupelnic - czy to nie moze byc w 'test' ???
@@ -26,7 +26,7 @@ Directly in the 'src' directory only files needed to start application can be pu
 
 The 'cluster_elements' includes source of Erlang modules, which are responsible for load balancing, spawning processes for requests etc. This allows implementation of 'proper' modules using sequential code.
 
-The 'oneprovider_modules' includes directories that contain code of 'proper' modules of *Onedata*. Each 'proper' module will work inside of 'worker_host' (one of 'cluster_elements') so it must implement 'worker_plugin_behaviour' defined in 'worker_plugin_behaviour.erl' file in this directory.
+The 'oneprovider_modules' includes directories that contain code of 'proper' modules of *onedata*. Each 'proper' module will work inside of 'worker_host' (one of 'cluster_elements') so it must implement 'worker_plugin_behaviour' defined in 'worker_plugin_behaviour.erl' file in this directory.
 
 
 #### Tests
@@ -163,7 +163,7 @@ If everything went correct, two processes should be started and a default web si
 
 Note:
 
-* To have a fully working *Onedata* installation, we should also start a BigCouch instance on the same machine, with its cookie set to 'oneprovider_node' and hostname set to 'db'. 
+* To have a fully working *onedata* installation, we should also start a BigCouch instance on the same machine, with its cookie set to 'oneprovider_node' and hostname set to 'db'. 
 
 
 -------------------------------------------------------------------------------

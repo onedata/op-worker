@@ -132,7 +132,7 @@ get_user({Key, Value}) ->
                     GRUID = Value,
 
                     fslogic_spaces:sync_all_supported_spaces(),
-                    {ok, SpaceFiles} = dao_lib:apply(vfs, get_space_files, [{gruid, opn_utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()),
+                    {ok, SpaceFiles} = dao_lib:apply(vfs, get_space_files, [{gruid, utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()),
 
                     Spaces = [fslogic_utils:file_to_space_info(SpaceFile) || #db_document{record = #file{}} = SpaceFile <- SpaceFiles],
 

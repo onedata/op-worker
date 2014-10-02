@@ -60,7 +60,7 @@ validate_login() ->
             {dn_list, []}
         ],
         try
-            ExpirationTime = opn_utils:time() + ExpiresIn,
+            ExpirationTime = utils:time() + ExpiresIn,
             {Login, UserDoc} = user_logic:sign_in(LoginProplist, AccessToken, RefreshToken, ExpirationTime),
             gui_ctx:create_session(),
             gui_ctx:set_user_id(UserDoc#db_document.uuid),
@@ -115,7 +115,7 @@ refresh_access(UserId) ->
                             refresh_token = NewRefreshToken,
                             expires_in = ExpiresIn} = Response,
 
-            ExpirationTime = opn_utils:time() + ExpiresIn,
+            ExpirationTime = utils:time() + ExpiresIn,
             user_logic:update_access_credentials(UserDoc, NewAccessToken, NewRefreshToken, ExpirationTime),
             {ok, ExpiresIn, NewAccessToken};
 

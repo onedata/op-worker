@@ -62,7 +62,7 @@ Vocabulary
 	* *database node* - installed Bigcouch instance
 	* *oneprovider node* - installed CCM and worker or only worker
 	* *db cluster* - connected and cooperating database nodes group 
-	* *oneprovider cluster, cluster, Onedata* - connected and cooperating oneprovider nodes group
+	* *oneprovider cluster, cluster, onedata* - connected and cooperating oneprovider nodes group
 	* *storage* - it is composed of group name that use it and mount point
 	* *group name* - fuse client group name that use storage
 	* *storage directory* - storage mount point 

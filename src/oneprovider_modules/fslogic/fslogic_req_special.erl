@@ -47,7 +47,7 @@ create_dir(FullFileName, Mode) ->
 
     FileInit = #file{type = ?DIR_TYPE, name = NewFileName, uid = UserId, parent = ParentDoc#db_document.uuid, perms = Mode},
     %% Async *times update
-    CTime = opn_utils:time(),
+    CTime = utils:time(),
     File = fslogic_meta:update_meta_attr(FileInit, times, {CTime, CTime, CTime}),
 
     {Status, TmpAns} = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, File], fslogic_context:get_protocol_version()),
@@ -128,7 +128,7 @@ create_link(FullFileName, LinkValue) ->
     {ok, UserId} = fslogic_context:get_user_id(),
 
     LinkDocInit = #file{type = ?LNK_TYPE, name = NewFileName, uid = UserId, ref_file = LinkValue, parent = ParentDoc#db_document.uuid},
-    CTime = opn_utils:time(),
+    CTime = utils:time(),
     LinkDoc = fslogic_meta:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
 
     case dao_lib:apply(dao_vfs, save_new_file, [FullFileName, LinkDoc], fslogic_context:get_protocol_version()) of

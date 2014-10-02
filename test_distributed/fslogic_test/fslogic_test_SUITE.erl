@@ -1666,7 +1666,7 @@ fuse_requests_test(Config) ->
 
 
   %% updatetimes message test
-  CurrentTime = opn_utils:time(),
+  CurrentTime = utils:time(),
   {Status20, Answer20} = update_times(Socket, SecondFileInDir, CurrentTime + 1234, CurrentTime + 4321),
   ?assertEqual("ok", Status20),
   ?assertEqual(list_to_atom(?VOK), Answer20),
@@ -1827,7 +1827,7 @@ users_separation_test(Config) ->
   ?assertEqual(ok, ConAns1),
 
   %% Current time
-  Time = opn_utils:time(),
+  Time = utils:time(),
   test_utils:wait_for_db_reaction(),
 
   %% Users have different (and next to each other) IDs

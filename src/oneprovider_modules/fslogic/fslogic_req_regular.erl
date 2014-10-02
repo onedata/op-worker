@@ -113,7 +113,7 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
 
     {ok, UserID} = fslogic_context:get_user_id(),
 
-    CTime = opn_utils:time(),
+    CTime = utils:time(),
 
     FileRecordInit = #file{type = ?REG_TYPE, name = NewFileName, uid = UserID, parent = ParentDoc#db_document.uuid, perms = Mode, location = FileLocation, created = false},
     %% Async *times update

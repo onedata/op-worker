@@ -328,7 +328,7 @@ fuse_session_cleanup_test(Config) ->
     %% Check if everithing is fine in DB
     {Status0, Ans0} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
     {Status1, Ans1} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID2}], 1]),
-    {Status2, Ans2} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_fuse_sessions, [{by_valid_to, opn_utils:time() + 60}], 1]),
+    {Status2, Ans2} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_fuse_sessions, [{by_valid_to, utils:time() + 60}], 1]),
     ?assertEqual([ok, ok, ok], [Status0, Status1, Status2]),
 
     ?assertEqual(3, length(Ans0)),
@@ -344,7 +344,7 @@ fuse_session_cleanup_test(Config) ->
     %% Check if everithing is fine in DB
     {Status3, Ans3} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
     {Status4, Ans4} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID2}], 1]),
-    {Status5, Ans5} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_fuse_sessions, [{by_valid_to, opn_utils:time() + 60}], 1]),
+    {Status5, Ans5} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_fuse_sessions, [{by_valid_to, utils:time() + 60}], 1]),
     ?assertEqual([ok, ok, ok], [Status3, Status4, Status5]),
 
     ?assertEqual(1, length(Ans3)),
@@ -359,7 +359,7 @@ fuse_session_cleanup_test(Config) ->
     %% Check if everithing is fine in DB
     {Status6, Ans6} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
     {Status7, Ans7} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID2}], 1]),
-    {Status8, Ans8} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_fuse_sessions, [{by_valid_to, opn_utils:time() + 60}], 1]),
+    {Status8, Ans8} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_fuse_sessions, [{by_valid_to, utils:time() + 60}], 1]),
     ?assertEqual([ok, ok, ok], [Status6, Status7, Status8]),
 
     ?assertEqual(0, length(Ans6)),
@@ -384,7 +384,7 @@ fuse_session_cleanup_test(Config) ->
     %% Check if everithing is fine in DB
     {Status9, Ans9} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
     {Status10, Ans10} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID2}], 1]),
-    {Status11, Ans11} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_fuse_sessions, [{by_valid_to, opn_utils:time() + 60}], 1]),
+    {Status11, Ans11} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_fuse_sessions, [{by_valid_to, utils:time() + 60}], 1]),
     ?assertEqual([ok, ok, ok], [Status9, Status10, Status11]),
 
     ?assertEqual(0, length(Ans9)),

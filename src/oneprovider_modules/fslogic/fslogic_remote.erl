@@ -87,11 +87,11 @@ postrouting(_SpaceInfo, {ok, #filechildren{answer = ?VOK, entry = Entries} = Res
     Entries2 = lists:sublist(Entries1, Count),
     Response#filechildren{entry = Entries2};
 postrouting(#space_info{name = SpaceName} = SpaceInfo, {error, _FailureReason}, #getfileattr{file_logic_name = "/"}) ->
-    #fileattr{answer = ?VOK, atime = opn_utils:time(), mtime = opn_utils:time(), ctime = opn_utils:time(),
+    #fileattr{answer = ?VOK, atime = utils:time(), mtime = utils:time(), ctime = utils:time(),
                 links = 2, size = 0, type = ?DIR_TYPE, gname = unicode:characters_to_list(SpaceName), gid = fslogic_spaces:map_to_grp_owner(SpaceInfo),
                 mode = ?SpaceDirPerm, uid = 0};
 postrouting(#space_info{name = SpaceName} = SpaceInfo, {error, _FailureReason}, #getfileattr{file_logic_name = "/" ++ ?SPACES_BASE_DIR_NAME}) ->
-    #fileattr{answer = ?VOK, atime = opn_utils:time(), mtime = opn_utils:time(), ctime = opn_utils:time(),
+    #fileattr{answer = ?VOK, atime = utils:time(), mtime = utils:time(), ctime = utils:time(),
         links = 2, size = 0, type = ?DIR_TYPE, gname = unicode:characters_to_list(SpaceName), gid = fslogic_spaces:map_to_grp_owner(SpaceInfo),
         mode = ?SpaceDirPerm, uid = 0};
 postrouting(#space_info{}, {ok, #atom{value = ?VECOMM}}, #renamefile{} = RequestBody) ->

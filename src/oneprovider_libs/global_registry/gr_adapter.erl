@@ -56,7 +56,7 @@ get_space_info(SpaceId, {UserGID, AccessToken}) ->
         {ok, #space_details{
             id = BinarySpaceId,
             name = Name}
-        } = gr_spaces:get_details({try_user, AccessToken}, opn_utils:ensure_binary(SpaceId)),
+        } = gr_spaces:get_details({try_user, AccessToken}, utils:ensure_binary(SpaceId)),
         {ok, ProviderIds} = get_space_providers(SpaceId, {UserGID, AccessToken}),
 
         UserIds =
@@ -83,7 +83,7 @@ get_space_info(SpaceId, {UserGID, AccessToken}) ->
 get_space_providers(SpaceId, undefined) ->
     get_space_providers(SpaceId, {undefined, undefined});
 get_space_providers(SpaceId, {_UserGID, AccessToken}) ->
-    gr_spaces:get_providers({try_user, AccessToken}, opn_utils:ensure_binary(SpaceId)).
+    gr_spaces:get_providers({try_user, AccessToken}, utils:ensure_binary(SpaceId)).
 
 
 %% verify_client/2
@@ -98,7 +98,7 @@ verify_client(undefined, _) ->
 verify_client(_, undefined) ->
     false;
 verify_client(UserGID, TokenHash) when is_binary(UserGID), is_binary(TokenHash) ->
-    case gr_openid:verify_client(provider, [{<<"userId">>, UserGID}, {<<"secret">>, opn_utils:ensure_binary(TokenHash)}]) of
+    case gr_openid:verify_client(provider, [{<<"userId">>, UserGID}, {<<"secret">>, utils:ensure_binary(TokenHash)}]) of
         {ok, VerifyStatus} ->
             VerifyStatus;
         {error, Reason} ->

@@ -46,10 +46,10 @@ body() ->
 main_panel() ->
     [
         #p{style = <<"margin-top: 30px;">>, body = <<"<strong>oneclient</strong> is a software based on FUSE ",
-        "(Filesystem in Userspace) that allows mounting Onedata filesystem on UNIX systems.">>},
+        "(Filesystem in Userspace) that allows mounting <strong>onedata</strong> filesystem on UNIX systems.">>},
         #p{body = <<"In order to connect to the system, either <strong>access token</strong> ",
         "or <strong>certificate pair</strong> can be used.">>},
-        #p{body = <<"Download and install preferred package to mount Onedata filesystem on your computer:">>},
+        #p{body = <<"Download and install preferred package to mount <strong>onedata</strong> filesystem on your computer:">>},
         #list{style = <<"margin-top: -3px;">>, numbered = true, body = [
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
             #link{body = <<"RPM package">>, url = <<?CLIENT_RPM_URL>>}},

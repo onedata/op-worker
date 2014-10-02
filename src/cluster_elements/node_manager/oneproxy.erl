@@ -39,7 +39,7 @@
 -spec get_session(OneProxyNameOrPid :: atom() | pid(), SessionId :: binary()) -> {ok, Data :: binary()} | {error, Reason :: any()}.
 %% ====================================================================
 get_session(OneProxyNameOrPid, SessionId) ->
-    exec(OneProxyNameOrPid, <<"get_session">>, [<<(opn_utils:ensure_binary(SessionId))/binary>>]).
+    exec(OneProxyNameOrPid, <<"get_session">>, [<<(utils:ensure_binary(SessionId))/binary>>]).
 
 
 %% get_local_port/1
@@ -77,8 +77,8 @@ start(ListenerPort, ForwardPort, CertFile, VerifyType) ->
 
     Port = open_port({spawn_executable, ExecPath}, [
         {line, 1024 * 1024}, binary,
-        {args, [integer_to_list(ListenerPort), "127.0.0.1", integer_to_list(ForwardPort), opn_utils:ensure_list(CertFile),
-            opn_utils:ensure_list(VerifyType), filename:join(CADir, ?DER_CERTS_DIR)]}
+        {args, [integer_to_list(ListenerPort), "127.0.0.1", integer_to_list(ForwardPort), utils:ensure_list(CertFile),
+            utils:ensure_list(VerifyType), filename:join(CADir, ?DER_CERTS_DIR)]}
     ]),
     try
         timer:send_after(timer:seconds(0), reload_certs),
@@ -131,14 +131,14 @@ ca_crl_to_der(Dir) ->
                     fun({DER, #'Certificate'{tbsCertificate = #'TBSCertificate'{subject = Subject}}}) ->
                         FN0 = base64:encode(crypto:hash(md5, term_to_binary(Subject))),
                         FN = re:replace(FN0, "/", "_", [{return, list}]),
-                        file:write_file(filename:join(Dir, opn_utils:ensure_list(FN) ++ ".crt"), DER)
+                        file:write_file(filename:join(Dir, utils:ensure_list(FN) ++ ".crt"), DER)
                     end, CAs),
 
                 lists:foreach(
                     fun({DER, #'CertificateList'{tbsCertList = #'TBSCertList'{issuer = Issuer}}}) ->
                         FN0 = base64:encode(crypto:hash(md5, term_to_binary(Issuer))),
                         FN = re:replace(FN0, "/", "_", [{return, list}]),
-                        file:write_file(filename:join(Dir, opn_utils:ensure_list(FN) ++ ".crl"), DER)
+                        file:write_file(filename:join(Dir, utils:ensure_list(FN) ++ ".crl"), DER)
                     end, CRLs),
                 ok
             catch
@@ -182,16 +182,16 @@ main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = Sta
         receive
             %% Handle oneproxy logs
             {Port, {data, {eol, <<?LOG_DEBUG_PREFIX, Log/binary>>}}} ->
-                ?debug("[ oneproxy ~p ] ~s", [EnpointPort, opn_utils:ensure_list(Log)]),
+                ?debug("[ oneproxy ~p ] ~s", [EnpointPort, utils:ensure_list(Log)]),
                 State;
             {Port, {data, {eol, <<?LOG_INFO_PREFIX, Log/binary>>}}} ->
-                ?info("[ oneproxy ~p ] ~s", [EnpointPort, opn_utils:ensure_list(Log)]),
+                ?info("[ oneproxy ~p ] ~s", [EnpointPort, utils:ensure_list(Log)]),
                 State;
             {Port, {data, {eol, <<?LOG_WARNING_PREFIX, Log/binary>>}}} ->
-                ?warning("[ oneproxy ~p ] ~s", [EnpointPort, opn_utils:ensure_list(Log)]),
+                ?warning("[ oneproxy ~p ] ~s", [EnpointPort, utils:ensure_list(Log)]),
                 State;
             {Port, {data, {eol, <<?LOG_ERROR_PREFIX, Log/binary>>}}} ->
-                ?error("[ oneproxy ~p ] ~s", [EnpointPort, opn_utils:ensure_list(Log)]),
+                ?error("[ oneproxy ~p ] ~s", [EnpointPort, utils:ensure_list(Log)]),
                 State;
             {'EXIT', Port, Reason} ->
                 ?error("oneproxy port terminated due to: ~p", [Reason]),
@@ -218,7 +218,7 @@ main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = Sta
             {{Pid, Id}, {command, CMD, Args}} ->
                 BinPid = base64:encode(term_to_binary(Pid)),
                 PidSize = size(BinPid),
-                ArgsBin = opn_utils:binary_join(Args, <<" ">>),
+                ArgsBin = utils:binary_join(Args, <<" ">>),
                 FullCmd = <<CMD/binary, " ", BinPid/binary, " ", ArgsBin/binary, "\n">>,
                 port_command(Port, FullCmd),
                 receive

@@ -53,8 +53,8 @@ add_user(Config, Login, Cert, Spaces, AccessToken) ->
 
     [CCM | _] = ?config(nodes, Config),
 
-    SpacesBinary = [opn_utils:ensure_binary(Space) || Space <- Spaces],
-    SpacesList = [opn_utils:ensure_list(Space) || Space <- Spaces],
+    SpacesBinary = [utils:ensure_binary(Space) || Space <- Spaces],
+    SpacesList = [utils:ensure_list(Space) || Space <- Spaces],
 
     {ReadFileAns, PemBin} = file:read_file(Cert),
     ?assertMatch({ok, _}, {ReadFileAns, PemBin}),

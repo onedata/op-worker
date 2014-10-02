@@ -854,18 +854,18 @@ setup_ctx(File) ->
             case check_access_type(File) of
                 {ok, {group, SpaceId}} ->
                     UserSpaceIds = user_logic:get_space_ids(UserRec),
-                    SelectedSpaceId = [X || X <- UserSpaceIds, opn_utils:ensure_binary(SpaceId) =:= X],
+                    SelectedSpaceId = [X || X <- UserSpaceIds, utils:ensure_binary(SpaceId) =:= X],
                     SelectedSpaceIdOrSpace =
                         case SelectedSpaceId of
                             [] ->
                                 UserSpaces0 =
-                                    case dao_lib:apply(vfs, get_space_files, [{gruid, opn_utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()) of
+                                    case dao_lib:apply(vfs, get_space_files, [{gruid, utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()) of
                                         {ok, SpaceFiles} ->
                                             [fslogic_utils:file_to_space_info(SpaceFile) || #db_document{record = #file{}} = SpaceFile <- SpaceFiles];
                                         _ ->
                                             []
                                     end,
-                                SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, opn_utils:ensure_binary(SpaceId) =:= X],
+                                SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, utils:ensure_binary(SpaceId) =:= X],
                                 SelectedSpace0;
                             _  ->
                                 SelectedSpaceId

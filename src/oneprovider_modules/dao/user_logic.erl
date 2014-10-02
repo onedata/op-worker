@@ -54,7 +54,7 @@ create_partial_user(GRUID, Spaces) ->
         {ok, #user_details{name = Name0}} ->
             Login = openid_utils:get_user_login(GRUID),
             Name = unicode:characters_to_list(Name0),
-            try user_logic:sign_in([{global_id, opn_utils:ensure_list(GRUID)}, {name, Name}, {login, Login}], <<>>, <<>>, 0) of
+            try user_logic:sign_in([{global_id, utils:ensure_list(GRUID)}, {name, Name}, {login, Login}], <<>>, <<>>, 0) of
                 {_, UserDoc} ->
                     {ok, UserDoc}
             catch
@@ -213,7 +213,7 @@ get_user(Key) ->
 
 %% synchronize_spaces_info/2
 %% ====================================================================
-%% @doc Tries to synchronize spaces for given local user with GlobalRegistry. This process involves downloading list of available to user spaces <br/>
+%% @doc Tries to synchronize spaces for given local user with globalregistry. This process involves downloading list of available to user spaces <br/>
 %%      and initializing each of those spaces. This method never fails. On success, user's document is saved to DB.
 %% @end
 -spec synchronize_spaces_info(UserDoc :: #db_document{}, AccessToken :: binary()) -> UserDoc :: #db_document{}.
@@ -315,7 +315,7 @@ list_all_users(N, Offset, Actual) ->
 %% ====================================================================
 get_login(UserDoc) ->
     {{_, Login}, _} = get_login_with_uid(UserDoc),
-    opn_utils:ensure_list(Login).
+    utils:ensure_list(Login).
 
 
 %% get_login_with_uid/1
@@ -333,7 +333,7 @@ get_login_with_uid(#db_document{record = #user{logins = Logins0}, uuid = VCUID})
 
     StorageNameToUID =
         fun(Name) ->
-            MaybeUID = os:cmd("id -u " ++ opn_utils:ensure_list(Name)) -- "\n",
+            MaybeUID = os:cmd("id -u " ++ utils:ensure_list(Name)) -- "\n",
             UID =
                 try
                     list_to_integer(MaybeUID)
@@ -355,9 +355,9 @@ get_login_with_uid(#db_document{record = #user{logins = Logins0}, uuid = VCUID})
     LoginNamesWithUID1 = [{LoginName, UID} || {LoginName, UID} <- LoginNamesWithUID, UID >= 500],
 
     case LoginNamesWithUID1 of
-        [] -> {{internal, <<"Unknown_", (opn_utils:ensure_binary(VCUID))/binary>>}, fslogic_utils:gen_storage_uid(VCUID)};
+        [] -> {{internal, <<"Unknown_", (utils:ensure_binary(VCUID))/binary>>}, fslogic_utils:gen_storage_uid(VCUID)};
         [{{ProviderId, LoginName}, UID} | _] ->
-            {{ProviderId, opn_utils:ensure_binary(LoginName)}, UID}
+            {{ProviderId, utils:ensure_binary(LoginName)}, UID}
     end.
 
 
@@ -908,7 +908,7 @@ get_space_names(UserQuery) ->
 get_space_ids(#db_document{record = #user{} = User}) ->
     get_space_ids(User);
 get_space_ids(#user{spaces = Spaces}) ->
-    [opn_utils:ensure_binary(SpaceId) || SpaceId <- Spaces];
+    [utils:ensure_binary(SpaceId) || SpaceId <- Spaces];
 get_space_ids(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
     get_space_ids(UserDoc).
@@ -940,7 +940,7 @@ get_spaces(UserQuery) ->
 -spec create_space_dir(SpaceInfo :: #space_info{}) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
 %% ====================================================================
 create_space_dir(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
-    CTime = opn_utils:time(),
+    CTime = utils:time(),
 
     SpaceDirName = unicode:characters_to_list(SpaceName),
 
