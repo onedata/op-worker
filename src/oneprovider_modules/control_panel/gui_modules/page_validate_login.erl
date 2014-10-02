@@ -75,8 +75,8 @@ body() ->
                                             {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [<<"providerId">>]}} end)
                                 end,
 
-                                {Login, UserDoc} = user_logic:sign_in(Proplist, <<"">>),
-                                LogoutToken = opn_gui_utils:gen_logout_token(),
+                                {Login, UserDoc} = user_logic:sign_in(Proplist, <<"">>, <<"">>, <<"">>),
+                                LogoutToken = vcn_gui_utils:gen_logout_token(),
                                 gui_ctx:create_session(),
                                 gui_ctx:set_user_id(Login),
                                 opn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),

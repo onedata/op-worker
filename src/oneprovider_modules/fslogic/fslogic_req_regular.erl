@@ -65,6 +65,8 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
             throw(?VENOTSUP)
     end,
 
+    fslogic_file:fix_storage_owner(FileDoc),
+
     {ok, UserDoc} = fslogic_objects:get_user(),
     ok = fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,list_to_existing_atom(OpenMode)),
 

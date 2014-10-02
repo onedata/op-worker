@@ -36,13 +36,19 @@ init_chmod_table = function (current_mode) {
     update_chmod_checkboxes(current_mode);
     update_chmod_textbox(current_mode);
 
-    $('#octal_form_submit').click(function (event) {
+    $('#octal_form_textbox').keyup(function (event) {
         var textbox_value = $('#octal_form_textbox').val();
-        var mode_oct = parseInt(textbox_value, 8);
-        if (textbox_value.length != 3 || isNaN(mode_oct) || mode_oct < 0 || mode_oct > 511) {
-            alert('This is not a valid octal representation of mode. Please type in a number between 000 and 777.');
-        } else {
-            update_chmod_checkboxes(mode_oct);
+        if (textbox_value.length == 3) {
+            var digit_1 = parseInt(textbox_value[0]);
+            var digit_2 = parseInt(textbox_value[1]);
+            var digit_3 = parseInt(textbox_value[2]);
+            if (!isNaN(digit_1) && !isNaN(digit_2) && !isNaN(digit_3) &&
+                digit_1 >= 0 && digit_1 <= 7 &&
+                digit_2 >= 0 && digit_2 <= 7 &&
+                digit_3 >= 0 && digit_3 <= 7) {
+                var mode_oct = parseInt(textbox_value, 8);
+                update_chmod_checkboxes(mode_oct);
+            }
         }
     });
 };

@@ -124,7 +124,7 @@ get_user(#db_document{record = #user{}} = UserDoc) ->
     {ok, UserDoc};
 get_user({Key, Value}) ->
     case Value of
-        undefined -> {ok, #db_document{uuid = ?CLUSTER_USER_ID, record = #user{login = "root", role = admin}}};
+        undefined -> {ok, #veil_document{uuid = ?CLUSTER_USER_ID, record = #user{logins = [#id_token_login{login = "root", provider_id = internal}], role = admin}}};
         Value ->
             case user_logic:get_user({Key, Value}) of
                 {ok, #db_document{}} = OKRet -> OKRet;

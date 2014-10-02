@@ -56,29 +56,29 @@ exec(Method, Args) when is_atom(Method), is_list(Args) ->
 
 %% exec/5
 %% ====================================================================
-%% @doc Same as exec/3 but allows to set UserName and GroupId for file system permissions check.
+%% @doc Same as exec/3 but allows to set storage user and group ID for file system permissions check.
 %%
 %% @end
--spec exec(UserName :: string(), GroupId :: integer(), Method :: atom(), SHInfo :: #storage_helper_info{}, [Arg :: term()]) ->
+-spec exec(SUID :: non_neg_integer(), GroupId :: integer(), Method :: atom(), SHInfo :: #storage_helper_info{}, [Arg :: term()]) ->
     {error, Reason :: term()} | Response when Response :: term().
 %% ====================================================================
-exec(UserName, GroupId, Method, SHInfo = #storage_helper_info{}, Args) ->
+exec(SUID, GroupId, Method, SHInfo = #storage_helper_info{}, Args) ->
     Args1 = [SHInfo#storage_helper_info.name | [SHInfo#storage_helper_info.init_args | Args]],
-    exec(UserName, GroupId, Method, Args1).
+    exec(SUID, GroupId, Method, Args1).
 
 
 %% exec/4
 %% ====================================================================
-%% @doc Same as exec/2 but allows to set UserName and GroupId for file system permissions check.
+%% @doc Same as exec/2 but allows to set storage user and group ID for file system permissions check.
 %%
 %% @end
--spec exec(UserName :: string(), GroupId :: integer(), Method :: atom(), [Arg :: term()]) ->
+-spec exec(SUID :: non_neg_integer(), GroupId :: integer(), Method :: atom(), [Arg :: term()]) ->
     {error, Reason :: term()} | Response when Response :: term().
 %% ====================================================================
-exec(UserName, GroupId, Method, Args) when is_atom(Method), is_list(Args) ->
-    Args1 = [UserName, GroupId] ++ Args,
-    ?debug("Helpers storage CTX ~p ~p", [UserName, GroupId]),
-    ?debug("helpers:exec with args: ~p ~p", [Method, Args1]),
+exec(SUID, GroupId, Method, Args) when is_atom(Method), is_list(Args) ->
+    Args1 = [SUID, GroupId] ++ Args,
+    ?debug("VeilHelpers Storage CTX ~p ~p", [SUID, GroupId]),
+    ?debug("veilhelpers:exec with args: ~p ~p", [Method, Args1]),
 
     case Args of
         ["ClusterProxy", HelperArgs | MethodArgs] ->
