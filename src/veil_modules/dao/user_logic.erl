@@ -333,17 +333,10 @@ get_login_with_uid(#veil_document{record = #user{logins = Logins0}, uuid = VCUID
 
     StorageNameToUID =
         fun(Name) ->
-            MaybeUID = os:cmd("id -u " ++ vcn_utils:ensure_list(Name)) -- "\n",
-            UID =
-                try
-                    list_to_integer(MaybeUID)
-                catch
-                    _:_ ->
-                        -1
-                end,
-            case UID of
-                UID when UID < 500 -> -1;
-                _ -> UID
+            case ets:lookup(?STORAGE_USER_IDS_CACHE, unicode:characters_to_binary(Name)) of
+                [{_, UID}] when UID >= 500 ->
+                    UID;
+                _ -> -1
             end
         end,
 
