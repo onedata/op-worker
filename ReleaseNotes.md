@@ -1,13 +1,14 @@
-VeilProtocol 1.0
-===========
+ClientProtocol 1.0
+==================
 
-VeilProtocol 1.0 is a part of VeilFS 1.0. VeilFS 1.0 is a system that provides a unified and efficient access to data stored at various storage systems in one site. VeilProtocol contains definition of protocol between VeilCluster and VeilClient.
+*ClientProtocol 1.0* is a part of *Onedata 1.0*. *Onedata 1.0* is a system that provides a unified and efficient access
+to data stored at various storage systems in one site. *ClientProtocol* contains definition of protocol between 
+*oneprovider* and *oneclient*.
 
 Issue Summary
------
+-------------
 
-* VeilProtocol provides protocol for logical data management.
-* VeilProtocol provides protocol that enables remote operations on storage.
-* VeilProtocol provides protocol that enables logs exchange between VeilClient and VeilCluster.
-* VeilProtocol provides protocol for rules and notifications management.
-
+* *ClientProtocol* provides protocol for logical data management.
+* *ClientProtocol* provides protocol that enables remote operations on storage.
+* *ClientProtocol* provides protocol that enables logs exchange between *oneclient* and *oneprovider*.
+* *ClientProtocol* provides protocol for rules and notifications management.

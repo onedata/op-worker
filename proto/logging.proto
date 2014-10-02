@@ -1,4 +1,4 @@
-package veil.protocol.logging;
+package one.clproto.logging;
 
 enum LogLevel {
   LDEBUG = 0;
