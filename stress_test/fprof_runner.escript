@@ -11,7 +11,7 @@
 %%       profiling.
 %% ===================================================================
 
--define(default_cookie, veil_cluster_node).
+-define(default_cookie, oneprovider_node).
 -define(default_ccm_name, "ccm").
 -define(default_worker_name, "worker").
 

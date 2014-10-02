@@ -114,7 +114,7 @@ process_section(Section) ->
     case SectionName of
         vm_arguments ->
             extract_entries_from_section(-1000, ListOfEntries);
-        veil_cluster_node_env ->
+        oneprovider_node_env ->
             extract_entries_from_section(1, ListOfEntries);
         _ ->
             skip
@@ -141,7 +141,7 @@ store_parameter(Parameter, Counter) ->
     {Value, ErlangTerm} = get_value_and_erlang_term(Parameter),
 
     ets:insert(entries, {vm_args, {Counter, env, Name, Description, 
-        "-veil_cluster_node " ++  to_list(Name) ++ " " ++ to_list(Value)}}),
+        "-oneprovider_node " ++  to_list(Name) ++ " " ++ to_list(Value)}}),
 
     ets:insert(entries, {app_src, {Counter, env, Name, Description, 
         "\t\t{" ++ to_list(Name) ++ ", " ++ to_list(ErlangTerm) ++ "}"}}),
@@ -218,7 +218,7 @@ overlay_entry(EntryName, EntryValue) ->
                     ets:insert(entries, {vm_args, {Id, Type, Name, Description, to_list(Value)}});
                 env ->
                     ets:insert(entries, {vm_args, {Id, Type, Name, Description, 
-                        "-veil_cluster_node " ++  to_list(Name) ++ " " ++ to_list(Value)}})
+                        "-oneprovider_node " ++  to_list(Name) ++ " " ++ to_list(Value)}})
             end
     end,
 
@@ -251,11 +251,11 @@ write_to_vm_args(EntryList) ->
 
 % Write to app.src in proper format
 write_to_app_src(ParameterList) -> 
-    Data =  case file:read_file("config/veil_cluster_node.app.src") of
+    Data =  case file:read_file("config/oneprovider_node.app.src") of
                 {ok, DataRead} -> 
                     DataRead;
                 _ ->
-                    io:format("Error while reading veil_cluster_node.app.src. Is it present in /config directory?~n"),        
+                    io:format("Error while reading oneprovider_node.app.src. Is it present in /config directory?~n"),
                     halt(1)
             end,
 
@@ -274,7 +274,7 @@ write_to_app_src(ParameterList) ->
     [_Newline|ParametersRemovedNewline] = lists:reverse(Parameters),
     [_Comma|ParametersRemovedComma] = ParametersRemovedNewline,
 
-    file:write_file("src/veil_cluster_node.app.src",
+    file:write_file("src/oneprovider_node.app.src",
         NewFileBeginning ++ "{env, [\n" ++ lists:reverse(ParametersRemovedComma) ++ "\n\t]}\n]}.").
 
 

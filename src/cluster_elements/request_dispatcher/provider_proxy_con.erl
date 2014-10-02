@@ -14,7 +14,7 @@
 
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("remote_file_management_pb.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -254,7 +254,7 @@ connect(Host, Port, Opts) ->
     flush_errors(),
     Opts1 = Opts -- [auto_handshake],
     Monitored =
-        case websocket_client:start_link("wss://" ++ vcn_utils:ensure_list(Host) ++ ":" ++ integer_to_list(Port) ++ "/veilclient" , ?MODULE, [self()], Opts1 ++ [{reuse_sessions, false}]) of
+        case websocket_client:start_link("wss://" ++ utils:ensure_list(Host) ++ ":" ++ integer_to_list(Port) ++ "/oneclient" , ?MODULE, [self()], Opts1 ++ [{reuse_sessions, false}]) of
             {ok, Proc}      -> erlang:monitor(process, Proc), Proc;
             {error, Error}  -> self() ! {error, Error}, undefined;
             Error1          -> self() ! {error, Error1}, undefined

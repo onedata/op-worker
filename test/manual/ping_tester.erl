@@ -23,7 +23,7 @@
 %% ====================================================================
 
 ping(Host, Module) ->
-  ping(Host, Module, "veilfs.pem", 5555).
+  ping(Host, Module, "onedata.pem", 5555).
 
 ping(Host, Module, Cert, Port) ->
   ssl:start(),

@@ -8,7 +8,7 @@ reconfigure_node()
 	sed -i "s/^main_ccm:.*/main_ccm: $MAIN_CCM/g" ./bin/config.args
 	sed -i "s/^opt_ccms:.*/opt_ccms: $OPT_CCMS/g" ./bin/config.args
 	sed -i "s/^db_nodes:.*/db_nodes: $DB_NODES/g" ./bin/config.args
-	./bin/veil_cluster
+	./bin/oneprovider
 }
 
 case "$1" in
@@ -31,7 +31,7 @@ case "$1" in
 		reconfigure_node
 
 		# Start the node again
-		./bin/veil_cluster_node start
+		./bin/oneprovider_node start
 		;;
 
 	-restart) # Restart a node without changing configuration
@@ -45,7 +45,7 @@ case "$1" in
 		sleep 1 
 
 		# Start the node again
-		./bin/veil_cluster_node start
+		./bin/oneprovider_node start
 		;;
 
 	-reconfigure) # Change the configuration of the node

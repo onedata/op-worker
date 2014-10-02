@@ -9,7 +9,7 @@
 
 main(_)->
   Pwd = get_pwd(),
-  edoc:application(veil_cluster_test, Pwd, [no_packages, {dir, filename:join(Pwd, "../doc/test_distributed")}]).
+  edoc:application(oneprovider_test, Pwd, [no_packages, {dir, filename:join(Pwd, "../doc/test_distributed")}]).
 
 get_pwd() ->
   case file:get_cwd() of

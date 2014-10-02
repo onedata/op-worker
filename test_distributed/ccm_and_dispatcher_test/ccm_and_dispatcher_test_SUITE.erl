@@ -17,8 +17,8 @@
 -include("modules_and_args.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
--include("veil_modules/dao/dao.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
@@ -27,14 +27,14 @@
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, ping_test/1, application_start_test1/1,
-  veil_handshake_test/1, application_start_test2/1, validation_test/1, callbacks_list_actualization_test/1, monitoring_test/1]).
+  onedata_handshake_test/1, application_start_test2/1, validation_test/1, callbacks_list_actualization_test/1, monitoring_test/1]).
 
 %% export nodes' codes
 -export([application_start_test_code1/0, application_start_test_code2/0]).
 
 all() ->
   [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test,
-    validation_test, ping_test, dispatcher_connection_test, callbacks_list_actualization_test, veil_handshake_test, monitoring_test].
+    validation_test, ping_test, dispatcher_connection_test, callbacks_list_actualization_test, onedata_handshake_test, monitoring_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -154,7 +154,7 @@ dispatcher_connection_test(Config) ->
 
 
 %% This test checks if FuseId negotiation works correctly
-veil_handshake_test(Config) ->
+onedata_handshake_test(Config) ->
   NodesUp = ?config(nodes, Config),
 
   [CCM | _] = NodesUp,
@@ -289,7 +289,7 @@ veil_handshake_test(Config) ->
   {DAOStatus, DAOAns} = rpc:call(CCM, dao_lib, apply, [dao_cluster, get_fuse_session, [FuseId11], 1]),
   ?assertEqual(ok, DAOStatus),
 
-  #veil_document{record = #fuse_session{hostname = Hostname, env_vars = Vars}} = DAOAns,
+  #db_document{record = #fuse_session{hostname = Hostname, env_vars = Vars}} = DAOAns,
   ?assertEqual("hostname1", Hostname),
   ?assertEqual([{testname1, "testvalue1"}, {testname2, "testvalue2"}], Vars),
 
@@ -339,7 +339,7 @@ callbacks_list_actualization_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   test_utils:wait_for_cluster_init(),
 
-  Ans1 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 1, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = self(), node = CCM, action = channelregistration}}}}, 1000),
+  Ans1 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 1, #worker_request{subject = "DN", request = #callback{fuse = fuse1, pid = self(), node = CCM, action = channelregistration}}}}, 1000),
   ?assertEqual(ok, Ans1),
   Ans2 = receive
            {worker_answer, 1, WorkerAns} -> WorkerAns
@@ -357,7 +357,7 @@ callbacks_list_actualization_test(Config) ->
   Test4 = gen_server:call({?Node_Manager_Name, CCM}, {get_all_callbacks, fuse1}, 1000),
   ?assertEqual([self()], Test4),
 
-  Ans3 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 2, #veil_request{subject = "DN", request = #callback{fuse = fuse2, pid = self(), node = CCM, action = channelregistration}}}}, 1000),
+  Ans3 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 2, #worker_request{subject = "DN", request = #callback{fuse = fuse2, pid = self(), node = CCM, action = channelregistration}}}}, 1000),
   ?assertEqual(ok, Ans3),
   Ans4 = receive
            {worker_answer, 2, WorkerAns2} -> WorkerAns2
@@ -375,7 +375,7 @@ callbacks_list_actualization_test(Config) ->
   Test8 = gen_server:call({?Node_Manager_Name, CCM}, {get_all_callbacks, fuse2}, 1000),
   ?assertEqual([self()], Test8),
 
-  Ans5 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 3, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = pid2, node = CCM, action = channelregistration}}}}, 1000),
+  Ans5 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 3, #worker_request{subject = "DN", request = #callback{fuse = fuse1, pid = pid2, node = CCM, action = channelregistration}}}}, 1000),
   ?assertEqual(ok, Ans5),
   Ans6 = receive
            {worker_answer, 3, WorkerAns3} -> WorkerAns3
@@ -393,7 +393,7 @@ callbacks_list_actualization_test(Config) ->
   Test12 = gen_server:call({?Node_Manager_Name, CCM}, {get_all_callbacks, fuse1}, 1000),
   ?assertEqual([pid2, self()], Test12),
 
-  Ans7 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 4, #veil_request{subject = "DN", request = #callback{fuse = fuse2, pid = self(), node = CCM, action = channelclose}}}}, 1000),
+  Ans7 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 4, #worker_request{subject = "DN", request = #callback{fuse = fuse2, pid = self(), node = CCM, action = channelclose}}}}, 1000),
   ?assertEqual(ok, Ans7),
   Ans8 = receive
            {worker_answer, 4, WorkerAns4} -> WorkerAns4
@@ -409,7 +409,7 @@ callbacks_list_actualization_test(Config) ->
   Test15 = gen_server:call({?Node_Manager_Name, CCM}, get_fuses_list, 1000),
   ?assertEqual([fuse1], Test15),
 
-  Ans9 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 5, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = pid2, node = CCM, action = channelclose}}}}, 1000),
+  Ans9 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 5, #worker_request{subject = "DN", request = #callback{fuse = fuse1, pid = pid2, node = CCM, action = channelclose}}}}, 1000),
   ?assertEqual(ok, Ans9),
   Ans10 = receive
             {worker_answer, 5, WorkerAns5} -> WorkerAns5
@@ -427,7 +427,7 @@ callbacks_list_actualization_test(Config) ->
   Test19 = gen_server:call({?Node_Manager_Name, CCM}, {get_all_callbacks, fuse1}, 1000),
   ?assertEqual([self()], Test19),
 
-  Ans11 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 6, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = self(), node = CCM, action = channelclose}}}}, 1000),
+  Ans11 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 6, #worker_request{subject = "DN", request = #callback{fuse = fuse1, pid = self(), node = CCM, action = channelclose}}}}, 1000),
   ?assertEqual(ok, Ans11),
   Ans12 = receive
             {worker_answer, 6, WorkerAns6} -> WorkerAns6
@@ -554,7 +554,7 @@ init_per_testcase(application_start_test1, Config) ->
   NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
   lists:append([{nodes, NodesUp}], Config);
 
@@ -564,7 +564,7 @@ init_per_testcase(application_start_test2, Config) ->
   NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, NodesUp, [[{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
   lists:append([{nodes, NodesUp}], Config);
 
@@ -574,7 +574,7 @@ init_per_testcase(type1, Config) ->
   NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
   lists:append([{nodes, NodesUp}], Config);
 
@@ -587,7 +587,7 @@ init_per_testcase(type2, Config) ->
 
   PeerCert = ?COMMON_FILE("peer.pem"),
   Port = 6666,
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}, {db_nodes, [?DB_NODE]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}, {db_nodes, [?DB_NODE]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
   lists:append([{port, Port}, {peer_cert, PeerCert}, {nodes, NodesUp}], Config);
 
@@ -599,7 +599,7 @@ init_per_testcase(monitoring_test, Config) ->
   [CCM | _] = NodesUp,
   DBNode = ?DB_NODE,
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, NodesUp, [
     [{node_type, ccm}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
     [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
     [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
@@ -615,12 +615,12 @@ init_per_testcase(TestCase, Config) ->
 
 end_per_testcase(type1, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes);
 
 end_per_testcase(type2, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node();
 

@@ -46,7 +46,7 @@ init() ->
     case filelib:is_dir(CADir) of
         true ->
             load_certs(CADir),
-            case vcn_utils:ensure_running(inets) of
+            case utils:ensure_running(inets) of
                 ok ->
                     update_crls(CADir),
                     catch oneproxy:ca_crl_to_der(oneproxy:get_der_certs_dir()),
@@ -226,7 +226,7 @@ update_crls(CADir) ->
     ?info("GSI Handler: Updating CLRs from distribution points"),
     CAs = [{public_key:pkix_decode_cert(X, otp), Name} || [X, Name] <- ets:match(gsi_state, {{ca, '_'}, '$1', '$2'})],
     CAsAndDPs = [{OtpCert, get_dp_url(OtpCert), Name} || {OtpCert, Name} <- CAs],
-    vcn_utils:pforeach(fun(X) -> update_crl(CADir, X) end, CAsAndDPs),
+    utils:pforeach(fun(X) -> update_crl(CADir, X) end, CAsAndDPs),
     load_certs(CADir).
 
 
