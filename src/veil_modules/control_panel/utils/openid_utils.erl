@@ -44,15 +44,16 @@ validate_login() ->
             id_token = #id_token{
                 sub = GRUID,
                 name = Name,
+                logins = Logins,
                 emails = EmailList}
         }} = gr_openid:get_token_response(
             provider,
             [{<<"code">>, AuthorizationCode}, {<<"grant_type">>, <<"authorization_code">>}]
         ),
-        Login = get_user_login(gui_str:binary_to_unicode_list(GRUID)),
+
         LoginProplist = [
             {global_id, gui_str:binary_to_unicode_list(GRUID)},
-            {login, Login},
+            {logins, Logins},
             {name, gui_str:binary_to_unicode_list(Name)},
             {teams, []},
             {emails, lists:map(fun(Email) -> gui_str:binary_to_unicode_list(Email) end, EmailList)},
@@ -62,7 +63,7 @@ validate_login() ->
             ExpirationTime = vcn_utils:time() + ExpiresIn,
             {Login, UserDoc} = user_logic:sign_in(LoginProplist, AccessToken, RefreshToken, ExpirationTime),
             gui_ctx:create_session(),
-            gui_ctx:set_user_id(Login),
+            gui_ctx:set_user_id(UserDoc#veil_document.uuid),
             vcn_gui_utils:set_global_user_id(gui_str:binary_to_unicode_list(GRUID)),
             vcn_gui_utils:set_access_token(AccessToken),
             vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
@@ -137,7 +138,7 @@ refresh_access(UserId) ->
 %% ====================================================================
 get_user_login(GRUID) ->
     case user_logic:get_user({global_id, GRUID}) of
-        {ok, #veil_document{record = #user{login = Login}}} -> Login;
+        {ok, #veil_document{} = UserDoc} -> user_logic:get_login(UserDoc);
         _ -> next_free_user_login(1)
     end.
 

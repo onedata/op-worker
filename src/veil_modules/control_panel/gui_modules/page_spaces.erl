@@ -249,10 +249,10 @@ space_row_expanded(RowId, #space_details{id = SpaceId, name = SpaceName} = Space
             }
         }
     end, [
-        {<<RowId/binary, "_default_option">>, <<"Set as a default Space">>, {message, {set_default_space, RowId, SpaceDetails}}, <<"fui-home">>},
-        {<<RowId/binary, "_manage_option">>, <<"Manage Space">>, {manage_space, SpaceId}, <<"fui-gear">>},
-        {<<RowId/binary, "_leave_option">>, <<"Leave Space">>, {leave_space, RowId, SpaceDetails}, <<"fui-exit">>},
-        {<<RowId/binary, "_delete_option">>, <<"Delete Space">>, {delete_space, RowId, SpaceDetails}, <<"fui-trash">>}
+        {<<RowId/binary, "_default_option">>, <<"Set as a default Space">>, {message, {set_default_space, RowId, SpaceDetails}}, <<"icomoon-home">>},
+        {<<RowId/binary, "_manage_option">>, <<"Manage Space">>, {manage_space, SpaceId}, <<"icomoon-cog">>},
+        {<<RowId/binary, "_leave_option">>, <<"Leave Space">>, {leave_space, RowId, SpaceDetails}, <<"icomoon-exit">>},
+        {<<RowId/binary, "_delete_option">>, <<"Delete Space">>, {delete_space, RowId, SpaceDetails}, <<"icomoon-remove">>}
     ]),
     [
         #td{

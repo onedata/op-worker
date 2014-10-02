@@ -36,12 +36,12 @@ title() -> <<"Download oneclient">>.
 %% This will be placed in the template instead of {{body}} tag
 body() ->
     #panel{style = <<"position: relative;">>, body = [
-        vcn_gui_utils:top_menu(data_tab),
+        vcn_gui_utils:top_menu(client_download_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
             #h6{style = <<" text-align: center;">>, body = <<"Download oneclient">>},
             #panel{id = <<"main_panel">>, body = main_panel()}
         ]}
-    ] ++ vcn_gui_utils:logotype_footer(20)}.
+    ]}.
 
 main_panel() ->
     [

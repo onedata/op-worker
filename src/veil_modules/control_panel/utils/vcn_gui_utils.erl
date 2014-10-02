@@ -25,7 +25,7 @@
 -export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/3]).
 
 % Functions to generate page elements
--export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0, message/2, message/3,
+-export([top_menu/1, top_menu/2, empty_page/0, message/2, message/3,
     spinner/0, expand_button/1, expand_button/2, collapse_button/1, collapse_button/2]).
 
 
@@ -41,7 +41,7 @@
 %% ====================================================================
 get_user_dn() ->
     try
-        {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+        {ok, UserDoc} = user_logic:get_user({uuid, gui_ctx:get_user_id()}),
         case user_logic:get_dn_list(UserDoc) of
             [] -> undefined;
             L when is_list(L) -> lists:nth(1, L);
@@ -289,18 +289,18 @@ top_menu(ActiveTabID, SubMenuBody) ->
     end,
 
     MenuCaptions = Process(ActiveTabID, [
-        {brand_tab, #li{body = #link{style = <<"padding: 18px;">>, url = "/",
+        {brand_tab, #li{body = #link{style = <<"padding: 13px;">>, url = <<"/">>,
             body = [
-                #span{style = <<"font-size: xx-large;">>, class = <<"fui-home">>},
-                #b{style = <<"font-size: x-large;">>, body = <<"onedata">>}
+                #span{style = <<"font-size: 23px;">>, class = <<"icomoon-home">>},
+                #b{style = <<"margin-left: 5px; font-size: 20px;">>, body = <<"onedata">>}
             ]}
         }},
         {data_tab, #li{body = [
-            #link{style = "padding: 18px;", url = "/file_manager", body = "Data"},
-            #list{style = "top: 37px; width: 120px;", body = [
-                #li{body = #link{url = "/file_manager", body = "File manager"}},
-                #li{body = #link{url = "/shared_files", body = "Shared files"}},
-                #li{body = #link{url = "/client_download", body = "Download oneclient"}}
+            #link{style = <<"padding: 18px;">>, url = <<"/file_manager">>, body = <<"Data">>},
+            #list{style = <<"top: 37px; width: 120px;">>, body = [
+                #li{body = #link{url = <<"/file_manager">>, body = <<"File manager">>}},
+                #li{body = #link{url = <<"/shared_files">>, body = <<"Shared files">>}},
+                #li{body = #link{url = <<"/client_download">>, body = <<"Download oneclient">>}}
             ]}
         ]}},
         {spaces_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Spaces">>,
@@ -310,15 +310,21 @@ top_menu(ActiveTabID, SubMenuBody) ->
     ]),
 
     MenuIcons = Process(ActiveTabID, [
-        {manage_account_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Manage account">>,
-            url = <<"/manage_account">>, body = [gui_str:unicode_list_to_binary(get_user_fullname()), #span{class = <<"fui-user">>,
-                style = <<"margin-left: 10px;">>}]}}},
-        {about_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"About">>,
-            url = <<"/about">>, body = #span{class = <<"fui-info">>}}}},
+        {manage_account_tab, #li{body = #link{style = <<"padding: 13px 11px 14px;">>, title = <<"Manage account">>,
+            url = <<"/manage_account">>, body = [
+                #panel{style = <<"line-height: 24px; height: 24px;">>, body = [
+                    #span{style = <<"display: inline; font-size: 15px; vertical-align:middle;">>, body = gui_str:unicode_list_to_binary(get_user_fullname())},
+                    #span{class = <<"icomoon-user">>, style = <<"margin-left: 10px; font-size: 24px; vertical-align:middle;">>}
+                ]}
+            ]}}},
+        {client_download_tab, #li{body = #link{style = <<"padding: 14px 13px;">>, title = <<"Download oneclient">>,
+            url = <<"/client_download">>, body = #span{class = <<"icomoon-box-add">>, style = <<"font-size: 24px;">>}}}},
+        {about_tab, #li{body = #link{style = <<"padding: 14px 13px;">>, title = <<"About">>,
+            url = <<"/about">>, body = #span{class = <<"icomoon-info2">>, style = <<"font-size: 24px;">>}}}},
         {logout_button, #li{
             body = #form{
                 id = <<"logout_form">>,
-                style = <<"margin: 0; padding: 18px;">>,
+                style = <<"margin: 0; padding: 14px 13px;">>,
                 method = "post",
                 action = <<"/logout">>,
                 body = [
@@ -332,7 +338,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
                         class = <<"glyph-link">>,
                         data_fields = [{<<"onclick">>, <<"document.getElementById('logout_form').submit(); return false;">>}],
                         title = <<"Log out">>,
-                        body = #span{class = <<"fui-power">>}
+                        body = #span{class = <<"icomoon-switch">>}
                     }
                 ]
             }}
@@ -349,26 +355,6 @@ top_menu(ActiveTabID, SubMenuBody) ->
             ]}
         ] ++ SubMenuBody}
     ] ++ gui_utils:cookie_policy_popup_body(<<?privacy_policy_url>>).
-
-
-%% logotype_footer/1
-%% ====================================================================
-%% @doc Convienience function to render logotype footer, coming after page content.
-%% @end
--spec logotype_footer(MarginTop :: integer()) -> list().
-%% ====================================================================
-logotype_footer(MarginTop) ->
-    Height = integer_to_binary(MarginTop + 82),
-    Margin = integer_to_binary(MarginTop),
-    [
-        #panel{style = <<"position: relative; height: ", Height/binary, "px;">>, body = [
-            #panel{style = <<"text-align: center; z-index: -1; margin-top: ", Margin/binary, "px;">>, body = [
-                #image{style = <<"margin: 10px 100px;">>, image = <<"/images/innow-gosp-logo.png">>},
-                #image{style = <<"margin: 10px 100px;">>, image = <<"/images/plgrid-plus-logo.png">>},
-                #image{style = <<"margin: 10px 100px;">>, image = <<"/images/unia-logo.png">>}
-            ]}
-        ]}
-    ].
 
 
 %% message/2

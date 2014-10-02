@@ -59,7 +59,7 @@
 %% ====================================================================
 %% @doc Creates hard-link on storage
 %% @end
--spec mkdir(Storage_helper_info :: record(), FileId :: string(), LinkId :: string()) -> Result when
+-spec link(Storage_helper_info :: record(), FileId :: string(), LinkId :: string()) -> Result when
     Result :: ok | {ErrorGeneral, ErrorDetail},
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
@@ -117,9 +117,8 @@ mkdir(Storage_helper_info, Dir, Mode) ->
                             {GetUserAns, User} = user_logic:get_user(Query),
                             case GetUserAns of
                                 ok ->
-                                    UserRecord = User#veil_document.record,
-                                    Login = UserRecord#user.login,
-                                    ChownAns = chown(Storage_helper_info, Dir, Login, ""),
+                                    {_Login, UID} = user_logic:get_login_with_uid(User),
+                                    ChownAns = chown(Storage_helper_info, Dir, UID, -1),
                                     case ChownAns of
                                         ok -> ok;
                                         _ ->  {cannot_change_dir_owner, ChownAns}
@@ -315,6 +314,7 @@ write(Storage_helper_info, File, Offset, Buf) ->
                   case ErrorCode2 of
                     0 ->
                       BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
+
                       ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
                       case ErrorCode3 of
                         0 -> BytesWritten;
@@ -428,9 +428,8 @@ create(Storage_helper_info, File, Mode) ->
                   {GetUserAns, User} = user_logic:get_user(Query),
                   case GetUserAns of
                     ok ->
-                      UserRecord = User#veil_document.record,
-                      Login = UserRecord#user.login,
-                      ChownAns = chown(Storage_helper_info, File, Login, ""),
+                      {_Login, UID} = user_logic:get_login_with_uid(User),
+                      ChownAns = chown(Storage_helper_info, File, UID, -1),
                       case ChownAns of
                         ok ->
                           ok;
@@ -847,9 +846,11 @@ check_access_type(File) ->
 %% ====================================================================
 setup_ctx(File) ->
     ?debug("Setup storage ctx based on fslogc ctx -> DN: ~p, AccessToken: ~p", [fslogic_context:get_user_dn(), fslogic_context:get_gr_auth()]),
+
     case fslogic_objects:get_user() of
-        {ok, #veil_document{record = #user{login = UserName, global_id = GRUID} = UserRec}} ->
-            fslogic_context:set_fs_user_ctx(UserName),
+        {ok, #veil_document{record = #user{global_id = GRUID} = UserRec} = UserDoc} ->
+            {_Login, UID} = user_logic:get_login_with_uid(UserDoc),
+            fslogic_context:set_fs_user_ctx(UID),
             case check_access_type(File) of
                 {ok, {group, SpaceId}} ->
                     UserSpaceIds = user_logic:get_space_ids(UserRec),

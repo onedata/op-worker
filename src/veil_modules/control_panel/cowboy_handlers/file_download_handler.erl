@@ -138,7 +138,7 @@ handle_user_content_request(Req, Path) ->
             SessHandler = proplists:get_value(session, Context1#context.handlers),
             {ok, St, Context2} = SessHandler:init([], Context1),
             wf_context:context(Context2),
-            {ok, UserDocument} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+            {ok, UserDocument} = user_logic:get_user({uuid, gui_ctx:get_user_id()}),
             fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserDocument))),
             {St, Context2, SessHandler, UserDocument}
         catch T1:M1 ->

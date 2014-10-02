@@ -165,12 +165,14 @@ check_file_perms(FullFileName, Type) ->
 get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     #veil_document{record = #file{} = File, uuid = FileUUID} = FileDoc,
     Type = fslogic_file:normalize_file_type(protocol, File#file.type),
-    Size = fslogic_file:get_real_file_size(File),
+    {Size, SUID} = fslogic_file:get_real_file_size_and_uid(File),
 
     fslogic_file:update_file_size(File, Size),
 
     %% Get owner
-    {UName, UID} = fslogic_file:get_file_owner(File),
+    {UName, VCUID, RSUID} = fslogic_file:get_file_owner(File),
+
+    fslogic_file:fix_storage_owner(FileDoc),
 
     {ok, FilePath} = logical_files_manager:get_file_full_name_by_uuid(FileUUID),
     {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
@@ -198,7 +200,7 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
             end,
 
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = UID, gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links};
+        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID, gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links};
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
     case fslogic_objects:get_file(FullFileName) of
