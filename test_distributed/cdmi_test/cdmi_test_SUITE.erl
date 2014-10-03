@@ -198,7 +198,7 @@ metadata_test(_Config) ->
     ?assert(CTime1 =< After),
     ?assert(CTime1 =< ATime1),
     ?assert(CTime1 =< MTime1),
-    ?assertEqual(<<"onedatatestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
+    ?assertMatch(<<_/binary>>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
     ?assertEqual(<<"my_value">>, proplists:get_value(<<"my_metadata">>, Metadata1)),
     ?assertEqual(6, length(Metadata1)),
 
@@ -221,7 +221,7 @@ metadata_test(_Config) ->
     {struct,CdmiResponse4} = mochijson2:decode(Response4),
     ?assertEqual(1, length(CdmiResponse4)),
     {struct, Metadata4} = proplists:get_value(<<"metadata">>,CdmiResponse4),
-    ?assertEqual(<<"onedatatestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
+    ?assertMatch(<<_/binary>>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
     ?assertEqual(1, length(Metadata4)),
 
     {_Code5, _Headers5, Response5} = do_request(FileName++"?metadata:cdmi_size", get, RequestHeaders1, []),
@@ -904,8 +904,6 @@ init_per_suite(Config) ->
 
     [CCM] = Nodes = test_node_starter:start_test_nodes(1),
 
-    ct:print("CCM: ~p~n", [CCM]),
-
     test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes,
         [[{node_type, ccm_test},
             {initialization_time, 1},
@@ -927,12 +925,7 @@ init_per_suite(Config) ->
 
     ibrowse:start(),
     Cert = ?COMMON_FILE("peer.pem"),
-
-    ct:print("Cert: ~p~n", [Cert]),
-
     DN = get_dn_from_cert(Cert,CCM),
-
-    ct:print("DN: ~p~n", [DN]),
 
     Config1 = lists:append([{nodes, Nodes}], Config),
 
