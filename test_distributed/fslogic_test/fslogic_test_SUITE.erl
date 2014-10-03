@@ -976,7 +976,7 @@ permissions_management_test(Config) ->
     end,
 
     ?assertEqual(ok, LFM(create, [FilePath])),
-    ?assertEqual(ok, LFM(change_file_perm, [FilePath, 8#000])),
+    ?assertEqual(ok, LFM(change_file_perm, [FilePath, 8#000, true])),
 
     ?assertEqual(true, LFM(check_file_perm, [FilePath, ''])),
     ?assertEqual(false, LFM(check_file_perm, [FilePath, root])),
@@ -1036,7 +1036,7 @@ permissions_management_test(Config) ->
 
     lists:foreach(
         fun({PermsInt, Assertions}) ->
-            ?assertEqual(ok, LFM(change_file_perm, [FilePath, PermsInt])),
+            ?assertEqual(ok, LFM(change_file_perm, [FilePath, PermsInt, true])),
             lists:foreach(
                 fun({Type, Assertion}) ->
                     ?assertEqual(Assertion, LFM(check_file_perm, [FilePath, Type]))
@@ -2197,7 +2197,7 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, File2LocationAns2),
   ?assertEqual(File2Location, File2Location2),
 
-  AnsChPerm = rpc:call(Node1, logical_files_manager, change_file_perm, [File, 8#777]),
+  AnsChPerm = rpc:call(Node1, logical_files_manager, change_file_perm, [File, 8#777, true]),
   ?assertEqual(ok, AnsChPerm),
 
   {StatusLs2, AnsLs2} = rpc:call(Node1, logical_files_manager, ls, [DirName, 100, 0]),
