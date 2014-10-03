@@ -13,6 +13,7 @@
 
 -include("oneprovider_modules/dao/dao.hrl").
 -include("files_common.hrl").
+-include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -103,11 +104,13 @@ map_to_grp_owner([]) ->
 map_to_grp_owner([SpaceInfo | T]) ->
     [map_to_grp_owner(SpaceInfo)] ++ map_to_grp_owner(T);
 map_to_grp_owner(#space_info{name = SpaceName, space_id = SpaceId}) ->
-    case os:cmd("getent group \"" ++ unicode:characters_to_list(SpaceName) ++ "\" | cut -d: -f3") -- [10, 13] of
-        "" ->
-            fslogic_utils:gen_storage_uid(SpaceId);
-        StrGID ->
-            list_to_integer(StrGID)
+    case ets:lookup(?STORAGE_GROUP_IDS_CACHE, SpaceName) of
+        [] ->
+            <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, SpaceId),
+            {ok, LowestGID} = veil_cluster_node_app:get_env(lowest_generated_storage_gid),
+            LowestGID + GID0 rem 1000000;
+        [{_, GID}] ->
+            GID
     end.
 
 

@@ -92,9 +92,7 @@ cleanup() ->
 %% ====================================================================
 maybe_handle_message(RequestBody, SpaceId) ->
     {ok, #space_info{providers = Providers}} = fslogic_objects:get_space({uuid, SpaceId}),
-
     Self = cluster_manager_lib:get_provider_id(),
-
     case lists:member(Self, Providers) of
         true ->
             handle_message(RequestBody);
@@ -266,7 +264,7 @@ handle_message(Record) when is_record(Record, writefile) ->
           case Perms of
             true ->
               TmpAns = storage_files_manager:write(Storage_helper_info, File, Offset, Bytes),
-              case TmpAns of
+                case TmpAns of
                 BytesNum when is_integer(BytesNum) -> #writeinfo{answer_status = ?VOK, bytes_written = BytesNum};
                   {_, ErrorCode} when is_integer(ErrorCode) ->
                       throw(fslogic_errors:posix_to_oneerror(ErrorCode));
