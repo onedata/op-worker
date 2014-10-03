@@ -66,7 +66,7 @@ add_user(Config, Login, Cert, Spaces, AccessToken) ->
     DnList = [DN],
     Name = Login ++ " " ++ Login,
     Teams = SpacesList,
-    Email = Login ++ "@email.net",
+    Email = [Login ++ "@email.net"],
 
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
 

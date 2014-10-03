@@ -118,7 +118,7 @@ get_storage({Type, StorageID}) ->
 %% @doc Gets user associated with given DN
 %%      If DN is 'undefined', ROOT user is returned.
 %% @end
--spec get_user({dn, DN :: string()} | user_doc()) -> {ok, UserDoc :: user_doc()} | {error, any()}.
+-spec get_user({dn, DN :: string()} | user_doc()) -> {ok, UserDoc :: user_doc() | [user_doc()]} | {error, any()}.
 %% ====================================================================
 get_user(#veil_document{record = #user{}} = UserDoc) ->
     {ok, UserDoc};
@@ -128,6 +128,7 @@ get_user({Key, Value}) ->
         Value ->
             case user_logic:get_user({Key, Value}) of
                 {ok, #veil_document{}} = OKRet -> OKRet;
+                {ok, UserList} = OKRet when is_list(UserList)  -> OKRet;
                 {error, user_not_found} when Key =:= global_id ->
                     GRUID = Value,
 

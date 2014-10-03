@@ -47,6 +47,7 @@
 -define(FILES_BY_META_DOC, #view_info{name = "files_by_meta_doc", db_name = ?FILES_DB_NAME, version = 1}).
 
 -define(USER_BY_GLOBAL_ID_VIEW, #view_info{name = "user_by_global_id", db_name = ?USERS_DB_NAME, version = 1}).
+-define(USER_BY_NAME_VIEW, #view_info{name = "user_by_name", db_name = ?USERS_DB_NAME, version = 1}).
 -define(USER_BY_EMAIL_VIEW, #view_info{name = "user_by_email", db_name = ?USERS_DB_NAME, version = 1}).
 -define(USER_BY_LOGIN_VIEW, #view_info{name = "user_by_login", db_name = ?USERS_DB_NAME, version = 1}).
 -define(USER_BY_DN_VIEW, #view_info{name = "user_by_dn", db_name = ?USERS_DB_NAME, version = 1}).
@@ -77,7 +78,7 @@
 %% List of all used views :: [#view_info]
 -define(VIEW_LIST, [?FILE_TREE_VIEW, ?WAITING_FILES_TREE_VIEW, ?FILE_SUBDIRS_VIEW, ?FILE_CHILDS_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW,
     ?ALL_STORAGE_VIEW, ?FILES_BY_UID_AND_FILENAME, ?FILE_META_BY_TIMES, ?FILES_BY_META_DOC,
-    ?USER_BY_GLOBAL_ID_VIEW, ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UNVERIFIED_DN_VIEW, ?USER_BY_UID_VIEW,
+    ?USER_BY_GLOBAL_ID_VIEW, ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_NAME_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UNVERIFIED_DN_VIEW, ?USER_BY_UID_VIEW,
     ?STORAGE_BY_ID_VIEW, ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?USER_FILES_SIZE_VIEW, ?GROUP_FILES_NUMBER_VIEW,
     ?FUSE_CONNECTIONS_VIEW, ?EXPIRED_FUSE_SESSIONS_VIEW, ?FUSE_SESSIONS_BY_USER_ID_VIEW, ?SPACES_BY_GRUID_VIEW, ?COOKIES_BY_EXPIRED_BEFORE_VIEW]).
 

@@ -27,9 +27,9 @@
 -spec get_virtual_acl(FullfileName :: string(), FileDoc :: record(veil_document)) -> [#accesscontrolentity{}].
 %% ====================================================================
 get_virtual_acl(FullfileName, FileDoc) ->
-    #veil_document{record = #file{perms = Perms}} = FileDoc,
+    #veil_document{record = #file{perms = Perms, uid = Uid}} = FileDoc,
     {ok, #space_info{users = Users}} = fslogic_utils:get_space_info_for_path(FullfileName),
-    {ok, #veil_document{record = #user{global_id = OwnerGlobalId}}} = fslogic_objects:get_user({uuid, FileDoc#veil_document.record#file.uid}),
+    {ok, #veil_document{record = #user{global_id = OwnerGlobalId}}} = fslogic_objects:get_user({uuid, Uid}),
     OwnerPerms = posix_perms_to_acl_mask(Perms, true, true),
     OwnerAce = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = vcn_utils:ensure_binary(OwnerGlobalId), acemask = OwnerPerms},
     RestAceList = [ #accesscontrolentity{
@@ -38,7 +38,10 @@ get_virtual_acl(FullfileName, FileDoc) ->
         identifier = vcn_utils:ensure_binary(UserGlobalId),
         acemask = posix_perms_to_acl_mask(Perms, false, true)
     } || UserGlobalId <- Users -- [vcn_utils:ensure_binary(OwnerGlobalId)]],
-    [OwnerAce | RestAceList].
+    case Uid of
+        "0" -> RestAceList;
+        _ -> [OwnerAce | RestAceList]
+    end.
 
 %% check_permission/1
 %% ====================================================================
@@ -94,10 +97,10 @@ from_json_fromat_to_acl(JsonAcl) ->
 %% @end
 -spec ace_to_proplist(#accesscontrolentity{}) -> list().
 %% ====================================================================
-ace_to_proplist(#accesscontrolentity{acetype = Type, aceflags = Flags, identifier = Who, acemask = AccessMask} = Ace) ->
+ace_to_proplist(#accesscontrolentity{acetype = Type, aceflags = Flags, identifier = Who, acemask = AccessMask}) ->
     [
         {<<"acetype">>, bitmask_to_type(Type)},
-        {<<"identifier">>, Who},
+        {<<"identifier">>, gruid_to_name(Who)},
         {<<"aceflags">>, binary_list_to_csv(bitmask_to_flag_list(Flags))},
         {<<"acemask">>, binary_list_to_csv(bitmask_to_perm_list(AccessMask))}
     ].
@@ -113,9 +116,40 @@ ace_to_proplist(#accesscontrolentity{acetype = Type, aceflags = Flags, identifie
 proplist_to_ace(List) -> proplist_to_ace2(List,#accesscontrolentity{acetype = undefined, aceflags = undefined, identifier = undefined, acemask = undefined}).
 proplist_to_ace2([], Acc) -> Acc;
 proplist_to_ace2([{<<"acetype">>, Type} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{acetype = type_to_bitmask(Type)});
-proplist_to_ace2([{<<"identifier">>, Identifier} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{identifier = Identifier});
+proplist_to_ace2([{<<"identifier">>, Identifier} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{identifier = name_to_gruid(Identifier)});
 proplist_to_ace2([{<<"aceflags">>, Flags} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{aceflags = flags_to_bitmask(Flags)});
 proplist_to_ace2([{<<"acemask">>, AceMask} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{acemask = perm_list_to_bitmask(AceMask)}).
+
+%% gruid_to_name/1
+%% ====================================================================
+%% @doc Transforms global id to acl name representation (name and hash suffix)
+%% i. e. "fif3nhh238hdfg33f3" -> "John Dow#fif3n"
+%% @end
+-spec gruid_to_name(GRUID :: binary()) -> binary().
+%% ====================================================================
+gruid_to_name(GRUID) ->
+    {ok, #veil_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
+    <<(vcn_utils:ensure_binary(Name))/binary,"#",(binary_part(GRUID, 0, ?username_hash_length))/binary>>.
+
+%% proplist_to_ace/1
+%% ====================================================================
+%% @doc Transforms acl name representation (name and hash suffix) to global id
+%% i. e. "John Dow#fif3n" -> "fif3nhh238hdfg33f3"
+%% @end
+-spec name_to_gruid(Name :: binary()) -> binary().
+%% ====================================================================
+name_to_gruid(Name) ->
+    [UserName, Hash] = binary:split(Name, <<"#">>, [global]),
+    {ok, UserList} = fslogic_objects:get_user({name, vcn_utils:ensure_list(UserName)}),
+
+    GRUIDList = lists:map(fun(#veil_document{record = #user{global_id = GRUID}}) -> vcn_utils:ensure_binary(GRUID)  end, UserList),
+    GUIDWithMatchingPrefixList = lists:filter(fun(GRUID) -> binary:longest_common_prefix([Hash, GRUID]) == byte_size(Hash)  end , GRUIDList),
+    [GRUID] = GUIDWithMatchingPrefixList, % todo throw proper error message if more than one user matches given name
+    GRUID.
+
+%% ====================================================================
+%% Internal Functions
+%% ====================================================================
 
 %% bitmask_to_type/1
 %% ====================================================================
@@ -216,6 +250,12 @@ binary_list_to_csv(List) ->
 csv_to_binary_list(BinaryCsv) ->
     lists:map(fun fslogic_utils:trim_spaces/1, binary:split(BinaryCsv, <<",">>, [global])).
 
+%% posix_perms_to_acl_mask/3
+%% ====================================================================
+%% @doc converts posix perm mask, to acl perm mask
+%% @end
+-spec posix_perms_to_acl_mask(PosixPerms :: non_neg_integer(), FileOwner :: boolean(), GroupOwner :: boolean()) -> non_neg_integer().
+%% ====================================================================
 posix_perms_to_acl_mask(PosixPerms, FileOwner, GroupOwner) ->
     (case fslogic_perms:has_permission(read, PosixPerms, FileOwner, GroupOwner) of true -> ?read_mask; false -> 16#00000000 end) bor
     (case fslogic_perms:has_permission(write, PosixPerms, FileOwner, GroupOwner) of true -> ?write_mask; false -> 16#00000000 end) bor

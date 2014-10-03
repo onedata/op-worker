@@ -8,8 +8,9 @@
 %% @doc This file contains cdmi protocol tests
 %% @end
 %% ===================================================================
-
 -module(cdmi_test_SUITE).
+
+% Includes
 -include("test_utils.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -17,10 +18,12 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/control_panel/cdmi_capabilities.hrl").
 
+% Definitions
 -define(SH, "DirectIO").
 -define(Test_dir_name, "dir").
 -define(Test_file_name, "file.txt").
 -define(Test_file_content, <<"test_file_content">>).
+-define(verbose, false).
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
@@ -349,7 +352,7 @@ metadata_test(_Config) ->
     {struct, Metadata14}= proplists:get_value(<<"metadata">>,CdmiResponse14),
     ?assertEqual(
         [{struct,[{<<"acetype">>,<<"ALLOW">>},
-            {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+            {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
             {<<"aceflags">>,<<"NO_FLAGS">>},
             {<<"acemask">>,<<"READ, WRITE">>}]}],
     proplists:get_value(<<"cdmi_acl">>, Metadata14)),
@@ -359,19 +362,19 @@ metadata_test(_Config) ->
     FileName2 = "acl_test_file.txt",
     Ace1 = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ">>}
     ],
     Ace2 = [
         {<<"acetype">>,<<"DENY">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ, EXECUTE">>}
     ],
     Ace3 = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"WRITE">>}
     ],
@@ -402,7 +405,7 @@ metadata_test(_Config) ->
     %%-- create forbidden by acl ---
     Ace4 = [
         {<<"acetype">>,<<"DENY">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ, WRITE, EXECUTE">>}],
     RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace4]}]}],
@@ -1134,19 +1137,19 @@ acl_test(_Console) ->
     Dirname1 = "acl_test_dir1/",
     Read = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ">>}
     ],
     Write = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"WRITE">>}
     ],
     _Execute = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"EXECUTE">>}
     ],
@@ -1277,7 +1280,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1, ?verbose),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},

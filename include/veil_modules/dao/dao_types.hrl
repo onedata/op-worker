@@ -38,6 +38,7 @@
 -type user_doc() :: #veil_document{record :: #user{}}.
 -type user_key() :: {login, Login :: string()} |
                     {global_id, GlobalID :: string()} |
+                    {name, Name :: string()} |
                     {email, Email :: string()} |
                     {uuid, UUID :: uuid()} |
                     {dn, DN :: string()} |

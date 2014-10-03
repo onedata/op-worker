@@ -2434,31 +2434,31 @@ acl_test(Config) ->
         ,VirtualAclAns),
     {ok, VirtualAcl} = VirtualAclAns,
     ?assertEqual([[{<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ, WRITE">>}]],
-        fslogic_acl:from_acl_to_json_format(VirtualAcl)),
+        rpc:call(Node1, fslogic_acl,from_acl_to_json_format,[VirtualAcl])),
 
     % test setting and getting acl
-    Acl = fslogic_acl:from_json_fromat_to_acl(
+    Acl = rpc:call(Node1, fslogic_acl, from_json_fromat_to_acl,[
         [
             [
                 {<<"acetype">>, <<"ALLOW">>},
-                {<<"identifier">>, <<"OWNER@">>},
+                {<<"identifier">>, <<"veilfstestuser veilfstestuser#">>},
                 {<<"aceflags">>, <<"NO_FLAGS">>},
                 {<<"acemask">>, <<"READ, WRITE">>}
             ],
             [
                 {<<"acetype">>, <<"DENY">>},
-                {<<"identifier">>, <<"some_user">>},
+                {<<"identifier">>, <<"veilfstestuser veilfstestuser#">>},
                 {<<"aceflags">>, <<"IDENTIFIER_GROUP">>},
                 {<<"acemask">>, <<"WRITE">>}
             ]
         ]
-    ),
+    ]),
     ?assertEqual(Acl, [
-        #accesscontrolentity{acetype = ?allow_mask, identifier = ?owner, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
-        #accesscontrolentity{acetype = ?deny_mask, identifier = <<"some_user">>, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+        #accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_veilfstestuser">>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #accesscontrolentity{acetype = ?deny_mask, identifier = <<"global_id_for_veilfstestuser">>, aceflags = ?identifier_group_mask, acemask = ?write_mask}
     ]),
 
     Ans1 = rpc:call(Node1, logical_files_manager, set_acl, [DirName, Acl]),

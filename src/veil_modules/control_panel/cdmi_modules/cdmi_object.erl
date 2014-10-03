@@ -238,12 +238,14 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
     {CdmiPartialFlag, Req} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
     {Mimetype, Encoding} = parse_content(Content),
 
-    Ans = case logical_files_manager:create(Filepath) of
+    case logical_files_manager:create(Filepath) of
         ok ->
             update_completion_status(Filepath, <<"Processing">>),
             update_mimetype(Filepath, Mimetype),
             update_encoding(Filepath, Encoding),
-            write_body_to_file(Req, State, 0);
+            Ans = write_body_to_file(Req, State, 0),
+            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+            Ans;
         {error, file_exists} ->
             case logical_files_manager:check_file_perm(Filepath, write) of
                 true -> ok;
@@ -264,21 +266,26 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
                             set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
                             throw({?put_object_unknown_error, Error})
                     end,
-                    write_body_to_file(Req1, State, 0, false);
+                    Ans = write_body_to_file(Req1, State, 0, false),
+                    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                    Ans;
                 _ ->
                     {Length, Req2} = cowboy_req:body_length(Req1),
                     case parse_byte_range(State, RawRange) of
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
-                            write_body_to_file(Req2, State, From, false);
+                            Ans = write_body_to_file(Req2, State, From, false),
+                            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                            Ans;
                         _ ->
+                            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
                             cdmi_error:error_reply(Req2, State, {?invalid_range, RawRange})
                     end
             end;
-        {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> cdmi_error:error_reply(Req, State, ?forbidden);
-        Error -> cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error})
-    end,
-    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
-    Ans.
+        {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES ->
+            cdmi_error:error_reply(Req, State, ?forbidden);
+        Error ->
+            cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error})
+    end.
 
 %% put_cdmi_object/2
 %% ====================================================================

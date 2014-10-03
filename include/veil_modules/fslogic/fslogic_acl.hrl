@@ -13,6 +13,9 @@
 -ifndef(FSLOGIC_ACL_HRL).
 -define(FSLOGIC_ACL_HRL, 1).
 
+% defines the length of hash appended to username (such hash occures after '#') in acl text representation
+-define(username_hash_length, 5).
+
 % ace types
 -define(allow, <<"ALLOW">>).
 -define(allow_mask, 16#00000000).
