@@ -85,7 +85,7 @@ basic_test_() ->
                 fun() ->
                     ExistingUser = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = ["existing_user"],
+                        logins = [#id_token_login{provider_id = internal, login = <<"existing_user">>}],
                         name = "Existing User",
                         teams = "Existing team",
                         email_list = ["existing@email.com"],
@@ -96,7 +96,7 @@ basic_test_() ->
                     ?assertEqual("Existing User", user_logic:get_name(ExistingUser)),
                     ?assertEqual("Existing team", user_logic:get_teams(ExistingUser)),
                     ?assertEqual(["existing@email.com"], user_logic:get_email_list(ExistingUser)),
-                    ?assertEqual(["O=existing-dn"], user_logic:get_dn_list(ExistingUser))
+                    ?assertEqual(["O=existing-dn"], user_logic:get_dn_list(ExistingUser)),
                 end}
         ]}.
 
@@ -131,7 +131,7 @@ signing_in_test_() ->
                     % New user record that should be generated from above
                     NewUser = #user{
                         global_id = "global_id",
-                        logins = ["new_user"],
+                        logins = [#id_token_login{provider_id = provider, login = "new_user"}],
                         name = "New User",
                         teams = ["New team(team desc)", "Another team(another desc)"],
                         email_list = ["new@email.com"],
@@ -160,10 +160,11 @@ signing_in_test_() ->
                             (dao_users, save_quota, _, _) -> {ok, "quota_uuid"};
                             (dao_vfs, save_new_file, _, _) -> {ok, "file_uuid"};
                             (dao_vfs, list_storage, [], _) -> {ok, []};
-	                        (dao_vfs, exist_file,["/" ++ ?SPACES_BASE_DIR_NAME],_) -> {ok,true};
-	                        (dao_vfs, exist_file,["/" ++ ?SPACES_BASE_DIR_NAME ++ "/New team"],_) -> {ok,true};
-	                        (dao_vfs, exist_file,["/" ++ ?SPACES_BASE_DIR_NAME ++ "/Another team"],_) -> {ok,true};
-	                        (dao_vfs, get_file,["/" ++ ?SPACES_BASE_DIR_NAME],_) -> {ok,#db_document{uuid="group_dir_uuid"}}
+                            (dao_vfs, exist_file, ["/" ++ ?SPACES_BASE_DIR_NAME], _) -> {ok, true};
+                            (dao_vfs, exist_file, ["/" ++ ?SPACES_BASE_DIR_NAME ++ "/New team"], _) -> {ok, true};
+                            (dao_vfs, exist_file, ["/" ++ ?SPACES_BASE_DIR_NAME ++ "/Another team"], _) -> {ok, true};
+                            (dao_vfs, get_file, ["/" ++ ?SPACES_BASE_DIR_NAME], _) ->
+                                {ok, #db_document{uuid = "group_dir_uuid"}}
                         end),
 
                     meck:expect(fslogic_path, get_parent_and_name_from_path,
@@ -171,7 +172,8 @@ signing_in_test_() ->
 
                     Time = 12345677,
                     meck:expect(utils, time, fun() -> Time end),
-                    meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {__Time2, __Time2, __Time2}) -> File end),
+                    meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {__Time2, __Time2, __Time2}) ->
+                        File end),
                     ?assertEqual({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist, AccessToken, RefreshToken, ExpirationTime)),
                     ?assert(meck:validate(dao_lib))
                 end},
@@ -184,7 +186,7 @@ signing_in_test_() ->
                     % Existing record in database
                     ExistingUser = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = ["existing_user"],
+                        logins = [#id_token_login{provider_id = provider, login = "existing_user"}],
                         name = "Existing User",
                         teams = ["Existing team"],
                         email_list = ["existing@email.com"],
@@ -206,7 +208,7 @@ signing_in_test_() ->
                     % User record after updating teams
                     UserWithUpdatedTeams = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = ["existing_user"],
+                        logins = [#id_token_login{provider_id = provider, login = "existing_user"}],
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com"],
@@ -218,7 +220,7 @@ signing_in_test_() ->
                     % User record after updating emails
                     UserWithUpdatedEmailList = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = ["existing_user"],
+                        logins = [#id_token_login{provider_id = provider, login = "existing_user"}],
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
@@ -230,7 +232,7 @@ signing_in_test_() ->
                     % How should user end up after synchronization
                     SynchronizedUser = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = ["existing_user"],
+                        logins = [#id_token_login{provider_id = provider, login = "existing_user"}],
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
@@ -260,9 +262,10 @@ signing_in_test_() ->
                                 end;
                             (dao_vfs, save_new_file, _, _) -> {ok, "file_uuid"};
                             (dao_vfs, list_storage, [], _) -> {ok, []};
-	                        (dao_vfs, exist_file,["/" ++ ?SPACES_BASE_DIR_NAME],_) -> {ok,true};
-	                        (dao_vfs, exist_file,["/" ++ ?SPACES_BASE_DIR_NAME ++ "/Updated team"],_) -> {ok,true};
-	                        (dao_vfs, get_file,["/" ++ ?SPACES_BASE_DIR_NAME],_) -> {ok,#db_document{uuid="group_dir_uuid"}}
+                            (dao_vfs, exist_file, ["/" ++ ?SPACES_BASE_DIR_NAME], _) -> {ok, true};
+                            (dao_vfs, exist_file, ["/" ++ ?SPACES_BASE_DIR_NAME ++ "/Updated team"], _) -> {ok, true};
+                            (dao_vfs, get_file, ["/" ++ ?SPACES_BASE_DIR_NAME], _) ->
+                                {ok, #db_document{uuid = "group_dir_uuid"}}
                         end),
 
                     Time = 12345677,

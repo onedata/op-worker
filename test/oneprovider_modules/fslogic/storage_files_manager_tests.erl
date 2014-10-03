@@ -68,11 +68,19 @@ file_name_cache_test() ->
   Ans5 = storage_files_manager:get_cached_value(TestFile, owner, shi),
   ?assertEqual({ok, "0"}, Ans5).
 
+check_perms_test_() ->
+    {foreach, fun setup/0, fun teardown/1, [
+        fun check_perms_user_file/0,
+        fun check_perms_read_group_file/0,
+        fun check_perms_group_perms_file/0,
+        fun check_perms_group_write_file/0
+    ]}.
+
 %% Tests if permissions in users dir are checked correctly
 check_perms_user_file() ->
   SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
 
-  meck:expect(fslogic_objects, get_user, fun() -> {ok, #db_document{record = #user{login = "testuser"}}} end),
+  meck:expect(fslogic_objects, get_user, fun() -> {ok, #db_document{record = #user{logins = [#id_token_login{login = "testuser"}]}}} end),
   meck:expect(fslogic_path, get_user_root, fun() -> {ok, "testuser"} end),
   ?assertEqual({ok, true}, storage_files_manager:check_perms("users/testuser/somefile", SHInfo)),
 
@@ -88,7 +96,7 @@ check_perms_user_file() ->
 check_perms_read_group_file() ->
   SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
 
-  meck:expect(fslogic_objects, get_user, fun() -> {ok, #db_document{record = #user{login = "testuser"}}} end),
+  meck:expect(fslogic_objects, get_user, fun() -> {ok, #db_document{record = #user{logins = [#id_token_login{login = "testuser"}]}}} end),
   meck:expect(fslogic_utils, get_user_groups, fun(_, _) -> {ok, [xyz, abc, "testgroup", g123]} end),
   ?assertEqual({ok, true}, storage_files_manager:check_perms("groups/testgroup/somefile", SHInfo, read)),
 
@@ -105,7 +113,7 @@ check_perms_read_group_file() ->
 check_perms_group_perms_file() ->
   SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
 
-  meck:expect(fslogic_objects, get_user, fun() -> {ok, #db_document{record = #user{login = "testuser"}}} end),
+  meck:expect(fslogic_objects, get_user, fun() -> {ok, #db_document{record = #user{logins = [#id_token_login{login = "testuser"}]}}} end),
   meck:expect(fslogic_utils, get_user_groups, fun(_, _) -> {ok, [xyz, abc, "testgroup", g123]} end),
   meck:expect(helpers, exec, fun(getattr, _, _) -> {0, #st_stat{st_uid = 1000}} end),
   meck:expect(fslogic_utils, get_user_id_from_system, fun
@@ -114,11 +122,11 @@ check_perms_group_perms_file() ->
   end),
   ?assertEqual({ok, true}, storage_files_manager:check_perms("groups/testgroup/somefile", SHInfo, perms)),
 
-  meck:expect(fslogic_objects, get_user, fun() -> {ok, #db_document{record = #user{login = "testuser2"}}} end),
+  meck:expect(fslogic_objects, get_user, fun() -> {ok, #db_document{record = #user{logins = [#id_token_login{login = "testuser2"}]}}} end),
   ?assertEqual({ok, false}, storage_files_manager:check_perms("groups/testgroup/somefile", SHInfo, perms)),
 
   erlang:erase(),
-  meck:expect(fslogic_objects, get_user, fun() -> {ok, #db_document{record = #user{login = "testuser"}}} end),
+  meck:expect(fslogic_objects, get_user, fun() -> {ok, #db_document{record = #user{logins = [#id_token_login{login = "testuser"}]}}} end),
   meck:expect(helpers, exec, fun(getattr, _, _) -> {0, #st_stat{st_uid = 1001}} end),
   ?assertEqual({ok, false}, storage_files_manager:check_perms("groups/testgroup/somefile", SHInfo, perms)),
 
@@ -142,7 +150,7 @@ check_perms_group_perms_file() ->
 check_perms_group_write_file() ->
   SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
 
-  meck:expect(fslogic_objects, get_user, fun() -> {ok, #db_document{record = #user{login = "testuser"}}} end),
+  meck:expect(fslogic_objects, get_user, fun() -> {ok, #db_document{record = #user{logins = [#id_token_login{login = "testuser"}]}}} end),
   meck:expect(fslogic_utils, get_user_groups, fun(_, _) -> {ok, [xyz, abc, "testgroup", g123]} end),
   meck:expect(helpers, exec, fun(getattr, _, _) -> {0, #st_stat{st_uid = 1000, st_mode = 8#660}} end),
   ?assertEqual({ok, true}, storage_files_manager:check_perms("groups/testgroup/somefile", SHInfo)),
