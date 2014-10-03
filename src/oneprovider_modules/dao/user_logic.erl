@@ -128,16 +128,24 @@ sign_in(Proplist, AccessToken, RefreshToken, AccessExpirationTime) ->
     DnList :: [string()],
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
-create_user(GlobalId, Login, Name, Teams, Email, DnList) ->
-    create_user(GlobalId, Login, Name, Teams, Email, DnList, <<>>, <<>>, 0).
-create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime) ->
-    ?debug("Creating user: ~p", [{GlobalId, Login, Name, Teams, Email, DnList}]),
+create_user(GlobalId, Logins, Name, Teams, Email, DnList) ->
+    create_user(GlobalId, Logins, Name, Teams, Email, DnList, <<>>, <<>>, 0).
+create_user(GlobalId, Logins, Name, Teams, Email, DnList0, AccessToken, RefreshToken, AccessExpirationTime) ->
+    ?debug("Creating user: ~p", [{GlobalId, Logins, Name, Teams, Email, DnList0}]),
     Quota = #quota{},
     {QuotaAns, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
+
+    DnList = case DnList0 of
+                 DnList0 when is_list(DnList0) ->
+                     DnList0;
+                 _ ->
+                     []
+             end,
+
     User = #user
     {
         global_id = GlobalId,
-        logins = Login,
+        logins = Logins,
         name = Name,
         teams = case Teams of
                     Teams when is_list(Teams) -> Teams;
@@ -148,11 +156,19 @@ create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken, RefreshTok
                          _ -> []
                      end,
 
-        % Add login as first DN that user has - this enables use of GUI without having any
-        % certificates registered. It bases on assumption that every login is unique.
-        dn_list = case DnList of
-                      List when is_list(List) -> [Login | List];
-                      _ -> [Login]
+        %% Add login as first DN that user has - this enables use of GUI without having any
+        %% certificates registered while using provider without Global Registry, which
+        %% means that its need only when developer_mode is turned on.
+        %% It bases on assumption that every login is unique.
+        dn_list = case oneprovider_node_app:get_env(developer_mode) of
+                      {ok, true} ->
+                          case [utils:ensure_list(Login) || #id_token_login{provider_id = plgrid, login = Login} <- Logins] of
+                              [Login | _] ->
+                                  [Login | DnList];
+                              _ -> DnList
+                          end;
+                      {ok, false} ->
+                          DnList
                   end,
         quota_doc = QuotaUUID,
 
