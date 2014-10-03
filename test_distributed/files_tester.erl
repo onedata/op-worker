@@ -46,7 +46,7 @@ file_exists(LogicalName) ->
           #storage_helper_info{name = SHName, init_args = SHArgs} = SHI,
           case SHName of
             ?SH ->
-              case file_exists_storage(SHArgs ++ "/" ++ Location#file_location.file_id) of
+              case file_exists_storage(SHArgs ++ "/" ++ Location#file_location.storage_file_id) of
                 true -> true;
                 false -> file_not_exists_at_storage;
                 Error -> {storage_error, Error}
@@ -79,7 +79,7 @@ read_file(LogicalName, BytesNum) ->
           #storage_helper_info{name = SHName, init_args = SHArgs} = SHI,
           case SHName of
             ?SH ->
-              case read_file_storage(SHArgs ++ "/" ++ Location#file_location.file_id, BytesNum) of
+              case read_file_storage(SHArgs ++ "/" ++ Location#file_location.storage_file_id, BytesNum) of
                 {ok, Data} -> {ok, Data};
                 Error -> {storage_error, Error}
               end;
@@ -169,7 +169,7 @@ get_file_location(LogicalName) ->
           SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
           #storage_helper_info{name = SHName, init_args = SHArgs} = SHI,
           case SHName of
-            ?SH -> {ok, lists:nth(1, SHArgs) ++ "/" ++ Location#file_location.file_id};
+            ?SH -> {ok, lists:nth(1, SHArgs) ++ "/" ++ Location#file_location.storage_file_id};
             _ -> {wrong_storage_helper, SHName}
           end;
         Other -> {get_storage_error, Other}

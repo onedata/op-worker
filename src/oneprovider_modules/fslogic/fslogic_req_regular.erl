@@ -79,7 +79,7 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
 
     {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
 
-    {SH, File_id} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.file_id, SpaceId, ForceClusterProxy),
+    {SH, File_id} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.storage_file_id, SpaceId, ForceClusterProxy),
     #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
         storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args}.
 
@@ -109,7 +109,7 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
     #db_document{uuid = UUID, record = #storage_info{} = Storage} = fslogic_storage:select_storage(fslogic_context:get_fuse_id(), StorageList),
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
     FileId = fslogic_storage:get_new_file_id(SpaceInfo, FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
-    FileLocation = #file_location{storage_id = UUID, file_id = FileId},
+    FileLocation = #file_location{storage_id = UUID, storage_file_id = FileId},
 
     {ok, UserID} = fslogic_context:get_user_id(),
 
@@ -132,7 +132,7 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
             ExistingWFileLocation= ExistingWFileRecord#file.location,
 
             {ok, #db_document{record = ExistingWFileStorage}} = fslogic_objects:get_storage({uuid, ExistingWFileLocation#file_location.storage_id}),
-            {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), ExistingWFileStorage, ExistingWFileLocation#file_location.file_id, SpaceId, ForceClusterProxy),
+            {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), ExistingWFileStorage, ExistingWFileLocation#file_location.storage_file_id, SpaceId, ForceClusterProxy),
             #storage_helper_info{name = ExistingWFileStorageSHName, init_args = ExistingWFileStorageSHArgs} = SH,
             #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs};
         {ok, FileUUID} ->

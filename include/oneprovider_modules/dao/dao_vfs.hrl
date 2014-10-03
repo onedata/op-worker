@@ -15,13 +15,15 @@
 -include_lib("files_common.hrl").
 -include("oneprovider_modules/dao/dao_spaces.hrl").
 
+%%
+-record(file_block_info, {file_location_id = "", offset = 0, size = 0}).
 %% Files' location (storage helper id and its relative file ID). Designed for use within #file record (`location` filed).
--record(file_location, {storage_id = "", file_id = ""}).
+-record(file_location, {file_id = "", provider_id = "", storage_id = "", storage_file_id = ""}).
 %% Files' locks. Designed for use within #file record (`locks` field).
 -record(file_lock, {type = ?REG_TYPE, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
 %% onedata file
 -record(file, {
-    type = 1, name = "", uid = "", perms = 0, parent = "", ref_file = "", location = #file_location{},
+    type = 1, name = "", uid = "", perms = 0, parent = "", ref_file = "",
     locks = [], meta_doc, created = true,
     extensions = [] %% General use field for extending #file{} capabilities. Shall have fallowing format: [{ExtName :: atom(), ExtValue :: term()}]
 }).

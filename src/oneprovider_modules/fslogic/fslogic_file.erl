@@ -42,7 +42,7 @@ fix_storage_owner(#db_document{record = #file{type = ?REG_TYPE} = File, uuid = F
             ?info("SUID missmatch on file ~p (~p vs correct ~p) - fixing", [FileUUID, SUID, RSUID]),
             FileLoc = fslogic_file:get_file_local_location(File#file.location),
             {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
-            {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+            {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.storage_file_id),
             case storage_files_manager:chown(SH, File_id, RSUID, -1) of
                 ok -> ok;
                 SReason ->
@@ -103,7 +103,7 @@ get_real_file_size_and_uid(#file{type = ?REG_TYPE} = File) ->
     FileLoc = get_file_local_location(File#file.location),
     {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
 
-    {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+    {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.storage_file_id),
     case helpers:exec(getattr, SH, [File_id]) of
         {0, #st_stat{st_size = ST_Size, st_uid = SUID} = _Stat} ->
             {ST_Size, SUID};

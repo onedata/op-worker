@@ -43,12 +43,12 @@ normalize_file_type_test() ->
 
 
 get_file_local_location_test() ->
-    LocationField = #file_location{file_id = "123"},
+    LocationField = #file_location{storage_file_id = "123"},
     File = #file{location = LocationField},
     Doc = #db_document{record = File},
-    ?assertMatch(#file_location{file_id = "123"}, fslogic_file:get_file_local_location(Doc)),
-    ?assertMatch(#file_location{file_id = "123"}, fslogic_file:get_file_local_location(File)),
-    ?assertMatch(#file_location{file_id = "123"}, fslogic_file:get_file_local_location(LocationField)).
+    ?assertMatch(#file_location{storage_file_id = "123"}, fslogic_file:get_file_local_location(Doc)),
+    ?assertMatch(#file_location{storage_file_id = "123"}, fslogic_file:get_file_local_location(File)),
+    ?assertMatch(#file_location{storage_file_id = "123"}, fslogic_file:get_file_local_location(LocationField)).
 
 
 get_real_file_size_test() ->

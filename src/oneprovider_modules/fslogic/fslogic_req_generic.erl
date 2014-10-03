@@ -121,7 +121,7 @@ change_file_group(_FullFileName, _GID, _GName) ->
 change_file_perms(FullFileName, Perms) ->
     ?debug("change_file_perms(FullFileName: ~p, Perms: ~p)", [FullFileName, Perms]),
     {ok, UserDoc} = fslogic_objects:get_user(),
-    {ok, #db_document{record = #file{perms = ActualPerms, location = #file_location{storage_id = StorageId, file_id = FileId}} = File} = FileDoc} =
+    {ok, #db_document{record = #file{perms = ActualPerms, location = #file_location{storage_id = StorageId, storage_file_id = FileId}} = File} = FileDoc} =
         fslogic_objects:get_file(FullFileName),
 
     ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner),

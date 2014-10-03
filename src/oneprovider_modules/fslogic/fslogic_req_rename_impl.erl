@@ -360,7 +360,7 @@ db_rollback([_ | T]) ->
     ok | {error, Reason :: any()}.
 %% ====================================================================
 update_moved_file(SourceFilePath, #db_document{record = #file{location = Location} = File, uuid = FileUUID} = FileDoc, NewFileID, RetryCount) ->
-    NewFile = File#file{location = Location#file_location{file_id = NewFileID}},
+    NewFile = File#file{location = Location#file_location{storage_file_id = NewFileID}},
 
     case fslogic_objects:save_file(FileDoc#db_document{record = NewFile}) of
         {ok, _} -> ok;
@@ -429,7 +429,7 @@ rename_on_storage(UserDoc, TargetSpaceInfo, SourceFilePath, TargetFilePath) ->
     try
         {ok, #db_document{record = File} = FileDoc} = fslogic_objects:get_file(SourceFilePath),
         StorageID   = File#file.location#file_location.storage_id,
-        FileID      = File#file.location#file_location.file_id,
+        FileID      = File#file.location#file_location.storage_file_id,
 
         OPInfo0 = #{transfer_type => none, source_fileid => FileID,
             source_path => SourceFilePath, source_path => TargetFilePath, file_doc => FileDoc},
