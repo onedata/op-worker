@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATOR_MOCK_H
-#define VEILHELPERS_COMMUNICATOR_MOCK_H
+#ifndef HELPERS_COMMUNICATOR_MOCK_H
+#define HELPERS_COMMUNICATOR_MOCK_H
 
 
 #include "communication/communicator.h"
@@ -15,15 +15,15 @@
 
 #include <gmock/gmock.h>
 
-class MockCommunicator: public veil::communication::Communicator
+class MockCommunicator: public one::communication::Communicator
 {
-    using Answer = veil::protocol::communication_protocol::Answer;
-    using Atom = veil::protocol::communication_protocol::Atom;
-    using ServerModule = veil::communication::ServerModule;
+    using Answer = one::clproto::communication_protocol::Answer;
+    using Atom = one::clproto::communication_protocol::Atom;
+    using ServerModule = one::communication::ServerModule;
 
 public:
     MockCommunicator()
-        : veil::communication::Communicator{std::make_unique<::testing::NiceMock<MockCommunicationHandler>>()}
+        : one::communication::Communicator{std::make_unique<::testing::NiceMock<MockCommunicationHandler>>()}
     {
     }
 
@@ -62,4 +62,4 @@ public:
 };
 
 
-#endif // VEILHELPERS_COMMUNICATOR_MOCK_H
+#endif // HELPERS_COMMUNICATOR_MOCK_H

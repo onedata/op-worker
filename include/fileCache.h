@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_FILE_CACHE_H
-#define VEILHELPERS_FILE_CACHE_H
+#ifndef HELPERS_FILE_CACHE_H
+#define HELPERS_FILE_CACHE_H
 
 
 #include <sys/types.h>
@@ -16,7 +16,7 @@
 #include <set>
 #include <string>
 
-namespace veil
+namespace one
 {
 namespace helpers
 {
@@ -150,7 +150,7 @@ private:
 };
 
 } // namespace helpers
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_FILE_CACHE_H
+#endif // HELPERS_FILE_CACHE_H

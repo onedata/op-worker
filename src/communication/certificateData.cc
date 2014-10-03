@@ -9,7 +9,7 @@
 
 #include <exception>
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -67,4 +67,4 @@ InMemoryCertificate::initContext(std::shared_ptr<boost::asio::ssl::context> ctx)
 }
 
 } // namespace communication
-} // namespace veil
+} // namespace one

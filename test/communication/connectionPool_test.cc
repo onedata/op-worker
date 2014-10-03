@@ -28,7 +28,7 @@
 using namespace ::testing;
 using namespace std::placeholders;
 
-struct ConnectionMock: public veil::communication::Connection
+struct ConnectionMock: public one::communication::Connection
 {
     static std::atomic<unsigned int> openConnections;
     static std::mutex connectionOpenedMutex;
@@ -38,7 +38,7 @@ struct ConnectionMock: public veil::communication::Connection
                    std::function<void(Connection&, std::exception_ptr)> onFailCallback,
                    std::function<void(Connection&)> onOpenCallback,
                    std::function<void(Connection&)> onErrorCallback)
-        : veil::communication::Connection{onMessageCallback, onFailCallback,
+        : one::communication::Connection{onMessageCallback, onFailCallback,
                                           onOpenCallback, onErrorCallback}
     {
         std::lock_guard<std::mutex> guard{connectionOpenedMutex};
@@ -51,11 +51,11 @@ struct ConnectionMock: public veil::communication::Connection
         --openConnections;
     }
 
-    using veil::communication::Connection::Connection;
-    using veil::communication::Connection::m_onErrorCallback;
-    using veil::communication::Connection::m_onFailCallback;
-    using veil::communication::Connection::m_onMessageCallback;
-    using veil::communication::Connection::m_onOpenCallback;
+    using one::communication::Connection::Connection;
+    using one::communication::Connection::m_onErrorCallback;
+    using one::communication::Connection::m_onFailCallback;
+    using one::communication::Connection::m_onMessageCallback;
+    using one::communication::Connection::m_onOpenCallback;
 
     MOCK_METHOD1(send, void(const std::string&));
 
@@ -66,7 +66,7 @@ decltype(ConnectionMock::openConnections) ConnectionMock::openConnections{0};
 decltype(ConnectionMock::connectionOpenedMutex) ConnectionMock::connectionOpenedMutex;
 decltype(ConnectionMock::connectionOpened) ConnectionMock::connectionOpened;
 
-struct ConnectionPoolProxy: public veil::communication::ConnectionPool
+struct ConnectionPoolProxy: public one::communication::ConnectionPool
 {
     ConnectionPoolProxy(const unsigned int connectionsNumber, std::string uri)
         : ConnectionPool{connectionsNumber, std::move(uri), {}}
@@ -74,17 +74,17 @@ struct ConnectionPoolProxy: public veil::communication::ConnectionPool
     }
 
 
-    using veil::communication::ConnectionPool::ConnectionPool;
-    using veil::communication::ConnectionPool::addConnections;
-    using veil::communication::ConnectionPool::onFail;
-    using veil::communication::ConnectionPool::onOpen;
-    using veil::communication::ConnectionPool::onError;
-    using veil::communication::ConnectionPool::m_onMessageCallback;
+    using one::communication::ConnectionPool::ConnectionPool;
+    using one::communication::ConnectionPool::addConnections;
+    using one::communication::ConnectionPool::onFail;
+    using one::communication::ConnectionPool::onOpen;
+    using one::communication::ConnectionPool::onError;
+    using one::communication::ConnectionPool::m_onMessageCallback;
 
     std::vector<ConnectionMock*> createdConnections;
 
-    MOCK_METHOD0(createConnection, std::unique_ptr<veil::communication::Connection>());
-    std::unique_ptr<veil::communication::Connection> createConnection_impl()
+    MOCK_METHOD0(createConnection, std::unique_ptr<one::communication::Connection>());
+    std::unique_ptr<one::communication::Connection> createConnection_impl()
     {
         auto c = new NiceMock<ConnectionMock>{
             m_onMessageCallback,
@@ -93,7 +93,7 @@ struct ConnectionPoolProxy: public veil::communication::ConnectionPool
             std::bind(&ConnectionPoolProxy::onError, this, _1)};
 
         createdConnections.emplace_back(c);
-        return std::unique_ptr<veil::communication::Connection>{c};
+        return std::unique_ptr<one::communication::Connection>{c};
     }
 };
 

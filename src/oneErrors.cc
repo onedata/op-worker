@@ -1,17 +1,17 @@
 /**
- * @file veilErrors.hh
+ * @file oneErrors.hh
  * @author Rafal Slota
  * @copyright (C) 2013 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "veilErrors.h"
+#include "oneErrors.h"
 
 #include <errno.h>
 
 #include <unordered_map>
 
-namespace veil
+namespace one
 {
 
 int translateError(const std::string &verr)

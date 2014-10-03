@@ -23,8 +23,7 @@ void handle(const boost::system::error_code &error,
 }
 }
 
-
-namespace veil
+namespace one
 {
 
 Scheduler::Scheduler(const unsigned int threadNumber)
@@ -60,4 +59,4 @@ std::function<void()> Scheduler::schedule(const std::chrono::milliseconds after,
 
 }
 
-} // namespace veil
+} // namespace one

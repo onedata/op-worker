@@ -13,7 +13,7 @@
 
 #include <gmock/gmock.h>
 
-class MockGenericHelper: public veil::helpers::IStorageHelper
+class MockGenericHelper: public one::helpers::IStorageHelper
 {
 public:
         MOCK_METHOD2(sh_getattr, int(const char *path, struct stat *stbuf));

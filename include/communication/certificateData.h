@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATION_CERTIFICATE_DATA_H
-#define VEILHELPERS_COMMUNICATION_CERTIFICATE_DATA_H
+#ifndef HELPERS_COMMUNICATION_CERTIFICATE_DATA_H
+#define HELPERS_COMMUNICATION_CERTIFICATE_DATA_H
 
 
 #include <boost/asio/buffer.hpp>
@@ -16,7 +16,7 @@
 #include <memory>
 #include <string>
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -127,7 +127,7 @@ private:
 };
 
 } // namespace communication
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_COMMUNICATION_CERTIFICATE_DATA_H
+#endif // HELPERS_COMMUNICATION_CERTIFICATE_DATA_H

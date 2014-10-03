@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_TEST_UTILS_H
-#define VEILHELPERS_TEST_UTILS_H
+#ifndef HELPERS_TEST_UTILS_H
+#define HELPERS_TEST_UTILS_H
 
 
 #include <algorithm>
@@ -42,4 +42,4 @@ std::string randomString()
 }
 
 
-#endif // VEILHELPERS_TEST_UTILS_H
+#endif // HELPERS_TEST_UTILS_H

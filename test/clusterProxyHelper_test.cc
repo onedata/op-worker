@@ -8,7 +8,7 @@
 #include "clusterProxyHelper_proxy.h"
 #include "communication/communicator_mock.h"
 #include "helpers/storageHelperFactory.h"
-#include "veilErrors.h"
+#include "oneErrors.h"
 
 #include <boost/algorithm/string.hpp>
 #include <google/protobuf/descriptor.h>
@@ -21,12 +21,12 @@
 #include <cstring>
 
 using namespace ::testing;
-using namespace veil;
-using namespace veil::helpers;
-using namespace veil::protocol::remote_file_management;
-using namespace veil::protocol::communication_protocol;
+using namespace one;
+using namespace one::helpers;
+using namespace one::clproto::remote_file_management;
+using namespace one::clproto::communication_protocol;
 using namespace std::placeholders;
-using veil::helpers::utils::tolower;
+using one::helpers::utils::tolower;
 
 template<typename T>
 bool identityEqual(const T &lhs, const T &rhs)

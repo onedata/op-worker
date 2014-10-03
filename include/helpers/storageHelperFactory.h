@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_STORAGE_HELPER_FACTORY_H
-#define VEILHELPERS_STORAGE_HELPER_FACTORY_H
+#ifndef HELPERS_STORAGE_HELPER_FACTORY_H
+#define HELPERS_STORAGE_HELPER_FACTORY_H
 
 
 #include "helpers/IStorageHelper.h"
@@ -14,7 +14,7 @@
 #include <memory>
 #include <string>
 
-namespace veil
+namespace one
 {
 
 namespace communication{ class Communicator; }
@@ -68,7 +68,7 @@ private:
 };
 
 } // namespace helpers
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_STORAGE_HELPER_FACTORY_H
+#endif // HELPERS_STORAGE_HELPER_FACTORY_H

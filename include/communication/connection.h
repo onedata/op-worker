@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATION_CONNECTION_H
-#define VEILHELPERS_COMMUNICATION_CONNECTION_H
+#ifndef HELPERS_COMMUNICATION_CONNECTION_H
+#define HELPERS_COMMUNICATION_CONNECTION_H
 
 
 #include <exception>
@@ -14,7 +14,7 @@
 #include <memory>
 #include <string>
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -81,7 +81,7 @@ protected:
 };
 
 } // namespace communication
-} // namespace veil
+} // namespace one
 
 
-#endif // VEILHELPERS_COMMUNICATION_CONNECTION_H
+#endif // HELPERS_COMMUNICATION_CONNECTION_H

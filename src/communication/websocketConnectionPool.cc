@@ -18,7 +18,7 @@
 
 template class websocketpp::client<websocketpp::config::asio_tls_client>;
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -112,4 +112,4 @@ std::unique_ptr<Connection> WebsocketConnectionPool::createConnection()
 }
 
 } // namespace communication
-} // namespace veil
+} // namespace one

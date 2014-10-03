@@ -12,7 +12,7 @@
 #include "communication/websocketConnectionPool.h"
 #include "fuse_messages.pb.h"
 #include "logging.h"
-#include "veilErrors.h"
+#include "oneErrors.h"
 #include "remote_file_management.pb.h"
 #include "scheduler.h"
 
@@ -22,7 +22,7 @@
 #include <cassert>
 #include <unordered_set>
 
-namespace veil
+namespace one
 {
 namespace communication
 {
@@ -51,14 +51,14 @@ void Communicator::setupPushChannels(std::function<void(const Answer&)> callback
 
     auto handshake = [=]{
         LOG(INFO) << "Opening a push channel with fuseId: '" << fuseId << "'";
-        protocol::fuse_messages::ChannelRegistration reg;
+        clproto::fuse_messages::ChannelRegistration reg;
         reg.set_fuse_id(fuseId);
         return createMessage(fslogic, true, Atom::default_instance(), reg);
     };
 
     auto goodbye = [=]{
         LOG(INFO) << "Closing the push channel with fuseId: '" << fuseId << "'";
-        protocol::fuse_messages::ChannelClose close;
+        clproto::fuse_messages::ChannelClose close;
         close.set_fuse_id(fuseId);
         return createMessage(fslogic, true, Atom::default_instance(), close);
     };
@@ -83,7 +83,7 @@ void Communicator::setupHandshakeAck()
     // Build HandshakeAck message
     auto handshake = [this, fuseId]{
         LOG(INFO) << "Sending HandshakeAck with fuseId: '" << fuseId << "'";
-        protocol::fuse_messages::HandshakeAck ack;
+        clproto::fuse_messages::HandshakeAck ack;
         ack.set_fuse_id(fuseId);
         return createMessage("", true, Atom::default_instance(), ack);
     };
@@ -105,7 +105,7 @@ void Communicator::reply(const Answer &originalMsg, const ServerModule module,
                          const unsigned int retries)
 {
     auto cmsg = createMessage(toString(module), false,
-                              veil::protocol::communication_protocol::Atom::default_instance(),
+                              one::clproto::communication_protocol::Atom::default_instance(),
                               msg);
 
     m_communicationHandler->reply(originalMsg, *cmsg, poolType(msg), retries);
@@ -116,7 +116,7 @@ void Communicator::send(const ServerModule module,
                         const unsigned int retries)
 {
     auto cmsg = createMessage(toString(module), false,
-                              veil::protocol::communication_protocol::Atom::default_instance(),
+                              one::clproto::communication_protocol::Atom::default_instance(),
                               msg);
     m_communicationHandler->send(*cmsg, poolType(msg), retries);
 }
@@ -197,7 +197,7 @@ Communicator::createMessage(const std::string &module,
 CommunicationHandler::Pool Communicator::poolType(const google::protobuf::Message &msg) const
 {
     static const std::unordered_set<std::string> dataPoolMessages{
-        describe(*protocol::remote_file_management::RemoteFileMangement::descriptor()).second
+        describe(*clproto::remote_file_management::RemoteFileMangement::descriptor()).second
     };
 
     return dataPoolMessages.count(describe(*msg.GetDescriptor()).second)
@@ -237,4 +237,4 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(
 }
 
 } // namespace communication
-} // namespace veil
+} // namespace one

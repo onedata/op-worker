@@ -14,7 +14,7 @@
 #include <functional>
 #include <thread>
 
-namespace veil
+namespace one
 {
 namespace helpers
 {
@@ -337,8 +337,15 @@ void BufferAgent::agentStart(int worker_count)
 void BufferAgent::agentStop()
 {
     m_agentActive = false;
-    m_wrCond.notify_all();
-    m_rdCond.notify_all();
+
+    {
+        std::lock_guard<std::recursive_mutex> guard{m_wrMutex};
+        m_wrCond.notify_all();
+    }
+    {
+        std::lock_guard<std::recursive_mutex> guard{m_rdMutex};
+        m_rdCond.notify_all();
+    }
 
     while(m_workers.size() > 0)
     {
@@ -353,9 +360,7 @@ void BufferAgent::readerLoop()
     unique_lock guard(m_rdMutex);
     while(m_agentActive)
     {
-        while(m_rdJobQueue.empty() && m_agentActive)
-            m_rdCond.wait(guard);
-
+        m_rdCond.wait(guard, [=]{ return !m_agentActive || !m_rdJobQueue.empty(); });
         if(!m_agentActive)
             return;
 
@@ -412,9 +417,7 @@ void BufferAgent::writerLoop()
     unique_lock guard(m_wrMutex);
     while(m_agentActive)
     {
-        while(m_wrJobQueue.empty() && m_agentActive)
-            m_wrCond.wait(guard);
-
+        m_wrCond.wait(guard, [=]{ return !m_agentActive || !m_wrJobQueue.empty(); });
         if(!m_agentActive)
             return;
 
@@ -497,5 +500,5 @@ std::shared_ptr<FileCache> BufferAgent::newFileCache(bool isBuffer)
 }
 
 } // namespace helpers
-} // namespace veil
+} // namespace one
 

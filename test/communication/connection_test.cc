@@ -17,13 +17,13 @@
 using namespace ::testing;
 using namespace std::placeholders;
 
-struct Connection: public veil::communication::Connection
+struct Connection: public one::communication::Connection
 {
-    using veil::communication::Connection::Connection;
-    using veil::communication::Connection::m_onErrorCallback;
-    using veil::communication::Connection::m_onFailCallback;
-    using veil::communication::Connection::m_onMessageCallback;
-    using veil::communication::Connection::m_onOpenCallback;
+    using one::communication::Connection::Connection;
+    using one::communication::Connection::m_onErrorCallback;
+    using one::communication::Connection::m_onFailCallback;
+    using one::communication::Connection::m_onMessageCallback;
+    using one::communication::Connection::m_onOpenCallback;
 
     MOCK_METHOD1(send, void(const std::string&));
 };
@@ -33,9 +33,9 @@ struct ConnectionTest: public ::testing::Test
     std::unique_ptr<Connection> connection;
 
     MOCK_METHOD1(onMessage, void(const std::string&));
-    MOCK_METHOD1(onFail, void(veil::communication::Connection&));
-    MOCK_METHOD1(onOpen, void(veil::communication::Connection&));
-    MOCK_METHOD1(onError, void(veil::communication::Connection&));
+    MOCK_METHOD1(onFail, void(one::communication::Connection&));
+    MOCK_METHOD1(onOpen, void(one::communication::Connection&));
+    MOCK_METHOD1(onError, void(one::communication::Connection&));
 
     ConnectionTest()
     {
@@ -47,8 +47,8 @@ struct ConnectionTest: public ::testing::Test
     }
 };
 
-bool identityEqual(const veil::communication::Connection &lhs,
-                   const veil::communication::Connection &rhs)
+bool identityEqual(const one::communication::Connection &lhs,
+                   const one::communication::Connection &rhs)
 {
     return &lhs == &rhs;
 }

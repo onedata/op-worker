@@ -29,9 +29,9 @@ struct CommunicationHandlerTest: public ::testing::Test
 {
     ConnectionPoolMock *dataPool;
     ConnectionPoolMock *metaPool;
-    std::unique_ptr<veil::communication::CommunicationHandler> communicationHandler;
+    std::unique_ptr<one::communication::CommunicationHandler> communicationHandler;
 
-    using Pool = veil::communication::CommunicationHandler::Pool;
+    using Pool = one::communication::CommunicationHandler::Pool;
 
     CommunicationHandlerTest()
     {
@@ -41,14 +41,14 @@ struct CommunicationHandlerTest: public ::testing::Test
         dataPool = dataPoolPtr.get();
         metaPool = metaPoolPtr.get();
 
-        communicationHandler = std::make_unique<veil::communication::CommunicationHandler>(
+        communicationHandler = std::make_unique<one::communication::CommunicationHandler>(
                     std::move(dataPoolPtr), std::move(metaPoolPtr));
     }
 };
 
-veil::protocol::communication_protocol::ClusterMsg randomMessage()
+one::clproto::communication_protocol::ClusterMsg randomMessage()
 {
-    veil::protocol::communication_protocol::ClusterMsg message;
+    one::clproto::communication_protocol::ClusterMsg message;
     message.set_answer_decoder_name(randomString());
     message.set_answer_type(randomString());
     message.set_input(randomString());
@@ -61,9 +61,9 @@ veil::protocol::communication_protocol::ClusterMsg randomMessage()
     return message;
 }
 
-std::unique_ptr<veil::protocol::communication_protocol::ClusterMsg> randomHandshake()
+std::unique_ptr<one::clproto::communication_protocol::ClusterMsg> randomHandshake()
 {
-    return std::make_unique<veil::protocol::communication_protocol::ClusterMsg>(randomMessage());
+    return std::make_unique<one::clproto::communication_protocol::ClusterMsg>(randomMessage());
 };
 
 CommunicationHandlerTest::Pool randomPool()
@@ -81,7 +81,7 @@ TEST_F(CommunicationHandlerTest, shouldSetOnMessageCallbackOnPools)
     EXPECT_CALL(*dataPool, setOnMessageCallback(_));
     EXPECT_CALL(*metaPool, setOnMessageCallback(_));
 
-    std::make_unique<veil::communication::CommunicationHandler>(
+    std::make_unique<one::communication::CommunicationHandler>(
                 std::move(dataPool), std::move(metaPool));
 }
 
@@ -96,7 +96,7 @@ TEST_F(CommunicationHandlerTest, shouldCallSendOnAppropriatePoolOnReply)
     EXPECT_CALL(*dataPool, send(_)).WillOnce(SaveArg<0>(&sentDataMessage));
     EXPECT_CALL(*metaPool, send(_)).WillOnce(SaveArg<0>(&sentMetaMessage));
 
-    veil::protocol::communication_protocol::Answer replyTo;
+    one::clproto::communication_protocol::Answer replyTo;
     replyTo.set_message_id(0);
 
     communicationHandler->reply(replyTo, dataMsg, Pool::DATA, 0);
@@ -172,7 +172,7 @@ TEST_F(CommunicationHandlerTest, shouldFulfilAPromiseOnResultMessage)
     auto future = communicationHandler->communicate(dataMsg, randomPool(), 0);
     auto messageId = dataMsg.message_id();
 
-    veil::protocol::communication_protocol::Answer answer;
+    one::clproto::communication_protocol::Answer answer;
     answer.set_answer_status("answer status");
     answer.set_message_id(messageId);
 
@@ -187,13 +187,13 @@ TEST_F(CommunicationHandlerTest, shouldFulfilAPromiseOnResultMessage)
 
 TEST_F(CommunicationHandlerTest, shouldCallSubscribedCallbackOnPredicateFulfilment)
 {
-    auto pred = [](const veil::protocol::communication_protocol::Answer &ans) {
+    auto pred = [](const one::clproto::communication_protocol::Answer &ans) {
         return ans.message_id() == 128 || ans.message_id() == 256 || ans.message_id() == 512;
     };
 
     int callbackCalled = 0;
-    veil::protocol::communication_protocol::Answer answerGiven;
-    auto callback = [&](const veil::protocol::communication_protocol::Answer &ans) {
+    one::clproto::communication_protocol::Answer answerGiven;
+    auto callback = [&](const one::clproto::communication_protocol::Answer &ans) {
         ++callbackCalled;
         answerGiven = ans;
     };
@@ -202,7 +202,7 @@ TEST_F(CommunicationHandlerTest, shouldCallSubscribedCallbackOnPredicateFulfilme
 
     for(int i = 0; i < 1000; ++i)
     {
-        veil::protocol::communication_protocol::Answer answer;
+        one::clproto::communication_protocol::Answer answer;
         answer.set_answer_status("answer status");
         answer.set_message_id(i);
 
@@ -239,7 +239,7 @@ TEST_F(CommunicationHandlerTest, shouldPassHandshakeToMetaPool)
 }
 
 void checkMessageGenerator(const std::function<std::string()> &gen,
-                           veil::protocol::communication_protocol::ClusterMsg original)
+                           one::clproto::communication_protocol::ClusterMsg original)
 {
     ASSERT_FALSE(original.has_message_id());
 
@@ -262,7 +262,7 @@ void checkMessageGenerator(const std::function<std::string()> &gen,
 
 TEST_F(CommunicationHandlerTest, shouldGenerateIdsForHandshakeAndGoodbyeMessages)
 {
-    using veil::protocol::communication_protocol::ClusterMsg;
+    using one::clproto::communication_protocol::ClusterMsg;
 
     auto poolType = randomPool();
     auto pool = poolType == Pool::META ? metaPool : dataPool;
@@ -288,7 +288,7 @@ TEST_F(CommunicationHandlerTest, shouldGenerateIdsForHandshakeAndGoodbyeMessages
 
 TEST_F(CommunicationHandlerTest, shouldGenerateIdsForHandshakeMessages)
 {
-    using veil::protocol::communication_protocol::ClusterMsg;
+    using one::clproto::communication_protocol::ClusterMsg;
 
     auto poolType = randomPool();
     auto pool = poolType == Pool::META ? metaPool : dataPool;
@@ -311,7 +311,7 @@ TEST_F(CommunicationHandlerTest, shouldReturnHandshakeRemovalFunctionOnHandshake
     auto pool = poolType == Pool::META ? metaPool : dataPool;
 
     const auto handshakeFun = [=]{
-        return std::make_unique<veil::protocol::communication_protocol::ClusterMsg>(randomMessage());
+        return std::make_unique<one::clproto::communication_protocol::ClusterMsg>(randomMessage());
     };
 
     bool removeCalled = false;
@@ -335,7 +335,7 @@ TEST_F(CommunicationHandlerTest, shouldReplyWithProperMessageId)
     auto poolType = randomPool();
     auto msg = randomMessage();
 
-    veil::protocol::communication_protocol::Answer replyTo;
+    one::clproto::communication_protocol::Answer replyTo;
     for(auto attempts = randomInt(100, 1000); attempts >= 0; --attempts)
     {
         auto msgId = randomInt(-1000, 1000);
