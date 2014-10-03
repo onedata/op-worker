@@ -7,7 +7,7 @@
 %% ===================================================================
 %% @doc: This module tests cluster by sending large number of requests
 %% to each worker. To use it enter .eunit directory (after 'make test'
-%% command) and run erlang with the same cookie as veil cluster
+%% command) and run erlang with the same cookie as oneprovider
 %% uses (cookie is used to test if all modules work well after the
 %% stress test). Test methods use list of pairs
 %% {erlang_node, dispatcher_port}. E.g. to start test of cluster with
@@ -100,7 +100,7 @@ test_ccm(Nodes) ->
 
 %% This function ping all nodes in cluster
 ping_test(Nodes, PingsNum) ->
-  Cert = '../veilfs.pem',
+  Cert = '../onedata.pem',
   CertString = atom_to_list(Cert),
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),

@@ -1,5 +1,5 @@
-% Installation directory of veil RPM
--define(prefix, "/opt/veil/").
+% Installation directory of oneprovider RPM
+-define(prefix, "/opt/oneprovider/").
 
 % Args file
 -define(args_file, ?prefix ++"scripts/addusers.cfg").

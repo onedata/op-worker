@@ -1,5 +1,5 @@
 % Default cookie used for communication with cluster
--define(default_cookie, veil_cluster_node).
+-define(default_cookie, oneprovider_node).
 
 % Default bigcouch port
 -define(default_port, "5986").
@@ -15,8 +15,8 @@
 % Curl options
 -define(curl_opts, "-u admin:password --connect-timeout 5 -s").
 
-% Installation directory of veil RPM
--define(prefix, filename:join([filename:absname("/"), "opt", "veil"])).
+% Installation directory of oneprovider RPM
+-define(prefix, filename:join([filename:absname("/"), "opt", "oneprovider"])).
 
 % Location of configured_nodes.cfg
 -define(configured_nodes_path, filename:join([?prefix, "scripts", "configured_nodes.cfg"])).
@@ -27,10 +27,10 @@
 -define(default_processes, "65535").
 
 % Location of init.d script
--define(init_d_script_path, filename:join([filename:absname("/"), "etc", "init.d", "veil"])).
+-define(init_d_script_path, filename:join([filename:absname("/"), "etc", "init.d", "oneprovider"])).
 
 % Location of release packages
--define(veil_release, filename:join([?prefix, "files", "veil_cluster_node"])).
+-define(oneprovider_release, filename:join([?prefix, "files", "oneprovider_node"])).
 -define(db_release, filename:join([?prefix, "files", "database_node"])).
 
 % Location of erl_launcher
@@ -43,9 +43,9 @@
 -define(default_worker_name, "worker").
 -define(default_db_name, "db").
 
-% Paths relative to veil_cluster_node release
+% Paths relative to oneprovider_node release
 -define(config_args_path, filename:join(["bin", "config.args"])).
--define(veil_cluster_script_path, filename:join(["bin", "veil_cluster"])).
+-define(oneprovider_script_path, filename:join(["bin", "oneprovider"])).
 -define(storage_config_path, filename:join(["bin", "storage_info.cfg"])).
 
 % Print error message with formatting and finish
@@ -79,19 +79,19 @@ main(Args) ->
 % Each function represent one step in installation process
 
 setup_start() ->
-    h1("Veil SETUP"),
+    h1("oneprovider SETUP"),
     info("Erlang nodes configured on this machine will use its hostname: " ++ get(hostname)),
     warn("Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)"),
     set_ulimits(),
     Option = interaction_choose_option(what_to_do, "What do you want to do?",
         [
             {manage_db, "Manage database nodes"},
-            {manage_veil, "Manage veil nodes"},
+            {manage_oneprovider, "Manage oneprovider nodes"},
             {exit, "Exit"}
         ]),
     case Option of
         manage_db -> setup_manage_db();
-        manage_veil -> setup_manage_veil();
+        manage_oneprovider -> setup_manage_oneprovider();
         exit -> halt(1)
     end.
 
@@ -115,11 +115,11 @@ reset_ulimits() ->
     Processes = interaction_get_string(process_limit, "Processes: ", ?default_processes),
     file:write_file(?ulimits_config_path, io_lib:fwrite("~p.\n~p.\n", [{open_files, OpenFiles}, {process_limit, Processes}]), [append]).
 
-% Manage veil cluster nodes
-setup_manage_veil() ->
+% Manage oneprovider nodes
+setup_manage_oneprovider() ->
     info("Each machine can only host a single worker or a ccm + worker pair."),
 
-    OptionList = case get_nodes_from_config(veil) of
+    OptionList = case get_nodes_from_config(oneprovider) of
                      {none, []} ->
                          [
                              {new_cluster, "Set up a new cluster"},
@@ -129,11 +129,11 @@ setup_manage_veil() ->
                          [{remove_nodes, "Remove node(s) configured on this machine"}]
                  end,
 
-    Option = interaction_choose_option(what_to_do_veil, "What do you want to do?", OptionList ++ [{go_back, "Go back"}]),
+    Option = interaction_choose_option(what_to_do_oneprovider, "What do you want to do?", OptionList ++ [{go_back, "Go back"}]),
     case Option of
         new_cluster -> setup_confirm_new_cluster();
         extend_cluster -> setup_extend_cluster();
-        remove_nodes -> setup_remove_veil_nodes();
+        remove_nodes -> setup_remove_oneprovider_nodes();
         go_back -> setup_start()
     end.
 
@@ -193,13 +193,13 @@ setup_get_db_nodes() ->
 
 setup_create_storage() ->
     h2("Storage setup"),
-    VeilRoot = interaction_get_string(veilfs_storage_root, "Select path where veil can store its files", ?default_main_directio_storage),
-    VeilGroup = [{name, cluster_fuse_id}, {root, VeilRoot}],
+    OneproviderRoot = interaction_get_string(oneprovider_storage_root, "Select path where oneprovider can store its files", ?default_main_directio_storage),
+    OneproviderGroup = [{name, cluster_fuse_id}, {root, OneproviderRoot}],
     warn("IMPORTANT"),
     warn("Configuring direct storage (much faster than default proxy storage) for fuse client groups"),
     warn("If you don't create any storage now, all the data will go throught proxy\n and it will work really slow!"),
     UserDefinedGroups = get_fuse_groups_from_user([], 1),
-    AllGroups = [VeilGroup | UserDefinedGroups],
+    AllGroups = [OneproviderGroup | UserDefinedGroups],
 
     CreateDir = fun([{name, _}, {root, Root}]) -> os:cmd("mkdir -p " ++ Root) end,
     lists:foreach(CreateDir, AllGroups),
@@ -285,7 +285,7 @@ setup_new_ccm_plus_worker(IsThisMainCCM, FuseGroups) ->
         ]),
     case Option of
         back ->
-            setup_manage_veil();
+            setup_manage_oneprovider();
         ok ->
             LongName = CCMName ++ get(hostname),
             case IsThisMainCCM of
@@ -295,8 +295,8 @@ setup_new_ccm_plus_worker(IsThisMainCCM, FuseGroups) ->
                 false ->
                     put(opt_ccms, get(opt_ccms) ++ [list_to_atom(LongName)])
             end,
-            install_veil_node(ccm_node, CCMName, CCMPath),
-            install_veil_node(worker_node, WorkerName, WorkerPath),
+            install_oneprovider_node(ccm_node, CCMName, CCMPath),
+            install_oneprovider_node(worker_node, WorkerName, WorkerPath),
             case IsThisMainCCM of
                 true ->
                     save_storage_in_config(FuseGroups);
@@ -304,14 +304,14 @@ setup_new_ccm_plus_worker(IsThisMainCCM, FuseGroups) ->
                     ok_storage_defined_in_main
             end,
             info("Starting node(s)..."),
-            os:cmd(?init_d_script_path ++ " start_veil 1>/dev/null")
+            os:cmd(?init_d_script_path ++ " start_oneprovider 1>/dev/null")
     end.
 
 
 % Firstly check connection to an existing cluster, then ask to choose installation variant
 setup_extend_cluster() ->
     check_open_ports(?ports_to_check),
-    IPOrHostname = interaction_get_string(ip_or_hostname, "Specify IP/hostname of any host with running veil node(s): "),
+    IPOrHostname = interaction_get_string(ip_or_hostname, "Specify IP/hostname of any host with running oneprovider node(s): "),
     case discover_cluster(IPOrHostname) of
         no_connection ->
             warn("No node at [" ++ IPOrHostname ++ "] is available. Make sure there is a viable connection between hosts."),
@@ -325,7 +325,7 @@ setup_extend_cluster() ->
                         ]),
                     case WantRetry of
                         yes -> setup_extend_cluster();
-                        no -> setup_manage_veil()
+                        no -> setup_manage_oneprovider()
                     end;
                 _ ->
                     halt(1)
@@ -363,21 +363,21 @@ setup_new_worker() ->
         ]),
     case Option of
         back ->
-            setup_manage_veil();
+            setup_manage_oneprovider();
         ok ->
-            install_veil_node(worker_node, WorkerName, WorkerPath),
+            install_oneprovider_node(worker_node, WorkerName, WorkerPath),
             info("Starting node(s)..."),
-            os:cmd(?init_d_script_path ++ " start_veil 1>/dev/null")
+            os:cmd(?init_d_script_path ++ " start_oneprovider 1>/dev/null")
     end.
 
 
-% Install a generic veil node
-install_veil_node(Type, Name, Path) ->
+% Install a generic oneprovider node
+install_oneprovider_node(Type, Name, Path) ->
     LongName = Name ++ get(hostname),
-    VeilNodePath = filename:join([Path, Name]),
+    OneproviderNodePath = filename:join([Path, Name]),
     info("Installing " ++ LongName ++ "..."),
-    os:cmd("mkdir -p " ++ VeilNodePath),
-    os:cmd("cp -R " ++ filename:join([?veil_release, "* "]) ++ VeilNodePath),
+    os:cmd("mkdir -p " ++ OneproviderNodePath),
+    os:cmd("cp -R " ++ filename:join([?oneprovider_release, "* "]) ++ OneproviderNodePath),
 
     MainCCM = get(main_ccm),
     OptCCMs = get(opt_ccms),
@@ -391,7 +391,7 @@ install_veil_node(Type, Name, Path) ->
     overwrite_config_args(ConfigArgsPath, "db_nodes", to_space_delimited_list(DBNodes)),
     overwrite_config_args(ConfigArgsPath, "storage_config_path", StorageConfigPath),
 
-    os:cmd(filename:join([Path, Name, ?veil_cluster_script_path])),
+    os:cmd(filename:join([Path, Name, ?oneprovider_script_path])),
     add_node_to_config(Type, list_to_atom(Name), Path).
 
 
@@ -404,11 +404,11 @@ to_space_delimited_list(List) ->
 
 
 % List currently installed nodes and ask for confirmation
-setup_remove_veil_nodes() ->
-    case get_nodes_from_config(veil) of
+setup_remove_oneprovider_nodes() ->
+    case get_nodes_from_config(oneprovider) of
         {none, []} ->
             warn("There are no nodes configured on this machine"),
-            setup_manage_veil();
+            setup_manage_oneprovider();
         {worker, {worker_node, WorkerName, _}} ->
             info("Nodes currently configured on this machine:"),
             li(atom_to_list(WorkerName) ++ get(hostname));
@@ -418,22 +418,22 @@ setup_remove_veil_nodes() ->
             li(atom_to_list(WorkerName) ++ get(hostname))
     end,
 
-    Option = interaction_choose_option(confirm_veil_nodes_deletion, "Do you wish to remove current configuration?",
+    Option = interaction_choose_option(confirm_oneprovider_nodes_deletion, "Do you wish to remove current configuration?",
         [
             {yes, "Yes"},
             {no, "No"}
         ]),
     case Option of
         no -> setup_start();
-        yes -> do_remove_veil_nodes()
+        yes -> do_remove_oneprovider_nodes()
     end.
 
 
 % Stop node(s) and remove them from the machine
-do_remove_veil_nodes() ->
+do_remove_oneprovider_nodes() ->
     info("Stopping node(s)..."),
-    os:cmd(?init_d_script_path ++ " stop_veil"),
-    case get_nodes_from_config(veil) of
+    os:cmd(?init_d_script_path ++ " stop_oneprovider"),
+    case get_nodes_from_config(oneprovider) of
         {worker, {worker_node, Name, Path}} ->
             info("Removing " ++ atom_to_list(Name) ++ get(hostname)),
             os:cmd("rm -rf " ++ filename:join([Path, atom_to_list(Name)])),
@@ -620,13 +620,13 @@ set_up_net_kernel() ->
 % Try to connect to the cluster (firstly workers, then ccms) and retrieve CCM and DB nodes
 discover_cluster(IPOrHostname) ->
     try
-        {ok, CCMNodes} = rpc:call(list_to_atom(?default_worker_name ++ "@" ++ IPOrHostname), application, get_env, [veil_cluster_node, ccm_nodes]),
-        {ok, DBNodes} = rpc:call(list_to_atom(?default_worker_name ++ "@" ++ IPOrHostname), application, get_env, [veil_cluster_node, db_nodes]),
+        {ok, CCMNodes} = rpc:call(list_to_atom(?default_worker_name ++ "@" ++ IPOrHostname), application, get_env, [oneprovider_node, ccm_nodes]),
+        {ok, DBNodes} = rpc:call(list_to_atom(?default_worker_name ++ "@" ++ IPOrHostname), application, get_env, [oneprovider_node, db_nodes]),
         {CCMNodes, DBNodes}
     catch _:_ ->
         try
-            {ok, CCMNodes2} = rpc:call(list_to_atom(?default_ccm_name ++ "@" ++ IPOrHostname), application, get_env, [veil_cluster_node, ccm_nodes]),
-            {ok, DBNodes2} = rpc:call(list_to_atom(?default_ccm_name ++ "@" ++ IPOrHostname), application, get_env, [veil_cluster_node, db_nodes]),
+            {ok, CCMNodes2} = rpc:call(list_to_atom(?default_ccm_name ++ "@" ++ IPOrHostname), application, get_env, [oneprovider_node, ccm_nodes]),
+            {ok, DBNodes2} = rpc:call(list_to_atom(?default_ccm_name ++ "@" ++ IPOrHostname), application, get_env, [oneprovider_node, db_nodes]),
             {CCMNodes2, DBNodes2}
         catch _:_ ->
             no_connection
@@ -646,7 +646,7 @@ actualize_db_hostname(BigcouchInstallationPath, NodeName) ->
     os:cmd("sed -i -e \"s/^\\-name .*/\\-name " ++ NodeName ++ get(hostname) ++ "/g\" " ++ BigcouchInstallationPath ++ "/etc/vm.args").
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Function used to process config file used by veil_cluster script
+% Function used to process config file used by oneprovider script
 %
 
 % Overwrite a parameter in config.args
@@ -669,13 +669,13 @@ overwrite_config_args(Path, Parameter, NewValue) ->
 
 
 % Read contigured_nodes.cfg
-% WhichCluster = veil | database
+% WhichCluster = oneprovider | database
 get_nodes_from_config(WhichCluster) ->
     try
         {ok, Entries} = file:consult(?configured_nodes_path),
         case WhichCluster of
             database -> get_database_node_from_config(Entries);
-            veil -> get_veil_nodes_from_config(Entries)
+            oneprovider -> get_oneprovider_nodes_from_config(Entries)
         end
     catch _:_ ->
         ?error("Error while reading ~s", [?configured_nodes_path])
@@ -691,7 +691,7 @@ get_database_node_from_config(Entries) ->
 
 
 % Do not use directly
-get_veil_nodes_from_config(Entries) ->
+get_oneprovider_nodes_from_config(Entries) ->
     case lists:keyfind(worker_node, 1, Entries) of
         false -> {none, []};
         Worker ->

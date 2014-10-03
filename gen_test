@@ -165,8 +165,8 @@ if [[ $INDEX -eq 0 ]]; then
         echo "Terminating."
         exit 1
     fi
-	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
-	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster	
+	chmod u+x ./releases/oneprovider_node/bin/oneprovider_node
+	chmod u+x ./releases/oneprovider_node/bin/oneprovider
 
 	# Generate releases for all nodes
 	ALL_NODES="$WORKERS $MAIN_CCM $OPT_CCMS"
@@ -211,7 +211,7 @@ if [[ $DO_START -eq 1 ]]; then
 		fi
 
 		echo "Starting node: $NODE_NAME_WITHOUT_HOSTNAME..."
-		./releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/bin/veil_cluster_node start
+		./releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/bin/oneprovider_node start
         if [ $? -ne 0 ]; then
             echo ""
             echo "Error during start of node $NODE_NAME_WITHOUT_HOSTNAME. Is the test environment ready?"

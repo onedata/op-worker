@@ -35,7 +35,7 @@ wrong_request_test() ->
   worker_host:stop(Module).
 
 %% This test checks if worker properly stores information about time used by
-%% plug-in (veil module) to process requests. The tests checks not only if this
+%% plug-in (oneprovider module) to process requests. The tests checks not only if this
 %% information is stored but also verifies if old information is correctly deleted
 %% (to provide only latest data to ccm).
 load_info_storing_test() ->

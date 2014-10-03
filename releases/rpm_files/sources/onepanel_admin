@@ -12,4 +12,4 @@
 ## @end
 ## ===================================================================
 
-/opt/veil/scripts/erl_launcher escript /opt/veil/nodes/onepanel/scripts/onepanel_admin.escript $@
+/opt/oneprovider/scripts/erl_launcher escript /opt/oneprovider/nodes/onepanel/scripts/onepanel_admin.escript $@

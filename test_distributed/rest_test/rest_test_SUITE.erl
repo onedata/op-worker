@@ -12,13 +12,13 @@
 
 -module(rest_test_SUITE).
 -include("test_utils.hrl").
--include("veil_modules/control_panel/common.hrl").
--include("veil_modules/control_panel/rest_messages.hrl").
+-include("oneprovider_modules/control_panel/common.hrl").
+-include("oneprovider_modules/control_panel/rest_messages.hrl").
 -include("err.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
--include("veil_modules/control_panel/global_registry_interfacing.hrl").
+-include("oneprovider_modules/control_panel/global_registry_interfacing.hrl").
 
 -define(ProtocolVersion, 1).
 
@@ -259,7 +259,7 @@ test_rest_shares() ->
     {Code4, Headers4, Response4} = do_request(?REST_SHARE_SUBPATH ++ ShareID, get, [], []),
     ?assertEqual(Code4, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers4), "application/json"),
-    {ok, Port} = rpc:call(get(ccm), application, get_env, [veil_cluster_node, control_panel_port]),
+    {ok, Port} = rpc:call(get(ccm), application, get_env, [oneprovider_node, control_panel_port]),
     Hostname = case (Port =:= 80) or (Port =:= 443) of
                    true -> "https://localhost";
                    false -> "https://localhost:" ++ integer_to_list(Port)
@@ -298,7 +298,7 @@ do_request(APIVersion, RestSubpath, Method, Headers, Body) ->
     Cert = ?COMMON_FILE("peer.pem"),
     CCM = get(ccm),
 
-    {ok, Port} = rpc:call(CCM, application, get_env, [veil_cluster_node, rest_port]),
+    {ok, Port} = rpc:call(CCM, application, get_env, [oneprovider_node, rest_port]),
     Hostname = case (Port =:= 80) or (Port =:= 443) of
                    true -> "https://localhost";
                    false -> "https://localhost:" ++ integer_to_list(Port)
@@ -401,7 +401,7 @@ init_per_testcase(main_test, Config) ->
 
     DB_Node = ?DB_NODE,
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
+    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes,
         [[{node_type, ccm_test},
             {initialization_time, 1},
             {dispatcher_port, 5055},
@@ -418,5 +418,5 @@ init_per_testcase(main_test, Config) ->
 
 end_per_testcase(main_test, Config) ->
     Nodes = ?config(nodes, Config),
-    test_node_starter:stop_app_on_nodes(?APP_Name,?VEIL_DEPS,Nodes),
+    test_node_starter:stop_app_on_nodes(?APP_Name,?ONEDATA_DEPS,Nodes),
     test_node_starter:stop_test_nodes(Nodes).

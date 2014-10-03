@@ -9,7 +9,7 @@ all: generate docs
 compile:
 	-@if [ -f ebin/.test ]; then rm -rf ebin; fi 
 	./gen_config
-	cp -R veilprotocol/proto src
+	cp -R clproto/proto src
 	./rebar compile
 	rm -rf src/proto
 
@@ -36,7 +36,7 @@ ct: deps compile
 	-@if [ ! -f ebin/.test ]; then rm -rf ebin; fi
 	-@mkdir -p ebin ; touch ebin/.test 
 	./gen_config
-	 cp -R veilprotocol/proto src
+	 cp -R clproto/proto src
 	./rebar -D TEST compile
 	rm -rf src/proto
 	./rebar ct skip_deps=true
@@ -50,8 +50,8 @@ test: eunit ct
 
 generate: deps compile
 	./rebar generate
-	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster
-	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
+	chmod u+x ./releases/oneprovider_node/bin/oneprovider
+	chmod u+x ./releases/oneprovider_node/bin/oneprovider_node
 
 docs: deps
 	make -C docs html
@@ -115,17 +115,17 @@ start_test_env_from_file:
 
 ### Starting a node
 start_node:
-	./releases/test_cluster/$(node)/bin/veil_cluster_node start
+	./releases/test_cluster/$(node)/bin/oneprovider_node start
 
 attach_to_node:
-	./releases/test_cluster/$(node)/bin/veil_cluster_node attach
+	./releases/test_cluster/$(node)/bin/oneprovider_node attach
 
 start_node_console:
-	./releases/test_cluster/$(node)/bin/veil_cluster_node console
+	./releases/test_cluster/$(node)/bin/oneprovider_node console
 
 ### Basho-Bench build (used by CI)
 basho_bench: deps 
-	@cp -R veilprotocol/proto ${BASHO_BENCH_DIR}/src
+	@cp -R clproto/proto ${BASHO_BENCH_DIR}/src
 	cp ${STRESS_TESTS_SRC_DIR}/**/*.erl ${BASHO_BENCH_DIR}/src
 	cp ${DIST_TESTS_SRC_DIR}/wss.erl ${BASHO_BENCH_DIR}/src
 	@mkdir -p ${BASHO_BENCH_DIR}/tests
