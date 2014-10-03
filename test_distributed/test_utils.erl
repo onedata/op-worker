@@ -14,6 +14,7 @@
 -module(test_utils).
 
 -include("registered_names.hrl").
+-include_lib("ctool/include/global_registry/gr_openid.hrl").
 -include("test_utils.hrl").
 -include("modules_and_args.hrl").
 
@@ -68,6 +69,7 @@ add_user(Config, Login, Cert, Spaces, AccessToken, RefreshToken, AccessExpiratio
     Name = Login ++ " " ++ Login,
     Teams = SpacesList,
     Email = Login ++ "@email.net",
+    Logins = [#id_token_login{provider_id = plgrid, login = utils:ensure_binary(Login)}],
 
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
 
@@ -77,7 +79,7 @@ add_user(Config, Login, Cert, Spaces, AccessToken, RefreshToken, AccessExpiratio
     end,
 
     {CreateUserAns, NewUserDoc} = rpc:call(CCM, user_logic, create_user,
-        ["global_id_for_" ++ Login, Login, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime]),
+        ["global_id_for_" ++ Login, Logins, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime]),
     ?assertMatch({ok, _}, {CreateUserAns, NewUserDoc}),
 
     test_utils:ct_mock(Config, gr_users, get_spaces, fun(_) -> {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
