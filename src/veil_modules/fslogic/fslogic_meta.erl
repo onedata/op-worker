@@ -95,7 +95,7 @@ update_parent_ctime(Dir, CTime) ->
 %% @doc Internal implementation of update_meta_attr/3. See update_meta_attr/3 for more information.
 %% @end
 -spec update_meta_attr(File :: #file{}, Attr, Value :: term(), RetryCount :: integer(), ForceSynch :: boolean()) -> Result :: #file{} when
-    Attr :: atime | mtime | ctime | size | times.
+    Attr :: atime | mtime | ctime | size | times | acl | xattrs.
 update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount, ForceSynch) ->
     {File1, #veil_document{record = MetaRec} = MetaDoc} = init_file_meta(File),
     MetaDocChanged = MetaUUID =/= MetaDoc#veil_document.uuid,
