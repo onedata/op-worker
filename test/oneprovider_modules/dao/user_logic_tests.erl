@@ -14,6 +14,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("oneprovider_modules/dao/dao.hrl").
 -include_lib("public_key/include/public_key.hrl").
+-include("registered_names.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 
 
@@ -83,6 +84,9 @@ basic_test_() ->
 
             {"convinience_functions",
                 fun() ->
+                    ets:new(?STORAGE_USER_IDS_CACHE, [set, named_table, protected, {read_concurrency, true}]),
+                    ets:insert(?STORAGE_USER_IDS_CACHE, {<<"existing_user">>, 1000}),
+
                     ExistingUser = #db_document{record = #user{
                         global_id = "global_id",
                         logins = [#id_token_login{provider_id = internal, login = <<"existing_user">>}],
@@ -97,6 +101,8 @@ basic_test_() ->
                     ?assertEqual("Existing team", user_logic:get_teams(ExistingUser)),
                     ?assertEqual(["existing@email.com"], user_logic:get_email_list(ExistingUser)),
                     ?assertEqual(["O=existing-dn"], user_logic:get_dn_list(ExistingUser)),
+
+                    ets:delete(?STORAGE_USER_IDS_CACHE)
                 end}
         ]}.
 
@@ -105,16 +111,20 @@ signing_in_test_() ->
         fun() ->
             meck:new(dao_lib),
             meck:new(fslogic_utils),
-            meck:new(utils)
+            meck:new(utils, [passthrough]),
+            application:set_env(?APP_Name, developer_mode, false)
         end,
         fun(_) ->
             ok = meck:unload(dao_lib),
             ok = meck:unload(fslogic_utils),
-            ok = meck:unload(utils)
+            ok = meck:unload(utils),
+            application:unset_env(?APP_Name, developer_mode)
         end,
         [
             {"new user -> create_user",
                 fun() ->
+                    ets:new(?STORAGE_USER_IDS_CACHE, [set, named_table, protected, {read_concurrency, true}]),
+                    ets:insert(?STORAGE_USER_IDS_CACHE, {<<"new_user">>, 1000}),
                     AccessToken = RefreshToken = <<"test_token">>,
                     ExpirationTime = 1234,
 
@@ -122,7 +132,7 @@ signing_in_test_() ->
                     NewUserInfoProplist =
                         [
                             {global_id, "global_id"},
-                            {login, "new_user"},
+                            {logins, [#id_token_login{provider_id = internal, login = <<"new_user">>}]},
                             {name, "New User"},
                             {teams, ["New team(team desc)", "Another team(another desc)"]},
                             {emails, ["new@email.com"]},
@@ -131,11 +141,11 @@ signing_in_test_() ->
                     % New user record that should be generated from above
                     NewUser = #user{
                         global_id = "global_id",
-                        logins = [#id_token_login{provider_id = provider, login = "new_user"}],
+                        logins = [#id_token_login{provider_id = internal, login = <<"new_user">>}],
                         name = "New User",
                         teams = ["New team(team desc)", "Another team(another desc)"],
                         email_list = ["new@email.com"],
-                        dn_list = ["new_user", "O=new-dn"],
+                        dn_list = ["O=new-dn"],
                         quota_doc = "quota_uuid",
                         access_token = AccessToken,
                         refresh_token = RefreshToken,
@@ -175,18 +185,21 @@ signing_in_test_() ->
                     meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {__Time2, __Time2, __Time2}) ->
                         File end),
                     ?assertEqual({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist, AccessToken, RefreshToken, ExpirationTime)),
-                    ?assert(meck:validate(dao_lib))
+                    ?assert(meck:validate(dao_lib)),
+                    ets:delete(?STORAGE_USER_IDS_CACHE)
                 end},
 
             {"existing user -> synchronize + update functions",
                 fun() ->
+                    ets:new(?STORAGE_USER_IDS_CACHE, [set, named_table, protected, {read_concurrency, true}]),
+                    ets:insert(?STORAGE_USER_IDS_CACHE, {<<"existing_user">>, 1000}),
                     AccessToken = RefreshToken = <<"test_token">>,
                     ExpirationTime = 12345,
 
                     % Existing record in database
                     ExistingUser = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = [#id_token_login{provider_id = provider, login = "existing_user"}],
+                        logins = [#id_token_login{provider_id = internal, login = <<"existing_user">>}],
                         name = "Existing User",
                         teams = ["Existing team"],
                         email_list = ["existing@email.com"],
@@ -199,7 +212,7 @@ signing_in_test_() ->
                     ExistingUserInfoProplist =
                         [
                             {global_id, "global_id"},
-                            {logins, ["existing_user"]},
+                            {logins, [#id_token_login{provider_id = internal, login = <<"existing_user">>}]},
                             {name, "Existing User"},
                             {teams, ["Updated team"]},
                             {emails, ["some.other@email.com"]},
@@ -208,7 +221,7 @@ signing_in_test_() ->
                     % User record after updating teams
                     UserWithUpdatedTeams = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = [#id_token_login{provider_id = provider, login = "existing_user"}],
+                        logins = [#id_token_login{provider_id = internal, login = <<"existing_user">>}],
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com"],
@@ -220,7 +233,7 @@ signing_in_test_() ->
                     % User record after updating emails
                     UserWithUpdatedEmailList = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = [#id_token_login{provider_id = provider, login = "existing_user"}],
+                        logins = [#id_token_login{provider_id = internal, login = <<"existing_user">>}],
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
@@ -232,7 +245,7 @@ signing_in_test_() ->
                     % How should user end up after synchronization
                     SynchronizedUser = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = [#id_token_login{provider_id = provider, login = "existing_user"}],
+                        logins = [#id_token_login{provider_id = internal, login = <<"existing_user">>}],
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
@@ -273,7 +286,8 @@ signing_in_test_() ->
                     meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {_Time2, _Time2, _Time2}) -> File end),
 
                     ?assertEqual({"existing_user", SynchronizedUser}, user_logic:sign_in(ExistingUserInfoProplist, AccessToken, RefreshToken, ExpirationTime)),
-                    ?assert(meck:validate(dao_lib))
+                    ?assert(meck:validate(dao_lib)),
+                    ets:delete(?STORAGE_USER_IDS_CACHE)
                 end}
         ]}.
 
