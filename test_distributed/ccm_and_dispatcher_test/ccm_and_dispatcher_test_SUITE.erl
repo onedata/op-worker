@@ -177,7 +177,7 @@ onedata_handshake_test(Config) ->
   Cert2 = ?COMMON_FILE("peer2.pem"),
 
   %% Add test users since cluster wont generate FuseId without full authentication
-  test_utils:add_user(Config, "user1", Cert1, [SpaceName]),
+  UserDoc1 = test_utils:add_user(Config, "user1", Cert1, [SpaceName]),
 
   %% Open two connections for first user
   {ok, Socket11} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}]),
@@ -196,7 +196,7 @@ onedata_handshake_test(Config) ->
 
 
   %% Add user2 and renegotiate FuseId
-  test_utils:add_user(Config, "user2", Cert2, [SpaceName]),
+  UserDoc2 = test_utils:add_user(Config, "user2", Cert2, [SpaceName]),
   FuseId21 = wss:handshakeInit(Socket21, "hostname2", []),
   ?assert(is_list(FuseId21)),
 
@@ -301,8 +301,8 @@ onedata_handshake_test(Config) ->
   ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ SpaceName], ?ProtocolVersion])),
   ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion])),
 
-  ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user1"}])),
-  ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user2"}])).
+  ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{uuid, UserDoc1#db_document.uuid}])),
+  ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{uuid, UserDoc2#db_document.uuid}])).
 
 
 %% This test checks if workers list inside dispatcher is refreshed correctly.

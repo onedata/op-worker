@@ -63,8 +63,8 @@ permissions_test(Config) ->
   UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, Team1]),
   UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, Team1]),
 
-  Login = UserDoc1#db_document.record#user.login,
-  Login2 = UserDoc2#db_document.record#user.login,
+  Login = rpc:call(FSLogicNode, user_logic, get_login, [UserDoc1]),
+  Login2 = rpc:call(FSLogicNode, user_logic, get_login, [UserDoc2]),
 
   [DN | _] = UserDoc1#db_document.record#user.dn_list,
   [DN2 | _] = UserDoc2#db_document.record#user.dn_list,
@@ -375,7 +375,7 @@ helper_requests_test(Config) ->
   UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
 
   [DN | _] = user_logic:get_dn_list(UserDoc),
-  Login = user_logic:get_login(UserDoc),
+  Login = rpc:call(FSLogicNode, user_logic, get_login, [UserDoc]),
 
   %% Get FuseId
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),

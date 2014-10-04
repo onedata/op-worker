@@ -300,7 +300,7 @@ fuse_session_cleanup_test(Config) ->
     _Cert2 = ?COMMON_FILE("peer2.pem"),
 
     %% Add test users since cluster wont generate FuseId without full authentication
-    test_utils:add_user(Config, "user1", Cert1, [SpaceName]),
+    UserDoc = test_utils:add_user(Config, "user1", Cert1, [SpaceName]),
 
     %% Open connections for the user as session #1
     {ConAns11, Socket11} = wss:connect(Host, 6666, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #1
@@ -395,7 +395,7 @@ fuse_session_cleanup_test(Config) ->
     ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ SpaceName], ?ProtocolVersion])),
     ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion])),
 
-    ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user1"}])).
+    ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{uuid, UserDoc#db_document.uuid}])).
 
 main_test(Config) ->
   NodesUp = ?config(nodes, Config),
