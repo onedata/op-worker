@@ -27,7 +27,7 @@
 %% ====================================================================
 %% Logical file organization management (only db is used)
 
--export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, get_xattr/2, set_xattr/3, remove_xattr/2, list_xattr/1, rmlink/1, read_link/1, create_symlink/2]).
+-export([mkdir/1, rmdir/1, mv/2, chown/2, ls/3, getfileattr/1, get_xattr/2, set_xattr/3, remove_xattr/2, list_xattr/1, rmlink/1, read_link/1, create_symlink/2]).
 %% File access (db and helper are used)
 -export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
 -export([change_file_perm/3, check_file_perm/2]).
@@ -179,17 +179,17 @@ mv(From, To) ->
             {Status, TmpAns}
     end.
 
-%% chown/3
+%% chown/2
 %% ====================================================================
 %% @doc Changes owner of file (in db)
 %% @end
--spec chown(FileName :: string(), Uname :: string(), Uid :: integer()) -> Result when
+-spec chown(FileName :: string(), Uid :: non_neg_integer()) -> Result when
     Result :: ok | {ErrorGeneral, ErrorDetail},
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
-chown(FileName, Uname, Uid) ->
-    Record = #changefileowner{file_logic_name = FileName, uname = Uname, uid = Uid},
+chown(FileName, Uid) ->
+    Record = #changefileowner{file_logic_name = FileName, uid = Uid},
     {Status, TmpAns} = contact_fslogic(Record),
     case Status of
         ok ->

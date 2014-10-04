@@ -76,10 +76,10 @@ spaces_permissions_test(Config) ->
   UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, Team]),
   UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, Team, Team2, Team3]),
 
+  UID2 = list_to_integer(UserDoc2#db_document.uuid),
+
   [DN1 | _] = user_logic:get_dn_list(UserDoc1),
   [DN2 | _] = user_logic:get_dn_list(UserDoc2),
-
-  Login2 = rpc:call(FSLogicNode, user_logic, get_login, [UserDoc2]),
 
   %% Connect to cluster
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
@@ -119,11 +119,11 @@ spaces_permissions_test(Config) ->
   ?assertEqual("ok", Status7),
   ?assertEqual(list_to_atom(?VOK), Answer7),
 
-  {Status8, Answer8} = chown(Socket2, TestFileNewName, 0, Login2),
+  {Status8, Answer8} = chown(Socket2, TestFileNewName, UID2),
   ?assertEqual("ok", Status8),
   ?assertEqual(list_to_atom(?VEACCES), Answer8),
 
-  {Status9, Answer9} = chown(Socket, TestFileNewName, 0, Login2),
+  {Status9, Answer9} = chown(Socket, TestFileNewName, UID2),
   ?assertEqual("ok", Status9),
   ?assertEqual(list_to_atom(?VEACCES), Answer9),
 
@@ -134,7 +134,7 @@ spaces_permissions_test(Config) ->
   FileMetaUID = FileMetaDoc#db_document.record#file_meta.uid,
   ?assertEqual(UserDoc1#db_document.uuid, FileMetaUID),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [TestFileNewName, Login2, -1])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [TestFileNewName, UID2])),
 
   {GetFileAns1, FileDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file, [TestFileNewName]),
   ?assertEqual(ok, GetFileAns1),
@@ -516,10 +516,10 @@ spaces_test(Config) ->
   {"ok", A9} = change_file_perms(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP2]), 8#555),
   ?assertEqual(eacces, A9),
 
-  {"ok", A12} = chown(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP2]), 500, ?TEST_USER),
+  {"ok", A12} = chown(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP2]), 500),
   ?assertEqual(eacces, A12),
 
-  {"ok", A13} = chown(Socket1, ?SPACES_BASE_DIR_NAME, 500, ?TEST_USER),
+  {"ok", A13} = chown(Socket1, ?SPACES_BASE_DIR_NAME, 500),
   ?assertEqual(eacces, A13),
 
   {"ok", _, _, _, A15} = create_file(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, "file"])),
@@ -1872,19 +1872,12 @@ users_separation_test(Config) ->
   test_utils:wait_for_db_reaction(),
 
   %% chown test
-  {Status23, Answer23} = chown(Socket, TestFile, 77777, "unknown"),
+  {Status23, Answer23} = chown(Socket, TestFile, 77777),
   ?assertEqual("ok", Status23),
   ?assertEqual(list_to_atom(?VEACCES), Answer23),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login1 ++ "/" ++ TestFile, Login2, 0])),
-%%   {Status24, Answer24} = chown(Socket, TestFile, 0, Login2),
-%%   ?assertEqual("ok", Status24),
-%%   ?assertEqual(list_to_atom(?VOK), Answer24),
-
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login2 ++ "/" ++ TestFile, "unknown", UID1])),
-%%   {Status25, Answer25} = chown(Socket2, TestFile, UID1, "unknown"),
-%%   ?assertEqual("ok", Status25),
-%%   ?assertEqual(list_to_atom(?VOK), Answer25),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login1 ++ "/" ++ TestFile, UID2])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login2 ++ "/" ++ TestFile, UID1])),
 
   %% Check if owners are set properly
   {Status26, Attr3} = get_file_attr(Socket, TestFile),
@@ -1919,13 +1912,13 @@ users_separation_test(Config) ->
   ?assertEqual(Attr4#fileattr.gid, FM_Attrs#fileattributes.gid),
   ?assertEqual(Attr4#fileattr.type, FM_Attrs#fileattributes.type),
   ?assertEqual(Attr4#fileattr.size, FM_Attrs#fileattributes.size),
-  ?assertEqual(Attr4#fileattr.uname, FM_Attrs#fileattributes.uname),
+  ?assertEqual(Attr4#fileattr.uname, utils:ensure_list(FM_Attrs#fileattributes.uname)),
   ?assertEqual(Attr4#fileattr.gname, FM_Attrs#fileattributes.gname),
   ?assertEqual(Attr4#fileattr.ctime, FM_Attrs#fileattributes.ctime),
   ?assertEqual(Attr4#fileattr.mtime, FM_Attrs#fileattributes.mtime),
   ?assertEqual(Attr4#fileattr.atime, FM_Attrs#fileattributes.atime),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login1 ++ "/" ++ TestFile, Login1, UID1])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login1 ++ "/" ++ TestFile, UID1])),
   {Status6, Answer6} = delete_file(Socket, TestFile),
   ?assertEqual("ok", Status6),
   ?assertEqual(list_to_atom(?VOK), Answer6),
@@ -1940,7 +1933,7 @@ users_separation_test(Config) ->
   ?assertEqual(Helper4, Helper8),
   ?assertEqual(Id4, Id8),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login2 ++ "/" ++ TestFile, Login2, UID2])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login2 ++ "/" ++ TestFile, UID2])),
   {Status9, Answer9} = delete_file(Socket2, TestFile),
   ?assertEqual("ok", Status9),
   ?assertEqual(list_to_atom(?VOK), Answer9),
@@ -2726,8 +2719,8 @@ update_times(Socket, FileName, ATime, MTime) ->
   Answer2 = records_translator:translate(Answer, "communication_protocol"),
   {Status, Answer2}.
 
-chown(Socket, FileName, UID, UName) ->
-  FslogicMessage = #changefileowner{file_logic_name = FileName, uid = UID, uname = UName},
+chown(Socket, FileName, UID) ->
+  FslogicMessage = #changefileowner{file_logic_name = FileName, uid = UID},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_changefileowner(FslogicMessage)),
 
   FuseMessage = #fusemessage{message_type = "changefileowner", input = FslogicMessageMessageBytes},
@@ -2747,27 +2740,26 @@ chown(Socket, FileName, UID, UName) ->
   Answer2 = records_translator:translate(Answer, "communication_protocol"),
   {Status, Answer2}.
 
-chgrp(Socket, FileName, GID, GName) ->
-  FslogicMessage = #changefilegroup{file_logic_name = FileName, gid = GID, gname = GName},
-  FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_changefilegroup(FslogicMessage)),
-
-  FuseMessage = #fusemessage{message_type = "changefilegroup", input = FslogicMessageMessageBytes},
-  FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
-
-  Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-    message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
-  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
-
-  wss:send(Socket, MessageBytes),
-  {SendAns, Ans} = wss:recv(Socket, 5000),
-  ?assertEqual(ok, SendAns),
-
-  #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
-  Answer = communication_protocol_pb:decode_atom(Bytes),
-  Answer2 = records_translator:translate(Answer, "communication_protocol"),
-  {Status, Answer2}.
-
+%% chgrp(Socket, FileName, GID, GName) ->
+%%   FslogicMessage = #changefilegroup{file_logic_name = FileName, gid = GID, gname = GName},
+%%   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_changefilegroup(FslogicMessage)),
+%%
+%%   FuseMessage = #fusemessage{message_type = "changefilegroup", input = FslogicMessageMessageBytes},
+%%   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+%%
+%%   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+%%     message_decoder_name = "fuse_messages", answer_type = "atom",
+%%     answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+%%   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+%%
+%%   wss:send(Socket, MessageBytes),
+%%   {SendAns, Ans} = wss:recv(Socket, 5000),
+%%   ?assertEqual(ok, SendAns),
+%%
+%%   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+%%   Answer = communication_protocol_pb:decode_atom(Bytes),
+%%   Answer2 = records_translator:translate(Answer, "communication_protocol"),
+%%   {Status, Answer2}.
 
 clear_old_descriptors(Node) ->
   {Megaseconds, Seconds, _Microseconds} = os:timestamp(),
