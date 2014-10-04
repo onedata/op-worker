@@ -24,8 +24,12 @@
 -spec gather_metadata() -> list().
 %% ====================================================================
 gather_metadata() ->
-    % Add user's dn to metadata if in context
-    case fslogic_context:get_user_dn() of
+    % Add user's ID and FUSE ID to metadata if in context
+    case fslogic_context:get_user_id() of
         undefined -> [];
-        DN -> [{dn, DN}]
+        UserId -> [{userID, UserId}]
+    end ++
+    case fslogic_context:get_fuse_id() of
+        undefined -> [];
+        FuseId -> [{fuseID, FuseId}]
     end.

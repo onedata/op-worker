@@ -14,6 +14,7 @@
 
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao_types.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

@@ -997,30 +997,32 @@ create_space_dir(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) 
 {rdnSequence, [#'AttributeTypeAndValue'{}]}, ProtocolVersion :: integer()) ->
     {boolean() | no_return()}.
 %% ====================================================================
+quota_exceeded(#db_document{uuid = Uuid, record = #user{}} = UserDoc, ProtocolVersion) ->
+    {ok, SpaceUsed} = user_logic:get_files_size(Uuid, ProtocolVersion),
+    {ok, #quota{size = Quota}} = user_logic:get_quota(UserDoc),
+    ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
+
+    %% TODO: there is one little problem with this - we dont recognize situation in which quota has been manually changed to
+    %% exactly the same value as default_quota
+    {ok, DefaultQuotaSize} = application:get_env(?APP_Name, default_quota),
+    QuotaToInsert = case Quota =:= DefaultQuotaSize of
+                        true -> ?DEFAULT_QUOTA_DB_TAG;
+                        _ -> Quota
+                    end,
+
+    case SpaceUsed > Quota of
+        true ->
+            update_quota(UserDoc, #quota{size = QuotaToInsert, exceeded = true}),
+            true;
+        _ ->
+            update_quota(UserDoc, #quota{size = QuotaToInsert, exceeded = false}),
+            false
+    end;
+
 quota_exceeded(UserQuery, ProtocolVersion) ->
     case user_logic:get_user(UserQuery) of
         {ok, UserDoc} ->
-            Uuid = UserDoc#db_document.uuid,
-            {ok, SpaceUsed} = user_logic:get_files_size(Uuid, ProtocolVersion),
-            {ok, #quota{size = Quota}} = user_logic:get_quota(UserDoc),
-            ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
-
-            %% TODO: there is one little problem with this - we dont recognize situation in which quota has been manually changed to
-            %% exactly the same value as default_quota
-            {ok, DefaultQuotaSize} = application:get_env(?APP_Name, default_quota),
-            QuotaToInsert = case Quota =:= DefaultQuotaSize of
-                                true -> ?DEFAULT_QUOTA_DB_TAG;
-                                _ -> Quota
-                            end,
-
-            case SpaceUsed > Quota of
-                true ->
-                    update_quota(UserDoc, #quota{size = QuotaToInsert, exceeded = true}),
-                    true;
-                _ ->
-                    update_quota(UserDoc, #quota{size = QuotaToInsert, exceeded = false}),
-                    false
-            end;
+            quota_exceeded(UserDoc, ProtocolVersion);
         Error ->
             throw({cannot_fetch_user, Error})
     end.

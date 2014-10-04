@@ -845,7 +845,7 @@ check_access_type(File) ->
 -spec setup_ctx(File :: string()) -> ok | {error, no_user}.
 %% ====================================================================
 setup_ctx(File) ->
-    ?debug("Setup storage ctx based on fslogc ctx -> DN: ~p, AccessToken: ~p", [fslogic_context:get_user_dn(), fslogic_context:get_gr_auth()]),
+    ?debug("Setup storage ctx based on user ctx: ~p", [fslogic_context:get_user_context()]),
 
     case fslogic_objects:get_user() of
         {ok, #db_document{record = #user{global_id = GRUID} = UserRec} = UserDoc} ->
