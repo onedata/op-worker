@@ -125,7 +125,7 @@ handle_http_upload(Req) ->
 
             catch Type:Message ->
                 ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
-                    [fslogic_context:get_user_dn(), Type, Message]),
+                    [fslogic_context:get_user_id(), Type, Message]),
                 {ok, _ErrorReq} = opn_cowboy_bridge:apply(cowboy_req, reply, [500, cowboy_req:set([{connection, close}], Req)])
             end
     end.

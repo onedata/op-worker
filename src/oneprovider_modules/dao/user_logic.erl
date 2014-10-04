@@ -854,8 +854,7 @@ create_dirs_at_storage(SpacesInfo) ->
 create_dirs_at_storage(SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
 
-    DN_CTX = fslogic_context:get_user_dn(),
-    {AT_CTX1, AT_CTX2} = fslogic_context:get_gr_auth(),
+    UserCtx = fslogic_context:get_user_context(),
 
     fslogic_context:clear_user_ctx(),
 
@@ -884,8 +883,7 @@ create_dirs_at_storage(SpacesInfo, Storage) ->
     end,
 
     Result = lists:foldl(CreateTeamsDirs, ok, SpacesInfo),
-    fslogic_context:set_user_dn(DN_CTX),
-    fslogic_context:set_gr_auth(AT_CTX1, AT_CTX2),
+    fslogic_context:set_user_context(UserCtx),
 
     Result.
 
