@@ -21,10 +21,12 @@
 basic_test_() ->
     {foreach,
         fun() ->
-            meck:new(dao_lib)
+            meck:new(dao_lib),
+            application:set_env(?APP_Name, trusted_openid_providers, [plgrid])
         end,
         fun(_) ->
-            ok = meck:unload(dao_lib)
+            ok = meck:unload(dao_lib),
+            application:unset_env(?APP_Name, trusted_openid_providers)
         end,
         [
             {"get_user",
@@ -89,7 +91,7 @@ basic_test_() ->
 
                     ExistingUser = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = [#id_token_login{provider_id = internal, login = <<"existing_user">>}],
+                        logins = [#id_token_login{provider_id = plgrid, login = <<"existing_user">>}],
                         name = "Existing User",
                         teams = "Existing team",
                         email_list = ["existing@email.com"],
@@ -112,13 +114,15 @@ signing_in_test_() ->
             meck:new(dao_lib),
             meck:new(fslogic_utils),
             meck:new(utils, [passthrough]),
-            application:set_env(?APP_Name, developer_mode, false)
+            application:set_env(?APP_Name, developer_mode, false),
+            application:set_env(?APP_Name, trusted_openid_providers, [plgrid])
         end,
         fun(_) ->
             ok = meck:unload(dao_lib),
             ok = meck:unload(fslogic_utils),
             ok = meck:unload(utils),
-            application:unset_env(?APP_Name, developer_mode)
+            application:unset_env(?APP_Name, developer_mode),
+            application:unset_env(?APP_Name, trusted_openid_providers)
         end,
         [
             {"new user -> create_user",
@@ -132,7 +136,7 @@ signing_in_test_() ->
                     NewUserInfoProplist =
                         [
                             {global_id, "global_id"},
-                            {logins, [#id_token_login{provider_id = internal, login = <<"new_user">>}]},
+                            {logins, [#id_token_login{provider_id = plgrid, login = <<"new_user">>}]},
                             {name, "New User"},
                             {teams, ["New team(team desc)", "Another team(another desc)"]},
                             {emails, ["new@email.com"]},
@@ -141,7 +145,7 @@ signing_in_test_() ->
                     % New user record that should be generated from above
                     NewUser = #user{
                         global_id = "global_id",
-                        logins = [#id_token_login{provider_id = internal, login = <<"new_user">>}],
+                        logins = [#id_token_login{provider_id = plgrid, login = <<"new_user">>}],
                         name = "New User",
                         teams = ["New team(team desc)", "Another team(another desc)"],
                         email_list = ["new@email.com"],
@@ -199,7 +203,7 @@ signing_in_test_() ->
                     % Existing record in database
                     ExistingUser = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = [#id_token_login{provider_id = internal, login = <<"existing_user">>}],
+                        logins = [#id_token_login{provider_id = plgrid, login = <<"existing_user">>}],
                         name = "Existing User",
                         teams = ["Existing team"],
                         email_list = ["existing@email.com"],
@@ -212,7 +216,7 @@ signing_in_test_() ->
                     ExistingUserInfoProplist =
                         [
                             {global_id, "global_id"},
-                            {logins, [#id_token_login{provider_id = internal, login = <<"existing_user">>}]},
+                            {logins, [#id_token_login{provider_id = plgrid, login = <<"existing_user">>}]},
                             {name, "Existing User"},
                             {teams, ["Updated team"]},
                             {emails, ["some.other@email.com"]},
@@ -221,7 +225,7 @@ signing_in_test_() ->
                     % User record after updating teams
                     UserWithUpdatedTeams = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = [#id_token_login{provider_id = internal, login = <<"existing_user">>}],
+                        logins = [#id_token_login{provider_id = plgrid, login = <<"existing_user">>}],
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com"],
@@ -233,7 +237,7 @@ signing_in_test_() ->
                     % User record after updating emails
                     UserWithUpdatedEmailList = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = [#id_token_login{provider_id = internal, login = <<"existing_user">>}],
+                        logins = [#id_token_login{provider_id = plgrid, login = <<"existing_user">>}],
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
@@ -245,7 +249,7 @@ signing_in_test_() ->
                     % How should user end up after synchronization
                     SynchronizedUser = #db_document{record = #user{
                         global_id = "global_id",
-                        logins = [#id_token_login{provider_id = internal, login = <<"existing_user">>}],
+                        logins = [#id_token_login{provider_id = plgrid, login = <<"existing_user">>}],
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
