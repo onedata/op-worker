@@ -946,14 +946,10 @@ end_per_suite(Config) ->
 
 object_exists(Path) ->
     DN=get(dn),
-    Ans = rpc_call_node(fun() ->
+    rpc_call_node(fun() ->
         fslogic_context:set_user_dn(DN),
-        logical_files_manager:getfileattr(Path)
-    end),
-    case Ans of
-        {ok,_} -> true;
-        _ -> false
-    end.
+        logical_files_manager:exists(Path)
+    end).
 
 create_dir(Path) ->
     DN=get(dn),
