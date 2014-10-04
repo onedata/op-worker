@@ -89,7 +89,7 @@ handle_http_upload(Req) ->
             {ok, St, Context2} = SessHandler:init([], Context1),
             wf_context:context(Context2),
             {ok, UserDoc} = user_logic:get_user({uuid, gui_ctx:get_user_id()}),
-            fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserDoc))),
+            fslogic_context:set_user_context(UserDoc),
             {St, Context2, SessHandler}
         catch T1:M1 ->
             ?warning("Cannot establish session context for user content request - ~p:~p", [T1, M1]),

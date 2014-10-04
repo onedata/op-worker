@@ -47,7 +47,7 @@
 
 %% Check if user is logged in and has dn defined.
 main() ->
-    case opn_gui_utils:maybe_redirect(true, true, true) of
+    case opn_gui_utils:maybe_redirect(true, true) of
         true ->
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
@@ -227,15 +227,14 @@ api_event("submit_chmod_event", Args, _Ctx) ->
 
 
 event(init) ->
-    case gui_ctx:user_logged_in() and opn_gui_utils:dn_and_storage_defined() of
+    case gui_ctx:user_logged_in() and opn_gui_utils:storage_defined() of
         false ->
             skip;
         true ->
-            VCUID = opn_gui_utils:get_user_dn(),
             GRUID = opn_gui_utils:get_global_user_id(),
             AccessToken = opn_gui_utils:get_access_token(),
             Hostname = gui_ctx:get_requested_hostname(),
-            {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(VCUID, GRUID, AccessToken, Hostname) end),
+            {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(GRUID, AccessToken, Hostname) end),
             put(comet_pid, Pid)
     end;
 
@@ -260,14 +259,13 @@ event({action, Fun, Args}) ->
                     Other
             end
         end, Args),
-    opn_gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, Fun, NewArgs}], true).
+    opn_gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, Fun, NewArgs}]).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Comet loop and functions evaluated by comet
-comet_loop_init(UserId, GRUID, UserAccessToken, RequestedHostname) ->
+comet_loop_init(GRUID, UserAccessToken, RequestedHostname) ->
     % Initialize page state
-    fslogic_context:set_user_dn(UserId),
     fslogic_context:set_gr_auth(GRUID, UserAccessToken),
 
     set_requested_hostname(RequestedHostname),

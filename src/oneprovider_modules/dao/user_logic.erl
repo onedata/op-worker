@@ -77,8 +77,8 @@ create_partial_user(GRUID, Spaces) ->
 %% in the database and info received from OpenID provider.
 %% @end
 -spec sign_in(Proplist, AccessToken :: binary(),
-              RefreshToken :: binary(),
-              AccessExpirationTime :: non_neg_integer()) ->
+    RefreshToken :: binary(),
+    AccessExpirationTime :: non_neg_integer()) ->
     Result when
     Proplist :: list(),
     Result :: {string(), user_doc()} | no_return().
@@ -130,17 +130,10 @@ sign_in(Proplist, AccessToken, RefreshToken, AccessExpirationTime) ->
 %% ====================================================================
 create_user(GlobalId, Logins, Name, Teams, Email, DnList) ->
     create_user(GlobalId, Logins, Name, Teams, Email, DnList, <<>>, <<>>, 0).
-create_user(GlobalId, Logins, Name, Teams, Email, DnList0, AccessToken, RefreshToken, AccessExpirationTime) ->
-    ?debug("Creating user: ~p", [{GlobalId, Logins, Name, Teams, Email, DnList0}]),
+create_user(GlobalId, Logins, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime) ->
+    ?debug("Creating user: ~p", [{GlobalId, Logins, Name, Teams, Email, DnList}]),
     Quota = #quota{},
     {QuotaAns, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
-
-    DnList = case DnList0 of
-                 DnList0 when is_list(DnList0) ->
-                     DnList0;
-                 _ ->
-                     []
-             end,
 
     User = #user
     {
@@ -148,30 +141,18 @@ create_user(GlobalId, Logins, Name, Teams, Email, DnList0, AccessToken, RefreshT
         logins = Logins,
         name = Name,
         teams = case Teams of
-                    Teams when is_list(Teams) -> Teams;
+                    List when is_list(List) -> List;
                     _ -> []
                 end,
         email_list = case Email of
                          List when is_list(List) -> List;
                          _ -> []
                      end,
-
-        %% Add login as first DN that user has - this enables use of GUI without having any
-        %% certificates registered while using provider without Global Registry, which
-        %% means that its need only when developer_mode is turned on.
-        %% It bases on assumption that every login is unique.
-        dn_list = case oneprovider_node_app:get_env(developer_mode) of
-                      {ok, true} ->
-                          case [utils:ensure_list(Login) || #id_token_login{provider_id = plgrid, login = Login} <- Logins] of
-                              [Login | _] ->
-                                  [Login | DnList];
-                              _ -> DnList
-                          end;
-                      {ok, false} ->
-                          DnList
+        dn_list = case DnList of
+                      List when is_list(List) -> List;
+                      _ -> []
                   end,
         quota_doc = QuotaUUID,
-
         access_token = AccessToken,
         refresh_token = RefreshToken,
         access_expiration_time = AccessExpirationTime
@@ -224,7 +205,6 @@ get_user({rdnSequence, RDNSequence}) ->
 
 get_user(Key) ->
     dao_lib:apply(dao_users, get_user, [Key], 1).
-
 
 
 %% synchronize_spaces_info/2
@@ -742,7 +722,7 @@ update_access_credentials_int(UserDoc, AccessToken, RefreshToken, ExpirationTime
 %% received from OpenID provider.
 %% @end
 -spec synchronize_user_info(User, Logins, Teams, Emails, DnList, AccessToken :: binary(),
-                            RefreshToken :: binary(), AccessExpiration :: non_neg_integer()) -> Result when
+    RefreshToken :: binary(), AccessExpiration :: non_neg_integer()) -> Result when
     User :: user_doc(),
     Logins :: [#id_token_login{}],
     Teams :: string(),

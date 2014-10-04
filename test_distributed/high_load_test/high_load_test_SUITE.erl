@@ -80,7 +80,6 @@ main_test(Config) ->
   for(1, TestRequestsNum, TestFun),
   Answers = count_answers(),
 
-%%   ct:print("Answers ~p~n", [Answers]),
   ?assertEqual(5*TestRequestsNum, proplists:get_value(test_fun_ok, Answers, 0)),
   ?assertEqual(5*TestRequestsNum, proplists:get_value(pong, Answers, 0)).
 
@@ -159,7 +158,6 @@ multi_node_test(Config) ->
   for(1, TestRequestsNum, TestFun),
   Answers = count_answers(),
 
-%%   ct:print("Answers ~p~n", [Answers]),
   ?assertEqual(5*length(NodesUp)*TestRequestsNum, proplists:get_value(test_fun_ok, Answers, 0)),
   ?assertEqual(5*length(NodesUp)*TestRequestsNum, proplists:get_value(pong, Answers, 0)).
 
@@ -263,7 +261,6 @@ sub_proc_load_test(Config) ->
 
   Answers = count_answers(),
 
-%%   ct:print("Answers ~p~n", [Answers]),
   ?assertEqual(12*TestRequestsNum, proplists:get_value(test_fun_ok, Answers, 0)),
   ?assertEqual(12*TestRequestsNum, proplists:get_value(sub_proc_ok, Answers, 0)).
 

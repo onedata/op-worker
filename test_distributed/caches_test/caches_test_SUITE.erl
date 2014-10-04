@@ -887,7 +887,6 @@ sub_proc_test(Config) ->
   for(1, TestRequestsNum, TestFun),
 
   Ans = count_answers(6 * TestRequestsNum),
-%%   ct:print("Ans: ~p~n", [Ans]),
   ?assertEqual(10, length(Ans)),
   Keys = proplists:get_keys(Ans),
   ?assertEqual(6* TestRequestsNum, lists:foldl(fun(K, Sum) ->

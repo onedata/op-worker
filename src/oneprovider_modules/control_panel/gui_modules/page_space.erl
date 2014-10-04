@@ -44,7 +44,7 @@
 -spec main() -> #dtl{}.
 %% ====================================================================
 main() ->
-    case opn_gui_utils:maybe_redirect(true, false, false) of
+    case opn_gui_utils:maybe_redirect(true, false) of
         true ->
             gui_jq:redirect_to_login(),
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};

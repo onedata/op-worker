@@ -836,20 +836,15 @@ get_file_uuid(FileName) ->
 get_file_user_dependent_name_by_uuid(UUID) ->
     case get_file_full_name_by_uuid(UUID) of
         {ok, FullPath} ->
-            case fslogic_context:get_user_dn() of
-                undefined ->
-                    {ok, FullPath};
-                UserDN ->
-                    case dao_lib:apply(dao_users, get_user, [{dn, UserDN}], 1) of
-                        {ok, #db_document{} = UserDoc} ->
-                            Login = user_logic:get_login(UserDoc),
-                            case string:str(FullPath, Login ++ "/") of
-                                1 -> {ok, string:sub_string(FullPath, length(Login ++ "/") + 1)};
-                                _ -> {ok, FullPath}
-                            end;
-                        {ErrorGeneral, ErrorDetail} ->
-                            {ErrorGeneral, ErrorDetail}
-                    end
+            case fslogic_objects:get_user() of
+                {ok, UserDoc} ->
+                    Login = user_logic:get_login(UserDoc),
+                    case string:str(FullPath, Login ++ "/") of
+                        1 -> {ok, string:sub_string(FullPath, length(Login ++ "/") + 1)};
+                        _ -> {ok, FullPath}
+                    end;
+                {ErrorGeneral, ErrorDetail} ->
+                    {ErrorGeneral, ErrorDetail}
             end;
         {ErrorGeneral, ErrorDetail} ->
             {ErrorGeneral, ErrorDetail}
