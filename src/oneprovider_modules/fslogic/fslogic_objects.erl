@@ -129,7 +129,7 @@ get_user() ->
 %% @doc Gets user associated with given DN
 %%      If DN is 'undefined', ROOT user is returned.
 %% @end
--spec get_user({dn, DN :: string()} | user_doc()) -> {ok, UserDoc :: user_doc()} | {error, any()}.
+-spec get_user({Key :: term(), Value :: term()} | user_doc() | undefined) -> {ok, UserDoc :: user_doc()} | {error, any()}.
 %% ====================================================================
 get_user(undefined) ->
     {ok, #db_document{uuid = ?CLUSTER_USER_ID, record = #user{logins = [#id_token_login{login = "root", provider_id = internal}], role = admin}}};
