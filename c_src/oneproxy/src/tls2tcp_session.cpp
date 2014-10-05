@@ -90,7 +90,7 @@ bool tls2tcp_session::handle_verify_certificate(
     std::array<char, 256> subject_name;
     X509_NAME_oneline(X509_get_subject_name(cert), subject_name.data(),
                       subject_name.size());
-    LOG(DEBUG) << "Verifying " << subject_name;
+    LOG(DEBUG) << "Verifying " << subject_name.data();
 #endif
 
     return true;
