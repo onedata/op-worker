@@ -79,7 +79,7 @@ error_value(?no_certificate_chain_found) ->
 error_value({?user_unknown, DnString}) ->
     [?error_unauthorized_code, [{<<"NoUserFoundError">>, <<"Cannot find user">>}], "No user found with given DN: ~p", [DnString], debug];
 
-error_value(?group_dir_delete) ->
+error_value(?space_dir_delete) ->
     [?error_forbidden_code, [{<<"SpaceDeleteError">>, <<"Deleting space directory, which is forbidden.">>}], "Deleting space dir", [], debug];
 error_value(?forbidden) ->
     [?error_forbidden_code, [{<<"Forbidden">>, <<"Requested operation is forbidden.">>}], "Deleting space dir", [], debug];

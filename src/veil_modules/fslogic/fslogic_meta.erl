@@ -59,7 +59,7 @@ update_user_files_size_view(ProtocolVersion) ->
 %%      In this case returned #file record will have #file.meta_doc field updated and shall be saved to DB after this call.
 %% @end
 -spec update_meta_attr(File :: #file{}, Attr, Value :: term()) -> Result :: #file{} when
-    Attr :: atime | mtime | ctime | size | times | acl | xattrs.
+    Attr :: atime | mtime | ctime | size | times | acl | xattr_set| xattr_remove.
 %% ====================================================================
 update_meta_attr(File, Attr, Value) ->
     update_meta_attr(File, Attr, Value, false).
@@ -95,7 +95,7 @@ update_parent_ctime(Dir, CTime) ->
 %% @doc Internal implementation of update_meta_attr/3. See update_meta_attr/3 for more information.
 %% @end
 -spec update_meta_attr(File :: #file{}, Attr, Value :: term(), RetryCount :: integer(), ForceSynch :: boolean()) -> Result :: #file{} when
-    Attr :: atime | mtime | ctime | size | times | acl | xattrs.
+    Attr :: atime | mtime | ctime | size | times | acl | xattr_set| xattr_remove.
 update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount, ForceSynch) ->
     {File1, #veil_document{record = MetaRec} = MetaDoc} = init_file_meta(File),
     MetaDocChanged = MetaUUID =/= MetaDoc#veil_document.uuid,
@@ -121,7 +121,10 @@ update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount, For
                 atime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, atime = max(Value, MetaRec#file_meta.atime)};
                 size when Value >= 0 -> MetaRec#file_meta{uid = File#file.uid, size = Value};
                 acl -> MetaRec#file_meta{uid = File#file.uid, acl = Value};
-                xattrs -> MetaRec#file_meta{uid = File#file.uid, xattrs = Value};
+                xattr_set ->
+                    {Key, Val} = Value,
+                    MetaRec#file_meta{uid = File#file.uid, xattrs = [{Key, Val} | proplists:delete(Key, MetaRec#file_meta.xattrs)]};
+                xattr_remove -> MetaRec#file_meta{uid = File#file.uid, xattrs = proplists:delete(Value, MetaRec#file_meta.xattrs)};
                 _ -> MetaRec
             end,
         case MetaRec of

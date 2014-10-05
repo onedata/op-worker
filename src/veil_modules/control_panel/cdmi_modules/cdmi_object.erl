@@ -16,6 +16,7 @@
 -include("veil_modules/control_panel/cdmi_object.hrl").
 -include("veil_modules/control_panel/cdmi_error.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("files_common.hrl").
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
@@ -54,7 +55,7 @@ malformed_request(Req, #state{filepath = Filepath} = State) ->
 %% ====================================================================
 resource_exists(Req, State = #state{filepath = Filepath}) ->
     case logical_files_manager:getfileattr(Filepath) of
-        {ok, #fileattributes{type = "REG"} = Attr} -> {true, Req, State#state{attributes = Attr}};
+        {ok, #fileattributes{type = ?REG_TYPE_PROT} = Attr} -> {true, Req, State#state{attributes = Attr}};
         {ok, _} ->
             Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath++"/"), Req),
             cdmi_error:error_reply(Req1, State, {?moved_permanently, Filepath});
@@ -328,7 +329,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     Error_ -> {create, Error_}
                 end;
             {undefined, MoveURI} -> {move, logical_files_manager:mv(binary_to_list(MoveURI),Filepath)};
-            {_CopyURI, undefined} -> {copy, unimplemented}
+            {CopyURI, undefined} -> {copy, logical_files_manager:cp(binary_to_list(CopyURI),Filepath)}
         end,
 
     %check creation result, update value and metadata depending on creation type
@@ -348,7 +349,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                             throw({?write_object_unknown_error, Error}) %todo handle create file forbidden
                     end;
                 {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> throw(?forbidden);
-                Error1 -> throw({?put_container_unknown_error, Error1})
+                Error1 -> throw({?put_object_unknown_error, Error1})
             end,
 
             % return response
@@ -408,7 +409,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
                     set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
                     {true, Req1, State};
-                Error -> cdmi_error:error_reply(Req, State, {?put_container_unknown_error, Error})
+                Error -> cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error})
             end
     end.
 

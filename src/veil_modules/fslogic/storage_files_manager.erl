@@ -252,7 +252,7 @@ read(Storage_helper_info, File, Offset, Size) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
         {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
             case has_permission(File, read) of
-                true -> ok;
+                true -> set_root_ctx();
                 false -> setup_ctx(File)
             end;
         _ -> setup_ctx(File)
@@ -312,7 +312,7 @@ write(Storage_helper_info, File, Offset, Buf) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
         {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
             case has_permission(File, write) of
-                true -> ok;
+                true -> set_root_ctx();
                 false -> setup_ctx(File)
             end;
         _ -> setup_ctx(File)
@@ -363,7 +363,7 @@ write(Storage_helper_info, File, Buf) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
         {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
             case has_permission(File, write) of
-                true -> ok;
+                true -> set_root_ctx();
                 false -> setup_ctx(File)
             end;
         _ -> setup_ctx(File)
@@ -486,7 +486,7 @@ truncate(Storage_helper_info, File, Size) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
              {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
                  case has_permission(File, write) of
-                     true -> ok;
+                     true -> set_root_ctx();
                      false -> setup_ctx(File)
                  end;
              _ -> setup_ctx(File)
@@ -523,7 +523,7 @@ delete(Storage_helper_info, File) ->
     ok = case get_cached_value(File, mode, Storage_helper_info) of
              {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
                  case has_permission(File, delete) of
-                     true -> ok;
+                     true -> set_root_ctx();
                      false -> setup_ctx(File)
                  end;
              _ -> setup_ctx(File)
@@ -874,6 +874,17 @@ check_access_type(File) ->
             {error, too_short_path}
     end.
 
+%% set_root_ctx/0
+%% ====================================================================
+%% @doc Setups user filesystem context (uid and gid for veilhelpers)
+%%      as a root. Use with caution!
+%% @end
+-spec set_root_ctx() -> ok.
+%% ====================================================================
+set_root_ctx() ->
+    fslogic_context:set_fs_group_ctx(undefined),
+    fslogic_context:set_fs_user_ctx(undefined),
+    ok.
 
 %% setup_ctx/1
 %% ====================================================================

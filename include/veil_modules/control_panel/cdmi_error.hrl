@@ -28,7 +28,7 @@
 -define(no_certificate_chain_found, no_certificate_chain_found).
 -define(user_unknown, user_unknown).
 
--define(group_dir_delete, group_dir_delete).
+-define(space_dir_delete, group_dir_delete).
 -define(forbidden, forbidden).
 
 -define(not_found, not_found).

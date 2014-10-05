@@ -52,6 +52,7 @@ update_user_metadata(Filepath, UserMetadata) ->
 %% ====================================================================
 -spec update_user_metadata(Filepath :: string(), UserMetadata :: [{Name :: binary(), Value :: binary()}] | undefined,
     URIMetadataNames :: [Name :: binary()]) -> ok | no_return().
+update_user_metadata(_Filepath, undefined, []) -> ok;
 update_user_metadata(Filepath, undefined, URIMetadataNames) ->
     update_user_metadata(Filepath, [], URIMetadataNames);
 update_user_metadata(Filepath, UserMetadata, AllURIMetadataNames) ->

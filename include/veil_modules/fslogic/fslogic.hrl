@@ -55,7 +55,8 @@
   size = 0,
   uname = [],
   gname = [],
-  links = 0
+  links = 0,
+  has_acl = false
 }).
 
 %% Directory entry: name :: string(), type :: file_type_protocol().
@@ -104,5 +105,8 @@
 -define(CACHE_TREE_MAX_DEPTH, 6).
 -define(CACHE_TREE_MAX_WIDTH, 10).
 -define(CACHE_REQUEST_TIMEOUT,1000).
+
+%% default buffer size for copy operation
+-define(default_copy_buffer_size, 1048576).
 
 -endif.

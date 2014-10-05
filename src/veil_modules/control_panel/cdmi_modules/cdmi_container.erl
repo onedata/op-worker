@@ -53,7 +53,7 @@ malformed_request(Req, #state{filepath = Filepath} = State) ->
 %% ====================================================================
 resource_exists(Req, State = #state{filepath = Filepath}) ->
     case logical_files_manager:getfileattr(Filepath) of
-        {ok, #fileattributes{type = "DIR"} = Attr} -> {true, Req, State#state{attributes = Attr}};
+        {ok, #fileattributes{type = ?DIR_TYPE_PROT} = Attr} -> {true, Req, State#state{attributes = Attr}};
         {ok, _} ->
             Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath), Req),
             cdmi_error:error_reply(Req1,State,{?moved_permanently, Filepath});
@@ -105,13 +105,10 @@ content_types_accepted(Req, State) ->
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 delete_resource(Req, #state{filepath = Filepath} = State) ->
-    case is_group_dir(Filepath) of
-        false ->
-            case fs_remove_dir(Filepath) of
-                ok -> {true, Req, State};
-                Error -> cdmi_error:error_reply(Req, State, {?dir_delete_unknown_error, Error}) %todo handle dir error forbidden
-            end;
-        true -> cdmi_error:error_reply(Req, State, ?group_dir_delete)
+    case logical_files_manager:rmdir_recursive(Filepath) of
+        ok -> {true, Req, State};
+        {logical_file_system_error, Error} when Error == ?VEPERM orelse Error == ?VEACCES  -> cdmi_error:error_reply(Req, State, ?forbidden);
+        Error -> cdmi_error:error_reply(Req, State, {?dir_delete_unknown_error, Error})
     end.
 
 %% ====================================================================
@@ -157,7 +154,7 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
         case {RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined} -> logical_files_manager:mkdir(Filepath);
             {undefined, MoveURI} -> logical_files_manager:mv(binary_to_list(MoveURI),Filepath);
-            {_CopyURI, undefined} -> unimplemented
+            {CopyURI, undefined} -> logical_files_manager:cp(binary_to_list(CopyURI),Filepath)
         end,
 
     %check result and update metadata
@@ -170,7 +167,7 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
                         {struct, prepare_container_ans(?default_get_dir_opts, State#state{attributes = Attr, opts = ?default_get_dir_opts})}),
                     Req2 = cowboy_req:set_resp_body(Response, Req1),
                     {true, Req2, State};
-                Error -> %todo handle getattr forbidden
+                Error ->
                     logical_files_manager:rmdir(Filepath),
                     cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error})
             end;
@@ -183,8 +180,7 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
             URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
             cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};
-        {logical_file_system_error, ?VEPERM} -> cdmi_error:error_reply(Req, State, ?forbidden);
-        {logical_file_system_error, ?VEACCES} -> cdmi_error:error_reply(Req, State, ?forbidden);
+        {logical_file_system_error, Error} when Error == ?VEPERM orelse Error == ?VEACCES  -> cdmi_error:error_reply(Req, State, ?forbidden);
         {logical_file_system_error, ?VENOENT} -> cdmi_error:error_reply(Req1, State, ?parent_not_found);
         Error -> cdmi_error:error_reply(Req1, State, {?put_container_unknown_error, Error})
     end.
@@ -201,8 +197,7 @@ put_binary(Req, #state{filepath = Filepath} = State) ->
         ok -> {true, Req, State};
         {error, dir_exists} -> cdmi_error:error_reply(Req, State, ?put_container_conflict);
         {logical_file_system_error, ?VENOENT} -> cdmi_error:error_reply(Req, State, ?parent_not_found);
-        {logical_file_system_error, ?VEPERM} -> cdmi_error:error_reply(Req, State, ?forbidden);
-        {logical_file_system_error, ?VEACCES} -> cdmi_error:error_reply(Req, State, ?forbidden);
+        {logical_file_system_error, Error} when Error == ?VEPERM orelse Error == ?VEACCES  -> cdmi_error:error_reply(Req, State, ?forbidden);
         Error -> cdmi_error:error_reply(Req, State, {?put_container_unknown_error, Error})
     end.
 
@@ -261,58 +256,25 @@ prepare_container_ans([{<<"children">>, From, To} | Tail], #state{filepath = Fil
     {ok, ChildNum0} = logical_files_manager:get_file_children_count(Filepath),
     ChildNum = case Filepath of "/" -> ChildNum0 + 1; _ -> ChildNum0 end,
     {From1, To1} = normalize_childrenrange(From, To, ChildNum),
+    {ok, List} = logical_files_manager:ls_chunked(Filepath, From1, To1),
     Childs = lists:map(
         fun(#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) ->
             list_to_binary(rest_utils:ensure_path_ends_with_slash(Name));
             (#dir_entry{name = Name, type = ?REG_TYPE_PROT}) ->
                 list_to_binary(Name)
-        end,
-        rest_utils:list_dir(Filepath, From1, To1)),
+        end, List),
     [{<<"children">>, Childs} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
+    {ok, List} = logical_files_manager:ls_chunked(Filepath),
     Childs = lists:map(
         fun(#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) ->
                 list_to_binary(rest_utils:ensure_path_ends_with_slash(Name));
            (#dir_entry{name = Name, type = ?REG_TYPE_PROT}) ->
                 list_to_binary(Name)
-        end,
-        rest_utils:list_dir(Filepath)),
+        end, List),
     [{<<"children">>, Childs} | prepare_container_ans(Tail, State)];
 prepare_container_ans([_Other | Tail], State) ->
     prepare_container_ans(Tail, State).
-
-
-%% fs_remove_dir/1
-%% ====================================================================
-%% @doc Removes given dir with all files and subdirectories.
-%% @end
--spec fs_remove_dir(DirPath :: string()) -> Result when
-    Result :: ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
-%% ====================================================================
-fs_remove_dir(DirPath) ->
-    case is_group_dir(DirPath) of
-        true -> ok;
-        false ->
-            lists:foreach(
-                fun(#dir_entry{name = Name, type = ?REG_TYPE_PROT}) -> logical_files_manager:delete(filename:join(DirPath, Name));
-                   (#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) -> fs_remove_dir(filename:join(DirPath, Name))
-                end,
-                rest_utils:list_dir(DirPath)),
-            logical_files_manager:rmdir(DirPath)
-    end.
-
-%% is_group_dir/1
-%% ====================================================================
-%% @doc Returns true when Path points to group directory (or groups root directory)
--spec is_group_dir(Path :: string()) -> boolean().
-%% ====================================================================
-is_group_dir(Path) ->
-    case string:tokens(Path,"/") of
-        [] -> true;
-        [?SPACES_BASE_DIR_NAME] -> true;
-        [?SPACES_BASE_DIR_NAME , _GroupName] ->  true;
-        _ -> false
-    end.
 
 %% normalize_childrenrange/1
 %% ====================================================================

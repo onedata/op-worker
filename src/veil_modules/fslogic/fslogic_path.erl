@@ -19,7 +19,7 @@
 -export([get_user_file_name/1, get_user_file_name/2]).
 -export([get_full_file_name/1, get_full_file_name/2, get_full_file_name/4, get_short_file_name/1]).
 -export([verify_file_name/1, absolute_join/1]).
--export([strip_path_leaf/1, basename/1, split/1]).
+-export([strip_path_leaf/1, basename/1, split/1, is_space_dir/1]).
 -export([get_parent_and_name_from_path/2]).
 -export([get_user_root/0, get_user_root/2, get_user_root/1]).
 
@@ -210,6 +210,19 @@ basename(Path) ->
     case lists:reverse(string:tokens(Path, [?PATH_SEPARATOR])) of
         [Leaf | _] -> Leaf;
         _ -> [?PATH_SEPARATOR]
+    end.
+
+%% is_space_dir/1
+%% ====================================================================
+%% @doc Returns true when Path points to group directory (or groups root directory)
+-spec is_space_dir(Path :: string()) -> boolean().
+%% ====================================================================
+is_space_dir(Path) ->
+    case string:tokens(Path,"/") of
+        [] -> true;
+        [?SPACES_BASE_DIR_NAME] -> true;
+        [?SPACES_BASE_DIR_NAME , _GroupName] ->  true;
+        _ -> false
     end.
 
 %% get_parent_and_name_from_path/2

@@ -178,10 +178,10 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
 
     %% Get attributes
-    {CTime, MTime, ATime, _SizeFromDB} =
+    {CTime, MTime, ATime, _SizeFromDB, HasAcl} =
         case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
             {ok, #veil_document{record = FMeta}} ->
-                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size};
+                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size, FMeta#file_meta.acl =/= []};
             {error, Error} ->
                 ?warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
                 {0, 0, 0, 0}
@@ -200,7 +200,8 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
             end,
 
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = UID, gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links};
+        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = UID,
+        gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links, has_acl = HasAcl};
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
     case fslogic_objects:get_file(FullFileName) of
@@ -234,10 +235,8 @@ get_xattr(FullFileName, Name) ->
     #atom{} | no_return().
 %% ====================================================================
 set_xattr(FullFileName, Name, Value, _Flags) ->
-    {ok, #veil_document{record = #file{meta_doc = MetaUuid} = FileDoc}} = fslogic_objects:get_file(FullFileName),
-    {ok, #veil_document{record = #file_meta{xattrs = XAttrs}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
-    UpdatedXAttrs = [{Name,Value} | proplists:delete(Name,XAttrs)],
-    #file{} = fslogic_meta:update_meta_attr(FileDoc, xattrs, UpdatedXAttrs, true),
+    {ok, #veil_document{record = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    #file{} = fslogic_meta:update_meta_attr(FileDoc, xattr_set, {Name,Value}, true),
     #atom{value = ?VOK}.
 
 %% remove_xattr/2
@@ -247,11 +246,9 @@ set_xattr(FullFileName, Name, Value, _Flags) ->
 -spec remove_xattr(FullFileName :: string(), Name :: binary()) ->
     #atom{} | no_return().
 %% ====================================================================
-remove_xattr(FullFileName,Name) ->
-    {ok, #veil_document{record = #file{meta_doc = MetaUuid} = FileDoc}} = fslogic_objects:get_file(FullFileName),
-    {ok, #veil_document{record = #file_meta{xattrs = XAttrs}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
-    UpdatedXAttrs = proplists:delete(Name,XAttrs),
-    #file{} = fslogic_meta:update_meta_attr(FileDoc, xattrs, UpdatedXAttrs, true),
+remove_xattr(FullFileName, Name) ->
+    {ok, #veil_document{record = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    #file{} = fslogic_meta:update_meta_attr(FileDoc, xattr_remove, Name, true),
     #atom{value = ?VOK}.
 
 %% list_xattr/1
@@ -295,7 +292,7 @@ get_acl(FullFileName) ->
 set_acl(FullFileName, Entities) ->
     true = lists:all(fun(X) -> is_record(X, accesscontrolentity) end, Entities),
     {ok, #veil_document{record = #file{location = FileLoc, type = Type} = FileDoc}} = fslogic_objects:get_file(FullFileName),
-    case Entities of
+    #atom{value = ?VOK} = case Entities of
         [] -> fslogic_req_generic:change_file_perms(FullFileName, application:get_env(?APP_Name, new_file_logic_mode));
         _ -> fslogic_req_generic:change_file_perms(FullFileName, 0)
     end,
