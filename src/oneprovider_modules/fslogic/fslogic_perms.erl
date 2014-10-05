@@ -87,7 +87,7 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
         ok -> check_file_perms(FileName, UserDoc, FileDoc, write);
         Error -> Error
     end;
-check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms, type = Type, meta_doc = MetaUuid, location = FileLoc}}, CheckType) -> %check read/write/execute perms
+check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerUid, perms = FilePerms, type = Type, meta_doc = MetaUuid, location = FileLoc}}, CheckType) -> %check read/write/execute perms
     #db_document{uuid = UserUid, record = #user{global_id = GlobalId}} = UserDoc,
     FileSpace = get_group(FileName),
 
@@ -96,7 +96,7 @@ check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwne
     RealAcl =
         case FilePerms of
             0 ->
-                {ok, #veil_document{record = #file_meta{acl = Acl}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+                {ok, #db_document{record = #file_meta{acl = Acl}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
                 Acl;
             _ -> []
         end,

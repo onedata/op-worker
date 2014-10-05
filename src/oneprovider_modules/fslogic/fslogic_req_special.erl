@@ -72,7 +72,7 @@ create_dir(FullFileName, Mode) ->
 get_file_children_count(FullFileName) ->
     ?debug("get_file_children_count(FullFileName ~p)", [FullFileName]),
 
-    {ok, #veil_document{uuid = Uuid}} = fslogic_objects:get_file(FullFileName),
+    {ok, #db_document{uuid = Uuid}} = fslogic_objects:get_file(FullFileName),
     {ok, Sum} = dao_lib:apply(dao_vfs, count_childs, [{uuid, Uuid}], fslogic_context:get_protocol_version()),
     #filechildrencount{count = Sum}.
 

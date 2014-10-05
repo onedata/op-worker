@@ -71,7 +71,7 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
     ok = fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,list_to_existing_atom(OpenMode)),
 
     % cache all permissions
-    case FileDoc#veil_document.record#file.perms of
+    case FileDoc#db_document.record#file.perms of
         Mask when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
             fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,rdwr),
             fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,execute),

@@ -274,9 +274,9 @@ list_xattr(FullFileName) ->
 %% ====================================================================
 get_acl(FullFileName) ->
     {ok, UserDoc} = fslogic_objects:get_user(),
-    {ok, FileDoc = #veil_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
+    {ok, FileDoc = #db_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
     ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, read),
-    {ok, #veil_document{record = #file_meta{acl = Acl}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+    {ok, #db_document{record = #file_meta{acl = Acl}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
     VirtualAcl =
         case Acl of
             [] -> fslogic_acl:get_virtual_acl(FullFileName, FileDoc);
@@ -293,7 +293,7 @@ get_acl(FullFileName) ->
 %% ====================================================================
 set_acl(FullFileName, Entities) ->
     true = lists:all(fun(X) -> is_record(X, accesscontrolentity) end, Entities),
-    {ok, #veil_document{record = #file{location = FileLoc, type = Type} = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    {ok, #db_document{record = #file{location = FileLoc, type = Type} = FileDoc}} = fslogic_objects:get_file(FullFileName),
     #atom{value = ?VOK} = case Entities of
         [] -> fslogic_req_generic:change_file_perms(FullFileName, application:get_env(?APP_Name, new_file_logic_mode));
         _ -> fslogic_req_generic:change_file_perms(FullFileName, 0)
@@ -303,7 +303,7 @@ set_acl(FullFileName, Entities) ->
     % invalidate file permission cache
     case Type of
         ?REG_TYPE ->
-            {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+            {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
             {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
             gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {invalidate_cache, StorageFileName}}, ?CACHE_REQUEST_TIMEOUT);
         _ -> ok

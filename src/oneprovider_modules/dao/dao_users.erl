@@ -87,7 +87,7 @@ exist_user(Key) ->
 %% get_user/1
 %% ====================================================================
 %% @doc Gets user from DB by login, e-mail, uuid or dn.
-%% Non-error return value is always {ok, #veil_document{record = #user} | [#veil_document{record = #user}]}.
+%% Non-error return value is always {ok, #db_document{record = #user} | [#db_document{record = #user}]}.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #db_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
@@ -98,7 +98,7 @@ get_user(Key) ->
         [] -> %% Cached document not found. Fetch it from DB and save in cache
             DBAns = get_user_from_db(Key),
             case DBAns of
-                {ok, #veil_document{} = Doc} ->
+                {ok, #db_document{} = Doc} ->
                     ets:insert(users_cache, {Key, Doc}),
                     DocKey = Doc#db_document.uuid,
                     case ets:lookup(users_cache, {key_info, DocKey}) of
@@ -191,7 +191,7 @@ exist_user_in_db({Key, Value}) ->
 %% get_user_from_db/1
 %% ====================================================================
 %% @doc Gets user from DB by login, e-mail, uuid or dn.
-%% Non-error return value is {ok, #veil_document{record = #user}, or {ok, [#veil_document{record = #user}]} when we query by name.
+%% Non-error return value is {ok, #db_document{record = #user}, or {ok, [#db_document{record = #user}]} when we query by name.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #db_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
