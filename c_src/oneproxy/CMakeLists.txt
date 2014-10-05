@@ -39,7 +39,7 @@ target_link_libraries(oneproxy_gsi PUBLIC
 
 target_include_directories(oneproxy_gsi SYSTEM PUBLIC
     ${Globus_INCLUDE_DIRS}
-    ${OPENSSL_INCLUDE_DIRS})
+    ${OPENSSL_INCLUDE_DIR})
 
 target_compile_options(oneproxy_gsi PUBLIC ${Globus_CFLAGS_OTHER})
 
