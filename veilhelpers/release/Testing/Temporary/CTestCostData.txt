@@ -1,9 +1,0 @@
-fileCache_test 5 0.00158601
-communicator_test 5 0.0570384
-communicationHandler_test 5 0.00389204
-connectionPool_test 5 0.00715518
-connection_test 5 0.00166039
-clusterProxyHelper_test 5 0.00560422
-storageHelperFactory_test 5 0.00436478
-logging_test 5 0.00466619
----
