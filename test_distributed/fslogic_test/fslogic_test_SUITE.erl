@@ -16,20 +16,12 @@
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
-<<<<<<< HEAD
--include("veil_modules/fslogic/fslogic.hrl").
--include("veil_modules/fslogic/fslogic_acl.hrl").
--include("veil_modules/dao/dao.hrl").
--include("veil_modules/dao/dao_vfs.hrl").
--include("veil_modules/dao/dao.hrl").
--include("veil_modules/dao/dao_share.hrl").
-=======
 -include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic_acl.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
 -include("oneprovider_modules/dao/dao_vfs.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
 -include("oneprovider_modules/dao/dao_share.hrl").
->>>>>>> develop
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
 

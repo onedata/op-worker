@@ -21,12 +21,8 @@
 -export([get_sh_and_id/3, get_sh_and_id/4, get_sh_and_id/5, get_files_number/3]).
 -export([get_space_info_for_path/1, get_user_groups/2]).
 -export([random_ascii_lowercase_sequence/1, path_walk/3, list_dir/1]).
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic_utils.erl
--export([run_as_root/1, file_to_space_info/1]).
--export([trim_spaces/1]).
-=======
 -export([run_as_root/1, file_to_space_info/1, gen_storage_uid/1]).
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic_utils.erl
+-export([trim_spaces/1]).
 
 
 %% ====================================================================

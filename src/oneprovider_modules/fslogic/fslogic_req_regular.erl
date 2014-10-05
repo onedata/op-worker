@@ -70,7 +70,6 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
     {ok, UserDoc} = fslogic_objects:get_user(),
     ok = fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,list_to_existing_atom(OpenMode)),
 
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic_req_regular.erl
     % cache all permissions
     case FileDoc#veil_document.record#file.perms of
         Mask when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
@@ -80,10 +79,7 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
         _ -> ok
     end,
 
-    {ok,_} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#veil_document.uuid, fslogic_context:get_fuse_id(), Validity),
-=======
     {ok,_} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#db_document.uuid, fslogic_context:get_fuse_id(), Validity),
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic_req_regular.erl
 
     FileDesc = FileDoc#db_document.record,
     FileLoc = fslogic_file:get_file_local_location(FileDesc),

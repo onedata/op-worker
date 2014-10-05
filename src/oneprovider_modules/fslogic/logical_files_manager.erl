@@ -153,6 +153,29 @@ rmlink(LnkName) ->
 rmdir(DirName) ->
     delete_special(DirName).
 
+%% rmdir_recursive/1
+%% ====================================================================
+%% @doc Removes given dir with all files and subdirectories.
+%% @end
+-spec rmdir_recursive(DirPath :: string()) -> Result when
+    Result :: ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+rmdir_recursive(DirPath) ->
+    case fslogic_path:is_space_dir(DirPath) of
+        true -> {logical_file_system_error, ?VEACCES};
+        false ->
+            case ls_chunked(DirPath) of
+                {ok, Childs} ->
+                    lists:foreach(
+                        fun(#dir_entry{name = Name, type = ?REG_TYPE_PROT}) -> logical_files_manager:delete(filename:join(DirPath, Name));
+                            (#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) -> rmdir_recursive(filename:join(DirPath, Name))
+                        end,
+                        Childs),
+                    logical_files_manager:rmdir(DirPath);
+                Error -> Error
+            end
+    end.
+
 %% mv/2
 %% ====================================================================
 %% @doc Moves directory (in db)
@@ -178,6 +201,98 @@ mv(From, To) ->
             clear_cache(From),
             {Status, TmpAns}
     end.
+
+%% cp/2
+%% ====================================================================
+%% @doc Copies file or directory
+%% @end
+-spec cp(From :: string(), To :: string()) -> Result when
+    Result :: ok | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+cp(From, To) ->
+    {ok, #fileattributes{type = Type, has_acl = HasAcl}} = getfileattr(From),
+    case Type of
+        ?DIR_TYPE_PROT ->
+            case mkdir(To) of
+                ok ->
+                    case {case HasAcl of true -> copy_file_acl(From, To); false -> ok end, copy_file_xattr(From,To)} of
+                        {ok, ok} ->
+                            case ls_chunked(From) of
+                                {ok, ChildList} ->
+                                    AnswerList = lists:map(fun(#dir_entry{name = Name}) -> cp(filename:join(From, Name), filename:join(To, Name)) end, ChildList),
+                                    case lists:filter(fun(ok) -> false; (_) -> true end, AnswerList) of
+                                        [] -> ok;
+                                        [Error | _] ->
+                                            rmdir_recursive(To),
+                                            Error
+                                    end;
+                                Error ->
+                                    rmdir(To),
+                                    Error
+                            end;
+                        {ok, Error} ->
+                            rmdir_recursive(To),
+                            Error;
+                        {Error, _} ->
+                            rmdir_recursive(To),
+                            Error
+                    end;
+                Error ->
+                    Error
+            end;
+        ?REG_TYPE_PROT ->
+            case create(To) of
+                ok ->
+                    case copy_file_content(From, To, 0, ?default_copy_buffer_size) of
+                        ok ->
+                            Ans = {case HasAcl of true -> copy_file_acl(From, To); false -> ok end, copy_file_xattr(From, To)},
+                            case Ans of
+                                {ok, ok} -> ok;
+                                {ok, Error} ->
+                                    delete(To),
+                                    Error;
+                                {Error, _} ->
+                                    delete(To),
+                                    Error
+                            end;
+                        Error ->
+                            delete(To),
+                            Error
+                    end;
+                Error -> Error
+            end;
+        ?LNK_TYPE_PROT ->
+            case read_link(From) of
+                {ok, Value} -> create_symlink(Value, To);
+                Error -> Error
+            end
+    end.
+
+%% ls_chunked/1
+%% ====================================================================
+%% @doc @equiv ls_chunked(Path, 0, 10, all, [])
+%% @end
+-spec ls_chunked(string()) -> Result when
+    Result :: {ok, [#dir_entry{}]} | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+ls_chunked(Path) ->
+    ls_chunked(Path, 0, 10, all, []).
+
+%% ls_chunked/3
+%% ====================================================================
+%% @doc @equiv ls_chunked(Path, From, 10, To - From + 1, [])
+%% @end
+-spec ls_chunked(string(), integer(), integer()) -> Result when
+    Result :: {ok, [#dir_entry{}]} | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+ls_chunked(Path, From, To) ->
+    ls_chunked(Path, From, 10, To - From + 1, []).
 
 %% chown/3
 %% ====================================================================
@@ -274,7 +389,8 @@ getfileattr(Message, Value) ->
                     size = TmpAns#fileattr.size,
                     uname = TmpAns#fileattr.uname,
                     gname = TmpAns#fileattr.gname,
-                    links = TmpAns#fileattr.links
+                    links = TmpAns#fileattr.links,
+                    has_acl = TmpAns#fileattr.has_acl
                 }};
                 _ -> {logical_file_system_error, Response}
             end;
@@ -349,6 +465,42 @@ list_xattr(FullFileName) ->
             case TmpAns#xattrlist.answer of
                 ?VOK ->
                     {ok, [{Name, Value} || #xattrlist_xattrentry{name = Name, value = Value} <- TmpAns#xattrlist.attrs]};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
+%% get_acl/1
+%% ====================================================================
+%% @doc Gets file's access controll list.
+%% @end
+-spec get_acl(FullFileName :: string()) ->
+    {ok, list(#accesscontrolentity{})} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+get_acl(FullFileName) ->
+    {Status, TmpAns} = contact_fslogic(#getacl{file_logic_name = FullFileName}),
+    case Status of
+        ok ->
+            case TmpAns#acl.answer of
+                ?VOK -> {ok, TmpAns#acl.entities};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
+%% set_acl/1
+%% ====================================================================
+%% @doc Sets file's access controll list.
+%% @end
+-spec set_acl(FullFileName :: string(), EntitiyList :: list(#accesscontrolentity{})) ->
+    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+set_acl(FullFileName, EntitiyList) ->
+    {Status, TmpAns} = contact_fslogic(#setacl{file_logic_name = FullFileName, entities = EntitiyList}),
+    case Status of
+        ok ->
+            case TmpAns#atom.value of
+                ?VOK -> ok;
                 Error -> {logical_file_system_error, Error}
             end;
         _ -> {Status, TmpAns}
@@ -720,6 +872,25 @@ exists(FileName) ->
         _ -> {full_name_finding_error, File}
     end.
 
+%% get_file_children_count/1
+%% ====================================================================
+%% @doc Counts first level childrens of directory.
+%% @end
+-spec get_file_children_count(DirName :: string()) -> Result when
+    Result :: {ok, non_neg_integer()} | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+get_file_children_count(DirName) ->
+    {Status, TmpAns} = contact_fslogic(#getfilechildrencount{dir_logic_name = DirName}),
+    case Status of
+        ok ->
+            case TmpAns#filechildrencount.answer of
+                ?VOK -> {ok, TmpAns#filechildrencount.count};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
 
 %% ====================================================================
 %% Internal functions
@@ -1274,4 +1445,96 @@ delete_special(Path) ->
                 _ -> {logical_file_system_error, Response}
             end;
         _ -> {Status, TmpAns}
+    end.
+
+%% ls_chunked/5
+%% ====================================================================
+%% @doc List the given directory, calling itself recursively if there is more to fetch.
+%% The arguments are dir path, child offset, chunk size for db queries, number of childs to read and actual Reslt list
+%% @end
+-spec ls_chunked(Path :: string(), Offset :: integer(), ChunkSize ::integer(), HowManyChilds :: all | integer(), Result :: list()) -> Result when
+    Result :: [#dir_entry{}] | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+ls_chunked(Path, Offset, ChunkSize, all, Result) ->
+    case logical_files_manager:ls(Path, ChunkSize, Offset) of
+        {ok, FileList} ->
+            case length(FileList) of
+                ChunkSize -> ls_chunked(Path, Offset + ChunkSize, ChunkSize * 10, all, Result ++ FileList);
+                _ -> {ok, Result ++ FileList}
+            end;
+        Error -> Error
+    end;
+ls_chunked(_Path, _Offset, _ChunkSize, HowManyChilds, Result) when HowManyChilds =< 0 ->
+    {ok, Result};
+ls_chunked(Path, Offset, ChunkSize, HowManyChilds, Result) ->
+    case logical_files_manager:ls(Path, min(HowManyChilds, ChunkSize), Offset) of
+        {ok, FileList} ->
+            case length(FileList) of
+                ChunkSize -> ls_chunked(Path, Offset + ChunkSize, ChunkSize * 10, HowManyChilds - ChunkSize, Result ++ FileList);
+                _ -> {ok, Result ++ FileList}
+            end;
+        Error -> Error
+    end.
+
+%% copy_file_content/4
+%% ====================================================================
+%% @doc Copies file content beginning at offset, with given buffer size
+%% @end
+-spec copy_file_content(From :: string(), To :: string(), Offset ::integer(), BufferSize :: integer()) -> Result when
+    Result :: ok | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+copy_file_content(From, To, Offset, BufferSize) ->
+    case read(From, Offset, BufferSize) of
+        {ok,Data} ->
+            case byte_size(Data) < BufferSize of
+                true ->
+                    case write(To, Data) of
+                        Written when is_integer(Written) -> ok;
+                        Error -> Error
+                    end;
+                false ->
+                    case write(To, Data) of
+                        Written when is_integer(Written) ->
+                            copy_file_content(From, To, Offset + Written, BufferSize);
+                        Error -> Error
+                    end
+            end;
+        Error -> Error
+    end.
+
+%% copy_file_acl/2
+%% ====================================================================
+%% @doc Copies file access contol list
+%% @end
+-spec copy_file_acl(From :: string(), To :: string()) -> Result when
+    Result :: ok | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+copy_file_acl(From, To) ->
+    case get_acl(From) of
+        {ok,Acl} ->
+            set_acl(To,Acl);
+        Error -> Error
+    end.
+
+%% copy_file_xattr/4
+%% ====================================================================
+%% @doc Copies file extended attributes
+%% @end
+-spec copy_file_xattr(From :: string(), To :: string()) -> Result when
+    Result :: ok | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+copy_file_xattr(From, To) ->
+    case list_xattr(From) of
+        {ok, XattrList} ->
+            lists:foreach(fun({Key, Value}) -> set_xattr(To, Key, Value) end, XattrList),
+            ok;
+        Error -> Error
     end.

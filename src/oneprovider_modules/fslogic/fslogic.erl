@@ -38,11 +38,10 @@
 -spec init(Args :: term()) -> list().
 %% ====================================================================
 init(_Args) ->
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic.erl
     Pid = self(),
-    {ok, CleaningInterval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
+    {ok, CleaningInterval} = application:get_env(oneprovider_node, fslogic_cleaning_period),
     erlang:send_after(CleaningInterval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
-    {ok, FilesSizeUpdateInterval} = application:get_env(veil_cluster_node, user_files_size_view_update_period),
+    {ok, FilesSizeUpdateInterval} = application:get_env(oneprovider_node, user_files_size_view_update_period),
     erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
 
     % Create acl permission cache
@@ -77,14 +76,6 @@ init(_Args) ->
     end,
 
     #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispMapFun, sub_procs = SubProcList, plug_in_state = ok}.
-=======
-  Pid = self(),
-  {ok, CleaningInterval} = application:get_env(oneprovider_node, fslogic_cleaning_period),
-  erlang:send_after(CleaningInterval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
-  {ok, FilesSizeUpdateInterval} = application:get_env(oneprovider_node, user_files_size_view_update_period),
-  erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
-  [].
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic.erl
 
 %% handle/2
 %% ====================================================================

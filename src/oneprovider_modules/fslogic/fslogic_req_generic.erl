@@ -127,14 +127,9 @@ change_file_perms(FullFileName, Perms) ->
 
     ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner),
 
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic_req_generic.erl
     %todo reset acl's
-    NewFile = fslogic_meta:update_meta_attr(File, ctime, vcn_utils:time()),
-    NewFile1 = FileDoc#veil_document{record = NewFile#file{perms = Perms}},
-=======
     NewFile = fslogic_meta:update_meta_attr(File, ctime, utils:time()),
     NewFile1 = FileDoc#db_document{record = NewFile#file{perms = Perms}},
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic_req_generic.erl
     {ok, _} = fslogic_objects:save_file(NewFile1),
 
     case (ActualPerms == Perms orelse StorageId == []) of
@@ -187,13 +182,8 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
     %% Get attributes
     {CTime, MTime, ATime, _SizeFromDB, HasAcl} =
         case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic_req_generic.erl
-            {ok, #veil_document{record = FMeta}} ->
-                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size, FMeta#file_meta.acl =/= []};
-=======
             {ok, #db_document{record = FMeta}} ->
-                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size};
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic_req_generic.erl
+                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size, FMeta#file_meta.acl =/= []};
             {error, Error} ->
                 ?warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
                 {0, 0, 0, 0}
@@ -212,12 +202,8 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
             end,
 
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic_req_generic.erl
-        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = UID,
+        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
         gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links, has_acl = HasAcl};
-=======
-        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID, gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links};
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic_req_generic.erl
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
     case fslogic_objects:get_file(FullFileName) of
@@ -251,16 +237,8 @@ get_xattr(FullFileName, Name) ->
     #atom{} | no_return().
 %% ====================================================================
 set_xattr(FullFileName, Name, Value, _Flags) ->
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic_req_generic.erl
-    {ok, #veil_document{record = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    {ok, #db_document{record = FileDoc}} = fslogic_objects:get_file(FullFileName),
     #file{} = fslogic_meta:update_meta_attr(FileDoc, xattr_set, {Name,Value}, true),
-=======
-    {ok, #db_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
-    {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
-    #db_document{record = #file_meta{xattrs = XAttrs}} = FileMetaDoc,
-    UpdatedXAttrs = [{Name,Value} | proplists:delete(Name,XAttrs)],
-    {ok, _} = dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#db_document{record = #file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic_req_generic.erl
     #atom{value = ?VOK}.
 
 %% remove_xattr/2
@@ -270,18 +248,9 @@ set_xattr(FullFileName, Name, Value, _Flags) ->
 -spec remove_xattr(FullFileName :: string(), Name :: binary()) ->
     #atom{} | no_return().
 %% ====================================================================
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic_req_generic.erl
 remove_xattr(FullFileName, Name) ->
-    {ok, #veil_document{record = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    {ok, #db_document{record = FileDoc}} = fslogic_objects:get_file(FullFileName),
     #file{} = fslogic_meta:update_meta_attr(FileDoc, xattr_remove, Name, true),
-=======
-remove_xattr(FullFileName,Name) ->
-    {ok, #db_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
-    {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
-    #db_document{record = #file_meta{xattrs = XAttrs}} = FileMetaDoc,
-    UpdatedXAttrs = proplists:delete(Name,XAttrs),
-    dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#db_document{record = #file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic_req_generic.erl
     #atom{value = ?VOK}.
 
 %% list_xattr/1

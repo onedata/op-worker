@@ -296,14 +296,9 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
 %% @end
 -spec put_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-<<<<<<< HEAD:src/veil_modules/control_panel/cdmi_modules/cdmi_object.erl
-put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
-    {ok, RawBody, Req0} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
-=======
 put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
     % parse body
     {ok, RawBody, Req0} = opn_cowboy_bridge:apply(cowboy_req, body, [Req]),
->>>>>>> develop:src/oneprovider_modules/control_panel/cdmi_modules/cdmi_object.erl
     Body = rest_utils:parse_body(RawBody),
     ok = rest_utils:validate_body(Body),
 

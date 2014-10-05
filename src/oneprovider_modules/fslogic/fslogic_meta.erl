@@ -94,19 +94,11 @@ update_parent_ctime(Dir, CTime) ->
 %% ====================================================================
 %% @doc Internal implementation of update_meta_attr/3. See update_meta_attr/3 for more information.
 %% @end
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic_meta.erl
 -spec update_meta_attr(File :: #file{}, Attr, Value :: term(), RetryCount :: integer(), ForceSynch :: boolean()) -> Result :: #file{} when
     Attr :: atime | mtime | ctime | size | times | acl | xattr_set| xattr_remove.
 update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount, ForceSynch) ->
-    {File1, #veil_document{record = MetaRec} = MetaDoc} = init_file_meta(File),
-    MetaDocChanged = MetaUUID =/= MetaDoc#veil_document.uuid,
-=======
--spec update_meta_attr(File :: #file{}, Attr, Value :: term(), RetryCount :: integer()) -> Result :: #file{} when
-    Attr :: atime | mtime | ctime | size | times.
-update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount) ->
     {File1, #db_document{record = MetaRec} = MetaDoc} = init_file_meta(File),
     MetaDocChanged = MetaUUID =/= MetaDoc#db_document.uuid,
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic_meta.erl
     FileOwnerChanged = File#file.uid =/= MetaRec#file_meta.uid,
     RunSync = MetaDocChanged or FileOwnerChanged,
     SyncTask = fun() ->

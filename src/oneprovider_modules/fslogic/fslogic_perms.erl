@@ -56,13 +56,8 @@ check_file_perms(_FileName, _UserDoc, _FileDoc, '') -> %undefined mode
 check_file_perms(_FileName, #db_document{uuid = ?CLUSTER_USER_ID}, _FileDoc, _CheckType) -> %root, always return ok
     ok;
 check_file_perms(FileName, UserDoc, _FileDoc, root = CheckType) -> % check if root
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic_perms.erl
     ?permission_denied_error(UserDoc, FileName, CheckType);
-check_file_perms(_FileName, #veil_document{uuid = UserUid}, #veil_document{record = #file{uid = UserUid}}, owner) -> % check if owner
-=======
-    ?permission_denied_error(UserDoc,FileName,CheckType);
 check_file_perms(_FileName, #db_document{uuid = UserUid}, #db_document{record = #file{uid = UserUid}}, owner) -> % check if owner
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic_perms.erl
     ok;
 check_file_perms(FileName, UserDoc, _FileDoc, owner = CheckType) ->
     ?permission_denied_error(UserDoc, FileName, CheckType);
@@ -70,7 +65,7 @@ check_file_perms(FileName, UserDoc, _FileDoc, create) ->
     {ok, {_, ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName, fslogic_context:get_protocol_version()),
     ParentFileName = fslogic_path:strip_path_leaf(FileName),
     check_file_perms(ParentFileName, UserDoc, ParentFileDoc, write);
-check_file_perms(FileName, UserDoc = #veil_document{record = #user{global_id = GlobalId}}, #veil_document{record = #file{location = FileLoc, type = Type, perms = FilePerms}} = FileDoc, delete) ->
+check_file_perms(FileName, UserDoc = #db_document{record = #user{global_id = GlobalId}}, #db_document{record = #file{location = FileLoc, type = Type, perms = FilePerms}} = FileDoc, delete) ->
     {ok, {_, ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName, fslogic_context:get_protocol_version()),
     ParentFileName = fslogic_path:strip_path_leaf(FileName),
     case check_file_perms(ParentFileName, UserDoc, ParentFileDoc, write) of
@@ -79,7 +74,7 @@ check_file_perms(FileName, UserDoc = #veil_document{record = #user{global_id = G
             % cache file perms
             case FilePerms == 0 andalso Type == ?REG_TYPE andalso Ans == ok of
                 true ->
-                    {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+                    {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
                     {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
                     gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), delete}}, ?CACHE_REQUEST_TIMEOUT);
                 false -> ok
@@ -92,13 +87,8 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
         ok -> check_file_perms(FileName, UserDoc, FileDoc, write);
         Error -> Error
     end;
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic_perms.erl
 check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms, type = Type, meta_doc = MetaUuid, location = FileLoc}}, CheckType) -> %check read/write/execute perms
-    #veil_document{uuid = UserUid, record = #user{global_id = GlobalId}} = UserDoc,
-=======
-check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerUid, perms = FilePerms}}, CheckType) -> %check read/write/execute perms
-    UserUid = UserDoc#db_document.uuid,
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic_perms.erl
+    #db_document{uuid = UserUid, record = #user{global_id = GlobalId}} = UserDoc,
     FileSpace = get_group(FileName),
 
     UserOwnsFile = UserUid =:= FileOwnerUid,
@@ -122,7 +112,7 @@ check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerU
                     % cache permissions for storage_files_manager use
                     case Type of
                         ?REG_TYPE ->
-                            {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+                            {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
                             {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
                             gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), CheckType}}, ?CACHE_REQUEST_TIMEOUT),
                             ok;
@@ -196,11 +186,7 @@ is_member_of_space3(#db_document{record = #user{}} = UserDoc, {name, SpaceName},
 %% ====================================================================
 assert_grp_access(_UserDoc, Request, [?SPACES_BASE_DIR_NAME]) ->
     lists:member(Request, ?GROUPS_BASE_ALLOWED_ACTIONS);
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic_perms.erl
-assert_grp_access(#veil_document{record = #user{}} = UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail]) ->
-=======
-assert_grp_access(#db_document{record = #user{}} = UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail] = _PathTokens) ->
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic_perms.erl
+assert_grp_access(#db_document{record = #user{}} = UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail]) ->
     TailCheck = case Tail of
                     [_GroupName] ->
                         lists:member(Request, ?GROUPS_ALLOWED_ACTIONS);

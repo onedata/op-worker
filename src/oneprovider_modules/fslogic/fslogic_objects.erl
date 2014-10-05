@@ -127,12 +127,8 @@ get_user({Key, Value}) ->
         undefined -> {ok, #db_document{uuid = ?CLUSTER_USER_ID, record = #user{logins = [#id_token_login{login = "root", provider_id = internal}], role = admin}}};
         Value ->
             case user_logic:get_user({Key, Value}) of
-<<<<<<< HEAD:src/veil_modules/fslogic/fslogic_objects.erl
-                {ok, #veil_document{}} = OKRet -> OKRet;
-                {ok, UserList} = OKRet when is_list(UserList)  -> OKRet;
-=======
                 {ok, #db_document{}} = OKRet -> OKRet;
->>>>>>> develop:src/oneprovider_modules/fslogic/fslogic_objects.erl
+                {ok, UserList} = OKRet when is_list(UserList)  -> OKRet;
                 {error, user_not_found} when Key =:= global_id ->
                     GRUID = Value,
 

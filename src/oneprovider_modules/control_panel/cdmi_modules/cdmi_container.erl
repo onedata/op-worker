@@ -139,12 +139,8 @@ get_cdmi_container(Req, #state{opts = Opts, filepath = Filepath} = State) ->
 -spec put_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
-<<<<<<< HEAD:src/veil_modules/control_panel/cdmi_modules/cdmi_container.erl
     % parse body
-    {ok, RawBody, Req1} = veil_cowboy_bridge:apply(cowboy_req, body, [Req]),
-=======
     {ok, RawBody, Req1} = opn_cowboy_bridge:apply(cowboy_req, body, [Req]),
->>>>>>> develop:src/oneprovider_modules/control_panel/cdmi_modules/cdmi_container.erl
     Body = rest_utils:parse_body(RawBody),
     ok = rest_utils:validate_body(Body),
 

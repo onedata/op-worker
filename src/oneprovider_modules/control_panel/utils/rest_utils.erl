@@ -14,26 +14,15 @@
 
 -include_lib("public_key/include/public_key.hrl").
 -include("err.hrl").
-<<<<<<< HEAD:src/veil_modules/control_panel/utils/rest_utils.erl
--include("veil_modules/control_panel/common.hrl").
--include("veil_modules/control_panel/cdmi.hrl").
--include("veil_modules/control_panel/cdmi_error.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
-
--export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
--export([success_reply/1, error_reply/1]).
--export([verify_peer_cert/1, prepare_context/1, reply_with_error/4, join_to_path/1, parse_body/1,
-         validate_body/1, ensure_path_ends_with_slash/1, get_path_leaf_with_ending_slash/1]).
-=======
 -include("oneprovider_modules/control_panel/common.hrl").
+-include("oneprovider_modules/control_panel/cdmi.hrl").
 -include("oneprovider_modules/control_panel/cdmi_error.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
--export([verify_peer_cert/2, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, parse_body/1,
-         validate_body/1, ensure_path_ends_with_slash/1, get_path_leaf_with_ending_slash/1, trim_spaces/1]).
->>>>>>> develop:src/oneprovider_modules/control_panel/utils/rest_utils.erl
+-export([verify_peer_cert/2, prepare_context/1, reply_with_error/4, join_to_path/1, parse_body/1,
+         validate_body/1, ensure_path_ends_with_slash/1, get_path_leaf_with_ending_slash/1]).
 
 %% ====================================================================
 %% API functions

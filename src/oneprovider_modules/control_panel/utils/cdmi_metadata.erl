@@ -12,14 +12,9 @@
 
 -module(cdmi_metadata).
 
-<<<<<<< HEAD:src/veil_modules/control_panel/utils/cdmi_metadata.erl
--include("veil_modules/control_panel/cdmi_metadata.hrl").
--include("veil_modules/control_panel/cdmi_error.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
-=======
+-include("oneprovider_modules/control_panel/cdmi_error.hrl").
 -include("oneprovider_modules/control_panel/cdmi_metadata.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
->>>>>>> develop:src/oneprovider_modules/control_panel/utils/cdmi_metadata.erl
 
 -export([get_user_metadata/1, update_user_metadata/2, update_user_metadata/3]).
 -export([prepare_metadata/2, prepare_metadata/3]).

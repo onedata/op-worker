@@ -308,15 +308,14 @@ read(Storage_helper_info, File, Offset, Size) ->
     ErrorDetail :: term().
 %% ====================================================================
 write(Storage_helper_info, File, Offset, Buf) ->
-<<<<<<< HEAD:src/veil_modules/fslogic/storage_files_manager.erl
     ok = case get_cached_value(File, mode, Storage_helper_info) of
-        {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-            case has_permission(File, write) of
-                true -> set_root_ctx();
-                false -> setup_ctx(File)
-            end;
-        _ -> setup_ctx(File)
-    end,
+             {ok, Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0 ->
+                 case has_permission(File, write) of
+                     true -> set_root_ctx();
+                     false -> setup_ctx(File)
+                 end;
+             _ -> setup_ctx(File)
+         end,
     {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
     case ErrorCode of
         ok ->
@@ -325,12 +324,12 @@ write(Storage_helper_info, File, Offset, Buf) ->
                     {FlagCode, Flag} = get_cached_value(File, o_wronly, Storage_helper_info),
                     case FlagCode of
                         ok ->
-                            {ErrorCode2, FFI} = veilhelpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
+                            {ErrorCode2, FFI} = helpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
                             case ErrorCode2 of
                                 0 ->
                                     BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
 
-                                    ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
+                                    ErrorCode3 = helpers:exec(release, Storage_helper_info, [File, FFI]),
                                     case ErrorCode3 of
                                         0 -> BytesWritten;
                                         {error, 'NIF_not_loaded'} -> ErrorCode3;
@@ -346,38 +345,6 @@ write(Storage_helper_info, File, Offset, Buf) ->
         error -> {ErrorCode, Stat};
         _ -> {ErrorCode, Stat}
     end.
-=======
-    ok = setup_ctx(File),
-  {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
-  case ErrorCode of
-    ok ->
-      case Stat of
-        true ->
-              {FlagCode, Flag} = get_cached_value(File, o_wronly, Storage_helper_info),
-              case FlagCode of
-                ok ->
-                  {ErrorCode2, FFI} = helpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
-                  case ErrorCode2 of
-                    0 ->
-                      BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
-
-                      ErrorCode3 = helpers:exec(release, Storage_helper_info, [File, FFI]),
-                      case ErrorCode3 of
-                        0 -> BytesWritten;
-                        {error, 'NIF_not_loaded'} -> ErrorCode3;
-                        _ -> {wrong_release_return_code, ErrorCode3}
-                      end;
-                    error -> {ErrorCode, FFI};
-                    _ -> {wrong_open_return_code, ErrorCode2}
-                  end;
-                _ -> {FlagCode, Flag}
-              end;
-        false -> {error, not_regular_file}
-      end;
-    error -> {ErrorCode, Stat};
-    _ -> {ErrorCode, Stat}
-  end.
->>>>>>> develop:src/oneprovider_modules/fslogic/storage_files_manager.erl
 
 %% write/3
 %% ====================================================================
@@ -392,15 +359,14 @@ write(Storage_helper_info, File, Offset, Buf) ->
     ErrorDetail :: term().
 %% ====================================================================
 write(Storage_helper_info, File, Buf) ->
-<<<<<<< HEAD:src/veil_modules/fslogic/storage_files_manager.erl
     ok = case get_cached_value(File, mode, Storage_helper_info) of
-        {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-            case has_permission(File, write) of
-                true -> set_root_ctx();
-                false -> setup_ctx(File)
-            end;
-        _ -> setup_ctx(File)
-    end,
+             {ok, Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0 ->
+                 case has_permission(File, write) of
+                     true -> set_root_ctx();
+                     false -> setup_ctx(File)
+                 end;
+             _ -> setup_ctx(File)
+         end,
     {ErrorCode, CValue} = get_cached_value(File, size, Storage_helper_info),
     case ErrorCode of
         ok ->
@@ -410,12 +376,12 @@ write(Storage_helper_info, File, Buf) ->
                     {FlagCode, Flag} = get_cached_value(File, o_wronly, Storage_helper_info),
                     case FlagCode of
                         ok ->
-                            {ErrorCode2, FFI} = veilhelpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
+                            {ErrorCode2, FFI} = helpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
                             case ErrorCode2 of
                                 0 ->
                                     BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
 
-                                    ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
+                                    ErrorCode3 = helpers:exec(release, Storage_helper_info, [File, FFI]),
                                     case ErrorCode3 of
                                         0 -> BytesWritten;
                                         {error, 'NIF_not_loaded'} -> ErrorCode3;
@@ -431,39 +397,6 @@ write(Storage_helper_info, File, Buf) ->
         error -> {ErrorCode, CValue};
         _ -> {ErrorCode, CValue}
     end.
-=======
-    ok = setup_ctx(File),
-  {ErrorCode, CValue} = get_cached_value(File, size, Storage_helper_info),
-  case ErrorCode of
-    ok ->
-      {IsReg, Offset} = CValue,
-      case IsReg of
-        true ->
-          {FlagCode, Flag} = get_cached_value(File, o_wronly, Storage_helper_info),
-          case FlagCode of
-            ok ->
-              {ErrorCode2, FFI} = helpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
-              case ErrorCode2 of
-                0 ->
-                  BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
-
-                  ErrorCode3 = helpers:exec(release, Storage_helper_info, [File, FFI]),
-                  case ErrorCode3 of
-                    0 -> BytesWritten;
-                    {error, 'NIF_not_loaded'} -> ErrorCode3;
-                    _ -> {wrong_release_return_code, ErrorCode3}
-                  end;
-                error -> {ErrorCode, FFI};
-                _ -> {wrong_open_return_code, ErrorCode2}
-              end;
-            _ -> {FlagCode, Flag}
-          end;
-        false -> {error, not_regular_file}
-      end;
-    error -> {ErrorCode, CValue};
-    _ -> {ErrorCode, CValue}
-  end.
->>>>>>> develop:src/oneprovider_modules/fslogic/storage_files_manager.erl
 
 %% create/2
 %% ====================================================================
@@ -494,56 +427,16 @@ create(Storage_helper_info, File) ->
     ErrorDetail :: term().
 %% ====================================================================
 create(Storage_helper_info, File, Mode) ->
-<<<<<<< HEAD:src/veil_modules/fslogic/storage_files_manager.erl
     ok = setup_ctx(File),
-    {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
+    {ErrorCode, Stat} = helpers:exec(getattr, Storage_helper_info, [File]),
     case ErrorCode of
         0 -> {error, file_exists};
         error -> {ErrorCode, Stat};
-=======
-  ok = setup_ctx(File),
-  {ErrorCode, Stat} = helpers:exec(getattr, Storage_helper_info, [File]),
-  case ErrorCode of
-    0 -> {error, file_exists};
-    error -> {ErrorCode, Stat};
-    _ ->
-      ErrorCode2 = helpers:exec(mknod, Storage_helper_info, [File, Mode bor ?S_IFREG, 0]),
-      case ErrorCode2 of
-        0 ->
-          ErrorCode3 = helpers:exec(truncate, Storage_helper_info, [File, 0]),
-          case ErrorCode3 of
-            0 ->
-              derive_gid_from_parent(Storage_helper_info, File),
-
-              Query = fslogic_context:get_user_query(),
-
-              case Query of
-                undefined -> ok;
-                _ ->
-                  {GetUserAns, User} = user_logic:get_user(Query),
-                  case GetUserAns of
-                    ok ->
-                      {_Login, UID} = user_logic:get_login_with_uid(User),
-                      ChownAns = chown(Storage_helper_info, File, UID, -1),
-                      case ChownAns of
-                        ok ->
-                          ok;
-                        _ ->
-                          {cannot_change_file_owner, ChownAns}
-                      end;
-                    _ -> {cannot_change_file_owner, get_user_error}
-                  end
-              end;
-            {error, 'NIF_not_loaded'} -> ErrorCode3;
-            _ -> {wrong_truncate_return_code, ErrorCode3}
-          end;
-        {error, 'NIF_not_loaded'} -> ErrorCode2;
->>>>>>> develop:src/oneprovider_modules/fslogic/storage_files_manager.erl
         _ ->
-            ErrorCode2 = veilhelpers:exec(mknod, Storage_helper_info, [File, Mode bor ?S_IFREG, 0]),
+            ErrorCode2 = helpers:exec(mknod, Storage_helper_info, [File, Mode bor ?S_IFREG, 0]),
             case ErrorCode2 of
                 0 ->
-                    ErrorCode3 = veilhelpers:exec(truncate, Storage_helper_info, [File, 0]),
+                    ErrorCode3 = helpers:exec(truncate, Storage_helper_info, [File, 0]),
                     case ErrorCode3 of
                         0 ->
                             derive_gid_from_parent(Storage_helper_info, File),
@@ -556,9 +449,8 @@ create(Storage_helper_info, File, Mode) ->
                                     {GetUserAns, User} = user_logic:get_user(Query),
                                     case GetUserAns of
                                         ok ->
-                                            UserRecord = User#veil_document.record,
-                                            Login = UserRecord#user.login,
-                                            ChownAns = chown(Storage_helper_info, File, Login, ""),
+                                            {_Login, UID} = user_logic:get_login_with_uid(User),
+                                            ChownAns = chown(Storage_helper_info, File, UID, -1),
                                             case ChownAns of
                                                 ok ->
                                                     ok;
@@ -573,8 +465,42 @@ create(Storage_helper_info, File, Mode) ->
                     end;
                 {error, 'NIF_not_loaded'} -> ErrorCode2;
                 _ ->
-                    ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p, CTX: ~p / ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG, fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
-                    {wrong_mknod_return_code, ErrorCode2}
+                    ErrorCode2 = helpers:exec(mknod, Storage_helper_info, [File, Mode bor ?S_IFREG, 0]),
+                    case ErrorCode2 of
+                        0 ->
+                            ErrorCode3 = helpers:exec(truncate, Storage_helper_info, [File, 0]),
+                            case ErrorCode3 of
+                                0 ->
+                                    derive_gid_from_parent(Storage_helper_info, File),
+
+                                    Query = fslogic_context:get_user_query(),
+
+                                    case Query of
+                                        undefined -> ok;
+                                        _ ->
+                                            {GetUserAns, User} = user_logic:get_user(Query),
+                                            case GetUserAns of
+                                                ok ->
+                                                    UserRecord = User#veil_document.record,
+                                                    Login = UserRecord#user.login,
+                                                    ChownAns = chown(Storage_helper_info, File, Login, ""),
+                                                    case ChownAns of
+                                                        ok ->
+                                                            ok;
+                                                        _ ->
+                                                            {cannot_change_file_owner, ChownAns}
+                                                    end;
+                                                _ -> {cannot_change_file_owner, get_user_error}
+                                            end
+                                    end;
+                                {error, 'NIF_not_loaded'} -> ErrorCode3;
+                                _ -> {wrong_truncate_return_code, ErrorCode3}
+                            end;
+                        {error, 'NIF_not_loaded'} -> ErrorCode2;
+                        _ ->
+                            ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p, CTX: ~p / ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG, fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
+                            {wrong_mknod_return_code, ErrorCode2}
+                    end
             end
     end.
 
@@ -589,9 +515,8 @@ create(Storage_helper_info, File, Mode) ->
     ErrorDetail :: term().
 %% ====================================================================
 truncate(Storage_helper_info, File, Size) ->
-<<<<<<< HEAD:src/veil_modules/fslogic/storage_files_manager.erl
     ok = case get_cached_value(File, mode, Storage_helper_info) of
-             {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
+             {ok, Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0 ->
                  case has_permission(File, write) of
                      true -> set_root_ctx();
                      false -> setup_ctx(File)
@@ -603,7 +528,7 @@ truncate(Storage_helper_info, File, Size) ->
         ok ->
             case Stat of
                 true ->
-                    ErrorCode2 = veilhelpers:exec(truncate, Storage_helper_info, [File, Size]),
+                    ErrorCode2 = helpers:exec(truncate, Storage_helper_info, [File, Size]),
                     case ErrorCode2 of
                         0 -> ok;
                         {error, 'NIF_not_loaded'} -> ErrorCode2;
@@ -615,26 +540,6 @@ truncate(Storage_helper_info, File, Size) ->
         error -> {ErrorCode, Stat};
         _ -> {ErrorCode, Stat}
     end.
-=======
-  ok = setup_ctx(File),
-  {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
-  case ErrorCode of
-    ok ->
-      case Stat of
-        true ->
-          ErrorCode2 = helpers:exec(truncate, Storage_helper_info, [File, Size]),
-          case ErrorCode2 of
-            0 -> ok;
-            {error, 'NIF_not_loaded'} -> ErrorCode2;
-            _ ->
-                {wrong_truncate_return_code, ErrorCode2}
-          end;
-        false -> {error, not_regular_file}
-      end;
-    error -> {ErrorCode, Stat};
-    _ -> {ErrorCode, Stat}
-  end.
->>>>>>> develop:src/oneprovider_modules/fslogic/storage_files_manager.erl
 
 %% delete/2
 %% ====================================================================
@@ -647,21 +552,19 @@ truncate(Storage_helper_info, File, Size) ->
     ErrorDetail :: term().
 %% ====================================================================
 delete(Storage_helper_info, File) ->
-<<<<<<< HEAD:src/veil_modules/fslogic/storage_files_manager.erl
     ok = case get_cached_value(File, mode, Storage_helper_info) of
-             {ok,Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
+             {ok, Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0 ->
                  case has_permission(File, delete) of
                      true -> set_root_ctx();
                      false -> setup_ctx(File)
                  end;
              _ -> setup_ctx(File)
-         end,
-    {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
+         end, {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
     case ErrorCode of
         ok ->
             case Stat of
                 true ->
-                    ErrorCode2 = veilhelpers:exec(unlink, Storage_helper_info, [File]),
+                    ErrorCode2 = helpers:exec(unlink, Storage_helper_info, [File]),
                     case ErrorCode2 of
                         0 -> clear_cache(File);
                         {error, 'NIF_not_loaded'} ->
@@ -682,35 +585,6 @@ delete(Storage_helper_info, File) ->
             clear_cache(File),
             {ErrorCode, Stat}
     end.
-=======
-    ok = setup_ctx(File),
-  {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
-  case ErrorCode of
-    ok ->
-      case Stat of
-        true ->
-          ErrorCode2 = helpers:exec(unlink, Storage_helper_info, [File]),
-          case ErrorCode2 of
-            0 -> clear_cache(File);
-            {error, 'NIF_not_loaded'} ->
-              clear_cache(File),
-              ErrorCode2;
-            _ ->
-              clear_cache(File),
-              {wrong_unlink_return_code, ErrorCode2}
-          end;
-        false ->
-          clear_cache(File),
-          {error, not_regular_file}
-      end;
-    error ->
-      clear_cache(File),
-      {ErrorCode, Stat};
-    _ ->
-      clear_cache(File),
-      {ErrorCode, Stat}
-  end.
->>>>>>> develop:src/oneprovider_modules/fslogic/storage_files_manager.erl
 
 %% ls/0
 %% ====================================================================
@@ -742,8 +616,7 @@ read_bytes(_Storage_helper_info, _File, _Offset, 0, _FFI) ->
     {ok, <<>>};
 
 read_bytes(Storage_helper_info, File, Offset, Size, FFI) ->
-<<<<<<< HEAD:src/veil_modules/fslogic/storage_files_manager.erl
-    {ErrorCode, Bytes} = veilhelpers:exec(read, Storage_helper_info, [File, Size, Offset, FFI]),
+    {ErrorCode, Bytes} = helpers:exec(read, Storage_helper_info, [File, Size, Offset, FFI]),
     case ErrorCode of
         BytesNum when is_integer(BytesNum), BytesNum > 0 ->
             {TmpErrorCode, TmpBytes} = read_bytes(Storage_helper_info, File, Offset + BytesNum, Size - BytesNum, FFI),
@@ -754,19 +627,6 @@ read_bytes(Storage_helper_info, File, Offset, Size, FFI) ->
         error -> {ErrorCode, Bytes};
         _ -> {error, {wrong_read_return_code, ErrorCode}}
     end.
-=======
-  {ErrorCode, Bytes} = helpers:exec(read, Storage_helper_info, [File, Size, Offset, FFI]),
-  case ErrorCode of
-    BytesNum when is_integer(BytesNum), BytesNum > 0 ->
-      {TmpErrorCode, TmpBytes} = read_bytes(Storage_helper_info, File, Offset + BytesNum, Size - BytesNum, FFI),
-      case TmpErrorCode of
-        ok -> {ok, <<Bytes/binary, TmpBytes/binary>>};
-        _ -> {TmpErrorCode, TmpBytes}
-      end;
-    error -> {ErrorCode, Bytes};
-    _ -> {error, {wrong_read_return_code, ErrorCode}}
-  end.
->>>>>>> develop:src/oneprovider_modules/fslogic/storage_files_manager.erl
 
 %% write_bytes/5
 %% ====================================================================
@@ -784,21 +644,6 @@ write_bytes(_Storage_helper_info, _File, _Offset, <<>>, _FFI) ->
     0;
 
 write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
-<<<<<<< HEAD:src/veil_modules/fslogic/storage_files_manager.erl
-    ErrorCode = veilhelpers:exec(write, Storage_helper_info, [File, Buf, Offset, FFI]),
-    case ErrorCode of
-        BytesNum when is_integer(BytesNum), BytesNum > 0 ->
-            <<_:BytesNum/binary, NewBuf/binary>> = Buf,
-            TmpErrorCode = write_bytes(Storage_helper_info, File, Offset + BytesNum, NewBuf, FFI),
-            case TmpErrorCode of
-                BytesNum2 when is_integer(BytesNum2) -> BytesNum2 + BytesNum;
-                _ -> TmpErrorCode
-            end;
-        {error, 'NIF_not_loaded'} -> ErrorCode;
-        _ ->
-            {error, {wrong_write_return_code, ErrorCode}}
-    end.
-=======
   ErrorCode = helpers:exec(write, Storage_helper_info, [File, Buf, Offset, FFI]),
   case ErrorCode of
     BytesNum when is_integer(BytesNum), BytesNum > 0 ->
@@ -812,7 +657,6 @@ write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
     _ ->
       {error, {wrong_write_return_code, ErrorCode}}
   end.
->>>>>>> develop:src/oneprovider_modules/fslogic/storage_files_manager.erl
 
 
 %% get_cached_value/3
@@ -826,7 +670,6 @@ write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
     ErrorDetail :: term().
 %% ====================================================================
 get_cached_value(File, ValueName, Storage_helper_info) ->
-<<<<<<< HEAD:src/veil_modules/fslogic/storage_files_manager.erl
     ValType = case ValueName of
                   is_reg -> file_stats;
                   is_dir -> file_stats;
@@ -851,7 +694,7 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
                 file_stats ->
                     {ErrorCode, Stat} = case get({File, stats}) of
                                             undefined ->
-                                                {TmpErrorCode, TmpStat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
+                                                {TmpErrorCode, TmpStat} = helpers:exec(getattr, Storage_helper_info, [File]),
                                                 case TmpErrorCode of
                                                     0 -> put({File, stats}, TmpStat);
                                                     _ -> ok
@@ -873,7 +716,7 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
                                               owner ->
                                                   integer_to_list(Stat#st_stat.st_uid);
                                               _ ->
-                                                  veilhelpers:exec(ValueName, Storage_helper_info, [Stat#st_stat.st_mode])
+                                                  helpers:exec(ValueName, Storage_helper_info, [Stat#st_stat.st_mode])
                                           end,
                             put({File, ValueName}, ReturnValue),
                             {ok, ReturnValue};
@@ -881,14 +724,14 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
                         _ -> {wrong_getatt_return_code, ErrorCode}
                     end;
                 flag ->
-                    ReturnValue2 = veilhelpers:exec(get_flag, Storage_helper_info, [ValueName]),
+                    ReturnValue2 = helpers:exec(get_flag, Storage_helper_info, [ValueName]),
                     put({Storage_helper_info, ValueName}, ReturnValue2),
                     {ok, ReturnValue2};
                 size ->
-                    {ErrorCode2, Stat2} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
+                    {ErrorCode2, Stat2} = helpers:exec(getattr, Storage_helper_info, [File]),
                     case ErrorCode2 of
                         0 ->
-                            ReturnValue3 = veilhelpers:exec(is_reg, Storage_helper_info, [Stat2#st_stat.st_mode]),
+                            ReturnValue3 = helpers:exec(is_reg, Storage_helper_info, [Stat2#st_stat.st_mode]),
                             put({File, is_reg}, ReturnValue3),
                             {ok, {ReturnValue3, Stat2#st_stat.st_size}};
                         error -> {ErrorCode2, Stat2};
@@ -897,77 +740,7 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
             end;
         _ -> {ok, CachedValue}
     end.
-=======
-  ValType = case ValueName of
-    is_reg -> file_stats;
-    is_dir -> file_stats;
-    grp_wr -> file_stats;
-    owner -> file_stats;
-    o_wronly -> flag;
-    o_rdonly -> flag;
-    size -> size
-  end,
 
-  CachedValue =
-    case ValType of
-      file_stats -> get({File, ValueName});
-      flag -> get({Storage_helper_info, ValueName});
-      _ -> undefined   %% size
-    end,
-
-  case CachedValue of
-    undefined ->
-      case ValType of
-        file_stats ->
-          {ErrorCode, Stat} = case get({File, stats}) of
-                                undefined ->
-              {TmpErrorCode, TmpStat} = helpers:exec(getattr, Storage_helper_info, [File]),
-              case TmpErrorCode of
-                0 ->
-                                      put({File, stats}, TmpStat);
-                _ ->
-                  ok
-              end,
-                                  {TmpErrorCode, TmpStat};
-                                StatsValue ->
-                                  {0, StatsValue}
-          end,
-          case ErrorCode of
-            0 ->
-              ReturnValue = case ValueName of
-                grp_wr ->
-                  case Stat#st_stat.st_mode band ?WR_GRP_PERM of
-                    0 -> false;
-                    _ -> true
-                  end;
-                owner ->
-                  integer_to_list(Stat#st_stat.st_uid);
-                _ ->
-                  helpers:exec(ValueName, Storage_helper_info, [Stat#st_stat.st_mode])
-              end,
-              put({File, ValueName}, ReturnValue),
-              {ok, ReturnValue};
-            error -> {ErrorCode, Stat};
-            _ -> {wrong_getatt_return_code, ErrorCode}
-          end;
-        flag ->
-          ReturnValue2 = helpers:exec(get_flag, Storage_helper_info, [ValueName]),
-          put({Storage_helper_info, ValueName}, ReturnValue2),
-          {ok, ReturnValue2};
-        size ->
-          {ErrorCode2, Stat2} = helpers:exec(getattr, Storage_helper_info, [File]),
-          case ErrorCode2 of
-            0 ->
-              ReturnValue3 = helpers:exec(is_reg, Storage_helper_info, [Stat2#st_stat.st_mode]),
-              put({File, is_reg}, ReturnValue3),
-              {ok, {ReturnValue3, Stat2#st_stat.st_size}};
-            error -> {ErrorCode2, Stat2};
-            _ -> {wrong_getatt_return_code, ErrorCode2}
-          end
-      end;
-    _ -> {ok, CachedValue}
-  end.
->>>>>>> develop:src/oneprovider_modules/fslogic/storage_files_manager.erl
 
 %% check_perms/2
 %% ====================================================================
@@ -1068,17 +841,6 @@ check_perms(_File, _Storage_helper_info, _CheckType) ->
 -spec derive_gid_from_parent(Storage_helper_info :: record(), File :: string()) -> ok | {error, ErrNo :: integer()}.
 %% ====================================================================
 derive_gid_from_parent(SHInfo, File) ->
-<<<<<<< HEAD:src/veil_modules/fslogic/storage_files_manager.erl
-    case veilhelpers:exec(getattr, SHInfo, [fslogic_path:strip_path_leaf(File)]) of
-        {0, #st_stat{st_gid = GID}} ->
-            Res = chown(SHInfo, File, -1, GID),
-            ?debug("Changing gid of file ~p to ~p. Status: ~p", [File, GID, Res]),
-            Res;
-        {ErrNo, _} ->
-            ?error("Cannot fetch parent dir ~p attrs. Error: ~p", [fslogic_path:strip_path_leaf(File), ErrNo]),
-            {error, ErrNo}
-    end.
-=======
   case helpers:exec(getattr, SHInfo, [fslogic_path:strip_path_leaf(File)]) of
     {0, #st_stat{st_gid = GID}} ->
       Res = chown(SHInfo, File, -1, GID),
@@ -1088,7 +850,6 @@ derive_gid_from_parent(SHInfo, File) ->
       ?error("Cannot fetch parent dir ~p attrs. Error: ~p", [fslogic_path:strip_path_leaf(File), ErrNo]),
       {error, ErrNo}
   end.
->>>>>>> develop:src/oneprovider_modules/fslogic/storage_files_manager.erl
 
 %% get_mode/1
 %% ====================================================================
@@ -1147,7 +908,7 @@ check_access_type(File) ->
 
 %% set_root_ctx/0
 %% ====================================================================
-%% @doc Setups user filesystem context (uid and gid for veilhelpers)
+%% @doc Setups user filesystem context (uid and gid for helpers)
 %%      as a root. Use with caution!
 %% @end
 -spec set_root_ctx() -> ok.
@@ -1185,12 +946,6 @@ setup_ctx(File) ->
                                         _ ->
                                             []
                                     end,
-<<<<<<< HEAD:src/veil_modules/fslogic/storage_files_manager.erl
-                                SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, vcn_utils:ensure_binary(SpaceId) =:= X],
-                                {UserSpaces0 ++ UserSpaces, SelectedSpace0};
-                            _ ->
-                                {UserSpaces, SelectedSpace}
-=======
                                 SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, utils:ensure_binary(SpaceId) =:= X],
                                 SelectedSpace0;
                             _  ->
@@ -1205,7 +960,6 @@ setup_ctx(File) ->
                                 [SelectedSpace1];
                             [#space_info{} = SpaceInfo1 | _] ->
                                 [SpaceInfo1]
->>>>>>> develop:src/oneprovider_modules/fslogic/storage_files_manager.erl
                         end,
 
                     GIDs =
