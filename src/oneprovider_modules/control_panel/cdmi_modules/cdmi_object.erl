@@ -347,7 +347,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                             throw(?forbidden);
                         Error ->
                             logical_files_manager:delete(Filepath),
-                            throw({?write_object_unknown_error, Error}) %todo handle create file forbidden
+                            throw({?write_object_unknown_error, Error})
                     end;
                 {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> throw(?forbidden);
                 Error1 -> throw({?put_object_unknown_error, Error1})
@@ -410,6 +410,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
                     set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
                     {true, Req1, State};
+                {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> cdmi_error:error_reply(Req, State, ?forbidden);
                 Error -> cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error})
             end
     end.

@@ -465,44 +465,10 @@ create(Storage_helper_info, File, Mode) ->
                     end;
                 {error, 'NIF_not_loaded'} -> ErrorCode2;
                 _ ->
-                    ErrorCode2 = helpers:exec(mknod, Storage_helper_info, [File, Mode bor ?S_IFREG, 0]),
-                    case ErrorCode2 of
-                        0 ->
-                            ErrorCode3 = helpers:exec(truncate, Storage_helper_info, [File, 0]),
-                            case ErrorCode3 of
-                                0 ->
-                                    derive_gid_from_parent(Storage_helper_info, File),
-
-                                    Query = fslogic_context:get_user_query(),
-
-                                    case Query of
-                                        undefined -> ok;
-                                        _ ->
-                                            {GetUserAns, User} = user_logic:get_user(Query),
-                                            case GetUserAns of
-                                                ok ->
-                                                    UserRecord = User#veil_document.record,
-                                                    Login = UserRecord#user.login,
-                                                    ChownAns = chown(Storage_helper_info, File, Login, ""),
-                                                    case ChownAns of
-                                                        ok ->
-                                                            ok;
-                                                        _ ->
-                                                            {cannot_change_file_owner, ChownAns}
-                                                    end;
-                                                _ -> {cannot_change_file_owner, get_user_error}
-                                            end
-                                    end;
-                                {error, 'NIF_not_loaded'} -> ErrorCode3;
-                                _ -> {wrong_truncate_return_code, ErrorCode3}
-                            end;
-                        {error, 'NIF_not_loaded'} -> ErrorCode2;
-                        _ ->
                             ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p, CTX: ~p / ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG, fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
                             {wrong_mknod_return_code, ErrorCode2}
                     end
-            end
-    end.
+            end.
 
 %% truncate/3
 %% ====================================================================

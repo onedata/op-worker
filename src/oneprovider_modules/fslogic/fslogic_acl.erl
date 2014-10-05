@@ -11,9 +11,9 @@
 %% ===================================================================
 -module(fslogic_acl).
 
--include("veil_modules/fslogic/fslogic.hrl").
--include("veil_modules/fslogic/fslogic_acl.hrl").
--include("veil_modules/dao/dao.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic_acl.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
 -include("fuse_messages_pb.hrl").
 
 %% API
@@ -24,12 +24,12 @@
 %% @doc Converts posix permission of file, to ACL format. Such acl is called virtual
 %% because it is based only on file perms and it is not stored in db.
 %% @end
--spec get_virtual_acl(FullfileName :: string(), FileDoc :: record(veil_document)) -> [#accesscontrolentity{}].
+-spec get_virtual_acl(FullfileName :: string(), FileDoc :: record(db_document)) -> [#accesscontrolentity{}].
 %% ====================================================================
 get_virtual_acl(FullfileName, FileDoc) ->
-    #veil_document{record = #file{perms = Perms, uid = Uid}} = FileDoc,
+    #db_document{record = #file{perms = Perms, uid = Uid}} = FileDoc,
     {ok, #space_info{users = Users}} = fslogic_utils:get_space_info_for_path(FullfileName),
-    {ok, #veil_document{record = #user{global_id = OwnerGlobalId}}} = fslogic_objects:get_user({uuid, Uid}),
+    {ok, #db_document{record = #user{global_id = OwnerGlobalId}}} = fslogic_objects:get_user({uuid, Uid}),
     OwnerPerms = posix_perms_to_acl_mask(Perms, true, true),
     OwnerAce = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = vcn_utils:ensure_binary(OwnerGlobalId), acemask = OwnerPerms},
     RestAceList = [ #accesscontrolentity{
@@ -128,7 +128,7 @@ proplist_to_ace2([{<<"acemask">>, AceMask} | Rest], Acc) -> proplist_to_ace2(Res
 -spec gruid_to_name(GRUID :: binary()) -> binary().
 %% ====================================================================
 gruid_to_name(GRUID) ->
-    {ok, #veil_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
+    {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
     <<(vcn_utils:ensure_binary(Name))/binary,"#",(binary_part(GRUID, 0, ?username_hash_length))/binary>>.
 
 %% proplist_to_ace/1
@@ -142,7 +142,7 @@ name_to_gruid(Name) ->
     [UserName, Hash] = binary:split(Name, <<"#">>, [global]),
     {ok, UserList} = fslogic_objects:get_user({name, vcn_utils:ensure_list(UserName)}),
 
-    GRUIDList = lists:map(fun(#veil_document{record = #user{global_id = GRUID}}) -> vcn_utils:ensure_binary(GRUID)  end, UserList),
+    GRUIDList = lists:map(fun(#db_document{record = #user{global_id = GRUID}}) -> vcn_utils:ensure_binary(GRUID)  end, UserList),
     GUIDWithMatchingPrefixList = lists:filter(fun(GRUID) -> binary:longest_common_prefix([Hash, GRUID]) == byte_size(Hash)  end , GRUIDList),
     [GRUID] = GUIDWithMatchingPrefixList, % todo throw proper error message if more than one user matches given name
     GRUID.

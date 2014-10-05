@@ -27,10 +27,13 @@
 %% ====================================================================
 %% Logical file organization management (only db is used)
 
--export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1, get_xattr/2, set_xattr/3, remove_xattr/2, list_xattr/1, rmlink/1, read_link/1, create_symlink/2]).
+-export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, ls_chunked/1, ls_chunked/3,
+    getfileattr/1, get_xattr/2, set_xattr/3, remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2,
+    rmlink/1, read_link/1, create_symlink/2]).
 %% File access (db and helper are used)
--export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
+-export([rmdir_recursive/1, cp/2, read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
 -export([change_file_perm/3, check_file_perm/2]).
+-export([get_file_children_count/1]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
@@ -153,29 +156,6 @@ rmlink(LnkName) ->
 rmdir(DirName) ->
     delete_special(DirName).
 
-%% rmdir_recursive/1
-%% ====================================================================
-%% @doc Removes given dir with all files and subdirectories.
-%% @end
--spec rmdir_recursive(DirPath :: string()) -> Result when
-    Result :: ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
-%% ====================================================================
-rmdir_recursive(DirPath) ->
-    case fslogic_path:is_space_dir(DirPath) of
-        true -> {logical_file_system_error, ?VEACCES};
-        false ->
-            case ls_chunked(DirPath) of
-                {ok, Childs} ->
-                    lists:foreach(
-                        fun(#dir_entry{name = Name, type = ?REG_TYPE_PROT}) -> logical_files_manager:delete(filename:join(DirPath, Name));
-                            (#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) -> rmdir_recursive(filename:join(DirPath, Name))
-                        end,
-                        Childs),
-                    logical_files_manager:rmdir(DirPath);
-                Error -> Error
-            end
-    end.
-
 %% mv/2
 %% ====================================================================
 %% @doc Moves directory (in db)
@@ -200,74 +180,6 @@ mv(From, To) ->
         _ ->
             clear_cache(From),
             {Status, TmpAns}
-    end.
-
-%% cp/2
-%% ====================================================================
-%% @doc Copies file or directory
-%% @end
--spec cp(From :: string(), To :: string()) -> Result when
-    Result :: ok | {ErrorGeneral, ErrorDetail},
-    ErrorGeneral :: atom(),
-    ErrorDetail :: term().
-%% ====================================================================
-cp(From, To) ->
-    {ok, #fileattributes{type = Type, has_acl = HasAcl}} = getfileattr(From),
-    case Type of
-        ?DIR_TYPE_PROT ->
-            case mkdir(To) of
-                ok ->
-                    case {case HasAcl of true -> copy_file_acl(From, To); false -> ok end, copy_file_xattr(From,To)} of
-                        {ok, ok} ->
-                            case ls_chunked(From) of
-                                {ok, ChildList} ->
-                                    AnswerList = lists:map(fun(#dir_entry{name = Name}) -> cp(filename:join(From, Name), filename:join(To, Name)) end, ChildList),
-                                    case lists:filter(fun(ok) -> false; (_) -> true end, AnswerList) of
-                                        [] -> ok;
-                                        [Error | _] ->
-                                            rmdir_recursive(To),
-                                            Error
-                                    end;
-                                Error ->
-                                    rmdir(To),
-                                    Error
-                            end;
-                        {ok, Error} ->
-                            rmdir_recursive(To),
-                            Error;
-                        {Error, _} ->
-                            rmdir_recursive(To),
-                            Error
-                    end;
-                Error ->
-                    Error
-            end;
-        ?REG_TYPE_PROT ->
-            case create(To) of
-                ok ->
-                    case copy_file_content(From, To, 0, ?default_copy_buffer_size) of
-                        ok ->
-                            Ans = {case HasAcl of true -> copy_file_acl(From, To); false -> ok end, copy_file_xattr(From, To)},
-                            case Ans of
-                                {ok, ok} -> ok;
-                                {ok, Error} ->
-                                    delete(To),
-                                    Error;
-                                {Error, _} ->
-                                    delete(To),
-                                    Error
-                            end;
-                        Error ->
-                            delete(To),
-                            Error
-                    end;
-                Error -> Error
-            end;
-        ?LNK_TYPE_PROT ->
-            case read_link(From) of
-                {ok, Value} -> create_symlink(Value, To);
-                Error -> Error
-            end
     end.
 
 %% ls_chunked/1
@@ -488,7 +400,7 @@ get_acl(FullFileName) ->
         _ -> {Status, TmpAns}
     end.
 
-%% set_acl/1
+%% set_acl/2
 %% ====================================================================
 %% @doc Sets file's access controll list.
 %% @end
@@ -509,6 +421,97 @@ set_acl(FullFileName, EntitiyList) ->
 %% ====================================================================
 %% File access (db and helper are used)
 %% ====================================================================
+
+%% rmdir_recursive/1
+%% ====================================================================
+%% @doc Removes given dir with all files and subdirectories.
+%% @end
+-spec rmdir_recursive(DirPath :: string()) -> Result when
+    Result :: ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+rmdir_recursive(DirPath) ->
+    case fslogic_path:is_space_dir(DirPath) of
+        true -> {logical_file_system_error, ?VEACCES};
+        false ->
+            case ls_chunked(DirPath) of
+                {ok, Childs} ->
+                    lists:foreach(
+                        fun(#dir_entry{name = Name, type = ?REG_TYPE_PROT}) -> logical_files_manager:delete(filename:join(DirPath, Name));
+                            (#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) -> rmdir_recursive(filename:join(DirPath, Name))
+                        end,
+                        Childs),
+                    logical_files_manager:rmdir(DirPath);
+                Error -> Error
+            end
+    end.
+
+%% cp/2
+%% ====================================================================
+%% @doc Copies file or directory
+%% @end
+-spec cp(From :: string(), To :: string()) -> Result when
+    Result :: ok | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+cp(From, To) ->
+    {ok, #fileattributes{type = Type, has_acl = HasAcl}} = getfileattr(From),
+    case Type of
+        ?DIR_TYPE_PROT ->
+            case mkdir(To) of
+                ok ->
+                    case {case HasAcl of true -> copy_file_acl(From, To); false -> ok end, copy_file_xattr(From,To)} of
+                        {ok, ok} ->
+                            case ls_chunked(From) of
+                                {ok, ChildList} ->
+                                    AnswerList = lists:map(fun(#dir_entry{name = Name}) -> cp(filename:join(From, Name), filename:join(To, Name)) end, ChildList),
+                                    case lists:filter(fun(ok) -> false; (_) -> true end, AnswerList) of
+                                        [] -> ok;
+                                        [Error | _] ->
+                                            rmdir_recursive(To),
+                                            Error
+                                    end;
+                                Error ->
+                                    rmdir(To),
+                                    Error
+                            end;
+                        {ok, Error} ->
+                            rmdir_recursive(To),
+                            Error;
+                        {Error, _} ->
+                            rmdir_recursive(To),
+                            Error
+                    end;
+                Error ->
+                    Error
+            end;
+        ?REG_TYPE_PROT ->
+            case create(To) of
+                ok ->
+                    case copy_file_content(From, To, 0, ?default_copy_buffer_size) of
+                        ok ->
+                            Ans = {case HasAcl of true -> copy_file_acl(From, To); false -> ok end, copy_file_xattr(From, To)},
+                            case Ans of
+                                {ok, ok} -> ok;
+                                {ok, Error} ->
+                                    delete(To),
+                                    Error;
+                                {Error, _} ->
+                                    delete(To),
+                                    Error
+                            end;
+                        Error ->
+                            delete(To),
+                            Error
+                    end;
+                Error -> Error
+            end;
+        ?LNK_TYPE_PROT ->
+            case read_link(From) of
+                {ok, Value} -> create_symlink(Value, To);
+                Error -> Error
+            end
+    end.
 
 %% read/3
 %% ====================================================================

@@ -13,9 +13,9 @@
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
--include("veil_modules/fslogic/fslogic_acl.hrl").
+-include("oneprovider_modules/fslogic/fslogic_acl.hrl").
 -include("fuse_messages_pb.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
 
 check_permission_test() ->
     Id1 = <<"id1">>,
