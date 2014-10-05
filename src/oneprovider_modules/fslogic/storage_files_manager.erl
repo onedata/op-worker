@@ -225,11 +225,11 @@ chown(Storage_helper_info, File, User, Group) when is_integer(User), is_integer(
         _ -> {error, ErrorCode}
     end;
 chown(Storage_helper_info, File, User, Group) ->
-  ErrorCode = helpers:exec(chown_name, Storage_helper_info, [File, User, Group]),
-  case ErrorCode of
-    0 -> ok;
-    _ -> {error, ErrorCode}
-  end.
+    ErrorCode = helpers:exec(chown_name, Storage_helper_info, [File, User, Group]),
+    case ErrorCode of
+        0 -> ok;
+        _ -> {error, ErrorCode}
+    end.
 
 %% ====================================================================
 %% Physical files access (used to create temporary copies for remote files)
@@ -465,10 +465,10 @@ create(Storage_helper_info, File, Mode) ->
                     end;
                 {error, 'NIF_not_loaded'} -> ErrorCode2;
                 _ ->
-                            ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p, CTX: ~p / ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG, fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
-                            {wrong_mknod_return_code, ErrorCode2}
-                    end
-            end.
+                    ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p, CTX: ~p / ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG, fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
+                    {wrong_mknod_return_code, ErrorCode2}
+            end
+    end.
 
 %% truncate/3
 %% ====================================================================
@@ -610,19 +610,19 @@ write_bytes(_Storage_helper_info, _File, _Offset, <<>>, _FFI) ->
     0;
 
 write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
-  ErrorCode = helpers:exec(write, Storage_helper_info, [File, Buf, Offset, FFI]),
-  case ErrorCode of
-    BytesNum when is_integer(BytesNum), BytesNum > 0 ->
-      <<_:BytesNum/binary, NewBuf/binary>> = Buf,
-      TmpErrorCode = write_bytes(Storage_helper_info, File, Offset + BytesNum, NewBuf, FFI),
-      case TmpErrorCode of
-        BytesNum2 when is_integer(BytesNum2) -> BytesNum2 + BytesNum;
-        _ -> TmpErrorCode
-      end;
-    {error, 'NIF_not_loaded'} -> ErrorCode;
-    _ ->
-      {error, {wrong_write_return_code, ErrorCode}}
-  end.
+    ErrorCode = helpers:exec(write, Storage_helper_info, [File, Buf, Offset, FFI]),
+    case ErrorCode of
+        BytesNum when is_integer(BytesNum), BytesNum > 0 ->
+            <<_:BytesNum/binary, NewBuf/binary>> = Buf,
+            TmpErrorCode = write_bytes(Storage_helper_info, File, Offset + BytesNum, NewBuf, FFI),
+            case TmpErrorCode of
+                BytesNum2 when is_integer(BytesNum2) -> BytesNum2 + BytesNum;
+                _ -> TmpErrorCode
+            end;
+        {error, 'NIF_not_loaded'} -> ErrorCode;
+        _ ->
+            {error, {wrong_write_return_code, ErrorCode}}
+    end.
 
 
 %% get_cached_value/3
@@ -807,15 +807,15 @@ check_perms(_File, _Storage_helper_info, _CheckType) ->
 -spec derive_gid_from_parent(Storage_helper_info :: record(), File :: string()) -> ok | {error, ErrNo :: integer()}.
 %% ====================================================================
 derive_gid_from_parent(SHInfo, File) ->
-  case helpers:exec(getattr, SHInfo, [fslogic_path:strip_path_leaf(File)]) of
-    {0, #st_stat{st_gid = GID}} ->
-      Res = chown(SHInfo, File, -1, GID),
-      ?debug("Changing gid of file ~p to ~p. Status: ~p", [File, GID, Res]),
-      Res;
-    {ErrNo, _} ->
-      ?error("Cannot fetch parent dir ~p attrs. Error: ~p", [fslogic_path:strip_path_leaf(File), ErrNo]),
-      {error, ErrNo}
-  end.
+    case helpers:exec(getattr, SHInfo, [fslogic_path:strip_path_leaf(File)]) of
+        {0, #st_stat{st_gid = GID}} ->
+            Res = chown(SHInfo, File, -1, GID),
+            ?debug("Changing gid of file ~p to ~p. Status: ~p", [File, GID, Res]),
+            Res;
+        {ErrNo, _} ->
+            ?error("Cannot fetch parent dir ~p attrs. Error: ~p", [fslogic_path:strip_path_leaf(File), ErrNo]),
+            {error, ErrNo}
+    end.
 
 %% get_mode/1
 %% ====================================================================
@@ -914,7 +914,7 @@ setup_ctx(File) ->
                                     end,
                                 SelectedSpace0 = [SP || #space_info{space_id = X} = SP <- UserSpaces0, utils:ensure_binary(SpaceId) =:= X],
                                 SelectedSpace0;
-                            _  ->
+                            _ ->
                                 SelectedSpaceId
                         end,
 
