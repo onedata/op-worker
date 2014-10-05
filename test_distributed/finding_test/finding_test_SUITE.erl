@@ -13,15 +13,15 @@
 
 -include("test_utils.hrl").
 -include("registered_names.hrl").
--include_lib("veil_modules/dao/dao_types.hrl").
+-include_lib("oneprovider_modules/dao/dao_types.hrl").
 -include_lib("files_common.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
--include("veil_modules/dao/dao.hrl").
--include("veil_modules/dao/dao_vfs.hrl").
--include("veil_modules/dao/dao.hrl").
--include("veil_modules/dao/dao_share.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao_vfs.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao_share.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("dao/include/couch_db.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -150,13 +150,13 @@ init_per_testcase(_, Config) ->
 
   DB_Node = ?DB_NODE,
   Port = 6666,
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
   lists:append([{port, Port}, {nodes, NodesUp}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node().
 
@@ -180,7 +180,7 @@ create_file(Node, #path_with_times{path = FilePath, times = {ATime, MTime, CTime
   {ParentFound, ParentInfo} = rpc:call(Node, fslogic_path, get_parent_and_name_from_path , [FilePath, ?ProtocolVersion]),
   ?assertEqual(ok, ParentFound),
   {FileName, Parent} = ParentInfo,
-  File = #file{type = FileType, name = FileName, uid = Uid, parent = Parent#veil_document.uuid, perms = 8#600},
+  File = #file{type = FileType, name = FileName, uid = Uid, parent = Parent#db_document.uuid, perms = 8#600},
   FileDoc = rpc:call(Node, fslogic_meta, update_meta_attr, [File, times, {ATime, MTime, CTime}]),
   {SaveAns, FileUuid} = rpc:call(Node, dao_lib, apply, [dao_vfs, save_file, [FileDoc], ?ProtocolVersion]),
   ?assertEqual(ok, SaveAns),
@@ -236,7 +236,7 @@ verify_files_tree(Node, Files) ->
     fun ({FilePath, Uuid}) ->
       {GetFileAns, FileDoc} = rpc:call(Node, dao_vfs, get_file, [{uuid, Uuid}]),
       ?assertEqual(ok, GetFileAns),
-      FileNameFromDb = FileDoc#veil_document.record#file.name,
+      FileNameFromDb = FileDoc#db_document.record#file.name,
       ExpectedFileName = filename:basename(FilePath),
       ?assertEqual(ExpectedFileName, FileNameFromDb)
     end,

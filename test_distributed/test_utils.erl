@@ -33,10 +33,10 @@
 %% @doc Creates user with given Login, Cert path (for DN identification) and list of Spaces.
 %%      First space on Spaces will be used as user's default space.
 %%      Config shall be a proplist with at least {nodes, Nodes :: list()} entry.
-%%      Returns #veil_document with #user record that was just created or fails with exception.
+%%      Returns #db_document with #user record that was just created or fails with exception.
 %% @end
 -spec add_user(Config :: list(), Login :: string(), Cert :: string(), Spaces :: [string() | binary()]) ->
-    #veil_document{} | no_return().
+    #db_document{} | no_return().
 %% ====================================================================
 add_user(Config, Login, Cert, Spaces) ->
     add_user(Config, Login, Cert, Spaces, <<"access_token">>).
@@ -47,14 +47,14 @@ add_user(Config, Login, Cert, Spaces) ->
 %% @doc Same as add_user/4 but also allows to explicitly set AccessToken for created user.
 %% @end
 -spec add_user(Config :: list(), Login :: string(), Cert :: string(), Spaces :: [string() | binary()], AccessToken :: binary()) ->
-    #veil_document{} | no_return().
+    #db_document{} | no_return().
 %% ====================================================================
 add_user(Config, Login, Cert, Spaces, AccessToken) ->
 
     [CCM | _] = ?config(nodes, Config),
 
-    SpacesBinary = [vcn_utils:ensure_binary(Space) || Space <- Spaces],
-    SpacesList = [vcn_utils:ensure_list(Space) || Space <- Spaces],
+    SpacesBinary = [utils:ensure_binary(Space) || Space <- Spaces],
+    SpacesList = [utils:ensure_list(Space) || Space <- Spaces],
 
     {ReadFileAns, PemBin} = file:read_file(Cert),
     ?assertMatch({ok, _}, {ReadFileAns, PemBin}),

@@ -18,7 +18,7 @@
 
 -deprecated([proxy_subject/1]).
 
--export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3, get_ca_certs/0, get_ca_certs_from_all_cert_dirs/0, strip_self_signed_ca/1, get_ciphers/0]).
+-export([init/0, get_certs_from_req/2, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3, get_ca_certs/0, get_ca_certs_from_all_cert_dirs/0, strip_self_signed_ca/1, get_ciphers/0]).
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -46,9 +46,10 @@ init() ->
     case filelib:is_dir(CADir) of
         true ->
             load_certs(CADir),
-            case vcn_utils:ensure_running(inets) of
+            case utils:ensure_running(inets) of
                 ok ->
                     update_crls(CADir),
+                    catch oneproxy:ca_crl_to_der(oneproxy:get_der_certs_dir()),
                     {ok, CRLUpdateInterval} = application:get_env(?APP_Name, crl_update_interval),
                     case timer:apply_interval(CRLUpdateInterval, ?MODULE, update_crls, [CADir]) of
                         {ok, _} -> ok;
@@ -74,6 +75,32 @@ init() ->
     end,
 
     ok.
+
+
+%% get_certs_from_req/2
+%% ====================================================================
+%% @doc Returns client's certificates based on cowboy's request.
+%%      If there is not valid GSI session, {error, no_gsi_session} is returned.
+%% @end
+-spec get_certs_from_req(OneProxyHandler :: pid() | atom(), Req :: term()) ->
+    {ok, {OtpCert :: #'OTPCertificate'{}, Chain :: [#'OTPCertificate'{}]}} | {error, no_gsi_session} | {error, Reason :: any()}.
+%% ====================================================================
+get_certs_from_req(OneProxyHandler, Req) ->
+    {SessionId, _} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
+    case SessionId of
+        undefined ->
+            {error, no_gsi_session};
+        SessionId ->
+            case oneproxy:get_session(OneProxyHandler, SessionId) of
+                {error, Reason} ->
+                    {error, Reason};
+                {ok, SessionData} ->
+                    ClientCerts = base64:decode(SessionData),
+                    [OtpCert | Certs] = lists:reverse([public_key:pkix_decode_cert(DER, otp) || {'Certificate', DER, _} <- public_key:pem_decode(ClientCerts)]),
+                    {ok, {OtpCert, Certs}}
+            end
+    end.
+
 
 %% get_ca_certs_from_all_cert_dirs/0
 %% ====================================================================
@@ -199,7 +226,7 @@ update_crls(CADir) ->
     ?info("GSI Handler: Updating CLRs from distribution points"),
     CAs = [{public_key:pkix_decode_cert(X, otp), Name} || [X, Name] <- ets:match(gsi_state, {{ca, '_'}, '$1', '$2'})],
     CAsAndDPs = [{OtpCert, get_dp_url(OtpCert), Name} || {OtpCert, Name} <- CAs],
-    vcn_utils:pforeach(fun(X) -> update_crl(CADir, X) end, CAsAndDPs),
+    utils:pforeach(fun(X) -> update_crl(CADir, X) end, CAsAndDPs),
     load_certs(CADir).
 
 
@@ -270,35 +297,16 @@ start_slaves(Count) when Count >= 0 ->
 %% ====================================================================
 initialize_node(NodeName) when is_atom(NodeName) ->
     ?info("Trying to start GSI slave node: ~p @ ~p", [NodeName, get_host()]),
-    NodeRes1 =
-        case slave:start(get_host(), NodeName, make_code_path() ++ " -setcookie \"" ++ atom_to_list(erlang:get_cookie()) ++ "\"", no_link, erl) of
-            {error, {already_running, Node}} ->
-                ?info("GSI slave node ~p is already running", [Node]),
-                Node;
-            {ok, Node} ->
-                ?info("GSI slave node ~p started", [Node]),
-                Node;
-            {error, Reason} ->
-                ?error("Could not start GSI slave node ~p @ ~p due to error: ~p", [NodeName, get_host(), Reason]),
-                'nonode@nohost'
-        end,
-    case NodeRes1 of
-        'nonode@nohost' -> {error, cannot_start_node};
-        NodeRes ->
-            {ok, Prefix} = application:get_env(?APP_Name, nif_prefix),
-            case rpc:call(NodeRes, gsi_nif, start, [atom_to_list(Prefix)]) of
-                ok ->
-                    ?info("NIF lib on node ~p was successfully loaded", [NodeRes]),
-                    ets:insert(gsi_state, {node, NodeName});
-                {error,{reload, _}} ->
-                    ?info("NIF lib on node ~p is already loaded", [NodeRes]),
-                    ets:insert(gsi_state, {node, NodeName});
-                {error, Reason1} ->
-                    ?error("Could not load NIF lib on node ~p due to: ~p. Killing node", [NodeRes, Reason1]),
-                    slave:stop(NodeRes);
-                {badrpc, Reason2} ->
-                    ?error("Could not load NIF lib on node ~p due to: ~p. Ignoring", [NodeRes, Reason2])
-            end
+    case slave:start(get_host(), NodeName, make_code_path() ++ " -setcookie \"" ++ atom_to_list(erlang:get_cookie()) ++ "\"", no_link, erl) of
+        {error, {already_running, Node}} ->
+            ?info("GSI slave node ~p is already running", [Node]),
+            ets:insert(gsi_state, {node, NodeName});
+        {ok, Node} ->
+            ?info("GSI slave node ~p started", [Node]),
+            ets:insert(gsi_state, {node, NodeName});
+        {error, Reason} ->
+            ?error("Could not start GSI slave node ~p @ ~p due to error: ~p", [NodeName, get_host(), Reason]),
+            {error, Reason}
     end.
 
 

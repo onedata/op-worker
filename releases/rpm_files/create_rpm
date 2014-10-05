@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Path, where rpm building will take place
-RPM_BUILD_DIRECTORY=/tmp/veil_rpmbuild
+RPM_BUILD_DIRECTORY=/tmp/oneprovider_rpmbuild
 
 # Bigcouch release submodule
 BIGCOUCH_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/bigcouchdb
 
 # Onepanel release submodule
-ONEPANEL_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/onepanel/rel/onepanel
+ONEPANEL_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/onepanel/rel_provider/onepanel
 
 ##############################
 # Exit on any failure
@@ -17,8 +17,8 @@ set -e
 RUNNER_SCRIPT_DIR=$(cd ${0%/*} && pwd)
 cd $RUNNER_SCRIPT_DIR
 
-# Check if veil_cluster_node release exists
-if [[ ! -d "../veil_cluster_node" ]]; then
+# Check if oneprovider_node release exists
+if [[ ! -d "../oneprovider_node" ]]; then
   	echo "Generate a release first."
 fi
 
@@ -30,25 +30,25 @@ cd $RPM_BUILD_DIRECTORY
 # Create required directory structure
 mkdir -p BUILD RPMS SOURCES SPECS SRPMS tmp
 
-cp $RUNNER_SCRIPT_DIR/veil.spec SPECS/
+cp $RUNNER_SCRIPT_DIR/oneprovider.spec SPECS/
 
-mkdir -p $RPM_BUILD_DIRECTORY/SOURCES/veil/files/veil_cluster_node
-cp -R $RUNNER_SCRIPT_DIR/sources/* $RPM_BUILD_DIRECTORY/SOURCES/veil
-cp -R $RUNNER_SCRIPT_DIR/../veil_cluster_node/* $RPM_BUILD_DIRECTORY/SOURCES/veil/files/veil_cluster_node
+mkdir -p $RPM_BUILD_DIRECTORY/SOURCES/oneprovider/files/oneprovider_node
+cp -R $RUNNER_SCRIPT_DIR/sources/* $RPM_BUILD_DIRECTORY/SOURCES/oneprovider
+cp -R $RUNNER_SCRIPT_DIR/../oneprovider_node/* $RPM_BUILD_DIRECTORY/SOURCES/oneprovider/files/oneprovider_node
 
 # Attach bigcouch release
-cp -R $BIGCOUCH_RELEASE_DIRECTORY/*  $RPM_BUILD_DIRECTORY/SOURCES/veil/files
+cp -R $BIGCOUCH_RELEASE_DIRECTORY/*  $RPM_BUILD_DIRECTORY/SOURCES/oneprovider/files
 
 # Attach onepanel release
-mkdir -p $RPM_BUILD_DIRECTORY/SOURCES/veil/files/onepanel_node
-cp -R $ONEPANEL_RELEASE_DIRECTORY/*  $RPM_BUILD_DIRECTORY/SOURCES/veil/files/onepanel_node
+mkdir -p $RPM_BUILD_DIRECTORY/SOURCES/oneprovider/files/onepanel_node
+cp -R $ONEPANEL_RELEASE_DIRECTORY/*  $RPM_BUILD_DIRECTORY/SOURCES/oneprovider/files/onepanel_node
 
 cd $RPM_BUILD_DIRECTORY/SOURCES
-tar zcf veil.tar.gz veil
+tar zcf oneprovider.tar.gz oneprovider
 
 # Launch rpmbuild
 cd $RPM_BUILD_DIRECTORY
-rpmbuild -ba SPECS/veil.spec
+rpmbuild -ba SPECS/oneprovider.spec
 
 # Move created RPM to releases directory
 mv -f $RPM_BUILD_DIRECTORY/RPMS/x86_64/* $RUNNER_SCRIPT_DIR/..

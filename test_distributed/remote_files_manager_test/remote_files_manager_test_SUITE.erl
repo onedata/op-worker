@@ -14,8 +14,8 @@
 
 -include("test_utils.hrl").
 -include("registered_names.hrl").
--include("veil_modules/dao/dao_vfs.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/dao/dao_vfs.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("remote_file_management_pb.hrl").
@@ -63,11 +63,11 @@ permissions_test(Config) ->
   UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, Team1]),
   UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, Team1]),
 
-  Login = UserDoc1#veil_document.record#user.login,
-  Login2 = UserDoc2#veil_document.record#user.login,
+  Login = UserDoc1#db_document.record#user.login,
+  Login2 = UserDoc2#db_document.record#user.login,
 
-  [DN | _] = UserDoc1#veil_document.record#user.dn_list,
-  [DN2 | _] = UserDoc2#veil_document.record#user.dn_list,
+  [DN | _] = UserDoc1#db_document.record#user.dn_list,
+  [DN2 | _] = UserDoc2#db_document.record#user.dn_list,
 
   %% Get FuseId
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -298,7 +298,7 @@ storage_helpers_management_test(Config) ->
   ?ENABLE_PROVIDER(Config),
 
   UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_GROUP]),
-  [DN | _] = UserDoc#veil_document.record#user.dn_list,
+  [DN | _] = UserDoc#db_document.record#user.dn_list,
 
   {ok, Socket1} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -487,7 +487,7 @@ init_per_testcase(_, Config) ->
 
   DB_Node = ?DB_NODE,
   Port = 6666,
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
   discover_default_file_mode(FSLogicNode),
 
@@ -495,7 +495,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node().
 

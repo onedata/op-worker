@@ -5,9 +5,9 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module hosts all VeilFS modules (fslogic, cluster_rengin etc.).
+%% @doc: This module hosts all oneprovider modules (fslogic, cluster_rengin etc.).
 %% It makes it easy to manage modules and provides some basic functionality
-%% for its plug-ins (VeilFS modules) e.g. requests management.
+%% for its plug-ins (oneprovider modules) e.g. requests management.
 %% @end
 %% ===================================================================
 
@@ -18,7 +18,7 @@
 -include("registered_names.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("ctool/include/logging.hrl").
--include("veil_modules/dao/dao_types.hrl").
+-include("oneprovider_modules/dao/dao_types.hrl").
 
 -define(BORTER_CHILD_WAIT_TIME, 10000).
 -define(MAX_CHILD_WAIT_TIME, 60000000).
@@ -578,7 +578,7 @@ proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId,
 %% ====================================================================
 preproccess_msg(Msg) ->
     case Msg of
-      #veil_request{subject = Subj, request = Msg1, fuse_id = FuseID, access_token = AccessTokenTuple} ->
+      #worker_request{subject = Subj, request = Msg1, fuse_id = FuseID, access_token = AccessTokenTuple} ->
         fslogic_context:set_user_dn(Subj),
         case AccessTokenTuple of
             {UserID, AccessToken} ->
@@ -1005,7 +1005,7 @@ del_sub_procs(Key, Name) ->
 send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
   case user_logic:get_user(UserKey) of
     {ok, UserDoc} ->
-      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
+      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#db_document.uuid], ProtocolVersion) of
         {ok, FuseIds} ->
           lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, Message, MessageDecoder) end, FuseIds),
           ok;
@@ -1029,7 +1029,7 @@ send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
 send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, ProtocolVersion) ->
   case user_logic:get_user(UserKey) of
     {ok, UserDoc} ->
-      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
+      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#db_document.uuid], ProtocolVersion) of
         {ok, FuseIds} ->
           send_to_fuses_with_ack(FuseIds, Message, MessageDecoder, OnCompleteCallback);
         {error, Error} ->
@@ -1157,7 +1157,7 @@ register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Clearing
       LoopTime = case CacheLoop of
                    non -> non;
                    Atom when is_atom(Atom) ->
-                     case application:get_env(veil_cluster_node, CacheLoop) of
+                     case application:get_env(oneprovider_node, CacheLoop) of
                        {ok, Interval1} -> Interval1;
                        _               -> loop_time_load_error
                      end;

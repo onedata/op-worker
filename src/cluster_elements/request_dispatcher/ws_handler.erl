@@ -19,11 +19,12 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("logging_pb.hrl").
+-include("remote_file_management_pb.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
--include("veil_modules/cluster_rengine/cluster_rengine.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/cluster_rengine/cluster_rengine.hrl").
 -include_lib("ctool/include/logging.hrl").
--include("veil_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 %% Holds state of websocket connection. peer_dn field contains DN of certificate of connected peer.
@@ -69,39 +70,19 @@ init(_Proto, _Req, _Opts) ->
 websocket_init(TransportName, Req, _Opts) ->
     ?debug("WebSocket connection received. Transport: ~p", [TransportName]),
 
-    {ok, DispatcherTimeout} = application:get_env(veil_cluster_node, dispatcher_timeout),
+    {ClientSubjectDN, _} = cowboy_req:header(<<"onedata-internal-client-subject-dn">>, Req),
+    {SessionId, _} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
+    ?debug("New connection with SessionId ~p, ClientSubjectDN: ~p", [SessionId, ClientSubjectDN]),
+
+    {ok, DispatcherTimeout} = application:get_env(oneprovider_node, dispatcher_timeout),
     InitCtx = #handler_state{dispatcher_timeout = DispatcherTimeout},
 
-    case ssl:peercert(cowboy_req:get(socket, Req)) of
-        {ok, PeerCert} ->
-            {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
-
-            case ets:lookup(gsi_state, {Serial, Issuer}) of
-                [{_, [OtpCert | Certs], _}] ->
-                    case gsi_handler:call(gsi_nif, verify_cert_c,
-                        [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate
-                            [public_key:pkix_encode('OTPCertificate', Cert, otp) || Cert <- Certs], %% peer CA chain
-                            [DER || [DER] <- ets:match(gsi_state, {{ca, '_'}, '$1', '_'})],         %% cluster CA store
-                            [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
-                        {ok, 1} ->
-                            InitCtx2 = InitCtx#handler_state{peer_serial = Serial},
-                            {ok, Req, setup_connection(InitCtx2, OtpCert, Certs, auth_handler:is_provider(OtpCert))};
-                        {ok, 0, Errno} ->
-                            ?info("Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
-                            {shutdown, Req};
-                        {error, Reason} ->
-                            ?error("GSI peer verification callback error: ~p", [Reason]),
-                            {shutdown, Req};
-                        Other ->
-                            ?error("GSI verification callback returned unknown response ~p", [Other]),
-                            {shutdown, Req}
-                    end;
-                _ ->
-                    ?error("Peer was conected but cerificate chain was not found. Please check if GSI validation is enabled."),
-                    {shutdown, Req}
-            end;
-
-        {error, no_peercert} ->
+    case gsi_handler:get_certs_from_req(?ONEPROXY_DISPATCHER, Req) of
+        {ok, {OtpCert, Certs}} ->
+            {ok, {Serial, _Issuer}} = public_key:pkix_issuer_id(OtpCert, self),
+            InitCtx2 = InitCtx#handler_state{peer_serial = Serial},
+            {ok, Req, setup_connection(InitCtx2, OtpCert, Certs, auth_handler:is_provider(OtpCert))};
+        {error, _} ->
             {GRUID, Req2}  = cowboy_req:header(<<"global-user-id">>, Req),
             {Secret, Req3} = cowboy_req:header(<<"authentication-secret">>, Req2),
 
@@ -192,11 +173,13 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     UID = case DnString =:= undefined of %% Fetch user's ID
         false ->
             case user_logic:get_user({dn, DnString}) of
-                {ok, #veil_document{uuid = UID1}} ->
+                {ok, #db_document{uuid = UID1}} ->
                     UID1;
                 {error, Error} ->
                     case user_logic:get_user({unverified_dn, DnString}) of
-                        {ok, #veil_document{uuid = UID1, record = #user{login = Login}} = UserDoc} ->
+                        {ok, #db_document{uuid = UID1} = UserDoc} ->
+                            {{OpenIdProvider, UserName}, _} = user_logic:get_login_with_uid(UserDoc),
+                            Login = utils:ensure_list(OpenIdProvider) ++ "_" ++ utils:ensure_list(UserName),
                             case CertConfirmation of
                                 #handshakerequest_certconfirmation{login = Login, result = Result} ->
                                     % Remove the DN from unverified DNs as it has been confirmed or declined
@@ -215,17 +198,17 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
                                     throw({cert_confirmation_required, Login, MsgId})
                             end;
                         {error, _} ->
-                            ?error("VeilClient handshake failed. User (DN: ~p) data is not available due to DAO error: ~p", [DnString, Error]),
+                            ?error("oneclient handshake failed. User (DN: ~p) data is not available due to DAO error: ~p", [DnString, Error]),
                             throw({no_user_found_error, Error, MsgId})
                     end
             end;
 
         true ->
-            case user_logic:get_user({global_id, vcn_utils:ensure_list(GRUID)}) of
-                {ok, #veil_document{uuid = UID1}} ->
+            case user_logic:get_user({global_id, utils:ensure_list(GRUID)}) of
+                {ok, #db_document{uuid = UID1}} ->
                     UID1;
                 {error, Error} ->
-                    ?error("VeilClient handshake failed. User (GRUID: ~p) data is not available due to DAO error: ~p", [GRUID, Error]),
+                    ?error("oneclient handshake failed. User (GRUID: ~p) data is not available due to DAO error: ~p", [GRUID, Error]),
                     throw({no_user_found_error, Error, MsgId})
             end
     end,
@@ -234,11 +217,11 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     EnvVars = [{list_to_atom(string:to_lower(Name)), Value} || #handshakerequest_envvariable{name = Name, value = Value} <- Vars],
 
     %% Save received data to DB
-    FuseEnv = #veil_document{uuid = NewFuseId, record = #fuse_session{uid = UID, hostname = Hostname, env_vars = EnvVars}},
+    FuseEnv = #db_document{uuid = NewFuseId, record = #fuse_session{uid = UID, hostname = Hostname, env_vars = EnvVars}},
     case dao_lib:apply(dao_cluster, save_fuse_session, [FuseEnv], ProtocolVersion) of
         {ok, _} -> ok;
         {error, Error1} ->
-            ?error("VeilClient handshake failed. Cannot save FUSE env variables (~p) due to DAO error: ~p", [FuseEnv, Error1]),
+            ?error("oneclient handshake failed. Cannot save FUSE env variables (~p) due to DAO error: ~p", [FuseEnv, Error1]),
             throw({handshake_error, Error1, MsgId})
     end,
 
@@ -249,22 +232,25 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
 handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, {_GlobalId, _TokenHash}}, #handler_state{peer_dn = DnString, user_global_id = GRUID} = State) ->
     UserKey = case DnString =:= undefined of
-        true  -> {global_id, vcn_utils:ensure_list(GRUID)};
+        true  -> {global_id, utils:ensure_list(GRUID)};
         false -> {dn, DnString}
     end,
 
     {UID, AccessToken, UserGID} = %% Fetch user's ID
         case dao_lib:apply(dao_users, get_user, [UserKey], ProtocolVersion) of
-            {ok, #veil_document{uuid = UID1, record = #user{access_token = AccessToken1, global_id = UserGID1}}} ->
+            {ok, #db_document{uuid = UID1, record = #user{access_token = AccessToken1, global_id = UserGID1}}} ->
                 {UID1, AccessToken1, UserGID1};
             {error, Error} ->
-                ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [UserKey, Error]),
+                ?error("oneclient handshake failed. User ~p data is not available due to DAO error: ~p", [UserKey, Error]),
                 throw({no_user_found_error, Error, MsgId})
         end,
 
+    %% Refresh user's access token and schedule future refreshes
+    gen_server:call(?Dispatcher_Name, {control_panel, 1, {request_refresh, {uuid, UID}, {fuse, self()}}}),
+
     %% Fetch session data (using FUSE ID)
     case dao_lib:apply(dao_cluster, get_fuse_session, [NewFuseId], ProtocolVersion) of
-        {ok, #veil_document{uuid = SessID, record = #fuse_session{uid = UID}}} ->
+        {ok, #db_document{uuid = SessID, record = #fuse_session{uid = UID}}} ->
             %% Save connection's location (node and pid) to DB or crash, sice failure leaves no way of recovering
             {ok, ConnID} = dao_lib:apply(dao_cluster, save_connection_info, [#connection_info{session_id = SessID, controlling_node = node(), controlling_pid = self()}], ProtocolVersion),
 
@@ -280,9 +266,9 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
             %% Session data found, and its user ID matches -> send OK status and update current connection state
             ?debug("User ~p assigned FUSE ID ~p to the connection (PID: ~p)", [UserKey, NewFuseId, self()]),
             {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req,
-                        State#handler_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = vcn_utils:ensure_binary(AccessToken), user_global_id = vcn_utils:ensure_binary(UserGID)}};
+                        State#handler_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = utils:ensure_binary(AccessToken), user_global_id = utils:ensure_binary(UserGID)}};
 
-        {ok, #veil_document{record = #fuse_session{uid = OtherUID}}} ->
+        {ok, #db_document{record = #fuse_session{uid = OtherUID}}} ->
             %% Current user does not match session owner
             ?warning("User ~p tried to access someone else's session (fuse ID: ~p, session owner UID: ~p)", [UserKey, NewFuseId, OtherUID]),
             throw({invalid_fuse_id, MsgId});
@@ -295,11 +281,11 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
 %% Handle other messages
 handle(Req, {push, FuseID, {Msg, MsgId, DecoderName1, MsgType}}, #handler_state{peer_type = provider} = State) ->
     ?debug("Got push msg for ~p: ~p ~p ~p", [FuseID, Msg, DecoderName1, MsgType]),
-    request_dispatcher:send_to_fuse(vcn_utils:ensure_list(FuseID), Msg, DecoderName1),
+    request_dispatcher:send_to_fuse(utils:ensure_list(FuseID), Msg, DecoderName1),
     {reply, {binary, encode_answer(ok, MsgId)}, Req, State};
 handle(Req, {pull, FuseID, CLM}, #handler_state{peer_type = provider, provider_id = ProviderId} = State) ->
     ?debug("Got pull msg: ~p from ~p", [CLM, FuseID]),
-    handle(Req, CLM, State#handler_state{fuse_id = vcn_utils:ensure_list( fslogic_context:gen_global_fuse_id(ProviderId, FuseID) )});
+    handle(Req, CLM, State#handler_state{fuse_id = utils:ensure_list( fslogic_context:gen_global_fuse_id(ProviderId, FuseID) )});
 handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = _CLM,
         #handler_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
                       access_token = SessionAccessToken, user_global_id = SessionUserGID} = State) ->
@@ -344,13 +330,13 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
 
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->
-                      #veil_request{subject = DnString, request =
+                      #worker_request{subject = DnString, request =
                       #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}, access_token = {UserGID, AccessToken}};
                   CallbackMsg2 when is_record(CallbackMsg2, channelclose) ->
-                      #veil_request{subject = DnString, request =
+                      #worker_request{subject = DnString, request =
                       #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}, access_token = {UserGID, AccessToken}};
                   _ ->
-                      #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
+                      #worker_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
               end,
 
     case Synch of
@@ -401,6 +387,8 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
     Req :: term(),
     State :: #handler_state{}.
 %% ====================================================================
+websocket_info({new_access_token, AccessToken}, Req, State) ->
+    {ok, Req, State#handler_state{access_token = AccessToken}};
 websocket_info({Pid, get_session_id}, Req, State) ->
     Pid ! {ok, State#handler_state.fuse_id}, %% Response with assigned FuseID, when cluster asks
     {ok, Req, State};
@@ -424,9 +412,25 @@ websocket_info(_Msg, Req, State) ->
     Req :: term(),
     State :: #handler_state{}.
 %% ====================================================================
-websocket_terminate(_Reason, _Req, #handler_state{peer_serial = _Serial, connection_id = ConnID} = _State) ->
+websocket_terminate(_Reason, _Req, State) ->
+    #handler_state{peer_serial = _Serial, connection_id = ConnID, peer_dn = DN, user_global_id = GRUID, peer_type = PeerType} = State,
     ?debug("WebSocket connection  terminate for peer ~p with reason: ~p", [_Serial, _Reason]),
     dao_lib:apply(dao_cluster, remove_connection_info, [ConnID], 1),        %% Cleanup connection info.
+
+    case PeerType of
+        user ->
+            UserIdentification =
+                if
+                    DN =/= undefined -> {dn, DN};
+                    GRUID =/= undefined -> {global_id, GRUID}
+                end,
+
+            gen_server:call(?Dispatcher_Name, {control_panel, 1, {fuse_session_close, UserIdentification, self()}});
+
+        provider ->
+            ok
+    end,
+
     gen_server:cast(?Node_Manager_Name, {delete_callback_by_pid, self()}),
     ok.
 

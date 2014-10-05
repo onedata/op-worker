@@ -19,17 +19,17 @@
 -include("registered_names.hrl").
 -include("records.hrl").
 -include("supervision_macros.hrl").
--include("veil_modules/control_panel/common.hrl").
+-include("oneprovider_modules/control_panel/common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Path (relative to domain) on which cowboy expects client's requests
--define(VEILCLIENT_URI_PATH, "/veilclient").
+-define(ONECLIENT_URI_PATH, "/oneclient").
 
 %% ------------
 % GUI and cowboy related defines
 
 % Paths in gui static directory
--define(static_paths, ["/css/", "/fonts/", "/images/", "/js/", "/n2o/"]).
+-define(static_paths, ["/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
 
 % Session logic module
 -define(session_logic_module, session_logic).
@@ -45,6 +45,9 @@
 -define(https_listener, https).
 -define(rest_listener, rest).
 -define(http_redirector_listener, http).
+
+%% Reload time for storage UIDs and GIDs.
+-define(storage_ids_reload_time, timer:seconds(20)).
 
 %% ====================================================================
 %% API
@@ -118,8 +121,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
                 _:_ -> ok
             end,
             start_dispatcher_listener(),
-            {ok, Interval} = application:get_env(?APP_Name, initialization_time),
-            erlang:send_after(Interval * 1000, self(), {timer, init_listeners}),
+            erlang:send_after(0, self(), {timer, init_listeners}),
             {ok, MonitoringInitialization} = application:get_env(?APP_Name, node_monitoring_initialization),
             erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_node_monitoring});
         false -> ok
@@ -130,14 +132,16 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
     ets:new(?LFM_EVENT_PRODUCTION_ENABLED_ETS, [set, named_table, public]),
     ets:new(?WRITE_DISABLED_USERS, [set, named_table, public]),
     ets:new(?ACK_HANDLERS, [set, named_table, public]),
+    ets:new(?STORAGE_USER_IDS_CACHE, [set, named_table, protected, {read_concurrency, true}]),
+    ets:new(?STORAGE_GROUP_IDS_CACHE, [set, named_table, protected, {read_concurrency, true}]),
 
-    process_flag(trap_exit, true),
     erlang:send_after(10, self(), {timer, do_heart_beat}),
+    erlang:send_after(0, self(), {timer, reload_storage_users}),
+    erlang:send_after(0, self(), {timer, reload_storage_groups}),
 
     {ok, #node_state{node_type = Type, ccm_con_status = not_connected}};
 
 init([Type]) when Type =:= test_worker ->
-    process_flag(trap_exit, true),
     {ok, MonitoringInitialization} = application:get_env(?APP_Name, node_monitoring_initialization),
     erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_node_monitoring}),
     erlang:send_after(10, self(), {timer, do_heart_beat}),
@@ -360,7 +364,7 @@ handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
 handle_cast({node_for_ack, MsgID, Node}, State) ->
     ?debug("Node for ack chosen: ~p", [{MsgID, Node}]),
     ets:insert(?ACK_HANDLERS, {{chosen_node, MsgID}, Node}),
-    {ok, Interval} = application:get_env(veil_cluster_node, callback_ack_time),
+    {ok, Interval} = application:get_env(oneprovider_node, callback_ack_time),
     Pid = self(),
     erlang:send_after(Interval * 1000, Pid, {delete_node_for_ack, MsgID}),
     {noreply, State};
@@ -373,6 +377,41 @@ handle_cast({update_network_stats, NetworkStats}, State) ->
 
 handle_cast({update_ports_stats, PortsStats}, State) ->
     {noreply, State#node_state{ports_stats = PortsStats}};
+
+
+handle_cast(reload_storage_users, State) ->
+    {ok, Data} = file:read_file("/etc/passwd"),
+    UserTokens = binary:split(Data, [<<10>>, <<13>>], [global, trim]),
+    EtsMap = maps:from_list(ets:tab2list(?STORAGE_USER_IDS_CACHE)),
+    UnusedMap =
+        lists:foldl(
+            fun(Elem, CurrMap) ->
+                [UserName, _, UID | _] = binary:split(Elem, [<<":">>], [global, trim]),
+                ets:insert(?STORAGE_USER_IDS_CACHE, {UserName, binary_to_integer(UID)}),
+                maps:remove(UserName, CurrMap)
+            end, EtsMap, UserTokens),
+
+    [ets:delete(?STORAGE_USER_IDS_CACHE, Key) || Key <- maps:keys(UnusedMap)],
+
+    erlang:send_after(timer:seconds(20), self(), {timer, reload_storage_users}),
+    {noreply, State};
+
+handle_cast(reload_storage_groups, State) ->
+    {ok, Data} = file:read_file("/etc/group"),
+    GroupTokens = binary:split(Data, [<<10>>, <<13>>], [global, trim]),
+    EtsMap = maps:from_list(ets:tab2list(?STORAGE_GROUP_IDS_CACHE)),
+    UnusedMap =
+        lists:foldl(
+            fun(Elem, CurrMap) ->
+                [GroupName, _, GID | _] = binary:split(Elem, [<<":">>], [global, trim]),
+                ets:insert(?STORAGE_GROUP_IDS_CACHE, {GroupName, binary_to_integer(GID)}),
+                maps:remove(GroupName, CurrMap)
+            end, EtsMap, GroupTokens),
+
+    [ets:delete(?STORAGE_GROUP_IDS_CACHE, Key) || Key <- maps:keys(UnusedMap)],
+
+    erlang:send_after(timer:seconds(20), self(), {timer, reload_storage_groups}),
+    {noreply, State};
 
 handle_cast(_Msg, State) ->
     ?warning("Wrong cast: ~p", [_Msg]),
@@ -456,7 +495,7 @@ code_change(_OldVsn, State, _Extra) ->
 heart_beat(Conn_status, State) ->
     New_conn_status = case Conn_status of
                           not_connected ->
-                              {ok, CCM_Nodes} = application:get_env(veil_cluster_node, ccm_nodes),
+                              {ok, CCM_Nodes} = application:get_env(oneprovider_node, ccm_nodes),
                               Ans = init_net_connection(CCM_Nodes),
                               case Ans of
                                   ok -> connected;
@@ -465,7 +504,7 @@ heart_beat(Conn_status, State) ->
                           Other -> Other
                       end,
 
-    {ok, Interval} = application:get_env(veil_cluster_node, heart_beat),
+    {ok, Interval} = application:get_env(oneprovider_node, heart_beat),
     case New_conn_status of
         connected ->
             gen_server:cast({global, ?CCM}, {node_is_up, node()}),
@@ -1201,17 +1240,16 @@ start_dispatcher_listener() ->
     {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
     {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
 
-    Dispatch = cowboy_router:compile([{'_', [{?VEILCLIENT_URI_PATH, ws_handler, []}]}]),
+    LocalPort = oneproxy:get_local_port(Port),
+    Pid = spawn_link(fun() -> oneproxy:start(Port, LocalPort, CertFile, verify_peer) end),
+    register(?ONEPROXY_DISPATCHER, Pid),
 
-    {ok, _} = cowboy:start_https(?dispatcher_listener, DispatcherPoolSize,
+    Dispatch = cowboy_router:compile([{'_', [{?ONECLIENT_URI_PATH, ws_handler, []}]}]),
+
+    {ok, _} = cowboy:start_http(?dispatcher_listener, DispatcherPoolSize,
         [
-            {port, Port},
-            {certfile, atom_to_list(CertFile)},
-            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs_from_all_cert_dirs())},
-            {keyfile, atom_to_list(CertFile)},
-            {password, ""},
-            {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}},
-            {ciphers, gsi_handler:get_ciphers()}
+            {ip, {127, 0, 0, 1}},
+            {port, LocalPort}
         ],
         [
             {env, [{dispatch, Dispatch}]}
@@ -1227,15 +1265,18 @@ start_dispatcher_listener() ->
 %% ====================================================================
 start_gui_listener() ->
     % Get params from env for gui
-    {ok, DocRoot} = application:get_env(veil_cluster_node, control_panel_static_files_root),
+    {ok, DocRoot} = application:get_env(oneprovider_node, control_panel_static_files_root),
 
-    {ok, Cert} = application:get_env(veil_cluster_node, web_ssl_cert_path),
+    {ok, Cert} = application:get_env(oneprovider_node, web_ssl_cert_path),
     CertString = atom_to_list(Cert),
 
-    {ok, GuiPort} = application:get_env(veil_cluster_node, control_panel_port),
-    {ok, GuiNbAcceptors} = application:get_env(veil_cluster_node, control_panel_number_of_acceptors),
-    {ok, MaxKeepAlive} = application:get_env(veil_cluster_node, control_panel_max_keepalive),
-    {ok, Timeout} = application:get_env(veil_cluster_node, control_panel_socket_timeout),
+    {ok, GuiPort} = application:get_env(oneprovider_node, control_panel_port),
+    {ok, GuiNbAcceptors} = application:get_env(oneprovider_node, control_panel_number_of_acceptors),
+    {ok, MaxKeepAlive} = application:get_env(oneprovider_node, control_panel_max_keepalive),
+    {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
+
+    LocalPort = oneproxy:get_local_port(GuiPort),
+    spawn_link(fun() -> oneproxy:start(GuiPort, LocalPort, CertString, verify_none) end),
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
@@ -1243,7 +1284,7 @@ start_gui_listener() ->
         % Cowboy does not have a mechanism to match every hostname starting with 'www.'
         % This will match hostnames with up to 6 segments
         % e. g. www.seg2.seg3.seg4.seg5.com
-        {"www.:_[.:_[.:_[.:_[.:_]]]]", [{'_', veil_cowboy_bridge,
+        {"www.:_[.:_[.:_[.:_[.:_]]]]", [{'_', opn_cowboy_bridge,
             [
                 {delegation, true},
                 {handler_module, redirect_handler},
@@ -1252,37 +1293,37 @@ start_gui_listener() ->
         ]},
         % Proper requests are routed to handler modules
         {'_', static_dispatches(atom_to_list(DocRoot), ?static_paths) ++ [
-            {"/nagios/[...]", veil_cowboy_bridge,
+            {"/nagios/[...]", opn_cowboy_bridge,
                 [
                     {delegation, true},
                     {handler_module, nagios_handler},
                     {handler_opts, []}
                 ]},
-            {?user_content_download_path ++ "/:path", veil_cowboy_bridge,
+            {?user_content_download_path ++ "/:path", opn_cowboy_bridge,
                 [
                     {delegation, true},
                     {handler_module, file_download_handler},
                     {handler_opts, [{type, ?user_content_request_type}]}
                 ]},
-            {?shared_files_download_path ++ "/:path", veil_cowboy_bridge,
+            {?shared_files_download_path ++ "/:path", opn_cowboy_bridge,
                 [
                     {delegation, true},
                     {handler_module, file_download_handler},
                     {handler_opts, [{type, ?shared_files_request_type}]}
                 ]},
-            {?file_upload_path, veil_cowboy_bridge,
+            {?file_upload_path, opn_cowboy_bridge,
                 [
                     {delegation, true},
                     {handler_module, file_upload_handler},
                     {handler_opts, []}
                 ]},
-            {"/ws/[...]", veil_cowboy_bridge,
+            {"/ws/[...]", opn_cowboy_bridge,
                 [
                     {delegation, true},
-                    {handler_module, veil_bullet_handler},
+                    {handler_module, opn_bullet_handler},
                     {handler_opts, [{handler, n2o_bullet}]}
                 ]},
-            {'_', veil_cowboy_bridge,
+            {'_', opn_cowboy_bridge,
                 [
                     {delegation, true},
                     {handler_module, n2o_handler},
@@ -1295,14 +1336,10 @@ start_gui_listener() ->
     gui_utils:init_n2o_ets_and_envs(GuiPort, ?gui_routing_module, ?session_logic_module, ?cowboy_bridge_module),
 
     % Start the listener for web gui and nagios handler
-    {ok, _} = cowboy:start_https(?https_listener, GuiNbAcceptors,
+    {ok, _} = cowboy:start_http(?https_listener, GuiNbAcceptors,
         [
-            {port, GuiPort},
-            {certfile, CertString},
-            {keyfile, CertString},
-            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs_from_all_cert_dirs())},
-            {password, ""},
-            {ciphers, gsi_handler:get_ciphers()}
+            {ip, {127, 0, 0, 1}},
+            {port, LocalPort}
         ],
         [
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
@@ -1320,16 +1357,16 @@ start_gui_listener() ->
 -spec start_redirector_listener() -> ok | no_return().
 %% ====================================================================
 start_redirector_listener() ->
-    {ok, RedirectPort} = application:get_env(veil_cluster_node, control_panel_redirect_port),
-    {ok, RedirectNbAcceptors} = application:get_env(veil_cluster_node, control_panel_number_of_http_acceptors),
-    {ok, Timeout} = application:get_env(veil_cluster_node, control_panel_socket_timeout),
+    {ok, RedirectPort} = application:get_env(oneprovider_node, control_panel_redirect_port),
+    {ok, RedirectNbAcceptors} = application:get_env(oneprovider_node, control_panel_number_of_http_acceptors),
+    {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
 
     RedirectDispatch = [
         {'_', [
-            {'_', veil_cowboy_bridge,
+            {'_', opn_cowboy_bridge,
                 [
                     {delegation, true},
-                    {handler_module, vcn_redirect_handler},
+                    {handler_module, opn_redirect_handler},
                     {handler_opts, []}
                 ]}
         ]}
@@ -1353,24 +1390,28 @@ start_redirector_listener() ->
 -spec start_rest_listener() -> ok | no_return().
 %% ====================================================================
 start_rest_listener() ->
-    {ok, NbAcceptors} = application:get_env(veil_cluster_node, control_panel_number_of_acceptors),
-    {ok, Timeout} = application:get_env(veil_cluster_node, control_panel_socket_timeout),
+    {ok, NbAcceptors} = application:get_env(oneprovider_node, control_panel_number_of_acceptors),
+    {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
 
-    {ok, Cert} = application:get_env(veil_cluster_node, web_ssl_cert_path),
+    {ok, Cert} = application:get_env(oneprovider_node, web_ssl_cert_path),
     CertString = atom_to_list(Cert),
 
     % Get REST port from env and setup dispatch opts for cowboy
-    {ok, RestPort} = application:get_env(veil_cluster_node, rest_port),
+    {ok, RestPort} = application:get_env(oneprovider_node, rest_port),
+
+    LocalPort = oneproxy:get_local_port(RestPort),
+    Pid = spawn_link(fun() -> oneproxy:start(RestPort, LocalPort, CertString, verify_peer) end),
+    register(oneproxy_rest, Pid),
 
     RestDispatch = [
         {'_', [
-            {"/rest/:version/[...]", veil_cowboy_bridge,
+            {"/rest/:version/[...]", opn_cowboy_bridge,
                 [
                     {delegation, true},
                     {handler_module, rest_handler},
                     {handler_opts, []}
                 ]},
-            {"/cdmi/[...]", veil_cowboy_bridge,
+            {"/cdmi/[...]", opn_cowboy_bridge,
                 [
                     {delegation, true},
                     {handler_module, cdmi_handler},
@@ -1380,15 +1421,10 @@ start_rest_listener() ->
     ],
 
     % Start the listener for REST handler
-    {ok, _} = cowboy:start_https(?rest_listener, NbAcceptors,
+    {ok, _} = cowboy:start_http(?rest_listener, NbAcceptors,
         [
-            {port, RestPort},
-            {certfile, CertString},
-            {keyfile, CertString},
-            {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs_from_all_cert_dirs())},
-            {password, ""},
-            {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}},
-            {ciphers, gsi_handler:get_ciphers()}
+            {ip, {127, 0, 0, 1}},
+            {port, LocalPort}
         ],
         [
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
@@ -1407,7 +1443,7 @@ start_rest_listener() ->
 %% ====================================================================
 static_dispatches(DocRoot, StaticPaths) ->
     _StaticDispatches = lists:map(fun(Dir) ->
-        {Dir ++ "[...]", veil_cowboy_bridge,
+        {Dir ++ "[...]", opn_cowboy_bridge,
             [
                 {delegation, true},
                 {handler_module, cowboy_static},

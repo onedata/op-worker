@@ -12,8 +12,8 @@
 
 -module(files_tester).
 
--include("veil_modules/dao/dao.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
 -include_lib("dao/include/common.hrl").
 
 -define(SH, "DirectIO").
@@ -39,9 +39,9 @@
 file_exists(LogicalName) ->
   File = dao_lib:apply(dao_vfs, get_file, [LogicalName], 0),
   case File of
-    {ok, #veil_document{record = #file{location = Location}}} ->
+    {ok, #db_document{record = #file{location = Location}}} ->
       case dao_lib:apply(dao_vfs, get_storage, [{uuid, Location#file_location.storage_id}], 0) of
-        {ok, #veil_document{record = Storage}} ->
+        {ok, #db_document{record = Storage}} ->
           SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
           #storage_helper_info{name = SHName, init_args = SHArgs} = SHI,
           case SHName of
@@ -72,9 +72,9 @@ file_exists(LogicalName) ->
 read_file(LogicalName, BytesNum) ->
   File = dao_lib:apply(dao_vfs, get_file, [LogicalName], 0),
   case File of
-    {ok, #veil_document{record = #file{location = Location}}} ->
+    {ok, #db_document{record = #file{location = Location}}} ->
       case dao_lib:apply(dao_vfs, get_storage, [{uuid, Location#file_location.storage_id}], 0) of
-        {ok, #veil_document{record = Storage}} ->
+        {ok, #db_document{record = Storage}} ->
           SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
           #storage_helper_info{name = SHName, init_args = SHArgs} = SHI,
           case SHName of
@@ -163,9 +163,9 @@ delete_dir(File) ->
 get_file_location(LogicalName) ->
   File = dao_lib:apply(dao_vfs, get_file, [LogicalName], 0),
   case File of
-    {ok, #veil_document{record = #file{location = Location}}} ->
+    {ok, #db_document{record = #file{location = Location}}} ->
       case dao_lib:apply(dao_vfs, get_storage, [{uuid, Location#file_location.storage_id}], 0) of
-        {ok, #veil_document{record = Storage}} ->
+        {ok, #db_document{record = Storage}} ->
           SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
           #storage_helper_info{name = SHName, init_args = SHArgs} = SHI,
           case SHName of

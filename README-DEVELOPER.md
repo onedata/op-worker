@@ -1,7 +1,7 @@
 Development
 ===========
 
-This document intends to provide essential information for VeilCluster developers. General information about VeilCluster usage can be found in the "README.md" file.
+This document intends to provide essential information for oneprovider developers. General information about oneprovider usage can be found in the "README.md" file.
 
 -------------------------------------------------------------------------------
 
@@ -12,21 +12,21 @@ This document intends to provide essential information for VeilCluster developer
 * certs               # TODO uzupelnic
 * config              # TODO uzupelnic
 * include             # TODO uzupelnic
-* releases            # folder for generated VeilCluster releases
+* releases            # folder for generated oneprovider releases
 * src
-    * cluster_elements  # includes directories that contain code of Erlang modules that enable cluster management and host 'proper' modules of VeilFS
-    * veil_modules      # includes directories that contain code of 'proper' modules of VeilFS
-    * proto             # definitions of protocol buffer messages used by clients during the communication with VeilCluster
+    * cluster_elements  # includes directories that contain code of Erlang modules that enable cluster management and host 'proper' modules of *onedata*
+    * oneprovider_modules      # includes directories that contain code of 'proper' modules of *onedata*
+    * proto             # definitions of protocol buffer messages used by clients during the communication with oneprovider
 * test
 * test_distributed    # TODO uzupelnic - czy to nie moze byc w 'test' ???
-* ...                 # othe VeilCluster files
+* ...                 # othe oneprovider files
 
 #### Src
 Directly in the 'src' directory only files needed to start application can be put.
 
 The 'cluster_elements' includes source of Erlang modules, which are responsible for load balancing, spawning processes for requests etc. This allows implementation of 'proper' modules using sequential code.
 
-The 'veil_modules' includes directories that contain code of 'proper' modules of VeilFS. Each 'proper' module will work inside of 'worker_host' (one of 'cluster_elements') so it must implement 'worker_plugin_behaviour' defined in 'worker_plugin_behaviour.erl' file in this directory.
+The 'oneprovider_modules' includes directories that contain code of 'proper' modules of *onedata*. Each 'proper' module will work inside of 'worker_host' (one of 'cluster_elements') so it must implement 'worker_plugin_behaviour' defined in 'worker_plugin_behaviour.erl' file in this directory.
 
 
 #### Tests
@@ -39,7 +39,7 @@ Eunit is used during tests so each test file should:
 * use compilation control macros (code between '-ifdef(TEST).' and '-endif.').
 
 #### Releases
-To create new release, version must be changed in both 'src/veil_cluster_node.app.src' and 'releases/reltool.conf'.
+To create new release, version must be changed in both 'src/oneprovider_node.app.src' and 'releases/reltool.conf'.
 
 
 Node:
@@ -48,12 +48,12 @@ Node:
 
 -------------------------------------------------------------------------------
 
-#### Development - using Makefile to generate single releases and test environments of veil cluster nodes
+#### Development - using Makefile to generate single releases and test environments of oneprovider nodes
 
 Generating and managing a single node release for development purposes
 ----------------------------------------------------------------------
 
-The script 'gen_dev' generates a single node release for testing purposes. It uses 'veil_cluster' script to set the configuration.
+The script 'gen_dev' generates a single node release for testing purposes. It uses 'oneprovider' script to set the configuration.
 
 Every node (worker or CCM) requires information about all CCMs running in the cluster. Hence to generate release of
 a node it is required to specify the following set of arguments:
@@ -96,7 +96,7 @@ Note, that it only works for packages in releases/test_cluster/ - those created 
 Generating a local test environment
 -----------------------------------
 
-The script 'gen_test' simplifies setting up a bunch of cluster nodes for testing. It uses both 'gen_dev' and 'veil_cluster' scripts.
+The script 'gen_test' simplifies setting up a bunch of cluster nodes for testing. It uses both 'gen_dev' and 'oneprovider' scripts.
 To generate a testing environment proper arguments must be passed to the script:
 
     -workers worker1@host worker2@host ... -main_ccm main_ccm_node@host [-opt_ccms opt_ccm_node1@host opt_ccm_node2@host ...] -db_nodes db1@host db2@host
@@ -141,29 +141,29 @@ Every node can be started independently with use of 'start_node', 'attach_to_nod
 Compilation and Releases from Sources
 -------------------------------------
 
-To build a working release of VeilCluster from scratch, type the following commands:
+To build a working release of oneprovider from scratch, type the following commands:
 
     ~$  make test
     ~$  make generate
 
-After this step we should have a 'veil_cluster_node' folder in the 'releases' folder.
+After this step we should have a 'oneprovider_node' folder in the 'releases' folder.
 
 Execution
 ---------
 
 Now, we are ready to start CCM and worker processes:
 
-    ~$  cp -R releases/veil_cluster_node releases/veil_cluster_node_worker
-    ~$  ./releases/veil_cluster_node/bin/veil_cluster -name ccm@127.0.0.1 -main_ccm ccm@127.0.0.1 -opt_ccms -db_nodes db@127.0.0.1 -start
-    ~$  ./releases/veil_cluster_node_worker/bin/veil_cluster -name worker@127.0.0.1 -main_ccm ccm@127.0.0.1 -opt_ccms -db_nodes db@127.0.0.1 -start
+    ~$  cp -R releases/oneprovider_node releases/oneprovider_node_worker
+    ~$  ./releases/oneprovider_node/bin/oneprovider -name ccm@127.0.0.1 -main_ccm ccm@127.0.0.1 -opt_ccms -db_nodes db@127.0.0.1 -start
+    ~$  ./releases/oneprovider_node_worker/bin/oneprovider -name worker@127.0.0.1 -main_ccm ccm@127.0.0.1 -opt_ccms -db_nodes db@127.0.0.1 -start
 
     ~$  curl https://127.0.0.1:8000
 
-If everything went correct, two processes should be started and a default web site of the VeilCluster should be available.
+If everything went correct, two processes should be started and a default web site of the oneprovider should be available.
 
 Note:
 
-* To have a fully working VeilFS installation, we should also start a BigCouch instance on the same machine, with its cookie set to 'veil_cluster_node' and hostname set to 'db'. 
+* To have a fully working *onedata* installation, we should also start a BigCouch instance on the same machine, with its cookie set to 'oneprovider_node' and hostname set to 'db'. 
 
 
 -------------------------------------------------------------------------------
@@ -195,16 +195,16 @@ Note:
 
 #### Release management
 
-After generation of a release package, configuration files contain default parameters. The script 'veil_cluster', that
+After generation of a release package, configuration files contain default parameters. The script 'oneprovider', that
 comes with the package (in the 'bin' directory) is used to set up and start a release.
 
 Prerequisites
 -------------
 
-Firstly, the user must have execution rights on both './bin/veil_cluster' and './bin/veil_cluster_node' scripts.
+Firstly, the user must have execution rights on both './bin/oneprovider' and './bin/oneprovider_node' scripts.
 
-// TODO to along veil_cluster czy w config ???
-Secondly, 'config.args' file must be present in the 'config' directory (along with 'veil_cluster' script).
+// TODO to along oneprovider czy w config ???
+Secondly, 'config.args' file must be present in the 'config' directory (along with 'oneprovider' script).
 
 Setting parameters
 ------------------
@@ -222,15 +222,15 @@ Primarily, these parameters are retrieved from 'config.args' file. It should con
 
 Another way is passing these parameters via command line arguments. In this case the syntax is:
 
-    ./veil_cluster -<parameter1_name> <parameter1_value> -<parameter2_name> <parameter2_value> ...
+    ./oneprovider -<parameter1_name> <parameter1_value> -<parameter2_name> <parameter2_value> ...
 
 NOTE:
 
 * parameters passed via command line OVERRIDE those in 'config.args' file
 * "command line way" can specify any subset of parameters, for instance:
-    * './veil_cluster' will cause the script to use all parameters from 'config.args'
-    * './veil_cluster -name somename@host.net' will cause the script to use parameters from 'config.args' except node name
-    * './veil_cluster -opt_ccms' (no opt_ccms value specified) will override opt_ccms from 'config.args' with null value
+    * './oneprovider' will cause the script to use all parameters from 'config.args'
+    * './oneprovider -name somename@host.net' will cause the script to use parameters from 'config.args' except node name
+    * './oneprovider -opt_ccms' (no opt_ccms value specified) will override opt_ccms from 'config.args' with null value
 * (both) parameter order can be arbitrary
 * (both) multiple values (eg. DBMS nodes) are passed as a space-delimited list (eg. -db_nodes dbnode1@host.net dbnode2@host.net)
 * (both) parameter values can't contain spaces or hyphens
@@ -239,7 +239,7 @@ NOTE:
 Starting a release
 ------------------
 
-There are three options which are used to start a release. They are passed along with other arguments to the 'veil_cluster' script.
+There are three options which are used to start a release. They are passed along with other arguments to the 'oneprovider' script.
 
     -start    -> the script will perform the configuration and then start the node as a daemon
     -attach   -> the script will skip configuration and try to attach to a running node with an erlang shell (used after -start)
@@ -250,7 +250,7 @@ If none of these arguments occur, the script will terminate after setting up the
 Full example of usage
 ---------------------
 
-    ~$  ./veil_cluster -name mynode@host.net -main_ccm ccmnode@host.net -console
+    ~$  ./oneprovider -name mynode@host.net -main_ccm ccmnode@host.net -console
 
 Above command will configure the release according to 'config.args', except for name and main_ccm which will be modified
 corresponding to command line arguments. Then, the node will be started presenting to the user with an erlang shell.

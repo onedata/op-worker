@@ -4,12 +4,12 @@ DIST_TESTS_SRC_DIR = "test_distributed"
 
 .PHONY: releases deps test docs
 
-all: deps generate docs
+all: generate docs
 
 compile:
 	-@if [ -f ebin/.test ]; then rm -rf ebin; fi 
 	./gen_config
-	cp -R veilprotocol/proto src
+	cp -R clproto/proto src
 	./rebar compile
 	rm -rf src/proto
 
@@ -32,11 +32,11 @@ eunit: deps compile
 ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
-ct:
+ct: deps compile
 	-@if [ ! -f ebin/.test ]; then rm -rf ebin; fi
 	-@mkdir -p ebin ; touch ebin/.test 
 	./gen_config
-	 cp -R veilprotocol/proto src
+	 cp -R clproto/proto src
 	./rebar -D TEST compile
 	rm -rf src/proto
 	./rebar ct skip_deps=true
@@ -48,10 +48,10 @@ ct:
 test: eunit ct
 
 
-generate: compile
+generate: deps compile
 	./rebar generate
-	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster
-	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
+	chmod u+x ./releases/oneprovider_node/bin/oneprovider
+	chmod u+x ./releases/oneprovider_node/bin/oneprovider_node
 
 docs: deps
 	make -C docs html
@@ -65,7 +65,7 @@ upgrade:
 	./rebar generate-upgrade previous_release=${PREV}
 
 rpm: deps generate
-	make -C onepanel rel
+	make -C onepanel rel CONFIG=config/provider.config
 	./releases/rpm_files/create_rpm
 
 
@@ -115,17 +115,17 @@ start_test_env_from_file:
 
 ### Starting a node
 start_node:
-	./releases/test_cluster/$(node)/bin/veil_cluster_node start
+	./releases/test_cluster/$(node)/bin/oneprovider_node start
 
 attach_to_node:
-	./releases/test_cluster/$(node)/bin/veil_cluster_node attach
+	./releases/test_cluster/$(node)/bin/oneprovider_node attach
 
 start_node_console:
-	./releases/test_cluster/$(node)/bin/veil_cluster_node console
+	./releases/test_cluster/$(node)/bin/oneprovider_node console
 
 ### Basho-Bench build (used by CI)
 basho_bench: deps 
-	@cp -R veilprotocol/proto ${BASHO_BENCH_DIR}/src
+	@cp -R clproto/proto ${BASHO_BENCH_DIR}/src
 	cp ${STRESS_TESTS_SRC_DIR}/**/*.erl ${BASHO_BENCH_DIR}/src
 	cp ${DIST_TESTS_SRC_DIR}/wss.erl ${BASHO_BENCH_DIR}/src
 	@mkdir -p ${BASHO_BENCH_DIR}/tests

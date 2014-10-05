@@ -201,11 +201,11 @@ if [[ $INDEX -eq 0 ]]; then
         echo "Terminating."
         exit 1
     fi
-	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
-	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster	
+	chmod u+x ./releases/oneprovider_node/bin/oneprovider_node
+	chmod u+x ./releases/oneprovider_node/bin/oneprovider
 else
 	# User requested to skip release generation
-	if [[ ! -d releases/veil_cluster_node ]]; then
+	if [[ ! -d releases/oneprovider_node ]]; then
 		echo "Error: no release found"
 		echo "Cannot skip release generation - no release package found."
 		echo "Try executing the script without -no_generate option."
@@ -236,11 +236,18 @@ done
 # Remove old release
 rm -r "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME" 2>/dev/null
 
-# Copy the release package to proper location (directory named as the node without hostname), preserve mode
-cp -R -p releases/veil_cluster_node "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME"
+# Get application version
+START_ERL=`cat "releases/oneprovider_node/releases/start_erl.data"`
+APP_VSN=${START_ERL#* }
 
-# Execute the veil_cluster script with proper arguments
-./releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME/bin/veil_cluster \
+# Replace developer_mode env to enable developer functionalities in generated package
+sed -i "s/-oneprovider_node developer_mode.*/-oneprovider_node developer_mode true/g" releases/oneprovider_node/releases/$APP_VSN/vm.args
+
+# Copy the release package to proper location (directory named as the node without hostname), preserve mode
+cp -R -p releases/oneprovider_node "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME"
+
+# Execute the oneprovider script with proper arguments
+./releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME/bin/oneprovider \
 -name $NODE_NAME -main_ccm $MAIN_CCM -opt_ccms $OPT_CCMS -db_nodes $DB_NODES -storage_config_path $STORAGE_CONFIG_PATH
 
 # Get hostname to use it as the cookie
@@ -254,10 +261,6 @@ if [[ $AT_INDEX -gt 0 ]]; then
 	COOKIE=${FIRST_DB_NODE:$AT_INDEX:${#FIRST_DB_NODE}}
 fi
 
-# Get application version
-START_ERL=`cat "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME/releases/start_erl.data"`
-APP_VSN=${START_ERL#* }
-
 # Replace the cookie
 sed $SED_OPTS  "s/-setcookie.*/-setcookie '$COOKIE'/g" "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME/releases/$APP_VSN/vm.args"
 echo "Cookie set to: $COOKIE"
@@ -270,9 +273,9 @@ if [[ $NODE_TYPE == "ccm" ]]; then
 
     rm -r "releases/${TEST_NODE_DIR}/${NODE_NAME_WITHOUT_HOSTNAME}_worker" 2>/dev/null
 
-    cp -R -p releases/veil_cluster_node "releases/$TEST_NODE_DIR/${NODE_NAME_WITHOUT_HOSTNAME}_worker"
+    cp -R -p releases/oneprovider_node "releases/$TEST_NODE_DIR/${NODE_NAME_WITHOUT_HOSTNAME}_worker"
 
-    ./releases/${TEST_NODE_DIR}/${NODE_NAME_WITHOUT_HOSTNAME}_worker/bin/veil_cluster \
+    ./releases/${TEST_NODE_DIR}/${NODE_NAME_WITHOUT_HOSTNAME}_worker/bin/oneprovider \
     -name ${NODE_NAME_WITHOUT_HOSTNAME}_worker${HOSTNAME} -main_ccm $MAIN_CCM -opt_ccms $OPT_CCMS -db_nodes $DB_NODES -storage_config_path $STORAGE_CONFIG_PATH
 
     sed $SED_OPTS  "s/-setcookie.*/-setcookie '$COOKIE'/g" "releases/${TEST_NODE_DIR}/${NODE_NAME_WITHOUT_HOSTNAME}_worker/releases/$APP_VSN/vm.args"

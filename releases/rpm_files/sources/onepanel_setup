@@ -7,20 +7,20 @@
 ## cited in 'LICENSE.txt'.
 ## @end
 ## ===================================================================
-## @doc: This script sets up OnePanel node during VeilCluster package
+## @doc: This script sets up OnePanel node during oneprovider package
 ## post-installation hooks execution. It accepts one argument:
-## * VeilCluster package installation prefix
+## * oneprovider package installation prefix
 ## @end
 ## ===================================================================
 
 mkdir -p $1/nodes
 cp -r $1/files/onepanel_node $1/nodes/onepanel
 sed -i -e s/"^-name .*"/"-name onepanel@"`hostname -f`/g $1/nodes/onepanel/etc/vm.args
-sed -i -e s/"^-setcookie .*"/"-setcookie veil_cluster_node"/g $1/nodes/onepanel/etc/vm.args
+sed -i -e s/"^-setcookie .*"/"-setcookie oneprovider_node"/g $1/nodes/onepanel/etc/vm.args
 if [[ -n "$ONEPANEL_MULTICAST_ADDRESS" ]]
 then
     multicast_address=`echo $ONEPANEL_MULTICAST_ADDRESS | sed s/"\."/", "/g`
-    sed -i -e s/"{multicast_address, .*"/"{multicast_address, {$multicast_address} }"/g $1/nodes/onepanel/etc/app.config
+    sed -i -e s/"{multicast_address, [^}]*"/"{multicast_address, {$multicast_address"/g $1/nodes/onepanel/etc/app.config
 fi
 
 exit 0
