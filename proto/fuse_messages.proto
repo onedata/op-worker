@@ -100,6 +100,7 @@ message FileAttr {
     optional string uname = 11 [default = ""];
     optional string gname = 12 [default = ""];
     optional int32 links = 13 [default = 1];
+    optional bool has_acl = 14 [default = false];
 }
 
 message GetFileUuid {
