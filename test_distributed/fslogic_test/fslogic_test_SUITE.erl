@@ -2399,7 +2399,7 @@ acl_test(Config) ->
     [DN | _] = user_logic:get_dn_list(UserDoc),
     fslogic_context:set_user_dn(DN),
 
-    DirName = "/spaces/veilfstestuser/test_acl_dir",
+    DirName = "/spaces/" ++ ?TEST_USER ++ "/test_acl_dir",
 
     % make test file
     AnsDirCreate1 = rpc:call(Node1, fslogic_test_SUITE, make_dir, [DirName, DN]),
@@ -2407,35 +2407,37 @@ acl_test(Config) ->
 
     %test getting virtual acl
     VirtualAclAns = rpc:call(Node1, fslogic_test_SUITE, get_acl, [DirName, DN]),
-    ?assertEqual({ok,[#accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_veilfstestuser">>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask}]}
+    ?assertEqual({ok,[#accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_", ?TEST_USER>>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask}]}
         ,VirtualAclAns),
     {ok, VirtualAcl} = VirtualAclAns,
+    TestUserName = <<?TEST_USER, " ", ?TEST_USER, "#globa">>,
     ?assertEqual([[{<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
-        {<<"aceflags">>,<<"NO_FLAGS">>},
-        {<<"acemask">>,<<"READ, WRITE">>}]],
+        {<<"identifier">>, TestUserName},
+        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"acemask">>, <<"READ, WRITE">>}]],
         rpc:call(Node1, fslogic_acl,from_acl_to_json_format,[VirtualAcl])),
 
     % test setting and getting acl
+    TestUserNameWithNoHash = <<?TEST_USER, " ", ?TEST_USER, "#">>,
     Acl = rpc:call(Node1, fslogic_acl, from_json_fromat_to_acl,[
         [
             [
                 {<<"acetype">>, <<"ALLOW">>},
-                {<<"identifier">>, <<"veilfstestuser veilfstestuser#">>},
+                {<<"identifier">>, TestUserNameWithNoHash},
                 {<<"aceflags">>, <<"NO_FLAGS">>},
                 {<<"acemask">>, <<"READ, WRITE">>}
             ],
             [
                 {<<"acetype">>, <<"DENY">>},
-                {<<"identifier">>, <<"veilfstestuser veilfstestuser#">>},
+                {<<"identifier">>, TestUserNameWithNoHash},
                 {<<"aceflags">>, <<"IDENTIFIER_GROUP">>},
                 {<<"acemask">>, <<"WRITE">>}
             ]
         ]
     ]),
     ?assertEqual(Acl, [
-        #accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_veilfstestuser">>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
-        #accesscontrolentity{acetype = ?deny_mask, identifier = <<"global_id_for_veilfstestuser">>, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+        #accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_", ?TEST_USER>>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #accesscontrolentity{acetype = ?deny_mask, identifier = <<"global_id_for_", ?TEST_USER>>, aceflags = ?identifier_group_mask, acemask = ?write_mask}
     ]),
 
     Ans1 = rpc:call(Node1, logical_files_manager, set_acl, [DirName, Acl]),

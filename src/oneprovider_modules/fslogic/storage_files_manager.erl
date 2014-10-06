@@ -880,8 +880,8 @@ check_access_type(File) ->
 -spec set_root_ctx() -> ok.
 %% ====================================================================
 set_root_ctx() ->
-    fslogic_context:set_fs_group_ctx(undefined),
-    fslogic_context:set_fs_user_ctx(undefined),
+    fslogic_context:set_fs_root_user_ctx(),
+    fslogic_context:set_fs_root_group_ctx(),
     ok.
 
 %% setup_ctx/1
