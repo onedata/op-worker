@@ -55,7 +55,7 @@ cp -R ${RUNNER_SCRIPT_DIR}/../oneprovider_node/* ${RPM_BUILD_DIRECTORY}/SOURCES/
 
 # Attach bigcouch release
 mkdir -p ${RPM_BUILD_DIRECTORY}/SOURCES/oneprovider/files/database_node
-cp -R ${BIGCOUCH_RELEASE_DIRECTORY}/*  ${RPM_BUILD_DIRECTORY}/SOURCES/oneprovider/files
+cp -R ${BIGCOUCH_RELEASE_DIRECTORY}/*  ${RPM_BUILD_DIRECTORY}/SOURCES/oneprovider/files/database_node
 
 # Attach onepanel release
 mkdir -p ${RPM_BUILD_DIRECTORY}/SOURCES/oneprovider/files/onepanel_node
