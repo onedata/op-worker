@@ -103,7 +103,6 @@ int main(int argc, char *argv[])
             // Simple erlang port dirver
             std::string command, message_id, arg0;
             for(std::string line; std::getline(std::cin, line); ) {
-                std::getline(std::cin, line);
                 std::stringstream line_stream(line);
 
                 line_stream >> command;

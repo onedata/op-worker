@@ -14,6 +14,7 @@
 -module(test_utils).
 
 -include("registered_names.hrl").
+-include_lib("ctool/include/global_registry/gr_openid.hrl").
 -include("test_utils.hrl").
 -include("modules_and_args.hrl").
 
@@ -25,7 +26,7 @@
 -export([ct_mock/4, wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0,
          wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
 
--export([add_user/4, add_user/5]).
+-export([add_user/4, add_user/7]).
 
 
 %% add_user/4
@@ -39,17 +40,18 @@
     #db_document{} | no_return().
 %% ====================================================================
 add_user(Config, Login, Cert, Spaces) ->
-    add_user(Config, Login, Cert, Spaces, <<"access_token">>).
+    add_user(Config, Login, Cert, Spaces, <<"access_token">>, <<>>, 0).
 
 
 %% add_user/5
 %% ====================================================================
 %% @doc Same as add_user/4 but also allows to explicitly set AccessToken for created user.
 %% @end
--spec add_user(Config :: list(), Login :: string(), Cert :: string(), Spaces :: [string() | binary()], AccessToken :: binary()) ->
+-spec add_user(Config :: list(), Login :: string(), Cert :: string(), Spaces :: [string() | binary()],
+    AccessToken :: binary(), RefreshToken :: binary(), AccessExpirationTime :: integer()) ->
     #db_document{} | no_return().
 %% ====================================================================
-add_user(Config, Login, Cert, Spaces, AccessToken) ->
+add_user(Config, Login, Cert, Spaces, AccessToken, RefreshToken, AccessExpirationTime) ->
 
     [CCM | _] = ?config(nodes, Config),
 
@@ -67,6 +69,7 @@ add_user(Config, Login, Cert, Spaces, AccessToken) ->
     Name = Login ++ " " ++ Login,
     Teams = SpacesList,
     Email = [Login ++ "@email.net"],
+    Logins = [#id_token_login{provider_id = plgrid, login = utils:ensure_binary(Login)}],
 
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
 
@@ -75,12 +78,12 @@ add_user(Config, Login, Cert, Spaces, AccessToken) ->
         Ctx -> put(ct_spaces, lists:usort(SpacesBinary ++ Ctx))
     end,
 
-    {CreateUserAns, NewUserDoc} = rpc:call(CCM, user_logic, create_user, ["global_id_for_" ++ Login, Login, Name, Teams, Email, DnList, AccessToken]),
+    {CreateUserAns, NewUserDoc} = rpc:call(CCM, user_logic, create_user,
+        ["global_id_for_" ++ Login, Logins, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime]),
     ?assertMatch({ok, _}, {CreateUserAns, NewUserDoc}),
 
     test_utils:ct_mock(Config, gr_users, get_spaces, fun(_) -> {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
     test_utils:ct_mock(Config, gr_adapter, get_space_info, fun(SpaceId, _) -> {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [?LOCAL_PROVIDER_ID]}} end),
-
     test_utils:ct_mock(Config, gr_providers, get_spaces, fun(provider) -> {ok, AllSpaces} end),
 
     _UserDoc = rpc:call(CCM, user_logic, synchronize_spaces_info, [NewUserDoc, AccessToken]).

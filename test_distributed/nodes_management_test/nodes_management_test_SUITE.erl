@@ -300,7 +300,7 @@ fuse_session_cleanup_test(Config) ->
     _Cert2 = ?COMMON_FILE("peer2.pem"),
 
     %% Add test users since cluster wont generate FuseId without full authentication
-    test_utils:add_user(Config, "user1", Cert1, [SpaceName]),
+    UserDoc = test_utils:add_user(Config, "user1", Cert1, [SpaceName]),
 
     %% Open connections for the user as session #1
     {ConAns11, Socket11} = wss:connect(Host, 6666, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #1
@@ -395,7 +395,7 @@ fuse_session_cleanup_test(Config) ->
     ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ SpaceName], ?ProtocolVersion])),
     ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion])),
 
-    ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user1"}])).
+    ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{uuid, UserDoc#db_document.uuid}])).
 
 main_test(Config) ->
   NodesUp = ?config(nodes, Config),
@@ -681,7 +681,7 @@ init_per_testcase(_, Config) ->
   [CCM | _] = NodesUp,
   DBNode = ?DB_NODE,
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, NodesUp, [
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [
     [{node_type, ccm_test}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
     [{node_type, worker}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8444}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
     [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8445}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
@@ -691,7 +691,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node().
 

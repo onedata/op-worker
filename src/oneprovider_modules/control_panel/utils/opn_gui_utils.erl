@@ -15,14 +15,15 @@
 -include_lib("ctool/include/logging.hrl").
 
 % Functions connected with user's session
--export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0]).
+-export([storage_defined/0]).
 
 % Saving and retrieving information that does not change during one session
--export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0, gen_logout_token/0, set_logout_token/1, get_logout_token/0,
+-export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0,
+    gen_logout_token/0, set_logout_token/1, get_logout_token/0,
     set_access_token/1, get_access_token/0, set_global_user_id/1, get_global_user_id/0]).
 
 % Functions to check for user's session
--export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/3]).
+-export([apply_or_redirect/2, apply_or_redirect/3, maybe_redirect/2]).
 
 % Functions to generate page elements
 -export([top_menu/1, top_menu/2, empty_page/0, message/2, message/3,
@@ -32,25 +33,6 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
-
-%% get_user_dn/0
-%% ====================================================================
-%% @doc Returns user's DN retrieved from his session state.
-%% @end
--spec get_user_dn() -> string() | undefined.
-%% ====================================================================
-get_user_dn() ->
-    try
-        {ok, UserDoc} = user_logic:get_user({uuid, gui_ctx:get_user_id()}),
-        case user_logic:get_dn_list(UserDoc) of
-            [] -> undefined;
-            L when is_list(L) -> lists:nth(1, L);
-            _ -> undefined
-        end
-    catch _:_ ->
-        undefined
-    end.
-
 
 %% set_global_user_id/1
 %% ====================================================================
@@ -177,16 +159,6 @@ storage_defined() ->
     end.
 
 
-%% dn_and_storage_defined/0
-%% ====================================================================
-%% @doc Convienience function to check both conditions.
-%% @end
--spec dn_and_storage_defined() -> boolean().
-%% ====================================================================
-dn_and_storage_defined() ->
-    (get_user_dn() /= undefined) and storage_defined().
-
-
 %% maybe_redirect/3
 %% ====================================================================
 %% @doc Decides if user can view the page, depending on arguments.
@@ -194,58 +166,49 @@ dn_and_storage_defined() ->
 %% Otherwise, it issues a redirection and returns true.
 %% NOTE: Should be called from page:main().
 %% @end
--spec maybe_redirect(NeedLogin :: boolean(), NeedDN :: boolean(), NeedStorage :: boolean()) -> ok.
+-spec maybe_redirect(NeedLogin :: boolean(), NeedStorage :: boolean()) -> ok.
 %% ====================================================================
-maybe_redirect(NeedLogin, NeedDN, NeedStorage) ->
+maybe_redirect(NeedLogin, NeedStorage) ->
     case NeedLogin and (not gui_ctx:user_logged_in()) of
         true ->
             gui_jq:redirect_to_login(),
             true;
         false ->
-            case NeedDN and (opn_gui_utils:get_user_dn() =:= undefined) of
+            case NeedStorage and (not opn_gui_utils:storage_defined()) of
                 true ->
                     gui_jq:redirect(<<"/manage_account">>),
                     true;
                 false ->
-                    case NeedStorage and (not opn_gui_utils:storage_defined()) of
-                        true ->
-                            gui_jq:redirect(<<"/manage_account">>),
-                            true;
-                        false ->
-                            false
-                    end
+                    false
             end
     end.
 
 
+%% apply_or_redirect/2
+%% ====================================================================
+%% @doc Checks if the client has right to do the operation (is logged).
+%% If so, it executes the code.
+%% @end
+-spec apply_or_redirect(Module :: atom, Fun :: atom) -> boolean().
+%% ====================================================================
+apply_or_redirect(Module, Fun) ->
+    apply_or_redirect(Module, Fun, []).
+
+
 %% apply_or_redirect/3
 %% ====================================================================
-%% @doc Checks if the client has right to do the operation (is logged in and possibly 
-%% has a certificate DN defined). If so, it executes the code.
+%% @doc Checks if the client has right to do the operation (is logged).
+%% If so, it executes the code.
 %% @end
--spec apply_or_redirect(Module :: atom, Fun :: atom, NeedDN :: boolean()) -> boolean().
+-spec apply_or_redirect(Module :: atom, Fun :: atom, Args :: list()) -> boolean() | no_return.
 %% ====================================================================
-apply_or_redirect(Module, Fun, NeedDN) ->
-    apply_or_redirect(Module, Fun, [], NeedDN).
-
-
-%% apply_or_redirect/4
-%% ====================================================================
-%% @doc Checks if the client has right to do the operation (is logged in and possibly 
-%% has a certificate DN defined). If so, it executes the code.
-%% @end
--spec apply_or_redirect(Module :: atom, Fun :: atom, Args :: list(), NeedDN :: boolean()) -> boolean() | no_return.
-%% ====================================================================
-apply_or_redirect(Module, Fun, Args, NeedDN) ->
+apply_or_redirect(Module, Fun, Args) ->
     try
         case gui_ctx:user_logged_in() of
             false ->
                 gui_jq:redirect_to_login();
             true ->
-                case NeedDN and (not dn_and_storage_defined()) of
-                    true -> gui_jq:redirect(<<"/manage_account">>);
-                    false -> erlang:apply(Module, Fun, Args)
-                end
+                erlang:apply(Module, Fun, Args)
         end
     catch Type:Message ->
         ?error_stacktrace("Error in ~p - ~p:~p", [Module, Type, Message]),

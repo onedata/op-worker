@@ -27,7 +27,7 @@
 %% ====================================================================
 %% Logical file organization management (only db is used)
 
--export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, ls_chunked/1, ls_chunked/3,
+-export([mkdir/1, rmdir/1, mv/2, chown/2, ls/3, ls_chunked/1, ls_chunked/3,
     getfileattr/1, get_xattr/2, set_xattr/3, remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2,
     rmlink/1, read_link/1, create_symlink/2]).
 %% File access (db and helper are used)
@@ -206,17 +206,17 @@ ls_chunked(Path) ->
 ls_chunked(Path, From, To) ->
     ls_chunked(Path, From, 10, To - From + 1, []).
 
-%% chown/3
+%% chown/2
 %% ====================================================================
 %% @doc Changes owner of file (in db)
 %% @end
--spec chown(FileName :: string(), Uname :: string(), Uid :: integer()) -> Result when
+-spec chown(FileName :: string(), Uid :: non_neg_integer()) -> Result when
     Result :: ok | {ErrorGeneral, ErrorDetail},
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
-chown(FileName, Uname, Uid) ->
-    Record = #changefileowner{file_logic_name = FileName, uname = Uname, uid = Uid},
+chown(FileName, Uid) ->
+    Record = #changefileowner{file_logic_name = FileName, uid = Uid},
     {Status, TmpAns} = contact_fslogic(Record),
     case Status of
         ok ->
@@ -1010,20 +1010,15 @@ get_file_uuid(FileName) ->
 get_file_user_dependent_name_by_uuid(UUID) ->
     case get_file_full_name_by_uuid(UUID) of
         {ok, FullPath} ->
-            case fslogic_context:get_user_dn() of
-                undefined ->
-                    {ok, FullPath};
-                UserDN ->
-                    case dao_lib:apply(dao_users, get_user, [{dn, UserDN}], 1) of
-                        {ok, #db_document{} = UserDoc} ->
-                            Login = user_logic:get_login(UserDoc),
-                            case string:str(FullPath, Login ++ "/") of
-                                1 -> {ok, string:sub_string(FullPath, length(Login ++ "/") + 1)};
-                                _ -> {ok, FullPath}
-                            end;
-                        {ErrorGeneral, ErrorDetail} ->
-                            {ErrorGeneral, ErrorDetail}
-                    end
+            case fslogic_objects:get_user() of
+                {ok, UserDoc} ->
+                    Login = user_logic:get_login(UserDoc),
+                    case string:str(FullPath, Login ++ "/") of
+                        1 -> {ok, string:sub_string(FullPath, length(Login ++ "/") + 1)};
+                        _ -> {ok, FullPath}
+                    end;
+                {ErrorGeneral, ErrorDetail} ->
+                    {ErrorGeneral, ErrorDetail}
             end;
         {ErrorGeneral, ErrorDetail} ->
             {ErrorGeneral, ErrorDetail}

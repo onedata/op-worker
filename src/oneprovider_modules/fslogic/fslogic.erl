@@ -106,15 +106,15 @@ handle(ProtocolVersion, is_write_enabled) ->
             %% there was no event handler for rm_event then it would need manual trigger to enable writing
             %% in most cases Exceeded == true so in most cases we will not call user_logic:quota_exceeded
             case Exceeded of
-              true -> not(user_logic:quota_exceeded({dn, fslogic_context:get_user_dn()}, ProtocolVersion));
+              true -> not(user_logic:quota_exceeded(UserDoc, ProtocolVersion));
               _ -> true
             end;
           Error ->
-            ?warning("cannot get quota doc for user with dn: ~p, Error: ~p", [fslogic_context:get_user_dn(), Error]),
+            ?warning("cannot get quota doc for user with dn: ~p, Error: ~p", [fslogic_context:get_user_id(), Error]),
             false
         end;
       Error ->
-        ?warning("cannot get user with dn: ~p, Error: ~p", [fslogic_context:get_user_dn(), Error]),
+        ?warning("cannot get user with dn: ~p, Error: ~p", [fslogic_context:get_user_id(), Error]),
         false
     end
   catch
@@ -326,9 +326,9 @@ handle_fuse_message(Req = #updatetimes{file_logic_name = FName, atime = ATime, m
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_req_generic:update_times(FullFileName, ATime, MTime, CTime);
 
-handle_fuse_message(Req = #changefileowner{file_logic_name = FName, uid = UID, uname = UName}) ->
+handle_fuse_message(Req = #changefileowner{file_logic_name = FName, uid = UID}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    fslogic_req_generic:change_file_owner(FullFileName, UID, UName);
+    fslogic_req_generic:change_file_owner(FullFileName, UID);
 
 handle_fuse_message(Req = #changefilegroup{file_logic_name = FName, gid = GID, gname = GName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
