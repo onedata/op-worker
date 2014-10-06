@@ -966,7 +966,7 @@ clear_cache(File) ->
 has_permission(StorageFilePath, PermissionAtom) ->
     {ok, #db_document{record = #user{global_id = GRUID}}} = fslogic_objects:get_user(),
     MsgID = make_ref(),
-    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), self(), MsgID, {has_permission, StorageFilePath, vcn_utils:ensure_binary(GRUID), PermissionAtom}}, ?CACHE_REQUEST_TIMEOUT),
+    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), self(), MsgID, {has_permission, StorageFilePath, utils:ensure_binary(GRUID), PermissionAtom}}, ?CACHE_REQUEST_TIMEOUT),
     receive
         {worker_answer, MsgID, {ok, Resp}} -> Resp
     after ?CACHE_REQUEST_TIMEOUT -> {error, timeout}

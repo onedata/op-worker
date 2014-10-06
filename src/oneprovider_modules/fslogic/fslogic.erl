@@ -363,11 +363,11 @@ handle_fuse_message(Req = #listxattr{file_logic_name = FName}) ->
     fslogic_req_generic:list_xattr(FullFileName);
 
 handle_fuse_message(Req = #getacl{file_logic_name = FName}) ->
-    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_req_generic:get_acl(FullFileName);
 
 handle_fuse_message(Req = #setacl{file_logic_name = FName, entities = Entities}) ->
-    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_req_generic:set_acl(FullFileName, Entities);
 
 handle_fuse_message(Req = #getfileuuid{file_logic_name = FName}) ->
@@ -404,7 +404,7 @@ handle_fuse_message(Req = #getfilechildren{dir_logic_name = FName, offset = Offs
     fslogic_req_special:get_file_children(FullFileName, UserPathTokens, Offset, Count);
 
 handle_fuse_message(Req = #getfilechildrencount{dir_logic_name = FName}) ->
-    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_req_special:get_file_children_count(FullFileName);
 
 handle_fuse_message(Req = #deletefile{file_logic_name = FName}) ->

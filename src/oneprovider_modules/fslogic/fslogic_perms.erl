@@ -76,7 +76,7 @@ check_file_perms(FileName, UserDoc = #db_document{record = #user{global_id = Glo
                 true ->
                     {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
                     {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-                    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), delete}}, ?CACHE_REQUEST_TIMEOUT);
+                    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, utils:ensure_binary(GlobalId), delete}}, ?CACHE_REQUEST_TIMEOUT);
                 false -> ok
             end,
             Ans;
@@ -107,14 +107,14 @@ check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerU
                 false -> ?permission_denied_error(UserDoc, FileName, CheckType)
             end;
         _ ->
-            case (catch fslogic_acl:check_permission(RealAcl, vcn_utils:ensure_binary(GlobalId), CheckType)) of
+            case (catch fslogic_acl:check_permission(RealAcl, utils:ensure_binary(GlobalId), CheckType)) of
                 ok ->
                     % cache permissions for storage_files_manager use
                     case Type of
                         ?REG_TYPE ->
                             {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
                             {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-                            gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, vcn_utils:ensure_binary(GlobalId), CheckType}}, ?CACHE_REQUEST_TIMEOUT),
+                            gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, utils:ensure_binary(GlobalId), CheckType}}, ?CACHE_REQUEST_TIMEOUT),
                             ok;
                         _ -> ok
                     end;

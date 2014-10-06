@@ -31,13 +31,13 @@ get_virtual_acl(FullfileName, FileDoc) ->
     {ok, #space_info{users = Users}} = fslogic_utils:get_space_info_for_path(FullfileName),
     {ok, #db_document{record = #user{global_id = OwnerGlobalId}}} = fslogic_objects:get_user({uuid, Uid}),
     OwnerPerms = posix_perms_to_acl_mask(Perms, true, true),
-    OwnerAce = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = vcn_utils:ensure_binary(OwnerGlobalId), acemask = OwnerPerms},
+    OwnerAce = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = utils:ensure_binary(OwnerGlobalId), acemask = OwnerPerms},
     RestAceList = [ #accesscontrolentity{
         acetype = ?allow_mask,
         aceflags = ?no_flags_mask,
-        identifier = vcn_utils:ensure_binary(UserGlobalId),
+        identifier = utils:ensure_binary(UserGlobalId),
         acemask = posix_perms_to_acl_mask(Perms, false, true)
-    } || UserGlobalId <- Users -- [vcn_utils:ensure_binary(OwnerGlobalId)]],
+    } || UserGlobalId <- Users -- [utils:ensure_binary(OwnerGlobalId)]],
     case Uid of
         "0" -> RestAceList;
         _ -> [OwnerAce | RestAceList]
@@ -129,7 +129,7 @@ proplist_to_ace2([{<<"acemask">>, AceMask} | Rest], Acc) -> proplist_to_ace2(Res
 %% ====================================================================
 gruid_to_name(GRUID) ->
     {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
-    <<(vcn_utils:ensure_binary(Name))/binary,"#",(binary_part(GRUID, 0, ?username_hash_length))/binary>>.
+    <<(utils:ensure_binary(Name))/binary,"#",(binary_part(GRUID, 0, ?username_hash_length))/binary>>.
 
 %% proplist_to_ace/1
 %% ====================================================================
@@ -140,9 +140,9 @@ gruid_to_name(GRUID) ->
 %% ====================================================================
 name_to_gruid(Name) ->
     [UserName, Hash] = binary:split(Name, <<"#">>, [global]),
-    {ok, UserList} = fslogic_objects:get_user({name, vcn_utils:ensure_list(UserName)}),
+    {ok, UserList} = fslogic_objects:get_user({name, utils:ensure_list(UserName)}),
 
-    GRUIDList = lists:map(fun(#db_document{record = #user{global_id = GRUID}}) -> vcn_utils:ensure_binary(GRUID)  end, UserList),
+    GRUIDList = lists:map(fun(#db_document{record = #user{global_id = GRUID}}) -> utils:ensure_binary(GRUID)  end, UserList),
     GUIDWithMatchingPrefixList = lists:filter(fun(GRUID) -> binary:longest_common_prefix([Hash, GRUID]) == byte_size(Hash)  end , GRUIDList),
     [GRUID] = GUIDWithMatchingPrefixList, % todo throw proper error message if more than one user matches given name
     GRUID.
