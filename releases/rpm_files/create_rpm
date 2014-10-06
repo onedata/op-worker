@@ -21,7 +21,7 @@ RPM_BUILD_DIRECTORY=/tmp/oneprovider_rpmbuild
 BIGCOUCH_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/bigcouchdb/database_node
 
 # Onepanel release submodule
-ONEPANEL_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/onepanel/rel_provider/onepanel
+ONEPANEL_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/onepanel/rel_oneprovider/onepanel
 
 ##############################
 # Exit on any failure
