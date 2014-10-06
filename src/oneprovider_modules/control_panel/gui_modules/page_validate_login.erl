@@ -13,6 +13,7 @@
 -module(page_validate_login).
 -include("oneprovider_modules/control_panel/common.hrl").
 -include("oneprovider_modules/dao/dao_spaces.hrl").
+-include("oneprovider_modules/dao/dao_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("dao/include/common.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
@@ -79,6 +80,7 @@ body() ->
                                 LogoutToken = opn_gui_utils:gen_logout_token(),
                                 gui_ctx:create_session(),
                                 gui_ctx:set_user_id(UserDoc#db_document.uuid),
+                                opn_gui_utils:set_global_user_id(UserDoc#db_document.record#user.global_id),
                                 opn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
                                 opn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
                                 opn_gui_utils:set_logout_token(LogoutToken),
