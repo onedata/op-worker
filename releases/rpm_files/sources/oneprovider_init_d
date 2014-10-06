@@ -21,106 +21,115 @@
 # Needed for erlexec to run
 export HOME=/
 
-# Default installation path
-PREFIX=/opt/oneprovider/
+# Scripts paths
+ERL_LUNCHER=/opt/oneprovider/scripts/erl_launcher
+INIT_ESCRIPT=/opt/oneprovider/scripts/init.escript
 
 start() {
-	start_db ; ret1=$?
-	start_oneprovider ; ret2=$?
-	return `[ $ret1 -a $ret2 ]`
+	start_db ; RETVAL1=$?
+	start_oneprovider ; RETVAL2=$?
+	return `[ ${RETVAL1} -eq 0 -a ${RETVAL2} -eq 0 ]`
 }
 
 start_oneprovider() {
-	status_oneprovider_silent ; status=$?
-	if [ $status -eq 3 ]; then
+	status_oneprovider_silent ; STATUS=$?
+	if [ ${STATUS} -eq 3 ]; then
 		echo -n "Starting oneprovider: "
-		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript start_oneprovider
-		ret=$?
-		[ $ret -eq 0 ] && success || failure
+		${ERL_LUNCHER} escript ${INIT_ESCRIPT} start_oneprovider
+		RETVAL=$?
+		[ ${RETVAL} -eq 0 ] && success || failure
 		echo
-		return $ret
+		return ${RETVAL}
 	fi
 }
+
 start_db() {
-	status_db_silent ; status=$?
-	if [ $status -eq 3 ]; then
+	status_db_silent ; STATUS=$?
+	if [ ${STATUS} -eq 3 ]; then
 		echo -n "Starting database: "
-		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript start_db
-		ret=$?
-		[ $ret -eq 0 ] && success || failure
+		${ERL_LUNCHER} escript ${INIT_ESCRIPT} start_db
+		RETVAL=$?
+		[ ${RETVAL} -eq 0 ] && success || failure
 		echo
-		return $ret
+		return ${RETVAL}
 	fi
 }
 
 stop() {
-	stop_oneprovider ; ret1=$?
-	stop_db ; ret2=$?
-	return `[ $ret1 -a $ret2 ]`
+	stop_oneprovider ; RETVAL1=$?
+	stop_db ; RETVAL2=$?
+	return `[ ${RETVAL1} -eq 0 -a ${RETVAL2} -eq 0 ]`
 }
 
 stop_oneprovider() {
-	status_oneprovider_silent ; status=$?
-	if [ $status -eq 0 ]; then
+	status_oneprovider_silent ; STATUS=$?
+	if [ ${STATUS} -eq 0 ]; then
 		echo -n "Stopping oneprovider: "
-		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript stop_oneprovider
-		ret=$?
-		[ $ret -eq 0 ] && success || failure
+		${ERL_LUNCHER} escript ${INIT_ESCRIPT} stop_oneprovider
+		RETVAL=$?
+		[ ${RETVAL} -eq 0 ] && success || failure
 		echo
-		return $ret
+		return ${RETVAL}
 	fi
 }
+
 stop_db() {
-	status_db_silent ; status=$?
-	if [ $status -eq 0 ]; then
+	status_db_silent ; STATUS=$?
+	if [ ${STATUS} -eq 0 ]; then
 		echo -n "Stopping database: "
-		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript stop_db
-		ret=$?
-		[ $ret -eq 0 ] && success || failure
+		${ERL_LUNCHER} escript ${INIT_ESCRIPT} stop_db
+		RETVAL=$?
+		[ ${RETVAL} -eq 0 ] && success || failure
 		echo
-		return $ret
+		return ${RETVAL}
 	fi
 }
+
 restart() {
-	stop
-	start
+	stop ; RETVAL1=$?
+	start ; RETVAL2=$?
+	return `[ ${RETVAL1} -eq 0 -a ${RETVAL2} -eq 0 ]`
 }
+
 status() {
-	status_oneprovider ; ret1=$?
-    status_db ; ret2=$?
-	[[ $ret1 -eq 0 || $ret1 -eq 4 ]] && [[ $ret2 -eq 0 || $ret2 -eq 4 ]] || return 3
+	status_oneprovider ; RETVAL1=$?
+    status_db ; RETVAL2=$?
+	[[ ${RETVAL1} -eq 0 || ${RETVAL1} -eq 4 ]] && [[ ${RETVAL2} -eq 0 || ${RETVAL2} -eq 4 ]] || return 3
 }
+
 status_oneprovider() {
-	status_oneprovider_silent ; ret=$?
+	status_oneprovider_silent ; STATUS=$?
 	echo -n "oneprovider: "
-	if [ $ret -eq 0 ]; then
+	if [ ${STATUS} -eq 0 ]; then
 		 echo "running"
-	elif [ $ret -eq 4 ]; then
+	elif [ ${STATUS} -eq 4 ]; then
 		echo "not present on host"
 	else
 		echo "not running."
 	fi
-	return $ret
+	return ${STATUS}
 }
+
 status_db() {
-	status_db_silent ; ret=$?
+	status_db_silent ; STATUS=$?
 	echo -n "database: "
-	if [ $ret -eq 0 ]; then
+	if [ ${STATUS} -eq 0 ]; then
 		 echo "running"
-	elif [ $ret -eq 4 ]; then
+	elif [ ${STATUS} -eq 4 ]; then
 		echo "not present on host"
 	else
 		echo "not running"
 	fi
-	return $ret
-}
-status_oneprovider_silent() {
-	${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript status_oneprovider
-}
-status_db_silent() {
-	${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript status_db
+	return ${STATUS}
 }
 
+status_oneprovider_silent() {
+	${ERL_LUNCHER} escript ${INIT_ESCRIPT} status_oneprovider
+}
+
+status_db_silent() {
+	${ERL_LUNCHER} escript ${INIT_ESCRIPT} status_db
+}
 
 case "$1" in
     start|start_oneprovider|start_db)

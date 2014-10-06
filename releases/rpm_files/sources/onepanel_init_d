@@ -48,8 +48,9 @@ stop() {
 }
 
 restart() {
-	stop
-	start
+	stop ; RETVAL1=$?
+	start ; RETVAL2=$?
+	return `[ ${RETVAL1} -eq 0 -a ${RETVAL2} -eq 0 ]`
 }
 
 status() {
