@@ -44,7 +44,7 @@ start_oneprovider() {
 start_db() {
 	status_db_silent ; status=$?
 	if [ $status -eq 3 ]; then
-		echo -n "Starting db: "
+		echo -n "Starting database: "
 		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript start_db
 		ret=$?
 		[ $ret -eq 0 ] && success || failure
@@ -73,7 +73,7 @@ stop_oneprovider() {
 stop_db() {
 	status_db_silent ; status=$?
 	if [ $status -eq 0 ]; then
-		echo -n "Stopping db: "
+		echo -n "Stopping database: "
 		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript stop_db
 		ret=$?
 		[ $ret -eq 0 ] && success || failure
@@ -104,7 +104,7 @@ status_oneprovider() {
 }
 status_db() {
 	status_db_silent ; ret=$?
-	echo -n "db: "
+	echo -n "database: "
 	if [ $ret -eq 0 ]; then
 		 echo "running"
 	elif [ $ret -eq 4 ]; then
