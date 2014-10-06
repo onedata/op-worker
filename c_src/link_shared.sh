@@ -7,7 +7,7 @@
 #  cited in 'LICENSE.txt'.
 #####################################################################
 #  This script is used to include given as first argument
-#  dynamic libraries into veil_cluster release package based on ldd 
+#  dynamic libraries into oneprovider release package based on ldd
 #  output from file given as second agrument. 
 #####################################################################
 

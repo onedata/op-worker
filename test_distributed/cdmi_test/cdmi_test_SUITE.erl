@@ -8,19 +8,24 @@
 %% @doc This file contains cdmi protocol tests
 %% @end
 %% ===================================================================
-
 -module(cdmi_test_SUITE).
+
+% Includes
 -include("test_utils.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
--include("veil_modules/control_panel/cdmi_capabilities.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic_acl.hrl").
+-include("oneprovider_modules/control_panel/cdmi_capabilities.hrl").
+-include("fuse_messages_pb.hrl").
 
+% Definitions
 -define(SH, "DirectIO").
 -define(Test_dir_name, "dir").
 -define(Test_file_name, "file.txt").
 -define(Test_file_content, <<"test_file_content">>).
+-define(verbose, false).
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
@@ -241,7 +246,7 @@ metadata_test(_Config) ->
     ?assert(CTime1 =< After),
     ?assert(CTime1 =< ATime1),
     ?assert(CTime1 =< MTime1),
-    ?assertEqual(<<"veilfstestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
+    ?assertEqual(<<"onedatatestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
     ?assertEqual(<<"my_value">>, proplists:get_value(<<"my_metadata">>, Metadata1)),
     ?assertEqual(7, length(Metadata1)),
 
@@ -264,7 +269,7 @@ metadata_test(_Config) ->
     {struct,CdmiResponse4} = mochijson2:decode(Response4),
     ?assertEqual(1, length(CdmiResponse4)),
     {struct, Metadata4} = proplists:get_value(<<"metadata">>,CdmiResponse4),
-    ?assertEqual(<<"veilfstestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
+    ?assertEqual(<<"onedatatestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
     ?assertEqual(1, length(Metadata4)),
 
     {_Code5, _Headers5, Response5} = do_request(FileName++"?metadata:cdmi_size", get, RequestHeaders1, []),
@@ -349,7 +354,7 @@ metadata_test(_Config) ->
     {struct, Metadata14}= proplists:get_value(<<"metadata">>,CdmiResponse14),
     ?assertEqual(
         [{struct,[{<<"acetype">>,<<"ALLOW">>},
-            {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+            {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
             {<<"aceflags">>,<<"NO_FLAGS">>},
             {<<"acemask">>,<<"READ, WRITE">>}]}],
     proplists:get_value(<<"cdmi_acl">>, Metadata14)),
@@ -359,19 +364,19 @@ metadata_test(_Config) ->
     FileName2 = "acl_test_file.txt",
     Ace1 = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ">>}
     ],
     Ace2 = [
         {<<"acetype">>,<<"DENY">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ, EXECUTE">>}
     ],
     Ace3 = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"WRITE">>}
     ],
@@ -402,7 +407,7 @@ metadata_test(_Config) ->
     %%-- create forbidden by acl ---
     Ace4 = [
         {<<"acetype">>,<<"DENY">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ, WRITE, EXECUTE">>}],
     RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace4]}]}],
@@ -646,7 +651,7 @@ delete_dir_test(_Config) ->
 % Tests cdmi object DELETE requests
 delete_file_test(_Config) ->
     FileName = "/toDelete",
-    GroupFileName = "/spaces/veilfstestgroup/groupFile",
+    GroupFileName = "/spaces/onedatatestgroup/groupFile",
 
     %%----- basic delete -----------
     create_file(FileName),
@@ -714,6 +719,8 @@ request_format_check_test(_Config) ->
     ?assertEqual("400",Code3).
     %%------------------------------
 
+% tests if objects and container can be acessed by objectid,
+% and if capabilities of objects, containers, and whole storage system are set properly
 objectid_and_capabilities_test(_Config) ->
     %%-------- / objectid ----------
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
@@ -842,7 +849,8 @@ objectid_and_capabilities_test(_Config) ->
     ?assertEqual(?dataobject_capability_list,Capabilities3).
     %%------------------------------
 
-% tests mimetype and valuetransferencoding properties
+% tests mimetype and valuetransferencoding properties, they are part of cdmi-object and cdmi-container
+% and should be changeble
 mimetype_and_encoding_test(_Config) ->
     %% get mimetype and valuetransferencoding of non-cdmi file
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
@@ -947,7 +955,7 @@ errors_test(_Config) ->
     ?assertEqual("400", Code4),
     %%------------------------------
 
-    %%----- duplicated fields ------
+    %%-- duplicated body fields ----
     RawBody5 = [{<<"metadata">>, [{<<"a">>, <<"a">>}]}, {<<"metadata">>, [{<<"b">>, <<"b">>}]}],
     RequestBody5 = rest_utils:encode_to_json(RawBody5),
     RequestHeaders5 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type","application/cdmi-container"}],
@@ -969,12 +977,12 @@ token_test(_Config) ->
     ?assertEqual("200",Code1).
     %%------------------------------
 
-% tests writing to file at random ranges
+% tests reading&writing file at random ranges
 out_of_range_test(_Config) ->
     FileName = "random_range_file.txt",
     create_file(FileName),
 
-    %%---- reading out of range ----
+    %%---- reading out of range ---- (shuld return empty binary)
     ?assertEqual(<<>>, get_file_content(FileName)),
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
 
@@ -985,7 +993,7 @@ out_of_range_test(_Config) ->
     ?assertEqual(<<>>,proplists:get_value(<<"value">>,CdmiResponse1)),
     %%------------------------------
 
-    %%------ writing at end --------
+    %%------ writing at end -------- (shuld extend file)
     ?assertEqual(<<>>, get_file_content(FileName)),
 
     RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
@@ -996,7 +1004,7 @@ out_of_range_test(_Config) ->
     ?assertEqual(<<"data">>, get_file_content(FileName)),
     %%------------------------------
 
-    %%------ writing at random --------
+    %%------ writing at random -------- (should return zero bytes in any gaps)
     RequestBody3 = rest_utils:encode_to_json([{<<"value">>, base64:encode(<<"data">>)}]),
     {Code3, _Headers3, _Response3} = do_request(FileName ++ "?value:10-13", put, RequestHeaders2, RequestBody3),
     ?assertEqual("204",Code3),
@@ -1004,7 +1012,7 @@ out_of_range_test(_Config) ->
     ?assertEqual(<<100,97,116,97,0,0,0,0,0,0,100,97,116,97>>, get_file_content(FileName)), % "data(6x<0_byte>)data"
     %%------------------------------
 
-    %%----- random childrange ------
+    %%----- random childrange ------ (shuld fail)
     {Code4, _Headers4, Response4} = do_request(?Test_dir_name ++ "/?children:100-132", get, RequestHeaders2, []),
     ?assertEqual("400",Code4),
     {struct, CdmiResponse4} = mochijson2:decode(Response4),
@@ -1016,7 +1024,7 @@ out_of_range_test(_Config) ->
 copy_move_test(_Config) ->
     FileName = "move_test_file.txt",
     DirName = "move_test_dir/",
-    FileUri = list_to_binary(filename:join("/",FileName)),
+    FileUri = list_to_binary(filename:join("/", FileName)),
     FileData = <<"data">>,
     create_file(FileName),
     create_dir(DirName),
@@ -1024,15 +1032,15 @@ copy_move_test(_Config) ->
     NewMoveFileName = "new_move_test_file",
     NewMoveDirName = "new_move_test_dir/",
 
-    %%--- conflicting mv/cpy -------
+    %%--- conflicting mv/cpy ------- (we cannot move and copy at the same time)
     ?assertEqual(FileData, get_file_content(FileName)),
 
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
     RequestBody1 = rest_utils:encode_to_json([{<<"move">>, FileUri}, {<<"copy">>, FileUri}]),
     {Code1, _Headers1, Response1} = do_request(NewMoveFileName, put, RequestHeaders1, RequestBody1),
-    ?assertEqual("400",Code1),
+    ?assertEqual("400", Code1),
     {struct, CdmiResponse1} = mochijson2:decode(Response1),
-    ?assertMatch([{<<"BodyFieldsInConflictError">>,_}],CdmiResponse1),
+    ?assertMatch([{<<"BodyFieldsInConflictError">>, _}], CdmiResponse1),
 
     ?assertEqual(FileData, get_file_content(FileName)),
     %%------------------------------
@@ -1044,7 +1052,7 @@ copy_move_test(_Config) ->
     RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-container"}],
     RequestBody2 = rest_utils:encode_to_json([{<<"move">>, list_to_binary(DirName)}]),
     {Code2, _Headers2, _Response2} = do_request(NewMoveDirName, put, RequestHeaders2, RequestBody2),
-    ?assertEqual("201",Code2),
+    ?assertEqual("201", Code2),
 
     ?assert(not object_exists(DirName)),
     ?assert(object_exists(NewMoveDirName)),
@@ -1057,12 +1065,97 @@ copy_move_test(_Config) ->
     RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
     RequestBody3 = rest_utils:encode_to_json([{<<"move">>, list_to_binary(FileName)}]),
     {Code3, _Headers3, _Response3} = do_request(NewMoveFileName, put, RequestHeaders3, RequestBody3),
-    ?assertEqual("201",Code3),
+    ?assertEqual("201", Code3),
 
     ?assert(not object_exists(FileName)),
     ?assert(object_exists(NewMoveFileName)),
-    ?assertEqual(FileData, get_file_content(NewMoveFileName)).
+    ?assertEqual(FileData, get_file_content(NewMoveFileName)),
     %%------------------------------
+
+    %%---------- file cp ----------- (copy file, with xattrs and acl)
+    % create file to copy
+    FileName2 = "copy_test_file.txt",
+    create_file(FileName2),
+    FileData2 = <<"data">>,
+    Acl = [#accesscontrolentity{
+        acetype = ?allow_mask,
+        identifier = list_to_binary("global_id_for_" ++ ?TEST_USER),
+        aceflags = ?no_flags_mask,
+        acemask = ?read_mask bor ?write_mask bor ?execute_mask}],
+    Xattrs = [{<<"key1">>, <<"value1">>}, {<<"key2">>, <<"value2">>}],
+    set_file_acl(FileName2, Acl),
+    add_xattrs(FileName2, Xattrs),
+    write_to_file(FileName2, FileData2),
+
+    % assert source file is created and destination does not exist
+    NewFileName2 = "copy_test_file2.txt",
+    ?assert(object_exists(FileName2)),
+    ?assert(not object_exists(NewFileName2)),
+    ?assertEqual(FileData2, get_file_content(FileName2)),
+    ?assertEqual({ok, Acl}, get_file_acl(FileName2)),
+
+    % copy file using cdmi
+    RequestHeaders4 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
+    RequestBody4 = rest_utils:encode_to_json([{<<"copy">>, list_to_binary(FileName2)}]),
+    {Code4, _Headers4, _Response4} = do_request(NewFileName2, put, RequestHeaders4, RequestBody4),
+    ?assertEqual("201", Code4),
+
+    % assert new file is created
+    ?assert(object_exists(FileName2)),
+    ?assert(object_exists(NewFileName2)),
+    ?assertEqual(FileData2, get_file_content(NewFileName2)),
+    ?assertEqual({ok, [{<<"cdmi_completion_status">>, <<"Complete">>} | Xattrs]}, get_file_xattrs(NewFileName2)),
+    ?assertEqual({ok, Acl}, get_file_acl(NewFileName2)),
+    %%------------------------------
+
+    %%---------- dir cp ------------
+    % create dir to copy (with some subdirs and subfiles)
+    DirName2 = "copy_dir/",
+    create_dir(DirName2),
+    ?assert(object_exists(DirName2)),
+    NewDirName2 = "new_copy_dir/",
+    set_file_acl(DirName2, Acl),
+    add_xattrs(DirName2, Xattrs),
+    create_dir(filename:join(DirName2, "dir1")),
+    create_dir(filename:join(DirName2, "dir2")),
+    create_file(filename:join([DirName2, "dir1", "1"])),
+    create_file(filename:join([DirName2, "dir1", "2"])),
+    create_file(filename:join(DirName2, "3")),
+
+    % assert source files are successfully created, and destination file does not exist
+    ?assert(object_exists(DirName2)),
+    ?assert(object_exists(filename:join(DirName2, "dir1"))),
+    ?assert(object_exists(filename:join(DirName2, "dir2"))),
+    ?assert(object_exists(filename:join([DirName2, "dir1", "1"]))),
+    ?assert(object_exists(filename:join([DirName2, "dir1", "2"]))),
+    ?assert(object_exists(filename:join(DirName2, "3"))),
+    ?assert(not object_exists(NewDirName2)),
+
+    % copy dir using cdmi
+    RequestHeaders5 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-container"}],
+    RequestBody5 = rest_utils:encode_to_json([{<<"copy">>, list_to_binary(DirName2)}]),
+    {Code5, _Headers5, _Response5} = do_request(NewDirName2, put, RequestHeaders5, RequestBody5),
+    ?assertEqual("201", Code5),
+
+    % assert source files still exists
+    ?assert(object_exists(DirName2)),
+    ?assert(object_exists(filename:join(DirName2, "dir1"))),
+    ?assert(object_exists(filename:join(DirName2, "dir2"))),
+    ?assert(object_exists(filename:join([DirName2, "dir1", "1"]))),
+    ?assert(object_exists(filename:join([DirName2, "dir1", "2"]))),
+    ?assert(object_exists(filename:join(DirName2, "3"))),
+
+    % assert destination files have been created
+    ?assert(object_exists(NewDirName2)),
+    ?assertEqual({ok, Xattrs}, get_file_xattrs(NewDirName2)),
+    ?assertEqual({ok, Acl}, get_file_acl(NewDirName2)),
+    ?assert(object_exists(filename:join(NewDirName2, "dir1"))),
+    ?assert(object_exists(filename:join(NewDirName2, "dir2"))),
+    ?assert(object_exists(filename:join([NewDirName2, "dir1", "1"]))),
+    ?assert(object_exists(filename:join([NewDirName2, "dir1", "2"]))),
+    ?assert(object_exists(filename:join(NewDirName2, "3"))).
+    %%------------------------------
+
 
 % tests cdmi and non-cdmi partial upload feature (requests with x-cdmi-partial flag set to true)
 partial_upload_test(_Config) ->
@@ -1072,9 +1165,10 @@ partial_upload_test(_Config) ->
     Chunk2 = <<"_">>,
     Chunk3 = <<"value">>,
 
-    %%------- cdmi partial ---------
+    %%------ cdmi request partial upload ------
     ?assert(not object_exists(FileName)),
 
+    % upload first chunk of file
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}, {"X-CDMI-Partial", "true"}],
     RequestBody1 = rest_utils:encode_to_json([{<<"value">>, Chunk1}]),
     {Code1, _Headers1, Response1} = do_request(FileName, put, RequestHeaders1, RequestBody1),
@@ -1082,15 +1176,18 @@ partial_upload_test(_Config) ->
     {struct, CdmiResponse1} = mochijson2:decode(Response1),
     ?assertEqual(<<"Processing">>, proplists:get_value(<<"completionStatus">>, CdmiResponse1)),
 
+    % upload second chunk of file
     RequestBody2 = rest_utils:encode_to_json([{<<"value">>, base64:encode(Chunk2)}]),
     {Code2, _Headers2, _Response2} = do_request(FileName ++ "?value:4-4", put, RequestHeaders1, RequestBody2),
     ?assertEqual("204",Code2),
 
+    % upload third chunk of file
     RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}, {"Content-Type", "application/cdmi-object"}],
     RequestBody3 = rest_utils:encode_to_json([{<<"value">>, base64:encode(Chunk3)}]),
     {Code3, _Headers3, _Response3} = do_request(FileName ++ "?value:5-9", put, RequestHeaders3, RequestBody3),
     ?assertEqual("204",Code3),
 
+    % get created file and check its consistency
     RequestHeaders4 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code4, _Headers4, Response4} = do_request(FileName, get, RequestHeaders4, []),
     ?assertEqual("200",Code4),
@@ -1100,26 +1197,31 @@ partial_upload_test(_Config) ->
     ?assertEqual(<<Chunk1/binary, Chunk2/binary, Chunk3/binary>>, proplists:get_value(<<"value">>, CdmiResponse4)),
     %%------------------------------
 
-    %%----- non cdmi partial -------
+    %%----- non-cdmi request partial upload -------
     ?assert(not object_exists(FileName2)),
 
+    % upload first chunk of file
     RequestHeaders5 = [{"X-CDMI-Partial", "true"}],
     {Code5, _Headers5, _Response5} = do_request(FileName2, put, RequestHeaders5, Chunk1),
     ?assertEqual("201",Code5),
 
+    % check "completionStatus", should be set to "Processing"
     {Code5_1, _Headers5_1, Response5_1} = do_request(FileName2 ++ "?completionStatus", get, RequestHeaders4, Chunk1),
     {struct, CdmiResponse5_1} = mochijson2:decode(Response5_1),
     ?assertEqual("200",Code5_1),
     ?assertEqual(<<"Processing">>, proplists:get_value(<<"completionStatus">>, CdmiResponse5_1)),
 
+    % upload second chunk of file
     RequestHeaders6 = [{"content-range", "4-4"}, {"X-CDMI-Partial", "true"}],
     {Code6, _Headers6, _Response6} = do_request(FileName2, put, RequestHeaders6, Chunk2),
     ?assertEqual("204",Code6),
 
+    % upload third chunk of file
     RequestHeaders7 = [{"content-range", "5-9"}, {"X-CDMI-Partial", "false"}],
     {Code7, _Headers7, _Response7} = do_request(FileName2, put, RequestHeaders7, Chunk3),
     ?assertEqual("204",Code7),
 
+    % get created file and check its consistency
     RequestHeaders8 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code8, _Headers8, Response8} = do_request(FileName2, get, RequestHeaders8, []),
     ?assertEqual("200",Code8),
@@ -1134,19 +1236,19 @@ acl_test(_Console) ->
     Dirname1 = "acl_test_dir1/",
     Read = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ">>}
     ],
     Write = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"WRITE">>}
     ],
     _Execute = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"EXECUTE">>}
     ],
@@ -1277,9 +1379,9 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1, ?verbose),
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
+    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes,
         [[{node_type, ccm_test},
             {initialization_time, 1},
             {dispatcher_port, 5055},
@@ -1312,7 +1414,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     Nodes = ?config(nodes, Config),
-    test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+    test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
     test_node_starter:stop_test_nodes(Nodes).
 
 %% ====================================================================
@@ -1321,14 +1423,10 @@ end_per_suite(Config) ->
 
 object_exists(Path) ->
     DN=get(dn),
-    Ans = rpc_call_node(fun() ->
+    rpc_call_node(fun() ->
         fslogic_context:set_user_dn(DN),
-        logical_files_manager:getfileattr(Path)
-    end),
-    case Ans of
-        {ok,_} -> true;
-        _ -> false
-    end.
+        logical_files_manager:exists(Path)
+    end).
 
 create_dir(Path) ->
     DN=get(dn),
@@ -1367,6 +1465,34 @@ get_file_content(Path) ->
         GetFile(Path,Attr#fileattributes.size,0,10,<<>>)
     end).
 
+set_file_acl(Path, Acl) ->
+    DN=get(dn),
+    rpc_call_node(fun() ->
+        fslogic_context:set_user_dn(DN),
+        logical_files_manager:set_acl(Path, Acl)
+    end).
+
+get_file_acl(Path) ->
+    DN=get(dn),
+    rpc_call_node(fun() ->
+        fslogic_context:set_user_dn(DN),
+        logical_files_manager:get_acl(Path)
+    end).
+
+add_xattrs(Path, Xattrs) ->
+    DN=get(dn),
+    rpc_call_node(fun() ->
+        fslogic_context:set_user_dn(DN),
+        lists:foreach(fun({Key, Value}) -> logical_files_manager:set_xattr(Path, Key, Value) end, Xattrs)
+    end).
+
+get_file_xattrs(Path) ->
+    DN=get(dn),
+    rpc_call_node(fun() ->
+        fslogic_context:set_user_dn(DN),
+        logical_files_manager:list_xattr(Path)
+    end).
+
 write_to_file(Path,Data) ->
     DN=get(dn),
 
@@ -1394,7 +1520,7 @@ setup_user_in_db(Cert, Config) ->
     [CCM | _] = ?config(nodes, Config),
 
     UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_GROUP]),
-    [DN | _] = UserDoc#veil_document.record#user.dn_list,
+    [DN | _] = UserDoc#db_document.record#user.dn_list,
 
     {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?ARG_TEST_ROOT]),
     ?assertEqual(ok, Ans1),
@@ -1427,7 +1553,7 @@ do_request(RestSubpath, Method, Headers, Body, UseCert) ->
     Cert = get(cert),
     CCM = get(ccm),
 
-    {ok, Port} = rpc:call(CCM, application, get_env, [veil_cluster_node, rest_port]),
+    {ok, Port} = rpc:call(CCM, application, get_env, [oneprovider_node, rest_port]),
     Hostname = case (Port =:= 80) or (Port =:= 443) of
                    true -> "https://localhost";
                    false -> "https://localhost:" ++ integer_to_list(Port)

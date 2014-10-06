@@ -19,14 +19,14 @@
 
 %% get_provider_id/0
 %% ====================================================================
-%% @doc Returns Provider ID for current VeilCluster instance.
-%%      Fails with undefined exception if the VeilCLuster is not registered as an Provider.
+%% @doc Returns Provider ID for current oneprovider instance.
+%%      Fails with undefined exception if the oneprovider is not registered as a provider.
 %% @end
 -spec get_provider_id() -> ProviderId :: binary() | no_return().
 %% ====================================================================
 get_provider_id() ->
     % Cache the provider ID so that we don't decode the cert every time
-    case application:get_env(veil_cluster_node, provider_id) of
+    case application:get_env(oneprovider_node, provider_id) of
         {ok, ProviderId} ->
             ProviderId;
         _ ->
@@ -34,7 +34,7 @@ get_provider_id() ->
             [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
             PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
             ProviderId = auth_handler:get_provider_id(PeerCert),
-            application:set_env(veil_cluster_node, provider_id, ProviderId),
+            application:set_env(oneprovider_node, provider_id, ProviderId),
             ProviderId
     end.
 

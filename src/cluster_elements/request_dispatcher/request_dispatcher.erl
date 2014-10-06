@@ -14,8 +14,8 @@
 -include("registered_names.hrl").
 -include("records.hrl").
 -include("modules_and_args.hrl").
--include("veil_modules/dao/dao_types.hrl").
--include("veil_modules/dao/dao_cluster.hrl").
+-include("oneprovider_modules/dao/dao_types.hrl").
+-include("oneprovider_modules/dao/dao_cluster.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -define(CALLBACKS_TABLE, dispatcher_callbacks_table).
@@ -833,7 +833,7 @@ get_connected_fuses() ->
     Infinity = 10000000000000000000,
     {ok, List} = dao_lib:apply(dao_cluster, list_fuse_sessions, [{by_valid_to, Infinity}], 1),
     ClientList = lists:foldl(
-      fun(#veil_document{uuid = UUID, record = #fuse_session{uid = UserID}} = SessionDoc, Acc) ->
+      fun(#db_document{uuid = UUID, record = #fuse_session{uid = UserID}} = SessionDoc, Acc) ->
         case dao_cluster:check_session(SessionDoc) of
           ok ->
             {ok, UserDoc} = user_logic:get_user({uuid, UserID}),

@@ -3,7 +3,7 @@
 # @author Krzysztof Trzepla
 # @copyright (C): 2014 ACK CYFRONET AGH
 # This software is released under the MIT license cited in 'LICENSE.txt'.
-# @doc: This script creates rst files from veilclient source code using erl_doc_lexer. @end
+# @doc: This script creates rst files from oneclient source code using erl_doc_lexer. @end
 
 import os
 
@@ -24,37 +24,37 @@ class Sphinx(object):
 
 	def w_class(self, file, name, depth):
 		file.write('\t' * depth + '.. doxygenclass:: ' + name + '\n')
-		file.write('\t' * (depth + 1) + ':project: veilclient\n')
+		file.write('\t' * (depth + 1) + ':project: oneclient\n')
 		file.write('\t' * (depth + 1) + ':members:\n')
 		file.write('\t' * (depth + 1) + ':sections: public*, protected*, private*\n\n')
 
 	def w_struct(self, file, name, depth):
 		file.write('\t' * depth + '.. doxygenstruct:: ' + name + '\n')
-		file.write('\t' * (depth + 1) + ':project: veilclient\n\n')
+		file.write('\t' * (depth + 1) + ':project: oneclient\n\n')
 
 	def w_function(self, file, name, depth):
 		file.write('\t' * depth + '.. doxygenfunction:: ' + name + '\n')
-		file.write('\t' * (depth + 1) + ':project: veilclient\n\n')
+		file.write('\t' * (depth + 1) + ':project: oneclient\n\n')
 
 	def w_enum(self, file, name, depth):
 		file.write('\t' * depth + '.. doxygenenum:: ' + name + '\n')
-		file.write('\t' * (depth + 1) + ':project: veilclient\n\n')
+		file.write('\t' * (depth + 1) + ':project: oneclient\n\n')
 
 	def w_typedef(self, file, name, depth):
 		file.write('\t' * depth + '.. doxygentypedef:: ' + name + '\n')
-		file.write('\t' * (depth + 1) + ':project: veilclient\n\n')
+		file.write('\t' * (depth + 1) + ':project: oneclient\n\n')
 
 	def w_define(self, file, name, depth):
 		file.write('\t' * depth + '.. doxygendefine:: ' + name + '\n')
-		file.write('\t' * (depth + 1) + ':project: veilclient\n\n')
+		file.write('\t' * (depth + 1) + ':project: oneclient\n\n')
 
 	def w_variable(self, file, name, depth):
 		file.write('\t' * depth + '.. doxygenvariable:: ' + name + '\n')
-		file.write('\t' * (depth + 1) + ':project: veilclient\n\n')
+		file.write('\t' * (depth + 1) + ':project: oneclient\n\n')
 
 	def w_file(self, file, name, depth):
 		file.write('\t' * depth + '.. doxygenfile:: ' + name + '\n')
-		file.write('\t' * (depth + 1) + ':project: veilclient\n\n')
+		file.write('\t' * (depth + 1) + ':project: oneclient\n\n')
 
 	def format_links(self, path, rstfile):
 		with open(self.path + '/' + rstfile, 'r') as f:

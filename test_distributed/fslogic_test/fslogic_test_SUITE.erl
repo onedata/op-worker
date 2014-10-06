@@ -16,12 +16,12 @@
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
--include("veil_modules/fslogic/fslogic_acl.hrl").
--include("veil_modules/dao/dao.hrl").
--include("veil_modules/dao/dao_vfs.hrl").
--include("veil_modules/dao/dao.hrl").
--include("veil_modules/dao/dao_share.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic_acl.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao_vfs.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao_share.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
 
@@ -129,19 +129,19 @@ spaces_permissions_test(Config) ->
 
   {GetFileAns, FileDoc} = rpc:call(FSLogicNode, dao_vfs, get_file, [TestFileNewName]),
   ?assertEqual(ok, GetFileAns),
-  {GetFileMetaAns, FileMetaDoc} = rpc:call(FSLogicNode, dao_vfs, get_file_meta, [FileDoc#veil_document.record#file.meta_doc]),
+  {GetFileMetaAns, FileMetaDoc} = rpc:call(FSLogicNode, dao_vfs, get_file_meta, [FileDoc#db_document.record#file.meta_doc]),
   ?assertEqual(ok, GetFileMetaAns),
-  FileMetaUID = FileMetaDoc#veil_document.record#file_meta.uid,
-  ?assertEqual(UserDoc1#veil_document.uuid, FileMetaUID),
+  FileMetaUID = FileMetaDoc#db_document.record#file_meta.uid,
+  ?assertEqual(UserDoc1#db_document.uuid, FileMetaUID),
 
   ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [TestFileNewName, Login2, -1])),
 
   {GetFileAns1, FileDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file, [TestFileNewName]),
   ?assertEqual(ok, GetFileAns1),
-  {GetFileMetaAns1, FileMetaDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file_meta, [FileDoc1#veil_document.record#file.meta_doc]),
+  {GetFileMetaAns1, FileMetaDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file_meta, [FileDoc1#db_document.record#file.meta_doc]),
   ?assertEqual(ok, GetFileMetaAns1),
-  FileMetaUID1 = FileMetaDoc1#veil_document.record#file_meta.uid,
-  ?assertEqual(UserDoc2#veil_document.uuid, FileMetaUID1),
+  FileMetaUID1 = FileMetaDoc1#db_document.record#file_meta.uid,
+  ?assertEqual(UserDoc2#db_document.uuid, FileMetaUID1),
 
   ?assertNotEqual(FileMetaUID, FileMetaUID1),
 
@@ -379,7 +379,7 @@ get_by_uuid_test(Config) ->
 
   {DocFindStatus, FileDoc} = rpc:call(Node1, fslogic_objects, get_file, [1, TestFile, ?CLUSTER_FUSE_ID]),
   ?assertEqual(ok, DocFindStatus),
-  FileLocation2 = rpc:call(Node1, fslogic, handle, [1, {getfilelocation_uuid, FileDoc#veil_document.uuid}]),
+  FileLocation2 = rpc:call(Node1, fslogic, handle, [1, {getfilelocation_uuid, FileDoc#db_document.uuid}]),
   ?assertEqual(?VOK, FileLocation2#filelocation.answer),
   Root = ?TEST_ROOT,
   ?assertEqual(FileLocation, Root ++ "/" ++ FileLocation2#filelocation.file_id),
@@ -390,7 +390,7 @@ get_by_uuid_test(Config) ->
   ?assertEqual(?ARG_TEST_ROOT, SHI3#storage_helper_info.init_args),
   ?assertEqual(FileLocation, Root ++ "/" ++ FileLocation3),
 
-  {FileLocationAns4, {SHI4, FileLocation4}} = rpc:call(Node1, logical_files_manager, getfilelocation, [{uuid, FileDoc#veil_document.uuid}]),
+  {FileLocationAns4, {SHI4, FileLocation4}} = rpc:call(Node1, logical_files_manager, getfilelocation, [{uuid, FileDoc#db_document.uuid}]),
   ?assertEqual(ok, FileLocationAns4),
   ?assertEqual(SHI3, SHI4),
   ?assertEqual(FileLocation3, FileLocation4),
@@ -398,11 +398,11 @@ get_by_uuid_test(Config) ->
   {FMStatys, FM_Attrs} = rpc:call(Node1, logical_files_manager, getfileattr, [TestFile]),
   ?assertEqual(ok, FMStatys),
 
-  {FMStatys2, FM_Attrs2} = rpc:call(Node1, logical_files_manager, getfileattr, [{uuid, FileDoc#veil_document.uuid}]),
+  {FMStatys2, FM_Attrs2} = rpc:call(Node1, logical_files_manager, getfileattr, [{uuid, FileDoc#db_document.uuid}]),
   ?assertEqual(ok, FMStatys2),
   ?assertEqual(FM_Attrs, FM_Attrs2),
 
-  {FNameAns, FName} = rpc:call(Node1, logical_files_manager, get_file_name_by_uuid, [FileDoc#veil_document.uuid]),
+  {FNameAns, FName} = rpc:call(Node1, logical_files_manager, get_file_name_by_uuid, [FileDoc#db_document.uuid]),
   ?assertEqual(ok, FNameAns),
   ?assertEqual(TestFile, FName),
 
@@ -410,11 +410,11 @@ get_by_uuid_test(Config) ->
   ?assertEqual(8, AnsWrite1),
   ?assertEqual({ok, "abcdefgh"}, rpc:call(Node1, files_tester, read_file, [TestFile, 100])),
 
-  {StatusRead1, AnsRead1} = rpc:call(Node1, logical_files_manager, read, [{uuid, FileDoc#veil_document.uuid}, 2, 2]),
+  {StatusRead1, AnsRead1} = rpc:call(Node1, logical_files_manager, read, [{uuid, FileDoc#db_document.uuid}, 2, 2]),
   ?assertEqual(ok, StatusRead1),
   ?assertEqual("cd", binary_to_list(AnsRead1)),
 
-  {StatusRead2, AnsRead2} = rpc:call(Node1, logical_files_manager, read, [{uuid, FileDoc#veil_document.uuid}, 7, 2]),
+  {StatusRead2, AnsRead2} = rpc:call(Node1, logical_files_manager, read, [{uuid, FileDoc#db_document.uuid}, 7, 2]),
   ?assertEqual(ok, StatusRead2),
   ?assertEqual("h", binary_to_list(AnsRead2)),
 
@@ -693,8 +693,8 @@ user_file_counting_test(Config) ->
     [DN1 | _] = user_logic:get_dn_list(UserDoc1),
     [DN2 | _] = user_logic:get_dn_list(UserDoc2),
 
-    UserID1 = UserDoc1#veil_document.uuid,
-    UserID2 = UserDoc2#veil_document.uuid,
+    UserID1 = UserDoc1#db_document.uuid,
+    UserID2 = UserDoc2#db_document.uuid,
 
   rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, "not_existing_id", 1]),
   test_utils:wait_for_db_reaction(),
@@ -813,8 +813,8 @@ user_file_size_test(Config) ->
     [DN1 | _] = user_logic:get_dn_list(UserDoc1),
     [DN2 | _] = user_logic:get_dn_list(UserDoc2),
 
-    UserID1 = UserDoc1#veil_document.uuid,
-    UserID2 = UserDoc2#veil_document.uuid,
+    UserID1 = UserDoc1#db_document.uuid,
+    UserID2 = UserDoc2#db_document.uuid,
 
   %% Init connections
   {ConAns1, Socket1} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}, auto_handshake]),
@@ -1376,20 +1376,20 @@ file_sharing_test(Config) ->
 
   {StatusCreate3, AnsCreate3} = rpc:call(FSLogicNode, fslogic_test_SUITE, create_standard_share, [TestFile, DN]),
   ?assertEqual(exists, StatusCreate3),
-  ?assertEqual(AnsCreate2, AnsCreate3#veil_document.uuid),
+  ?assertEqual(AnsCreate2, AnsCreate3#db_document.uuid),
 
   {StatusGet, AnsGet} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{uuid, AnsCreate2}, DN]),
   ?assertEqual(ok, StatusGet),
-  ?assertEqual(AnsCreate2, AnsGet#veil_document.uuid),
+  ?assertEqual(AnsCreate2, AnsGet#db_document.uuid),
 
   {StatusGet2, AnsGet2} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{file, TestFile}, DN]),
   ?assertEqual(ok, StatusGet2),
-  ?assertEqual(AnsCreate2, AnsGet2#veil_document.uuid),
+  ?assertEqual(AnsCreate2, AnsGet2#db_document.uuid),
 
-  {StatusGet3, AnsGet3} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{user, UserDoc#veil_document.uuid}, DN]),
+  {StatusGet3, AnsGet3} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{user, UserDoc#db_document.uuid}, DN]),
   ?assertEqual(ok, StatusGet3),
-  ?assertEqual(AnsCreate2, AnsGet3#veil_document.uuid),
-  ShareDoc = AnsGet3#veil_document.record,
+  ?assertEqual(AnsCreate2, AnsGet3#db_document.uuid),
+  ShareDoc = AnsGet3#db_document.record,
 
   {StatusCreateFile2, _Helper2, _Id2, _Validity2, AnswerCreateFile2} = create_file(Socket, TestFile2),
   ?assertEqual("ok", StatusCreateFile2),
@@ -1407,12 +1407,12 @@ file_sharing_test(Config) ->
 
   {StatusGet4, AnsGet4} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{uuid, AnsCreate4}, DN]),
   ?assertEqual(ok, StatusGet4),
-  ?assertEqual(AnsCreate4, AnsGet4#veil_document.uuid),
+  ?assertEqual(AnsCreate4, AnsGet4#db_document.uuid),
 
   {StatusGet5, AnsGet5} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{uuid, AnsCreate5}, DN]),
   ?assertEqual(ok, StatusGet5),
-  ?assertEqual(AnsCreate5, AnsGet5#veil_document.uuid),
-  ShareDoc2 = AnsGet5#veil_document.record,
+  ?assertEqual(AnsCreate5, AnsGet5#db_document.uuid),
+  ShareDoc2 = AnsGet5#db_document.record,
 
   {StatusGet6, AnsGet6} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{file, TestFile}, DN]),
   ?assertEqual(ok, StatusGet6),
@@ -1420,7 +1420,7 @@ file_sharing_test(Config) ->
   ?assert(lists:member(AnsGet, AnsGet6)),
   ?assert(lists:member(AnsGet4, AnsGet6)),
 
-  {StatusGet7, AnsGet7} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{user, UserDoc#veil_document.uuid}, DN]),
+  {StatusGet7, AnsGet7} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{user, UserDoc#db_document.uuid}, DN]),
   ?assertEqual(ok, StatusGet7),
   ?assertEqual(3, length(AnsGet7)),
   ?assert(lists:member(AnsGet, AnsGet7)),
@@ -1429,8 +1429,8 @@ file_sharing_test(Config) ->
 
   {StatusGet8, AnsGet8} = rpc:call(FSLogicNode, logical_files_manager, get_file_by_uuid, [ShareDoc#share_desc.file]),
   ?assertEqual(ok, StatusGet8),
-  ?assertEqual(ShareDoc#share_desc.file, AnsGet8#veil_document.uuid),
-  FileRecord = AnsGet8#veil_document.record,
+  ?assertEqual(ShareDoc#share_desc.file, AnsGet8#db_document.uuid),
+  FileRecord = AnsGet8#db_document.record,
   ?assertEqual(TestFile, FileRecord#file.name),
 
   {StatusGet9, AnsGet9} = rpc:call(FSLogicNode, logical_files_manager, get_file_full_name_by_uuid, [ShareDoc#share_desc.file]),
@@ -1449,7 +1449,7 @@ file_sharing_test(Config) ->
 
   {StatusGet10, AnsGet10} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{file, DirName ++ "/" ++ TestFile2}, DN]),
   ?assertEqual(ok, StatusGet10),
-  ?assertEqual(AnsCreate5, AnsGet10#veil_document.uuid),
+  ?assertEqual(AnsCreate5, AnsGet10#db_document.uuid),
 
   {StatusGet11, AnsGet11} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{file, TestFile2}, DN]),
   ?assertEqual(error, StatusGet11),
@@ -1667,7 +1667,7 @@ fuse_requests_test(Config) ->
 
 
   %% updatetimes message test
-  CurrentTime = vcn_utils:time(),
+  CurrentTime = utils:time(),
   {Status20, Answer20} = update_times(Socket, SecondFileInDir, CurrentTime + 1234, CurrentTime + 4321),
   ?assertEqual("ok", Status20),
   ?assertEqual(list_to_atom(?VOK), Answer20),
@@ -1813,12 +1813,12 @@ users_separation_test(Config) ->
     UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert1, [?TEST_USER, ?TEST_GROUP]),
     [DN1 | _] = user_logic:get_dn_list(UserDoc1),
     Login1 = user_logic:get_login(UserDoc1),
-    UserID1 = UserDoc1#veil_document.uuid,
+    UserID1 = UserDoc1#db_document.uuid,
 
     UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, ?TEST_GROUP2]),
     [DN2 | _] = user_logic:get_dn_list(UserDoc2),
     Login2 = user_logic:get_login(UserDoc2),
-    UserID2 = UserDoc2#veil_document.uuid,
+    UserID2 = UserDoc2#db_document.uuid,
 
   %% Open connections
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}, auto_handshake]),
@@ -1828,7 +1828,7 @@ users_separation_test(Config) ->
   ?assertEqual(ok, ConAns1),
 
   %% Current time
-  Time = vcn_utils:time(),
+  Time = utils:time(),
   test_utils:wait_for_db_reaction(),
 
   %% Users have different (and next to each other) IDs
@@ -2434,31 +2434,31 @@ acl_test(Config) ->
         ,VirtualAclAns),
     {ok, VirtualAcl} = VirtualAclAns,
     ?assertEqual([[{<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"global_id_for_veilfstestuser">>},
+        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ, WRITE">>}]],
-        fslogic_acl:from_acl_to_json_format(VirtualAcl)),
+        rpc:call(Node1, fslogic_acl,from_acl_to_json_format,[VirtualAcl])),
 
     % test setting and getting acl
-    Acl = fslogic_acl:from_json_fromat_to_acl(
+    Acl = rpc:call(Node1, fslogic_acl, from_json_fromat_to_acl,[
         [
             [
                 {<<"acetype">>, <<"ALLOW">>},
-                {<<"identifier">>, <<"OWNER@">>},
+                {<<"identifier">>, <<"veilfstestuser veilfstestuser#">>},
                 {<<"aceflags">>, <<"NO_FLAGS">>},
                 {<<"acemask">>, <<"READ, WRITE">>}
             ],
             [
                 {<<"acetype">>, <<"DENY">>},
-                {<<"identifier">>, <<"some_user">>},
+                {<<"identifier">>, <<"veilfstestuser veilfstestuser#">>},
                 {<<"aceflags">>, <<"IDENTIFIER_GROUP">>},
                 {<<"acemask">>, <<"WRITE">>}
             ]
         ]
-    ),
+    ]),
     ?assertEqual(Acl, [
-        #accesscontrolentity{acetype = ?allow_mask, identifier = ?owner, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
-        #accesscontrolentity{acetype = ?deny_mask, identifier = <<"some_user">>, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+        #accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_veilfstestuser">>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #accesscontrolentity{acetype = ?deny_mask, identifier = <<"global_id_for_veilfstestuser">>, aceflags = ?identifier_group_mask, acemask = ?write_mask}
     ]),
 
     Ans1 = rpc:call(Node1, logical_files_manager, set_acl, [DirName, Acl]),
@@ -2486,7 +2486,7 @@ init_per_testcase(user_file_size_test, Config) ->
 
   DB_Node = ?DB_NODE,
   Port = 6666,
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {user_files_size_view_update_period, 2}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {user_files_size_view_update_period, 2}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
   ?ENABLE_PROVIDER(lists:append([{port, Port}, {nodes, NodesUp}], Config));
 
 init_per_testcase(_, Config) ->
@@ -2498,13 +2498,13 @@ init_per_testcase(_, Config) ->
 
   DB_Node = ?DB_NODE,
   Port = 6666,
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
   ?ENABLE_PROVIDER(lists:append([{port, Port}, {nodes, NodesUp}], Config)).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node().
 
