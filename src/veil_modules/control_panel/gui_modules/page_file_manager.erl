@@ -21,7 +21,7 @@
 -export([get_requested_hostname/0, comet_loop/1]).
 -export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
 -export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0]).
--export([confirm_paste/0, confirm_chmod/2]).
+-export([confirm_paste/0, confirm_chmod/2, show_permissions_info/0]).
 -export([rename_item/2, create_directory/1, remove_selected/0, search/1, toggle_column/2, show_popup/1, hide_popup/0, path_navigator_body/1]).
 -export([fs_list_dir/1, fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
 
@@ -106,7 +106,7 @@ manager_submenu() ->
             #panel{class = <<"container">>, body = [
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
                 [#li{id = wire_click(<<"tb_create_dir">>, {action, show_popup, [create_directory]}), body = #link{title = <<"Create directory">>,
-                    style =  <<"padding: 16px 12px;">>, body = #span{class = <<"icomoon-folder-open">>, style = <<"font-size: 24px;">>,
+                    style = <<"padding: 16px 12px;">>, body = #span{class = <<"icomoon-folder-open">>, style = <<"font-size: 24px;">>,
                         body = #span{class = <<"icomoon-plus">>, style = <<"position: absolute; font-size: 10px; right: 5px; top: 16px;">>}}}}] ++
                     tool_button(<<"tb_upload_files">>, <<"Upload file(s)">>, <<"padding: 16px 12px;">>,
                         <<"icomoon-upload">>, {action, show_popup, [file_upload]}) ++
@@ -117,7 +117,7 @@ manager_submenu() ->
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
                 tool_button_and_dummy(<<"tb_rename">>, <<"Rename">>, <<"padding: 16px 12px;">>,
                     <<"icomoon-pencil2">>, {action, show_popup, [rename_item]}) ++
-                    tool_button_and_dummy(<<"tb_chmod">>, <<"Change mode">>, <<"padding: 16px 12px;">>,
+                    tool_button_and_dummy(<<"tb_chmod">>, <<"Change permissions">>, <<"padding: 16px 12px;">>,
                         <<"icomoon-lock">>, {action, show_popup, [chmod]}) ++
                     tool_button_and_dummy(<<"tb_remove">>, <<"Remove">>, <<"padding: 16px 12px;">>,
                         <<"icomoon-remove">>, {action, show_popup, [remove_selected]})
@@ -696,6 +696,16 @@ toggle_column(Attr, Flag) ->
     refresh_workspace().
 
 
+show_permissions_info() ->
+    gui_jq:info_popup(<<"File permissions and ACLs">>, <<"Standard permissions and ACLs are two ways of controlling ",
+    "the access to your data. You can choose to use one of them for each file. They cannot be used together. <br /><br />",
+    "<strong>Standard permissions</strong> - UNIX file permissions, can be used to enable certain types ",
+    "of users to read, write or execute given file. The types are: user (the owner of the file), group (all users ",
+    "sharing the space where the file resides), other (not aplicable in GUI, but used in oneclient).<br /><br />",
+    "<strong>ACLs</strong> (Access Control List) - CDMI standard (compliant with NFSv4 ACLs), allows ",
+    "defining ordered lists of permissions-granting or permissions-denying entries for users / groups.">>, <<"">>).
+
+
 % Shows popup with a prompt, form, etc.
 show_popup(Type) ->
     {FooterBody, Script, CloseButtonAction} =
@@ -772,74 +782,91 @@ show_popup(Type) ->
                 LabelStyle = <<"margin: 0 auto; width: 20px;">>,
                 Body = [
                     #panel{style = <<"position: relative; text-align: center; overflow: hidden;">>, body = [
-                        #p{body = <<"Change mode">>},
-                        #table{class = <<"table table-bordered">>,
-                            style = <<"margin: 0 auto 15px; table-layout: fixed; width: 200px; border-color: rgb(82, 100, 118);">>,
-                            header = [
-                                #tr{cells = [
-                                    #th{body = <<"">>, style = TDStyle},
-                                    #th{body = <<"read">>, style = TDStyle},
-                                    #th{body = <<"write">>, style = TDStyle},
-                                    #th{body = <<"execute">>, style = TDStyle}
-                                ]}
-                            ], body = [
-                                #tr{cells = [
-                                    #td{body = <<"user">>, style = <<TDStyle/binary, " font-weight: 700;">>},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_ur">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
+                        #link{id = wire_click(<<"permissions_info_button">>, {action, show_permissions_info}), title = <<"Learn about permissions">>,
+                            class = <<"glyph-link">>, style = <<"position: absolute; top: 8px; left: 410px;">>,
+                            body = #span{class = <<"icomoon-question">>, style = <<"font-size: 20px;">>}},
+
+                        #list{class = <<"nav nav-tabs nav-append-content">>, body = [
+                            #li{class = <<"">>, body = #link{url = <<"#tab1">>, body = <<"Standard permissions">>}},
+                            #li{class = <<"active">>, body = #link{url = <<"#tab2">>, body = <<"ACLs (advanced)">>}}
+                        ]},
+
+                        #panel{style = <<"background-color: #FFF; border-radius: 0;">>, class = <<"tab-content">>, body = [
+                            #panel{class = <<"tab-pane">>, id = <<"tab1">>, body = [
+                                #table{class = <<"table table-bordered">>,
+                                    style = <<"margin: 0 auto 15px; table-layout: fixed; width: 200px; border-color: rgb(82, 100, 118);">>,
+                                    header = [
+                                        #tr{cells = [
+                                            #th{body = <<"">>, style = TDStyle},
+                                            #th{body = <<"read">>, style = TDStyle},
+                                            #th{body = <<"write">>, style = TDStyle},
+                                            #th{body = <<"execute">>, style = TDStyle}
+                                        ]}
+                                    ], body = [
+                                        #tr{cells = [
+                                            #td{body = <<"user">>, style = <<TDStyle/binary, " font-weight: 700;">>},
+                                            #td{style = TDStyle, body = [
+                                                #flatui_checkbox{id = <<"chbx_ur">>, label_class = <<"checkbox no-label">>,
+                                                    label_style = LabelStyle, value = <<"">>}
+                                            ]},
+                                            #td{style = TDStyle, body = [
+                                                #flatui_checkbox{id = <<"chbx_uw">>, label_class = <<"checkbox no-label">>,
+                                                    label_style = LabelStyle, value = <<"">>}
+                                            ]},
+                                            #td{style = TDStyle, body = [
+                                                #flatui_checkbox{id = <<"chbx_ux">>, label_class = <<"checkbox no-label">>,
+                                                    label_style = LabelStyle, value = <<"">>}
+                                            ]}
+                                        ]},
+                                        #tr{cells = [
+                                            #td{body = <<"group">>, style = <<TDStyle/binary, " font-weight: 700;">>},
+                                            #td{style = TDStyle, body = [
+                                                #flatui_checkbox{id = <<"chbx_gr">>, label_class = <<"checkbox no-label">>,
+                                                    label_style = LabelStyle, value = <<"">>}
+                                            ]},
+                                            #td{style = TDStyle, body = [
+                                                #flatui_checkbox{id = <<"chbx_gw">>, label_class = <<"checkbox no-label">>,
+                                                    label_style = LabelStyle, value = <<"">>}
+                                            ]},
+                                            #td{style = TDStyle, body = [
+                                                #flatui_checkbox{id = <<"chbx_gx">>, label_class = <<"checkbox no-label">>,
+                                                    label_style = LabelStyle, value = <<"">>}
+                                            ]}
+                                        ]},
+                                        #tr{cells = [
+                                            #td{body = <<"other">>, style = <<TDStyle/binary, " font-weight: 700;">>},
+                                            #td{style = TDStyle, body = [
+                                                #flatui_checkbox{id = <<"chbx_or">>, label_class = <<"checkbox no-label">>,
+                                                    label_style = LabelStyle, value = <<"">>}
+                                            ]},
+                                            #td{style = TDStyle, body = [
+                                                #flatui_checkbox{id = <<"chbx_ow">>, label_class = <<"checkbox no-label">>,
+                                                    label_style = LabelStyle, value = <<"">>}
+                                            ]},
+                                            #td{style = TDStyle, body = [
+                                                #flatui_checkbox{id = <<"chbx_ox">>, label_class = <<"checkbox no-label">>,
+                                                    label_style = LabelStyle, value = <<"">>}
+                                            ]}
+                                        ]}
                                     ]},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_uw">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
-                                    ]},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_ux">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
-                                    ]}
-                                ]},
-                                #tr{cells = [
-                                    #td{body = <<"group">>, style = <<TDStyle/binary, " font-weight: 700;">>},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_gr">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
-                                    ]},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_gw">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
-                                    ]},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_gx">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
-                                    ]}
-                                ]},
-                                #tr{cells = [
-                                    #td{body = <<"other">>, style = <<TDStyle/binary, " font-weight: 700;">>},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_or">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
-                                    ]},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_ow">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
-                                    ]},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_ox">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
-                                    ]}
+                                #panel{style = <<"position: relative; width: 430px; margin: 0 auto;">>, body = [
+                                    #p{style = <<"display: inline-block;float: left; ">>, body = <<"octal form:">>,
+                                        title = <<"Type in octal representation of mode to automatically adjust checkboxes">>},
+                                    #textbox{id = wire_enter(<<"octal_form_textbox">>, <<"octal_form_submit">>), class = <<"span2">>,
+                                        style = <<"width: 50px; padding: 5px 5px; position: relative; float: left; margin: 0 50px 0 8px;">>, placeholder = <<"000">>,
+                                        value = <<"">>},
+                                    #flatui_checkbox{id = <<"chbx_recursive">>, label_class = <<"checkbox no-label">>,
+                                        value = <<"">>, checked = false, body = <<"recursive">>,
+                                        label_style = <<"position: relative; float: right; margin-top: 6px;;">>,
+                                        label_title = <<"Change mode in all subdirectories, recursively">>}
                                 ]}
                             ]},
-                        #panel{style = <<"position: relative; width: 430px; margin: 0 auto;">>, body = [
-                            #p{style = <<"display: inline-block;float: left; ">>, body = <<"octal form:">>,
-                                title = <<"Type in octal representation of mode to automatically adjust checkboxes">>},
-                            #textbox{id = wire_enter(<<"octal_form_textbox">>, <<"octal_form_submit">>), class = <<"span2">>,
-                                style = <<"width: 50px; padding: 5px 5px; position: relative; float: left; margin: 0 50px 0 8px;">>, placeholder = <<"000">>,
-                                value = <<"">>},
-                            #flatui_checkbox{id = <<"chbx_recursive">>, label_class = <<"checkbox no-label">>,
-                                value = <<"">>, checked = false, body = <<"recursive">>,
-                                label_style = <<"position: relative; float: right; margin-top: 6px;;">>,
-                                label_title = <<"Change mode in all subdirectories, recursively">>}
+                            #panel{class = <<"tab-pane active">>, id = <<"tab2">>, body = [
+                                <<"JEMPTY">>
+                            ]}
                         ]},
+
+
                         #panel{style = <<"clear: both;  margin-bottom: 18px;">>},
                         #form{class = <<"control-group">>, body = [
                             #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
