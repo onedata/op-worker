@@ -158,6 +158,6 @@ cdmi_metadata_to_attrs(<<"cdmi_atime">>, Attrs) ->
 cdmi_metadata_to_attrs(<<"cdmi_mtime">>, Attrs) ->
     {<<"cdmi_mtime">>, integer_to_binary(Attrs#fileattributes.mtime)};
 cdmi_metadata_to_attrs(<<"cdmi_owner">>, Attrs) ->
-    {<<"cdmi_owner">>, list_to_binary(Attrs#fileattributes.uname)};
+    {<<"cdmi_owner">>, Attrs#fileattributes.uname};
 cdmi_metadata_to_attrs(_,_Attrs) ->
     {}.

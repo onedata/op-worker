@@ -30,6 +30,6 @@ distributed_tests_out
 c_lib
 c_src/gpv_nif/*.o
 c_src/helpers_nif/*.o
-c_src/oneproxy/build
+c_src/oneproxy/build/*
 
 docs/_build/

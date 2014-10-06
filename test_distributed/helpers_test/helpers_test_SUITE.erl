@@ -116,7 +116,7 @@ init_per_testcase(_, Config) ->
 
     DB_Node = ?DB_NODE,
     Port = 6666,
-    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
     FSRoot = ?TEST_ROOT,
     file:delete(FSRoot ++ ?TEST_FILE1),
@@ -126,6 +126,6 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
     Nodes = ?config(nodes, Config),
-    test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
+    test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes),
     test_node_starter:stop_test_nodes(Nodes),
     test_node_starter:stop_deps_for_tester_node().
