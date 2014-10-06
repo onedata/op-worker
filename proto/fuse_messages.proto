@@ -91,12 +91,29 @@ message FileUuid {
 }
 
 message FileLocation {
+    message BlockAvailability {
+        required uint64 offset = 1;
+        required uint64 size = 2;
+    }
+
     optional string answer = 1 [default = "ok"];
-    required int32 storage_id = 2;
+    required uint32 storage_id = 2;
     required string file_id = 3;
-    required int32 validity = 4;
+    required uint32 validity = 4;
     optional string storage_helper_name = 5;
     repeated string storage_helper_args = 6;
+    repeated BlockAvailability available = 7;
+}
+
+message BlocksAvailable {
+    required string logical_name = 1;
+    required FileLocation.BlockAvailability blocks = 2;
+}
+
+message RequestFileBlock {
+    required string logical_name = 1;
+    required uint64 offset = 2;
+    required uint64 size = 3;
 }
 
 message CreateFileAck {
@@ -116,7 +133,6 @@ message FileLocationValidity {
     optional int32 validity = 2;
 }
 
-
 message GetFileChildren {
     required string dir_logic_name = 1;
     required int32 children_num = 2;
@@ -132,7 +148,6 @@ message FileChildren {
     optional string answer = 1 [default = "ok"];
     repeated DirEntry entry = 2;
 }
-
 
 message CreateDir {
     required string dir_logic_name = 1;
