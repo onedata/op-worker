@@ -59,7 +59,7 @@ get_user() ->
 
     ?assertMatch({ok, #db_document{uuid = "uuid"}}, fslogic_objects:get_user({dn, "dn"})),
     ?assertMatch({error, {get_user_error, {reason, {key, dn}, {value, "invalid"}}}}, fslogic_objects:get_user({dn, "invalid"})),
-    ?assertMatch({ok, #db_document{uuid = ?CLUSTER_USER_ID}}, fslogic_objects:get_user({dn, undefined})),
+    ?assertMatch({ok, #db_document{uuid = ?CLUSTER_USER_ID}}, fslogic_objects:get_user(undefined)),
 
     ?assert(meck:validate(user_logic)).
 

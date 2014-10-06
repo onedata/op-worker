@@ -14,6 +14,7 @@
 
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao_types.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -101,7 +102,7 @@ clear_user_ctx() ->
 %% get_user_dn/0
 %% ====================================================================
 %% @doc Gets user's DN for current request or 'undefined' when there is none.
--spec get_user_dn() -> Result when Result :: atom() | undefined.
+-spec get_user_dn() -> Result when Result :: string() | undefined.
 %% ====================================================================
 get_user_dn() ->
     get(user_dn).
@@ -110,7 +111,7 @@ get_user_dn() ->
 %% set_user_dn/1
 %% ====================================================================
 %% @doc Sets user's DN for current request.
--spec set_user_dn(UserDN :: term()) -> Result when Result :: term().
+-spec set_user_dn(UserDN :: string() | undefined) -> Result when Result :: term().
 %% ====================================================================
 set_user_dn(UserDN) ->
     put(user_dn, UserDN).
@@ -273,7 +274,7 @@ is_global_fuse_id(GlobalFuseId) ->
 %% ====================================================================
 %% @doc Gets user DN, accessToken and GRUID
 %% @end
--spec get_user_context() -> {Dn :: binary(), {GRUID :: binary(), Token :: binary()}}.
+-spec get_user_context() -> {DN :: term(), {GRUID :: term(), Token :: term()}}.
 %% ====================================================================
 get_user_context() ->
     {get_user_dn(),{get(gruid), get(access_token)}}.
@@ -281,13 +282,17 @@ get_user_context() ->
 
 %% set_user_context/0
 %% ====================================================================
-%% @doc Gets user DN, accessToken and GRUID
+%% @doc Sets user DN, accessToken and GRUID
 %% @end
--spec set_user_context({Dn :: binary(), {GRUID :: binary(), Token :: binary()}}) -> ok.
+-spec set_user_context(UserDoc :: user_doc() | {DN :: term(), {GRUID :: term(), Token :: term()}}) -> ok.
 %% ====================================================================
-set_user_context({Dn,{GRUID,AccessToken}}) ->
-    set_user_dn(Dn),
-    set_gr_auth(GRUID,AccessToken),
+set_user_context(#db_document{record = #user{global_id = GRUID, access_token = AccessToken, dn_list = [DN | _]}}) ->
+    set_user_context({DN, {GRUID, AccessToken}});
+set_user_context(#db_document{record = #user{global_id = GRUID, access_token = AccessToken}}) ->
+    set_user_context({undefined, {GRUID, AccessToken}});
+set_user_context({DN, {GRUID, AccessToken}}) ->
+    set_user_dn(DN),
+    set_gr_auth(GRUID, AccessToken),
     ok.
 
 %% ====================================================================
