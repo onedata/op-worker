@@ -1435,6 +1435,8 @@ fs_remove_dir(BinDirPath) ->
 
 
 fs_list_dir(BinDir) ->
+    ?dump(fslogic_context:get_gr_auth()),
+    ?dump(fslogic_context:get_user_context()),
     case fs_list_dir(BinDir, 0, 10, []) of
         DirContent when is_list(DirContent) ->
             _ItemList = lists:foldl(
