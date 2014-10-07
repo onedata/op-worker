@@ -670,8 +670,8 @@ count_subdirs({uuid, Id}) ->
         view_type = reduce,
         inclusive_end = false
     },
-    case dao_records:list_records(?FILE_SUBDIRS_VIEW, QueryArgs) of
-        {ok, #view_result{rows = [#view_row{value = Sum}]}} -> {ok, Sum};
+    case dao_records:list_records(?FILE_CHILDS_VIEW, QueryArgs) of
+        {ok, #view_result{rows = [#view_row{value = [DirCount, _FileCount]}]}} -> {ok, DirCount};
         {ok, #view_result{rows = []}} -> {ok, 0};
         _Other ->
             ?error("Invalid view response: ~p", [_Other]),
@@ -693,7 +693,7 @@ count_childs({uuid, Id}) ->
         inclusive_end = false
     },
     case dao_records:list_records(?FILE_CHILDS_VIEW, QueryArgs) of
-        {ok, #view_result{rows = [#view_row{value = Sum}]}} -> {ok, Sum};
+        {ok, #view_result{rows = [#view_row{value = [DirCount, FileCount]}]}} -> {ok, DirCount + FileCount};
         {ok, #view_result{rows = []}} -> {ok, 0};
         _Other ->
             ?error("Invalid view response: ~p", [_Other]),

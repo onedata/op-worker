@@ -170,7 +170,7 @@ prepare_cdmi_metadata([Name | Rest], Filepath, Attrs, Prefix) ->
                 <<"cdmi_mtime">> ->
                     [{<<"cdmi_mtime">>, integer_to_binary(Attrs#fileattributes.mtime)} | prepare_cdmi_metadata(Rest, Filepath, Attrs, Prefix)];
                 <<"cdmi_owner">> ->
-                    [{<<"cdmi_owner">>, list_to_binary(Attrs#fileattributes.uname)} | prepare_cdmi_metadata(Rest, Filepath, Attrs, Prefix)];
+                    [{<<"cdmi_owner">>, Attrs#fileattributes.uname} | prepare_cdmi_metadata(Rest, Filepath, Attrs, Prefix)];
                 <<"cdmi_acl">> ->
                     case logical_files_manager:get_acl(Filepath) of
                         {ok, Acl} ->

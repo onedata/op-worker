@@ -113,37 +113,6 @@ get_storage({Type, StorageID}) ->
     end.
 
 
-%% get_user/1
-%% ====================================================================
-%% @doc Gets user associated with given DN
-%%      If DN is 'undefined', ROOT user is returned.
-%% @end
--spec get_user({dn, DN :: string()} | user_doc()) -> {ok, UserDoc :: user_doc() | [user_doc()]} | {error, any()}.
-%% ====================================================================
-get_user(#db_document{record = #user{}} = UserDoc) ->
-    {ok, UserDoc};
-get_user({Key, Value}) ->
-    case Value of
-        undefined -> {ok, #db_document{uuid = ?CLUSTER_USER_ID, record = #user{logins = [#id_token_login{login = "root", provider_id = internal}], role = admin}}};
-        Value ->
-            case user_logic:get_user({Key, Value}) of
-                {ok, #db_document{}} = OKRet -> OKRet;
-                {ok, UserList} = OKRet when is_list(UserList)  -> OKRet;
-                {error, user_not_found} when Key =:= global_id ->
-                    GRUID = Value,
-
-                    fslogic_spaces:sync_all_supported_spaces(),
-                    {ok, SpaceFiles} = dao_lib:apply(vfs, get_space_files, [{gruid, utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()),
-
-                    Spaces = [fslogic_utils:file_to_space_info(SpaceFile) || #db_document{record = #file{}} = SpaceFile <- SpaceFiles],
-
-                    user_logic:create_partial_user(GRUID, Spaces);
-                {error, Reason} ->
-                    {error, {get_user_error, {Reason, {key, Key}, {value, Value}}}}
-            end
-    end.
-
-
 %% get_user/0
 %% ====================================================================
 %% @doc Gets user associated with current session from DB
@@ -152,11 +121,35 @@ get_user({Key, Value}) ->
 -spec get_user() -> {ok, UserDoc :: user_doc()} | {error, any()}.
 %% ====================================================================
 get_user() ->
-    case fslogic_context:get_gr_auth() of
-        {GRUID, _} when GRUID =/= undefined ->
-            get_user({global_id, GRUID});
-        {_, _} ->
-            get_user({dn, fslogic_context:get_user_dn()})
+    get_user(fslogic_context:get_user_query()).
+
+
+%% get_user/1
+%% ====================================================================
+%% @doc Gets user associated with given DN
+%%      If DN is 'undefined', ROOT user is returned.
+%% @end
+-spec get_user({dn, DN :: string()} | user_doc() | undefined) -> {ok, UserDoc :: user_doc() | [user_doc()]} | {error, any()}.
+%% ====================================================================
+get_user(undefined) ->
+    {ok, #db_document{uuid = ?CLUSTER_USER_ID, record = #user{logins = [#id_token_login{login = "root", provider_id = internal}], role = admin}}};
+get_user(#db_document{record = #user{}} = UserDoc) ->
+    {ok, UserDoc};
+get_user({Key, Value}) ->
+    case user_logic:get_user({Key, Value}) of
+        {ok, #db_document{}} = OKRet -> OKRet;
+        {ok, UserList} = OKRet when is_list(UserList)  -> OKRet;
+        {error, user_not_found} when Key =:= global_id ->
+            GRUID = Value,
+
+            fslogic_spaces:sync_all_supported_spaces(),
+            {ok, SpaceFiles} = dao_lib:apply(vfs, get_space_files, [{gruid, utils:ensure_binary(GRUID)}], fslogic_context:get_protocol_version()),
+
+            Spaces = [fslogic_utils:file_to_space_info(SpaceFile) || #db_document{record = #file{}} = SpaceFile <- SpaceFiles],
+
+            user_logic:create_partial_user(GRUID, Spaces);
+        {error, Reason} ->
+            {error, {get_user_error, {Reason, {key, Key}, {value, Value}}}}
     end.
 
 

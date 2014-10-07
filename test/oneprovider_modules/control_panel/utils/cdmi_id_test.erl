@@ -12,9 +12,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("oneprovider_modules/control_panel/cdmi_id.hrl").
 
-%% API
--export([crc_test/0,build_with_enum_test/0,build_without_enum_test/0,build_with_badarg_test/0,build_with_badarg2_test/0,base16_test/0]).
-
 crc_test() ->
     Expected = 40679,
     ?assertEqual(Expected, cdmi_id:crc16("test string")).

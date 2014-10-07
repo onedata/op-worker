@@ -22,6 +22,7 @@
 
 % Definitions
 -define(SH, "DirectIO").
+-define(Test_user_name_with_hash, <<?TEST_USER, " ", ?TEST_USER, "#globa">>).
 -define(Test_dir_name, "dir").
 -define(Test_file_name, "file.txt").
 -define(Test_file_content, <<"test_file_content">>).
@@ -246,7 +247,7 @@ metadata_test(_Config) ->
     ?assert(CTime1 =< After),
     ?assert(CTime1 =< ATime1),
     ?assert(CTime1 =< MTime1),
-    ?assertEqual(<<"onedatatestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
+    ?assertMatch(<<_/binary>>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
     ?assertEqual(<<"my_value">>, proplists:get_value(<<"my_metadata">>, Metadata1)),
     ?assertEqual(7, length(Metadata1)),
 
@@ -269,7 +270,7 @@ metadata_test(_Config) ->
     {struct,CdmiResponse4} = mochijson2:decode(Response4),
     ?assertEqual(1, length(CdmiResponse4)),
     {struct, Metadata4} = proplists:get_value(<<"metadata">>,CdmiResponse4),
-    ?assertEqual(<<"onedatatestuser">>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
+    ?assertMatch(<<_/binary>>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
     ?assertEqual(1, length(Metadata4)),
 
     {_Code5, _Headers5, Response5} = do_request(FileName++"?metadata:cdmi_size", get, RequestHeaders1, []),
@@ -323,7 +324,7 @@ metadata_test(_Config) ->
     {struct, Metadata10}= proplists:get_value(<<"metadata">>,CdmiResponse10),
     ?assertEqual(<<"my_new_value_update">>, proplists:get_value(<<"my_new_metadata">>, Metadata10)),
     ?assertEqual(1, length(Metadata10)),
-    
+
     %%------ create directory with user metadata  ----------
     RequestHeaders2 = [{"content-type", "application/cdmi-container"},{"X-CDMI-Specification-Version", "1.0.2"}],
     RequestBody11 = [{<<"metadata">>, [{<<"my_metadata">>, <<"my_dir_value">>}]}],
@@ -354,7 +355,7 @@ metadata_test(_Config) ->
     {struct, Metadata14}= proplists:get_value(<<"metadata">>,CdmiResponse14),
     ?assertEqual(
         [{struct,[{<<"acetype">>,<<"ALLOW">>},
-            {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
+            {<<"identifier">>,?Test_user_name_with_hash},
             {<<"aceflags">>,<<"NO_FLAGS">>},
             {<<"acemask">>,<<"READ, WRITE">>}]}],
     proplists:get_value(<<"cdmi_acl">>, Metadata14)),
@@ -364,19 +365,19 @@ metadata_test(_Config) ->
     FileName2 = "acl_test_file.txt",
     Ace1 = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
+        {<<"identifier">>,?Test_user_name_with_hash},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ">>}
     ],
     Ace2 = [
         {<<"acetype">>,<<"DENY">>},
-        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
+        {<<"identifier">>,?Test_user_name_with_hash},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ, EXECUTE">>}
     ],
     Ace3 = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
+        {<<"identifier">>,?Test_user_name_with_hash},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"WRITE">>}
     ],
@@ -403,11 +404,10 @@ metadata_test(_Config) ->
     ?assertEqual("data", Response17),
     %%------------------------------
 
-
     %%-- create forbidden by acl ---
     Ace4 = [
         {<<"acetype">>,<<"DENY">>},
-        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
+        {<<"identifier">>,?Test_user_name_with_hash},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ, WRITE, EXECUTE">>}],
     RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace4]}]}],
@@ -1236,19 +1236,19 @@ acl_test(_Console) ->
     Dirname1 = "acl_test_dir1/",
     Read = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
+        {<<"identifier">>,?Test_user_name_with_hash},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ">>}
     ],
     Write = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
+        {<<"identifier">>,?Test_user_name_with_hash},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"WRITE">>}
     ],
     _Execute = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,<<"veilfstestuser veilfstestuser#globa">>},
+        {<<"identifier">>,?Test_user_name_with_hash},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"EXECUTE">>}
     ],
@@ -1381,7 +1381,7 @@ init_per_suite(Config) ->
 
     [CCM] = Nodes = test_node_starter:start_test_nodes(1, ?verbose),
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes,
+    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes,
         [[{node_type, ccm_test},
             {initialization_time, 1},
             {dispatcher_port, 5055},
@@ -1414,7 +1414,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     Nodes = ?config(nodes, Config),
-    test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
+    test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes),
     test_node_starter:stop_test_nodes(Nodes).
 
 %% ====================================================================

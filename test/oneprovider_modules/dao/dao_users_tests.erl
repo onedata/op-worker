@@ -79,7 +79,7 @@ main_test_() ->
             {"remove & get user doc from views",
                 fun() ->
                     meck:expect(dao_records, remove_record, fun(_UUID) -> ok end),
-                    UserByLogin = #db_document{ record = #user{ login = "login" } },
+                    UserByLogin = #db_document{ record = #user{ logins = [#id_token_login{provider_id = provider, login = "login"}]} },
                     UserByEmail = #db_document{ record = #user{ email_list = ["email"] } },
                     UserByDn = #db_document{ record = #user{ dn_list = ["dn"] } },
                     UserByUnverifiedDn = #db_document{record = #user{unverified_dn_list = ["unv_dn"]}},

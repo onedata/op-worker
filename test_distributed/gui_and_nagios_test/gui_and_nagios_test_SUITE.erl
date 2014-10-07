@@ -98,7 +98,7 @@ init_per_testcase(main_test, Config) ->
 
 	DB_Node = ?DB_NODE,
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes,
+    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes,
         [[{node_type, ccm_test},
             {initialization_time, 1},
             {dispatcher_port, 5055},
@@ -114,5 +114,5 @@ init_per_testcase(main_test, Config) ->
 
 end_per_testcase(main_test, Config) ->
     Nodes = ?config(nodes, Config),
-    test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
+    test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes),
     test_node_starter:stop_test_nodes(Nodes).

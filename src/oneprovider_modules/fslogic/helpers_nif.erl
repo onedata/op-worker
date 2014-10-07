@@ -56,7 +56,7 @@ start(Prefix) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      link/6 creates hard link _linkId to existing file _fileId. Behaves exactly as 'link' syscall.
 %% @end
--spec link(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _link :: string()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec link(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _link :: string()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 link(_uname, _gname, _sh_name, _sh_args, _fileId, _linkId) ->
     {error, 'NIF_not_loaded'}.
@@ -68,7 +68,7 @@ link(_uname, _gname, _sh_name, _sh_args, _fileId, _linkId) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      gettattr/3 returns #st_stat{} record for given file _path. Note that if ErrorCode does not equal 0, fields of #st_stat{} are undefined and shall be ignored.
 %% @end
--spec getattr(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string()) -> {ErrorCode :: integer(), Stats :: #st_stat{}} | {error, 'NIF_not_loaded'}.
+-spec getattr(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string()) -> {ErrorCode :: integer(), Stats :: #st_stat{}} | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 getattr(_uname, _gname, _sh_name, _sh_args, _path) ->
     {error, 'NIF_not_loaded'}.
@@ -82,7 +82,7 @@ getattr(_uname, _gname, _sh_name, _sh_args, _path) ->
 %%      access/4 checks if the calling process has specified by _mask premissions to file with given _path. Most storage helpers <br/>
 %%      will always return 0 (success), therefore this method can be used only to check if calling process does NOT have permissions to the file. 
 %% @end
--spec access(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _mask :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec access(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _mask :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 access(_uname, _gname, _sh_name, _sh_args, _path, _mask) ->
     {error, 'NIF_not_loaded'}.
@@ -95,7 +95,7 @@ access(_uname, _gname, _sh_name, _sh_args, _path, _mask) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      mknod/5 can and shall be used in order to create file (not directory). _mode and _rdev arguments are the same as in mknod syscall.
 %% @end
--spec mknod(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _mode :: integer(), _rdev :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec mknod(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _mode :: integer(), _rdev :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 mknod(_uname, _gname, _sh_name, _sh_args, _path, _mode, _rdev) ->
     {error, 'NIF_not_loaded'}.
@@ -107,7 +107,7 @@ mknod(_uname, _gname, _sh_name, _sh_args, _path, _mode, _rdev) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      unlink/3 removes given file (not directory).
 %% @end
--spec unlink(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec unlink(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 unlink(_uname, _gname, _sh_name, _sh_args, _path) ->
     {error, 'NIF_not_loaded'}.
@@ -120,7 +120,7 @@ unlink(_uname, _gname, _sh_name, _sh_args, _path) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      rename/4 shall be used to rename/move file from _from path to _to path.
 %% @end
--spec rename(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _from :: string(), _to :: string()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec rename(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _from :: string(), _to :: string()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 rename(_uname, _gname, _sh_name, _sh_args, _from, _to) ->
     {error, 'NIF_not_loaded'}.
@@ -132,7 +132,7 @@ rename(_uname, _gname, _sh_name, _sh_args, _from, _to) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      chmod/4 changes file's _mode.
 %% @end
--spec chmod(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _mode :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec chmod(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _mode :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 chmod(_uname, _gname, _sh_name, _sh_args, _path, _mode) ->
     {error, 'NIF_not_loaded'}.
@@ -145,7 +145,7 @@ chmod(_uname, _gname, _sh_name, _sh_args, _path, _mode) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      chown/5 changes file's uid and gid
 %% @end
--spec chown(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _uid :: integer(), _gid :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec chown(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _uid :: integer(), _gid :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 chown(_uname, _gname, _sh_name, _sh_args, _path, _uid, _gid) ->
     {error, 'NIF_not_loaded'}.
@@ -158,7 +158,7 @@ chown(_uname, _gname, _sh_name, _sh_args, _path, _uid, _gid) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      chown/5 changes file's uid and gid
 %% @end
--spec chown_name(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _uname :: string(), _gname :: string()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec chown_name(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _uname :: integer(), _gname :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 chown_name(_uname, _gname, _sh_name, _sh_args, _path, _uname, _gname) ->
     {error, 'NIF_not_loaded'}.
@@ -171,7 +171,7 @@ chown_name(_uname, _gname, _sh_name, _sh_args, _path, _uname, _gname) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      truncate/4 changes file size to _size.
 %% @end
--spec truncate(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _size :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec truncate(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _size :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 truncate(_uname, _gname, _sh_name, _sh_args, _path, _size) ->
     {error, 'NIF_not_loaded'}.
@@ -185,7 +185,7 @@ truncate(_uname, _gname, _sh_name, _sh_args, _path, _size) ->
 %%      open/4 opens file. _fi aregument is an #st_fuse_file_info record that shall contain open flags. Same record will be returnd <br/>
 %%      with 'fd' field set (file descriptor), therefore record returned by 'open' shall be passed to next read/write/release calls. 
 %% @end
--spec open(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _fi :: #st_fuse_file_info{}) -> {ErrorCode :: integer(), FFI :: #st_fuse_file_info{}} | {error, 'NIF_not_loaded'}.
+-spec open(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _fi :: #st_fuse_file_info{}) -> {ErrorCode :: integer(), FFI :: #st_fuse_file_info{}} | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 open(_uname, _gname, _sh_name, _sh_args, _path, _fi) ->
     {error, 'NIF_not_loaded'}.
@@ -199,7 +199,7 @@ open(_uname, _gname, _sh_name, _sh_args, _path, _fi) ->
 %%      read/6 reads _size bytes (starting with _offset) from given file. If the _fi arguemnt is given with valid file descriptor ('fd' field) <br/>
 %%      the 'fd' will be used to access file. Otherwise read/6 will open file for you.
 %% @end
--spec read(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _size :: integer(), _offset :: integer(), _fi :: #st_fuse_file_info{}) ->
+-spec read(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _size :: integer(), _offset :: integer(), _fi :: #st_fuse_file_info{}) ->
     {ErrorCode :: integer(), Data  :: binary()} | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 read(_uname, _gname, _sh_name, _sh_args, _path, _size, _offset, _fi) ->
@@ -214,7 +214,7 @@ read(_uname, _gname, _sh_name, _sh_args, _path, _size, _offset) ->
 %%      ErrorCode return value equals to bytes writen count if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      write/6 writes _buf binary data to given file starting with _offset. _fi argument has the same meaning as in read/6. 
 %% @end
--spec write(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _buf :: binary(), _offset :: integer(), _fi :: #st_fuse_file_info{}) ->
+-spec write(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _buf :: binary(), _offset :: integer(), _fi :: #st_fuse_file_info{}) ->
     ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 write(_uname, _gname, _sh_name, _sh_args, _path, _buf, _offset, _fi) ->
@@ -230,7 +230,7 @@ write(_uname, _gname, _sh_name, _sh_args, _path, _buf, _offset) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      statfs/3 returns #st_statvfs record for given _path. See statfs syscall for more details.
 %% @end
--spec statfs(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string()) -> {ErrorCode :: integer(), #st_statvfs{}} | {error, 'NIF_not_loaded'}.
+-spec statfs(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string()) -> {ErrorCode :: integer(), #st_statvfs{}} | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 statfs(_uname, _gname, _sh_name, _sh_args, _path) ->
     {error, 'NIF_not_loaded'}.
@@ -243,7 +243,7 @@ statfs(_uname, _gname, _sh_name, _sh_args, _path) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      release/4 closes file that was previously opened with open/4. 
 %% @end
--spec release(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _fi :: #st_fuse_file_info{}) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec release(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _fi :: #st_fuse_file_info{}) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 release(_uname, _gname, _sh_name, _sh_args, _path, _fi) ->
     {error, 'NIF_not_loaded'}.
@@ -256,7 +256,7 @@ release(_uname, _gname, _sh_name, _sh_args, _path, _fi) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      
 %% @end
--spec fsync(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _isdatasync :: integer(), _fi :: #st_fuse_file_info{}) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec fsync(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _isdatasync :: integer(), _fi :: #st_fuse_file_info{}) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 fsync(_uname, _gname, _sh_name, _sh_args, _path, _isdatasync, _fi) ->
     {error, 'NIF_not_loaded'}.
@@ -269,7 +269,7 @@ fsync(_uname, _gname, _sh_name, _sh_args, _path, _isdatasync, _fi) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      mkdir creates directory with given _path and _mode (permissions).
 %% @end
--spec mkdir(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _mode :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec mkdir(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string(), _mode :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 mkdir(_uname, _gname, _sh_name, _sh_args, _path, _mode) ->
     {error, 'NIF_not_loaded'}.
@@ -282,7 +282,7 @@ mkdir(_uname, _gname, _sh_name, _sh_args, _path, _mode) ->
 %%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      rmdir removes directory with given _path.
 %% @end
--spec rmdir(_uname :: string(), _gname :: string(), _sh_name :: string(), _sh_args :: [string()], _path :: string()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+-spec rmdir(_uname :: integer(), _gname :: integer(), _sh_name :: string(), _sh_args :: [string()], _path :: string()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 rmdir(_uname, _gname, _sh_name, _sh_args, _path) ->
     {error, 'NIF_not_loaded'}.
