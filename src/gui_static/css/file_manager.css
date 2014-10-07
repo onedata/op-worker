@@ -1,0 +1,153 @@
+
+.nav-tabs > li > a {
+    background-color: #DCDEE0;
+}
+
+#tab-acl {
+    position: relative;
+}
+
+#tab-acl-content {
+    position: relative;
+    margin: auto;
+}
+
+#acl-list {
+    display: inline-block;
+    width: 550px;
+    height: 200px;
+    border: 2px solid #526476;
+    border-radius: 6px;
+    position: relative;
+    overflow-x: hidden;
+    overflow-y: scroll;
+}
+
+.acl-entry {
+    width: 100%;
+    border-bottom: 2px solid lightgray;
+    height: 40px;
+    position: relative;
+    cursor: pointer;
+}
+
+.acl-entry-allow {
+    background-color: #DFFFDF;
+}
+
+.acl-entry-deny {
+    background-color: #FFE5E5;
+}
+
+#acl-form {
+    display: inline-block;
+    width: 200px;
+    height: 200px;
+    border: 2px solid #526476;
+    border-radius: 6px;
+}
+
+.acl-subject {
+    position: absolute;
+    left: 6px;
+    top: 7px;
+    line-height: 24px;
+    height: 24px;
+    width: 250px;
+    text-align: left;
+    overflow: hidden;
+}
+
+.acl-sub-icon {
+    vertical-align: middle;
+    font-size: 24px;
+    color: rgb(82, 100, 118);
+}
+
+.acl-sub-name {
+    vertical-align: middle;
+    font-size: 15px;
+    margin-left: 7px;
+    word-wrap: break-word;
+    white-space: nowrap;
+}
+
+.acl-icon-read {
+    position: absolute;
+    left: 300px;
+    top: 12px;
+    font-size: 14px;
+    color: rgb(82, 100, 118);
+}
+
+.acl-symbol-read {
+    position: absolute;
+    left: 318px;
+    top: 12px;
+    font-size: 14px;
+    color: rgb(82, 100, 118);
+}
+
+.acl-icon-write {
+    position: absolute;
+    left: 340px;
+    top: 12px;
+    font-size: 14px;
+    color: rgb(82, 100, 118);
+}
+
+.acl-symbol-write {
+    position: absolute;
+    left: 358px;
+    top: 12px;
+    font-size: 14px;
+    color: rgb(82, 100, 118);
+}
+
+.acl-icon-exec {
+    position: absolute;
+    left: 385px;
+    top: 12px;
+    font-size: 14px;
+    color: rgb(82, 100, 118);
+}
+
+.acl-symbol-exec {
+    position: absolute;
+    left: 403px;
+    top: 12px;
+    font-size: 14px;
+    color: rgb(82, 100, 118);
+}
+
+.acl-button-delete {
+    position: absolute;
+    top: 9px;
+    right: 72px;
+    font-size: 20px;
+    display: none;
+}
+
+.acl-button-edit {
+    position: absolute;
+    top: 9px;
+    right: 42px;
+    font-size: 20px;
+    display: none;
+}
+
+.acl-button-move-up {
+    position: absolute;
+    top: 0;
+    right: 10px;
+    font-size: 20px;
+    display: none;
+}
+
+.acl-button-move-down {
+    position: absolute;
+    top: 15px;
+    right: 10px;
+    font-size: 20px;
+    display: none;
+}

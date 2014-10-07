@@ -53,7 +53,7 @@ init_chmod_table = function (current_mode) {
     });
 
     // Initialize tabs
-    $(".nav-tabs a").on('click', function (e) {
+    $('.nav-tabs a').on('click', function (e) {
         e.preventDefault();
         $(this).tab("show");
     });
@@ -98,3 +98,58 @@ update_chmod_textbox = function (mode) {
     $('#octal_form_textbox').val((mode_string + "00").substring(0, 3));
 };
 
+
+// -----------------------------
+// ACL handling
+
+populate_acl_list = function (json_array) {
+    console.log(json_array);
+
+    for (var i = 0; i < json_array.length; ++i) {
+        $('#acl-list').append(
+            render_acl_entry(i, json_array[i].subject, json_array[i].allow, json_array[i].read, json_array[i].write, json_array[i].exec));
+    }
+
+    $('.acl-entry').click(function (event) {
+        $('[class*="acl-button-"]').hide();
+        $(this).find('[class*="acl-button-"]').show();
+    });
+
+    $('.acl-button-delete').click(function (event) {
+        delete_acl($(this).attr('index'));
+    });
+
+    $('.acl-button-edit').click(function (event) {
+        edit_acl($(this).attr('index'));
+    });
+
+    $('.acl-button-move-up').click(function (event) {
+        move_acl([$(this).attr('index'), true]);
+    });
+
+    $('.acl-button-move-down').click(function (event) {
+        move_acl([$(this).attr('index'), false]);
+    });
+};
+
+// Renders a single ACL entry
+render_acl_entry = function (index, subject, allow_flag, read_flag, write_flag, exec_flag) {
+    var entry_class = allow_flag ? 'acl-entry acl-entry-allow' : 'acl-entry acl-entry-deny';
+    var icon_type = allow_flag ? 'fui-check-inverted' : 'fui-cross-inverted';
+    var icon_read = read_flag ? '<span class="' + icon_type + ' acl-icon-read"></span>' +
+        '<span class="acl-symbol-read">R</span>' : '';
+    var icon_write = write_flag ? '<span class="' + icon_type + ' acl-icon-write"></span>' +
+        '<span class="acl-symbol-write">W</span>' : '';
+    var icon_exec = exec_flag ? '<span class="' + icon_type + ' acl-icon-exec"></span>' +
+        '<span class="acl-symbol-exec">X</span>' : '';
+
+    return '<div class="' + entry_class + '"><div class="acl-subject">' +
+        '<span class="icomoon-user acl-sub-icon"></span>' +
+        '<span class="acl-sub-name">' + subject + '</span></div>' +
+        icon_read + icon_write + icon_exec +
+        '<a class="glyph-link acl-button-delete" title="Delete ACL entry" index="' + index + '"><span class="icomoon-remove"></span></a>' +
+        '<a class="glyph-link acl-button-edit" title="Edit ACL entry" index="' + index + '"><span class="icomoon-pencil2"></span></a>' +
+        '<a class="glyph-link acl-button-move-up" title="Move up" index="' + index + '"><span class="fui-triangle-up-small"></span></a>' +
+        '<a class="glyph-link acl-button-move-down" title="Move down" index="' + index + '"><span class="fui-triangle-down-small"></span></a>' +
+        '</div>';
+};

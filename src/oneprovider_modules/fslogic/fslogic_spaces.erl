@@ -107,7 +107,7 @@ map_to_grp_owner(#space_info{name = SpaceName, space_id = SpaceId}) ->
     case ets:lookup(?STORAGE_GROUP_IDS_CACHE, SpaceName) of
         [] ->
             <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, SpaceId),
-            {ok, LowestGID} = veil_cluster_node_app:get_env(lowest_generated_storage_gid),
+            {ok, LowestGID} = oneprovider_node_app:get_env(lowest_generated_storage_gid),
             LowestGID + GID0 rem 1000000;
         [{_, GID}] ->
             GID

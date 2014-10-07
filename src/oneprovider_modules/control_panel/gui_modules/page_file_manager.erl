@@ -22,6 +22,7 @@
 -export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
 -export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0]).
 -export([confirm_paste/0, confirm_chmod/2, show_permissions_info/0]).
+-export([delete_acl/1, edit_acl/1, move_acl/2]).
 -export([rename_item/2, create_directory/1, remove_selected/0, search/1, toggle_column/2, show_popup/1, hide_popup/0, path_navigator_body/1]).
 -export([fs_list_dir/1, fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
 
@@ -49,20 +50,44 @@
 main() ->
     case opn_gui_utils:maybe_redirect(true, true, true) of
         true ->
-            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
+            #dtl{file = "bare", app = ?APP_Name, bindings = [
+                {title, <<"">>},
+                {body, <<"">>},
+                {custom, <<"">>},
+                {css, <<"">>}
+            ]};
         false ->
-            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [
+                {title, title()},
+                {body, body()},
+                {custom, custom()},
+                {css, css()}
+            ]}
     end.
 
 
 %% Page title
 title() -> <<"File manager">>.
 
+%% This will be placed in the template instead of {{custom}} tag
+custom() ->
+    <<"<script src=\"/js/oneprovider_upload.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
+    "    <script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>",
+    "    <script src=\"/flatui/bootbox.min.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n">>.
+
+%% This will be placed in the template instead of {{css}} tag
+css() ->
+    <<"<link rel=\"stylesheet\" href=\"/css/file_manager.css\" type=\"text/css\" media=\"screen\" charset=\"utf-8\" />">>.
+
+
 %% This will be placed in the template instead of {{body}} tag
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
     gui_jq:wire(#api{name = "confirm_paste", tag = "confirm_paste"}, false),
     gui_jq:wire(#api{name = "submit_chmod_event", tag = "submit_chmod_event"}, false),
+    gui_jq:wire(#api{name = "delete_acl", tag = "delete_acl"}, false),
+    gui_jq:wire(#api{name = "edit_acl", tag = "edit_acl"}, false),
+    gui_jq:wire(#api{name = "move_acl", tag = "move_acl"}, false),
     Body = [
         #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
@@ -72,12 +97,6 @@ body() ->
         footer_popup()
     ],
     Body.
-
-%% This will be placed in the template instead of {{custom}} tag
-custom() ->
-    <<"<script src=\"/js/oneprovider_upload.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
-    "    <script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>",
-    "    <script src=\"/flatui/bootbox.min.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n">>.
 
 % Submenu that will be glued below the top menu
 manager_submenu() ->
@@ -223,7 +242,19 @@ api_event("confirm_paste", _, _) ->
 
 api_event("submit_chmod_event", Args, _Ctx) ->
     [Mode, Recursive] = mochijson2:decode(Args),
-    event({action, confirm_chmod, [Mode, Recursive]}).
+    event({action, confirm_chmod, [Mode, Recursive]});
+
+api_event("delete_acl", Args, _) ->
+    Index = mochijson2:decode(Args),
+    event({action, delete_acl, [binary_to_integer(Index)]});
+
+api_event("edit_acl", Args, _) ->
+    Index = mochijson2:decode(Args),
+    event({action, edit_acl, [binary_to_integer(Index)]});
+
+api_event("move_acl", Args, _) ->
+    [Index, MoveUp] = mochijson2:decode(Args),
+    event({action, move_acl, [binary_to_integer(Index), MoveUp]}).
 
 
 event(init) ->
@@ -283,6 +314,11 @@ comet_loop_init(UserId, GRUID, UserAccessToken, RequestedHostname) ->
     set_clipboard_type(none),
     refresh_workspace(),
     gui_jq:hide(<<"spinner">>),
+
+    %% TODO
+    set_selected_items([{<<"/spaces">>, <<"spaces">>}]),
+    show_popup(chmod),
+
     gui_comet:flush(),
 
     % Enter comet loop for event processing and autorefreshing
@@ -706,6 +742,18 @@ show_permissions_info() ->
     "defining ordered lists of permissions-granting or permissions-denying entries for users / groups.">>, <<"">>).
 
 
+delete_acl(Index) ->
+    ?dump(Index).
+
+
+edit_acl(Index) ->
+    ?dump(Index).
+
+
+move_acl(Index, MoveUp) ->
+    ?dump({Index, MoveUp}).
+
+
 % Shows popup with a prompt, form, etc.
 show_popup(Type) ->
     {FooterBody, Script, CloseButtonAction} =
@@ -787,12 +835,12 @@ show_popup(Type) ->
                             body = #span{class = <<"icomoon-question">>, style = <<"font-size: 20px;">>}},
 
                         #list{class = <<"nav nav-tabs nav-append-content">>, body = [
-                            #li{class = <<"">>, body = #link{url = <<"#tab1">>, body = <<"Standard permissions">>}},
-                            #li{class = <<"active">>, body = #link{url = <<"#tab2">>, body = <<"ACLs (advanced)">>}}
+                            #li{class = <<"">>, body = #link{url = <<"#tab-perms">>, body = <<"Standard permissions">>}},
+                            #li{class = <<"active">>, body = #link{url = <<"#tab-acl">>, body = <<"ACLs (advanced)">>}}
                         ]},
 
                         #panel{style = <<"background-color: #FFF; border-radius: 0;">>, class = <<"tab-content">>, body = [
-                            #panel{class = <<"tab-pane">>, id = <<"tab1">>, body = [
+                            #panel{class = <<"tab-pane">>, id = <<"tab-perms">>, body = [
                                 #table{class = <<"table table-bordered">>,
                                     style = <<"margin: 0 auto 15px; table-layout: fixed; width: 200px; border-color: rgb(82, 100, 118);">>,
                                     header = [
@@ -861,8 +909,11 @@ show_popup(Type) ->
                                         label_title = <<"Change mode in all subdirectories, recursively">>}
                                 ]}
                             ]},
-                            #panel{class = <<"tab-pane active">>, id = <<"tab2">>, body = [
-                                <<"JEMPTY">>
+                            #panel{class = <<"tab-pane active">>, id = <<"tab-acl">>, body = [
+                                #panel{id = <<"tab-acl-content">>, body = [
+                                    #panel{id = <<"acl-list">>},
+                                    #panel{id = <<"acl-form">>}
+                                ]}
                             ]}
                         ]},
 
@@ -874,6 +925,14 @@ show_popup(Type) ->
                         ]}
                     ]}
                 ],
+                JSON = rest_utils:encode_to_json([
+                    [{subject, <<"Łukasz Opioła"/utf8>>}, {allow, false}, {read, true}, {write, true}, {exec, false}],
+                    [{subject, <<"Jan Kowalski"/utf8>>}, {allow, true}, {read, true}, {write, false}, {exec, true}],
+                    [{subject, <<"Jan Nowak"/utf8>>}, {allow, true}, {read, true}, {write, true}, {exec, true}],
+                    [{subject, <<"Jan Siekierski"/utf8>>}, {allow, true}, {read, false}, {write, true}, {exec, false}],
+                    [{subject, <<"Jan Tomczyk"/utf8>>}, {allow, true}, {read, false}, {write, true}, {exec, true}]
+                ]),
+                gui_jq:wire(<<"populate_acl_list(", JSON/binary, ");">>),
                 gui_jq:bind_element_click(<<"ok_button">>, <<"function() { submit_chmod(); }">>),
                 {Body, undefined, {action, hide_popup}};
 
@@ -1435,8 +1494,6 @@ fs_remove_dir(BinDirPath) ->
 
 
 fs_list_dir(BinDir) ->
-    ?dump(fslogic_context:get_gr_auth()),
-    ?dump(fslogic_context:get_user_context()),
     case fs_list_dir(BinDir, 0, 10, []) of
         DirContent when is_list(DirContent) ->
             _ItemList = lists:foldl(
@@ -1590,3 +1647,7 @@ get_item_counter() ->
     Val = get(item_counter),
     put(item_counter, Val + 1),
     integer_to_binary(Val).  % Return binary as this is used for making element IDs
+
+% Holds information what files' ACLs are being edited and what is the current state
+set_acl_state(State) -> put(acl_state, State).
+get_acl_state() -> get(acl_state).

@@ -77,17 +77,6 @@
     background-color: rgba(26, 188, 156, 0.2);
 }
 
-.nav-tabs > li > a {
-    background-color: #DCDEE0;
-}
-
-/*.nav-tabs > li.active > a,*/
-/*.nav-tabs > li.active > a:focus,*/
-/*.nav-tabs > li.active > a:hover {*/
-    /*background-color: #EDEFF1;*/
-    /*border-bottom-color: #EDEFF1;*/
-/*}*/
-
 a.glyph-link {
     color: rgb(82, 100, 118);
 }
