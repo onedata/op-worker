@@ -100,7 +100,7 @@ body() ->
             style = <<"margin-bottom: 100px;">>,
             body = [
                 #h6{
-                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; width: 161px;">>,
+                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; text-align: center;">>,
                     body = <<"Manage tokens">>
                 },
                 #panel{

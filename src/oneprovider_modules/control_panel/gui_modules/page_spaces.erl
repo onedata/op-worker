@@ -100,7 +100,7 @@ body() ->
             body =
             [
                 #h6{
-                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; width: 162px;">>,
+                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; text-align: center;">>,
                     body = <<"Manage Spaces">>
                 },
                 #panel{
@@ -380,7 +380,7 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
                                        opn_gui_utils:message(<<"error_message">>, <<"Cannot join Space using token: <b>", Token/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
-                    gui_jq:prop(<<"create_space_button">>, <<"disabled">>, <<"">>),
+                    gui_jq:prop(<<"join_space_button">>, <<"disabled">>, <<"">>),
                     NewState;
 
                 {set_default_space, RowId, #space_details{id = SpaceId}} ->

@@ -118,7 +118,7 @@ body(SpaceDetails) ->
             style = <<"margin-bottom: 100px;">>,
             body = [
                 #h6{
-                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; width: 152px;">>,
+                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; text-align: center;">>,
                     body = <<"Manage Space">>
                 },
                 space_details_table(SpaceDetails) |
@@ -137,9 +137,9 @@ body(SpaceDetails) ->
                         ]
                     }
                 end, [
-                    {<<"providers_table">>, providers_panel(SpaceDetails)},
-                    {<<"users_table">>, users_panel(SpaceDetails)},
-                    {<<"groups_table">>, groups_panel(SpaceDetails)}
+                    {<<"providers_table">>, providers_panel()},
+                    {<<"users_table">>, users_panel()},
+                    {<<"groups_table">>, groups_panel()}
                 ])
             ]
         }
@@ -246,13 +246,13 @@ change_space_name(SpaceDetails) ->
     ].
 
 
-%% providers_panel/1
+%% providers_panel/0
 %% ====================================================================
 %% @doc Renders providers management panel.
--spec providers_panel(SpaceDetails :: #space_details{}) -> Result when
+-spec providers_panel() -> Result when
     Result :: #panel{}.
 %% ====================================================================
-providers_panel(#space_details{}) ->
+providers_panel() ->
     #panel{
         style = <<"margin: 0 auto; width: 50%; margin-top: 30px; text-align: center;">>,
         body = #button{
@@ -265,13 +265,13 @@ providers_panel(#space_details{}) ->
     }.
 
 
-%% users_panel/1
+%% users_panel/0
 %% ====================================================================
 %% @doc Renders users management panel.
--spec users_panel(SpaceDetails :: #space_details{}) -> Result when
+-spec users_panel() -> Result when
     Result :: #panel{}.
 %% ====================================================================
-users_panel(#space_details{}) ->
+users_panel() ->
     #panel{
         style = <<"margin: 0 auto; width: 50%; margin-top: 30px; text-align: center;">>,
         body = #button{
@@ -284,13 +284,13 @@ users_panel(#space_details{}) ->
     }.
 
 
-%% groups_panel/1
+%% groups_panel/0
 %% ====================================================================
 %% @doc Renders groups management panel.
--spec groups_panel(SpaceDetails :: #space_details{}) -> Result when
+-spec groups_panel() -> Result when
     Result :: #panel{}.
 %% ====================================================================
-groups_panel(#space_details{}) ->
+groups_panel() ->
     #panel{
         style = <<"margin: 0 auto; width: 50%; margin-top: 30px; text-align: center;">>,
         body = #button{
@@ -786,12 +786,12 @@ event(init) ->
             end, {[], 0}, Ids)
         end,
 
-        {ok, ProvideIds} = gr_spaces:get_providers({user, AccessToken}, SpaceId),
-        {ProvidersDetails, _} = GetDetailsFun(ProvideIds, get_provider_details, <<"provider_">>),
-        {ok, UseIds} = gr_spaces:get_users({user, AccessToken}, SpaceId),
-        {UsersDetails, _} = GetDetailsFun(UseIds, get_user_details, <<"user_">>),
-        {ok, GrouIds} = gr_spaces:get_groups({user, AccessToken}, SpaceId),
-        {GroupsDetails, _} = GetDetailsFun(GrouIds, get_group_details, <<"group_">>),
+        {ok, ProvidersIds} = gr_spaces:get_providers({user, AccessToken}, SpaceId),
+        {ProvidersDetails, _} = GetDetailsFun(ProvidersIds, get_provider_details, <<"provider_">>),
+        {ok, UsersIds} = gr_spaces:get_users({user, AccessToken}, SpaceId),
+        {UsersDetails, _} = GetDetailsFun(UsersIds, get_user_details, <<"user_">>),
+        {ok, GroupsIds} = gr_spaces:get_groups({user, AccessToken}, SpaceId),
+        {GroupsDetails, _} = GetDetailsFun(GroupsIds, get_group_details, <<"group_">>),
 
         gui_jq:bind_key_to_click_on_class(<<"13">>, <<"confirm">>),
         lists:foreach(fun
