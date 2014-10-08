@@ -67,8 +67,8 @@ error_value(?unsupported_version) ->
     [?error_bad_request_code, [{<<"UnsupportedVersionError">>, <<"Version unsupported">>}], "Invalid version error.", [], debug];
 error_value({?malformed_request, Error}) ->
     [?error_bad_request_code, [{<<"MalformedRequestError">>, <<"The request is malformed">>}], "Malformed request error: ~p", [Error], debug];
-error_value({?invalid_json, Error}) ->
-    [?error_bad_request_code, [{<<"InvalidJsonError">>, <<"The json body could not be parsed">>}], "Malformed request error: ~p", [Error], debug];
+error_value(?invalid_json) ->
+    [?error_bad_request_code, [{<<"InvalidJsonError">>, <<"The json body could not be parsed">>}], "The json body could not be parsed", [], debug];
 
 error_value(?invalid_token) ->
     [?error_unauthorized_code, [{<<"InvalidTokenError">>, <<"The token is invalid or expired">>}], "Invalid token error", [], debug];

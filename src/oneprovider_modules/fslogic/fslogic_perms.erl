@@ -242,10 +242,9 @@ has_permission(execute, FilePerms, _, _) ->
     Result :: string() | none.
 %% ====================================================================
 get_group(File) ->
-    FileTokens = string:tokens(File, "/"),
-    case lists:nth(1, FileTokens) of
-        ?SPACES_BASE_DIR_NAME ->
-            lists:nth(2, FileTokens);
+    case string:tokens(File, "/") of
+        [?SPACES_BASE_DIR_NAME, SpaceName | _Rest] ->
+            SpaceName;
         _ ->
             none
     end.

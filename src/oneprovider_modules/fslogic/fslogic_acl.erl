@@ -129,7 +129,7 @@ proplist_to_ace2([{<<"acemask">>, AceMask} | Rest], Acc) -> proplist_to_ace2(Res
 %% ====================================================================
 gruid_to_name(GRUID) ->
     {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
-    <<(utils:ensure_binary(Name))/binary,"#",(binary_part(GRUID, 0, ?username_hash_length))/binary>>.
+    <<(utils:ensure_unicode_binary(Name))/binary,"#",(binary_part(GRUID, 0, ?username_hash_length))/binary>>.
 
 %% proplist_to_ace/1
 %% ====================================================================
@@ -139,10 +139,13 @@ gruid_to_name(GRUID) ->
 -spec name_to_gruid(Name :: binary()) -> binary().
 %% ====================================================================
 name_to_gruid(Name) ->
-    [UserName, Hash] = binary:split(Name, <<"#">>, [global]),
-    {ok, UserList} = fslogic_objects:get_user({name, utils:ensure_list(UserName)}),
+    [UserName, Hash] = case binary:split(Name, <<"#">>, [global]) of
+                           [UserName_] -> [UserName_, <<"">>];
+                           [UserName_, Hash_] -> [UserName_, Hash_]
+                       end,
+    {ok, UserList} = fslogic_objects:get_user({name, utils:ensure_unicode_list(UserName)}),
 
-    GRUIDList = lists:map(fun(#db_document{record = #user{global_id = GRUID}}) -> utils:ensure_binary(GRUID)  end, UserList),
+    GRUIDList = lists:map(fun(#db_document{record = #user{global_id = GRUID}}) -> utils:ensure_unicode_binary(GRUID)  end, UserList),
     GUIDWithMatchingPrefixList = lists:filter(fun(GRUID) -> binary:longest_common_prefix([Hash, GRUID]) == byte_size(Hash)  end , GRUIDList),
     [GRUID] = GUIDWithMatchingPrefixList, % todo throw proper error message if more than one user matches given name
     GRUID.

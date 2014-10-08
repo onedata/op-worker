@@ -75,8 +75,7 @@ delete(Req, <<"1.0">>, _Id) ->
     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
 %% ====================================================================
 post(Req, <<"1.0">>, _Id, Data) ->
-    AuthorizationCode = proplists:get_value(<<"authorizationCode">>, Data),
-    case gr_openid:get_token_response(client, [{<<"grant_type">>, <<"authorization_code">>}, {<<"code">>, AuthorizationCode}]) of
+    case gr_openid:get_token_response(client, [{<<"grant_type">>, <<"authorization_code">>} | Data]) of % Data = code + client_name
         {ok, #token_response{access_token = AccessToken, id_token = #id_token{sub = GRUID}}} ->
             TokenHash = utils:access_token_hash(AccessToken),
             Response = rest_utils:encode_to_json([{<<"accessToken">>, base64:encode(<<TokenHash/binary,";",GRUID/binary>>)}]),
