@@ -12,7 +12,7 @@
 {application, oneprovider_node,
     [
         {description, "Application starts node of oneprovider central cluster"},
-        {vsn, "0.0.6_VFS-70"},
+        {vsn, git},
         {registered, []},
         {applications, [
             kernel,

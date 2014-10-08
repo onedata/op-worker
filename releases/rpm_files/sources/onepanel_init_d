@@ -1,0 +1,96 @@
+#!/bin/sh
+
+# chkconfig: 2345 80 30
+# description: onepanel service
+
+### BEGIN INIT INFO
+# Provides:		        onepanel
+# Required-Start:	    $local_fs $remote_fs $network $time
+# Required-Stop:	    $local_fs $remote_fs $network $time
+# Should-Start:		    $syslog
+# Should-Stop:		    $syslog
+# Default-Start:	    3 4 5
+# Default-Stop:		    0 1 2 6
+# Short-Description:	onepanel service
+# Description:          Management tool for onedata components.
+### END INIT INFO
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+# Needed for erlexec to run
+export HOME=/
+
+NAME=onepanel
+LOCKFILE=/var/lock/subsys/${NAME}
+DEAMON=/opt/oneprovider/nodes/onepanel/bin/${NAME}
+
+start() {
+	status_silent ; STATUS=$?
+	if [ ${STATUS} -ne 0 ]; then
+		echo -n $"Starting ${NAME}: "
+	    ${DEAMON} start 1>/dev/null 2>&1 ; RETVAL=$?
+        [ ${RETVAL} -eq 0 ] && success || failure
+        echo
+	    return ${RETVAL}
+	fi
+}
+
+stop() {
+	status_silent ; STATUS=$?
+	if [ ${STATUS} -eq 0 ]; then
+	    echo -n $"Stopping ${NAME}: "
+	    ${DEAMON} stop 1>/dev/null 2>&1 ; RETVAL=$?
+        [ ${RETVAL} -eq 0 ] && success || failure
+        echo
+	    return ${RETVAL}
+	fi
+}
+
+restart() {
+	stop ; RETVAL1=$?
+	start ; RETVAL2=$?
+	return `[ ${RETVAL1} -eq 0 -a ${RETVAL2} -eq 0 ]`
+}
+
+status() {
+    status_silent ; STATUS=$?
+    echo -n $"${NAME}: "
+	if [ ${STATUS} -eq 0 ]; then
+        echo "running"
+	    return 0
+	else
+		echo "not running"
+		return 3
+	fi
+}
+
+status_silent() {
+    ${DEAMON} ping > /dev/null 2>&1 ; STATUS=$?
+    return ${STATUS}
+}
+
+case "$1" in
+    start)
+        start && touch ${LOCKFILE}
+        ;;
+
+    stop)
+        stop && rm -f ${LOCKFILE}
+	    ;;
+
+    restart|force-reload)
+	    restart
+	    ;;
+
+    status)
+	    status
+	    ;;
+
+    *)
+	    echo "Usage: $0 {start|stop|restart|force-reload|status}"
+	    exit 2
+	    ;;
+esac
+
+exit $?
