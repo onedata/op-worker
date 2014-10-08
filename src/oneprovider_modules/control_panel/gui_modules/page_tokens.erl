@@ -22,7 +22,7 @@
 -define(MESSAGE_STYLE, <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>).
 -define(CONTENT_COLUMN_STYLE, <<"padding-right: 0">>).
 -define(NAVIGATION_COLUMN_STYLE, <<"border-left-width: 0; width: 20px; padding-left: 0;">>).
--define(PARAGRAPH_STYLE, <<"margin: 0 auto; font-weight: normal;">>).
+-define(DETAIL_STYLE, <<"font-size: large; font-weight: normal; vertical-align: middle;">>).
 
 %$ Table names
 -define(CLIENT_TOKENS_TABLE_NAME, <<"Client tokens">>).
@@ -209,8 +209,8 @@ token_row_collapsed(TableName, RowId, #token_details{access_id = AccessId, clien
     [
         #td{
             style = ?CONTENT_COLUMN_STYLE,
-            body = #p{
-                style = ?PARAGRAPH_STYLE,
+            body = #span{
+                style = ?DETAIL_STYLE,
                 body = <<"<b>", ClientName/binary, "</b> (", AccessId/binary, ")">>
             }
         },
@@ -274,7 +274,7 @@ token_row_expanded(TableName, RowId, #token_details{access_id = AccessId} = Toke
 %% ====================================================================
 token_detail(Content, Title, Postback, Class) ->
     #span{
-        style = <<"font-size: large; font-weight: normal; fivertical-align: -webkit-baseline-middle;">>,
+        style = <<"font-size: large; font-weight: normal; vertical-align: middle;">>,
         body = [
             Content,
             #link{

@@ -38,5 +38,7 @@ route(<<"/privacy_policy">>) -> page_privacy_policy;
 route(<<"/validate_login">>) -> page_validate_login;
 route(<<"/openid/login">>) -> page_openid_login;
 route(<<"/error">>) -> page_error;
+route(<<"/privileges/space">>) -> page_space_privileges;
+route(<<"/privileges/group">>) -> page_group_privileges;
 route(ConnectionCheck) when ConnectionCheck == <<"/", (?connection_check_path)/binary>> -> page_connection_check;
 route(_) -> page_404.
