@@ -1,33 +1,68 @@
-
-.nav-tabs > li > a {
-    background-color: #DCDEE0;
+#perms_wrapper {
+    position: relative;
+    text-align: center;
+    overflow: hidden;
 }
 
-#tab-acl {
+#chbx_recursive_label {
+    margin: 10px 10px 0 0;
+    display: inline-block;
+}
+
+#perms_header {
+    line-height: 33px;
+    height: 33px;
+    vertical-align: middle;
+    margin-bottom: 10px;
+}
+
+#perms_header_info {
+    display: inline-block;
+}
+
+#perms_radios {
+    display: inline-block;
+}
+
+.radio-label {
+    margin-left: 18px;
+    display: inline-block;
+    padding-left: 24px;
+}
+
+#permissions_info_button {
+    margin-left: 25px;
+    vertical-align: middle;
+}
+
+#permissions_info_button > span {
+    font-size: 20px;
+}
+
+#tab_posix {
+}
+
+#tab_acl {
     position: relative;
 }
 
-#tab-acl-content {
-    position: relative;
-    margin: auto;
-}
-
-#acl-info {
+.acl-info {
     display: inline-block;
     height: 70px;
+    width: 80px;
     overflow: hidden;
-    margin-right: 13px;
+    margin-right: 10px;
     text-align: center;
     padding: 70px 0;
 }
 
-#acl-info > p {
+.acl-info > p {
     line-height: 14px;
     font-size: 14px;
     margin: 0 0 8px;
 }
 
-#acl-info > span {
+.acl-info > span {
     font-size: 24px;
 }
 

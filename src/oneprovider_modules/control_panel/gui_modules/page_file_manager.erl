@@ -24,7 +24,7 @@
 -export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
 -export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0]).
 -export([confirm_paste/0, confirm_chmod/2, show_permissions_info/0]).
--export([populate_acl_list/1, add_acl/0, delete_acl/1, edit_acl/1, move_acl/2, submit_acl/6]).
+-export([populate_acl_list/1, change_perms_type/1, add_acl/0, delete_acl/1, edit_acl/1, move_acl/2, submit_acl/6]).
 -export([rename_item/2, create_directory/1, remove_selected/0, search/1, toggle_column/2, show_popup/1, hide_popup/0, path_navigator_body/1]).
 -export([fs_list_dir/1, fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
 
@@ -90,6 +90,7 @@ css() ->
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
     gui_jq:wire(#api{name = "confirm_paste", tag = "confirm_paste"}, false),
+    gui_jq:wire(#api{name = "change_perms_type", tag = "change_perms_type"}, false),
     gui_jq:wire(#api{name = "submit_chmod_event", tag = "submit_chmod_event"}, false),
     gui_jq:wire(#api{name = "add_acl", tag = "add_acl"}, false),
     gui_jq:wire(#api{name = "delete_acl", tag = "delete_acl"}, false),
@@ -252,6 +253,10 @@ api_event("submit_chmod_event", Args, _Ctx) ->
     [Mode, Recursive] = mochijson2:decode(Args),
     event({action, confirm_chmod, [Mode, Recursive]});
 
+api_event("change_perms_type", Args, _Ctx) ->
+    EnableACL = mochijson2:decode(Args),
+    event({action, change_perms_type, [EnableACL]});
+
 api_event("add_acl", _Args, _) ->
     event({action, add_acl});
 
@@ -345,7 +350,7 @@ comet_loop_init(GRUID, UserAccessToken, RequestedHostname) ->
     gui_jq:hide(<<"spinner">>),
 
     %% TODO
-    set_acl_state({[<<"/spaces">>], [
+    set_perms_state({[<<"/spaces">>], true, [
         #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = <<"Janusz">>, acemask = ?read_mask},
         #accesscontrolentity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = <<"Waclaw"/utf8>>, acemask = ?write_mask},
         #accesscontrolentity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = <<"Bogdan">>, acemask = ?execute_mask},
@@ -768,17 +773,18 @@ toggle_column(Attr, Flag) ->
 
 
 show_permissions_info() ->
-    gui_jq:info_popup(<<"File permissions and ACLs">>, <<"Standard permissions and ACLs are two ways of controlling ",
+    gui_jq:info_popup(<<"POSIX permissions and ACLs">>, <<"Basic POSIX permissions and ACLs are two ways of controlling ",
     "the access to your data. You can choose to use one of them for each file. They cannot be used together. <br /><br />",
-    "<strong>Standard permissions</strong> - POSIX basic file permissions, can be used to enable certain types ",
+    "<strong>POSIX permissions</strong> - basic file permissions, can be used to enable certain types ",
     "of users to read, write or execute given file. The types are: user (the owner of the file), group (all users ",
     "sharing the space where the file resides), other (not aplicable in GUI, but used in oneclient).<br /><br />",
-    "<strong>ACLs</strong> (Access Control List) - CDMI standard (compliant with NFSv4 ACLs), allows ",
-    "defining ordered lists of permissions-granting or permissions-denying entries for users or groups.">>, <<"">>).
+    "<strong>ACL</strong> (Access Control List) - CDMI standard (compliant with NFSv4 ACLs), allows ",
+    "defining ordered lists of permissions-granting or permissions-denying entries for users or groups. ",
+    "ACLs are processed from top to bottom - entries higher on list will have higher priority.">>, <<"">>).
 
 
 populate_acl_list(SelectedIndex) ->
-    {_Files, ACLEntries} = get_acl_state(),
+    {_Files, _EnableACL, ACLEntries} = get_perms_state(),
     JSON = rest_utils:encode_to_json(lists:map(
         fun(#accesscontrolentity{acetype = ACEType, aceflags = _ACEFlags, identifier = Identifier, acemask = ACEMask}) ->
             [
@@ -794,8 +800,22 @@ populate_acl_list(SelectedIndex) ->
     gui_jq:wire(<<"populate_acl_list(", JSON/binary, ", ", (integer_to_binary(SelectedIndex))/binary, ");">>).
 
 
+change_perms_type(EnableACL) ->
+    {Files, _CurrentEnableACL, ACLEntries} = get_perms_state(),
+    set_perms_state({Files, EnableACL, ACLEntries}),
+    case EnableACL of
+        true ->
+            gui_jq:show(<<"tab_acl">>),
+            gui_jq:hide(<<"tab_posix">>);
+        _ ->
+            gui_jq:hide(<<"tab_acl">>),
+            gui_jq:show(<<"tab_posix">>)
+    end.
+
+
 add_acl() ->
     gui_jq:show(<<"acl-form">>),
+    gui_jq:wire(<<"$('#acl_textbox').val('');">>),
     gui_jq:wire(<<"$('#acl_type_checkbox').checkbox('check');">>),
     gui_jq:wire(<<"$('#acl_read_checkbox').checkbox('uncheck');">>),
     gui_jq:wire(<<"$('#acl_write_checkbox').checkbox('uncheck');">>),
@@ -803,15 +823,15 @@ add_acl() ->
 
 
 delete_acl(Index) ->
-    {Files, ACLEntries} = get_acl_state(),
+    {Files, EnableACL, ACLEntries} = get_perms_state(),
     {Head, [_ | Tail]} = lists:split(Index, ACLEntries),
-    set_acl_state({Files, Head ++ Tail}),
+    set_perms_state({Files, EnableACL, Head ++ Tail}),
     populate_acl_list(-1).
 
 
 edit_acl(Index) ->
     gui_jq:show(<<"acl-form">>),
-    {_Files, ACLEntries} = get_acl_state(),
+    {_Files, _EnableACL, ACLEntries} = get_perms_state(),
     #accesscontrolentity{acetype = ACEType, aceflags = _ACEFlags,
         identifier = Identifier, acemask = ACEMask} = lists:nth(Index + 1, ACLEntries),
     gui_jq:set_value(<<"acl_textbox">>, Identifier),
@@ -837,7 +857,7 @@ edit_acl(Index) ->
 
 submit_acl(Index, Identifier, Type, ReadFlag, WriteFlag, ExecFlag) ->
 %%     gui_jq:hide(<<"acl-form">>), TODO jak wsyzstko OK
-    {Files, ACLEntries} = get_acl_state(),
+    {Files, EnableACL, ACLEntries} = get_perms_state(),
     ACEMask = (case ReadFlag of true -> ?read_mask; _ -> 0 end) bor
         (case WriteFlag of true -> ?write_mask; _ -> 0 end) bor
         (case ExecFlag of true -> ?execute_mask; _ -> 0 end),
@@ -848,16 +868,16 @@ submit_acl(Index, Identifier, Type, ReadFlag, WriteFlag, ExecFlag) ->
         acemask = ACEMask},
     case Index of
         -1 ->
-            set_acl_state({Files, ACLEntries ++ [NewEntity]});
+            set_perms_state({Files, EnableACL, ACLEntries ++ [NewEntity]});
         _ ->
             {Head, [_Ident | Tail]} = lists:split(Index, ACLEntries),
-            set_acl_state({Files, Head ++ [NewEntity] ++ Tail})
+            set_perms_state({Files, EnableACL, Head ++ [NewEntity] ++ Tail})
     end,
     populate_acl_list(-1).
 
 
 move_acl(Index, MoveUp) ->
-    {Files, ACLEntries} = get_acl_state(),
+    {Files, EnableACL, ACLEntries} = get_perms_state(),
     MaxIndex = length(ACLEntries) - 1,
     {NewEntries, SelectedIndex} = case {Index, MoveUp} of
                                       {0, true} ->
@@ -877,7 +897,7 @@ move_acl(Index, MoveUp) ->
                                                   {Head ++ [First] ++ [Ident] ++ AllButFirst, Index + 1}
                                           end
                                   end,
-    set_acl_state({Files, NewEntries}),
+    set_perms_state({Files, EnableACL, NewEntries}),
     populate_acl_list(SelectedIndex).
 
 
@@ -955,155 +975,163 @@ show_popup(Type) ->
                 gui_jq:wire(<<"init_chmod_table(", (integer_to_binary(CurrentMode))/binary, ");">>),
                 TDStyle = <<"border-color: rgb(82, 100, 118); width: 60px; text-align: center;">>,
                 LabelStyle = <<"margin: 0 auto; width: 20px;">>,
+                {_Files, EnableACL, _ACLEntries} = get_perms_state(),
+                {POSIXTabStyle, ACLTabStyle} = case EnableACL of
+                                                   true -> {<<"display: none;">>, <<"">>};
+                                                   false -> {<<"">>, <<"display: none;">>}
+                                               end,
                 Body = [
-                    #panel{style = <<"position: relative; text-align: center; overflow: hidden;">>, body = [
-                        #link{id = wire_click(<<"permissions_info_button">>, {action, show_permissions_info}), title = <<"Learn about permissions">>,
-                            class = <<"glyph-link">>, style = <<"position: absolute; top: 8px; left: 410px;">>,
-                            body = #span{class = <<"icomoon-question">>, style = <<"font-size: 20px;">>}},
-
-                        #list{class = <<"nav nav-tabs nav-append-content">>, body = [
-                            #li{class = <<"">>, body = #link{url = <<"#tab-perms">>, body = <<"Standard permissions">>}},
-                            #li{class = <<"active">>, body = #link{url = <<"#tab-acl">>, body = <<"ACLs (advanced)">>}}
-                        ]},
-
-                        #panel{style = <<"background-color: #FFF; border-radius: 0;">>, class = <<"tab-content">>, body = [
-                            #panel{class = <<"tab-pane">>, id = <<"tab-perms">>, body = [
-                                #table{class = <<"table table-bordered">>,
-                                    style = <<"margin: 0 auto 15px; table-layout: fixed; width: 200px; border-color: rgb(82, 100, 118);">>,
-                                    header = [
-                                        #tr{cells = [
-                                            #th{body = <<"">>, style = TDStyle},
-                                            #th{body = <<"read">>, style = TDStyle},
-                                            #th{body = <<"write">>, style = TDStyle},
-                                            #th{body = <<"execute">>, style = TDStyle}
-                                        ]}
-                                    ], body = [
-                                        #tr{cells = [
-                                            #td{body = <<"user">>, style = <<TDStyle/binary, " font-weight: 700;">>},
-                                            #td{style = TDStyle, body = [
-                                                #flatui_checkbox{id = <<"chbx_ur">>, label_class = <<"checkbox no-label">>,
-                                                    label_style = LabelStyle, value = <<"">>}
-                                            ]},
-                                            #td{style = TDStyle, body = [
-                                                #flatui_checkbox{id = <<"chbx_uw">>, label_class = <<"checkbox no-label">>,
-                                                    label_style = LabelStyle, value = <<"">>}
-                                            ]},
-                                            #td{style = TDStyle, body = [
-                                                #flatui_checkbox{id = <<"chbx_ux">>, label_class = <<"checkbox no-label">>,
-                                                    label_style = LabelStyle, value = <<"">>}
-                                            ]}
-                                        ]},
-                                        #tr{cells = [
-                                            #td{body = <<"group">>, style = <<TDStyle/binary, " font-weight: 700;">>},
-                                            #td{style = TDStyle, body = [
-                                                #flatui_checkbox{id = <<"chbx_gr">>, label_class = <<"checkbox no-label">>,
-                                                    label_style = LabelStyle, value = <<"">>}
-                                            ]},
-                                            #td{style = TDStyle, body = [
-                                                #flatui_checkbox{id = <<"chbx_gw">>, label_class = <<"checkbox no-label">>,
-                                                    label_style = LabelStyle, value = <<"">>}
-                                            ]},
-                                            #td{style = TDStyle, body = [
-                                                #flatui_checkbox{id = <<"chbx_gx">>, label_class = <<"checkbox no-label">>,
-                                                    label_style = LabelStyle, value = <<"">>}
-                                            ]}
-                                        ]},
-                                        #tr{cells = [
-                                            #td{body = <<"other">>, style = <<TDStyle/binary, " font-weight: 700;">>},
-                                            #td{style = TDStyle, body = [
-                                                #flatui_checkbox{id = <<"chbx_or">>, label_class = <<"checkbox no-label">>,
-                                                    label_style = LabelStyle, value = <<"">>}
-                                            ]},
-                                            #td{style = TDStyle, body = [
-                                                #flatui_checkbox{id = <<"chbx_ow">>, label_class = <<"checkbox no-label">>,
-                                                    label_style = LabelStyle, value = <<"">>}
-                                            ]},
-                                            #td{style = TDStyle, body = [
-                                                #flatui_checkbox{id = <<"chbx_ox">>, label_class = <<"checkbox no-label">>,
-                                                    label_style = LabelStyle, value = <<"">>}
-                                            ]}
-                                        ]}
-                                    ]},
-                                #panel{style = <<"position: relative; width: 430px; margin: 0 auto;">>, body = [
-                                    #p{style = <<"display: inline-block;float: left; ">>, body = <<"octal form:">>,
-                                        title = <<"Type in octal representation of mode to automatically adjust checkboxes">>},
-                                    #textbox{id = wire_enter(<<"octal_form_textbox">>, <<"octal_form_submit">>), class = <<"span2">>,
-                                        style = <<"width: 50px; padding: 5px 5px; position: relative; float: left; margin: 0 50px 0 8px;">>, placeholder = <<"000">>,
-                                        value = <<"">>},
-                                    #flatui_checkbox{id = <<"chbx_recursive">>, label_class = <<"checkbox no-label">>,
-                                        value = <<"">>, checked = false, body = <<"recursive">>,
-                                        label_style = <<"position: relative; float: right; margin-top: 6px;;">>,
-                                        label_title = <<"Change mode in all subdirectories, recursively">>}
-                                ]}
+                    #panel{id = <<"perms_wrapper">>, body = [
+                        #panel{id = <<"perms_header">>, body = [
+                            #p{id = <<"perms_header_info">>, body = <<"Permissions type:">>},
+                            #span{id = <<"perms_radios">>, body = [
+                                #flatui_radio{id = <<"perms_radio_posix">>, name = <<"perms_radio">>,
+                                    label_class = <<"radio radio-label">>, body = <<"POSIX">>, checked = not EnableACL},
+                                #flatui_radio{id = <<"perms_radio_acl">>, name = <<"perms_radio">>,
+                                    label_class = <<"radio radio-label">>, body = <<"ACL">>, checked = EnableACL}
                             ]},
-                            #panel{class = <<"tab-pane active">>, id = <<"tab-acl">>, body = [
-                                #panel{id = <<"tab-acl-content">>, body = [
-                                    #panel{id = <<"acl-info">>, body = [
-                                        #p{body = <<"proccessing">>},
-                                        #p{body = <<"order">>},
-                                        #span{class = <<"icomoon-arrow-down">>}
+                            #link{id = wire_click(<<"permissions_info_button">>, {action, show_permissions_info}),
+                                title = <<"Learn about permissions">>, class = <<"glyph-link">>,
+                                body = #span{class = <<"icomoon-question">>}}
+                        ]},
+                        #panel{id = <<"tab_posix">>, style = POSIXTabStyle, body = [
+                            #table{class = <<"table table-bordered">>,
+                                style = <<"margin: 0 auto 15px; table-layout: fixed; width: 200px; border-color: rgb(82, 100, 118);">>,
+                                header = [
+                                    #tr{cells = [
+                                        #th{body = <<"">>, style = TDStyle},
+                                        #th{body = <<"read">>, style = TDStyle},
+                                        #th{body = <<"write">>, style = TDStyle},
+                                        #th{body = <<"execute">>, style = TDStyle}
+                                    ]}
+                                ], body = [
+                                    #tr{cells = [
+                                        #td{body = <<"user">>, style = <<TDStyle/binary, " font-weight: 700;">>},
+                                        #td{style = TDStyle, body = [
+                                            #flatui_checkbox{id = <<"chbx_ur">>, label_class = <<"checkbox no-label">>,
+                                                label_style = LabelStyle, value = <<"">>}
+                                        ]},
+                                        #td{style = TDStyle, body = [
+                                            #flatui_checkbox{id = <<"chbx_uw">>, label_class = <<"checkbox no-label">>,
+                                                label_style = LabelStyle, value = <<"">>}
+                                        ]},
+                                        #td{style = TDStyle, body = [
+                                            #flatui_checkbox{id = <<"chbx_ux">>, label_class = <<"checkbox no-label">>,
+                                                label_style = LabelStyle, value = <<"">>}
+                                        ]}
                                     ]},
-                                    #panel{id = <<"acl-list">>},
-                                    #panel{id = <<"acl-form">>, body = [
-                                        #table{id = <<"acl-form-table">>, body = [
-                                            #tr{cells = [
-                                                #td{body = [
-                                                    #label{class = <<"label label-inverse acl-label">>, body = <<"Identifier">>}
-                                                ]},
-                                                #td{body = [
-                                                    #textbox{
-                                                        id = <<"acl_textbox">>, %wire_enter(<<"shared_link_textbox">>, <<"shared_link_submit">>),
-                                                        class = <<"flat acl-textbox">>, style = <<"width: 250px;">>,
-                                                        value = <<>>, placeholder = <<"User name">>}
-                                                ]}
-                                            ]},
-                                            #tr{cells = [
-                                                #td{body = [
-                                                    #label{class = <<"label label-inverse acl-label">>, body = <<"Type">>}
+                                    #tr{cells = [
+                                        #td{body = <<"group">>, style = <<TDStyle/binary, " font-weight: 700;">>},
+                                        #td{style = TDStyle, body = [
+                                            #flatui_checkbox{id = <<"chbx_gr">>, label_class = <<"checkbox no-label">>,
+                                                label_style = LabelStyle, value = <<"">>}
+                                        ]},
+                                        #td{style = TDStyle, body = [
+                                            #flatui_checkbox{id = <<"chbx_gw">>, label_class = <<"checkbox no-label">>,
+                                                label_style = LabelStyle, value = <<"">>}
+                                        ]},
+                                        #td{style = TDStyle, body = [
+                                            #flatui_checkbox{id = <<"chbx_gx">>, label_class = <<"checkbox no-label">>,
+                                                label_style = LabelStyle, value = <<"">>}
+                                        ]}
+                                    ]},
+                                    #tr{cells = [
+                                        #td{body = <<"other">>, style = <<TDStyle/binary, " font-weight: 700;">>},
+                                        #td{style = TDStyle, body = [
+                                            #flatui_checkbox{id = <<"chbx_or">>, label_class = <<"checkbox no-label">>,
+                                                label_style = LabelStyle, value = <<"">>}
+                                        ]},
+                                        #td{style = TDStyle, body = [
+                                            #flatui_checkbox{id = <<"chbx_ow">>, label_class = <<"checkbox no-label">>,
+                                                label_style = LabelStyle, value = <<"">>}
+                                        ]},
+                                        #td{style = TDStyle, body = [
+                                            #flatui_checkbox{id = <<"chbx_ox">>, label_class = <<"checkbox no-label">>,
+                                                label_style = LabelStyle, value = <<"">>}
+                                        ]}
+                                    ]}
+                                ]},
+                            #panel{style = <<"position: relative; width: 430px; margin: 0 auto;">>, body = [
+                                #p{style = <<"display: inline-block;float: left; ">>, body = <<"octal form:">>,
+                                    title = <<"Type in octal representation of mode to automatically adjust checkboxes">>},
+                                #textbox{id = wire_enter(<<"octal_form_textbox">>, <<"octal_form_submit">>), class = <<"span2">>,
+                                    style = <<"width: 50px; padding: 5px 5px; position: relative; float: left; margin: 0 50px 0 8px;">>, placeholder = <<"000">>,
+                                    value = <<"">>}
+                            ]}
+                        ]},
+                        #panel{id = <<"tab_acl">>, style = ACLTabStyle, body = [
+                            #panel{class = <<"acl-info">>, body = [
+                                #p{body = <<"proccessing">>},
+                                #p{body = <<"order">>},
+                                #span{class = <<"icomoon-arrow-down">>}
+                            ]},
+                            #panel{id = <<"acl-list">>},
+                            #panel{id = <<"acl-form">>, body = [
+                                #table{id = <<"acl-form-table">>, body = [
+                                    #tr{cells = [
+                                        #td{body = [
+                                            #label{class = <<"label label-inverse acl-label">>, body = <<"Identifier">>}
+                                        ]},
+                                        #td{body = [
+                                            #textbox{
+                                                id = <<"acl_textbox">>, %wire_enter(<<"shared_link_textbox">>, <<"shared_link_submit">>),
+                                                class = <<"flat acl-textbox">>, style = <<"width: 250px;">>,
+                                                value = <<>>, placeholder = <<"User name">>}
+                                        ]}
+                                    ]},
+                                    #tr{cells = [
+                                        #td{body = [
+                                            #label{class = <<"label label-inverse acl-label">>, body = <<"Type">>}
 
-                                                ]},
-                                                #td{body = [
-                                                    #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_type_checkbox">>,
-                                                        checked = true, body = #span{id = <<"acl_type_checkbox_label">>, body = <<"allow">>}}
-                                                ]}
-                                            ]},
-                                            #tr{cells = [
-                                                #td{body = [
-                                                    #label{class = <<"label label-inverse acl-label">>, body = <<"Perms">>}
+                                        ]},
+                                        #td{body = [
+                                            #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_type_checkbox">>,
+                                                checked = true, body = #span{id = <<"acl_type_checkbox_label">>, body = <<"allow">>}}
+                                        ]}
+                                    ]},
+                                    #tr{cells = [
+                                        #td{body = [
+                                            #label{class = <<"label label-inverse acl-label">>, body = <<"Perms">>}
 
-                                                ]},
-                                                #td{body = [
-                                                    #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_read_checkbox">>, checked = true, body = <<"read">>},
-                                                    #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_write_checkbox">>, checked = true, body = <<"write">>},
-                                                    #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_exec_checkbox">>, checked = true, body = <<"execute">>}
-                                                ]}
-                                            ]},
-                                            #tr{cells = [
-                                                #td{body = [
-                                                    #button{id = <<"button_save_acl">>, class = <<"btn btn-success acl-button">>,
-                                                        body = <<"Save">>}
-                                                ]},
-                                                #td{body = [
-                                                    #button{id = <<"button_discard_acl">>, class = <<"btn btn-danger acl-button">>,
-                                                        body = <<"Discard">>, postback = {action, populate_acl_list, [-1]}}
-                                                ]}
-                                            ]}
+                                        ]},
+                                        #td{body = [
+                                            #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_read_checkbox">>, checked = true, body = <<"read">>},
+                                            #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_write_checkbox">>, checked = true, body = <<"write">>},
+                                            #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_exec_checkbox">>, checked = true, body = <<"execute">>}
+                                        ]}
+                                    ]},
+                                    #tr{cells = [
+                                        #td{body = [
+                                            #button{id = <<"button_save_acl">>, class = <<"btn btn-success acl-button">>,
+                                                body = <<"Save">>}
+                                        ]},
+                                        #td{body = [
+                                            #button{id = <<"button_discard_acl">>, class = <<"btn btn-danger acl-button">>,
+                                                body = <<"Discard">>, postback = {action, populate_acl_list, [-1]}}
                                         ]}
                                     ]}
                                 ]}
-                            ]}
-                        ]},
-                        #panel{style = <<"clear: both;  margin-bottom: 18px;">>},
-                        #form{class = <<"control-group">>, body = [
-                            #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
-                            #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}
+                            ]},
+                            #panel{class = <<"acl-info">>}
                         ]}
+                    ]},
+                    #panel{style = <<"clear: both;  margin-bottom: 18px;">>},
+                    #form{class = <<"control-group">>, body = [
+                        #flatui_checkbox{id = <<"chbx_recursive">>, label_class = <<"checkbox">>,
+                            value = <<"">>, checked = false, body = <<"recursive">>,
+                            label_id = <<"chbx_recursive_label">>,
+                            label_title = <<"Change mode in all subdirectories, recursively">>},
+                        #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
+                        #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}
                     ]}
                 ],
                 flatui_checkbox:init_checkbox(<<"acl_type_checkbox">>),
                 flatui_checkbox:init_checkbox(<<"acl_read_checkbox">>),
                 flatui_checkbox:init_checkbox(<<"acl_write_checkbox">>),
                 flatui_checkbox:init_checkbox(<<"acl_exec_checkbox">>),
+                flatui_radio:init_radio_button(<<"perms_radio_posix">>),
+                gui_jq:wire(<<"$('#perms_radio_acl').change(function(e){change_perms_type($(this).is(':checked'));});">>),
+                flatui_radio:init_radio_button(<<"perms_radio_acl">>),
                 populate_acl_list(-1),
                 gui_jq:bind_element_click(<<"button_save_acl">>, <<"function() { submit_acl(); }">>),
                 gui_jq:bind_element_click(<<"ok_button">>, <<"function() { submit_chmod(); }">>),
@@ -1822,5 +1850,5 @@ get_item_counter() ->
     integer_to_binary(Val).  % Return binary as this is used for making element IDs
 
 % Holds information what files' ACLs are being edited and what is the current state
-set_acl_state(State) -> put(acl_state, State).
-get_acl_state() -> get(acl_state).
+set_perms_state(State) -> put(acl_state, State).
+get_perms_state() -> get(acl_state).

@@ -126,7 +126,7 @@ populate_acl_list = function (json_array, select_index) {
     $('.acl-entry').click(function (event) {
         if ($('#acl-form').css('display') == 'none') {
             document.getSelection().removeAllRanges();
-            var new_index = $(this).attr('index');
+            var new_index = parseInt($(this).attr('index'));
             console.log(new_index);
             if (clicked_index != new_index) {
                 clicked_index = new_index;
@@ -161,7 +161,7 @@ populate_acl_list = function (json_array, select_index) {
 
     $('.acl-confirm-yes').click(function (event) {
         event.stopPropagation();
-        delete_acl($(this).parent().attr('index'));
+        delete_acl(parseInt($(this).parent().attr('index')));
     });
 
     $('.acl-confirm-no').click(function (event) {
@@ -178,17 +178,17 @@ populate_acl_list = function (json_array, select_index) {
         var entry_div = $(this).parent();
         entry_div.addClass('acl-entry-selected');
         entry_div.find('[class*="acl-button-"]').hide();
-        edit_acl(entry_div.attr('index'));
+        edit_acl(parseInt(entry_div.attr('index')));
     });
 
     $('.acl-button-move-up').click(function (event) {
         event.stopPropagation();
-        move_acl([$(this).parent().attr('index'), true]);
+        move_acl([parseInt($(this).parent().attr('index')), true]);
     });
 
     $('.acl-button-move-down').click(function (event) {
         event.stopPropagation();
-        move_acl([$(this).parent().attr('index'), false]);
+        move_acl([parseInt($(this).parent().attr('index')), false]);
     });
 
 
