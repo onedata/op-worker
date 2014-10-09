@@ -10,15 +10,15 @@
 
 %define name        oneprovider
 %define summary     oneprovider service
-%define version     0.0.6
+%define version     {{version}}
 %define release     1
 %define license     MIT
 %define arch        x86_64
 %define group       System/Base
 %define source      %{name}.tar.gz
 %define url         http://provider.example.com
-%define vendor      oneprovider
-%define packager    oneprovider
+%define vendor      onedata
+%define packager    onedata
 %define buildroot   %{_tmppath}/%{name}-build
 
 
@@ -70,6 +70,7 @@ rm -f /usr/bin/oneprovider_setup
 rm -f /usr/bin/oneprovider_addusers
 rm -f /usr/bin/onepanel_admin
 rm -rf %{_prefix}
+rm -rf /opt/bigcouch
 
 %clean
 rm -rf $RPM_BUILD_ROOT
