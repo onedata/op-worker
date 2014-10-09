@@ -30,6 +30,10 @@ route(<<"/file_manager">>) -> page_file_manager;
 route(<<"/shared_files">>) -> page_shared_files;
 route(<<"/spaces">>) -> page_spaces;
 route(<<"/space">>) -> page_space;
+route(<<"/privileges/space">>) -> page_space_privileges;
+route(<<"/groups">>) -> page_groups;
+route(<<"/group">>) -> page_group;
+route(<<"/privileges/group">>) -> page_group_privileges;
 route(<<"/tokens">>) -> page_tokens;
 route(<<"/manage_account">>) -> page_manage_account;
 route(<<"/about">>) -> page_about;
@@ -38,7 +42,5 @@ route(<<"/privacy_policy">>) -> page_privacy_policy;
 route(<<"/validate_login">>) -> page_validate_login;
 route(<<"/openid/login">>) -> page_openid_login;
 route(<<"/error">>) -> page_error;
-route(<<"/privileges/space">>) -> page_space_privileges;
-route(<<"/privileges/group">>) -> page_group_privileges;
 route(ConnectionCheck) when ConnectionCheck == <<"/", (?connection_check_path)/binary>> -> page_connection_check;
 route(_) -> page_404.

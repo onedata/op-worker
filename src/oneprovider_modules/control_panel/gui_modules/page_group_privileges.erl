@@ -6,14 +6,14 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains n2o website code.
-%% The page allows user to manage Space privileges.
+%% The page allows user to manage Group privileges.
 %% @end
 %% ===================================================================
 
--module(page_space_privileges).
+-module(page_group_privileges).
 -include("oneprovider_modules/control_panel/common.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/global_registry/gr_groups.hrl").
 -include_lib("ctool/include/global_registry/gr_groups.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -26,18 +26,18 @@
 -define(DETAIL_STYLE, <<"font-size: large; font-weight: normal; vertical-align: middle;">>).
 
 %% Columns names and associated privileges names
--define(COLUMNS_NAMES, [<<"View Space">>, <<"Modify Space">>, <<"Remove Space">>, <<"Invite user">>, <<"Remove user">>,
-    <<"Invite group">>, <<"Remove group">>, <<"Invite provider">>, <<"Remove provider">>, <<"Set privileges">>]).
--define(PRIVILEGES_NAMES, [<<"space_view_data">>, <<"space_change_data">>, <<"space_remove">>, <<"space_invite_user">>,
-    <<"space_remove_user">>, <<"space_invite_group">>, <<"space_remove_group">>, <<"space_add_provider">>,
-    <<"space_remove_provider">>, <<"space_set_privileges">>]).
+-define(COLUMNS_NAMES, [<<"View group">>, <<"Modify group">>, <<"Remove group">>, <<"Invite user">>, <<"Remove user">>,
+    <<"Create Space">>, <<"Join Space">>, <<"Leave Space">>, <<"Invite provider">>, <<"Set privileges">>]).
+-define(PRIVILEGES_NAMES, [<<"group_view_data">>, <<"group_change_data">>, <<"group_remove">>, <<"group_invite_user">>,
+    <<"group_remove_user">>, <<"group_create_space">>, <<"group_join_space">>, <<"group_leave_space">>,
+    <<"group_create_space_token">>, <<"group_set_privileges">>]).
 
 %% Comet process pid
 -define(COMET_PID, comet_pid).
 
 %% Comet process state
 -define(STATE, comet_state).
--record(?STATE, {space_id, users_privileges, new_users_privileges, groups_privileges, new_groups_privileges, access_token}).
+-record(?STATE, {group_id, users_privileges, new_users_privileges, access_token}).
 
 %% ====================================================================
 %% API functions
@@ -57,15 +57,15 @@ main() ->
         false ->
             case gui_ctx:url_param(<<"id">>) of
                 undefined ->
-                    page_error:redirect_with_error(?error_space_not_found),
+                    page_error:redirect_with_error(?error_group_not_found),
                     #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
                 Id ->
-                    SpaceId = gui_str:to_binary(Id),
-                    case gr_users:get_space_details({user, opn_gui_utils:get_access_token()}, SpaceId) of
-                        {ok, SpaceDetails} ->
-                            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body(SpaceDetails)}, {custom, <<"">>}]};
+                    GroupId = gui_str:to_binary(Id),
+                    case gr_groups:get_details({user, opn_gui_utils:get_access_token()}, GroupId) of
+                        {ok, GroupDetails} ->
+                            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body(GroupDetails)}, {custom, <<"">>}]};
                         _ ->
-                            page_error:redirect_with_error(?error_space_permission_denied),
+                            page_error:redirect_with_error(?error_group_permission_denied),
                             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]}
                     end
             end
@@ -80,17 +80,17 @@ main() ->
     Result :: binary().
 %% ====================================================================
 title() ->
-    <<"Space privileges">>.
+    <<"Group privileges">>.
 
 
 %% body/0
 %% ====================================================================
 %% @doc This will be placed instead of {{body}} tag in template.
 %% @end
--spec body(SpaceDetails :: #space_details{}) -> Result when
+-spec body(GroupDetails :: #group_details{}) -> Result when
     Result :: #panel{}.
 %% ====================================================================
-body(SpaceDetails) ->
+body(GroupDetails) ->
     MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
     [
         #panel{
@@ -100,7 +100,7 @@ body(SpaceDetails) ->
                 image = <<"/images/spinner.gif">>
             }
         },
-        opn_gui_utils:top_menu(spaces_tab),
+        opn_gui_utils:top_menu(groups_tab),
         #panel{
             id = <<"ok_message">>,
             style = MessageStyle,
@@ -116,9 +116,9 @@ body(SpaceDetails) ->
             body = [
                 #h6{
                     style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; text-align: center;">>,
-                    body = <<"Space privileges">>
+                    body = <<"Group privileges">>
                 },
-                space_details_table(SpaceDetails) |
+                group_details_table(GroupDetails) |
                 lists:map(fun({TableId, Panel}) ->
                     #panel{
                         body = [
@@ -131,22 +131,21 @@ body(SpaceDetails) ->
                         ]
                     }
                 end, [
-                    {<<"users_table">>, save_button(<<"save_users_privileges_button">>, {message, save_users_privileges})},
-                    {<<"groups_table">>, save_button(<<"save_groups_privileges_button">>, {message, save_groups_privileges})}
+                    {<<"users_table">>, save_button(<<"save_users_privileges_button">>, {message, save_users_privileges})}
                 ])
             ]
         }
     ].
 
 
-%% space_details_table/1
+%% group_details_table/1
 %% ====================================================================
-%% @doc Renders the body of Space details table
+%% @doc Renders the body of Group details table
 %% @end
--spec space_details_table(SpaceDetails :: #space_details{}) -> Result when
+-spec group_details_table(GroupDetails :: #group_details{}) -> Result when
     Result :: #table{}.
 %% ====================================================================
-space_details_table(#space_details{id = SpaceId, name = SpaceName}) ->
+group_details_table(#group_details{id = GroupId, name = GroupName}) ->
     DescriptionStyle = <<"border-width: 0; text-align: right;">>,
     MainStyle = <<"border-width: 0;  text-align: left;">>,
     #table{
@@ -169,8 +168,8 @@ space_details_table(#space_details{id = SpaceId, name = SpaceName}) ->
                 ]
             }
         end, [
-            {<<"Space Name">>, #span{style = ?DETAIL_STYLE, body = SpaceName}},
-            {<<"Space ID">>, #span{style = ?DETAIL_STYLE, body = SpaceId}}
+            {<<"Group Name">>, #span{style = ?DETAIL_STYLE, body = GroupName}},
+            {<<"Group ID">>, #span{style = ?DETAIL_STYLE, body = GroupId}}
         ])
     }.
 
@@ -232,7 +231,7 @@ privileges_table(TableName, ColumnNames, PrivilegesNames, PrivilegesRows) ->
                             id = CheckboxId,
                             checked = lists:member(Privilege, Privileges),
                             delegate = ?MODULE,
-                            postback = {message, {checkbox_toggled, TableName, Name, Id, Privilege}}
+                            postback = {message, {checkbox_toggled, Name, Id, Privilege}}
                         }
                     }
                 end, lists:zip(PrivilegesNames, tl(lists:seq(0, length(PrivilegesNames)))))
@@ -249,49 +248,34 @@ privileges_table(TableName, ColumnNames, PrivilegesNames, PrivilegesRows) ->
 
 %% comet_loop/1
 %% ====================================================================
-%% @doc Handles space management actions.
+%% @doc Handles group management actions.
 -spec comet_loop(State :: #?STATE{}) -> Result when
     Result :: {error, Reason :: term()}.
 %% ====================================================================
 comet_loop({error, Reason}) ->
     {error, Reason};
 
-comet_loop(#?STATE{space_id = SpaceId, new_users_privileges = NewUsersPrivileges, new_groups_privileges = NewGroupsPrivileges, access_token = AccessToken} = State) ->
+comet_loop(#?STATE{group_id = GroupId, new_users_privileges = NewUsersPrivileges, access_token = AccessToken} = State) ->
     NewState = try
                    receive
                        render_tables ->
-                           lists:foreach(fun({ColumnName, TableName, Privileges, ButtonId}) ->
-                               ColumnsNames = [ColumnName | ?COLUMNS_NAMES],
-                               gui_jq:update(TableName, privileges_table(TableName, ColumnsNames, ?PRIVILEGES_NAMES, Privileges)),
-                               gui_jq:fade_in(TableName, 500),
-                               gui_jq:show(ButtonId),
-                               case Privileges of
-                                   [] ->
-                                       gui_jq:prop(ButtonId, <<"disabled">>, <<"disabled">>);
-                                   _ -> ok
-                               end
-                           end, [
-                               {<<"User">>, <<"users_table">>, NewUsersPrivileges, <<"save_users_privileges_button">>},
-                               {<<"Group">>, <<"groups_table">>, NewGroupsPrivileges, <<"save_groups_privileges_button">>}
-                           ]),
+                           UsersColumnsNames = [<<"User">> | ?COLUMNS_NAMES],
+                           gui_jq:update(<<"users_table">>, privileges_table(<<"users_privileges">>, UsersColumnsNames, ?PRIVILEGES_NAMES, NewUsersPrivileges)),
+                           gui_jq:fade_in(<<"users_table">>, 500),
+                           gui_jq:show(<<"save_users_privileges_button">>),
+                           case NewUsersPrivileges of
+                               [] -> gui_jq:prop(<<"save_users_privileges_button">>, <<"disabled">>, <<"disabled">>);
+                               _ -> ok
+                           end,
                            State;
 
-                       {checkbox_toggled, <<"users_privileges">>, Name, Id, Privilege} ->
+                       {checkbox_toggled, Name, Id, Privilege} ->
                            {_, _, Privileges} = lists:keyfind(Id, 2, NewUsersPrivileges),
                            case lists:member(Privilege, Privileges) of
                                true ->
                                    State#?STATE{new_users_privileges = [{Name, Id, lists:delete(Privilege, Privileges)} | lists:keydelete(Id, 2, NewUsersPrivileges)]};
                                _ ->
                                    State#?STATE{new_users_privileges = [{Name, Id, [Privilege | Privileges]} | lists:keydelete(Id, 2, NewUsersPrivileges)]}
-                           end;
-
-                       {checkbox_toggled, <<"groups_privileges">>, Name, Id, Privilege} ->
-                           {_, _, Privileges} = lists:keyfind(Id, 2, NewGroupsPrivileges),
-                           case lists:member(Privilege, Privileges) of
-                               true ->
-                                   State#?STATE{new_groups_privileges = [{Name, Id, lists:delete(Privilege, Privileges)} | lists:keydelete(Id, 2, NewGroupsPrivileges)]};
-                               _ ->
-                                   State#?STATE{new_groups_privileges = [{Name, Id, [Privilege | Privileges]} | lists:keydelete(Id, 2, NewGroupsPrivileges)]}
                            end;
 
                        save_users_privileges ->
@@ -303,7 +287,7 @@ comet_loop(#?STATE{space_id = SpaceId, new_users_privileges = NewUsersPrivileges
                                        OldUserPrivilegesSorted ->
                                            ok;
                                        NewUserPrivilegesSorted ->
-                                           ok = gr_spaces:set_user_privileges({user, AccessToken}, SpaceId, UserId, [{<<"privileges">>, NewUserPrivilegesSorted}])
+                                           ok = gr_groups:set_user_privileges({user, AccessToken}, GroupId, UserId, [{<<"privileges">>, NewUserPrivilegesSorted}])
                                    end
                                end, NewUsersPrivileges),
                                opn_gui_utils:message(<<"ok_message">>, <<"Users privileges saved successfully.">>),
@@ -312,27 +296,6 @@ comet_loop(#?STATE{space_id = SpaceId, new_users_privileges = NewUsersPrivileges
                                _:Reason ->
                                    ?error("Cannot save users privileges: ~p", [Reason]),
                                    opn_gui_utils:message(<<"error_message">>, <<"Cannot save users privileges.<br>Please try again later.">>),
-                                   State
-                           end;
-
-                       save_groups_privileges ->
-                           try
-                               lists:foreach(fun({_, GroupId, NewGroupPrivileges}) ->
-                                   {_, _, OldGroupPrivileges} = lists:keyfind(GroupId, 2, State#?STATE.groups_privileges),
-                                   OldGroupPrivilegesSorted = lists:sort(OldGroupPrivileges),
-                                   case lists:sort(NewGroupPrivileges) of
-                                       OldGroupPrivilegesSorted ->
-                                           ok;
-                                       NewGroupPrivilegesSorted ->
-                                           ok = gr_spaces:set_group_privileges({group, AccessToken}, SpaceId, GroupId, [{<<"privileges">>, NewGroupPrivilegesSorted}])
-                                   end
-                               end, NewGroupsPrivileges),
-                               opn_gui_utils:message(<<"ok_message">>, <<"Groups privileges saved successfully.">>),
-                               State
-                           catch
-                               _:Reason ->
-                                   ?error("Cannot save groups privileges: ~p", [Reason]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot save groups privileges.<br>Please try again later.">>),
                                    State
                            end
                    end
@@ -353,27 +316,20 @@ comet_loop(#?STATE{space_id = SpaceId, new_users_privileges = NewUsersPrivileges
 %% ====================================================================
 event(init) ->
     try
-        SpaceId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
+        GroupId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
         GRUID = utils:ensure_binary(opn_gui_utils:get_global_user_id()),
         AccessToken = opn_gui_utils:get_access_token(),
 
-        {ok, UsersIds} = gr_spaces:get_users({user, AccessToken}, SpaceId),
+        {ok, UsersIds} = gr_groups:get_users({user, AccessToken}, GroupId),
         UsersPrivileges = lists:map(fun(UserId) ->
-            {ok, #user_details{id = Id, name = Name}} = gr_spaces:get_user_details({user, AccessToken}, SpaceId, UserId),
-            {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceId, UserId),
+            {ok, #user_details{id = Id, name = Name}} = gr_groups:get_user_details({user, AccessToken}, GroupId, UserId),
+            {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, UserId),
             {Name, Id, Privileges}
         end, UsersIds),
 
-        {ok, GroupsIds} = gr_spaces:get_groups({user, AccessToken}, SpaceId),
-        GroupsPrivileges = lists:map(fun(GroupId) ->
-            {ok, #user_details{id = Id, name = Name}} = gr_spaces:get_group_details({user, AccessToken}, SpaceId, GroupId),
-            {ok, Privileges} = gr_spaces:get_group_privileges({user, AccessToken}, SpaceId, GroupId),
-            {Name, Id, Privileges}
-        end, GroupsIds),
-
         {ok, Pid} = gui_comet:spawn(fun() ->
-            comet_loop(#?STATE{space_id = SpaceId, users_privileges = UsersPrivileges, new_users_privileges = UsersPrivileges,
-                groups_privileges = GroupsPrivileges, new_groups_privileges = GroupsPrivileges, access_token = AccessToken})
+            comet_loop(#?STATE{group_id = GroupId, users_privileges = UsersPrivileges,
+                new_users_privileges = UsersPrivileges, access_token = AccessToken})
         end),
         put(?COMET_PID, Pid),
         Pid ! render_tables
@@ -381,7 +337,7 @@ event(init) ->
         _:Reason ->
             ?error("Cannot initialize page ~p: ~p", [?MODULE, Reason]),
             gui_jq:hide(<<"main_spinner">>),
-            opn_gui_utils:message(<<"error_message">>, <<"Cannot fetch Space privileges.<br>Please try again later.">>)
+            opn_gui_utils:message(<<"error_message">>, <<"Cannot fetch group privileges.<br>Please try again later.">>)
     end;
 
 event({message, Message}) ->

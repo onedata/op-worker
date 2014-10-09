@@ -548,6 +548,7 @@ event({close_message, MessageId}) ->
 event(terminate) ->
     ok.
 
+
 %% api_event/3
 %% ====================================================================
 %% @doc Handles page events.
