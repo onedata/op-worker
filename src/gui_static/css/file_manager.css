@@ -316,6 +316,7 @@
 }
 
 .acl-textbox {
+    width: 250px;
     margin-top: -3px !important;
     margin-bottom: 3px !important;
     border: 2px solid #BDC3C7 !important;
