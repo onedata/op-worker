@@ -108,7 +108,7 @@ message FileLocation {
 message BlocksAvailable {
     required uint32 storage_id = 1;
     required string file_id = 2;
-    required FileLocation.BlockAvailability blocks = 3;
+    repeated FileLocation.BlockAvailability blocks = 3;
 }
 
 message RequestFileBlock {
