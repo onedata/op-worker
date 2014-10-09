@@ -97,7 +97,7 @@ modules_start_and_ping_test(Config) ->
   Workers2 = State2#cm_state.workers,
   Jobs = ?Modules,
   ?assertEqual(length(Workers2), length(Jobs)),
-  ?assertEqual(4, gen_server:call({global, ?CCM}, get_state_num, 1000)),
+  ?assertEqual(5, gen_server:call({global, ?CCM}, get_state_num, 1000)),
 
   CheckModules = fun(M, Sum) ->
     Ans = gen_server:call({M, CCM}, {test_call, ?ProtocolVersion, ping}, 1000),
