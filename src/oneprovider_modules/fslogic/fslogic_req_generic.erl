@@ -263,9 +263,7 @@ list_xattr(FullFileName) ->
     #acl{} | no_return().
 %% ====================================================================
 get_acl(FullFileName) ->
-    {ok, UserDoc} = fslogic_objects:get_user(),
     {ok, FileDoc = #db_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, read),
     {ok, #db_document{record = #file_meta{acl = Acl}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
     VirtualAcl =
         case Acl of
