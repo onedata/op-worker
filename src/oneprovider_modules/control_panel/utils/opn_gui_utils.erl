@@ -268,6 +268,8 @@ top_menu(ActiveTabID, SubMenuBody) ->
         ]}},
         {spaces_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Spaces">>,
             url = <<"/spaces">>, body = <<"Spaces">>}}},
+        {groups_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Spaces">>,
+            url = <<"/groups">>, body = <<"Groups">>}}},
         {tokens_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Spaces">>,
             url = <<"/tokens">>, body = <<"Tokens">>}}}
     ]),
