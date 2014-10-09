@@ -102,38 +102,107 @@ update_chmod_textbox = function (mode) {
 // -----------------------------
 // ACL handling
 
-populate_acl_list = function (json_array) {
-    console.log(json_array);
+var clicked_index = -2;
+
+populate_acl_list = function (json_array, select_index) {
+    var acl_list = $('#acl-list');
+    acl_list.html('');
 
     for (var i = 0; i < json_array.length; ++i) {
-        $('#acl-list').append(
-            render_acl_entry(i, json_array[i].subject, json_array[i].allow, json_array[i].read, json_array[i].write, json_array[i].exec));
+        acl_list.append(
+            render_acl_entry(i, json_array[i].identifier, json_array[i].allow, json_array[i].read, json_array[i].write, json_array[i].exec));
+    }
+
+    acl_list.append('<div class="acl-entry" index="-1">' +
+        '<a class="glyph-link acl-add-button" title="New ACL Entry"><span class="icomoon-plus"></span></a>' +
+        '<span class="acl-info-add">New ACL entry...</span>' +
+        '</div>');
+
+    if (select_index > -1) {
+        clicked_index = select_index;
+        $(acl_list.find('.acl-entry')[select_index]).find('[class*="acl-button-"]').show();
     }
 
     $('.acl-entry').click(function (event) {
+        if ($('#acl-form').css('display') == 'none') {
+            document.getSelection().removeAllRanges();
+            var new_index = $(this).attr('index');
+            console.log(new_index);
+            if (clicked_index != new_index) {
+                clicked_index = new_index;
+                $('[class*="acl-button-"]').hide();
+                $(this).find('[class*="acl-button-"]').show();
+            } else {
+                $('[class*="acl-button-"]').hide();
+                if (clicked_index == -1) {
+                    add_acl();
+                } else {
+                    $(this).addClass('acl-entry-selected');
+                    edit_acl(clicked_index);
+                }
+            }
+        }
+    });
+
+    $('.acl-add-button').click(function (event) {
+        event.stopPropagation();
         $('[class*="acl-button-"]').hide();
-        $(this).find('[class*="acl-button-"]').show();
+        add_acl();
     });
 
     $('.acl-button-delete').click(function (event) {
-        delete_acl($(this).attr('index'));
+        event.stopPropagation();
+        var entry_div = $(this).parent();
+        entry_div.find('[class*="acl-button-"]').hide();
+        entry_div.find('[class*="acl-icon-"]').hide();
+        entry_div.find('[class*="acl-symbol-"]').hide();
+        entry_div.find('[class*="acl-confirm-"]').show();
+    });
+
+    $('.acl-confirm-yes').click(function (event) {
+        event.stopPropagation();
+        delete_acl($(this).parent().attr('index'));
+    });
+
+    $('.acl-confirm-no').click(function (event) {
+        event.stopPropagation();
+        var entry_div = $(this).parent();
+        entry_div.find('[class*="acl-button-"]').show();
+        entry_div.find('[class*="acl-icon-"]').show();
+        entry_div.find('[class*="acl-symbol-"]').show();
+        entry_div.find('[class*="acl-confirm-"]').hide();
     });
 
     $('.acl-button-edit').click(function (event) {
-        edit_acl($(this).attr('index'));
+        event.stopPropagation();
+        var entry_div = $(this).parent();
+        entry_div.addClass('acl-entry-selected');
+        entry_div.find('[class*="acl-button-"]').hide();
+        edit_acl(entry_div.attr('index'));
     });
 
     $('.acl-button-move-up').click(function (event) {
-        move_acl([$(this).attr('index'), true]);
+        event.stopPropagation();
+        move_acl([$(this).parent().attr('index'), true]);
     });
 
     $('.acl-button-move-down').click(function (event) {
-        move_acl([$(this).attr('index'), false]);
+        event.stopPropagation();
+        move_acl([$(this).parent().attr('index'), false]);
+    });
+
+
+    $('#acl_type_checkbox').change(function (event) {
+        if ($(this).is(':checked')) {
+            $('#acl_type_checkbox_label').html('allow');
+        } else {
+            $('#acl_type_checkbox_label').html('deny');
+        }
     });
 };
 
 // Renders a single ACL entry
-render_acl_entry = function (index, subject, allow_flag, read_flag, write_flag, exec_flag) {
+render_acl_entry = function (index, identifier, allow_flag, read_flag, write_flag, exec_flag) {
     var entry_class = allow_flag ? 'acl-entry acl-entry-allow' : 'acl-entry acl-entry-deny';
     var icon_type = allow_flag ? 'fui-check-inverted' : 'fui-cross-inverted';
     var icon_read = read_flag ? '<span class="' + icon_type + ' acl-icon-read"></span>' +
@@ -142,14 +211,30 @@ render_acl_entry = function (index, subject, allow_flag, read_flag, write_flag, 
         '<span class="acl-symbol-write">W</span>' : '';
     var icon_exec = exec_flag ? '<span class="' + icon_type + ' acl-icon-exec"></span>' +
         '<span class="acl-symbol-exec">X</span>' : '';
+    var icons_confirm_delete = '<span class="acl-confirm-prompt">Are you sure?</span>' +
+        '<a class="glyph-link acl-confirm-yes" title="Yes"><span class="icomoon-checkmark"></span></a>' +
+        '<a class="glyph-link acl-confirm-no" title="No"><span class="icomoon-close"></span></a>';
 
-    return '<div class="' + entry_class + '"><div class="acl-subject">' +
-        '<span class="icomoon-user acl-sub-icon"></span>' +
-        '<span class="acl-sub-name">' + subject + '</span></div>' +
+    return '<div class="' + entry_class + '" index="' + index + '"><div class="acl-identifier">' +
+        '<span class="icomoon-user acl-ident-icon"></span>' +
+        '<span class="acl-ident-name">' + identifier + '</span></div>' +
         icon_read + icon_write + icon_exec +
-        '<a class="glyph-link acl-button-delete" title="Delete ACL entry" index="' + index + '"><span class="icomoon-remove"></span></a>' +
-        '<a class="glyph-link acl-button-edit" title="Edit ACL entry" index="' + index + '"><span class="icomoon-pencil2"></span></a>' +
-        '<a class="glyph-link acl-button-move-up" title="Move up" index="' + index + '"><span class="fui-triangle-up-small"></span></a>' +
-        '<a class="glyph-link acl-button-move-down" title="Move down" index="' + index + '"><span class="fui-triangle-down-small"></span></a>' +
-        '</div>';
+        '<a class="glyph-link acl-button-delete" title="Delete ACL entry"><span class="icomoon-remove"></span></a>' +
+        '<a class="glyph-link acl-button-edit" title="Edit ACL entry"><span class="icomoon-pencil2"></span></a>' +
+        '<a class="glyph-link acl-button-move-up" title="Move up"><span class="fui-triangle-up-small"></span></a>' +
+        '<a class="glyph-link acl-button-move-down" title="Move down"><span class="fui-triangle-down-small"></span></a>' +
+        icons_confirm_delete + '</div>';
+};
+
+// Submits ACL form
+submit_acl = function () {
+    $('#spinner').delay(150).show();
+    submit_acl_event([
+        clicked_index,
+        $('#acl_textbox').val(),
+        $('#acl_type_checkbox').is(':checked'),
+        $('#acl_read_checkbox').is(':checked'),
+        $('#acl_write_checkbox').is(':checked'),
+        $('#acl_exec_checkbox').is(':checked')
+    ]);
 };

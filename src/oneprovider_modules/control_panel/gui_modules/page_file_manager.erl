@@ -13,6 +13,8 @@
 -module(page_file_manager).
 -include("oneprovider_modules/control_panel/common.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic_acl.hrl").
+-include("fuse_messages_pb.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % n2o API
@@ -22,10 +24,14 @@
 -export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
 -export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0]).
 -export([confirm_paste/0, confirm_chmod/2, show_permissions_info/0]).
--export([delete_acl/1, edit_acl/1, move_acl/2]).
+-export([populate_acl_list/1, add_acl/0, delete_acl/1, edit_acl/1, move_acl/2, submit_acl/6]).
 -export([rename_item/2, create_directory/1, remove_selected/0, search/1, toggle_column/2, show_popup/1, hide_popup/0, path_navigator_body/1]).
 -export([fs_list_dir/1, fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
 
+-export([dupa/0]).
+
+dupa() ->
+    #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = <<"id">>, acemask = ?read_mask}.
 
 % All file attributes that are supported
 -define(ALL_ATTRIBUTES, [mode, size, atime, mtime]).
@@ -85,9 +91,11 @@ body() ->
     gui_jq:register_escape_event("escape_pressed"),
     gui_jq:wire(#api{name = "confirm_paste", tag = "confirm_paste"}, false),
     gui_jq:wire(#api{name = "submit_chmod_event", tag = "submit_chmod_event"}, false),
+    gui_jq:wire(#api{name = "add_acl", tag = "add_acl"}, false),
     gui_jq:wire(#api{name = "delete_acl", tag = "delete_acl"}, false),
     gui_jq:wire(#api{name = "edit_acl", tag = "edit_acl"}, false),
     gui_jq:wire(#api{name = "move_acl", tag = "move_acl"}, false),
+    gui_jq:wire(#api{name = "submit_acl_event", tag = "submit_acl_event"}, false),
     Body = [
         #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
@@ -244,17 +252,40 @@ api_event("submit_chmod_event", Args, _Ctx) ->
     [Mode, Recursive] = mochijson2:decode(Args),
     event({action, confirm_chmod, [Mode, Recursive]});
 
+api_event("add_acl", _Args, _) ->
+    event({action, add_acl});
+
 api_event("delete_acl", Args, _) ->
-    Index = mochijson2:decode(Args),
-    event({action, delete_acl, [binary_to_integer(Index)]});
+    IndexRaw = mochijson2:decode(Args),
+    Index = case IndexRaw of
+                I when is_integer(I) -> I;
+                Bin when is_binary(Bin) -> binary_to_integer(Bin)
+            end,
+    event({action, delete_acl, [Index]});
 
 api_event("edit_acl", Args, _) ->
-    Index = mochijson2:decode(Args),
-    event({action, edit_acl, [binary_to_integer(Index)]});
+    IndexRaw = mochijson2:decode(Args),
+    Index = case IndexRaw of
+                I when is_integer(I) -> I;
+                Bin when is_binary(Bin) -> binary_to_integer(Bin)
+            end,
+    event({action, edit_acl, [Index]});
 
 api_event("move_acl", Args, _) ->
-    [Index, MoveUp] = mochijson2:decode(Args),
-    event({action, move_acl, [binary_to_integer(Index), MoveUp]}).
+    [IndexRaw, MoveUp] = mochijson2:decode(Args),
+    Index = case IndexRaw of
+                I when is_integer(I) -> I;
+                Bin when is_binary(Bin) -> binary_to_integer(Bin)
+            end,
+    event({action, move_acl, [Index, MoveUp]});
+
+api_event("submit_acl_event", Args, _) ->
+    [IndexRaw, Identifier, Type, Read, Write, Execute] = mochijson2:decode(Args),
+    Index = case IndexRaw of
+                I when is_integer(I) -> I;
+                Bin when is_binary(Bin) -> binary_to_integer(Bin)
+            end,
+    event({action, submit_acl, [Index, Identifier, Type, Read, Write, Execute]}).
 
 
 event(init) ->
@@ -314,6 +345,12 @@ comet_loop_init(GRUID, UserAccessToken, RequestedHostname) ->
     gui_jq:hide(<<"spinner">>),
 
     %% TODO
+    set_acl_state({[<<"/spaces">>], [
+        #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = <<"Janusz">>, acemask = ?read_mask},
+        #accesscontrolentity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = <<"Waclaw"/utf8>>, acemask = ?write_mask},
+        #accesscontrolentity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = <<"Bogdan">>, acemask = ?execute_mask},
+        #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = <<"Staszek">>, acemask = ?write_mask bor ?read_mask bor ?execute_mask}
+    ]}),
     set_selected_items([{<<"/spaces">>, <<"spaces">>}]),
     show_popup(chmod),
 
@@ -733,23 +770,115 @@ toggle_column(Attr, Flag) ->
 show_permissions_info() ->
     gui_jq:info_popup(<<"File permissions and ACLs">>, <<"Standard permissions and ACLs are two ways of controlling ",
     "the access to your data. You can choose to use one of them for each file. They cannot be used together. <br /><br />",
-    "<strong>Standard permissions</strong> - UNIX file permissions, can be used to enable certain types ",
+    "<strong>Standard permissions</strong> - POSIX basic file permissions, can be used to enable certain types ",
     "of users to read, write or execute given file. The types are: user (the owner of the file), group (all users ",
     "sharing the space where the file resides), other (not aplicable in GUI, but used in oneclient).<br /><br />",
     "<strong>ACLs</strong> (Access Control List) - CDMI standard (compliant with NFSv4 ACLs), allows ",
-    "defining ordered lists of permissions-granting or permissions-denying entries for users / groups.">>, <<"">>).
+    "defining ordered lists of permissions-granting or permissions-denying entries for users or groups.">>, <<"">>).
+
+
+populate_acl_list(SelectedIndex) ->
+    {_Files, ACLEntries} = get_acl_state(),
+    JSON = rest_utils:encode_to_json(lists:map(
+        fun(#accesscontrolentity{acetype = ACEType, aceflags = _ACEFlags, identifier = Identifier, acemask = ACEMask}) ->
+            [
+                {<<"identifier">>, Identifier},
+                {<<"allow">>, ACEType =:= ?allow_mask},
+                {<<"read">>, ACEMask band ?read_mask > 0},
+                {<<"write">>, ACEMask band ?write_mask > 0},
+                {<<"exec">>, ACEMask band ?execute_mask > 0}
+            ]
+        end, ACLEntries)),
+    gui_jq:hide(<<"acl-form">>),
+    gui_jq:wire(<<"clicked_index = -2;">>),
+    gui_jq:wire(<<"populate_acl_list(", JSON/binary, ", ", (integer_to_binary(SelectedIndex))/binary, ");">>).
+
+
+add_acl() ->
+    gui_jq:show(<<"acl-form">>),
+    gui_jq:wire(<<"$('#acl_type_checkbox').checkbox('check');">>),
+    gui_jq:wire(<<"$('#acl_read_checkbox').checkbox('uncheck');">>),
+    gui_jq:wire(<<"$('#acl_write_checkbox').checkbox('uncheck');">>),
+    gui_jq:wire(<<"$('#acl_exec_checkbox').checkbox('uncheck');">>).
 
 
 delete_acl(Index) ->
-    ?dump(Index).
+    {Files, ACLEntries} = get_acl_state(),
+    {Head, [_ | Tail]} = lists:split(Index, ACLEntries),
+    set_acl_state({Files, Head ++ Tail}),
+    populate_acl_list(-1).
 
 
 edit_acl(Index) ->
-    ?dump(Index).
+    gui_jq:show(<<"acl-form">>),
+    {_Files, ACLEntries} = get_acl_state(),
+    #accesscontrolentity{acetype = ACEType, aceflags = _ACEFlags,
+        identifier = Identifier, acemask = ACEMask} = lists:nth(Index + 1, ACLEntries),
+    gui_jq:set_value(<<"acl_textbox">>, Identifier),
+    CheckJS = <<"').checkbox('check');">>,
+    UncheckJS = <<"').checkbox('uncheck');">>,
+    case ACEType of
+        ?allow_mask -> gui_jq:wire(<<"$('#acl_type_checkbox", CheckJS/binary>>);
+        _ -> gui_jq:wire(<<"$('#acl_type_checkbox", UncheckJS/binary>>)
+    end,
+    case ACEMask band ?read_mask of
+        0 -> gui_jq:wire(<<"$('#acl_read_checkbox", UncheckJS/binary>>);
+        _ -> gui_jq:wire(<<"$('#acl_read_checkbox", CheckJS/binary>>)
+    end,
+    case ACEMask band ?write_mask of
+        0 -> gui_jq:wire(<<"$('#acl_write_checkbox", UncheckJS/binary>>);
+        _ -> gui_jq:wire(<<"$('#acl_write_checkbox", CheckJS/binary>>)
+    end,
+    case ACEMask band ?execute_mask of
+        0 -> gui_jq:wire(<<"$('#acl_exec_checkbox", UncheckJS/binary>>);
+        _ -> gui_jq:wire(<<"$('#acl_exec_checkbox", CheckJS/binary>>)
+    end.
+
+
+submit_acl(Index, Identifier, Type, ReadFlag, WriteFlag, ExecFlag) ->
+%%     gui_jq:hide(<<"acl-form">>), TODO jak wsyzstko OK
+    {Files, ACLEntries} = get_acl_state(),
+    ACEMask = (case ReadFlag of true -> ?read_mask; _ -> 0 end) bor
+        (case WriteFlag of true -> ?write_mask; _ -> 0 end) bor
+        (case ExecFlag of true -> ?execute_mask; _ -> 0 end),
+    NewEntity = #accesscontrolentity{
+        acetype = (case Type of true -> ?allow_mask; _ -> ?deny_mask end),
+        aceflags = ?no_flags_mask,
+        identifier = Identifier,
+        acemask = ACEMask},
+    case Index of
+        -1 ->
+            set_acl_state({Files, ACLEntries ++ [NewEntity]});
+        _ ->
+            {Head, [_Ident | Tail]} = lists:split(Index, ACLEntries),
+            set_acl_state({Files, Head ++ [NewEntity] ++ Tail})
+    end,
+    populate_acl_list(-1).
 
 
 move_acl(Index, MoveUp) ->
-    ?dump({Index, MoveUp}).
+    {Files, ACLEntries} = get_acl_state(),
+    MaxIndex = length(ACLEntries) - 1,
+    {NewEntries, SelectedIndex} = case {Index, MoveUp} of
+                                      {0, true} ->
+                                          {ACLEntries, Index};
+                                      {MaxIndex, false} ->
+                                          {ACLEntries, Index};
+                                      _ ->
+                                          {Head, [Ident | Tail]} = lists:split(Index, ACLEntries),
+                                          case MoveUp of
+                                              true ->
+                                                  % Head length is at least 1, because Index is not 0
+                                                  {AllButLast, Last} = lists:split(length(Head) - 1, Head),
+                                                  {AllButLast ++ [Ident] ++ Last ++ Tail, Index - 1};
+                                              false ->
+                                                  % Tail length is at least 1, because Index is not MaxIndex
+                                                  [First | AllButFirst] = Tail,
+                                                  {Head ++ [First] ++ [Ident] ++ AllButFirst, Index + 1}
+                                          end
+                                  end,
+    set_acl_state({Files, NewEntries}),
+    populate_acl_list(SelectedIndex).
 
 
 % Shows popup with a prompt, form, etc.
@@ -909,13 +1038,61 @@ show_popup(Type) ->
                             ]},
                             #panel{class = <<"tab-pane active">>, id = <<"tab-acl">>, body = [
                                 #panel{id = <<"tab-acl-content">>, body = [
+                                    #panel{id = <<"acl-info">>, body = [
+                                        #p{body = <<"proccessing">>},
+                                        #p{body = <<"order">>},
+                                        #span{class = <<"icomoon-arrow-down">>}
+                                    ]},
                                     #panel{id = <<"acl-list">>},
-                                    #panel{id = <<"acl-form">>}
+                                    #panel{id = <<"acl-form">>, body = [
+                                        #table{id = <<"acl-form-table">>, body = [
+                                            #tr{cells = [
+                                                #td{body = [
+                                                    #label{class = <<"label label-inverse acl-label">>, body = <<"Identifier">>}
+                                                ]},
+                                                #td{body = [
+                                                    #textbox{
+                                                        id = <<"acl_textbox">>, %wire_enter(<<"shared_link_textbox">>, <<"shared_link_submit">>),
+                                                        class = <<"flat acl-textbox">>, style = <<"width: 250px;">>,
+                                                        value = <<>>, placeholder = <<"User name">>}
+                                                ]}
+                                            ]},
+                                            #tr{cells = [
+                                                #td{body = [
+                                                    #label{class = <<"label label-inverse acl-label">>, body = <<"Type">>}
+
+                                                ]},
+                                                #td{body = [
+                                                    #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_type_checkbox">>,
+                                                        checked = true, body = #span{id = <<"acl_type_checkbox_label">>, body = <<"allow">>}}
+                                                ]}
+                                            ]},
+                                            #tr{cells = [
+                                                #td{body = [
+                                                    #label{class = <<"label label-inverse acl-label">>, body = <<"Perms">>}
+
+                                                ]},
+                                                #td{body = [
+                                                    #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_read_checkbox">>, checked = true, body = <<"read">>},
+                                                    #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_write_checkbox">>, checked = true, body = <<"write">>},
+                                                    #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_exec_checkbox">>, checked = true, body = <<"execute">>}
+                                                ]}
+                                            ]},
+                                            #tr{cells = [
+                                                #td{body = [
+                                                    #button{id = <<"button_save_acl">>, class = <<"btn btn-success acl-button">>,
+                                                        body = <<"Save">>}
+                                                ]},
+                                                #td{body = [
+                                                    #button{id = <<"button_discard_acl">>, class = <<"btn btn-danger acl-button">>,
+                                                        body = <<"Discard">>, postback = {action, populate_acl_list, [-1]}}
+                                                ]}
+                                            ]}
+                                        ]}
+                                    ]}
                                 ]}
                             ]}
                         ]},
-
-
                         #panel{style = <<"clear: both;  margin-bottom: 18px;">>},
                         #form{class = <<"control-group">>, body = [
                             #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
@@ -923,14 +1100,12 @@ show_popup(Type) ->
                         ]}
                     ]}
                 ],
-                JSON = rest_utils:encode_to_json([
-                    [{subject, <<"Łukasz Opioła"/utf8>>}, {allow, false}, {read, true}, {write, true}, {exec, false}],
-                    [{subject, <<"Jan Kowalski"/utf8>>}, {allow, true}, {read, true}, {write, false}, {exec, true}],
-                    [{subject, <<"Jan Nowak"/utf8>>}, {allow, true}, {read, true}, {write, true}, {exec, true}],
-                    [{subject, <<"Jan Siekierski"/utf8>>}, {allow, true}, {read, false}, {write, true}, {exec, false}],
-                    [{subject, <<"Jan Tomczyk"/utf8>>}, {allow, true}, {read, false}, {write, true}, {exec, true}]
-                ]),
-                gui_jq:wire(<<"populate_acl_list(", JSON/binary, ");">>),
+                flatui_checkbox:init_checkbox(<<"acl_type_checkbox">>),
+                flatui_checkbox:init_checkbox(<<"acl_read_checkbox">>),
+                flatui_checkbox:init_checkbox(<<"acl_write_checkbox">>),
+                flatui_checkbox:init_checkbox(<<"acl_exec_checkbox">>),
+                populate_acl_list(-1),
+                gui_jq:bind_element_click(<<"button_save_acl">>, <<"function() { submit_acl(); }">>),
                 gui_jq:bind_element_click(<<"ok_button">>, <<"function() { submit_chmod(); }">>),
                 {Body, undefined, {action, hide_popup}};
 

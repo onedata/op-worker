@@ -12,10 +12,29 @@
     margin: auto;
 }
 
+#acl-info {
+    display: inline-block;
+    height: 70px;
+    overflow: hidden;
+    margin-right: 13px;
+    text-align: center;
+    padding: 70px 0;
+}
+
+#acl-info > p {
+    line-height: 14px;
+    font-size: 14px;
+    margin: 0 0 8px;
+}
+
+#acl-info > span {
+    font-size: 24px;
+}
+
 #acl-list {
     display: inline-block;
     width: 550px;
-    height: 200px;
+    height: 210px;
     border: 2px solid #526476;
     border-radius: 6px;
     position: relative;
@@ -31,6 +50,22 @@
     cursor: pointer;
 }
 
+.acl-add-button {
+    position: absolute;
+    top: 12px;
+    left: 10px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.acl-info-add {
+    position: absolute;
+    top: 12px;
+    left: 30px;
+    font-size: 15px;
+    margin-left: 7px;
+}
+
 .acl-entry-allow {
     background-color: #DFFFDF;
 }
@@ -39,15 +74,15 @@
     background-color: #FFE5E5;
 }
 
-#acl-form {
-    display: inline-block;
-    width: 200px;
-    height: 200px;
-    border: 2px solid #526476;
-    border-radius: 6px;
+.acl-entry-allow.acl-entry-selected {
+    background-color: #A6FFA6;
 }
 
-.acl-subject {
+.acl-entry-deny.acl-entry-selected {
+    background-color: #FFB8B8;
+}
+
+.acl-identifier {
     position: absolute;
     left: 6px;
     top: 7px;
@@ -58,13 +93,13 @@
     overflow: hidden;
 }
 
-.acl-sub-icon {
+.acl-ident-icon {
     vertical-align: middle;
     font-size: 24px;
     color: rgb(82, 100, 118);
 }
 
-.acl-sub-name {
+.acl-ident-name {
     vertical-align: middle;
     font-size: 15px;
     margin-left: 7px;
@@ -126,6 +161,7 @@
     right: 72px;
     font-size: 20px;
     display: none;
+    cursor: pointer;
 }
 
 .acl-button-edit {
@@ -134,6 +170,7 @@
     right: 42px;
     font-size: 20px;
     display: none;
+    cursor: pointer;
 }
 
 .acl-button-move-up {
@@ -142,6 +179,7 @@
     right: 10px;
     font-size: 20px;
     display: none;
+    cursor: pointer;
 }
 
 .acl-button-move-down {
@@ -150,4 +188,87 @@
     right: 10px;
     font-size: 20px;
     display: none;
+    cursor: pointer;
+}
+
+#acl-form {
+    display: inline-block;
+    width: 400px;
+    height: 210px;
+    border: 2px solid #526476;
+    border-radius: 6px;
+    margin-left: 20px;
+    overflow: hidden;
+}
+
+#acl-form-table {
+    border-width: 0;
+    width: auto;
+    margin-top: 10px;
+}
+
+#acl-form-table > tbody > tr > td {
+    padding: 5px 0 5px 20px;
+    text-align: left;
+    vertical-align: middle;
+    height: 35px;
+}
+
+.acl-label {
+    margin-left: 0;
+    cursor: auto;
+    width: 60px;
+}
+
+.acl-textbox {
+    margin-top: -3px !important;
+    margin-bottom: 3px !important;
+    border: 2px solid #BDC3C7 !important;
+}
+
+.acl-textbox:focus {
+    border: 2px solid rgb(26, 188, 156) !important;
+}
+
+.acl-textbox.disabled {
+    border: 2px solid #EDEFF1 !important;
+}
+
+.acl-checkbox {
+    margin-top: -3px;
+    margin-bottom: 3px;
+    margin-right: 20px;
+    display: inline-block;
+}
+
+.acl-button {
+    padding: 4px 8px !important;
+    width: 78px;
+    font-size: 13px;
+}
+
+.acl-confirm-prompt {
+    position: absolute;
+    top: 12px;
+    right: 105px;
+    font-size: 14px;
+    display: none;
+}
+
+.acl-confirm-yes {
+    position: absolute;
+    top: 8px;
+    right: 72px;
+    font-size: 18px;
+    display: none;
+    cursor: pointer;
+}
+
+.acl-confirm-no {
+    position: absolute;
+    top: 8px;
+    right: 40px;
+    font-size: 18px;
+    display: none;
+    cursor: pointer;
 }
