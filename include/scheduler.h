@@ -37,15 +37,15 @@ public:
      * Destructor.
      * Stops the scheduler and joins worker threads.
      */
-    ~Scheduler();
+    virtual ~Scheduler();
 
     /**
      * Schedules a task tu be run after some time.
      * @param after The duration after which the task should be executed.
      * @param task The task to execute.
      */
-    void schedule(const std::chrono::milliseconds after,
-                  std::function<void()> task);
+    virtual void schedule(const std::chrono::milliseconds after,
+                          std::function<void()> task);
 
 private:
     std::vector<std::thread> m_workers;
