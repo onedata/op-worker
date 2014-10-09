@@ -216,9 +216,9 @@ join_to_path(Path, [Binary|Tail]) ->
 -spec parse_body(binary()) -> list().
 %% ====================================================================
 parse_body(RawBody) ->
-    case gui_str:binary_to_unicode_list(RawBody) of
-        "" -> [];
-        NonEmptyBody -> rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody))
+    case RawBody of
+        <<"">> -> [];
+        NonEmptyBody -> rest_utils:decode_from_json(NonEmptyBody)
     end.
 
 %% validate_body/1

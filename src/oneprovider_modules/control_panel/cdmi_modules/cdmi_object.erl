@@ -58,7 +58,7 @@ resource_exists(Req, State = #state{filepath = Filepath}) ->
     case logical_files_manager:getfileattr(Filepath) of
         {ok, #fileattributes{type = ?REG_TYPE_PROT} = Attr} -> {true, Req, State#state{attributes = Attr}};
         {ok, _} ->
-            Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath++"/"), Req),
+            Req1 = cowboy_req:set_resp_header(<<"Location">>, utils:ensure_unicode_binary(Filepath++"/"), Req),
             cdmi_error:error_reply(Req1, State, {?moved_permanently, Filepath});
         _ -> {false, Req, State}
     end.
@@ -329,8 +329,8 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     false -> {create, logical_files_manager:create(Filepath)};
                     Error_ -> {create, Error_}
                 end;
-            {undefined, MoveURI} -> {move, logical_files_manager:mv(binary_to_list(MoveURI),Filepath)};
-            {CopyURI, undefined} -> {copy, logical_files_manager:cp(binary_to_list(CopyURI),Filepath)}
+            {undefined, MoveURI} -> {move, logical_files_manager:mv(utils:ensure_unicode_list(MoveURI),Filepath)};
+            {CopyURI, undefined} -> {copy, logical_files_manager:cp(utils:ensure_unicode_list(CopyURI),Filepath)}
         end,
 
     %check creation result, update value and metadata depending on creation type
@@ -433,11 +433,11 @@ prepare_object_ans([<<"objectID">> | Tail], #state{filepath = Filepath} = State)
     {ok, Uuid} = logical_files_manager:get_file_uuid(Filepath),
     [{<<"objectID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"objectName">>, list_to_binary(filename:basename(Filepath))} | prepare_object_ans(Tail, State)];
+    [{<<"objectName">>, utils:ensure_unicode_binary(filename:basename(Filepath))} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = "/"} = State) ->
     [{<<"parentURI">>, <<>>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
-    ParentURI = list_to_binary(rest_utils:ensure_path_ends_with_slash(fslogic_path:strip_path_leaf(Filepath))),
+    ParentURI = utils:ensure_unicode_binary(rest_utils:ensure_path_ends_with_slash(fslogic_path:strip_path_leaf(Filepath))),
     [{<<"parentURI">>, ParentURI} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentID">> | Tail], #state{filepath = "/"} = State) ->
     [{<<"parentID">>, <<>>} | prepare_object_ans(Tail, State)];
@@ -445,7 +445,7 @@ prepare_object_ans([<<"parentID">> | Tail], #state{filepath = Filepath} = State)
     {ok, Uuid} = logical_files_manager:get_file_uuid(fslogic_path:strip_path_leaf(Filepath)),
     [{<<"parentID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"capabilitiesURI">> | Tail], State) ->
-    [{<<"capabilitiesURI">>, list_to_binary(?dataobject_capability_path)} | prepare_object_ans(Tail, State)];
+    [{<<"capabilitiesURI">>, utils:ensure_unicode_binary(?dataobject_capability_path)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"completionStatus">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"completionStatus">>, get_completion_status(Filepath)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"mimetype">> | Tail], #state{filepath = Filepath} = State) ->

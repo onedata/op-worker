@@ -55,7 +55,7 @@ resource_exists(Req, State = #state{filepath = Filepath}) ->
     case logical_files_manager:getfileattr(Filepath) of
         {ok, #fileattributes{type = ?DIR_TYPE_PROT} = Attr} -> {true, Req, State#state{attributes = Attr}};
         {ok, _} ->
-            Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath), Req),
+            Req1 = cowboy_req:set_resp_header(<<"Location">>, utils:ensure_unicode_binary(Filepath), Req),
             cdmi_error:error_reply(Req1,State,{?moved_permanently, Filepath});
         _ -> {false, Req, State}
     end.
@@ -153,8 +153,8 @@ put_cdmi_container(Req, #state{filepath = Filepath, opts = Opts} = State) ->
     OperationAns =
         case {RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined} -> logical_files_manager:mkdir(Filepath);
-            {undefined, MoveURI} -> logical_files_manager:mv(binary_to_list(MoveURI),Filepath);
-            {CopyURI, undefined} -> logical_files_manager:cp(binary_to_list(CopyURI),Filepath)
+            {undefined, MoveURI} -> logical_files_manager:mv(utils:ensure_unicode_list(MoveURI),Filepath);
+            {CopyURI, undefined} -> logical_files_manager:cp(utils:ensure_unicode_list(CopyURI),Filepath)
         end,
 
     %check result and update metadata
@@ -218,11 +218,11 @@ prepare_container_ans([<<"objectID">> | Tail], #state{filepath = Filepath} = Sta
     {ok, Uuid} = logical_files_manager:get_file_uuid(Filepath),
     [{<<"objectID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"objectName">>, list_to_binary([filename:basename(Filepath), "/"])} | prepare_container_ans(Tail, State)];
+    [{<<"objectName">>, utils:ensure_unicode_binary([filename:basename(Filepath), "/"])} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = "/"} = State) ->
     [{<<"parentURI">>,<<>>} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
-    ParentURI = list_to_binary(rest_utils:ensure_path_ends_with_slash(fslogic_path:strip_path_leaf(Filepath))),
+    ParentURI = utils:ensure_unicode_binary(rest_utils:ensure_path_ends_with_slash(fslogic_path:strip_path_leaf(Filepath))),
     [{<<"parentURI">>, ParentURI} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"parentID">> | Tail], #state{filepath = "/"} = State) ->
     prepare_container_ans(Tail, State);
@@ -230,7 +230,7 @@ prepare_container_ans([<<"parentID">> | Tail], #state{filepath = Filepath} = Sta
     {ok,Uuid} = logical_files_manager:get_file_uuid(fslogic_path:strip_path_leaf(Filepath)),
     [{<<"parentID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"capabilitiesURI">> | Tail], State) ->
-    [{<<"capabilitiesURI">>, list_to_binary(?container_capability_path)} | prepare_container_ans(Tail, State)];
+    [{<<"capabilitiesURI">>, utils:ensure_unicode_binary(?container_capability_path)} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"metadata">> | Tail], #state{filepath = Filepath, attributes = Attrs} = State) ->
@@ -259,18 +259,18 @@ prepare_container_ans([{<<"children">>, From, To} | Tail], #state{filepath = Fil
     {ok, List} = logical_files_manager:ls_chunked(Filepath, From1, To1),
     Childs = lists:map(
         fun(#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) ->
-            list_to_binary(rest_utils:ensure_path_ends_with_slash(Name));
+            utils:ensure_unicode_binary(rest_utils:ensure_path_ends_with_slash(Name));
             (#dir_entry{name = Name, type = ?REG_TYPE_PROT}) ->
-                list_to_binary(Name)
+                utils:ensure_unicode_binary(Name)
         end, List),
     [{<<"children">>, Childs} | prepare_container_ans(Tail, State)];
 prepare_container_ans([<<"children">> | Tail], #state{filepath = Filepath} = State) ->
     {ok, List} = logical_files_manager:ls_chunked(Filepath),
     Childs = lists:map(
         fun(#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) ->
-                list_to_binary(rest_utils:ensure_path_ends_with_slash(Name));
+            utils:ensure_unicode_binary(rest_utils:ensure_path_ends_with_slash(Name));
            (#dir_entry{name = Name, type = ?REG_TYPE_PROT}) ->
-                list_to_binary(Name)
+               utils:ensure_unicode_binary(Name)
         end, List),
     [{<<"children">>, Childs} | prepare_container_ans(Tail, State)];
 prepare_container_ans([_Other | Tail], State) ->
