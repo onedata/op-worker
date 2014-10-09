@@ -191,16 +191,14 @@ rename_file_interprovider(UserDoc, ?DIR_TYPE_PROT, SourceFilePath, TargetFilePat
     ok = logical_files_manager:mkdir(TargetFilePath),
 
     Self = self(),
-    DN_CTX = fslogic_context:get_user_dn(),
-    {AT_CTX1, AT_CTX2} = fslogic_context:get_gr_auth(),
+    UserCtx = fslogic_context:get_user_context(),
 
     PIDs = lists:map(
         fun(#dir_entry{name = FileName, type = FileType}) ->
 %%             Uncomment for parallel renaming
 %%             spawn_monitor(
 %%                 fun() ->
-            fslogic_context:set_user_dn(DN_CTX),
-            fslogic_context:set_gr_auth(AT_CTX1, AT_CTX2),
+            fslogic_context:set_user_context(UserCtx),
             NewSourceFilePath = filename:join(SourceFilePath, FileName),
             NewTargetFilePath = filename:join(TargetFilePath, FileName),
 

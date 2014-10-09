@@ -19,7 +19,7 @@
 
 
 %% API
--export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
+-export([update_times/4, change_file_owner/2, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
     remove_xattr/2, list_xattr/1, delete_file/1, rename_file/2, get_statfs/0]).
 
 %% ====================================================================
@@ -56,41 +56,31 @@ update_times(FullFileName, ATime, MTime, CTime) ->
     end.
 
 
-%% change_file_owner/3
+%% change_file_owner/2
 %% ====================================================================
 %% @doc Changes file's owner.
 %% @end
--spec change_file_owner(FullFileName :: string(), NewUID :: non_neg_integer(), NewUName :: string()) ->
+-spec change_file_owner(FullFileName :: string(), NewUID :: non_neg_integer()) ->
     #atom{} | no_return().
 %% ====================================================================
-change_file_owner(FullFileName, NewUID, NewUName) ->
-    ?debug("change_file_owner(FullFileName: ~p, NewUID: ~p, NewUName: ~p)", [FullFileName, NewUID, NewUName]),
+change_file_owner(FullFileName, NewUID) ->
+    ?debug("change_file_owner(FullFileName: ~p, NewUID: ~p)", [FullFileName, NewUID]),
 
     {ok, #db_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
     {ok, UserDoc} = fslogic_objects:get_user(),
 
     ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, root),
 
-    NewFile =
-        case user_logic:get_user({login, NewUName}) of
-            {ok, #db_document{record = #user{}, uuid = UID}} ->
-                File#file{uid = UID};
-            {error, user_not_found} ->
-                ?warning("chown: cannot find user with name ~p. lTrying UID (~p) lookup...", [NewUName, NewUID]),
-                case dao_lib:apply(dao_users, get_user, [{uuid, integer_to_list(NewUID)}], fslogic_context:get_protocol_version()) of
-                    {ok, #db_document{record = #user{}, uuid = UID1}} ->
-                        File#file{uid = UID1};
-                    {error, {not_found, missing}} ->
-                        ?warning("chown: cannot find user with uid ~p", [NewUID]),
-                        throw(?VEINVAL);
-                    {error, Reason1} ->
-                        ?error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
-                        throw(?VEREMOTEIO)
-                end;
-            {error, Reason1} ->
-                ?error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
-                throw(?VEREMOTEIO)
-        end,
+    NewFile = case dao_lib:apply(dao_users, get_user, [{uuid, integer_to_list(NewUID)}], fslogic_context:get_protocol_version()) of
+                  {ok, #db_document{record = #user{}, uuid = UID1}} ->
+                      File#file{uid = UID1};
+                  {error, {not_found, missing}} ->
+                      ?warning("chown: cannot find user with uid ~p", [NewUID]),
+                      throw(?VEINVAL);
+                  {error, Reason1} ->
+                      ?error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
+                      throw(?VEREMOTEIO)
+              end,
     NewFile1 = fslogic_meta:update_meta_attr(NewFile, ctime, utils:time()),
 
     {ok, _} = fslogic_objects:save_file(FileDoc#db_document{record = NewFile1}),

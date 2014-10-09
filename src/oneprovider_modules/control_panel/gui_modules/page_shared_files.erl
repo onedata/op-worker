@@ -21,7 +21,7 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case opn_gui_utils:maybe_redirect(true, true, true) of
+    case opn_gui_utils:maybe_redirect(true, true) of
         true ->
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
@@ -43,7 +43,9 @@ body() ->
 
 % Main table   
 main_panel() ->
-    fslogic_context:set_user_dn(opn_gui_utils:get_user_dn()),
+    GRUID = opn_gui_utils:get_global_user_id(),
+    AccessToken = opn_gui_utils:get_access_token(),
+    fslogic_context:set_gr_auth(GRUID, AccessToken),
     ShareEntries = lists:foldl(
         fun(#db_document{uuid = UUID, record = #share_desc{file = FileID}}, Acc) ->
             case logical_files_manager:get_file_user_dependent_name_by_uuid(FileID) of
@@ -125,7 +127,7 @@ event({action, Fun}) ->
     event({action, Fun, []});
 
 event({action, Fun, Args}) ->
-    opn_gui_utils:apply_or_redirect(?MODULE, Fun, Args, true);
+    opn_gui_utils:apply_or_redirect(?MODULE, Fun, Args);
 
 event(terminate) ->
     ok.

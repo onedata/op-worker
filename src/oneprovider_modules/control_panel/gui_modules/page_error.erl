@@ -107,5 +107,11 @@ id_to_reason_and_message(<<?error_space_permission_denied>>) ->
 id_to_reason_and_message(<<?error_space_not_found>>) ->
     {<<"Space not found">>, <<"Requested Space could not be found on the server.">>};
 
+id_to_reason_and_message(<<?error_group_permission_denied>>) ->
+    {<<"Invalid request">>, <<"You don't have permission to manage this group.">>};
+
+id_to_reason_and_message(<<?error_group_not_found>>) ->
+    {<<"Group not found">>, <<"Requested group could not be found on the server.">>};
+
 id_to_reason_and_message(_) ->
     {<<"Unknown">>, <<"No description">>}.

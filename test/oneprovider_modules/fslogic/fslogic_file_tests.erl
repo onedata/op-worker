@@ -53,27 +53,26 @@ get_file_local_location_test() ->
 
 get_real_file_size_test() ->
     %% This call shall be logic-less for non-regular files
-    ?assertEqual(0, fslogic_file:get_real_file_size(#file{type = ?DIR_TYPE})),
-    ?assertEqual(0, fslogic_file:get_real_file_size(#file{type = ?LNK_TYPE})).
+    ?assertEqual({0, -1}, fslogic_file:get_real_file_size_and_uid(#file{type = ?DIR_TYPE})),
+    ?assertEqual({0, -1}, fslogic_file:get_real_file_size_and_uid(#file{type = ?LNK_TYPE})).
 
 
 get_file_owner_test_() ->
     {foreach, fun setup/0, fun teardown/1, [fun get_file_owner/0]}.
 
 get_file_owner() ->
-    meck:expect(user_logic, get_login,
-        fun (#db_document{record = #user{login = Login}}) ->
-            Login
-        end),
-    meck:expect(user_logic, get_user,
-        fun ({uuid, "123"}) ->
-                {ok, #db_document{uuid = "123", record = #user{login = "login"}}};
-            ({uuid, _}) ->
-                {error, reason}
-        end),
+    meck:expect(user_logic, get_user, fun
+        ({uuid, "123"}) ->
+            {ok, #db_document{uuid = "123", record = #user{}}};
+        ({uuid, _}) ->
+            {error, reason}
+    end),
+    meck:expect(user_logic, get_login_with_uid, fun(#db_document{uuid = "123", record = #user{}}) ->
+        {{provider, "login"}, 123}
+    end),
 
-    ?assertMatch({"login", 123}, fslogic_file:get_file_owner(#file{uid = "123"})),
-    ?assertMatch({"", -1}, fslogic_file:get_file_owner(#file{uid = "321"})),
+    ?assertMatch({"login", 123, 123}, fslogic_file:get_file_owner(#file{uid = "123"})),
+    ?assertMatch({"", -1, -1}, fslogic_file:get_file_owner(#file{uid = "321"})),
 
     ?assert(meck:validate(user_logic)).
 

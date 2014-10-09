@@ -228,7 +228,7 @@ init_per_testcase(logging_test, Config) ->
     Nodes = test_node_starter:start_test_nodes(5),
     [CCM | _] = Nodes,
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes,
+    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes,
         [[{node_type, ccm},
             {dispatcher_port, 5055},
             {ccm_nodes, [CCM]},
@@ -260,7 +260,7 @@ init_per_testcase(init_and_cleanup_test, Config) ->
     Nodes = test_node_starter:start_test_nodes(2),
     [CCM | _] = Nodes,
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes,
+    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes,
         [[{node_type, ccm},
             {dispatcher_port, 5055},
             {ccm_nodes, [CCM]},
@@ -275,5 +275,5 @@ init_per_testcase(init_and_cleanup_test, Config) ->
 
 end_per_testcase(_, Config) ->
     Nodes = ?config(nodes, Config),
-    test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEDATA_DEPS, Nodes),
+    test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes),
     test_node_starter:stop_test_nodes(Nodes).
