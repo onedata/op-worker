@@ -30,7 +30,16 @@ init_chmod_table = function (current_mode) {
             }
         });
     }
-    $('#chbx_recursive').checkbox();
+
+    var checkbox_recursive = $('#chbx_recursive');
+    checkbox_recursive.checkbox();
+    checkbox_recursive.change(function (e) {
+        if (checkbox_recursive.is(':checked')) {
+            $('#perms_warning_overwrite').show()
+        } else {
+            $('#perms_warning_overwrite').hide()
+        }
+    });
 
     // Set checkboxes state and textbox value
     update_chmod_checkboxes(current_mode);
@@ -126,7 +135,6 @@ populate_acl_list = function (json_array, select_index) {
         if ($('#acl-form').css('display') == 'none') {
             document.getSelection().removeAllRanges();
             var new_index = parseInt($(this).attr('index'));
-            console.log(new_index);
             if (clicked_index != new_index) {
                 clicked_index = new_index;
                 $('[class*="acl-button-"]').hide();
@@ -146,6 +154,7 @@ populate_acl_list = function (json_array, select_index) {
     $('.acl-add-button').click(function (event) {
         event.stopPropagation();
         $('[class*="acl-button-"]').hide();
+        clicked_index = -1;
         add_acl_event();
     });
 

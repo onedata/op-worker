@@ -39,6 +39,28 @@
     font-size: 20px;
 }
 
+#perms_form {
+    margin-top: 18px;
+}
+
+.perms-warning {
+    width: 100%;
+    display: none;
+}
+
+.perms-warning > span {
+    font-size: 16px;
+    line-height: 20px;
+    display: inline-block;
+}
+
+.perms-warning > p {
+    margin: 0 0 0 7px;
+    font-size: 15px;
+    line-height: 20px;
+    display: inline-block;
+}
+
 #tab_posix {
 }
 

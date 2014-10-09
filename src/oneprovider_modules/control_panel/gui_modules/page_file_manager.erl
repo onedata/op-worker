@@ -978,30 +978,61 @@ show_popup(Type) ->
 
             chmod ->
                 Files = lists:map(fun({ItmPath, _}) -> ItmPath end, get_selected_items()),
-                [FirstItem | Items] = Files,
+                [FirstPath | Items] = Files,
+
+                GetTypeAndValue =
+                    fun(ItemPath) ->
+                        Item = item_find(ItemPath),
+                        case item_attr(has_acl, Item) of
+                            true ->
+                                {acl, fs_get_acl(ItemPath)};
+                            _ ->
+                                {posix, item_attr(perms, Item)}
+                        end
+                    end,
+                {FirstType, FirstValue} = GetTypeAndValue(FirstPath),
+
+                % CommonType can be undefined|acl|posix
+                % CommonValue can be undefined|list()|integer
+                {CommonType, CommonValue} = lists:foldl(
+                    fun(ItemPath, {AccCommonType, AccCommonValue}) ->
+                        {ItemType, ItemValue} = GetTypeAndValue(ItemPath),
+                        case ItemType of
+                            AccCommonType ->
+                                case ItemValue of
+                                    AccCommonValue -> {AccCommonType, AccCommonValue};
+                                    _ -> {AccCommonType, undefined}
+                                end;
+                            _ ->
+                                {undefined, undefined}
+                        end
+                    end, {FirstType, FirstValue}, Items),
+
+                ?dump({CommonType, CommonValue}),
+
                 % Compute common file perms (000 if any two are different) and check
                 % if any of the files has an ACL.
-                {HasACL, CommonPerms} = lists:foldl(
-                    fun(ItemPath, {AccHasACL, AccCurrentPerms}) ->
+                {EnableACL, AllHaveACLs, CommonPerms} = lists:foldl(
+                    fun(ItemPath, {AccHasACL, AccAllHaveACLs, AccCurrentPerms}) ->
                         Item = item_find(ItemPath),
-                        NewACL = case item_attr(has_acl, Item) of
-                                     true -> true;
-                                     _ -> AccHasACL
-                                 end,
+                        {NewACL, NewAllHaveACLs} = case item_attr(has_acl, Item) of
+                                                       true -> {true, AccAllHaveACLs};
+                                                       _ -> {AccHasACL, false}
+                                                   end,
                         NewPerms = case item_attr(perms, Item) of
                                        AccCurrentPerms -> AccCurrentPerms;
                                        _ -> 0
                                    end,
-                        {NewACL, NewPerms}
-                    end, {item_attr(has_acl, item_find(FirstItem)), item_attr(perms, item_find(FirstItem))}, Items),
+                        {NewACL, NewAllHaveACLs, NewPerms}
+                    end, {item_attr(has_acl, item_find(FirstPath)), true, item_attr(perms, item_find(FirstPath))}, Items),
 
                 % Compute common ACL, if any file has one
-                CommonACL = case HasACL of
+                CommonACL = case EnableACL of
                                 false ->
                                     [];
                                 true ->
-                                    FirstACL = fs_get_acl(FirstItem),
-                                    CurrentACL = lists:foldl(
+                                    FirstACL = fs_get_acl(FirstPath),
+                                    lists:foldl(
                                         fun(ItemPath, Acc) ->
                                             case fs_get_acl(ItemPath) of
                                                 Acc -> Acc;
@@ -1010,12 +1041,11 @@ show_popup(Type) ->
                                         end, FirstACL, Items)
                             end,
 
-                set_perms_state({Files, HasACL, CommonACL}),
+                set_perms_state({Files, EnableACL, CommonACL}),
                 ?dump(get_perms_state()),
 
                 gui_jq:wire(<<"init_chmod_table(", (integer_to_binary(CommonPerms))/binary, ");">>),
-                TDStyle = <<"border-color: rgb(82, 100, 118); width: 60px; text-align: center;">>,
-                {POSIXTabStyle, ACLTabStyle} = case HasACL of
+                {POSIXTabStyle, ACLTabStyle} = case EnableACL of
                                                    true -> {<<"display: none;">>, <<"">>};
                                                    false -> {<<"">>, <<"display: none;">>}
                                                end,
@@ -1025,9 +1055,9 @@ show_popup(Type) ->
                             #p{id = <<"perms_header_info">>, body = <<"Permissions type:">>},
                             #span{id = <<"perms_radios">>, body = [
                                 #flatui_radio{id = <<"perms_radio_posix">>, name = <<"perms_radio">>,
-                                    label_class = <<"radio radio-label">>, body = <<"POSIX">>, checked = not HasACL},
+                                    label_class = <<"radio radio-label">>, body = <<"POSIX">>, checked = not EnableACL},
                                 #flatui_radio{id = <<"perms_radio_acl">>, name = <<"perms_radio">>,
-                                    label_class = <<"radio radio-label">>, body = <<"ACL">>, checked = HasACL}
+                                    label_class = <<"radio radio-label">>, body = <<"ACL">>, checked = EnableACL}
                             ]},
                             #link{id = wire_click(<<"perms_info_button">>, {action, show_permissions_info}),
                                 title = <<"Learn about permissions">>, class = <<"glyph-link">>,
@@ -1152,8 +1182,16 @@ show_popup(Type) ->
                             #panel{class = <<"acl-info">>}
                         ]}
                     ]},
-                    #panel{style = <<"clear: both;  margin-bottom: 18px;">>},
-                    #form{class = <<"control-group">>, body = [
+                    #panel{class = <<"clearfix">>},
+                    #panel{id = <<"perms_warning_different">>, class = <<"perms-warning">>, body = [
+                        #span{class = <<"icomoon-warning">>},
+                        #p{body = <<"Selected files have different permissions. They will be overwritten by chosen permissions.">>}
+                    ]},
+                    #panel{id = <<"perms_warning_overwrite">>, class = <<"perms-warning">>, body = [
+                        #span{class = <<"icomoon-warning">>},
+                        #p{body = <<"Changing permissions recursively will overwrite <strong>ALL</strong> permissions in subdirectories.">>}
+                    ]},
+                    #form{class = <<"control-group">>, id = <<"perms_form">>, body = [
                         #flatui_checkbox{id = <<"chbx_recursive">>, label_class = <<"checkbox">>,
                             value = <<"">>, checked = false, body = <<"recursive">>,
                             label_id = <<"chbx_recursive_label">>,
@@ -1169,9 +1207,13 @@ show_popup(Type) ->
                 flatui_radio:init_radio_button(<<"perms_radio_posix">>),
                 gui_jq:wire(<<"$('#perms_radio_acl').change(function(e){change_perms_type_event($(this).is(':checked'));});">>),
                 flatui_radio:init_radio_button(<<"perms_radio_acl">>),
-                populate_acl_list(-1),
                 gui_jq:bind_element_click(<<"button_save_acl">>, <<"function() { submit_acl(); }">>),
                 gui_jq:bind_element_click(<<"ok_button">>, <<"function() { submit_perms(); }">>),
+                case EnableACL and (not AllHaveACLs) of
+                    true -> gui_jq:show(<<"perms_warning_different">>);
+                    _ -> ok
+                end,
+                populate_acl_list(-1),
                 {Body, undefined, {action, hide_popup}};
 
             share_file ->
@@ -1604,7 +1646,7 @@ item_attr_value(size, Item) ->
 item_attr_value(perms, Item) ->
     case item_attr(has_acl, Item) of
         true ->
-            #panel{style = <<"position: relative; text-align: right;">>, body = <<"ACL">>};
+            #panel{style = <<"position: relative;">>, body = <<"ACL">>};
         false ->
             Perms = item_attr(perms, Item),
             Format = [<<"r">>, <<"w">>, <<"x">>, <<"r">>, <<"w">>, <<"x">>, <<"r">>, <<"w">>, <<"x">>],
@@ -1631,7 +1673,7 @@ item_attr_value(perms, Item) ->
                            0 -> <<"000">>;
                            _ -> gui_str:format_bin("~.8B", [Perms])
                        end,
-            #panel{style = <<"position: relative; text-align: right;">>, body = [PermsTiles, <<"&nbsp;[", PermsStr/binary, "]">>]}
+            #panel{style = <<"position: relative;">>, body = [PermsTiles, <<"&nbsp;[", PermsStr/binary, "]">>]}
     end.
 
 
@@ -1807,31 +1849,40 @@ fs_chmod(Path, Perms, Recursive) ->
 
 fs_chmod(Path, Perms, Recursive, {Successful, Failed}) ->
     IsDir = item_is_dir(item_new(Path)),
-    {NewSuccessful, NewFailed} =
-        case Recursive of
-            false ->
-                case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Perms, not IsDir) of
-                    ok -> {[Path], []};
-                    Err1 -> {[], [{Path, Err1}]}
-                end;
-            true ->
-                case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Perms, not IsDir) of
-                    ok ->
-                        case IsDir of
-                            false ->
-                                {[Path], []};
-                            true ->
-                                lists:foldl(
-                                    fun(#item{path = ItemPath}, {SuccAcc, FailAcc}) ->
-                                        {Succ, Fail} = fs_chmod(ItemPath, Perms, Recursive),
-                                        {SuccAcc ++ Succ, FailAcc ++ Fail}
-                                    end, {[Path], []}, fs_list_dir(Path))
+    % Remove ACL
+    case ok of
+    % Successful unsetting of ACL
+        ok ->
+            {NewSuccessful, NewFailed} =
+                case Recursive of
+                    false ->
+                        case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Perms, not IsDir) of
+                            ok -> {[Path], []};
+                            Err1 -> {[], [{Path, Err1}]}
                         end;
-                    Err3 ->
-                        {[], [{Path, Err3}]}
-                end
-        end,
-    {Successful ++ NewSuccessful, Failed ++ NewFailed}.
+                    true ->
+                        case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Perms, not IsDir) of
+                            ok ->
+                                case IsDir of
+                                    false ->
+                                        {[Path], []};
+                                    true ->
+                                        lists:foldl(
+                                            fun(#item{path = ItemPath}, {SuccAcc, FailAcc}) ->
+                                                {Succ, Fail} = fs_chmod(ItemPath, Perms, Recursive),
+                                                {SuccAcc ++ Succ, FailAcc ++ Fail}
+                                            end, {[Path], []}, fs_list_dir(Path))
+                                end;
+                            Err3 ->
+                                {[], [{Path, Err3}]}
+                        end
+                end,
+            {Successful ++ NewSuccessful, Failed ++ NewFailed};
+
+        Err4 ->
+            % Unsetting ACL failed
+            {Successful, Failed ++ [{Path, Err4}]}
+    end.
 
 fs_has_perms(Path, CheckType) ->
     logical_files_manager:check_file_perm(gui_str:binary_to_unicode_list(Path), CheckType).

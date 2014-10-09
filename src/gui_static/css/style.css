@@ -132,3 +132,7 @@ tr.log_row:hover {
 .fw700 {
     font-weight: 700;
 }
+
+.clearfix {
+    clear: both;
+}
