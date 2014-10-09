@@ -119,20 +119,23 @@ body(SpaceDetails) ->
                     body = <<"Space privileges">>
                 },
                 space_details_table(SpaceDetails) |
-                lists:map(fun({TableId, Panel}) ->
+                lists:map(fun({TableId, Body, Panel}) ->
                     #panel{
                         body = [
                             #table{
                                 id = TableId,
                                 class = <<"table table-bordered">>,
-                                style = <<"width: 50%; margin: 0 auto; margin-top: 3em; display: none;">>
+                                style = <<"width: 50%; margin: 0 auto; margin-top: 3em;">>,
+                                body = Body
                             },
                             Panel
                         ]
                     }
                 end, [
-                    {<<"users_table">>, save_button(<<"save_users_privileges_button">>, {message, save_users_privileges})},
-                    {<<"groups_table">>, save_button(<<"save_groups_privileges_button">>, {message, save_groups_privileges})}
+                    {<<"users_table">>, privileges_table(<<"users_table">>, [<<"User">> | ?COLUMNS_NAMES], [], []),
+                        save_button(<<"save_users_privileges_button">>, {message, save_users_privileges})},
+                    {<<"groups_table">>, privileges_table(<<"groups_table">>, [<<"Group">> | ?COLUMNS_NAMES], [], []),
+                        save_button(<<"save_groups_privileges_button">>, {message, save_groups_privileges})}
                 ])
             ]
         }
@@ -187,7 +190,7 @@ save_button(ButtonId, Postback) ->
         body = #button{
             id = ButtonId,
             postback = Postback,
-            style = <<"display: none">>,
+            disabled = true,
             class = <<"btn btn-inverse btn-small">>,
             body = <<"Save">>
         }
@@ -257,93 +260,93 @@ comet_loop({error, Reason}) ->
     {error, Reason};
 
 comet_loop(#?STATE{space_id = SpaceId, new_users_privileges = NewUsersPrivileges, new_groups_privileges = NewGroupsPrivileges, access_token = AccessToken} = State) ->
-    NewState = try
-                   receive
-                       render_tables ->
-                           lists:foreach(fun({ColumnName, TableName, Privileges, ButtonId}) ->
-                               ColumnsNames = [ColumnName | ?COLUMNS_NAMES],
-                               gui_jq:update(TableName, privileges_table(TableName, ColumnsNames, ?PRIVILEGES_NAMES, Privileges)),
-                               gui_jq:fade_in(TableName, 500),
-                               gui_jq:show(ButtonId),
-                               case Privileges of
-                                   [] ->
-                                       gui_jq:prop(ButtonId, <<"disabled">>, <<"disabled">>);
-                                   _ -> ok
-                               end
-                           end, [
-                               {<<"User">>, <<"users_table">>, NewUsersPrivileges, <<"save_users_privileges_button">>},
-                               {<<"Group">>, <<"groups_table">>, NewGroupsPrivileges, <<"save_groups_privileges_button">>}
-                           ]),
-                           State;
+    NewCometLoopState =
+        try
+            receive
+                render_tables ->
+                    lists:foreach(fun({ColumnName, TableName, Privileges, ButtonId}) ->
+                        ColumnsNames = [ColumnName | ?COLUMNS_NAMES],
+                        gui_jq:update(TableName, privileges_table(TableName, ColumnsNames, ?PRIVILEGES_NAMES, Privileges)),
+                        case Privileges of
+                            [] ->
+                                ok;
+                            _ ->
+                                gui_jq:prop(ButtonId, <<"disabled">>, <<"">>)
+                        end
+                    end, [
+                        {<<"User">>, <<"users_table">>, NewUsersPrivileges, <<"save_users_privileges_button">>},
+                        {<<"Group">>, <<"groups_table">>, NewGroupsPrivileges, <<"save_groups_privileges_button">>}
+                    ]),
+                    State;
 
-                       {checkbox_toggled, <<"users_privileges">>, Name, Id, Privilege} ->
-                           {_, _, Privileges} = lists:keyfind(Id, 2, NewUsersPrivileges),
-                           case lists:member(Privilege, Privileges) of
-                               true ->
-                                   State#?STATE{new_users_privileges = [{Name, Id, lists:delete(Privilege, Privileges)} | lists:keydelete(Id, 2, NewUsersPrivileges)]};
-                               _ ->
-                                   State#?STATE{new_users_privileges = [{Name, Id, [Privilege | Privileges]} | lists:keydelete(Id, 2, NewUsersPrivileges)]}
-                           end;
+                {checkbox_toggled, <<"users_privileges">>, Name, Id, Privilege} ->
+                    {_, _, Privileges} = lists:keyfind(Id, 2, NewUsersPrivileges),
+                    case lists:member(Privilege, Privileges) of
+                        true ->
+                            State#?STATE{new_users_privileges = [{Name, Id, lists:delete(Privilege, Privileges)} | lists:keydelete(Id, 2, NewUsersPrivileges)]};
+                        _ ->
+                            State#?STATE{new_users_privileges = [{Name, Id, [Privilege | Privileges]} | lists:keydelete(Id, 2, NewUsersPrivileges)]}
+                    end;
 
-                       {checkbox_toggled, <<"groups_privileges">>, Name, Id, Privilege} ->
-                           {_, _, Privileges} = lists:keyfind(Id, 2, NewGroupsPrivileges),
-                           case lists:member(Privilege, Privileges) of
-                               true ->
-                                   State#?STATE{new_groups_privileges = [{Name, Id, lists:delete(Privilege, Privileges)} | lists:keydelete(Id, 2, NewGroupsPrivileges)]};
-                               _ ->
-                                   State#?STATE{new_groups_privileges = [{Name, Id, [Privilege | Privileges]} | lists:keydelete(Id, 2, NewGroupsPrivileges)]}
-                           end;
+                {checkbox_toggled, <<"groups_privileges">>, Name, Id, Privilege} ->
+                    {_, _, Privileges} = lists:keyfind(Id, 2, NewGroupsPrivileges),
+                    case lists:member(Privilege, Privileges) of
+                        true ->
+                            State#?STATE{new_groups_privileges = [{Name, Id, lists:delete(Privilege, Privileges)} | lists:keydelete(Id, 2, NewGroupsPrivileges)]};
+                        _ ->
+                            State#?STATE{new_groups_privileges = [{Name, Id, [Privilege | Privileges]} | lists:keydelete(Id, 2, NewGroupsPrivileges)]}
+                    end;
 
-                       save_users_privileges ->
-                           try
-                               lists:foreach(fun({_, UserId, NewUserPrivileges}) ->
-                                   {_, _, OldUserPrivileges} = lists:keyfind(UserId, 2, State#?STATE.users_privileges),
-                                   OldUserPrivilegesSorted = lists:sort(OldUserPrivileges),
-                                   case lists:sort(NewUserPrivileges) of
-                                       OldUserPrivilegesSorted ->
-                                           ok;
-                                       NewUserPrivilegesSorted ->
-                                           ok = gr_spaces:set_user_privileges({user, AccessToken}, SpaceId, UserId, [{<<"privileges">>, NewUserPrivilegesSorted}])
-                                   end
-                               end, NewUsersPrivileges),
-                               opn_gui_utils:message(<<"ok_message">>, <<"Users privileges saved successfully.">>),
-                               State
-                           catch
-                               _:Reason ->
-                                   ?error("Cannot save users privileges: ~p", [Reason]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot save users privileges.<br>Please try again later.">>),
-                                   State
-                           end;
+                save_users_privileges ->
+                    try
+                        lists:foreach(fun({_, UserId, NewUserPrivileges}) ->
+                            {_, _, OldUserPrivileges} = lists:keyfind(UserId, 2, State#?STATE.users_privileges),
+                            OldUserPrivilegesSorted = lists:sort(OldUserPrivileges),
+                            case lists:sort(NewUserPrivileges) of
+                                OldUserPrivilegesSorted ->
+                                    ok;
+                                NewUserPrivilegesSorted ->
+                                    ok = gr_spaces:set_user_privileges({user, AccessToken}, SpaceId, UserId, [{<<"privileges">>, NewUserPrivilegesSorted}])
+                            end
+                        end, NewUsersPrivileges),
+                        opn_gui_utils:message(<<"ok_message">>, <<"Users privileges saved successfully.">>),
+                        State
+                    catch
+                        _:Reason ->
+                            ?error("Cannot save users privileges: ~p", [Reason]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot save users privileges.<br>Please try again later.">>),
+                            State
+                    end;
 
-                       save_groups_privileges ->
-                           try
-                               lists:foreach(fun({_, GroupId, NewGroupPrivileges}) ->
-                                   {_, _, OldGroupPrivileges} = lists:keyfind(GroupId, 2, State#?STATE.groups_privileges),
-                                   OldGroupPrivilegesSorted = lists:sort(OldGroupPrivileges),
-                                   case lists:sort(NewGroupPrivileges) of
-                                       OldGroupPrivilegesSorted ->
-                                           ok;
-                                       NewGroupPrivilegesSorted ->
-                                           ok = gr_spaces:set_group_privileges({group, AccessToken}, SpaceId, GroupId, [{<<"privileges">>, NewGroupPrivilegesSorted}])
-                                   end
-                               end, NewGroupsPrivileges),
-                               opn_gui_utils:message(<<"ok_message">>, <<"Groups privileges saved successfully.">>),
-                               State
-                           catch
-                               _:Reason ->
-                                   ?error("Cannot save groups privileges: ~p", [Reason]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot save groups privileges.<br>Please try again later.">>),
-                                   State
-                           end
-                   end
-               catch Type:Message ->
-                   ?error_stacktrace("Comet process exception: ~p:~p", [Type, Message]),
-                   opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
-                   {error, Message}
-               end,
+                save_groups_privileges ->
+                    try
+                        lists:foreach(fun({_, GroupId, NewGroupPrivileges}) ->
+                            {_, _, OldGroupPrivileges} = lists:keyfind(GroupId, 2, State#?STATE.groups_privileges),
+                            OldGroupPrivilegesSorted = lists:sort(OldGroupPrivileges),
+                            case lists:sort(NewGroupPrivileges) of
+                                OldGroupPrivilegesSorted ->
+                                    ok;
+                                NewGroupPrivilegesSorted ->
+                                    ok = gr_spaces:set_group_privileges({group, AccessToken}, SpaceId, GroupId, [{<<"privileges">>, NewGroupPrivilegesSorted}])
+                            end
+                        end, NewGroupsPrivileges),
+                        opn_gui_utils:message(<<"ok_message">>, <<"Groups privileges saved successfully.">>),
+                        State
+                    catch
+                        _:Reason ->
+                            ?error("Cannot save groups privileges: ~p", [Reason]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot save groups privileges.<br>Please try again later.">>),
+                            State
+                    end
+            end
+        catch Type:Message ->
+            ?error_stacktrace("Comet process exception: ~p:~p", [Type, Message]),
+            opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+            {error, Message}
+        end,
     gui_jq:wire(<<"$('#main_spinner').delay(300).hide(0);">>, false),
     gui_comet:flush(),
-    ?MODULE:comet_loop(NewState).
+    ?MODULE:comet_loop(NewCometLoopState).
 
 
 %% event/1

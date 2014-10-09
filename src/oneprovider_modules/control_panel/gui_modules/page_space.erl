@@ -122,7 +122,7 @@ body(SpaceDetails) ->
                     body = <<"Manage Space">>
                 },
                 space_details_table(SpaceDetails) |
-                lists:map(fun({TableId, Panel}) ->
+                lists:map(fun({TableId, Body, Panel}) ->
                     #panel{
                         body = [
                             #table{
@@ -130,16 +130,16 @@ body(SpaceDetails) ->
                                 style = <<"width: 50%; margin: 0 auto; margin-top: 3em; table-layout: fixed;">>,
                                 body = #tbody{
                                     id = TableId,
-                                    style = <<"display: none;">>
+                                    body = Body
                                 }
                             },
                             Panel
                         ]
                     }
                 end, [
-                    {<<"providers_table">>, providers_panel()},
-                    {<<"users_table">>, users_panel()},
-                    {<<"groups_table">>, groups_panel()}
+                    {<<"providers_table">>, providers_table_collapsed([]), providers_panel()},
+                    {<<"users_table">>, users_table_collapsed([]), users_panel()},
+                    {<<"groups_table">>, groups_table_collapsed([]), groups_panel()}
                 ])
             ]
         }
@@ -533,6 +533,7 @@ detail(Content, Title, Visible, Postback, Class) ->
                 class = <<"glyph-link">>,
                 postback = Postback,
                 body = #span{
+                    style = <<"vertical-align: middle;">>,
                     class = Class
                 }
             }
@@ -618,150 +619,159 @@ comet_loop({error, Reason}) ->
 
 comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, users_details = UsersDetails,
     groups_details = GroupsDetails, gruid = GRUID, access_token = AccessToken} = State) ->
-    NewState = try
-                   receive
-                       render_tables ->
-                           gui_jq:update(<<"providers_table">>, providers_table_collapsed(ProvidersDetails)),
-                           gui_jq:fade_in(<<"providers_table">>, 500),
-                           gui_jq:update(<<"users_table">>, users_table_collapsed(UsersDetails)),
-                           gui_jq:fade_in(<<"users_table">>, 500),
-                           gui_jq:update(<<"groups_table">>, groups_table_collapsed(GroupsDetails)),
-                           gui_jq:fade_in(<<"groups_table">>, 500),
-                           State;
+    NewCometLoopState =
+        try
+            receive
+                {render_tables, Privileges} ->
+                    gui_jq:update(<<"providers_table">>, providers_table_collapsed(ProvidersDetails)),
+                    gui_jq:update(<<"users_table">>, users_table_collapsed(UsersDetails)),
+                    gui_jq:update(<<"groups_table">>, groups_table_collapsed(GroupsDetails)),
 
-                       request_support ->
-                           case gr_spaces:get_invite_provider_token({user, AccessToken}, SpaceId) of
-                               {ok, Token} ->
-                                   Message = <<"Give the token below to a provider willing to support your Space.",
-                                   "<input id=\"support_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
-                                   " width: 80%;\" value=\"", Token/binary, "\">">>,
-                                   gui_jq:info_popup(<<"Request support">>, Message, <<"return true;">>, <<"btn-inverse">>),
-                                   gui_jq:wire(<<"box.on('shown',function(){ $(\"#support_token_textbox\").focus().select(); });">>);
-                               Other ->
-                                   ?error("Cannot get support token for Space with ID ~p: ~p", [SpaceId, Other]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot get support token for Space with ID: <b>", SpaceId, "</b>."
-                                   "<br>Please try again later.">>)
-                           end,
-                           State;
+                    lists:foreach(fun
+                        ({false, _, _, _}) -> ok;
+                        ({true, Module, Function, Args}) -> apply(Module, Function, Args)
+                    end, [
+                        {lists:member(<<"space_change_data">>, Privileges), gui_jq, show, [<<"change_space_name_span">>]},
+                        {lists:member(<<"space_invite_user">>, Privileges), gui_jq, prop, [<<"invite_user_button">>, <<"disabled">>, <<"">>]},
+                        {lists:member(<<"space_invite_group">>, Privileges), gui_jq, prop, [<<"invite_group_button">>, <<"disabled">>, <<"">>]},
+                        {lists:member(<<"space_add_provider">>, Privileges), gui_jq, prop, [<<"request_support_button">>, <<"disabled">>, <<"">>]}
+                    ]),
 
-                       invite_user ->
-                           case gr_spaces:get_invite_user_token({user, AccessToken}, SpaceId) of
-                               {ok, Token} ->
-                                   Message = <<"Give the token below to a user willing to join your Space.",
-                                   "<input id=\"join_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
-                                   " width: 80%;\" value=\"", Token/binary, "\">">>,
-                                   gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>, <<"btn-inverse">>),
-                                   gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_token_textbox\").focus().select(); });">>);
-                               Other ->
-                                   ?error("Cannot get user invitation token for Space with ID ~p: ~p", [SpaceId, Other]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."
-                                   "<br>Please try again later.">>)
-                           end,
-                           State;
+                    State;
 
-                       invite_group ->
-                           case gr_spaces:get_invite_group_token({user, AccessToken}, SpaceId) of
-                               {ok, Token} ->
-                                   Message = <<"Give the token below to a group willing to join your Space.",
-                                   "<input id=\"join_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
-                                   " width: 80%;\" value=\"", Token/binary, "\">">>,
-                                   gui_jq:info_popup(<<"Invite group">>, Message, <<"return true;">>, <<"btn-inverse">>),
-                                   gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_token_textbox\").focus().select(); });">>);
-                               Other ->
-                                   ?error("Cannot get group invitation token for Space with ID ~p: ~p", [SpaceId, Other]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."
-                                   "<br>Please try again later.">>)
-                           end,
-                           State;
+                request_support ->
+                    case gr_spaces:get_invite_provider_token({user, AccessToken}, SpaceId) of
+                        {ok, Token} ->
+                            Message = <<"Give the token below to a provider willing to support your Space.",
+                            "<input id=\"support_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
+                            " width: 80%;\" value=\"", Token/binary, "\">">>,
+                            gui_jq:info_popup(<<"Request support">>, Message, <<"return true;">>, <<"btn-inverse">>),
+                            gui_jq:wire(<<"box.on('shown',function(){ $(\"#support_token_textbox\").focus().select(); });">>);
+                        Other ->
+                            ?error("Cannot get support token for Space with ID ~p: ~p", [SpaceId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get support token for Space with ID: <b>", SpaceId, "</b>."
+                            "<br>Please try again later.">>)
+                    end,
+                    State;
 
-                       {change_space_name, #space_details{id = SpaceId} = SpaceDetails, NewSpaceName} ->
-                           case gr_spaces:modify_details({user, AccessToken}, SpaceId, [{<<"name">>, NewSpaceName}]) of
-                               ok ->
-                                   gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
-                                   gui_jq:update(<<"space_name">>, space_name(SpaceDetails#space_details{name = NewSpaceName}));
-                               Other ->
-                                   ?error("Cannot change name of Space ~p: ~p", [SpaceDetails, Other]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot change name of Space with ID:  <b>", SpaceId, "</b>."
-                                   "<br>Please try again later.">>),
-                                   gui_jq:update(<<"space_name">>, space_name(SpaceDetails))
-                           end,
-                           State;
+                invite_user ->
+                    case gr_spaces:get_invite_user_token({user, AccessToken}, SpaceId) of
+                        {ok, Token} ->
+                            Message = <<"Give the token below to a user willing to join your Space.",
+                            "<input id=\"join_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
+                            " width: 80%;\" value=\"", Token/binary, "\">">>,
+                            gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>, <<"btn-inverse">>),
+                            gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_token_textbox\").focus().select(); });">>);
+                        Other ->
+                            ?error("Cannot get user invitation token for Space with ID ~p: ~p", [SpaceId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."
+                            "<br>Please try again later.">>)
+                    end,
+                    State;
 
-                       {remove_provider, RowId, ProviderId} ->
-                           case gr_spaces:remove_provider({user, AccessToken}, SpaceId, ProviderId) of
-                               ok ->
-                                   opn_gui_utils:message(<<"ok_message">>, <<"Provider with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
-                                   gui_jq:remove(RowId),
-                                   State#?STATE{providers_details = lists:keydelete(RowId, 1, ProvidersDetails)};
-                               Other ->
-                                   ?error("Cannot remove provider with ID ~p: ~p", [ProviderId, Other]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot remove provider with ID: <b>", ProviderId/binary, "</b>.<br>Please try again later.">>),
-                                   State
-                           end;
+                invite_group ->
+                    case gr_spaces:get_invite_group_token({user, AccessToken}, SpaceId) of
+                        {ok, Token} ->
+                            Message = <<"Give the token below to a group willing to join your Space.",
+                            "<input id=\"join_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
+                            " width: 80%;\" value=\"", Token/binary, "\">">>,
+                            gui_jq:info_popup(<<"Invite group">>, Message, <<"return true;">>, <<"btn-inverse">>),
+                            gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_token_textbox\").focus().select(); });">>);
+                        Other ->
+                            ?error("Cannot get group invitation token for Space with ID ~p: ~p", [SpaceId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."
+                            "<br>Please try again later.">>)
+                    end,
+                    State;
 
-                       {remove_user, RowId, UserId} ->
-                           case gr_spaces:remove_user({user, AccessToken}, SpaceId, UserId) of
-                               ok ->
-                                   opn_gui_utils:message(<<"ok_message">>, <<"User with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
-                                   gui_jq:remove(RowId),
-                                   State#?STATE{users_details = lists:keydelete(RowId, 1, UsersDetails)};
-                               Other ->
-                                   ?error("Cannot remove user with ID ~p: ~p", [UserId, Other]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot remove user with ID: <b>", UserId/binary, "</b>.<br>Please try again later.">>),
-                                   State
-                           end;
+                {change_space_name, #space_details{id = SpaceId} = SpaceDetails, NewSpaceName} ->
+                    case gr_spaces:modify_details({user, AccessToken}, SpaceId, [{<<"name">>, NewSpaceName}]) of
+                        ok ->
+                            gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
+                            gui_jq:update(<<"space_name">>, space_name(SpaceDetails#space_details{name = NewSpaceName}));
+                        Other ->
+                            ?error("Cannot change name of Space ~p: ~p", [SpaceDetails, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot change name of Space with ID:  <b>", SpaceId, "</b>."
+                            "<br>Please try again later.">>),
+                            gui_jq:update(<<"space_name">>, space_name(SpaceDetails))
+                    end,
+                    State;
 
-                       {remove_group, RowId, GroupId} ->
-                           case gr_spaces:remove_group({user, AccessToken}, SpaceId, GroupId) of
-                               ok ->
-                                   opn_gui_utils:message(<<"ok_message">>, <<"Group with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
-                                   gui_jq:remove(RowId),
-                                   State#?STATE{groups_details = lists:keydelete(RowId, 1, GroupsDetails)};
-                               Other ->
-                                   ?error("Cannot remove group with ID ~p: ~p", [GroupId, Other]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot remove group with ID: <b>", GroupId/binary, "</b>.<br>Please try again later.">>),
-                                   State
-                           end;
+                {remove_provider, RowId, ProviderId} ->
+                    case gr_spaces:remove_provider({user, AccessToken}, SpaceId, ProviderId) of
+                        ok ->
+                            opn_gui_utils:message(<<"ok_message">>, <<"Provider with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
+                            gui_jq:remove(RowId),
+                            State#?STATE{providers_details = lists:keydelete(RowId, 1, ProvidersDetails)};
+                        Other ->
+                            ?error("Cannot remove provider with ID ~p: ~p", [ProviderId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot remove provider with ID: <b>", ProviderId/binary, "</b>.<br>Please try again later.">>),
+                            State
+                    end;
 
-                       Event ->
-                           case Event of
-                               collapse_providers_table ->
-                                   gui_jq:update(<<"providers_table">>, providers_table_collapsed(ProvidersDetails));
-                               expand_providers_table ->
-                                   gui_jq:update(<<"providers_table">>, providers_table_expanded(ProvidersDetails));
-                               {collapse_provider_row, RowId, Privileges, ProviderDetails} ->
-                                   gui_jq:update(RowId, provider_row_collapsed(RowId, Privileges, ProviderDetails));
-                               {expand_provider_row, RowId, Privileges, ProviderDetails} ->
-                                   gui_jq:update(RowId, provider_row_expanded(RowId, Privileges, ProviderDetails));
-                               collapse_users_table ->
-                                   gui_jq:update(<<"users_table">>, users_table_collapsed(UsersDetails));
-                               expand_users_table ->
-                                   gui_jq:update(<<"users_table">>, users_table_expanded(UsersDetails));
-                               {collapse_user_row, RowId, Privileges, UserDetails} ->
-                                   gui_jq:update(RowId, user_row_collapsed(RowId, Privileges, UserDetails));
-                               {expand_user_row, RowId, Privileges, UserDetails} ->
-                                   gui_jq:update(RowId, user_row_expanded(RowId, Privileges, UserDetails));
-                               collapse_groups_table ->
-                                   gui_jq:update(<<"groups_table">>, groups_table_collapsed(GroupsDetails));
-                               expand_groups_table ->
-                                   gui_jq:update(<<"groups_table">>, groups_table_expanded(GroupsDetails));
-                               {collapse_group_row, RowId, Privileges, GroupDetails} ->
-                                   gui_jq:update(RowId, group_row_collapsed(RowId, Privileges, GroupDetails));
-                               {expand_group_row, RowId, Privileges, GroupDetails} ->
-                                   gui_jq:update(RowId, group_row_expanded(RowId, Privileges, GroupDetails));
-                               _ ->
-                                   ok
-                           end,
-                           State
-                   end
-               catch Type:Reason ->
-                   ?error_stacktrace("Comet process exception: ~p:~p", [Type, Reason]),
-                   opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
-                   {error, Reason}
-               end,
+                {remove_user, RowId, UserId} ->
+                    case gr_spaces:remove_user({user, AccessToken}, SpaceId, UserId) of
+                        ok ->
+                            opn_gui_utils:message(<<"ok_message">>, <<"User with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
+                            gui_jq:remove(RowId),
+                            State#?STATE{users_details = lists:keydelete(RowId, 1, UsersDetails)};
+                        Other ->
+                            ?error("Cannot remove user with ID ~p: ~p", [UserId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot remove user with ID: <b>", UserId/binary, "</b>.<br>Please try again later.">>),
+                            State
+                    end;
+
+                {remove_group, RowId, GroupId} ->
+                    case gr_spaces:remove_group({user, AccessToken}, SpaceId, GroupId) of
+                        ok ->
+                            opn_gui_utils:message(<<"ok_message">>, <<"Group with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
+                            gui_jq:remove(RowId),
+                            State#?STATE{groups_details = lists:keydelete(RowId, 1, GroupsDetails)};
+                        Other ->
+                            ?error("Cannot remove group with ID ~p: ~p", [GroupId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot remove group with ID: <b>", GroupId/binary, "</b>.<br>Please try again later.">>),
+                            State
+                    end;
+
+                Event ->
+                    case Event of
+                        collapse_providers_table ->
+                            gui_jq:update(<<"providers_table">>, providers_table_collapsed(ProvidersDetails));
+                        expand_providers_table ->
+                            gui_jq:update(<<"providers_table">>, providers_table_expanded(ProvidersDetails));
+                        {collapse_provider_row, RowId, Privileges, ProviderDetails} ->
+                            gui_jq:update(RowId, provider_row_collapsed(RowId, Privileges, ProviderDetails));
+                        {expand_provider_row, RowId, Privileges, ProviderDetails} ->
+                            gui_jq:update(RowId, provider_row_expanded(RowId, Privileges, ProviderDetails));
+                        collapse_users_table ->
+                            gui_jq:update(<<"users_table">>, users_table_collapsed(UsersDetails));
+                        expand_users_table ->
+                            gui_jq:update(<<"users_table">>, users_table_expanded(UsersDetails));
+                        {collapse_user_row, RowId, Privileges, UserDetails} ->
+                            gui_jq:update(RowId, user_row_collapsed(RowId, Privileges, UserDetails));
+                        {expand_user_row, RowId, Privileges, UserDetails} ->
+                            gui_jq:update(RowId, user_row_expanded(RowId, Privileges, UserDetails));
+                        collapse_groups_table ->
+                            gui_jq:update(<<"groups_table">>, groups_table_collapsed(GroupsDetails));
+                        expand_groups_table ->
+                            gui_jq:update(<<"groups_table">>, groups_table_expanded(GroupsDetails));
+                        {collapse_group_row, RowId, Privileges, GroupDetails} ->
+                            gui_jq:update(RowId, group_row_collapsed(RowId, Privileges, GroupDetails));
+                        {expand_group_row, RowId, Privileges, GroupDetails} ->
+                            gui_jq:update(RowId, group_row_expanded(RowId, Privileges, GroupDetails));
+                        _ ->
+                            ok
+                    end,
+                    State
+            end
+        catch Type:Reason ->
+            ?error_stacktrace("Comet process exception: ~p:~p", [Type, Reason]),
+            opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+            {error, Reason}
+        end,
     gui_jq:wire(<<"$('#main_spinner').delay(300).hide(0);">>, false),
     gui_comet:flush(),
-    ?MODULE:comet_loop(NewState).
+    ?MODULE:comet_loop(NewCometLoopState).
 
 
 %% event/1
@@ -794,15 +804,6 @@ event(init) ->
         {GroupsDetails, _} = GetDetailsFun(GroupsIds, get_group_details, <<"group_">>),
 
         gui_jq:bind_key_to_click_on_class(<<"13">>, <<"confirm">>),
-        lists:foreach(fun
-            ({false, _, _, _}) -> ok;
-            ({true, Module, Function, Args}) -> apply(Module, Function, Args)
-        end, [
-            {lists:member(<<"space_change_data">>, Privileges), gui_jq, show, [<<"change_space_name_span">>]},
-            {lists:member(<<"space_invite_user">>, Privileges), gui_jq, prop, [<<"invite_user_button">>, <<"disabled">>, <<"">>]},
-            {lists:member(<<"space_invite_group">>, Privileges), gui_jq, prop, [<<"invite_group_button">>, <<"disabled">>, <<"">>]},
-            {lists:member(<<"space_add_provider">>, Privileges), gui_jq, prop, [<<"request_support_button">>, <<"disabled">>, <<"">>]}
-        ]),
 
         gui_jq:wire(#api{name = "remove_provider", tag = "remove_provider"}, false),
         gui_jq:wire(#api{name = "remove_user", tag = "remove_user"}, false),
@@ -813,7 +814,7 @@ event(init) ->
                 groups_details = GroupsDetails, gruid = GRUID, access_token = AccessToken})
         end),
         put(?COMET_PID, Pid),
-        Pid ! render_tables
+        Pid ! {render_tables, Privileges}
     catch
         _:Reason ->
             ?error("Cannot initialize page ~p: ~p", [?MODULE, Reason]),

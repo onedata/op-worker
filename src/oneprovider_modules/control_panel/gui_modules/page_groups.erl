@@ -123,7 +123,7 @@ body() ->
                     style = <<"width: 50%; margin: 0 auto; margin-top: 30px; table-layout: fixed;">>,
                     body = #tbody{
                         id = <<"groups_table">>,
-                        style = <<"display: none;">>
+                        body = groups_table_collapsed([])
                     }
                 }
             ]
@@ -227,10 +227,11 @@ group_row_expanded(RowId, Privileges, #group_details{id = GroupId, name = GroupN
                 {true, #link{
                     id = LinkId,
                     title = LinkTitle,
-                    style = <<"font-size: large; margin-right: 1em;">>,
+                    style = <<"font-size: large; margin-right: 1em; vertical-align: middle;">>,
                     class = <<"glyph-link">>,
                     postback = LinkPostback,
                     body = #span{
+                        style = <<"vertical-align: middle;">>,
                         class = SpanClass
                     }
                 }};
@@ -375,7 +376,6 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
 
                 render_groups_table ->
                     gui_jq:update(<<"groups_table">>, groups_table_collapsed(GroupsDetails)),
-                    gui_jq:fade_in(<<"groups_table">>, 500),
                     State;
 
                 Event ->

@@ -123,7 +123,7 @@ body() ->
                     style = <<"width: 50%; margin: 0 auto; margin-top: 30px; table-layout: fixed;">>,
                     body = #tbody{
                         id = <<"spaces_table">>,
-                        style = <<"display: none;">>
+                        body = spaces_table_collapsed([])
                     }
                 }
             ]
@@ -243,10 +243,11 @@ space_row_expanded(RowId, Privileges, #space_details{id = SpaceId, name = SpaceN
                 {true, #link{
                     id = LinkId,
                     title = LinkTitle,
-                    style = <<"font-size: large; margin-right: 1em;">>,
+                    style = <<"font-size: large; margin-right: 1em; vertical-align: middle;">>,
                     class = <<"glyph-link">>,
                     postback = LinkPostback,
                     body = #span{
+                        style = <<"vertical-align: middle;">>,
                         class = SpanClass
                     }
                 }};
@@ -424,7 +425,6 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
 
                 render_spaces_table ->
                     gui_jq:update(<<"spaces_table">>, spaces_table_collapsed(SpacesDetails)),
-                    gui_jq:fade_in(<<"spaces_table">>, 500),
                     State;
 
                 Event ->

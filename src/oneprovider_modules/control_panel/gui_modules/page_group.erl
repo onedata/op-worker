@@ -30,7 +30,7 @@
 
 %% Comet process state
 -define(STATE, comet_state).
--record(?STATE, {group_id, spaces_details, users_details, access_token}).
+-record(?STATE, {counter = 1, group_id, spaces_details, users_details, gruid, access_token}).
 
 %% ====================================================================
 %% API functions
@@ -121,7 +121,7 @@ body(GroupDetails) ->
                     body = <<"Manage group">>
                 },
                 group_details_table(GroupDetails) |
-                lists:map(fun({TableId, Panel}) ->
+                lists:map(fun({TableId, Body, Panel}) ->
                     #panel{
                         body = [
                             #table{
@@ -129,15 +129,15 @@ body(GroupDetails) ->
                                 style = <<"width: 50%; margin: 0 auto; margin-top: 3em; table-layout: fixed;">>,
                                 body = #tbody{
                                     id = TableId,
-                                    style = <<"display: none;">>
+                                    body = Body
                                 }
                             },
                             Panel
                         ]
                     }
                 end, [
-                    {<<"spaces_table">>, spaces_panel()},
-                    {<<"users_table">>, users_panel()}
+                    {<<"spaces_table">>, spaces_table_collapsed([]), spaces_panel()},
+                    {<<"users_table">>, users_table_collapsed([]), users_panel()}
                 ])
             ]
         }
@@ -253,13 +253,20 @@ change_group_name(GroupDetails) ->
 spaces_panel() ->
     #panel{
         style = <<"margin: 0 auto; width: 50%; margin-top: 30px; text-align: center;">>,
-        body = #button{
-            id = <<"request_space_creation_button">>,
-            disabled = true,
-            postback = {message, request_space_creation},
-            class = <<"btn btn-inverse btn-small">>,
-            body = <<"Request Space creation">>
-        }
+        body = lists:map(fun({ButtonId, ButtonPostback, ButtonBody}) ->
+            #button{
+                id = ButtonId,
+                postback = ButtonPostback,
+                disabled = true,
+                class = <<"btn btn-inverse btn-small">>,
+                style = <<"margin-right: 0.5em; margin-left: 0.5em;">>,
+                body = ButtonBody
+            }
+        end, [
+            {<<"create_space_button">>, create_space, <<"Create Space">>},
+            {<<"join_space_button">>, join_space, <<"Join Space">>},
+            {<<"request_space_creation_button">>, {message, request_space_creation}, <<"Request Space creation">>}
+        ])
     }.
 
 
@@ -391,7 +398,7 @@ space_row_collapsed(RowId, Privileges, #space_details{id = SpaceId, name = Space
 %% ====================================================================
 space_row_expanded(RowId, Privileges, #space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
     Details = [
-        {<<"Name">>, detail(SpaceName, <<"Remove space">>, lists:member(<<"space_remove_space">>, Privileges), {remove_space, RowId, SpaceDetails}, <<"icomoon-remove">>)},
+        {<<"Name">>, detail(SpaceName, <<"Leave space">>, lists:member(<<"group_leave_space">>, Privileges), {leave_space, RowId, SpaceDetails}, <<"icomoon-exit">>)},
         {<<"Space ID">>, #span{style = ?DETAIL_STYLE, body = SpaceId}}
     ],
     NavigationBody = opn_gui_utils:collapse_button({message, {collapse_space_row, RowId, Privileges, SpaceDetails}}),
@@ -447,6 +454,7 @@ detail(Content, Title, Visible, Postback, Class) ->
                 class = <<"glyph-link">>,
                 postback = Postback,
                 body = #span{
+                    style = <<"vertical-align: middle;">>,
                     class = Class
                 }
             }
@@ -517,6 +525,20 @@ row_expanded(Details, NavigationBody) ->
     ].
 
 
+%% add_space_row/3
+%% ====================================================================
+%% @doc Adds collapsed Space settings row to Spaces settings table.
+-spec add_space_row(RowId :: binary(), Privileges :: [binary()], SpaceDetails :: #space_details{}) -> Result when
+    Result :: ok.
+%% ====================================================================
+add_space_row(RowId, Privileges, SpaceDetails) ->
+    Row = #tr{
+        id = RowId,
+        cells = space_row_collapsed(RowId, Privileges, SpaceDetails)
+    },
+    gui_jq:insert_bottom(<<"spaces_table">>, Row).
+
+
 %% ====================================================================
 %% Events handling
 %% ====================================================================
@@ -530,113 +552,163 @@ row_expanded(Details, NavigationBody) ->
 comet_loop({error, Reason}) ->
     {error, Reason};
 
-comet_loop(#?STATE{group_id = GroupId, spaces_details = SpacesDetails, users_details = UsersDetails, access_token = AccessToken} = State) ->
-    NewState = try
-                   receive
-                       render_tables ->
-                           gui_jq:update(<<"spaces_table">>, spaces_table_collapsed(SpacesDetails)),
-                           gui_jq:fade_in(<<"spaces_table">>, 500),
-                           gui_jq:update(<<"users_table">>, users_table_collapsed(UsersDetails)),
-                           gui_jq:fade_in(<<"users_table">>, 500),
-                           State;
+comet_loop(#?STATE{counter = Counter, group_id = GroupId, spaces_details = SpacesDetails,
+    users_details = UsersDetails, gruid = GRUID, access_token = AccessToken} = State) ->
+    NewCometLoopState =
+        try
+            receive
+                {render_tables, Privileges} ->
+                    gui_jq:update(<<"spaces_table">>, spaces_table_collapsed(SpacesDetails)),
+                    gui_jq:update(<<"users_table">>, users_table_collapsed(UsersDetails)),
 
-                       request_space_creation ->
-                           case gr_groups:get_create_space_token({user, AccessToken}, GroupId) of
-                               {ok, Token} ->
-                                   Message = <<"Give the token below to a provider willing to create Space for your group.",
-                                   "<input id=\"create_space_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
-                                   " width: 80%;\" value=\"", Token/binary, "\">">>,
-                                   gui_jq:info_popup(<<"Request Space creation">>, Message, <<"return true;">>, <<"btn-inverse">>),
-                                   gui_jq:wire(<<"box.on('shown',function(){ $(\"#create_space_token_textbox\").focus().select(); });">>);
-                               Other ->
-                                   ?error("Cannot get support token for group with ID ~p: ~p", [GroupId, Other]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot get Space creation token for group with ID: <b>", GroupId, "</b>."
-                                   "<br>Please try again later.">>)
-                           end,
-                           State;
+                    lists:foreach(fun
+                        ({false, _, _, _}) -> ok;
+                        ({true, Module, Function, Args}) -> apply(Module, Function, Args)
+                    end, [
+                        {lists:member(<<"group_change_data">>, Privileges), gui_jq, show, [<<"change_group_name_span">>]},
+                        {lists:member(<<"group_invite_user">>, Privileges), gui_jq, prop, [<<"invite_user_button">>, <<"disabled">>, <<"">>]},
+                        {lists:member(<<"group_create_space">>, Privileges), gui_jq, prop, [<<"create_space_button">>, <<"disabled">>, <<"">>]},
+                        {lists:member(<<"group_join_space">>, Privileges), gui_jq, prop, [<<"join_space_button">>, <<"disabled">>, <<"">>]},
+                        {lists:member(<<"group_create_space_token">>, Privileges), gui_jq, prop, [<<"request_space_creation_button">>, <<"disabled">>, <<"">>]}
+                    ]),
 
-                       invite_user ->
-                           case gr_groups:get_invite_user_token({user, AccessToken}, GroupId) of
-                               {ok, Token} ->
-                                   Message = <<"Give the token below to a user willing to join your group.",
-                                   "<input id=\"join_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
-                                   " width: 80%;\" value=\"", Token/binary, "\">">>,
-                                   gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>, <<"btn-inverse">>),
-                                   gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_token_textbox\").focus().select(); });">>);
-                               Other ->
-                                   ?error("Cannot get user invitation token for group with ID ~p: ~p", [GroupId, Other]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Group with ID: <b>", GroupId, "</b>."
-                                   "<br>Please try again later.">>)
-                           end,
-                           State;
+                    State;
 
-                       {change_group_name, #group_details{id = GroupId} = GroupDetails, NewGroupName} ->
-                           case gr_groups:modify_details({user, AccessToken}, GroupId, [{<<"name">>, NewGroupName}]) of
-                               ok ->
-                                   gui_jq:update(<<"group_name">>, group_name(GroupDetails#group_details{name = NewGroupName}));
-                               Other ->
-                                   ?error("Cannot change name of group ~p: ~p", [GroupDetails, Other]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot change name of group with ID:  <b>", GroupId, "</b>."
-                                   "<br>Please try again later.">>),
-                                   gui_jq:update(<<"group_name">>, group_name(GroupDetails))
-                           end,
-                           State;
+                {create_space, Name} ->
+                    NewState = try
+                                   {ok, SpaceId} = gr_groups:create_space({user, AccessToken}, GroupId, [{<<"name">>, Name}]),
+                                   {ok, SpaceDetails} = gr_groups:get_space_details({user, AccessToken}, GroupId, SpaceId),
+                                   {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
+                                   opn_gui_utils:message(<<"ok_message">>, <<"Created Space ID: <b>", SpaceId/binary, "</b>">>),
+                                   gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
+                                   RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
+                                   add_space_row(RowId, Privileges, SpaceDetails),
+                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, Privileges, SpaceDetails}]}
+                               catch
+                                   _:Other ->
+                                       ?error("Cannot create Space ~p: ~p", [Name, Other]),
+                                       opn_gui_utils:message(<<"error_message">>, <<"Cannot create Space: <b>", Name/binary, "</b>.<br>Please try again later.">>),
+                                       State
+                               end,
+                    gui_jq:prop(<<"create_space_button">>, <<"disabled">>, <<"">>),
+                    NewState;
 
-                       {leave_space, RowId, SpaceId} ->
-                           case gr_groups:leave_space({user, AccessToken}, GroupId, SpaceId) of
-                               ok ->
-                                   opn_gui_utils:message(<<"ok_message">>, <<"Space with ID: <b>", GroupId/binary, "</b> left successfully.">>),
-                                   gui_jq:remove(RowId),
-                                   State#?STATE{spaces_details = lists:keydelete(RowId, 1, SpacesDetails)};
-                               Other ->
-                                   ?error("Cannot leave Space with ID ~p: ~p", [SpaceId, Other]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot leave Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
-                                   State
-                           end;
+                {join_space, Token} ->
+                    NewState = try
+                                   {ok, SpaceId} = gr_groups:join_space({user, AccessToken}, GroupId, [{<<"token">>, Token}]),
+                                   {ok, SpaceDetails} = gr_groups:get_space_details({user, AccessToken}, GroupId, SpaceId),
+                                   {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
+                                   opn_gui_utils:message(<<"ok_message">>, <<"Joined Space ID: <b>", SpaceId/binary, "</b>">>),
+                                   gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
+                                   RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
+                                   add_space_row(RowId, Privileges, SpaceDetails),
+                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, Privileges, SpaceDetails}]}
+                               catch
+                                   _:Other ->
+                                       ?error("Cannot join Space using token ~p: ~p", [Token, Other]),
+                                       opn_gui_utils:message(<<"error_message">>, <<"Cannot join Space using token: <b>", Token/binary, "</b>.<br>Please try again later.">>),
+                                       State
+                               end,
+                    gui_jq:prop(<<"join_space_button">>, <<"disabled">>, <<"">>),
+                    NewState;
 
-                       {remove_user, RowId, UserId} ->
-                           case gr_groups:remove_user({user, AccessToken}, GroupId, UserId) of
-                               ok ->
-                                   opn_gui_utils:message(<<"ok_message">>, <<"User with ID: <b>", GroupId/binary, "</b> removed successfully.">>),
-                                   gui_jq:remove(RowId),
-                                   State#?STATE{users_details = lists:keydelete(RowId, 1, UsersDetails)};
-                               Other ->
-                                   ?error("Cannot remove user with ID ~p: ~p", [UserId, Other]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot remove user with ID: <b>", UserId/binary, "</b>.<br>Please try again later.">>),
-                                   State
-                           end;
+                request_space_creation ->
+                    case gr_groups:get_create_space_token({user, AccessToken}, GroupId) of
+                        {ok, Token} ->
+                            Message = <<"Give the token below to a provider willing to create Space for your group.",
+                            "<input id=\"create_space_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
+                            " width: 80%;\" value=\"", Token/binary, "\">">>,
+                            gui_jq:info_popup(<<"Request Space creation">>, Message, <<"return true;">>, <<"btn-inverse">>),
+                            gui_jq:wire(<<"box.on('shown',function(){ $(\"#create_space_token_textbox\").focus().select(); });">>);
+                        Other ->
+                            ?error("Cannot get support token for group with ID ~p: ~p", [GroupId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get Space creation token for group with ID: <b>", GroupId, "</b>."
+                            "<br>Please try again later.">>)
+                    end,
+                    State;
 
-                       Event ->
-                           case Event of
-                               collapse_spaces_table ->
-                                   gui_jq:update(<<"spaces_table">>, spaces_table_collapsed(SpacesDetails));
-                               expand_spaces_table ->
-                                   gui_jq:update(<<"spaces_table">>, spaces_table_expanded(SpacesDetails));
-                               {collapse_space_row, RowId, Privileges, SpaceDetails} ->
-                                   gui_jq:update(RowId, space_row_collapsed(RowId, Privileges, SpaceDetails));
-                               {expand_space_row, RowId, Privileges, SpaceDetails} ->
-                                   gui_jq:update(RowId, space_row_expanded(RowId, Privileges, SpaceDetails));
-                               collapse_users_table ->
-                                   gui_jq:update(<<"users_table">>, users_table_collapsed(UsersDetails));
-                               expand_users_table ->
-                                   gui_jq:update(<<"users_table">>, users_table_expanded(UsersDetails));
-                               {collapse_user_row, RowId, Privileges, UserDetails} ->
-                                   gui_jq:update(RowId, user_row_collapsed(RowId, Privileges, UserDetails));
-                               {expand_user_row, RowId, Privileges, UserDetails} ->
-                                   gui_jq:update(RowId, user_row_expanded(RowId, Privileges, UserDetails));
-                               _ ->
-                                   ok
-                           end,
-                           State
-                   end
-               catch Type:Reason ->
-                   ?error_stacktrace("Comet process exception: ~p:~p", [Type, Reason]),
-                   opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
-                   {error, Reason}
-               end,
+                invite_user ->
+                    case gr_groups:get_invite_user_token({user, AccessToken}, GroupId) of
+                        {ok, Token} ->
+                            Message = <<"Give the token below to a user willing to join your group.",
+                            "<input id=\"join_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
+                            " width: 80%;\" value=\"", Token/binary, "\">">>,
+                            gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>, <<"btn-inverse">>),
+                            gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_token_textbox\").focus().select(); });">>);
+                        Other ->
+                            ?error("Cannot get user invitation token for group with ID ~p: ~p", [GroupId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Group with ID: <b>", GroupId, "</b>."
+                            "<br>Please try again later.">>)
+                    end,
+                    State;
+
+                {change_group_name, #group_details{id = GroupId} = GroupDetails, NewGroupName} ->
+                    case gr_groups:modify_details({user, AccessToken}, GroupId, [{<<"name">>, NewGroupName}]) of
+                        ok ->
+                            gui_jq:update(<<"group_name">>, group_name(GroupDetails#group_details{name = NewGroupName}));
+                        Other ->
+                            ?error("Cannot change name of group ~p: ~p", [GroupDetails, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot change name of group with ID:  <b>", GroupId, "</b>."
+                            "<br>Please try again later.">>),
+                            gui_jq:update(<<"group_name">>, group_name(GroupDetails))
+                    end,
+                    State;
+
+                {leave_space, RowId, SpaceId} ->
+                    case gr_groups:leave_space({user, AccessToken}, GroupId, SpaceId) of
+                        ok ->
+                            opn_gui_utils:message(<<"ok_message">>, <<"Space with ID: <b>", GroupId/binary, "</b> left successfully.">>),
+                            gui_jq:remove(RowId),
+                            State#?STATE{spaces_details = lists:keydelete(RowId, 1, SpacesDetails)};
+                        Other ->
+                            ?error("Cannot leave Space with ID ~p: ~p", [SpaceId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot leave Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
+                            State
+                    end;
+
+                {remove_user, RowId, UserId} ->
+                    case gr_groups:remove_user({user, AccessToken}, GroupId, UserId) of
+                        ok ->
+                            opn_gui_utils:message(<<"ok_message">>, <<"User with ID: <b>", GroupId/binary, "</b> removed successfully.">>),
+                            gui_jq:remove(RowId),
+                            State#?STATE{users_details = lists:keydelete(RowId, 1, UsersDetails)};
+                        Other ->
+                            ?error("Cannot remove user with ID ~p: ~p", [UserId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot remove user with ID: <b>", UserId/binary, "</b>.<br>Please try again later.">>),
+                            State
+                    end;
+
+                Event ->
+                    case Event of
+                        collapse_spaces_table ->
+                            gui_jq:update(<<"spaces_table">>, spaces_table_collapsed(SpacesDetails));
+                        expand_spaces_table ->
+                            gui_jq:update(<<"spaces_table">>, spaces_table_expanded(SpacesDetails));
+                        {collapse_space_row, RowId, Privileges, SpaceDetails} ->
+                            gui_jq:update(RowId, space_row_collapsed(RowId, Privileges, SpaceDetails));
+                        {expand_space_row, RowId, Privileges, SpaceDetails} ->
+                            gui_jq:update(RowId, space_row_expanded(RowId, Privileges, SpaceDetails));
+                        collapse_users_table ->
+                            gui_jq:update(<<"users_table">>, users_table_collapsed(UsersDetails));
+                        expand_users_table ->
+                            gui_jq:update(<<"users_table">>, users_table_expanded(UsersDetails));
+                        {collapse_user_row, RowId, Privileges, UserDetails} ->
+                            gui_jq:update(RowId, user_row_collapsed(RowId, Privileges, UserDetails));
+                        {expand_user_row, RowId, Privileges, UserDetails} ->
+                            gui_jq:update(RowId, user_row_expanded(RowId, Privileges, UserDetails));
+                        _ ->
+                            ok
+                    end,
+                    State
+            end
+        catch Type:Reason ->
+            ?error_stacktrace("Comet process exception: ~p:~p", [Type, Reason]),
+            opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+            {error, Reason}
+        end,
     gui_jq:wire(<<"$('#main_spinner').delay(300).hide(0);">>, false),
     gui_comet:flush(),
-    ?MODULE:comet_loop(NewState).
+    ?MODULE:comet_loop(NewCometLoopState).
 
 
 %% event/1
@@ -662,28 +734,23 @@ event(init) ->
         end,
 
         {ok, SpacesIds} = gr_groups:get_spaces({user, AccessToken}, GroupId),
-        {SpacesDetails, _} = GetDetailsFun(SpacesIds, get_space_details, <<"space_">>),
+        {SpacesDetails, Counter} = GetDetailsFun(SpacesIds, get_space_details, <<"space_">>),
         {ok, UsersIds} = gr_groups:get_users({user, AccessToken}, GroupId),
         {UsersDetails, _} = GetDetailsFun(UsersIds, get_user_details, <<"user_">>),
 
         gui_jq:bind_key_to_click_on_class(<<"13">>, <<"confirm">>),
-        lists:foreach(fun
-            ({false, _, _, _}) -> ok;
-            ({true, Module, Function, Args}) -> apply(Module, Function, Args)
-        end, [
-            {lists:member(<<"group_change_data">>, Privileges), gui_jq, show, [<<"change_group_name_span">>]},
-            {lists:member(<<"group_invite_user">>, Privileges), gui_jq, prop, [<<"invite_user_button">>, <<"disabled">>, <<"">>]},
-            {lists:member(<<"group_create_space_token">>, Privileges), gui_jq, prop, [<<"request_space_creation_button">>, <<"disabled">>, <<"">>]}
-        ]),
 
+        gui_jq:wire(#api{name = "create_space", tag = "create_space"}, false),
+        gui_jq:wire(#api{name = "join_space", tag = "join_space"}, false),
         gui_jq:wire(#api{name = "remove_user", tag = "remove_user"}, false),
         gui_jq:wire(#api{name = "leave_space", tag = "leave_space"}, false),
 
         {ok, Pid} = gui_comet:spawn(fun() ->
-            comet_loop(#?STATE{group_id = GroupId, spaces_details = SpacesDetails, users_details = UsersDetails, access_token = AccessToken})
+            comet_loop(#?STATE{counter = Counter, group_id = GroupId, spaces_details = SpacesDetails,
+                users_details = UsersDetails, gruid = GRUID, access_token = AccessToken})
         end),
         put(?COMET_PID, Pid),
-        Pid ! render_tables
+        Pid ! {render_tables, Privileges}
     catch
         _:Reason ->
             ?error("Cannot initialize page ~p: ~p", [?MODULE, Reason]),
@@ -703,6 +770,30 @@ event({submit_new_group_name, GroupDetails}) ->
 
 event({cancel_new_group_name_submit, GroupDetails}) ->
     gui_jq:update(<<"group_name">>, group_name(GroupDetails));
+
+event(create_space) ->
+    Message = <<"<div style=\"margin: 0 auto; width: 80%;\">",
+    "<p id=\"create_space_alert\" style=\"width: 100%; color: red; font-size: medium; text-align: center; display: none;\"></p>",
+    "<input id=\"create_space_name\" type=\"text\" style=\"width: 100%;\" placeholder=\"Name\">",
+    "</div>">>,
+    Script = <<"var alert = $(\"#create_space_alert\");",
+    "var name = $.trim($(\"#create_space_name\").val());",
+    "if(name.length == 0) { alert.html(\"Please provide Space name.\"); alert.fadeIn(300); return false; }",
+    "else { create_space([name]); return true; }">>,
+    gui_jq:dialog_popup(<<"Create Space">>, Message, Script, <<"btn-inverse">>),
+    gui_jq:wire(<<"box.on('shown',function(){ $(\"#create_space_name\").focus(); });">>);
+
+event(join_space) ->
+    Message = <<"<div style=\"margin: 0 auto; width: 80%;\">",
+    "<p id=\"join_space_alert\" style=\"width: 100%; color: red; font-size: medium; text-align: center; display: none;\"></p>",
+    "<input id=\"join_space_token\" type=\"text\" style=\"width: 100%;\" placeholder=\"Token\">",
+    "</div>">>,
+    Script = <<"var alert = $(\"#join_space_alert\");",
+    "var token = $.trim($(\"#join_space_token\").val());",
+    "if(token.length == 0) { alert.html(\"Please provide Space token.\"); alert.fadeIn(300); return false; }",
+    "else { join_space([token]); return true; }">>,
+    gui_jq:dialog_popup(<<"Join Space">>, Message, Script, <<"btn-inverse">>),
+    gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_space_token\").focus(); });">>);
 
 event({leave_space, RowId, #space_details{id = SpaceId, name = SpaceName}}) ->
     Message = <<"Are you sure you want to leave space:<br><b>", SpaceName/binary, " (", SpaceId/binary, ") </b>?">>,
@@ -729,7 +820,19 @@ event(terminate) ->
 %% @doc Handles page events.
 -spec api_event(Name :: string(), Args :: string(), Req :: string()) -> no_return().
 %% ====================================================================
+api_event("create_space", Args, _) ->
+    [Name] = mochijson2:decode(Args),
+    get(?COMET_PID) ! {create_space, Name},
+    gui_jq:prop(<<"create_space_button">>, <<"disabled">>, <<"disabled">>),
+    gui_jq:show(<<"main_spinner">>);
+
+api_event("join_space", Args, _) ->
+    [Token] = mochijson2:decode(Args),
+    get(?COMET_PID) ! {join_space, Token},
+    gui_jq:prop(<<"join_space_button">>, <<"disabled">>, <<"disabled">>),
+    gui_jq:show(<<"main_spinner">>);
+
 api_event(Function, Args, _) ->
-    [RowId, ObejctId] = mochijson2:decode(Args),
-    get(?COMET_PID) ! {list_to_existing_atom(Function), RowId, ObejctId},
+    [RowId, ObjectId] = mochijson2:decode(Args),
+    get(?COMET_PID) ! {list_to_existing_atom(Function), RowId, ObjectId},
     gui_jq:show(<<"main_spinner">>).

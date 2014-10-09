@@ -119,19 +119,21 @@ body(GroupDetails) ->
                     body = <<"Group privileges">>
                 },
                 group_details_table(GroupDetails) |
-                lists:map(fun({TableId, Panel}) ->
+                lists:map(fun({TableId, Body, Panel}) ->
                     #panel{
                         body = [
                             #table{
                                 id = TableId,
                                 class = <<"table table-bordered">>,
-                                style = <<"width: 50%; margin: 0 auto; margin-top: 3em; display: none;">>
+                                style = <<"width: 50%; margin: 0 auto; margin-top: 3em;">>,
+                                body = Body
                             },
                             Panel
                         ]
                     }
                 end, [
-                    {<<"users_table">>, save_button(<<"save_users_privileges_button">>, {message, save_users_privileges})}
+                    {<<"users_table">>, privileges_table(<<"users_table">>, ?COLUMNS_NAMES, [], []),
+                        save_button(<<"save_users_privileges_button">>, {message, save_users_privileges})}
                 ])
             ]
         }
@@ -186,7 +188,7 @@ save_button(ButtonId, Postback) ->
         body = #button{
             id = ButtonId,
             postback = Postback,
-            style = <<"display: none">>,
+            disabled = true,
             class = <<"btn btn-inverse btn-small">>,
             body = <<"Save">>
         }
@@ -256,57 +258,56 @@ comet_loop({error, Reason}) ->
     {error, Reason};
 
 comet_loop(#?STATE{group_id = GroupId, new_users_privileges = NewUsersPrivileges, access_token = AccessToken} = State) ->
-    NewState = try
-                   receive
-                       render_tables ->
-                           UsersColumnsNames = [<<"User">> | ?COLUMNS_NAMES],
-                           gui_jq:update(<<"users_table">>, privileges_table(<<"users_privileges">>, UsersColumnsNames, ?PRIVILEGES_NAMES, NewUsersPrivileges)),
-                           gui_jq:fade_in(<<"users_table">>, 500),
-                           gui_jq:show(<<"save_users_privileges_button">>),
-                           case NewUsersPrivileges of
-                               [] -> gui_jq:prop(<<"save_users_privileges_button">>, <<"disabled">>, <<"disabled">>);
-                               _ -> ok
-                           end,
-                           State;
+    NewCometLoopState =
+        try
+            receive
+                render_tables ->
+                    UsersColumnsNames = [<<"User">> | ?COLUMNS_NAMES],
+                    gui_jq:update(<<"users_table">>, privileges_table(<<"users_privileges">>, UsersColumnsNames, ?PRIVILEGES_NAMES, NewUsersPrivileges)),
+                    case NewUsersPrivileges of
+                        [] -> ok;
+                        _ -> gui_jq:prop(<<"save_users_privileges_button">>, <<"disabled">>, <<"">>)
+                    end,
+                    State;
 
-                       {checkbox_toggled, Name, Id, Privilege} ->
-                           {_, _, Privileges} = lists:keyfind(Id, 2, NewUsersPrivileges),
-                           case lists:member(Privilege, Privileges) of
-                               true ->
-                                   State#?STATE{new_users_privileges = [{Name, Id, lists:delete(Privilege, Privileges)} | lists:keydelete(Id, 2, NewUsersPrivileges)]};
-                               _ ->
-                                   State#?STATE{new_users_privileges = [{Name, Id, [Privilege | Privileges]} | lists:keydelete(Id, 2, NewUsersPrivileges)]}
-                           end;
+                {checkbox_toggled, Name, Id, Privilege} ->
+                    {_, _, Privileges} = lists:keyfind(Id, 2, NewUsersPrivileges),
+                    case lists:member(Privilege, Privileges) of
+                        true ->
+                            State#?STATE{new_users_privileges = [{Name, Id, lists:delete(Privilege, Privileges)} | lists:keydelete(Id, 2, NewUsersPrivileges)]};
+                        _ ->
+                            State#?STATE{new_users_privileges = [{Name, Id, [Privilege | Privileges]} | lists:keydelete(Id, 2, NewUsersPrivileges)]}
+                    end;
 
-                       save_users_privileges ->
-                           try
-                               lists:foreach(fun({_, UserId, NewUserPrivileges}) ->
-                                   {_, _, OldUserPrivileges} = lists:keyfind(UserId, 2, State#?STATE.users_privileges),
-                                   OldUserPrivilegesSorted = lists:sort(OldUserPrivileges),
-                                   case lists:sort(NewUserPrivileges) of
-                                       OldUserPrivilegesSorted ->
-                                           ok;
-                                       NewUserPrivilegesSorted ->
-                                           ok = gr_groups:set_user_privileges({user, AccessToken}, GroupId, UserId, [{<<"privileges">>, NewUserPrivilegesSorted}])
-                                   end
-                               end, NewUsersPrivileges),
-                               opn_gui_utils:message(<<"ok_message">>, <<"Users privileges saved successfully.">>),
-                               State
-                           catch
-                               _:Reason ->
-                                   ?error("Cannot save users privileges: ~p", [Reason]),
-                                   opn_gui_utils:message(<<"error_message">>, <<"Cannot save users privileges.<br>Please try again later.">>),
-                                   State
-                           end
-                   end
-               catch Type:Message ->
-                   ?error_stacktrace("Comet process exception: ~p:~p", [Type, Message]),
-                   opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
-                   {error, Message}
-               end,
+                save_users_privileges ->
+                    try
+                        lists:foreach(fun({_, UserId, NewUserPrivileges}) ->
+                            {_, _, OldUserPrivileges} = lists:keyfind(UserId, 2, State#?STATE.users_privileges),
+                            OldUserPrivilegesSorted = lists:sort(OldUserPrivileges),
+                            case lists:sort(NewUserPrivileges) of
+                                OldUserPrivilegesSorted ->
+                                    ok;
+                                NewUserPrivilegesSorted ->
+                                    ok = gr_groups:set_user_privileges({user, AccessToken}, GroupId, UserId, [{<<"privileges">>, NewUserPrivilegesSorted}])
+                            end
+                        end, NewUsersPrivileges),
+                        opn_gui_utils:message(<<"ok_message">>, <<"Users privileges saved successfully.">>),
+                        State
+                    catch
+                        _:Reason ->
+                            ?error("Cannot save users privileges: ~p", [Reason]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot save users privileges.<br>Please try again later.">>),
+                            State
+                    end
+            end
+        catch Type:Message ->
+            ?error_stacktrace("Comet process exception: ~p:~p", [Type, Message]),
+            opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+            {error, Message}
+        end,
     gui_jq:wire(<<"$('#main_spinner').delay(300).hide(0);">>, false),
     gui_comet:flush(),
-    ?MODULE:comet_loop(NewState).
+    ?MODULE:comet_loop(NewCometLoopState).
 
 
 %% event/1
