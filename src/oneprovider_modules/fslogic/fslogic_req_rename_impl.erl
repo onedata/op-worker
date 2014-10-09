@@ -359,10 +359,11 @@ db_rollback([_ | T]) ->
 -spec update_moved_file(SourceFilePath :: path(), FileDoc :: file_doc(), NewFileId :: storage_file_id(), RetryCount :: non_neg_integer()) ->
     ok | {error, Reason :: any()}.
 %% ====================================================================
-update_moved_file(SourceFilePath, #db_document{record = #file{location = Location} = File, uuid = FileUUID} = FileDoc, NewFileID, RetryCount) ->
-    NewFile = File#file{location = Location#file_location{storage_file_id = NewFileID}},
+update_moved_file(SourceFilePath, #db_document{record = #file{}, uuid = FileUUID} = FileDoc, NewFileID, RetryCount) ->
+    #db_document{record = Location} = LocationDoc = fslogic_file:get_file_local_location_doc(FileUUID),
+    NewLocationDoc = LocationDoc#db_document{record = Location#file_location{storage_file_id = NewFileID}},
 
-    case fslogic_objects:save_file(FileDoc#db_document{record = NewFile}) of
+    case dao_lib:apply(dao_vfs, save_file_location, [NewLocationDoc], fslogic_context:get_protocol_version()) of
         {ok, _} -> ok;
         {error, Reason} when RetryCount > 0 ->
             ?error("Unable to save updated file document for file ~p due to: ~p", [FileUUID, Reason]),
@@ -427,9 +428,10 @@ storage_rollback(#space_info{} = SourceSpaceInfo, [{_, _} | T]) ->
 %% ====================================================================
 rename_on_storage(UserDoc, TargetSpaceInfo, SourceFilePath, TargetFilePath) ->
     try
-        {ok, #db_document{record = File} = FileDoc} = fslogic_objects:get_file(SourceFilePath),
-        StorageID   = File#file.location#file_location.storage_id,
-        FileID      = File#file.location#file_location.storage_file_id,
+        {ok, #db_document{record = #file{}} = FileDoc} = fslogic_objects:get_file(SourceFilePath),
+        Location = fslogic_file:get_file_local_location(FileDoc),
+        StorageID   = Location#file_location.storage_id,
+        FileID      = Location#file_location.storage_file_id,
 
         OPInfo0 = #{transfer_type => none, source_fileid => FileID,
             source_path => SourceFilePath, source_path => TargetFilePath, file_doc => FileDoc},

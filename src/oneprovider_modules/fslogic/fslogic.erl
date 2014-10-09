@@ -342,6 +342,10 @@ handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mo
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_req_regular:get_new_file_location(FullFileName, Mode, ForceClusterProxy);
 
+handle_fuse_message(Req = #requestfileblock{logical_name = FName, offset = _Offset, size = _Size}) ->
+    {ok, _FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    #atom{value = ?VOK};
+
 handle_fuse_message(Req = #createfileack{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_req_regular:create_file_ack(FullFileName);
@@ -435,6 +439,8 @@ extract_logical_path(#deletefile{file_logic_name = Path}) ->
 extract_logical_path(#renamefile{from_file_logic_name = Path}) ->
     Path;
 extract_logical_path(#getnewfilelocation{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#requestfileblock{logical_name = Path}) ->
     Path;
 extract_logical_path(#filenotused{file_logic_name = Path}) ->
     Path;

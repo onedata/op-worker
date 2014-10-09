@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013, ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -121,8 +121,10 @@ change_file_group(_FullFileName, _GID, _GName) ->
 change_file_perms(FullFileName, Perms) ->
     ?debug("change_file_perms(FullFileName: ~p, Perms: ~p)", [FullFileName, Perms]),
     {ok, UserDoc} = fslogic_objects:get_user(),
-    {ok, #db_document{record = #file{perms = ActualPerms, location = #file_location{storage_id = StorageId, storage_file_id = FileId}} = File} = FileDoc} =
+    {ok, #db_document{record = #file{perms = ActualPerms} = File} = FileDoc} =
         fslogic_objects:get_file(FullFileName),
+
+    #file_location{storage_id = StorageId, storage_file_id = FileId} = fslogic_file:get_file_local_location(FileDoc),
 
     ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner),
 
@@ -165,7 +167,7 @@ check_file_perms(FullFileName, Type) ->
 get_file_attr(FileDoc = #db_document{record = #file{}}) ->
     #db_document{record = #file{} = File, uuid = FileUUID} = FileDoc,
     Type = fslogic_file:normalize_file_type(protocol, File#file.type),
-    {Size, _SUID} = fslogic_file:get_real_file_size_and_uid(File),
+    {Size, _SUID} = fslogic_file:get_real_file_size_and_uid(FileDoc),
 
     fslogic_file:update_file_size(File, Size),
 

@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -25,6 +25,8 @@
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
 -export([get_space_file/1, get_space_files/1]).
+-export([get_file_locations/1, save_file_location/1, remove_file_location/1]).
+-export([get_file_blocks/1, save_file_block/1, remove_file_block/1]).
 
 
 -ifdef(TEST).
@@ -625,6 +627,51 @@ rename_file(File, NewName) ->
     {ok, #db_document{record = FileInfo} = FileDoc} = get_file(File),
     {ok, _} = save_file(FileDoc#db_document{record = FileInfo#file{name = NewName}}).
 
+-spec get_file_locations(FileId :: uuid()) -> {ok, [file_location_doc()]}.
+get_file_locations(FileId) when is_list(FileId) ->
+    QueryArgs =
+        #view_query_args{keys = [dao_helper:name(FileId)], include_docs = true},
+
+    Rows = fetch_rows(?FILE_LOCATIONS_BY_FILE, QueryArgs),
+    LocationDocs = [#db_document{record = #file_location{}} = Row#view_row.doc || Row <- Rows],
+    {ok, LocationDocs}.
+
+-spec save_file_location(file_location_doc() | file_location_info()) -> {ok, uuid()} | {error, any()}.
+save_file_location(#file_location{} = FileLocation) ->
+    save_file_location(#db_document{record = FileLocation});
+save_file_location(#db_document{record = #file_location{}} = FileLocationDoc) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:save_record(FileLocationDoc).
+
+-spec remove_file_location(file_location_doc() | uuid()) -> ok | {error, any()} | no_return().
+remove_file_location(#db_document{uuid = LocationId, record = #file_location{}}) ->
+    remove_file_location(LocationId);
+remove_file_location(LocationId) when is_list(LocationId) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:remove_record(LocationId).
+
+-spec get_file_blocks(LocationId :: uuid()) -> {ok, [file_block_doc()]}.
+get_file_blocks(LocationId) when is_list(LocationId) ->
+    QueryArgs =
+        #view_query_args{keys = [dao_helper:name(LocationId)], include_docs = true},
+
+    Rows = fetch_rows(?FILE_BLOCKS_BY_FILE_LOCATION, QueryArgs),
+    BlockDocs = [#db_document{record = #file_block{}} = Row#view_row.doc || Row <- Rows],
+    {ok, BlockDocs}.
+
+-spec save_file_block(file_block_doc() | file_block_info()) -> {ok, uuid()} | {error, any()}.
+save_file_block(#file_block{} = FileBlock) ->
+    save_file_block(#db_document{record = FileBlock});
+save_file_block(#db_document{record = #file_block{}} = FileBlockDoc) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:save_record(FileBlockDoc).
+
+-spec remove_file_block(file_block_doc() | uuid()) -> ok | {error, any()} | no_return().
+remove_file_block(#db_document{uuid = BlockId, record = #file_block{}}) ->
+    remove_file_block(BlockId);
+remove_file_block(BlockId) when is_list(BlockId) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:remove_record(BlockId).
 
 %% list_dir/3
 %% ====================================================================
@@ -1147,7 +1194,7 @@ file_path_analyze(Path) ->
 
 %% uca_increment/1
 %% ====================================================================
-%% @doc Returns "incremented string" based on Unicode Collation Algorithm. 
+%% @doc Returns "incremented string" based on Unicode Collation Algorithm.
 %%      This method works only for alpha-numeric strings.
 %% @end
 -spec uca_increment(Id :: string()) -> string().

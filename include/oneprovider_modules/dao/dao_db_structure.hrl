@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2014, ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -44,8 +44,8 @@
 -define(FILES_BY_UID_AND_FILENAME, #view_info{name = "files_by_uid_and_filename", db_name = ?FILES_DB_NAME, version = 1}).
 -define(FILE_META_BY_TIMES, #view_info{name = "file_meta_by_times", db_name = ?FILES_DB_NAME, version = 1}).
 -define(FILES_BY_META_DOC, #view_info{name = "files_by_meta_doc", db_name = ?FILES_DB_NAME, version = 1}).
--define(FILE_LOCATIONS_BY_FILE, #view_info{name = "file_locations_by_file", db_name = ?FILES_DB_NAME, version = 1}).
--define(FILE_BLOCKS_BY_FILE_LOCATION, #view_info{name="file_blocks_by_file_location", db_name = ?FILES_DB_NAME, version = 1}).
+-define(FILE_LOCATIONS_BY_FILE, #view_info{name = "file_locations_by_file", db_name = ?DESCRIPTORS_DB_NAME, version = 1}).
+-define(FILE_BLOCKS_BY_FILE_LOCATION, #view_info{name = "file_blocks_by_file_location", db_name = ?DESCRIPTORS_DB_NAME, version = 1}).
 
 -define(USER_BY_GLOBAL_ID_VIEW, #view_info{name = "user_by_global_id", db_name = ?USERS_DB_NAME, version = 1}).
 -define(USER_BY_EMAIL_VIEW, #view_info{name = "user_by_email", db_name = ?USERS_DB_NAME, version = 1}).

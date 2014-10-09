@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013, ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -19,7 +19,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file_location/2, get_file_location/3, get_new_file_location/3, create_file_ack/1, file_not_used/1, renew_file_location/1]).
+-export([get_file_location/2, get_file_location/3, get_new_file_location/3,
+         register_file_block/3, create_file_ack/1, file_not_used/1, renew_file_location/1]).
 
 %% ====================================================================
 %% API functions
@@ -72,16 +73,17 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
 
     {ok,_} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#db_document.uuid, fslogic_context:get_fuse_id(), Validity),
 
-    FileDesc = FileDoc#db_document.record,
-    FileLoc = fslogic_file:get_file_local_location(FileDesc),
+    #db_document{record = FileLoc} = FileLocDoc = fslogic_file:get_file_local_location_doc(FileDoc),
 
     {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
 
     {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
 
     {SH, File_id} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.storage_file_id, SpaceId, ForceClusterProxy),
+
     #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
-        storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args}.
+        storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args,
+        available = get_blockavailability(FileLocDoc)}.
 
 
 %% get_new_file_location/3
@@ -109,13 +111,12 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
     #db_document{uuid = UUID, record = #storage_info{} = Storage} = fslogic_storage:select_storage(fslogic_context:get_fuse_id(), StorageList),
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
     FileId = fslogic_storage:get_new_file_id(SpaceInfo, FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
-    FileLocation = #file_location{storage_id = UUID, storage_file_id = FileId},
 
     {ok, UserID} = fslogic_context:get_user_id(),
 
     CTime = utils:time(),
 
-    FileRecordInit = #file{type = ?REG_TYPE, name = NewFileName, uid = UserID, parent = ParentDoc#db_document.uuid, perms = Mode, location = FileLocation, created = false},
+    FileRecordInit = #file{type = ?REG_TYPE, name = NewFileName, uid = UserID, parent = ParentDoc#db_document.uuid, perms = Mode, created = false},
     %% Async *times update
     FileRecord = fslogic_meta:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
 
@@ -128,21 +129,44 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
             {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), ExistingWFileUUID, fslogic_context:get_fuse_id(), Validity),
 
-            ExistingWFileRecord = ExistingWFile#db_document.record,
-            ExistingWFileLocation= ExistingWFileRecord#file.location,
+            #db_document{record = ExistingWFileLocation} = ExistingWFileLocationDoc = fslogic_file:get_file_local_location_doc(ExistingWFileUUID),
+            Available = get_blockavailability(ExistingWFileLocationDoc),
 
             {ok, #db_document{record = ExistingWFileStorage}} = fslogic_objects:get_storage({uuid, ExistingWFileLocation#file_location.storage_id}),
             {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), ExistingWFileStorage, ExistingWFileLocation#file_location.storage_file_id, SpaceId, ForceClusterProxy),
             #storage_helper_info{name = ExistingWFileStorageSHName, init_args = ExistingWFileStorageSHArgs} = SH,
-            #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs};
+            #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs, available = Available};
         {ok, FileUUID} ->
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
             {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), Validity),
+            FileLocation = #file_location{file_id = FileUUID, storage_id = UUID, storage_file_id = FileId},
+            {ok, LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
+            FileBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
+            {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
 
             {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileId, SpaceId, ForceClusterProxy),
             #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
-            #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs}
+            #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs, available = [FileBlock]}
     end.
+
+
+register_file_block(FullFileName, Offset, Size) ->
+    {ok, #db_document{} = FileDoc} = fslogic_objects:get_file(FullFileName),
+    #db_document{uuid = LocationId, record = Location} = fslogic_file:get_file_local_location_doc(FileDoc),
+    FileBlock = #file_block{file_location_id = LocationId, offset = Offset, size = Size},
+    {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
+
+    #file_location{storage_id = StorageId, storage_file_id = StorageFileId} = Location,
+    BlockAvailability = #filelocation_blockavailability{offset = Offset, size = Size},
+    BlocksAvailable = #blocksavailable{storage_id = StorageId, file_id = StorageFileId, blocks = [BlockAvailability]},
+
+    {ok, Descriptors} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file, FullFileName}, 10000000000, 0], fslogic_context:get_protocol_version()),
+    lists:foreach(
+        fun(#db_document{record = #file_descriptor{fuse_id = FuseId}}) ->
+            request_dispatcher:send_to_fuse(FuseId, BlocksAvailable, "fuse_messages")
+        end, Descriptors),
+
+    ok.
 
 
 %% create_file_ack/1
@@ -210,3 +234,10 @@ renew_file_location(FullFileName) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+-spec get_blockavailability(file_doc() | file_location_doc()) -> [#filelocation_blockavailability{}].
+get_blockavailability(#db_document{record = #file{}} = FileDoc) ->
+    get_blockavailability(fslogic_file:get_file_local_location_doc(FileDoc));
+get_blockavailability(#db_document{uuid = LocationId, record = #file_location{}}) ->
+    {ok, FileBlockDocs} = dao_lib:apply(dao_vfs, get_file_blocks, [LocationId], fslogic_context:get_protocol_version()),
+    [#filelocation_blockavailability{offset = Offset, size = Size} || #db_document{record = #file_block{offset = Offset, size = Size}} <- FileBlockDocs].

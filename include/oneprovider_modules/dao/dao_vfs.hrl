@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -15,10 +15,12 @@
 -include_lib("files_common.hrl").
 -include("oneprovider_modules/dao/dao_spaces.hrl").
 
-%%
--record(file_block_info, {file_location_id = "", offset = 0, size = 0}).
+-define(FILE_BLOCK_SIZE_INF, 16#FFFFFFFFFFFFFFFF).
+
+%% Available blocks of the file per file location
+-record(file_block, {file_location_id = "", offset = 0, size = 0}).
 %% Files' location (storage helper id and its relative file ID). Designed for use within #file record (`location` filed).
--record(file_location, {file_id = "", provider_id = "", storage_id = "", storage_file_id = ""}).
+-record(file_location, {file_id = "", storage_id = "", storage_file_id = ""}).
 %% Files' locks. Designed for use within #file record (`locks` field).
 -record(file_lock, {type = ?REG_TYPE, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
 %% onedata file
