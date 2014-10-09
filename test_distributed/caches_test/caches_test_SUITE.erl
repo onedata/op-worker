@@ -22,6 +22,7 @@
 
 -define(ProtocolVersion, 1).
 -define(CacheClearingTime, 4).
+-define(CacheLocation, control_panel).
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
@@ -185,10 +186,10 @@ permanent_node_cache_test(Config) ->
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
-    case lists:member({Node, fslogic}, Workers) of
+    case lists:member({Node, ?CacheLocation}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, ?CacheLocation, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
@@ -216,10 +217,10 @@ sub_procs_error_cache_clearing_test(Config) ->
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
-    case lists:member({Node, fslogic}, Workers) of
+    case lists:member({Node, ?CacheLocation}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, ?CacheLocation, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
@@ -267,9 +268,9 @@ sub_procs_error_cache_clearing_test(Config) ->
   end,
 
   RegisterSubProc = fun(Node) ->
-    RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, simple}, 1000),
+    RegAns = gen_server:call({?CacheLocation, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, simple}, 1000),
     ?assertEqual(ok, RegAns),
-    test_utils:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({?CacheLocation, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
   test_utils:wait_for_request_handling(),
@@ -279,12 +280,12 @@ sub_procs_error_cache_clearing_test(Config) ->
   %% send many request to multiply sub_procs
   TestFun = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 21, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 31, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 41, Pid}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 11, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 12, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 13, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 21, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 31, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 41, Pid}}, 500)
     end)
   end,
 
@@ -294,20 +295,20 @@ sub_procs_error_cache_clearing_test(Config) ->
 
   TestFun2 = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
     end)
   end,
   for(1, TestRequestsNum, TestFun2),
   ?assertEqual(7*TestRequestsNum, count_answers2(7*TestRequestsNum, cache_updated)),
 
   VerifyFun = fun(MapVal, Key) ->
-    gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
+    gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
     receive
       {cache_value, Value} -> Value
     after 500 ->
@@ -322,7 +323,7 @@ sub_procs_error_cache_clearing_test(Config) ->
   ?assertEqual(TestRequestsNum, VerifyFun(31, k6)),
   ?assertEqual(TestRequestsNum, VerifyFun(41, k1)),
 
-  W1 = gen_server:call({?Dispatcher_Name, CCM}, {get_worker_node, {{get_from_cache, 11, k1}, fslogic}}, 500),
+  W1 = gen_server:call({?Dispatcher_Name, CCM}, {get_worker_node, {{get_from_cache, 11, k1}, ?CacheLocation}}, 500),
   ?assert(rpc:call(CCM, erlang, disconnect_node, [W1])),
   test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
 
@@ -423,10 +424,10 @@ sub_procs_automatic_cache_clearing_test(Config) ->
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
-    case lists:member({Node, fslogic}, Workers) of
+    case lists:member({Node, ?CacheLocation}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, ?CacheLocation, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
@@ -475,9 +476,9 @@ sub_procs_automatic_cache_clearing_test(Config) ->
 
   ClearFun = fun(CacheName) -> ets:delete_all_objects(CacheName) end,
   RegisterSubProc = fun(Node) ->
-    RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, {simple, ?CacheClearingTime, ClearFun}}, 1000),
+    RegAns = gen_server:call({?CacheLocation, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, {simple, ?CacheClearingTime, ClearFun}}, 1000),
     ?assertEqual(ok, RegAns),
-    test_utils:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({?CacheLocation, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
   test_utils:wait_for_request_handling(),
@@ -487,12 +488,12 @@ sub_procs_automatic_cache_clearing_test(Config) ->
   %% send many request to multiply sub_procs
   TestFun = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 21, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 31, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 41, Pid}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 11, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 12, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 13, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 21, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 31, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 41, Pid}}, 500)
     end)
   end,
 
@@ -502,20 +503,20 @@ sub_procs_automatic_cache_clearing_test(Config) ->
 
   TestFun2 = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
     end)
   end,
   for(1, TestRequestsNum, TestFun2),
   ?assertEqual(7*TestRequestsNum, count_answers2(7*TestRequestsNum, cache_updated)),
 
   VerifyFun = fun(MapVal, Key) ->
-    gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
+    gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
     receive
       {cache_value, Value} -> Value
     after 500 ->
@@ -613,10 +614,10 @@ sub_proc_cache_test(Config) ->
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
-    case lists:member({Node, fslogic}, Workers) of
+    case lists:member({Node, ?CacheLocation}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, ?CacheLocation, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
@@ -664,9 +665,9 @@ sub_proc_cache_test(Config) ->
   end,
 
   RegisterSubProc = fun(Node) ->
-    RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, simple}, 1000),
+    RegAns = gen_server:call({?CacheLocation, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, simple}, 1000),
     ?assertEqual(ok, RegAns),
-    test_utils:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({?CacheLocation, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
   test_utils:wait_for_request_handling(),
@@ -676,12 +677,12 @@ sub_proc_cache_test(Config) ->
   %% send many request to multiply sub_procs
   TestFun = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 21, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 31, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 41, Pid}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 11, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 12, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 13, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 21, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 31, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 41, Pid}}, 500)
     end)
   end,
 
@@ -691,20 +692,20 @@ sub_proc_cache_test(Config) ->
 
   TestFun2 = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
     end)
   end,
   for(1, TestRequestsNum, TestFun2),
   ?assertEqual(7*TestRequestsNum, count_answers2(7*TestRequestsNum, cache_updated)),
 
   VerifyFun = fun(MapVal, Key) ->
-    gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
+    gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
     receive
       {cache_value, Value} -> Value
     after 500 ->
@@ -719,7 +720,7 @@ sub_proc_cache_test(Config) ->
   ?assertEqual(TestRequestsNum, VerifyFun(31, k6)),
   ?assertEqual(TestRequestsNum, VerifyFun(41, k1)),
 
-  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{{sub_proc_cache, {fslogic, sub_proc_test_proccess}}, k1}])),
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{{sub_proc_cache, {?CacheLocation, sub_proc_test_proccess}}, k1}])),
   ?assertEqual(0, VerifyFun(11, k1)),
   ?assertEqual(TestRequestsNum, VerifyFun(11, k2)),
   ?assertEqual(TestRequestsNum, VerifyFun(12, k3)),
@@ -728,7 +729,7 @@ sub_proc_cache_test(Config) ->
   ?assertEqual(TestRequestsNum, VerifyFun(31, k6)),
   ?assertEqual(0, VerifyFun(41, k1)),
 
-  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{{sub_proc_cache, {fslogic, sub_proc_test_proccess}}, [k3, k4, k5]}])),
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{{sub_proc_cache, {?CacheLocation, sub_proc_test_proccess}}, [k3, k4, k5]}])),
   ?assertEqual(0, VerifyFun(11, k1)),
   ?assertEqual(TestRequestsNum, VerifyFun(11, k2)),
   ?assertEqual(0, VerifyFun(12, k3)),
@@ -737,7 +738,7 @@ sub_proc_cache_test(Config) ->
   ?assertEqual(TestRequestsNum, VerifyFun(31, k6)),
   ?assertEqual(0, VerifyFun(41, k1)),
 
-  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{sub_proc_cache, {fslogic, sub_proc_test_proccess}}])),
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{sub_proc_cache, {?CacheLocation, sub_proc_test_proccess}}])),
   ?assertEqual(0, VerifyFun(11, k1)),
   ?assertEqual(0, VerifyFun(11, k2)),
   ?assertEqual(0, VerifyFun(12, k3)),
@@ -831,10 +832,10 @@ sub_proc_test(Config) ->
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
-    case lists:member({Node, fslogic}, Workers) of
+    case lists:member({Node, ?CacheLocation}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, ?CacheLocation, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
@@ -864,9 +865,9 @@ sub_proc_test(Config) ->
   end,
 
   RegisterSubProc = fun(Node) ->
-    RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 1000),
+    RegAns = gen_server:call({?CacheLocation, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 1000),
     ?assertEqual(ok, RegAns),
-    test_utils:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({?CacheLocation, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
   test_utils:wait_for_request_handling(),
@@ -874,12 +875,12 @@ sub_proc_test(Config) ->
   Self = self(),
   TestFun = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Self}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Self}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Self}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 21, Self}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 31, Self}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 41, Self}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 11, Self}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 12, Self}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 13, Self}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 21, Self}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 31, Self}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 41, Self}}, 500)
     end)
   end,
 
