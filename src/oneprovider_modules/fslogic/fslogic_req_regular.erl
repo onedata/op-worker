@@ -150,6 +150,14 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
     end.
 
 
+%% register_file_block/3
+%% ====================================================================
+%% @doc Saves information about a new available file block in the database
+%% and distributes it to clients currently using the file.
+%% @end
+-spec register_file_block(FullFileName :: string(), Offset :: non_neg_integer(),
+                          Size :: non_neg_integer()) -> ok.
+%% ====================================================================
 register_file_block(FullFileName, Offset, Size) ->
     {ok, #db_document{} = FileDoc} = fslogic_objects:get_file(FullFileName),
     #db_document{uuid = LocationId, record = Location} = fslogic_file:get_file_local_location_doc(FileDoc),
@@ -235,7 +243,13 @@ renew_file_location(FullFileName) ->
 %% Internal functions
 %% ====================================================================
 
+%% get_blockavailability/1
+%% ====================================================================
+%% @doc Returns available blocks for a given file in a format accepted by
+%% clients.
+%% @end
 -spec get_blockavailability(file_doc() | file_location_doc()) -> [#filelocation_blockavailability{}].
+%% ====================================================================
 get_blockavailability(#db_document{record = #file{}} = FileDoc) ->
     get_blockavailability(fslogic_file:get_file_local_location_doc(FileDoc));
 get_blockavailability(#db_document{uuid = LocationId, record = #file_location{}}) ->

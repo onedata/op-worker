@@ -15,6 +15,7 @@
 -include_lib("files_common.hrl").
 -include("oneprovider_modules/dao/dao_spaces.hrl").
 
+%% The 'infinity' block size is actually an INT64_MAX
 -define(FILE_BLOCK_SIZE_INF, 16#FFFFFFFFFFFFFFFF).
 
 %% Available blocks of the file per file location

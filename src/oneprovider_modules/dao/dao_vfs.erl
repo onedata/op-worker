@@ -627,7 +627,15 @@ rename_file(File, NewName) ->
     {ok, #db_document{record = FileInfo} = FileDoc} = get_file(File),
     {ok, _} = save_file(FileDoc#db_document{record = FileInfo#file{name = NewName}}).
 
+
+%% get_file_locations/1
+%% ====================================================================
+%% @doc Fetches all file locations specified for a given file identified by its UUID.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
 -spec get_file_locations(FileId :: uuid()) -> {ok, [file_location_doc()]}.
+%% ====================================================================
+
 get_file_locations(FileId) when is_list(FileId) ->
     QueryArgs =
         #view_query_args{keys = [dao_helper:name(FileId)], include_docs = true},
@@ -636,21 +644,43 @@ get_file_locations(FileId) when is_list(FileId) ->
     LocationDocs = [#db_document{record = #file_location{}} = Row#view_row.doc || Row <- Rows],
     {ok, LocationDocs}.
 
+
+%% save_file_location/1
+%% ====================================================================
+%% @doc Saves a file location as a new document in the database, or as a new version
+%% of an existing document.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
 -spec save_file_location(file_location_doc() | file_location_info()) -> {ok, uuid()} | {error, any()}.
+%% ====================================================================
 save_file_location(#file_location{} = FileLocation) ->
     save_file_location(#db_document{record = FileLocation});
 save_file_location(#db_document{record = #file_location{}} = FileLocationDoc) ->
     dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:save_record(FileLocationDoc).
 
+
+%% remove_file_location/1
+%% ====================================================================
+%% @doc Removes a file location document from the database.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
 -spec remove_file_location(file_location_doc() | uuid()) -> ok | {error, any()} | no_return().
+%% ====================================================================
 remove_file_location(#db_document{uuid = LocationId, record = #file_location{}}) ->
     remove_file_location(LocationId);
 remove_file_location(LocationId) when is_list(LocationId) ->
     dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:remove_record(LocationId).
 
+
+%% get_file_blocks/1
+%% ====================================================================
+%% @doc Fetches all file blocks for a given file location identified by its UUID.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
 -spec get_file_blocks(LocationId :: uuid()) -> {ok, [file_block_doc()]}.
+%% ====================================================================
 get_file_blocks(LocationId) when is_list(LocationId) ->
     QueryArgs =
         #view_query_args{keys = [dao_helper:name(LocationId)], include_docs = true},
@@ -659,19 +689,35 @@ get_file_blocks(LocationId) when is_list(LocationId) ->
     BlockDocs = [#db_document{record = #file_block{}} = Row#view_row.doc || Row <- Rows],
     {ok, BlockDocs}.
 
+
+%% save_file_block/1
+%% ====================================================================
+%% @doc Saves a file block as a new document in the database, or as a new version
+%% of an existing document.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
 -spec save_file_block(file_block_doc() | file_block_info()) -> {ok, uuid()} | {error, any()}.
+%% ====================================================================
 save_file_block(#file_block{} = FileBlock) ->
     save_file_block(#db_document{record = FileBlock});
 save_file_block(#db_document{record = #file_block{}} = FileBlockDoc) ->
     dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:save_record(FileBlockDoc).
 
+
+%% remove_file_block/1
+%% ====================================================================
+%% @doc Removes a file block from the database.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
 -spec remove_file_block(file_block_doc() | uuid()) -> ok | {error, any()} | no_return().
+%% ====================================================================
 remove_file_block(#db_document{uuid = BlockId, record = #file_block{}}) ->
     remove_file_block(BlockId);
 remove_file_block(BlockId) when is_list(BlockId) ->
     dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:remove_record(BlockId).
+
 
 %% list_dir/3
 %% ====================================================================
