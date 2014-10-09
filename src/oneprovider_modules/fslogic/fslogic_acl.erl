@@ -223,7 +223,7 @@ flags_to_bitmask([?identifier_group | Rest]) -> ?identifier_group_mask bor flags
 -spec perm_list_to_bitmask(binary()) -> non_neg_integer().
 %% ====================================================================
 perm_list_to_bitmask(MaskNames) when is_binary(MaskNames) ->
-    FlagList = lists:map(fun fslogic_utils:trim_spaces/1, binary:split(MaskNames, <<",">>, [global])),
+    FlagList = lists:map(fun utils:trim_spaces/1, binary:split(MaskNames, <<",">>, [global])),
     perm_list_to_bitmask(FlagList);
 perm_list_to_bitmask([]) -> 16#00000000;
 perm_list_to_bitmask([?read | Rest]) -> ?read_mask bor perm_list_to_bitmask(Rest);
@@ -251,7 +251,7 @@ binary_list_to_csv(List) ->
 -spec csv_to_binary_list([binary()]) -> binary().
 %% ====================================================================
 csv_to_binary_list(BinaryCsv) ->
-    lists:map(fun fslogic_utils:trim_spaces/1, binary:split(BinaryCsv, <<",">>, [global])).
+    lists:map(fun utils:trim_spaces/1, binary:split(BinaryCsv, <<",">>, [global])).
 
 %% posix_perms_to_acl_mask/3
 %% ====================================================================

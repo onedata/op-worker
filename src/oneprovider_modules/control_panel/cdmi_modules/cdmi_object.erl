@@ -368,7 +368,15 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error2})
             end;
         update ->
-            case logical_files_manager:check_file_perm(Filepath, write) of
+            Permitted = case RequestedUserMetadata of
+                [{<<"cdmi_acl">>, _}] ->
+                    case URIMetadataNames of
+                        [<<"cdmi_acl">>] -> logical_files_manager:check_file_perm(Filepath, owner);
+                        _ -> logical_files_manager:check_file_perm(Filepath, write)
+                    end;
+                _ -> logical_files_manager:check_file_perm(Filepath, write)
+            end,
+            case Permitted of
                 true -> ok;
                 false -> throw(?forbidden)
             end,
@@ -597,14 +605,14 @@ parse_byte_range(#state{attributes = #fileattributes{size = Size}} = State, [Fir
 parse_content(Content) ->
     case binary:split(Content,<<";">>) of
         [RawMimetype, RawEncoding] ->
-            case binary:split(fslogic_utils:trim_spaces(RawEncoding),<<"=">>) of
+            case binary:split(utils:trim_spaces(RawEncoding),<<"=">>) of
                 [<<"charset">>, <<"utf-8">>] ->
-                    {fslogic_utils:trim_spaces(RawMimetype), <<"utf-8">>};
+                    {utils:trim_spaces(RawMimetype), <<"utf-8">>};
                 _ ->
-                    {fslogic_utils:trim_spaces(RawMimetype), undefined}
+                    {utils:trim_spaces(RawMimetype), undefined}
             end;
         [RawMimetype] ->
-            {fslogic_utils:trim_spaces(RawMimetype), undefined}
+            {utils:trim_spaces(RawMimetype), undefined}
     end.
 
 %% get_mimetype/1
