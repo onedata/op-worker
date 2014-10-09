@@ -368,7 +368,15 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error2})
             end;
         update ->
-            case logical_files_manager:check_file_perm(Filepath, write) of
+            Permitted = case RequestedUserMetadata of
+                [{<<"cdmi_acl">>, _}] ->
+                    case URIMetadataNames of
+                        [<<"cdmi_acl">>] -> logical_files_manager:check_file_perm(Filepath, owner);
+                        _ -> logical_files_manager:check_file_perm(Filepath, write)
+                    end;
+                _ -> logical_files_manager:check_file_perm(Filepath, write)
+            end,
+            case Permitted of
                 true -> ok;
                 false -> throw(?forbidden)
             end,
