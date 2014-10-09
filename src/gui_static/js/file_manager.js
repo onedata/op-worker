@@ -36,8 +36,8 @@ init_chmod_table = function (current_mode) {
     update_chmod_checkboxes(current_mode);
     update_chmod_textbox(current_mode);
 
-    $('#octal_form_textbox').keyup(function (event) {
-        var textbox_value = $('#octal_form_textbox').val();
+    $('#posix_octal_form_textbox').keyup(function (event) {
+        var textbox_value = $('#posix_octal_form_textbox').val();
         if (textbox_value.length == 3) {
             var digit_1 = parseInt(textbox_value[0]);
             var digit_2 = parseInt(textbox_value[1]);
@@ -60,10 +60,9 @@ init_chmod_table = function (current_mode) {
 };
 
 // Submit newly chosen mode to the server
-submit_chmod = function () {
+submit_perms = function () {
     $('#spinner').delay(150).show();
-    // Below function is registered from n2o context
-    submit_chmod_event([calculate_mode(), $('#chbx_recursive').is(':checked')]);
+    submit_perms_event([calculate_mode(), $('#chbx_recursive').is(':checked')]);
 };
 
 // Calculate mode depending on checked checkboxes
@@ -95,7 +94,7 @@ update_chmod_checkboxes = function (mode) {
 // Update value displayed in octal form textbox
 update_chmod_textbox = function (mode) {
     var mode_string = mode.toString(8);
-    $('#octal_form_textbox').val((mode_string + "00").substring(0, 3));
+    $('#posix_octal_form_textbox').val((mode_string + "00").substring(0, 3));
 };
 
 
@@ -135,10 +134,10 @@ populate_acl_list = function (json_array, select_index) {
             } else {
                 $('[class*="acl-button-"]').hide();
                 if (clicked_index == -1) {
-                    add_acl();
+                    add_acl_event();
                 } else {
                     $(this).addClass('acl-entry-selected');
-                    edit_acl(clicked_index);
+                    edit_acl_event(clicked_index);
                 }
             }
         }
@@ -147,7 +146,7 @@ populate_acl_list = function (json_array, select_index) {
     $('.acl-add-button').click(function (event) {
         event.stopPropagation();
         $('[class*="acl-button-"]').hide();
-        add_acl();
+        add_acl_event();
     });
 
     $('.acl-button-delete').click(function (event) {
@@ -161,7 +160,7 @@ populate_acl_list = function (json_array, select_index) {
 
     $('.acl-confirm-yes').click(function (event) {
         event.stopPropagation();
-        delete_acl(parseInt($(this).parent().attr('index')));
+        delete_acl_event(parseInt($(this).parent().attr('index')));
     });
 
     $('.acl-confirm-no').click(function (event) {
@@ -178,17 +177,17 @@ populate_acl_list = function (json_array, select_index) {
         var entry_div = $(this).parent();
         entry_div.addClass('acl-entry-selected');
         entry_div.find('[class*="acl-button-"]').hide();
-        edit_acl(parseInt(entry_div.attr('index')));
+        edit_acl_event(parseInt(entry_div.attr('index')));
     });
 
     $('.acl-button-move-up').click(function (event) {
         event.stopPropagation();
-        move_acl([parseInt($(this).parent().attr('index')), true]);
+        move_acl_event([parseInt($(this).parent().attr('index')), true]);
     });
 
     $('.acl-button-move-down').click(function (event) {
         event.stopPropagation();
-        move_acl([parseInt($(this).parent().attr('index')), false]);
+        move_acl_event([parseInt($(this).parent().attr('index')), false]);
     });
 
 

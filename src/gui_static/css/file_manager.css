@@ -30,16 +30,54 @@
     padding-left: 24px;
 }
 
-#permissions_info_button {
+#perms_info_button {
     margin-left: 25px;
     vertical-align: middle;
 }
 
-#permissions_info_button > span {
+#perms_info_button > span {
     font-size: 20px;
 }
 
 #tab_posix {
+}
+
+.posix-checkbox {
+    margin: 0 auto !important;
+    width: 20px;
+}
+
+#posix_table {
+    margin: 0 auto 15px;
+    table-layout: fixed;
+    width: 200px;
+    border-color: rgb(82, 100, 118);
+}
+
+.posix-cell {
+    border-left: 2px solid rgb(82, 100, 118) !important;
+    border-top: 2px solid rgb(82, 100, 118) !important;
+    width: 60px;
+    text-align: center !important;
+}
+
+#posix_table > thead:first-child > tr:first-child > th,
+#posix_table > tbody:first-child > tr:first-child > th,
+#posix_table > tbody:first-child > tr:first-child > td {
+    border-top: 0 !important;
+}
+
+.posix-octal-form-wrapper {
+    position: relative;
+    width: 430px;
+    margin: 10px auto 8px;
+}
+
+#posix_octal_form_textbox {
+    width: 50px;
+    padding: 5px 5px;
+    position: relative;
+    margin: -1px 0 1px 8px;
 }
 
 #tab_acl {
@@ -306,4 +344,11 @@
     font-size: 18px;
     display: none;
     cursor: pointer;
+}
+
+.perms-letter {
+    margin: 0 1px 0 0;
+    display: inline-block;
+    width: 10px;
+    text-align: center;
 }

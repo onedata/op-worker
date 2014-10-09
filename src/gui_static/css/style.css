@@ -124,3 +124,11 @@ tr.log_row:hover {
     cursor: pointer;
     background-color: rgba(26, 188, 156, 0.2) !important;
 }
+
+.inline-block {
+    display: inline-block;
+}
+
+.fw700 {
+    font-weight: 700;
+}
