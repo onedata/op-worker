@@ -12,11 +12,22 @@
 -module(dao_external).
 -author("Tomasz Lichon").
 
+-include("registered_names.hrl").
 -include_lib("oneprovider_modules/dao/dao.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([set_db/1, get_db/0, record_info/1, is_valid_record/1, sequential_synch_call/3, view_def_location/0]).
+-export([set_db/1, get_db/0, record_info/1, is_valid_record/1, sequential_synch_call/3, view_def_location/0, on_doc_save/4, on_doc_get/2]).
+
+on_doc_save(DbName, #db_document{} = Doc, NewRew, Opts) ->
+    ?info("on save ==============================> ~p ~p ~p", [DbName, NewRew, Opts]),
+    ok = gen_server:call(?Dispatcher_Name, {dao_worker, 1, {{event, doc_saved}, {DbName, Doc, NewRew, Opts}}});
+on_doc_save(DbName, Unkn, NewRew, Opts) ->
+    ?info("Unknown doc_save ========================> ~p ~p ~p ~p", [DbName, Unkn, NewRew, Opts]),
+    ok.
+
+on_doc_get(DbName, DBDocument) ->
+    ok.
 
 %% set_db/1
 %% ====================================================================

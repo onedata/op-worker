@@ -41,6 +41,8 @@
 %% Name of Round Robin Database that collects node load statistics
 -define(Node_Stats_RRD_Name, <<"node_stats.rrd">>).
 
+-define(DBSync_Name, dbsync).
+
 %% Local name of the process waiting for dns udp messages
 -define(DNS_UDP, dns_udp).
 

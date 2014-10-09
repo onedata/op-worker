@@ -10,6 +10,7 @@ compile:
 	-@if [ -f ebin/.test ]; then rm -rf ebin; fi 
 	./gen_config
 	cp -R clproto/proto src
+	cp -R rtproto/proto src
 	./rebar compile
 	rm -rf src/proto
 
@@ -37,6 +38,7 @@ ct: deps compile
 	-@mkdir -p ebin ; touch ebin/.test 
 	./gen_config
 	 cp -R clproto/proto src
+	 cp -R rtproto/proto src
 	./rebar -D TEST compile
 	rm -rf src/proto
 	./rebar ct skip_deps=true

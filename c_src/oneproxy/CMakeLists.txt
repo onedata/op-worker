@@ -14,16 +14,13 @@ include_directories(${OPENSSL_INCLUDE_DIR})
 message(STATUS "Checking for pthreads...")
 find_package(Threads REQUIRED)
 
-# Setup botan
-message(STATUS "Checking for botan...")
-find_package(Botan REQUIRED)
 
 # Setup Boost
 set(Boost_USE_STATIC_LIBS       OFF)
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME    OFF)
 find_package(Boost COMPONENTS filesystem system thread REQUIRED)
-include_directories(${Boost_INCLUDE_DIRS} ${BOTAN_INCLUDE_DIR})
+include_directories(${Boost_INCLUDE_DIRS})
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11")
 
@@ -37,7 +34,6 @@ target_link_libraries(oneproxy
     ${Boost_LIBRARIES}
     ${Threads_LIBRARIES}
     ${OPENSSL_LIBRARIES}
-    ${BOTAN_LIBRARY}
     ${ONEPROXY_GSI_LIBRARIES}
     oneproxy_gsi
     ${CMAKE_THREAD_LIBS_INIT}
