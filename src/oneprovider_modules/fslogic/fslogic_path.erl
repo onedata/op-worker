@@ -214,7 +214,7 @@ basename(Path) ->
 
 %% is_space_dir/1
 %% ====================================================================
-%% @doc Returns true when Path points to group directory (or groups root directory)
+%% @doc Returns true when Path points to space directory (or space root directory)
 -spec is_space_dir(Path :: string()) -> boolean().
 %% ====================================================================
 is_space_dir(Path) ->

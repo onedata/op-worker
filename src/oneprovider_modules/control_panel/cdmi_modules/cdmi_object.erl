@@ -605,14 +605,14 @@ parse_byte_range(#state{attributes = #fileattributes{size = Size}} = State, [Fir
 parse_content(Content) ->
     case binary:split(Content,<<";">>) of
         [RawMimetype, RawEncoding] ->
-            case binary:split(fslogic_utils:trim_spaces(RawEncoding),<<"=">>) of
+            case binary:split(utils:trim_spaces(RawEncoding),<<"=">>) of
                 [<<"charset">>, <<"utf-8">>] ->
-                    {fslogic_utils:trim_spaces(RawMimetype), <<"utf-8">>};
+                    {utils:trim_spaces(RawMimetype), <<"utf-8">>};
                 _ ->
-                    {fslogic_utils:trim_spaces(RawMimetype), undefined}
+                    {utils:trim_spaces(RawMimetype), undefined}
             end;
         [RawMimetype] ->
-            {fslogic_utils:trim_spaces(RawMimetype), undefined}
+            {utils:trim_spaces(RawMimetype), undefined}
     end.
 
 %% get_mimetype/1
