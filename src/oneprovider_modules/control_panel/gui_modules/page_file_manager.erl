@@ -853,7 +853,7 @@ edit_acl(Index) ->
     end.
 
 
-submit_acl(Index, Identifier, Type, ReadFlag, WriteFlag, ExecFlag) ->
+submit_acl(Index, Name, Type, ReadFlag, WriteFlag, ExecFlag) ->
     {Files, EnableACL, ACLEntries} = get_perms_state(),
     ACEMask = (case ReadFlag of true -> ?read_mask; _ -> 0 end) bor
         (case WriteFlag of true -> ?write_mask; _ -> 0 end) bor
@@ -866,7 +866,7 @@ submit_acl(Index, Identifier, Type, ReadFlag, WriteFlag, ExecFlag) ->
             NewEntity = #accesscontrolentity{
                 acetype = (case Type of true -> ?allow_mask; _ -> ?deny_mask end),
                 aceflags = ?no_flags_mask,
-                identifier = Identifier,
+                identifier = fslogic_acl:name_to_gruid(Name),
                 acemask = ACEMask},
             case Index of
                 -1 ->
