@@ -358,7 +358,9 @@ comet_loop(IsUploadInProgress) ->
                 {action, Fun, Args} ->
                     case IsUploadInProgress of
                         true ->
-                            gui_jq:wire(#alert{text = <<"Please wait for the upload to finish.">>}), gui_comet:flush();
+                            gui_jq:info_popup(<<"Upload in progress">>,
+                                <<"Please wait for the upload to finish.">>, <<"">>),
+                            gui_comet:flush();
                         false ->
                             erlang:apply(?MODULE, Fun, Args)
                     end,
@@ -644,7 +646,7 @@ confirm_paste() ->
         <<"">> ->
             ok;
         _ ->
-            gui_jq:wire(#alert{text = ErrorMessage})
+            gui_jq:info_popup(<<"Error(s) occured">>, ErrorMessage, <<"">>)
     end,
     clear_workspace().
 
@@ -681,7 +683,8 @@ submit_perms(Perms, Recursive) ->
                                 end,
                     <<Acc/binary, Path/binary, ": ", ReasonBin/binary, "\r\n">>
                 end, <<"">>, Failed),
-            gui_jq:wire(#alert{text = <<Message/binary, "\r\n\r\n", FailedList/binary>>})
+            gui_jq:info_popup(<<"Error(s) occured">>,
+                <<Message/binary, "\r\n\r\n", FailedList/binary>>, <<"">>)
     end,
     clear_manager().
 
@@ -694,19 +697,24 @@ rename_item(OldPath, NewName) ->
         OldName -> hide_popup();
         _ ->
             NewPath = filename:absname(NewName, get_working_directory()),
-            case fs_mv(OldPath, get_working_directory(), NewName) of
-                ok ->
-                    clear_clipboard(),
-                    clear_manager(),
-                    select_item(NewPath);
-                {logical_file_system_error, "eperm"} ->
-                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>});
-                {logical_file_system_error, "eexist"} ->
-                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - file exists.">>});
-                {logical_file_system_error, "eacces"} ->
-                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>});
-                _ ->
-                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - error occured.">>})
+            ErrorMessage = case fs_mv(OldPath, get_working_directory(), NewName) of
+                               ok ->
+                                   clear_clipboard(),
+                                   clear_manager(),
+                                   select_item(NewPath),
+                                   none;
+                               {logical_file_system_error, "eperm"} ->
+                                   <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>;
+                               {logical_file_system_error, "eexist"} ->
+                                   <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - file exists.">>;
+                               {logical_file_system_error, "eacces"} ->
+                                   <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>;
+                               _ ->
+                                   <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - error occured.">>
+                           end,
+            case ErrorMessage of
+                none -> ok;
+                _ -> gui_jq:info_popup(<<"Error(s) occured">>, ErrorMessage, <<"">>)
             end
     end.
 
@@ -724,9 +732,11 @@ create_directory(Name) ->
                 _ ->
                     case item_find(FullPath) of
                         undefined ->
-                            gui_jq:wire(#alert{text = <<"Cannot create directory - disallowed name.">>});
+                            gui_jq:info_popup(<<"Error(s) occured">>,
+                                <<"Cannot create directory - disallowed name.">>, <<"">>);
                         _ ->
-                            gui_jq:wire(#alert{text = <<"Cannot create directory - file exists.">>})
+                            gui_jq:info_popup(<<"Error(s) occured">>,
+                                <<"Cannot create directory - file exists.">>, <<"">>)
                     end,
                     hide_popup()
             end
@@ -926,7 +936,8 @@ show_popup(Type) ->
             rename_item ->
                 case fs_has_perms(get_working_directory(), write) of
                     false ->
-                        gui_jq:wire(#alert{text = <<"You need write permissions in this directory to rename files.">>}),
+                        gui_jq:info_popup(<<"Insufficient permissions">>,
+                            <<"You need write permissions in this directory to rename files.">>, <<"">>),
                         {[], undefined, undefined};
                     true ->
                         case length(get_selected_items()) =:= 1 of
@@ -1230,7 +1241,8 @@ show_popup(Type) ->
                         ],
                         {Body, undefined, {action, clear_manager}};
                     false ->
-                        gui_jq:wire(#alert{text = <<"You need write permissions in this directory to upload files.">>}),
+                        gui_jq:info_popup(<<"Insufficient permissions">>,
+                            <<"You need write permissions in this directory to upload files.">>, <<"">>),
                         {[], undefined, undefined}
                 end;
 
@@ -1238,7 +1250,8 @@ show_popup(Type) ->
                 {_FB, _S, _A} =
                     case fs_has_perms(get_working_directory(), write) of
                         false ->
-                            gui_jq:wire(#alert{text = <<"You need write permissions in this directory to delete files.">>}),
+                            gui_jq:info_popup(<<"Insufficient permissions">>,
+                                <<"You need write permissions in this directory to delete files.">>, <<"">>),
                             {[], undefined, undefined};
                         true ->
                             case get_selected_items() of

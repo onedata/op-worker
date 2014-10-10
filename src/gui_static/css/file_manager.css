@@ -45,6 +45,8 @@
 .perms-warning {
     width: 100%;
     display: none;
+    color: #E85142;
+    font-weight: 700;
 }
 
 .perms-warning > span {
@@ -54,10 +56,13 @@
 }
 
 .perms-warning > p {
-    margin: 0 0 0 7px;
-    font-size: 15px;
-    line-height: 20px;
+    margin: 3px 0 3px 7px;
+    font-size: 16px;
+    line-height: 22px;
     display: inline-block;
+}
+.perms-warning > p > strong {
+    font-weight: 900;
 }
 
 #tab_posix {
