@@ -1009,7 +1009,11 @@ show_popup(Type) ->
                             end,
                 set_perms_state({Files, EnableACL, CommonACL}),
 
-                {ok, FullFilePath} = fslogic_path:get_full_file_name(gui_str:binary_to_unicode_list(FirstPath)),
+                PathToCheck = case FirstPath of
+                                  <<"/", ?SPACES_BASE_DIR_NAME>> -> <<"/">>;
+                                  _ -> FirstPath
+                              end,
+                {ok, FullFilePath} = fslogic_path:get_full_file_name(gui_str:binary_to_unicode_list(PathToCheck)),
                 {ok, #space_info{users = Users}} = fslogic_utils:get_space_info_for_path(FullFilePath),
                 Identifiers = gruids_to_identifiers(Users),
 
