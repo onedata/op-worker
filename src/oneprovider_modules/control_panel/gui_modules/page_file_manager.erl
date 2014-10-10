@@ -628,13 +628,13 @@ confirm_paste() ->
                         ok ->
                             Acc;
                         {logical_file_system_error, "eperm"} ->
-                            <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.\r\n">>;
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.<br />">>;
                         {logical_file_system_error, "eexist"} ->
-                            <<Acc/binary, "Unable to move ", Basename/binary, " - file exists.\r\n">>;
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - file exists.<br />">>;
                         {logical_file_system_error, "eacces"} ->
-                            <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.\r\n">>;
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.<br />">>;
                         _ ->
-                            <<Acc/binary, "Unable to move ", Basename/binary, " - error occured.\r\n">>
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - error occured.<br />">>
                     end;
                 copy ->
                     % Not yet implemented
@@ -681,10 +681,10 @@ submit_perms(Perms, Recursive) ->
                                     _ ->
                                         <<"error occured">>
                                 end,
-                    <<Acc/binary, Path/binary, ": ", ReasonBin/binary, "\r\n">>
+                    <<Acc/binary, Path/binary, ": ", ReasonBin/binary, "<br />">>
                 end, <<"">>, Failed),
             gui_jq:info_popup(<<"Error(s) occured">>,
-                <<Message/binary, "\r\n\r\n", FailedList/binary>>, <<"">>)
+                <<Message/binary, "<br /><br />", FailedList/binary>>, <<"">>)
     end,
     clear_manager().
 
