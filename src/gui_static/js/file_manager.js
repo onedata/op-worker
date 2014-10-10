@@ -113,7 +113,7 @@ update_chmod_textbox = function (mode) {
 var clicked_index = -2;
 
 populate_acl_list = function (json_array, select_index) {
-    var acl_list = $('#acl-list');
+    var acl_list = $('#acl_list');
     acl_list.html('');
 
     for (var i = 0; i < json_array.length; ++i) {
@@ -123,7 +123,7 @@ populate_acl_list = function (json_array, select_index) {
 
     acl_list.append('<div class="acl-entry" index="-1">' +
         '<a class="glyph-link acl-add-button" title="New ACL Entry"><span class="icomoon-plus"></span></a>' +
-        '<span class="acl-info-add">New ACL entry...</span>' +
+        '<span class="acl-add-info">New ACL entry...</span>' +
         '</div>');
 
     if (select_index > -1) {

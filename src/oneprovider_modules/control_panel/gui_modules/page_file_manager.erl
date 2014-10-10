@@ -1041,9 +1041,9 @@ show_popup(Type) ->
                             #p{id = <<"perms_header_info">>, body = <<"Permissions type:">>},
                             #span{id = <<"perms_radios">>, body = [
                                 #flatui_radio{id = <<"perms_radio_posix">>, name = <<"perms_radio">>,
-                                    label_class = <<"radio radio-label">>, body = <<"POSIX">>, checked = not EnableACL},
+                                    label_class = <<"radio perms-radio-label">>, body = <<"POSIX">>, checked = not EnableACL},
                                 #flatui_radio{id = <<"perms_radio_acl">>, name = <<"perms_radio">>,
-                                    label_class = <<"radio radio-label">>, body = <<"ACL">>, checked = EnableACL}
+                                    label_class = <<"radio perms-radio-label">>, body = <<"ACL">>, checked = EnableACL}
                             ]},
                             #link{id = wire_click(<<"perms_info_button">>, {action, show_permissions_info}),
                                 title = <<"Learn about permissions">>, class = <<"glyph-link">>,
@@ -1118,7 +1118,7 @@ show_popup(Type) ->
                                 #p{body = <<"order">>},
                                 #span{class = <<"icomoon-arrow-down">>}
                             ]},
-                            #panel{id = <<"acl-list">>},
+                            #panel{id = <<"acl_list">>},
                             #panel{id = <<"acl-form">>, body = [
                                 #table{id = <<"acl-form-table">>, body = [
                                     #tr{cells = [
@@ -1179,7 +1179,7 @@ show_popup(Type) ->
                     #form{class = <<"control-group">>, id = <<"perms_form">>, body = [
                         #flatui_checkbox{id = <<"chbx_recursive">>, label_class = <<"checkbox">>,
                             value = <<"">>, checked = false, body = <<"recursive">>,
-                            label_id = <<"chbx_recursive_label">>,
+                            label_id = <<"perms_recursive_label">>,
                             label_title = <<"Change perms in all subdirectories, recursively">>},
                         #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
                         #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}

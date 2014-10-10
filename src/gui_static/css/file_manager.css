@@ -3,11 +3,6 @@
     text-align: center;
 }
 
-#chbx_recursive_label {
-    margin: 10px 10px 0 0;
-    display: inline-block;
-}
-
 #perms_header {
     line-height: 33px;
     height: 33px;
@@ -23,7 +18,7 @@
     display: inline-block;
 }
 
-.radio-label {
+.perms-radio-label {
     margin-left: 18px;
     display: inline-block;
     padding-left: 24px;
@@ -36,6 +31,11 @@
 
 #perms_info_button > span {
     font-size: 20px;
+}
+
+#perms_recursive_label {
+    margin: 10px 10px 0 0;
+    display: inline-block;
 }
 
 #perms_form {
@@ -125,7 +125,7 @@
     font-size: 24px;
 }
 
-#acl-list {
+#acl_list {
     display: inline-block;
     width: 550px;
     height: 210px;
