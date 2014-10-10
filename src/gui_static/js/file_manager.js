@@ -239,7 +239,7 @@ submit_acl = function () {
     $('#spinner').delay(150).show();
     submit_acl_event([
         clicked_index,
-        $('#acl_textbox').val(),
+        $('#acl_select_name').val(),
         $('#acl_type_checkbox').is(':checked'),
         $('#acl_read_checkbox').is(':checked'),
         $('#acl_write_checkbox').is(':checked'),

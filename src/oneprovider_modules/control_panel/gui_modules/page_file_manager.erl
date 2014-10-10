@@ -14,6 +14,7 @@
 -include("oneprovider_modules/control_panel/common.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("oneprovider_modules/fslogic/fslogic_acl.hrl").
+-include("oneprovider_modules/dao/dao_users.hrl").
 -include("fuse_messages_pb.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -30,6 +31,7 @@
 -export([fs_has_perms/2, fs_chmod/3, fs_get_acl/1, fs_set_acl/3]).
 
 -export([dupa/0]).
+-export([gruids_to_identifiers/1]).
 
 dupa() ->
     #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = <<"id">>, acemask = ?read_mask}.
@@ -1024,8 +1026,9 @@ show_popup(Type) ->
                             end,
                 set_perms_state({Files, EnableACL, CommonACL}),
 
-                ?dump(get_space_from_path(FirstPath)),
-                ?dump(gr_spaces:get_users(provider, <<"space1">>)),
+                {ok, FullFilePath} = fslogic_path:get_full_file_name(gui_str:binary_to_unicode_list(FirstPath)),
+                {ok, #space_info{users = Users}} = fslogic_utils:get_space_info_for_path(FullFilePath),
+                Identifiers = gruids_to_identifiers(Users),
 
                 gui_jq:wire(<<"init_chmod_table(", (integer_to_binary(CommonPerms))/binary, ");">>),
                 {POSIXTabStyle, ACLTabStyle} = case EnableACL of
@@ -1122,8 +1125,10 @@ show_popup(Type) ->
                                         #td{body = [
                                             #label{class = <<"label label-inverse acl-label">>, body = <<"Identifier">>}
                                         ]},
-                                        #td{body = [
-                                            #textbox{id = <<"acl_textbox">>, class = <<"flat acl-textbox">>, placeholder = <<"User name">>}
+                                        #td{style = <<"padding-right: 20px;">>, body = [
+                                            #select{id = <<"acl_select_name">>, class = <<"select-block">>, body = [
+                                                lists:map(fun(Ident) -> #option{body = Ident} end, Identifiers)
+                                            ]}
                                         ]}
                                     ]},
                                     #tr{cells = [
@@ -1185,6 +1190,7 @@ show_popup(Type) ->
                 flatui_checkbox:init_checkbox(<<"acl_write_checkbox">>),
                 flatui_checkbox:init_checkbox(<<"acl_exec_checkbox">>),
                 flatui_radio:init_radio_button(<<"perms_radio_posix">>),
+                gui_jq:wire(<<"$('#acl_select_name').selectpicker({style: 'btn-small', menuStyle: 'dropdown-inverse'});">>),
                 gui_jq:wire(<<"$('#perms_radio_acl').change(function(e){change_perms_type_event($(this).is(':checked'));});">>),
                 flatui_radio:init_radio_button(<<"perms_radio_acl">>),
                 gui_jq:bind_element_click(<<"button_save_acl">>, <<"function() { submit_acl(); }">>),
@@ -1722,6 +1728,37 @@ get_space_from_path(<<"/", Path/binary>>) ->
             [#space_info{name = SpaceName} | _] = user_logic:get_spaces(fslogic_context:get_user_query()),
             gui_str:unicode_list_to_binary(SpaceName)
     end.
+
+
+gruids_to_identifiers(GRUIDs) ->
+    NamesWithGRUIDs = lists:map(
+        fun(GRUID) ->
+            {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
+            {Name, GRUID}
+        end, GRUIDs),
+    SortedNames = lists:keysort(1, NamesWithGRUIDs),
+    {_, Identifiers} = lists:foldl(fun({Name, GRUID}, {Temp, Acc}) ->
+        case Temp of
+            [] ->
+                {[{Name, GRUID}], Acc};
+            [{FirstTemp, _} | _] ->
+                case Name of
+                    FirstTemp ->
+                        {Temp ++ [{Name, GRUID}], Acc};
+                    _ ->
+                        case length(Temp) of
+                            1 ->
+                                {[{Name, GRUID}], Acc ++ [gui_str:unicode_list_to_binary(FirstTemp)]};
+                            _ ->
+                                {[{Name, GRUID}], Acc ++ lists:map(
+                                    fun({Nam, GRU}) ->
+                                        <<(gui_str:unicode_list_to_binary(Nam))/binary, " (#", GRU/binary, ")">>
+                                    end, Temp)}
+                        end
+                end
+        end
+    end, {[], []}, SortedNames ++ [{<<"">>, <<"">>}]),
+    Identifiers.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

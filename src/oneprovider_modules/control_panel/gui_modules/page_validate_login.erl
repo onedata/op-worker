@@ -70,7 +70,8 @@ body() ->
 
                                         SpacesBinary = [<<"space1">>, <<"space2">>],
                                         user_logic:create_user("12435", ["fake_user"], "Fake User", [], [], []),
-                                        user_logic:create_user("abcde", ["mock_user"], "Mock User", [], [], []),
+                                        user_logic:create_user("abcde", ["fake_user2"], "Fake User", [], [], []),
+                                        user_logic:create_user("54321", ["mock_user"], "Mock User", [], [], []),
                                         user_logic:create_user("9z8x7", ["dummy_user"], "Dummy User", [], [], []),
 
                                         mock(AllNodes, cluster_manager_lib, get_provider_id, fun() ->
@@ -79,7 +80,7 @@ body() ->
                                             {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
                                         mock(AllNodes, gr_adapter, get_space_info, fun(SpaceId, _) ->
                                             Users = case SpaceId of
-                                                        <<"space1">> -> [<<"12435">>, <<"abcde">>];
+                                                        <<"space1">> -> [<<"12435">>, <<"abcde">>, <<"54321">>];
                                                         <<"space2">> -> [<<"12435">>, <<"9z8x7">>]
                                                     end,
                                             {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [<<"providerId">>], users = Users}} end)

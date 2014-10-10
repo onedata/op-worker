@@ -1,7 +1,6 @@
 #perms_wrapper {
     position: relative;
     text-align: center;
-    overflow: hidden;
 }
 
 #chbx_recursive_label {
@@ -293,7 +292,8 @@
     border: 2px solid #526476;
     border-radius: 6px;
     margin-left: 20px;
-    overflow: hidden;
+    /*overflow: hidden;*/
+
 }
 
 #acl-form-table {
@@ -313,6 +313,13 @@
     margin-left: 0;
     cursor: auto;
     width: 60px;
+}
+
+#acl_select_name {
+    margin: 3px 20px -3px 0;
+    z-index: 2;
+    line-height: 18px;
+    color: #34495E;
 }
 
 .acl-textbox {
