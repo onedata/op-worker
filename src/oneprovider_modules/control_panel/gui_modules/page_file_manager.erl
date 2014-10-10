@@ -111,7 +111,7 @@ manager_submenu() ->
             #panel{class = <<"container">>, style = <<"position: relative; overflow: hidden;">>, body = [
                 #list{class = <<"nav">>, body =
                 tool_button_and_dummy(<<"tb_up_one_level">>, <<"Up one level">>, <<"padding: 10px 7px 10px 15px; font-size: 28px; margin: -2px 0 2px -8px;">>,
-                    <<"icomoon-arrow-left">>, {action, up_one_level})},
+                    <<"icomoon-arrow-left3">>, {action, up_one_level})},
                 #panel{class = <<"breadcrumb-text breadcrumb-background">>, style = <<"overflow: hidden; margin-left: 15px;">>, body = [
                     #p{id = <<"path_navigator">>, class = <<"breadcrumb-content">>, body = <<"~">>}
                 ]},
