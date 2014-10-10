@@ -785,8 +785,9 @@ populate_acl_list(SelectedIndex) ->
     {_Files, _EnableACL, ACLEntries} = get_perms_state(),
     JSON = rest_utils:encode_to_json(lists:map(
         fun(#accesscontrolentity{acetype = ACEType, aceflags = _ACEFlags, identifier = Identifier, acemask = ACEMask}) ->
+            {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, Identifier}),
             [
-                {<<"identifier">>, Identifier},
+                {<<"identifier">>, gui_str:unicode_list_to_binary(Name)},
                 {<<"allow">>, ACEType =:= ?allow_mask},
                 {<<"read">>, ACEMask band ?read_mask > 0},
                 {<<"write">>, ACEMask band ?write_mask > 0},
@@ -1739,7 +1740,7 @@ gruids_to_identifiers(GRUIDs) ->
                             _ ->
                                 {[{Name, GRUID}], Acc ++ lists:map(
                                     fun({Nam, GRU}) ->
-                                        <<(gui_str:unicode_list_to_binary(Nam))/binary, " (#", GRU/binary, ")">>
+                                        <<(gui_str:unicode_list_to_binary(Nam))/binary, "#", GRU/binary>>
                                     end, Temp)}
                         end
                 end
