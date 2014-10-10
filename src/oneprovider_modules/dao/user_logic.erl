@@ -25,7 +25,7 @@
 %% API
 %% ====================================================================
 -export([sign_in/4, create_user/6, create_user/9, get_user/1, remove_user/1, list_all_users/0]).
--export([get_login/1, get_name/1, get_teams/1, update_name/2, update_teams/2, get_space_ids/1]).
+-export([get_login/1, get_name/1, update_name/2, get_teams/1, update_teams/2, get_space_ids/1]).
 -export([get_email_list/1, update_email_list/2, get_role/1, update_role/2, update_access_credentials/4]).
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
