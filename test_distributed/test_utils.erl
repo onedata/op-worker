@@ -68,7 +68,7 @@ add_user(Config, Login, Cert, Spaces, AccessToken, RefreshToken, AccessExpiratio
     DnList = [DN],
     Name = Login ++ " " ++ Login,
     Teams = SpacesList,
-    Email = Login ++ "@email.net",
+    Email = [Login ++ "@email.net"],
     Logins = [#id_token_login{provider_id = plgrid, login = utils:ensure_binary(Login)}],
 
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),

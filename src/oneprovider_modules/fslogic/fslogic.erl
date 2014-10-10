@@ -38,12 +38,44 @@
 -spec init(Args :: term()) -> list().
 %% ====================================================================
 init(_Args) ->
-  Pid = self(),
-  {ok, CleaningInterval} = application:get_env(oneprovider_node, fslogic_cleaning_period),
-  erlang:send_after(CleaningInterval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
-  {ok, FilesSizeUpdateInterval} = application:get_env(oneprovider_node, user_files_size_view_update_period),
-  erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
-  [].
+    Pid = self(),
+    {ok, CleaningInterval} = application:get_env(oneprovider_node, fslogic_cleaning_period),
+    erlang:send_after(CleaningInterval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
+    {ok, FilesSizeUpdateInterval} = application:get_env(oneprovider_node, user_files_size_view_update_period),
+    erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
+
+    % Create acl permission cache
+    ProcFun = fun
+        (_ProtocolVersion, {grant_permission, StorageFileName, GRUID, Permission}, CacheName) ->
+            ets:insert(CacheName, {{StorageFileName, GRUID, Permission}, true}),
+            ok;
+        (_ProtocolVersion, {has_permission, StorageFileName, GRUID, Permission}, CacheName) ->
+            case ets:lookup(CacheName, {StorageFileName, GRUID, Permission}) of
+                [{_,true}] -> {ok, true};
+                _ -> {ok, false}
+            end;
+        (_ProtocolVersion, {invalidate_cache, StorageFileName}, CacheName) ->
+            ets:match_delete(CacheName,{{StorageFileName, '_', '_'}, '_'})
+    end,
+    MapFun = fun({_, StorageFileName, _, _}) ->
+        lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, StorageFileName)
+    end,
+    SubProcList = worker_host:generate_sub_proc_list(pemission_cache, ?CACHE_TREE_MAX_DEPTH, ?CACHE_TREE_MAX_WIDTH, ProcFun, MapFun, simple),
+    RequestMap = fun
+        ({grant_permission, _, _, _}) -> pemission_cache;
+        ({has_permission, _, _, _}) -> pemission_cache;
+        ({invalidate_cache, _}) -> pemission_cache;
+        (_) -> non
+    end,
+    DispMapFun = fun
+        ({invalidate_cache, StorageFileName}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, StorageFileName);
+        ({_, StorageFileName, _, _}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, StorageFileName);
+        (_) -> non
+    end,
+
+    #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispMapFun, sub_procs = SubProcList, plug_in_state = ok}.
 
 %% handle/2
 %% ====================================================================
@@ -330,6 +362,14 @@ handle_fuse_message(Req = #listxattr{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_req_generic:list_xattr(FullFileName);
 
+handle_fuse_message(Req = #getacl{file_logic_name = FName}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    fslogic_req_generic:get_acl(FullFileName);
+
+handle_fuse_message(Req = #setacl{file_logic_name = FName, entities = Entities}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    fslogic_req_generic:set_acl(FullFileName, Entities);
+
 handle_fuse_message(Req = #getfileuuid{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_req_utility:get_file_uuid(FullFileName);
@@ -362,6 +402,10 @@ handle_fuse_message(Req = #getfilechildren{dir_logic_name = FName, offset = Offs
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     {ok, UserPathTokens} = fslogic_path:verify_file_name(FName),
     fslogic_req_special:get_file_children(FullFileName, UserPathTokens, Offset, Count);
+
+handle_fuse_message(Req = #getfilechildrencount{dir_logic_name = FName}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    fslogic_req_special:get_file_children_count(FullFileName);
 
 handle_fuse_message(Req = #deletefile{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
@@ -428,6 +472,10 @@ extract_logical_path(#removexattr{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#listxattr{file_logic_name = Path}) ->
     Path;
+extract_logical_path(#getacl{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#setacl{file_logic_name = Path}) ->
+    Path;
 extract_logical_path(#getfilelocation{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#deletefile{file_logic_name = Path}) ->
@@ -439,6 +487,8 @@ extract_logical_path(#getnewfilelocation{file_logic_name = Path}) ->
 extract_logical_path(#filenotused{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#renewfilelocation{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getfilechildrencount{dir_logic_name = Path}) ->
     Path;
 extract_logical_path(#getfilechildren{dir_logic_name = Path}) ->
     Path;
