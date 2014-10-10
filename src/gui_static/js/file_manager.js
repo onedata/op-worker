@@ -60,12 +60,6 @@ init_chmod_table = function (current_mode) {
             }
         }
     });
-
-    // Initialize tabs
-    $('.nav-tabs a').on('click', function (e) {
-        e.preventDefault();
-        $(this).tab("show");
-    });
 };
 
 // Submit newly chosen mode to the server

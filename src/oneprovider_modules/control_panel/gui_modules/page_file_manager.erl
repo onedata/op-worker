@@ -30,12 +30,6 @@
 -export([fs_list_dir/1, fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
 -export([fs_has_perms/2, fs_chmod/3, fs_get_acl/1, fs_set_acl/3]).
 
--export([dupa/0]).
--export([gruids_to_identifiers/1]).
-
-dupa() ->
-    #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = <<"id">>, acemask = ?read_mask}.
-
 % All file attributes that are supported
 -define(ALL_ATTRIBUTES, [perms, size, atime, mtime]).
 
@@ -351,17 +345,6 @@ comet_loop_init(GRUID, UserAccessToken, RequestedHostname) ->
     set_clipboard_type(none),
     refresh_workspace(),
     gui_jq:hide(<<"spinner">>),
-
-    %% TODO
-%%     set_perms_state({[{<<"/spaces">>, <<"spaces">>}], true, [
-%%         #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = <<"Janusz">>, acemask = ?read_mask},
-%%         #accesscontrolentity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = <<"Waclaw"/utf8>>, acemask = ?write_mask},
-%%         #accesscontrolentity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = <<"Bogdan">>, acemask = ?execute_mask},
-%%         #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = <<"Staszek">>, acemask = ?write_mask bor ?read_mask bor ?execute_mask}
-%%     ]}),
-%%     set_selected_items([{<<"/spaces">>, <<"spaces">>}]),
-%%     show_popup(chmod),
-
     gui_comet:flush(),
 
     % Enter comet loop for event processing and autorefreshing
@@ -1000,7 +983,7 @@ show_popup(Type) ->
                 {FirstType, FirstValue} = GetTypeAndValue(FirstPath),
 
                 % CommonType can be undefined|acl|posix
-                % CommonValue can be undefined|list()|integer
+                % CommonValue can be undefined|list()|integer()
                 {CommonType, CommonValue} = lists:foldl(
                     fun(ItemPath, {AccCommonType, AccCommonValue}) ->
                         {ItemType, ItemValue} = GetTypeAndValue(ItemPath),
@@ -1154,11 +1137,11 @@ show_popup(Type) ->
                                     ]},
                                     #tr{cells = [
                                         #td{body = [
-                                            #button{id = <<"button_save_acl">>, class = <<"btn btn-success acl-button">>,
+                                            #button{id = <<"button_save_acl">>, class = <<"btn btn-success acl-form-button">>,
                                                 body = <<"Save">>}
                                         ]},
                                         #td{body = [
-                                            #button{id = <<"button_discard_acl">>, class = <<"btn btn-danger acl-button">>,
+                                            #button{id = <<"button_discard_acl">>, class = <<"btn btn-danger acl-form-button">>,
                                                 body = <<"Discard">>, postback = {action, populate_acl_list, [-1]}}
                                         ]}
                                     ]}

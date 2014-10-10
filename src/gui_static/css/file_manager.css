@@ -152,7 +152,7 @@
     cursor: pointer;
 }
 
-.acl-info-add {
+.acl-add-info {
     position: absolute;
     top: 12px;
     left: 30px;
@@ -322,21 +322,6 @@
     color: #34495E;
 }
 
-.acl-textbox {
-    width: 250px;
-    margin-top: -3px !important;
-    margin-bottom: 3px !important;
-    border: 2px solid #BDC3C7 !important;
-}
-
-.acl-textbox:focus {
-    border: 2px solid rgb(26, 188, 156) !important;
-}
-
-.acl-textbox.disabled {
-    border: 2px solid #EDEFF1 !important;
-}
-
 .acl-checkbox {
     margin-top: -3px;
     margin-bottom: 3px;
@@ -344,7 +329,7 @@
     display: inline-block;
 }
 
-.acl-button {
+.acl-form-button {
     padding: 4px 8px !important;
     width: 78px;
     font-size: 13px;
