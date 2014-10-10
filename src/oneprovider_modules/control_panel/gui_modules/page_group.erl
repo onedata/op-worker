@@ -6,16 +6,15 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains n2o website code.
-%% The page allows user to manage his Space.
+%% The page allows user to manage his Group.
 %% @end
 %% ===================================================================
 
--module(page_space).
+-module(page_group).
 -include("oneprovider_modules/control_panel/common.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
 -include_lib("ctool/include/global_registry/gr_groups.hrl").
--include_lib("ctool/include/global_registry/gr_providers.hrl").
+-include_lib("ctool/include/global_registry/gr_spaces.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% n2o API and comet
@@ -31,7 +30,7 @@
 
 %% Comet process state
 -define(STATE, comet_state).
--record(?STATE, {space_id, providers_details, users_details, groups_details, gruid, access_token}).
+-record(?STATE, {counter = 1, group_id, spaces_details, users_details, gruid, access_token}).
 
 %% ====================================================================
 %% API functions
@@ -51,15 +50,15 @@ main() ->
         false ->
             case gui_ctx:url_param(<<"id">>) of
                 undefined ->
-                    page_error:redirect_with_error(?error_space_not_found),
+                    page_error:redirect_with_error(?error_group_not_found),
                     #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
                 Id ->
-                    SpaceId = gui_str:to_binary(Id),
-                    case gr_users:get_space_details({user, opn_gui_utils:get_access_token()}, SpaceId) of
-                        {ok, SpaceDetails} ->
-                            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body(SpaceDetails)}, {custom, custom()}]};
+                    GroupId = gui_str:to_binary(Id),
+                    case gr_groups:get_details({user, opn_gui_utils:get_access_token()}, GroupId) of
+                        {ok, GroupDetails} ->
+                            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body(GroupDetails)}, {custom, custom()}]};
                         _ ->
-                            page_error:redirect_with_error(?error_space_permission_denied),
+                            page_error:redirect_with_error(?error_group_permission_denied),
                             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]}
                     end
             end
@@ -74,7 +73,7 @@ main() ->
     Result :: binary().
 %% ====================================================================
 title() ->
-    <<"Space details">>.
+    <<"Group details">>.
 
 
 %% custom/0
@@ -90,10 +89,10 @@ custom() ->
 %% ====================================================================
 %% @doc This will be placed instead of {{body}} tag in template.
 %% @end
--spec body(SpaceDetails :: #space_details{}) -> Result when
+-spec body(GroupDetails :: #group_details{}) -> Result when
     Result :: #panel{}.
 %% ====================================================================
-body(SpaceDetails) ->
+body(GroupDetails) ->
     MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
     [
         #panel{
@@ -103,7 +102,7 @@ body(SpaceDetails) ->
                 image = <<"/images/spinner.gif">>
             }
         },
-        opn_gui_utils:top_menu(spaces_tab),
+        opn_gui_utils:top_menu(groups_tab),
         #panel{
             id = <<"ok_message">>,
             style = MessageStyle,
@@ -119,9 +118,9 @@ body(SpaceDetails) ->
             body = [
                 #h6{
                     style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; text-align: center;">>,
-                    body = <<"Manage Space">>
+                    body = <<"Manage group">>
                 },
-                space_details_table(SpaceDetails) |
+                group_details_table(GroupDetails) |
                 lists:map(fun({TableId, Body, Panel}) ->
                     #panel{
                         body = [
@@ -137,23 +136,22 @@ body(SpaceDetails) ->
                         ]
                     }
                 end, [
-                    {<<"providers_table">>, providers_table_collapsed([]), providers_panel()},
-                    {<<"users_table">>, users_table_collapsed([]), users_panel()},
-                    {<<"groups_table">>, groups_table_collapsed([]), groups_panel()}
+                    {<<"spaces_table">>, spaces_table_collapsed([]), spaces_panel()},
+                    {<<"users_table">>, users_table_collapsed([]), users_panel()}
                 ])
             ]
         }
     ].
 
 
-%% space_details_table/1
+%% group_details_table/1
 %% ====================================================================
-%% @doc Renders the body of Space details table
+%% @doc Renders the body of Group details table
 %% @end
--spec space_details_table(SpaceDetails :: #space_details{}) -> Result when
+-spec group_details_table(GroupDetails :: #group_details{}) -> Result when
     Result :: #table{}.
 %% ====================================================================
-space_details_table(#space_details{id = SpaceId} = SpaceDetails) ->
+group_details_table(#group_details{id = GroupId} = GroupDetails) ->
     DescriptionStyle = <<"border-width: 0; text-align: right;">>,
     MainStyle = <<"border-width: 0;  text-align: left;">>,
     #table{
@@ -177,29 +175,29 @@ space_details_table(#space_details{id = SpaceId} = SpaceDetails) ->
                 ]
             }
         end, [
-            {<<"Space Name">>, <<"space_name">>, space_name(SpaceDetails)},
-            {<<"Space ID">>, <<"">>, #span{style = ?DETAIL_STYLE, body = SpaceId}}
+            {<<"Group Name">>, <<"group_name">>, group_name(GroupDetails)},
+            {<<"Group ID">>, <<"">>, #span{style = ?DETAIL_STYLE, body = GroupId}}
         ])
     }.
 
 
-%% space_name/1
+%% group_name/1
 %% ====================================================================
-%% @doc Renders editable Space name.
--spec space_name(SpaceDetails :: #space_details{}) -> Result when
+%% @doc Renders editable Group name.
+-spec group_name(GroupDetails :: #group_details{}) -> Result when
     Result :: #span{}.
 %% ====================================================================
-space_name(#space_details{name = SpaceName} = SpaceDetails) ->
+group_name(#group_details{name = GroupName} = GroupDetails) ->
     #span{
         style = <<"font-size: large;">>,
         body = [
-            SpaceName,
+            GroupName,
             #link{
-                id = <<"change_space_name_span">>,
+                id = <<"change_group_name_span">>,
                 title = <<"Edit">>,
                 style = <<"margin-left: 1em; display: none;">>,
                 class = <<"glyph-link">>,
-                postback = {change_space_name, SpaceDetails},
+                postback = {change_group_name, GroupDetails},
                 body = #span{
                     class = <<"icomoon-pencil2">>
                 }
@@ -208,26 +206,26 @@ space_name(#space_details{name = SpaceName} = SpaceDetails) ->
     }.
 
 
-%% change_space_name/2
+%% change_group_name/2
 %% ====================================================================
-%% @doc Renders textbox used to change Space name.
--spec change_space_name(SpaceDetails :: #space_details{}) -> Result when
+%% @doc Renders textbox used to change Group name.
+-spec change_group_name(GroupDetails :: #group_details{}) -> Result when
     Result :: list().
 %% ====================================================================
-change_space_name(SpaceDetails) ->
+change_group_name(GroupDetails) ->
     [
         #textbox{
-            id = <<"new_space_name_textbox">>,
+            id = <<"new_group_name_textbox">>,
             style = <<"margin: 0 auto; padding: 1px;">>,
             class = <<"span">>,
-            placeholder = <<"New Space name">>
+            placeholder = <<"New Group name">>
         },
         #link{
-            id = <<"new_space_name_submit">>,
+            id = <<"new_group_name_submit">>,
             style = <<"margin-left: 10px;">>,
             class = <<"glyph-link">>,
             title = <<"Submit">>,
-            actions = gui_jq:form_submit_action(<<"new_space_name_submit">>, {submit_new_space_name, SpaceDetails}, <<"new_space_name_textbox">>),
+            actions = gui_jq:form_submit_action(<<"new_group_name_submit">>, {submit_new_group_name, GroupDetails}, <<"new_group_name_textbox">>),
             body = #span{
                 class = <<"fui-check-inverted">>,
                 style = <<"font-size: large; vertical-align: middle;">>
@@ -237,7 +235,7 @@ change_space_name(SpaceDetails) ->
             style = <<"margin-left: 10px;">>,
             class = <<"glyph-link">>,
             title = <<"Cancel">>,
-            postback = {cancel_new_space_name_submit, SpaceDetails},
+            postback = {cancel_new_group_name_submit, GroupDetails},
             body = #span{
                 class = <<"fui-cross-inverted">>,
                 style = <<"font-size: large; vertical-align: middle;">>
@@ -246,22 +244,29 @@ change_space_name(SpaceDetails) ->
     ].
 
 
-%% providers_panel/0
+%% spaces_panel/0
 %% ====================================================================
-%% @doc Renders providers management panel.
--spec providers_panel() -> Result when
+%% @doc Renders spaces management panel.
+-spec spaces_panel() -> Result when
     Result :: #panel{}.
 %% ====================================================================
-providers_panel() ->
+spaces_panel() ->
     #panel{
         style = <<"margin: 0 auto; width: 50%; margin-top: 30px; text-align: center;">>,
-        body = #button{
-            id = <<"request_support_button">>,
-            disabled = true,
-            postback = {message, request_support},
-            class = <<"btn btn-inverse btn-small">>,
-            body = <<"Request support">>
-        }
+        body = lists:map(fun({ButtonId, ButtonPostback, ButtonBody}) ->
+            #button{
+                id = ButtonId,
+                postback = ButtonPostback,
+                disabled = true,
+                class = <<"btn btn-inverse btn-small">>,
+                style = <<"margin-right: 0.5em; margin-left: 0.5em;">>,
+                body = ButtonBody
+            }
+        end, [
+            {<<"create_space_button">>, create_space, <<"Create Space">>},
+            {<<"join_space_button">>, join_space, <<"Join Space">>},
+            {<<"request_space_creation_button">>, {message, request_space_creation}, <<"Request Space creation">>}
+        ])
     }.
 
 
@@ -284,50 +289,32 @@ users_panel() ->
     }.
 
 
-%% groups_panel/0
+%% spaces_table_collapsed/1
 %% ====================================================================
-%% @doc Renders groups management panel.
--spec groups_panel() -> Result when
-    Result :: #panel{}.
-%% ====================================================================
-groups_panel() ->
-    #panel{
-        style = <<"margin: 0 auto; width: 50%; margin-top: 30px; text-align: center;">>,
-        body = #button{
-            id = <<"invite_group_button">>,
-            disabled = true,
-            postback = {message, invite_group},
-            class = <<"btn btn-inverse btn-small">>,
-            body = <<"Invite group">>
-        }
-    }.
-
-%% providers_table_collapsed/1
-%% ====================================================================
-%% @doc Renders collapsed providers details table.
+%% @doc Renders collapsed spaces details table.
 %% @end
--spec providers_table_collapsed(ProvidersDetails :: [{Id :: binary(), Privileges :: [binary()], ProviderDetails :: #provider_details{}}]) -> Result when
+-spec spaces_table_collapsed(SpacesDetails :: [{Id :: binary(), Privileges :: [binary()], SpaceDetails :: #space_details{}}]) -> Result when
     Result :: [#tr{}].
 %% ====================================================================
-providers_table_collapsed(ProvidersDetails) ->
-    TableName = <<"Providers">>,
-    NavigationBody = opn_gui_utils:expand_button(<<"Expand All">>, {message, expand_providers_table}),
-    RenderRowFunction = fun provider_row_collapsed/3,
-    table(ProvidersDetails, TableName, NavigationBody, RenderRowFunction).
+spaces_table_collapsed(SpacesDetails) ->
+    TableName = <<"Spaces">>,
+    NavigationBody = opn_gui_utils:expand_button(<<"Expand All">>, {message, expand_spaces_table}),
+    RenderRowFunction = fun space_row_collapsed/3,
+    table(SpacesDetails, TableName, NavigationBody, RenderRowFunction).
 
 
-%% providers_table_expanded/1
+%% spaces_table_expanded/1
 %% ====================================================================
-%% @doc Renders expanded providers details table.
+%% @doc Renders expanded spaces details table.
 %% @end
--spec providers_table_expanded(ProvidersDetails :: [{Id :: binary(), Privileges :: [binary()], ProviderDetails :: #provider_details{}}]) -> Result when
+-spec spaces_table_expanded(SpacesDetails :: [{Id :: binary(), Privileges :: [binary()], SpaceDetails :: #space_details{}}]) -> Result when
     Result :: [#tr{}].
 %% ====================================================================
-providers_table_expanded(ProvidersDetails) ->
-    TableName = <<"Providers">>,
-    NavigationBody = opn_gui_utils:collapse_button(<<"Collapse All">>, {message, collapse_providers_table}),
-    RenderRowFunction = fun provider_row_expanded/3,
-    table(ProvidersDetails, TableName, NavigationBody, RenderRowFunction).
+spaces_table_expanded(SpacesDetails) ->
+    TableName = <<"Spaces">>,
+    NavigationBody = opn_gui_utils:collapse_button(<<"Collapse All">>, {message, collapse_spaces_table}),
+    RenderRowFunction = fun space_row_expanded/3,
+    table(SpacesDetails, TableName, NavigationBody, RenderRowFunction).
 
 
 %% users_table_collapsed/1
@@ -358,39 +345,11 @@ users_table_expanded(UsersDetails) ->
     table(UsersDetails, TableName, NavigationBody, RenderRowFunction).
 
 
-%% groups_table_collapsed/1
-%% ====================================================================
-%% @doc Renders collapsed groups details table.
-%% @end
--spec groups_table_collapsed(GroupsDetails :: [{Id :: binary(), Privileges :: [binary()], GroupDetails :: #group_details{}}]) -> Result when
-    Result :: [#tr{}].
-%% ====================================================================
-groups_table_collapsed(GroupsDetails) ->
-    TableName = <<"Groups">>,
-    NavigationBody = opn_gui_utils:expand_button(<<"Expand All">>, {message, expand_groups_table}),
-    RenderRowFunction = fun group_row_collapsed/3,
-    table(GroupsDetails, TableName, NavigationBody, RenderRowFunction).
-
-
-%% groups_table_expanded/1
-%% ====================================================================
-%% @doc Renders expanded groups details table.
-%% @end
--spec groups_table_expanded(GroupsDetails :: [{Id :: binary(), Privileges :: [binary()], GroupDetails :: #group_details{}}]) -> Result when
-    Result :: [#tr{}].
-%% ====================================================================
-groups_table_expanded(GroupsDetails) ->
-    TableName = <<"Groups">>,
-    NavigationBody = opn_gui_utils:collapse_button(<<"Collapse All">>, {message, collapse_groups_table}),
-    RenderRowFunction = fun group_row_expanded/3,
-    table(GroupsDetails, TableName, NavigationBody, RenderRowFunction).
-
-
 %% table/4
 %% ====================================================================
 %% @doc Renders details table.
 %% @end
--spec table(Details :: [{Id :: binary(), Details :: #provider_details{} | #user_details{} | #group_details{}}], TableName :: binary(),
+-spec table(Details :: [{Id :: binary(), Details :: #user_details{} | #space_details{}}], TableName :: binary(),
     NavigationBody :: #link{}, RenderRowFunction :: function()) -> Result when
     Result :: [#tr{}].
 %% ====================================================================
@@ -418,41 +377,31 @@ table(Details, TableName, NavigationBody, RenderRowFunction) ->
     [Header | Rows].
 
 
-%% provider_row_collapsed/3
+%% space_row_collapsed/3
 %% ====================================================================
-%% @doc Renders collapsed provider details row.
+%% @doc Renders collapsed space details row.
 %% @end
--spec provider_row_collapsed(RowId :: binary(), Privileges :: [binary()], ProviderDetails :: #provider_details{}) -> Result when
+-spec space_row_collapsed(RowId :: binary(), Privileges :: [binary()], SpaceDetails :: #space_details{}) -> Result when
     Result :: [#td{}].
 %% ====================================================================
-provider_row_collapsed(RowId, Privileges, #provider_details{id = ProviderId, name = ProviderName} = ProviderDetails) ->
-    NavigationBody = opn_gui_utils:expand_button({message, {expand_provider_row, RowId, Privileges, ProviderDetails}}),
-    row_collapsed(ProviderId, ProviderName, NavigationBody).
+space_row_collapsed(RowId, Privileges, #space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
+    NavigationBody = opn_gui_utils:expand_button({message, {expand_space_row, RowId, Privileges, SpaceDetails}}),
+    row_collapsed(SpaceId, SpaceName, NavigationBody).
 
 
-%% provider_row_expanded/3
+%% space_row_expanded/3
 %% ====================================================================
-%% @doc Renders expanded provider details row.
+%% @doc Renders expanded space details row.
 %% @end
--spec provider_row_expanded(RowId :: binary(), Privileges :: [binary()], ProviderDetails :: #provider_details{}) -> Result when
+-spec space_row_expanded(RowId :: binary(), Privileges :: [binary()], SpaceDetails :: #space_details{}) -> Result when
     Result :: [#td{}].
 %% ====================================================================
-provider_row_expanded(RowId, Privileges, #provider_details{id = ProviderId, name = ProviderName, redirection_point = RedirectionPoint, urls = URLs} = ProviderDetails) ->
+space_row_expanded(RowId, Privileges, #space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
     Details = [
-        {<<"Name">>, detail(ProviderName, <<"Remove provider">>, lists:member(<<"space_remove_provider">>, Privileges), {remove_provider, RowId, ProviderDetails}, <<"icomoon-remove">>)},
-        {<<"Provider ID">>, #span{style = ?DETAIL_STYLE, body = ProviderId}},
-        {<<"URLs">>, #list{
-            style = <<"list-style-type: none; margin: 0 auto;">>,
-            body = lists:map(fun(URL) ->
-                #li{body = #span{
-                    style = ?DETAIL_STYLE,
-                    body = URL}
-                }
-            end, lists:sort(URLs))
-        }},
-        {<<"Redirection point">>, #span{style = ?DETAIL_STYLE, body = RedirectionPoint}}
+        {<<"Name">>, detail(SpaceName, <<"Leave space">>, lists:member(<<"group_leave_space">>, Privileges), {leave_space, RowId, SpaceDetails}, <<"icomoon-exit">>)},
+        {<<"Space ID">>, #span{style = ?DETAIL_STYLE, body = SpaceId}}
     ],
-    NavigationBody = opn_gui_utils:collapse_button({message, {collapse_provider_row, RowId, Privileges, ProviderDetails}}),
+    NavigationBody = opn_gui_utils:collapse_button({message, {collapse_space_row, RowId, Privileges, SpaceDetails}}),
     row_expanded(Details, NavigationBody).
 
 
@@ -477,38 +426,10 @@ user_row_collapsed(RowId, Privileges, #user_details{id = UserId, name = UserName
 %% ====================================================================
 user_row_expanded(RowId, Privileges, #user_details{id = UserId, name = UserName} = UserDetails) ->
     Details = [
-        {<<"Name">>, detail(UserName, <<"Remove user">>, lists:member(<<"space_remove_user">>, Privileges), {remove_user, RowId, UserDetails}, <<"icomoon-remove">>)},
+        {<<"Name">>, detail(UserName, <<"Remove user">>, lists:member(<<"group_remove_user">>, Privileges), {remove_user, RowId, UserDetails}, <<"icomoon-remove">>)},
         {<<"User ID">>, #span{style = ?DETAIL_STYLE, body = UserId}}
     ],
     NavigationBody = opn_gui_utils:collapse_button({message, {collapse_user_row, RowId, Privileges, UserDetails}}),
-    row_expanded(Details, NavigationBody).
-
-
-%% group_row_collapsed/3
-%% ====================================================================
-%% @doc Renders collapsed group details row.
-%% @end
--spec group_row_collapsed(RowId :: binary(), Privileges :: [binary()], GroupDetails :: #group_details{}) -> Result when
-    Result :: [#td{}].
-%% ====================================================================
-group_row_collapsed(RowId, Privileges, #group_details{id = GroupId, name = GroupName} = GroupDetails) ->
-    NavigationBody = opn_gui_utils:expand_button({message, {expand_group_row, RowId, Privileges, GroupDetails}}),
-    row_collapsed(GroupId, GroupName, NavigationBody).
-
-
-%% group_row_expanded/3
-%% ====================================================================
-%% @doc Renders expanded group details row.
-%% @end
--spec group_row_expanded(RowId :: binary(), Privileges :: [binary()], GroupDetails :: #group_details{}) -> Result when
-    Result :: [#td{}].
-%% ====================================================================
-group_row_expanded(RowId, Privileges, #group_details{id = GroupId, name = GroupName} = GroupDetails) ->
-    Details = [
-        {<<"Name">>, detail(GroupName, <<"Remove group">>, lists:member(<<"space_remove_group">>, Privileges), {remove_group, RowId, GroupDetails}, <<"icomoon-remove">>)},
-        {<<"Group ID">>, #span{style = ?DETAIL_STYLE, body = GroupId}}
-    ],
-    NavigationBody = opn_gui_utils:collapse_button({message, {collapse_group_row, RowId, Privileges, GroupDetails}}),
     row_expanded(Details, NavigationBody).
 
 
@@ -604,115 +525,151 @@ row_expanded(Details, NavigationBody) ->
     ].
 
 
+%% add_space_row/3
+%% ====================================================================
+%% @doc Adds collapsed Space settings row to Spaces settings table.
+-spec add_space_row(RowId :: binary(), Privileges :: [binary()], SpaceDetails :: #space_details{}) -> Result when
+    Result :: ok.
+%% ====================================================================
+add_space_row(RowId, Privileges, SpaceDetails) ->
+    Row = #tr{
+        id = RowId,
+        cells = space_row_collapsed(RowId, Privileges, SpaceDetails)
+    },
+    gui_jq:insert_bottom(<<"spaces_table">>, Row).
+
+
 %% ====================================================================
 %% Events handling
 %% ====================================================================
 
 %% comet_loop/1
 %% ====================================================================
-%% @doc Handles space management actions.
+%% @doc Handles group management actions.
 -spec comet_loop(State :: #?STATE{}) -> Result when
     Result :: {error, Reason :: term()}.
 %% ====================================================================
 comet_loop({error, Reason}) ->
     {error, Reason};
 
-comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, users_details = UsersDetails,
-    groups_details = GroupsDetails, gruid = GRUID, access_token = AccessToken} = State) ->
+comet_loop(#?STATE{counter = Counter, group_id = GroupId, spaces_details = SpacesDetails,
+    users_details = UsersDetails, gruid = GRUID, access_token = AccessToken} = State) ->
     NewCometLoopState =
         try
             receive
                 {render_tables, Privileges} ->
-                    gui_jq:update(<<"providers_table">>, providers_table_collapsed(ProvidersDetails)),
+                    gui_jq:update(<<"spaces_table">>, spaces_table_collapsed(SpacesDetails)),
                     gui_jq:update(<<"users_table">>, users_table_collapsed(UsersDetails)),
-                    gui_jq:update(<<"groups_table">>, groups_table_collapsed(GroupsDetails)),
 
                     lists:foreach(fun
                         ({false, _, _, _}) -> ok;
                         ({true, Module, Function, Args}) -> apply(Module, Function, Args)
                     end, [
-                        {lists:member(<<"space_change_data">>, Privileges), gui_jq, show, [<<"change_space_name_span">>]},
-                        {lists:member(<<"space_invite_user">>, Privileges), gui_jq, prop, [<<"invite_user_button">>, <<"disabled">>, <<"">>]},
-                        {lists:member(<<"space_invite_group">>, Privileges), gui_jq, prop, [<<"invite_group_button">>, <<"disabled">>, <<"">>]},
-                        {lists:member(<<"space_add_provider">>, Privileges), gui_jq, prop, [<<"request_support_button">>, <<"disabled">>, <<"">>]}
+                        {lists:member(<<"group_change_data">>, Privileges), gui_jq, show, [<<"change_group_name_span">>]},
+                        {lists:member(<<"group_invite_user">>, Privileges), gui_jq, prop, [<<"invite_user_button">>, <<"disabled">>, <<"">>]},
+                        {lists:member(<<"group_create_space">>, Privileges), gui_jq, prop, [<<"create_space_button">>, <<"disabled">>, <<"">>]},
+                        {lists:member(<<"group_join_space">>, Privileges), gui_jq, prop, [<<"join_space_button">>, <<"disabled">>, <<"">>]},
+                        {lists:member(<<"group_create_space_token">>, Privileges), gui_jq, prop, [<<"request_space_creation_button">>, <<"disabled">>, <<"">>]}
                     ]),
 
                     State;
 
-                request_support ->
-                    case gr_spaces:get_invite_provider_token({user, AccessToken}, SpaceId) of
+                {create_space, Name} ->
+                    NewState = try
+                                   {ok, SpaceId} = gr_groups:create_space({user, AccessToken}, GroupId, [{<<"name">>, Name}]),
+                                   {ok, SpaceDetails} = gr_groups:get_space_details({user, AccessToken}, GroupId, SpaceId),
+                                   {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
+                                   opn_gui_utils:message(<<"ok_message">>, <<"Created Space ID: <b>", SpaceId/binary, "</b>">>),
+                                   gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
+                                   RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
+                                   add_space_row(RowId, Privileges, SpaceDetails),
+                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, Privileges, SpaceDetails}]}
+                               catch
+                                   _:Other ->
+                                       ?error("Cannot create Space ~p: ~p", [Name, Other]),
+                                       opn_gui_utils:message(<<"error_message">>, <<"Cannot create Space: <b>", Name/binary, "</b>.<br>Please try again later.">>),
+                                       State
+                               end,
+                    gui_jq:prop(<<"create_space_button">>, <<"disabled">>, <<"">>),
+                    NewState;
+
+                {join_space, Token} ->
+                    NewState = try
+                                   {ok, SpaceId} = gr_groups:join_space({user, AccessToken}, GroupId, [{<<"token">>, Token}]),
+                                   {ok, SpaceDetails} = gr_groups:get_space_details({user, AccessToken}, GroupId, SpaceId),
+                                   {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
+                                   opn_gui_utils:message(<<"ok_message">>, <<"Joined Space ID: <b>", SpaceId/binary, "</b>">>),
+                                   gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
+                                   RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
+                                   add_space_row(RowId, Privileges, SpaceDetails),
+                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, Privileges, SpaceDetails}]}
+                               catch
+                                   _:Other ->
+                                       ?error("Cannot join Space using token ~p: ~p", [Token, Other]),
+                                       opn_gui_utils:message(<<"error_message">>, <<"Cannot join Space using token: <b>", Token/binary, "</b>.<br>Please try again later.">>),
+                                       State
+                               end,
+                    gui_jq:prop(<<"join_space_button">>, <<"disabled">>, <<"">>),
+                    NewState;
+
+                request_space_creation ->
+                    case gr_groups:get_create_space_token({user, AccessToken}, GroupId) of
                         {ok, Token} ->
-                            Message = <<"Give the token below to a provider willing to support your Space.",
-                            "<input id=\"support_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
+                            Message = <<"Give the token below to a provider willing to create Space for your group.",
+                            "<input id=\"create_space_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
                             " width: 80%;\" value=\"", Token/binary, "\">">>,
-                            gui_jq:info_popup(<<"Request support">>, Message, <<"return true;">>, <<"btn-inverse">>),
-                            gui_jq:wire(<<"box.on('shown',function(){ $(\"#support_token_textbox\").focus().select(); });">>);
+                            gui_jq:info_popup(<<"Request Space creation">>, Message, <<"return true;">>, <<"btn-inverse">>),
+                            gui_jq:wire(<<"box.on('shown',function(){ $(\"#create_space_token_textbox\").focus().select(); });">>);
                         Other ->
-                            ?error("Cannot get support token for Space with ID ~p: ~p", [SpaceId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get support token for Space with ID: <b>", SpaceId, "</b>."
+                            ?error("Cannot get support token for group with ID ~p: ~p", [GroupId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get Space creation token for group with ID: <b>", GroupId, "</b>."
                             "<br>Please try again later.">>)
                     end,
                     State;
 
                 invite_user ->
-                    case gr_spaces:get_invite_user_token({user, AccessToken}, SpaceId) of
+                    case gr_groups:get_invite_user_token({user, AccessToken}, GroupId) of
                         {ok, Token} ->
-                            Message = <<"Give the token below to a user willing to join your Space.",
+                            Message = <<"Give the token below to a user willing to join your group.",
                             "<input id=\"join_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
                             " width: 80%;\" value=\"", Token/binary, "\">">>,
                             gui_jq:info_popup(<<"Invite user">>, Message, <<"return true;">>, <<"btn-inverse">>),
                             gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_token_textbox\").focus().select(); });">>);
                         Other ->
-                            ?error("Cannot get user invitation token for Space with ID ~p: ~p", [SpaceId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."
+                            ?error("Cannot get user invitation token for group with ID ~p: ~p", [GroupId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Group with ID: <b>", GroupId, "</b>."
                             "<br>Please try again later.">>)
                     end,
                     State;
 
-                invite_group ->
-                    case gr_spaces:get_invite_group_token({user, AccessToken}, SpaceId) of
-                        {ok, Token} ->
-                            Message = <<"Give the token below to a group willing to join your Space.",
-                            "<input id=\"join_token_textbox\" type=\"text\" style=\"margin-top: 1em;"
-                            " width: 80%;\" value=\"", Token/binary, "\">">>,
-                            gui_jq:info_popup(<<"Invite group">>, Message, <<"return true;">>, <<"btn-inverse">>),
-                            gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_token_textbox\").focus().select(); });">>);
-                        Other ->
-                            ?error("Cannot get group invitation token for Space with ID ~p: ~p", [SpaceId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."
-                            "<br>Please try again later.">>)
-                    end,
-                    State;
-
-                {change_space_name, #space_details{id = SpaceId} = SpaceDetails, NewSpaceName} ->
-                    case gr_spaces:modify_details({user, AccessToken}, SpaceId, [{<<"name">>, NewSpaceName}]) of
+                {change_group_name, #group_details{id = GroupId} = GroupDetails, NewGroupName} ->
+                    case gr_groups:modify_details({user, AccessToken}, GroupId, [{<<"name">>, NewGroupName}]) of
                         ok ->
-                            gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
-                            gui_jq:update(<<"space_name">>, space_name(SpaceDetails#space_details{name = NewSpaceName}));
+                            gui_jq:update(<<"group_name">>, group_name(GroupDetails#group_details{name = NewGroupName}));
                         Other ->
-                            ?error("Cannot change name of Space ~p: ~p", [SpaceDetails, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot change name of Space with ID:  <b>", SpaceId, "</b>."
+                            ?error("Cannot change name of group ~p: ~p", [GroupDetails, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot change name of group with ID:  <b>", GroupId, "</b>."
                             "<br>Please try again later.">>),
-                            gui_jq:update(<<"space_name">>, space_name(SpaceDetails))
+                            gui_jq:update(<<"group_name">>, group_name(GroupDetails))
                     end,
                     State;
 
-                {remove_provider, RowId, ProviderId} ->
-                    case gr_spaces:remove_provider({user, AccessToken}, SpaceId, ProviderId) of
+                {leave_space, RowId, SpaceId} ->
+                    case gr_groups:leave_space({user, AccessToken}, GroupId, SpaceId) of
                         ok ->
-                            opn_gui_utils:message(<<"ok_message">>, <<"Provider with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
+                            opn_gui_utils:message(<<"ok_message">>, <<"Space with ID: <b>", GroupId/binary, "</b> left successfully.">>),
                             gui_jq:remove(RowId),
-                            State#?STATE{providers_details = lists:keydelete(RowId, 1, ProvidersDetails)};
+                            State#?STATE{spaces_details = lists:keydelete(RowId, 1, SpacesDetails)};
                         Other ->
-                            ?error("Cannot remove provider with ID ~p: ~p", [ProviderId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot remove provider with ID: <b>", ProviderId/binary, "</b>.<br>Please try again later.">>),
+                            ?error("Cannot leave Space with ID ~p: ~p", [SpaceId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot leave Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
                             State
                     end;
 
                 {remove_user, RowId, UserId} ->
-                    case gr_spaces:remove_user({user, AccessToken}, SpaceId, UserId) of
+                    case gr_groups:remove_user({user, AccessToken}, GroupId, UserId) of
                         ok ->
-                            opn_gui_utils:message(<<"ok_message">>, <<"User with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
+                            opn_gui_utils:message(<<"ok_message">>, <<"User with ID: <b>", GroupId/binary, "</b> removed successfully.">>),
                             gui_jq:remove(RowId),
                             State#?STATE{users_details = lists:keydelete(RowId, 1, UsersDetails)};
                         Other ->
@@ -721,28 +678,16 @@ comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, use
                             State
                     end;
 
-                {remove_group, RowId, GroupId} ->
-                    case gr_spaces:remove_group({user, AccessToken}, SpaceId, GroupId) of
-                        ok ->
-                            opn_gui_utils:message(<<"ok_message">>, <<"Group with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
-                            gui_jq:remove(RowId),
-                            State#?STATE{groups_details = lists:keydelete(RowId, 1, GroupsDetails)};
-                        Other ->
-                            ?error("Cannot remove group with ID ~p: ~p", [GroupId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot remove group with ID: <b>", GroupId/binary, "</b>.<br>Please try again later.">>),
-                            State
-                    end;
-
                 Event ->
                     case Event of
-                        collapse_providers_table ->
-                            gui_jq:update(<<"providers_table">>, providers_table_collapsed(ProvidersDetails));
-                        expand_providers_table ->
-                            gui_jq:update(<<"providers_table">>, providers_table_expanded(ProvidersDetails));
-                        {collapse_provider_row, RowId, Privileges, ProviderDetails} ->
-                            gui_jq:update(RowId, provider_row_collapsed(RowId, Privileges, ProviderDetails));
-                        {expand_provider_row, RowId, Privileges, ProviderDetails} ->
-                            gui_jq:update(RowId, provider_row_expanded(RowId, Privileges, ProviderDetails));
+                        collapse_spaces_table ->
+                            gui_jq:update(<<"spaces_table">>, spaces_table_collapsed(SpacesDetails));
+                        expand_spaces_table ->
+                            gui_jq:update(<<"spaces_table">>, spaces_table_expanded(SpacesDetails));
+                        {collapse_space_row, RowId, Privileges, SpaceDetails} ->
+                            gui_jq:update(RowId, space_row_collapsed(RowId, Privileges, SpaceDetails));
+                        {expand_space_row, RowId, Privileges, SpaceDetails} ->
+                            gui_jq:update(RowId, space_row_expanded(RowId, Privileges, SpaceDetails));
                         collapse_users_table ->
                             gui_jq:update(<<"users_table">>, users_table_collapsed(UsersDetails));
                         expand_users_table ->
@@ -751,14 +696,6 @@ comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, use
                             gui_jq:update(RowId, user_row_collapsed(RowId, Privileges, UserDetails));
                         {expand_user_row, RowId, Privileges, UserDetails} ->
                             gui_jq:update(RowId, user_row_expanded(RowId, Privileges, UserDetails));
-                        collapse_groups_table ->
-                            gui_jq:update(<<"groups_table">>, groups_table_collapsed(GroupsDetails));
-                        expand_groups_table ->
-                            gui_jq:update(<<"groups_table">>, groups_table_expanded(GroupsDetails));
-                        {collapse_group_row, RowId, Privileges, GroupDetails} ->
-                            gui_jq:update(RowId, group_row_collapsed(RowId, Privileges, GroupDetails));
-                        {expand_group_row, RowId, Privileges, GroupDetails} ->
-                            gui_jq:update(RowId, group_row_expanded(RowId, Privileges, GroupDetails));
                         _ ->
                             ok
                     end,
@@ -781,14 +718,14 @@ comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, use
 %% ====================================================================
 event(init) ->
     try
-        SpaceId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
+        GroupId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
         GRUID = utils:ensure_binary(opn_gui_utils:get_global_user_id()),
         AccessToken = opn_gui_utils:get_access_token(),
-        {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceId, GRUID),
+        {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
 
         GetDetailsFun = fun(Ids, Function, RowPrefix) ->
             lists:foldl(fun(Id, {Rows, It}) ->
-                {ok, Details} = gr_spaces:Function({user, AccessToken}, SpaceId, Id),
+                {ok, Details} = gr_groups:Function({user, AccessToken}, GroupId, Id),
                 {
                     [{<<RowPrefix/binary, (integer_to_binary(It + 1))/binary>>, Privileges, Details} | Rows],
                     It + 1
@@ -796,22 +733,21 @@ event(init) ->
             end, {[], 0}, Ids)
         end,
 
-        {ok, ProvidersIds} = gr_spaces:get_providers({user, AccessToken}, SpaceId),
-        {ProvidersDetails, _} = GetDetailsFun(ProvidersIds, get_provider_details, <<"provider_">>),
-        {ok, UsersIds} = gr_spaces:get_users({user, AccessToken}, SpaceId),
+        {ok, SpacesIds} = gr_groups:get_spaces({user, AccessToken}, GroupId),
+        {SpacesDetails, Counter} = GetDetailsFun(SpacesIds, get_space_details, <<"space_">>),
+        {ok, UsersIds} = gr_groups:get_users({user, AccessToken}, GroupId),
         {UsersDetails, _} = GetDetailsFun(UsersIds, get_user_details, <<"user_">>),
-        {ok, GroupsIds} = gr_spaces:get_groups({user, AccessToken}, SpaceId),
-        {GroupsDetails, _} = GetDetailsFun(GroupsIds, get_group_details, <<"group_">>),
 
         gui_jq:bind_key_to_click_on_class(<<"13">>, <<"confirm">>),
 
-        gui_jq:wire(#api{name = "remove_provider", tag = "remove_provider"}, false),
+        gui_jq:wire(#api{name = "create_space", tag = "create_space"}, false),
+        gui_jq:wire(#api{name = "join_space", tag = "join_space"}, false),
         gui_jq:wire(#api{name = "remove_user", tag = "remove_user"}, false),
-        gui_jq:wire(#api{name = "remove_group", tag = "remove_group"}, false),
+        gui_jq:wire(#api{name = "leave_space", tag = "leave_space"}, false),
 
         {ok, Pid} = gui_comet:spawn(fun() ->
-            comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, users_details = UsersDetails,
-                groups_details = GroupsDetails, gruid = GRUID, access_token = AccessToken})
+            comet_loop(#?STATE{counter = Counter, group_id = GroupId, spaces_details = SpacesDetails,
+                users_details = UsersDetails, gruid = GRUID, access_token = AccessToken})
         end),
         put(?COMET_PID, Pid),
         Pid ! {render_tables, Privileges}
@@ -819,36 +755,55 @@ event(init) ->
         _:Reason ->
             ?error("Cannot initialize page ~p: ~p", [?MODULE, Reason]),
             gui_jq:hide(<<"main_spinner">>),
-            opn_gui_utils:message(<<"error_message">>, <<"Cannot fetch Space details.<br>Please try again later.">>)
+            opn_gui_utils:message(<<"error_message">>, <<"Cannot fetch Group details.<br>Please try again later.">>)
     end;
 
-event({change_space_name, SpaceDetails}) ->
-    gui_jq:update(<<"space_name">>, change_space_name(SpaceDetails)),
-    gui_jq:bind_enter_to_submit_button(<<"new_space_name_textbox">>, <<"new_space_name_submit">>),
-    gui_jq:focus(<<"new_space_name_textbox">>);
+event({change_group_name, GroupDetails}) ->
+    gui_jq:update(<<"group_name">>, change_group_name(GroupDetails)),
+    gui_jq:bind_enter_to_submit_button(<<"new_group_name_textbox">>, <<"new_group_name_submit">>),
+    gui_jq:focus(<<"new_group_name_textbox">>);
 
-event({submit_new_space_name, SpaceDetails}) ->
-    NewSpaceName = gui_ctx:postback_param(<<"new_space_name_textbox">>),
-    get(?COMET_PID) ! {change_space_name, SpaceDetails, NewSpaceName},
+event({submit_new_group_name, GroupDetails}) ->
+    NewGroupName = gui_ctx:postback_param(<<"new_group_name_textbox">>),
+    get(?COMET_PID) ! {change_group_name, GroupDetails, NewGroupName},
     gui_jq:show(<<"main_spinner">>);
 
-event({cancel_new_space_name_submit, SpaceDetails}) ->
-    gui_jq:update(<<"space_name">>, space_name(SpaceDetails));
+event({cancel_new_group_name_submit, GroupDetails}) ->
+    gui_jq:update(<<"group_name">>, group_name(GroupDetails));
 
-event({remove_provider, RowId, #provider_details{id = ProviderId, name = ProviderName}}) ->
-    Message = <<"Are you sure you want to remove provider:<br><b>", ProviderName/binary, " (", ProviderId/binary, ") </b>?">>,
-    Script = <<"remove_provider(['", RowId/binary, "','", ProviderId/binary, "']);">>,
-    gui_jq:dialog_popup(<<"Remove provider">>, Message, Script, <<"btn-inverse">>);
+event(create_space) ->
+    Message = <<"<div style=\"margin: 0 auto; width: 80%;\">",
+    "<p id=\"create_space_alert\" style=\"width: 100%; color: red; font-size: medium; text-align: center; display: none;\"></p>",
+    "<input id=\"create_space_name\" type=\"text\" style=\"width: 100%;\" placeholder=\"Name\">",
+    "</div>">>,
+    Script = <<"var alert = $(\"#create_space_alert\");",
+    "var name = $.trim($(\"#create_space_name\").val());",
+    "if(name.length == 0) { alert.html(\"Please provide Space name.\"); alert.fadeIn(300); return false; }",
+    "else { create_space([name]); return true; }">>,
+    gui_jq:dialog_popup(<<"Create Space">>, Message, Script, <<"btn-inverse">>),
+    gui_jq:wire(<<"box.on('shown',function(){ $(\"#create_space_name\").focus(); });">>);
+
+event(join_space) ->
+    Message = <<"<div style=\"margin: 0 auto; width: 80%;\">",
+    "<p id=\"join_space_alert\" style=\"width: 100%; color: red; font-size: medium; text-align: center; display: none;\"></p>",
+    "<input id=\"join_space_token\" type=\"text\" style=\"width: 100%;\" placeholder=\"Token\">",
+    "</div>">>,
+    Script = <<"var alert = $(\"#join_space_alert\");",
+    "var token = $.trim($(\"#join_space_token\").val());",
+    "if(token.length == 0) { alert.html(\"Please provide Space token.\"); alert.fadeIn(300); return false; }",
+    "else { join_space([token]); return true; }">>,
+    gui_jq:dialog_popup(<<"Join Space">>, Message, Script, <<"btn-inverse">>),
+    gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_space_token\").focus(); });">>);
+
+event({leave_space, RowId, #space_details{id = SpaceId, name = SpaceName}}) ->
+    Message = <<"Are you sure you want to leave space:<br><b>", SpaceName/binary, " (", SpaceId/binary, ") </b>?">>,
+    Script = <<"leave_space(['", RowId/binary, "','", SpaceId/binary, "']);">>,
+    gui_jq:dialog_popup(<<"Leave space">>, Message, Script, <<"btn-inverse">>);
 
 event({remove_user, RowId, #user_details{id = UserId, name = UserName}}) ->
     Message = <<"Are you sure you want to remove user:<br><b>", UserName/binary, " (", UserId/binary, ") </b>?">>,
     Script = <<"remove_user(['", RowId/binary, "','", UserId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Remove user">>, Message, Script, <<"btn-inverse">>);
-
-event({remove_group, RowId, #group_details{id = GroupId, name = GroupName}}) ->
-    Message = <<"Are you sure you want to remove group:<br><b>", GroupName/binary, " (", GroupId/binary, ") </b>?">>,
-    Script = <<"remove_group(['", RowId/binary, "','", GroupId/binary, "']);">>,
-    gui_jq:dialog_popup(<<"Remove group">>, Message, Script, <<"btn-inverse">>);
 
 event({message, Message}) ->
     get(?COMET_PID) ! Message,
@@ -865,7 +820,19 @@ event(terminate) ->
 %% @doc Handles page events.
 -spec api_event(Name :: string(), Args :: string(), Req :: string()) -> no_return().
 %% ====================================================================
+api_event("create_space", Args, _) ->
+    [Name] = mochijson2:decode(Args),
+    get(?COMET_PID) ! {create_space, Name},
+    gui_jq:prop(<<"create_space_button">>, <<"disabled">>, <<"disabled">>),
+    gui_jq:show(<<"main_spinner">>);
+
+api_event("join_space", Args, _) ->
+    [Token] = mochijson2:decode(Args),
+    get(?COMET_PID) ! {join_space, Token},
+    gui_jq:prop(<<"join_space_button">>, <<"disabled">>, <<"disabled">>),
+    gui_jq:show(<<"main_spinner">>);
+
 api_event(Function, Args, _) ->
-    [RowId, ObejctId] = mochijson2:decode(Args),
-    get(?COMET_PID) ! {list_to_existing_atom(Function), RowId, ObejctId},
+    [RowId, ObjectId] = mochijson2:decode(Args),
+    get(?COMET_PID) ! {list_to_existing_atom(Function), RowId, ObjectId},
     gui_jq:show(<<"main_spinner">>).
