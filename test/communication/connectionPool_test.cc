@@ -10,7 +10,6 @@
 #include "communication_protocol.pb.h"
 #include "communication/connection.h"
 #include "communication/exception.h"
-#include "make_unique.h"
 #include "testUtils.h"
 
 #include <gmock/gmock.h>
