@@ -5,19 +5,19 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_SCHEDULER_MOCK_H
-#define VEILHELPERS_SCHEDULER_MOCK_H
+#ifndef ONEHELPERS_SCHEDULER_MOCK_H
+#define ONEHELPERS_SCHEDULER_MOCK_H
 
 
 #include "scheduler.h"
 
 #include <gmock/gmock.h>
 
-class MockScheduler: public veil::Scheduler
+class MockScheduler: public one::Scheduler
 {
 public:
     MockScheduler()
-        : veil::Scheduler{0}
+        : one::Scheduler{0}
     {
     }
 
@@ -27,4 +27,4 @@ public:
 };
 
 
-#endif // VEILHELPERS_SCHEDULER_MOCK_H
+#endif // ONEHELPERS_SCHEDULER_MOCK_H
