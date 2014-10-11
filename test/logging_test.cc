@@ -60,8 +60,8 @@ struct RemoteLogWriterFixture: public ::testing::Test
     template<typename pred>
     bool waitUntil(const pred &condition, const time_t timeout)
     {
-        const time_t until = std::time(0) + timeout;
-        while(!condition && std::time(0) < until); // busy wait
+        const time_t until = std::time(nullptr) + timeout;
+        while(!condition && std::time(nullptr) < until); // busy wait
         return condition;
     }
 
@@ -150,7 +150,7 @@ TEST_F(RemoteLogWriterFixture, ShouldSendReceivedMessagesThroughConnection)
     expectedMessage.set_level(one::clproto::logging::INFO);
     expectedMessage.set_file_name("meaningful_file.cc");
     expectedMessage.set_line(42);
-    expectedMessage.set_timestamp(std::time(0));
+    expectedMessage.set_timestamp(std::time(nullptr));
     expectedMessage.set_message("a meaningful INFO message");
 
     const one::clproto::logging::LogMessage sentMessage =

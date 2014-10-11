@@ -189,7 +189,7 @@ TEST_F(ClusterProxyHelperTest, readlink)
 
 TEST_F(ClusterProxyHelperTest, readdir)
 {
-    EXPECT_EQ(ENOTSUP, proxy->sh_readdir("file_id", NULL, NULL, 0, &ffi));
+    EXPECT_EQ(ENOTSUP, proxy->sh_readdir("file_id", nullptr, nullptr, 0, &ffi));
 }
 
 

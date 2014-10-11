@@ -67,7 +67,7 @@ bool FileCache::writeData(off_t offset, const std::string &buff)
 void FileCache::debugPrint()
 {
     cout << "BlockList:" << endl;
-    multiset<block_ptr>::iterator it = m_fileBlocks.begin();
+    auto it = m_fileBlocks.begin();
     while(it != m_fileBlocks.end())
     {
         printf("\t Offset: %lld, Size: %lu, Data: %s, valid_to: %llu\n", (long long int) (*it)->offset, (*it)->size(), (*it)->data.c_str(), (long long unsigned int) (*it)->valid_to);

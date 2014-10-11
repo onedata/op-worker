@@ -75,11 +75,11 @@ int DirectIOHelper::sh_readdir(const char *path, void *buf, fuse_fill_dir_t fill
                off_t /*offset*/, struct fuse_file_info */*fi*/)
 {
     DIR *dp = opendir(root(path).c_str());
-    if (dp == NULL)
+    if (dp == nullptr)
         return -errno;
 
 
-    for(struct dirent *de; (de = readdir(dp)) != NULL;)
+    for(struct dirent *de; (de = readdir(dp)) != nullptr;)
     {
         struct stat st;
         memset(&st, 0, sizeof(st));

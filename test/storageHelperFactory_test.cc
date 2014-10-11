@@ -20,7 +20,7 @@ TEST(StorageHelperFactoryTest, ObjectBuild)
 {
     StorageHelperFactory factory(std::make_shared<MockCommunicator>(), BufferLimits{});
 
-    EXPECT_NE((IStorageHelper*)0, factory.getStorageHelper("DirectIO", IStorageHelper::ArgsMap{}).get());
+    EXPECT_NE((IStorageHelper*)nullptr, factory.getStorageHelper("DirectIO", IStorageHelper::ArgsMap{}).get());
 
-    EXPECT_EQ((IStorageHelper*)0, factory.getStorageHelper("not existing", IStorageHelper::ArgsMap{}).get());
+    EXPECT_EQ((IStorageHelper*)nullptr, factory.getStorageHelper("not existing", IStorageHelper::ArgsMap{}).get());
 }
