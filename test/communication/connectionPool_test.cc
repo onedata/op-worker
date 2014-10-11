@@ -86,7 +86,7 @@ struct ConnectionPoolProxy: public one::communication::ConnectionPool
     MOCK_METHOD0(createConnection, std::unique_ptr<one::communication::Connection>());
     std::unique_ptr<one::communication::Connection> createConnection_impl()
     {
-        auto c = new NiceMock<ConnectionMock>{
+        auto  c = new NiceMock<ConnectionMock>{
             m_onMessageCallback,
             std::bind(&ConnectionPoolProxy::onFail, this, _1, _2),
             std::bind(&ConnectionPoolProxy::onOpen, this, _1),
