@@ -62,6 +62,27 @@ message XAttrList {
   repeated XAttrEntry attrs = 2;
 }
 
+message AccessControlEntity {
+  required uint32 acetype = 1;
+  required string identifier = 2;
+  required uint32 aceflags = 3;
+  required uint32 acemask = 4;
+}
+
+message GetAcl {
+  required string file_logic_name = 1;
+}
+
+message Acl {
+  optional string answer = 1 [default = "ok"];
+  repeated AccessControlEntity entities = 2;
+}
+
+message SetAcl {
+  required string file_logic_name = 1;
+  repeated AccessControlEntity entities = 2;
+}
+
 message GetFileAttr {
     required string file_logic_name = 1;
 }
@@ -79,6 +100,7 @@ message FileAttr {
     optional string uname = 11 [default = ""];
     optional string gname = 12 [default = ""];
     optional int32 links = 13 [default = 1];
+    optional bool has_acl = 14 [default = false];
 }
 
 message GetFileUuid {
@@ -132,6 +154,15 @@ message RenewFileLocation {
 message FileLocationValidity {
     optional string answer = 1 [default = "ok"];
     optional int32 validity = 2;
+}
+
+message GetFileChildrenCount {
+  required string dir_logic_name = 1;
+}
+
+message FileChildrenCount {
+  optional string answer = 1 [default = "ok"];
+  required uint32 count = 2;
 }
 
 message GetFileChildren {
