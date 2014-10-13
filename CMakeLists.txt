@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.0)
+cmake_minimum_required(VERSION 3.0.0)
 project(helpers C CXX)
 
 # The version number.
@@ -122,10 +122,11 @@ set(PLATFORM_EXTRA_LIBS ${CMAKE_THREAD_LIBS_INIT} ${LTDL_LIBRARY} ${ZLIB_LIBRARY
 
 if(APPLE)
     set(SECTION_FRAGMENTATION_FLAGS -Wno-deprecated-declarations)
+    set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 else(NOT APPLE)
     set(PLATFORM_EXTRA_LIBS ${PLATFORM_EXTRA_LIBS} ${RT_LIBRARY})
     set(SECTION_FRAGMENTATION_FLAGS -fdata-sections -ffunction-sections)
-    set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/lib" "." "./lib" "../lib" "./c_lib" "../c_lib" "\$ORIGIN")
+    set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/lib" "\$ORIGIN")
 endif(APPLE)
 
 add_compile_options(${SECTION_FRAGMENTATION_FLAGS} -Wall -fPIC -std=c++14)
