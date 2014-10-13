@@ -48,27 +48,44 @@ get_virtual_acl(FullfileName, FileDoc) ->
 %% @doc Traverses given ACL in order to check if a Principal (in our case GRUID),
 %% has permissions specified in 'OperationMask' (according to this ACL)
 %% @end
--spec check_permission(ACL :: [#accesscontrolentity{}], PrincipalName :: string(), OperationMask :: non_neg_integer() | read | write | execute) -> ok | no_return().
+-spec check_permission(ACL :: [#accesscontrolentity{}], User :: #user{}, OperationMask :: non_neg_integer() | read | write | execute) -> ok | no_return().
 %% ====================================================================
-check_permission(ACL, _PrincipalName, read) -> check_permission(ACL, _PrincipalName, ?read_mask);
-check_permission(ACL, _PrincipalName, write) -> check_permission(ACL, _PrincipalName, ?write_mask);
-check_permission(ACL, _PrincipalName, execute) -> check_permission(ACL, _PrincipalName, ?execute_mask);
-check_permission([], _PrincipalName, 16#00000000) -> ok;
-check_permission([], _PrincipalName, _OperationMask) -> throw(?VEPERM);
-check_permission([#accesscontrolentity{identifier = Name} | Rest], PrincipalName, Operation) when Name =/= PrincipalName ->
-    check_permission(Rest, PrincipalName, Operation);
-check_permission([#accesscontrolentity{acetype = ?allow_mask, acemask = AceMask} | Rest], PrincipalName, Operation) ->
+check_permission(ACL, User, read) -> check_permission(ACL, User, ?read_mask);
+check_permission(ACL, User, write) -> check_permission(ACL, User, ?write_mask);
+check_permission(ACL, User, execute) -> check_permission(ACL, User, ?execute_mask);
+check_permission([], _User, 16#00000000) -> ok;
+check_permission([], _User, _OperationMask) -> throw(?VEPERM);
+check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest],
+    #user{groups = Groups} = User, Operation) when Flags band ?identifier_group_mask == ?identifier_group_mask ->
+    case [Id || #group_details{id = Id} <- Groups, Id =:= GroupId] of
+        [] -> check_permission(Rest, User, Operation); % if no group matches, ignore this ace
+        _ -> case Type of
+                 ?allow_mask ->
+                     case (Operation band AceMask) of
+                         Operation -> ok;
+                         OtherAllowedBits -> check_permission(Rest, User, Operation bxor OtherAllowedBits)
+                     end;
+                 ?deny_mask ->
+                     case (Operation band AceMask) of
+                         16#00000000 -> check_permission(Rest, User, Operation);
+                         _ -> throw(?VEPERM)
+                     end
+             end
+    end;
+check_permission([#accesscontrolentity{identifier = UserId} | Rest], #user{global_id = Id} = User, Operation) when UserId =/= Id ->
+    check_permission(Rest, User, Operation);
+check_permission([#accesscontrolentity{acetype = ?allow_mask, acemask = AceMask} | Rest], User, Operation) ->
     case (Operation band AceMask) of
         Operation -> ok;
-        OtherAllowedBits -> check_permission(Rest, PrincipalName, Operation bxor OtherAllowedBits)
+        OtherAllowedBits -> check_permission(Rest, User, Operation bxor OtherAllowedBits)
     end;
-check_permission([#accesscontrolentity{acetype = ?deny_mask, acemask = AceMask} | Rest], PrincipalName, Operation) ->
+check_permission([#accesscontrolentity{acetype = ?deny_mask, acemask = AceMask} | Rest], User, Operation) ->
     case (Operation band AceMask) of
-        16#00000000 -> check_permission(Rest, PrincipalName, Operation);
+        16#00000000 -> check_permission(Rest, User, Operation);
         _ -> throw(?VEPERM)
     end;
-check_permission([#accesscontrolentity{} | Rest], PrincipalName, Operation) ->
-    check_permission(Rest, PrincipalName, Operation).
+check_permission([#accesscontrolentity{} | Rest], User, Operation) ->
+    check_permission(Rest, User, Operation).
 
 %% from_acl_to_json_format/1
 %% ====================================================================

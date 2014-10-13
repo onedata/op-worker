@@ -17,7 +17,7 @@
 
 %% API
 -export([verify_client/2]).
--export([synchronize_user_spaces/1, get_space_info/2, get_space_providers/2]).
+-export([synchronize_user_spaces/1, synchronize_user_groups/1, get_space_info/2, get_space_providers/2]).
 
 %% ====================================================================
 %% API functions
@@ -36,6 +36,23 @@ synchronize_user_spaces({UserGID, AccessToken}) ->
         {ok, UserDoc} ->
             #db_document{record = #user{spaces = Spaces}} = user_logic:synchronize_spaces_info(UserDoc, AccessToken),
             {ok, Spaces};
+        {error, Reason} ->
+            ?error("Cannot synchronize Spaces of user with ID ~p: ~p", [UserGID, Reason]),
+            {error, Reason}
+    end.
+
+%% synchronize_user_groups/1
+%% ====================================================================
+%% @doc Synchronizes and returns list of groups that user belongs to.
+%% @end
+-spec synchronize_user_groups({UserGID :: string(), AccessToken :: binary()}) -> Result when
+    Result :: {ok, Groups :: [#group_details{}]} | {error, Reason :: term()}.
+%% ====================================================================
+synchronize_user_groups({UserGID, AccessToken}) ->
+    case user_logic:get_user({global_id, UserGID}) of
+        {ok, UserDoc} ->
+            #db_document{record = #user{groups = Groups}} = user_logic:synchronize_groups_info(UserDoc, AccessToken),
+            {ok, Groups};
         {error, Reason} ->
             ?error("Cannot synchronize Spaces of user with ID ~p: ~p", [UserGID, Reason]),
             {error, Reason}
