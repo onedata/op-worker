@@ -11,7 +11,6 @@
 #include "communication/connectionPool.h"
 #include "communication/exception.h"
 #include "logging.h"
-#include "make_unique.h"
 
 #include <functional>
 #include <numeric>
@@ -179,7 +178,7 @@ void CommunicationHandler::onMessage(const std::string &payload)
         LOG(INFO) << "Received an unwarranted message from the server. "
                      "status: '" << answer->answer_status() << "', "
                      "message_id: '" << answer->message_id() << "', "
-                     "message_type: '" << answer->message_type() << "', " 
+                     "message_type: '" << answer->message_type() << "', "
                      "error_description: '" << answer->error_description() << "', "
                      "message_decoder_name: '" << answer->message_decoder_name() + "'.";
     }

@@ -13,7 +13,6 @@
 #include "communication/exception.h"
 #include "fuse_messages.pb.h"
 #include "logging.pb.h"
-#include "make_unique.h"
 #include "remote_file_management.pb.h"
 #include "testUtils.h"
 
