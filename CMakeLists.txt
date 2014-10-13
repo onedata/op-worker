@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.0)
+cmake_minimum_required(VERSION 3.0.0)
 project(helpers C CXX)
 
 # The version number.
@@ -50,7 +50,7 @@ if(${PREFER_STATIC_LINK})
 
     if(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
         set(OPENSSL_LIBRARIES ${SSL_LIBRARY} ${CRYPTO_LIBRARY})
-    else(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
+    else(NOT ${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
         set(OPENSSL_LIBRARIES ${SSL_LIBRARY} ${CRYPTO_LIBRARY} ${KRB5_LIBRARY})
     endif(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
 endif(${PREFER_STATIC_LINK})
@@ -69,7 +69,7 @@ include_directories(SYSTEM ${FUSE_INCLUDE_DIRS})
 # Setup Boost
 if(${PREFER_STATIC_LINK})
     set(Boost_USE_STATIC_LIBS       ON)
-else(${PREFER_STATIC_LINK})
+else(NOT ${PREFER_STATIC_LINK})
     set(Boost_USE_STATIC_LIBS       OFF)
 endif(${PREFER_STATIC_LINK})
 
@@ -84,7 +84,7 @@ include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 if(${PREFER_STATIC_LINK})
     find_library(LTDL_LIBRARY NAMES libltdl.a ltdl)
     find_library(ZLIB_LIBRARY NAMES libz.a z)
-else(${PREFER_STATIC_LINK})
+else(NOT ${PREFER_STATIC_LINK})
     find_library(LTDL_LIBRARY ltdl)
     find_library(ZLIB_LIBRARY z)
 endif(${PREFER_STATIC_LINK})
@@ -112,25 +112,25 @@ file(GLOB_RECURSE HELPER_SOURCES src/*.cc include/*.h)
 # Setup compile flags
 if(${PREFER_STATIC_LINK}) # Try to link libstdc++.a
     execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libstdc++.a OUTPUT_VARIABLE LIBSTD_NAME)
-    string(REGEX REPLACE "(\r?\n)+$" "" LIBSTD_NAME "${LIBSTD_NAME}")
-    execute_process(COMMAND ln -sf "${LIBSTD_NAME}" WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
+    string(STRIP ${LIBSTD_NAME} LIBSTD_NAME)
+    if(EXISTS ${LIBSTD_NAME})
+        execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${LIBSTD_NAME} ${PROJECT_BINARY_DIR}/libstdc++.a)
+    endif(EXISTS ${LIBSTD_NAME})
 endif(${PREFER_STATIC_LINK})
 
-set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_DIR}:.:${LIB_DIR}:../${LIB_DIR}:./c_lib:../c_lib:$ORIGIN")
 set(PLATFORM_EXTRA_LIBS ${CMAKE_THREAD_LIBS_INIT} ${LTDL_LIBRARY} ${ZLIB_LIBRARY} ${DL_LIBRARY})
 
 if(APPLE)
-    set(SECTION_FRAGMENTATION_FLAGS "-Wno-deprecated-declarations")
-else(APPLE)
+    set(SECTION_FRAGMENTATION_FLAGS -Wno-deprecated-declarations)
+    set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+else(NOT APPLE)
     set(PLATFORM_EXTRA_LIBS ${PLATFORM_EXTRA_LIBS} ${RT_LIBRARY})
-    set(SECTION_FRAGMENTATION_FLAGS "-fdata-sections -ffunction-sections")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--gc-sections -Wl,-rpath,${CUSTOM_RPATH}")
+    set(SECTION_FRAGMENTATION_FLAGS -fdata-sections -ffunction-sections)
+    set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/lib" "\$ORIGIN")
 endif(APPLE)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SECTION_FRAGMENTATION_FLAGS} -Wall -fPIC -std=c++11")
+add_compile_options(${SECTION_FRAGMENTATION_FLAGS} -Wall -fPIC -std=c++14)
 add_definitions(${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -D_WEBSOCKETPP_CPP11_STL_ -DBOOST_BIND_NO_PLACEHOLDERS)
-
-set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
 
 # Define targets
 add_library(clproto STATIC ${PROTO_SRCS})
@@ -139,8 +139,11 @@ add_library(helpers STATIC $<TARGET_OBJECTS:helpers_obj>)
 add_library(helpersShared SHARED $<TARGET_OBJECTS:helpers_obj>)
 
 add_dependencies(helpers_obj glog clproto websocketpp)
-
-set_target_properties(helpersShared PROPERTIES OUTPUT_NAME helpers)
+set_target_properties(helpersShared PROPERTIES
+    OUTPUT_NAME helpers
+    BUILD_WITH_INSTALL_RPATH true
+    INSTALL_RPATH_USE_LINK_PATH true
+    INSTALL_RPATH "${CUSTOM_RPATH}")
 
 set(COMMON_LIBRARIES
     ${Boost_LIBRARIES}

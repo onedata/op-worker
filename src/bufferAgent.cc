@@ -29,8 +29,8 @@ wrbuf_size_mem_t        BufferAgent::m_wrBufferSizeMem;
 
 BufferAgent::BufferAgent(const BufferLimits &bufferLimits, write_fun w, read_fun r)
   : m_agentActive(false),
-    doWrite(w),
-    doRead(r),
+    doWrite(std::move(w)),
+    doRead(std::move(r)),
     m_bufferLimits{bufferLimits}
 {
     agentStart(1); // Start agent with only 2 * 1 std::threads
@@ -44,7 +44,7 @@ BufferAgent::~BufferAgent()
 void BufferAgent::updateWrBufferSize(fd_type key, size_t size)
 {
     unique_lock guard(m_bufferSizeMutex);
-    wrbuf_size_mem_t::iterator it = m_wrBufferSizeMem.find(key);
+    auto it = m_wrBufferSizeMem.find(key);
 
     // If entry for this key doesn't exist, just create one
     if(it == m_wrBufferSizeMem.end()) {
@@ -69,7 +69,7 @@ void BufferAgent::updateWrBufferSize(fd_type key, size_t size)
 void BufferAgent::updateRdBufferSize(const std::string &key, size_t size)
 {
     unique_lock guard(m_bufferSizeMutex);
-    rdbuf_size_mem_t::iterator it = m_rdBufferSizeMem.find(key);
+    auto it = m_rdBufferSizeMem.find(key);
 
     if(it == m_rdBufferSizeMem.end()) {
         m_rdBufferSizeMem[key] = size;

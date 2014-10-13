@@ -10,7 +10,6 @@
 #include "communication/connection.h"
 #include "communication/connectionPool.h"
 #include "communication/connectionPool_mock.h"
-#include "make_unique.h"
 #include "testUtils.h"
 
 #include <gmock/gmock.h>
