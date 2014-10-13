@@ -114,7 +114,7 @@ if(${PREFER_STATIC_LINK}) # Try to link libstdc++.a
     execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libstdc++.a OUTPUT_VARIABLE LIBSTD_NAME)
     string(STRIP ${LIBSTD_NAME} LIBSTD_NAME)
     if(EXISTS ${LIBSTD_NAME})
-        execute_process(COMMAND ${CMAKE_PATH} -E create_symlink ${LIBSTD_NAME} WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
+        execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${LIBSTD_NAME} ${PROJECT_BINARY_DIR}/libstdc++.a)
     endif(EXISTS ${LIBSTD_NAME})
 endif(${PREFER_STATIC_LINK})
 
