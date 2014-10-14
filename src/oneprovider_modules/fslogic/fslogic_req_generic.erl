@@ -283,7 +283,8 @@ get_acl(FullFileName) ->
 %% ====================================================================
 set_acl(FullFileName, Entities) ->
     true = lists:all(fun(X) -> is_record(X, accesscontrolentity) end, Entities),
-    {ok, #db_document{record = #file{location = FileLoc, type = Type, perms = Perms} = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    {ok, #db_document{record = #file{type = Type} = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    FileLoc = fslogic_file:get_file_local_location(FileDoc),
     case Entities of
         [] -> ok;
         _ -> #atom{value = ?VOK} = fslogic_req_generic:change_file_perms(FullFileName, 0)
@@ -294,7 +295,7 @@ set_acl(FullFileName, Entities) ->
     case Type of
         ?REG_TYPE ->
             {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
-            {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+            {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.storage_file_id),
             gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {invalidate_cache, StorageFileName}}, ?CACHE_REQUEST_TIMEOUT);
         _ -> ok
     end,

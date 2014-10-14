@@ -2452,6 +2452,17 @@ acl_test(Config) ->
     ?assertEqual(ok, RemoveStorageAns).
 
 
+get_file_local_location_test() ->
+    FileId = "1234",
+    Doc = #db_document{uuid = FileId, record = #file{}},
+    Location = #file_location{file_id = FileId, storage_file_id = "123"},
+
+    {ok, _} = rpc:call(Node1, dao_lib, apply, [dao_vfs, save_file_location, [Location], ?ProtocolVersion]),
+    ?assertMatch(#file_location{storage_file_id = "123"}, rpc:call(Node1, fslogic_file, get_file_local_location, [Doc])),
+    ?assertMatch(#file_location{storage_file_id = "123"}, rpc:call(Node1, fslogic_file, get_file_local_location, [FileId])).
+
+
+
 %% ====================================================================
 %% SetUp and TearDown functions
 %% ====================================================================

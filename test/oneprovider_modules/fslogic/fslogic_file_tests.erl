@@ -42,15 +42,6 @@ normalize_file_type_test() ->
     ?assertEqual(?LNK_TYPE, fslogic_file:normalize_file_type(internal, ?LNK_TYPE_PROT)).
 
 
-get_file_local_location_test() ->
-    LocationField = #file_location{storage_file_id = "123"},
-    File = #file{location = LocationField},
-    Doc = #db_document{record = File},
-    ?assertMatch(#file_location{storage_file_id = "123"}, fslogic_file:get_file_local_location(Doc)),
-    ?assertMatch(#file_location{storage_file_id = "123"}, fslogic_file:get_file_local_location(File)),
-    ?assertMatch(#file_location{storage_file_id = "123"}, fslogic_file:get_file_local_location(LocationField)).
-
-
 get_real_file_size_test() ->
     %% This call shall be logic-less for non-regular files
     ?assertEqual({0, -1}, fslogic_file:get_real_file_size_and_uid(#file{type = ?DIR_TYPE})),
