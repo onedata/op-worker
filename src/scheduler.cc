@@ -7,17 +7,15 @@
 
 #include "scheduler.h"
 
-#include <boost/asio.hpp>
-
 /// Force boost's steady_timer to use std::chrono.
 using steady_timer = boost::asio::basic_waitable_timer<std::chrono::steady_clock>;
 
 namespace
 {
-// The Timer argument serves to preserve timer's life until the handle
+// The timer argument serves to preserve timer's life until the handle
 // function is called.
 void handle(const boost::system::error_code &error,
-            std::function<void()> callback,
+            const std::function<void()> &callback,
             std::shared_ptr<steady_timer> /*timer*/)
 {
     if(!error)
@@ -42,12 +40,23 @@ Scheduler::~Scheduler()
         t.join();
 }
 
-void Scheduler::schedule(const std::chrono::milliseconds after,
-                         std::function<void()> task)
+void Scheduler::post(const std::function<void()> &task)
+{
+    m_ioService.post(task);
+}
+
+std::function<void()> Scheduler::schedule(const std::chrono::milliseconds after,
+                                          std::function<void()> task)
 {
     using namespace std::placeholders;
     const auto timer = std::make_shared<steady_timer>(m_ioService, after);
     timer->async_wait(std::bind(handle, _1, std::move(task), timer));
+
+    return [t = std::weak_ptr<steady_timer>{timer}]{
+        if(auto timer = t.lock())
+            timer->cancel();
+    };
+
 }
 
 } // namespace one

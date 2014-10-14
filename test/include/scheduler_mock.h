@@ -21,8 +21,9 @@ public:
     {
     }
 
-    MOCK_METHOD2(schedule, void(const std::chrono::milliseconds,
-                                std::function<void()>));
+    MOCK_METHOD1(post, void(const std::function<void()>&));
+    MOCK_METHOD2(schedule, std::function<void()>(const std::chrono::milliseconds,
+                                                 std::function<void()>));
 };
 
 
