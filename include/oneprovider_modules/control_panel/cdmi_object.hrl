@@ -13,10 +13,12 @@
 -define(default_get_file_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>, <<"valuerange">>, <<"value">>]).
 -define(default_put_file_opts, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
 
-%% Keys of mimetype end encoding attrs
+%% Keys of special cdmi attrs
 -define(mimetype_xattr_key, <<"cdmi_mimetype">>).
 -define(encoding_xattr_key, <<"cdmi_valuetransferencoding">>).
+-define(completion_status_xattr_key, <<"cdmi_completion_status">>).
 
-%% Default values of mimetype end encoding attrs
+%% Default values of special cdmi attrs
 -define(mimetype_default_value, <<"application/octet-stream">>).
 -define(encoding_default_value, <<"base64">>).
+-define(completion_status_default_value, <<"Complete">>).

@@ -129,7 +129,7 @@ get_user() ->
 %% @doc Gets user associated with given DN
 %%      If DN is 'undefined', ROOT user is returned.
 %% @end
--spec get_user({Key :: term(), Value :: term()} | user_doc() | undefined) -> {ok, UserDoc :: user_doc()} | {error, any()}.
+-spec get_user({dn, DN :: string()} | user_doc() | undefined) -> {ok, UserDoc :: user_doc() | [user_doc()]} | {error, any()}.
 %% ====================================================================
 get_user(undefined) ->
     {ok, #db_document{uuid = ?CLUSTER_USER_ID, record = #user{logins = [#id_token_login{login = "root", provider_id = internal}], role = admin}}};
@@ -138,6 +138,7 @@ get_user(#db_document{record = #user{}} = UserDoc) ->
 get_user({Key, Value}) ->
     case user_logic:get_user({Key, Value}) of
         {ok, #db_document{}} = OKRet -> OKRet;
+        {ok, UserList} = OKRet when is_list(UserList)  -> OKRet;
         {error, user_not_found} when Key =:= global_id ->
             GRUID = Value,
 

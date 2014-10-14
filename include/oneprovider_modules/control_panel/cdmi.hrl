@@ -25,6 +25,13 @@
     capability = undefined :: atom()
 }).
 
+% exclusive body fields
+-define(keys_required_to_be_exclusive, [<<"deserialize">>, <<"copy">>, <<"move">>, <<"reference">>, <<"deserializevalue">>, <<"value">>]).
+
+% catch macro needed by cdmi_handler
+-define(cdmi_catch(Val), try Val catch _:Value -> cdmi_error:error_reply(Req, State, Value) end).
+
+% error codes
 -define(ok, 200).
 -define(ok_partial_content, 206).
 

@@ -78,6 +78,10 @@ gen_error_message(removexattr, Error) ->
     #atom{value = Error};
 gen_error_message(listxattr, Error) ->
     #xattrlist{answer = Error, attrs =[]};
+gen_error_message(getacl, Error) ->
+    #acl{answer = Error, entities = []};
+gen_error_message(setacl, Error) ->
+    #atom{value = Error};
 gen_error_message(getfileuuid, Error) ->
     #fileuuid{answer = Error, uuid = ""};
 gen_error_message(getfilelocation, Error) ->
@@ -106,6 +110,8 @@ gen_error_message(createlink, Error) ->
     #atom{value = Error};
 gen_error_message(renewfilelocation, Error) ->
     #filelocationvalidity{answer = Error, validity = 0};
+gen_error_message(getfilechildrencount, Error) ->
+    #filechildrencount{answer = Error, count = 0};
 gen_error_message(getfilechildren, Error) ->
     #filechildren{answer = Error, entry = []};
 gen_error_message(getlink, Error) ->

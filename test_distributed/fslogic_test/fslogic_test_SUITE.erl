@@ -17,6 +17,7 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic_acl.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
 -include("oneprovider_modules/dao/dao_vfs.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
@@ -29,13 +30,13 @@
 -export([spaces_permissions_test/1, files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1]).
 -export([permissions_management_test/1, user_creation_test/1, get_file_links_test/1, fuse_requests_test/1, users_separation_test/1]).
 -export([file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, user_file_size_test/1, dirs_creating_test/1, spaces_test/1]).
--export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2, xattrs_test/1]).
+-export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2, get_acl/2, make_dir/2, xattrs_test/1, acl_test/1]).
 
-all() ->
-  [spaces_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
-    fuse_requests_test, spaces_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test,
-    concurrent_file_creation_test, get_file_links_test, user_file_size_test, xattrs_test
-  ].
+all() -> 
+ [spaces_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
+   fuse_requests_test, spaces_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test,
+   concurrent_file_creation_test, get_file_links_test, user_file_size_test, xattrs_test, acl_test
+ ].
 
 -define(SH, "DirectIO").
 -define(ProtocolVersion, 1).
@@ -2380,6 +2381,77 @@ xattrs_test(Config) ->
   RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns).
 
+acl_test(Config) ->
+    NodesUp = ?config(nodes, Config),
+    [Node1 | _] = NodesUp,
+
+    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    test_utils:wait_for_cluster_cast(),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    test_utils:wait_for_cluster_init(),
+
+    {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
+    ?assertEqual(ok, InsertStorageAns),
+
+    Cert = ?COMMON_FILE("peer.pem"),
+    UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+    [DN | _] = user_logic:get_dn_list(UserDoc),
+    fslogic_context:set_user_dn(DN),
+
+    DirName = "/spaces/" ++ ?TEST_USER ++ "/test_acl_dir",
+
+    % make test file
+    AnsDirCreate1 = rpc:call(Node1, fslogic_test_SUITE, make_dir, [DirName, DN]),
+    ?assertEqual(ok, AnsDirCreate1),
+
+    %test getting virtual acl
+    VirtualAclAns = rpc:call(Node1, fslogic_test_SUITE, get_acl, [DirName, DN]),
+    ?assertEqual({ok,[#accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_", ?TEST_USER>>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask}]}
+        ,VirtualAclAns),
+    {ok, VirtualAcl} = VirtualAclAns,
+    TestUserName = <<?TEST_USER, " ", ?TEST_USER, "#globa">>,
+    ?assertEqual([[{<<"acetype">>,<<"ALLOW">>},
+        {<<"identifier">>, TestUserName},
+        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"acemask">>, <<"READ, WRITE">>}]],
+        rpc:call(Node1, fslogic_acl,from_acl_to_json_format,[VirtualAcl])),
+
+    % test setting and getting acl
+    TestUserNameWithNoHash = <<?TEST_USER, " ", ?TEST_USER, "#">>,
+    Acl = rpc:call(Node1, fslogic_acl, from_json_fromat_to_acl,[
+        [
+            [
+                {<<"acetype">>, <<"ALLOW">>},
+                {<<"identifier">>, TestUserNameWithNoHash},
+                {<<"aceflags">>, <<"NO_FLAGS">>},
+                {<<"acemask">>, <<"READ, WRITE">>}
+            ],
+            [
+                {<<"acetype">>, <<"DENY">>},
+                {<<"identifier">>, TestUserNameWithNoHash},
+                {<<"aceflags">>, <<"IDENTIFIER_GROUP">>},
+                {<<"acemask">>, <<"WRITE">>}
+            ]
+        ]
+    ]),
+    ?assertEqual(Acl, [
+        #accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_", ?TEST_USER>>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #accesscontrolentity{acetype = ?deny_mask, identifier = <<"global_id_for_", ?TEST_USER>>, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+    ]),
+
+    Ans1 = rpc:call(Node1, logical_files_manager, set_acl, [DirName, Acl]),
+    ?assertEqual(ok, Ans1),
+    Ans2 = rpc:call(Node1, logical_files_manager, get_acl, [DirName]),
+    ?assertEqual({ok,Acl}, Ans2),
+
+    % cleanup
+    AnsDel = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
+    ?assertEqual(ok, AnsDel),
+    RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+    ?assertEqual(ok, RemoveStorageAns).
+
+
 %% ====================================================================
 %% SetUp and TearDown functions
 %% ====================================================================
@@ -2777,3 +2849,11 @@ create_share(TestFile, Share_With, DN) ->
 get_share(Key, DN) ->
   fslogic_context:set_user_dn(DN),
   logical_files_manager:get_share(Key).
+
+get_acl(FilePath, DN) ->
+  fslogic_context:set_user_dn(DN),
+  logical_files_manager:get_acl(FilePath).
+
+make_dir(FilePath, DN) ->
+  fslogic_context:set_user_dn(DN),
+  logical_files_manager:mkdir(FilePath).

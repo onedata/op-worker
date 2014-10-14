@@ -45,6 +45,7 @@
 -type user_doc() :: db_doc(user_info()).
 -type user_key() :: {login, Login :: string()} |
                     {global_id, GlobalID :: string()} |
+                    {name, Name :: string()} |
                     {email, Email :: string()} |
                     {uuid, UUID :: uuid()} |
                     {dn, DN :: string()} |

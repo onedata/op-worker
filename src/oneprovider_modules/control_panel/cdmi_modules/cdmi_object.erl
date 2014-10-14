@@ -16,6 +16,8 @@
 -include("oneprovider_modules/control_panel/cdmi_capabilities.hrl").
 -include("oneprovider_modules/control_panel/cdmi_object.hrl").
 -include("oneprovider_modules/control_panel/cdmi_error.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("files_common.hrl").
 
 %% API
 -export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
@@ -39,8 +41,10 @@ allowed_methods(Req, State) ->
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}} | no_return().
 %% ====================================================================
 malformed_request(Req, #state{method = <<"PUT">>, cdmi_version = Version, filepath = Filepath } = State) when is_binary(Version) -> % put cdmi
-    {<<"application/cdmi-object">>, Req1} = cowboy_req:header(<<"content-type">>, Req),
-    {false,Req1,State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
+     case cowboy_req:header(<<"content-type">>, Req) of
+         {<<"application/cdmi-object">>, Req1} -> {false,Req1,State#state{filepath = fslogic_path:get_short_file_name(Filepath)}};
+         _ -> cdmi_error:error_reply(Req, State, ?invalid_content_type)
+     end;
 malformed_request(Req, #state{filepath = Filepath} = State) ->
     {false, Req, State#state{filepath = fslogic_path:get_short_file_name(Filepath)}}.
 
@@ -52,9 +56,9 @@ malformed_request(Req, #state{filepath = Filepath} = State) ->
 %% ====================================================================
 resource_exists(Req, State = #state{filepath = Filepath}) ->
     case logical_files_manager:getfileattr(Filepath) of
-        {ok, #fileattributes{type = "REG"} = Attr} -> {true, Req, State#state{attributes = Attr}};
+        {ok, #fileattributes{type = ?REG_TYPE_PROT} = Attr} -> {true, Req, State#state{attributes = Attr}};
         {ok, _} ->
-            Req1 = cowboy_req:set_resp_header(<<"Location">>, list_to_binary(Filepath++"/"), Req),
+            Req1 = cowboy_req:set_resp_header(<<"Location">>, utils:ensure_unicode_binary(Filepath++"/"), Req),
             cdmi_error:error_reply(Req1, State, {?moved_permanently, Filepath});
         _ -> {false, Req, State}
     end.
@@ -108,6 +112,7 @@ content_types_accepted(Req, State) ->
 delete_resource(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:delete(Filepath) of
         ok -> {true, Req, State};
+        {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> cdmi_error:error_reply(Req, State, ?forbidden);
         Error -> cdmi_error:error_reply(Req, State, {?file_delete_unknown_error,Error})
     end.
 
@@ -124,6 +129,12 @@ delete_resource(Req, #state{filepath = Filepath} = State) ->
 -spec get_binary(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = Size}} = State) ->
+    % check read permission
+    case logical_files_manager:check_file_perm(Filepath, read) of
+        true -> ok;
+        false -> throw(?forbidden)
+    end,
+
     % get optional 'Range' header
     {RawRange, Req1} = cowboy_req:header(<<"range">>, Req),
     Ranges = case RawRange of
@@ -136,7 +147,10 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
         invalid -> cdmi_error:error_reply(Req1, State, {?invalid_range, RawRange});
         _ ->
             % prepare data size and stream function
-            StreamSize = lists:foldl(fun({From, To}, Acc) when To >= From -> Acc + To - From + 1 end, 0, Ranges),
+            StreamSize = lists:foldl(fun
+                ({From, To}, Acc) when To >= From -> max(0, Acc + To - From + 1);
+                ({_, _}, Acc)  -> Acc
+            end, 0, Ranges),
             Context = fslogic_context:get_user_context(),
             StreamFun = fun(Socket, Transport) ->
                 try
@@ -171,6 +185,10 @@ get_binary(Req, #state{filepath = Filepath, attributes = #fileattributes{size = 
 -spec get_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Size}, filepath = Filepath} = State) ->
+    case logical_files_manager:check_file_perm(Filepath, read) of
+        true -> ok;
+        false -> throw(?forbidden)
+    end,
     DirCdmi = prepare_object_ans(case Opts of [] -> ?default_get_file_opts; _ -> Opts end, State),
     case proplists:get_value(<<"value">>, DirCdmi) of
         {range, Range} ->
@@ -217,32 +235,58 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
 -spec put_binary(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 put_binary(ReqArg, #state{filepath = Filepath} = State) ->
-    {Content, Req} = cowboy_req:header(<<"content-type">>, ReqArg, ?mimetype_default_value),
+    % prepare request data
+    {Content, Req0} = cowboy_req:header(<<"content-type">>, ReqArg, ?mimetype_default_value),
+    {CdmiPartialFlag, Req} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
     {Mimetype, Encoding} = parse_content(Content),
+
     case logical_files_manager:create(Filepath) of
         ok ->
+            update_completion_status(Filepath, <<"Processing">>),
             update_mimetype(Filepath, Mimetype),
             update_encoding(Filepath, Encoding),
-            write_body_to_file(Req, State, 0);
+            Ans = write_body_to_file(Req, State, 0),
+            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+            Ans;
         {error, file_exists} ->
+            case logical_files_manager:check_file_perm(Filepath, write) of
+                true -> ok;
+                false -> throw(?forbidden)
+            end,
+            update_completion_status(Filepath, <<"Processing">>),
             update_mimetype(Filepath, Mimetype),
             update_encoding(Filepath, Encoding),
             {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
             case RawRange of
                 undefined ->
-                    logical_files_manager:truncate(Filepath, 0),
-                    write_body_to_file(Req1, State, 0, false);
+                    case logical_files_manager:truncate(Filepath, 0) of
+                        ok -> ok;
+                        {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES ->
+                            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                            throw(?forbidden);
+                        Error ->
+                            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                            throw({?put_object_unknown_error, Error})
+                    end,
+                    Ans = write_body_to_file(Req1, State, 0, false),
+                    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                    Ans;
                 _ ->
                     {Length, Req2} = cowboy_req:body_length(Req1),
                     case parse_byte_range(State, RawRange) of
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
-                            write_body_to_file(Req2, State, From, false);
+                            Ans = write_body_to_file(Req2, State, From, false),
+                            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                            Ans;
                         _ ->
+                            set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
                             cdmi_error:error_reply(Req2, State, {?invalid_range, RawRange})
                     end
             end;
+        {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES ->
+            cdmi_error:error_reply(Req, State, ?forbidden);
         Error ->
-            cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error}) %todo handle creation forbidden error
+            cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error})
     end.
 
 %% put_cdmi_object/2
@@ -252,63 +296,131 @@ put_binary(ReqArg, #state{filepath = Filepath} = State) ->
 %% @end
 -spec put_cdmi_object(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) -> %todo read body in chunks
-    {ok, RawBody, Req1} = opn_cowboy_bridge:apply(cowboy_req, body, [Req]),
+put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
+    % parse body
+    {ok, RawBody, Req0} = opn_cowboy_bridge:apply(cowboy_req, body, [Req]),
     Body = rest_utils:parse_body(RawBody),
+    ok = rest_utils:validate_body(Body),
+
+    % prepare body fields
+    {CdmiPartialFlag, Req1} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
     RequestedMimetype = proplists:get_value(<<"mimetype">>, Body),
     RequestedValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body),
+    RequestedCopyURI = proplists:get_value(<<"copy">>, Body),
+    RequestedMoveURI = proplists:get_value(<<"move">>, Body),
     RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
-    ValueTransferEncoding = case RequestedValueTransferEncoding of undefined -> <<"utf-8">>; _ -> RequestedValueTransferEncoding end,
+    URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
     Value = proplists:get_value(<<"value">>, Body),
     Range = case lists:keyfind(<<"value">>, 1, Opts) of
         {<<"value">>, From_, To_} -> {From_,To_};
         false -> undefined
     end,
-    RawValue = decode(Value,ValueTransferEncoding),
+    RawValue = case Range of
+                   undefined -> decode(Value, RequestedValueTransferEncoding);
+                   _ -> decode(Value, <<"base64">>)
+               end,
 
-    case logical_files_manager:create(Filepath) of
-        ok ->
-            case logical_files_manager:write(Filepath, RawValue) of
-                Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                    case logical_files_manager:getfileattr(Filepath) of
-                        {ok,Attrs} ->
-                            update_encoding(Filepath, RequestedValueTransferEncoding),
-                            update_mimetype(Filepath, RequestedMimetype),
-                            cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata),
-                            Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
-                            Req2 = cowboy_req:set_resp_body(Response, Req1),
-                            {true, Req2, State};
+    % make sure file is created
+    {Operation, OperationAns} =
+        case {RequestedCopyURI, RequestedMoveURI} of
+            {undefined, undefined} ->
+                case logical_files_manager:exists(Filepath) of
+                    true -> {update, ok};
+                    false -> {create, logical_files_manager:create(Filepath)};
+                    Error_ -> {create, Error_}
+                end;
+            {undefined, MoveURI} -> {move, logical_files_manager:mv(utils:ensure_unicode_list(MoveURI),Filepath)};
+            {CopyURI, undefined} -> {copy, logical_files_manager:cp(utils:ensure_unicode_list(CopyURI),Filepath)}
+        end,
+
+    %check creation result, update value and metadata depending on creation type
+    case Operation of
+        create ->
+            case OperationAns of
+                ok ->
+                    update_completion_status(Filepath, <<"Processing">>),
+                    case logical_files_manager:write(Filepath, RawValue) of
+                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
+                            ok;
+                        {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES ->
+                            logical_files_manager:delete(Filepath),
+                            throw(?forbidden);
                         Error ->
                             logical_files_manager:delete(Filepath),
-                            cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error})
+                            throw({?write_object_unknown_error, Error})
                     end;
-                Error ->
+                {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> throw(?forbidden);
+                Error1 -> throw({?put_object_unknown_error, Error1})
+            end,
+
+            % return response
+            case logical_files_manager:getfileattr(Filepath) of
+                {ok,Attrs} ->
+                    update_encoding(Filepath, case RequestedValueTransferEncoding of undefined -> <<"utf-8">>; _ -> RequestedValueTransferEncoding end),
+                    update_mimetype(Filepath, RequestedMimetype),
+                    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                    cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata),
+                    Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_put_file_opts, State#state{attributes = Attrs})}),
+                    Req2 = cowboy_req:set_resp_body(Response, Req1),
+                    {true, Req2, State};
+                Error2 ->
                     logical_files_manager:delete(Filepath),
-                    cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error}) %todo handle create file forbidden
+                    cdmi_error:error_reply(Req1, State, {?get_attr_unknown_error, Error2})
             end;
-        {error, file_exists} ->
+        update ->
+            Permitted = case RequestedUserMetadata of
+                [{<<"cdmi_acl">>, _}] ->
+                    case URIMetadataNames of
+                        [<<"cdmi_acl">>] -> logical_files_manager:check_file_perm(Filepath, owner);
+                        _ -> logical_files_manager:check_file_perm(Filepath, write)
+                    end;
+                _ -> logical_files_manager:check_file_perm(Filepath, write)
+            end,
+            case Permitted of
+                true -> ok;
+                false -> throw(?forbidden)
+            end,
+            update_completion_status(Filepath, <<"Processing">>),
             update_encoding(Filepath, RequestedValueTransferEncoding),
             update_mimetype(Filepath, RequestedMimetype),
-            URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
             cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
             case Range of
                 {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
-                    case logical_files_manager:write(Filepath, From, RawValue) of
-                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                            {true, Req1, State};
-                        Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error}) %todo handle write file forbidden
+                    WriteAns = logical_files_manager:write(Filepath, From, RawValue),
+                    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                    case WriteAns of
+                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) -> {true, Req1, State};
+                        {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> cdmi_error:error_reply(Req, State, ?forbidden);
+                        Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error})
                     end;
                 undefined when is_binary(Value) ->
                     logical_files_manager:truncate(Filepath, 0),
-                    case logical_files_manager:write(Filepath, RawValue) of
-                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                            {true, Req1, State};
-                        Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error}) %todo handle write file forbidden
+                    WriteAns = logical_files_manager:write(Filepath, RawValue),
+                    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                    case WriteAns of
+                        Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) -> {true, Req1, State};
+                        {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> cdmi_error:error_reply(Req, State, ?forbidden);
+                        Error -> cdmi_error:error_reply(Req1, State, {?write_object_unknown_error, Error})
                     end;
-                undefined -> {true, Req1, State};
-                MalformedRange -> cdmi_error:error_reply(Req1, State, {?invalid_range, MalformedRange})
+                undefined ->
+                    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                    {true, Req1, State};
+                MalformedRange ->
+                    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                    cdmi_error:error_reply(Req1, State, {?invalid_range, MalformedRange})
             end;
-        Error -> cdmi_error:error_reply(Req1, State, {?put_object_unknown_error, Error})
+        Other when Other =:= move orelse Other =:= copy ->
+            case OperationAns of
+                ok ->
+                    update_completion_status(Filepath, <<"Processing">>),
+                    update_encoding(Filepath, RequestedValueTransferEncoding),
+                    update_mimetype(Filepath, RequestedMimetype),
+                    cdmi_metadata:update_user_metadata(Filepath, RequestedUserMetadata, URIMetadataNames),
+                    set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
+                    {true, Req1, State};
+                {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES -> cdmi_error:error_reply(Req, State, ?forbidden);
+                Error -> cdmi_error:error_reply(Req, State, {?put_object_unknown_error, Error})
+            end
     end.
 
 %% ====================================================================
@@ -329,11 +441,11 @@ prepare_object_ans([<<"objectID">> | Tail], #state{filepath = Filepath} = State)
     {ok, Uuid} = logical_files_manager:get_file_uuid(Filepath),
     [{<<"objectID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
-    [{<<"objectName">>, list_to_binary(filename:basename(Filepath))} | prepare_object_ans(Tail, State)];
+    [{<<"objectName">>, utils:ensure_unicode_binary(filename:basename(Filepath))} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = "/"} = State) ->
     [{<<"parentURI">>, <<>>} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
-    ParentURI = list_to_binary(rest_utils:ensure_path_ends_with_slash(fslogic_path:strip_path_leaf(Filepath))),
+    ParentURI = utils:ensure_unicode_binary(rest_utils:ensure_path_ends_with_slash(fslogic_path:strip_path_leaf(Filepath))),
     [{<<"parentURI">>, ParentURI} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"parentID">> | Tail], #state{filepath = "/"} = State) ->
     [{<<"parentID">>, <<>>} | prepare_object_ans(Tail, State)];
@@ -341,9 +453,9 @@ prepare_object_ans([<<"parentID">> | Tail], #state{filepath = Filepath} = State)
     {ok, Uuid} = logical_files_manager:get_file_uuid(fslogic_path:strip_path_leaf(Filepath)),
     [{<<"parentID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"capabilitiesURI">> | Tail], State) ->
-    [{<<"capabilitiesURI">>, list_to_binary(?dataobject_capability_path)} | prepare_object_ans(Tail, State)];
-prepare_object_ans([<<"completionStatus">> | Tail], State) ->
-    [{<<"completionStatus">>, <<"Complete">>} | prepare_object_ans(Tail, State)];
+    [{<<"capabilitiesURI">>, utils:ensure_unicode_binary(?dataobject_capability_path)} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"completionStatus">> | Tail], #state{filepath = Filepath} = State) ->
+    [{<<"completionStatus">>, get_completion_status(Filepath)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"mimetype">> | Tail], #state{filepath = Filepath} = State) ->
     [{<<"mimetype">>, get_mimetype(Filepath)} | prepare_object_ans(Tail, State)];
 prepare_object_ans([<<"metadata">> | Tail], #state{filepath = Filepath, attributes = Attrs} = State) ->
@@ -474,13 +586,12 @@ parse_byte_range(#state{attributes = #fileattributes{size = Size}} = State, [Fir
     Range = case binary:split(First, <<"-">>, [global]) of
                 [<<>>, FromEnd] -> {max(0, Size - binary_to_integer(FromEnd)), Size - 1};
                 [From, <<>>] -> {binary_to_integer(From), Size - 1};
-                [From_, To] -> {binary_to_integer(From_), min(Size - 1, binary_to_integer(To))};
+                [From_, To] -> {binary_to_integer(From_), binary_to_integer(To)};
                 _ -> [invalid]
             end,
     case Range of
         [invalid] -> [invalid];
         {Begin, End} when Begin > End -> [invalid];
-        {Begin_, _End} when Begin_ > Size -> parse_byte_range(State, Rest); % range is unsatisfiable and we ignore it
         ValidRange -> [ValidRange | parse_byte_range(State, Rest)]
     end.
 
@@ -494,14 +605,14 @@ parse_byte_range(#state{attributes = #fileattributes{size = Size}} = State, [Fir
 parse_content(Content) ->
     case binary:split(Content,<<";">>) of
         [RawMimetype, RawEncoding] ->
-            case binary:split(rest_utils:trim_spaces(RawEncoding),<<"=">>) of
+            case binary:split(utils:trim_spaces(RawEncoding),<<"=">>) of
                 [<<"charset">>, <<"utf-8">>] ->
-                    {rest_utils:trim_spaces(RawMimetype), <<"utf-8">>};
+                    {utils:trim_spaces(RawMimetype), <<"utf-8">>};
                 _ ->
-                    {rest_utils:trim_spaces(RawMimetype), undefined}
+                    {utils:trim_spaces(RawMimetype), undefined}
             end;
         [RawMimetype] ->
-            {rest_utils:trim_spaces(RawMimetype), undefined}
+            {utils:trim_spaces(RawMimetype), undefined}
     end.
 
 %% get_mimetype/1
@@ -530,6 +641,19 @@ get_encoding(Filepath) ->
         {logical_file_system_error, ?VENOATTR} -> ?encoding_default_value
     end.
 
+%% get_completion_status/1
+%% ====================================================================
+%% @doc Gets completion status associated with file, returns default value if no completion status
+%% could be found. The result can be: binary("Complete") | binary("Processing") | binary("Error")
+%% @end
+-spec get_completion_status(string()) -> binary().
+%% ====================================================================
+get_completion_status(Filepath) ->
+    case logical_files_manager:get_xattr(Filepath, ?completion_status_xattr_key) of
+        {ok, Value} -> Value;
+        {logical_file_system_error, ?VENOATTR} -> ?completion_status_default_value
+    end.
+
 %% update_mimetype/2
 %% ====================================================================
 %% @doc Updates mimetype associated with file
@@ -548,3 +672,21 @@ update_encoding(_Filepath, undefined) -> ok;
 update_encoding(Filepath, Encoding) ->
     ok = logical_files_manager:set_xattr(Filepath, ?encoding_xattr_key, Encoding).
 
+%% update_completion_status/2
+%% ====================================================================
+%% @doc Updates completion status associated with file
+-spec update_completion_status(string(), binary()) -> ok | no_return().
+%% ====================================================================
+update_completion_status(_Filepath, undefined) -> ok;
+update_completion_status(Filepath, CompletionStatus)
+    when CompletionStatus =:= <<"Complete">> orelse CompletionStatus =:= <<"Processing">> orelse CompletionStatus =:= <<"Error">> ->
+    ok = logical_files_manager:set_xattr(Filepath, ?completion_status_xattr_key, CompletionStatus).
+
+%% set_completion_status_according_to_partial_flag/2
+%% ====================================================================
+%% @doc Updates completion status associated with file,  according to X-CDMI-Partial flag
+-spec set_completion_status_according_to_partial_flag(string(), binary()) -> ok | no_return().
+%% ====================================================================
+set_completion_status_according_to_partial_flag(_Filepath, <<"true">>) -> ok;
+set_completion_status_according_to_partial_flag(Filepath, _) ->
+    ok = update_completion_status(Filepath, <<"Complete">>).

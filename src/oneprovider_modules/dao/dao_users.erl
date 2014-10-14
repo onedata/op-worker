@@ -87,18 +87,18 @@ exist_user(Key) ->
 %% get_user/1
 %% ====================================================================
 %% @doc Gets user from DB by login, e-mail, uuid or dn.
-%% Non-error return value is always {ok, #db_document{record = #user}.
+%% Non-error return value is always {ok, #db_document{record = #user} | [#db_document{record = #user}]}.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #db_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
--spec get_user(Key :: user_key()) -> {ok, user_doc()} | {error, any()} | no_return().
+-spec get_user(Key :: user_key()) -> {ok, user_doc() | [user_doc()]} | {error, any()} | no_return().
 %% ====================================================================
 get_user(Key) ->
     case ets:lookup(users_cache, Key) of
         [] -> %% Cached document not found. Fetch it from DB and save in cache
             DBAns = get_user_from_db(Key),
             case DBAns of
-                {ok, Doc} ->
+                {ok, #db_document{} = Doc} ->
                     ets:insert(users_cache, {Key, Doc}),
                     DocKey = Doc#db_document.uuid,
                     case ets:lookup(users_cache, {key_info, DocKey}) of
@@ -175,6 +175,9 @@ exist_user_in_db({Key, Value}) ->
                                 [dao_helper:name(Value)], include_docs = true}};
                             global_id ->
                                 {?USER_BY_GLOBAL_ID_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}};
+                            name ->
+                                {?USER_BY_NAME_VIEW, #view_query_args{keys =
                                 [dao_helper:name(Value)], include_docs = true}}
                         end,
     case dao_records:list_records(View, QueryArgs) of
@@ -188,11 +191,11 @@ exist_user_in_db({Key, Value}) ->
 %% get_user_from_db/1
 %% ====================================================================
 %% @doc Gets user from DB by login, e-mail, uuid or dn.
-%% Non-error return value is always {ok, #db_document{record = #user}.
+%% Non-error return value is {ok, #db_document{record = #user}, or {ok, [#db_document{record = #user}]} when we query by name.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #db_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
--spec get_user_from_db(Key :: user_key()) -> {ok, user_doc()} | {error, any()} | no_return().
+-spec get_user_from_db(Key :: user_key()) -> {ok, user_doc() | [user_doc()]} | {error, any()} | no_return().
 %% ====================================================================
 get_user_from_db({uuid, "0"}) ->
     {ok, #db_document{uuid = "0", record = #user{logins = [#id_token_login{provider_id = internal, login = "root"}], name = "root"}}}; %% Return virtual "root" user
@@ -218,15 +221,20 @@ get_user_from_db({Key, Value}) ->
                                 [dao_helper:name(Value)], include_docs = true}};
                             global_id ->
                                 {?USER_BY_GLOBAL_ID_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}};
+                            name ->
+                                {?USER_BY_NAME_VIEW, #view_query_args{keys =
                                 [dao_helper:name(Value)], include_docs = true}}
                         end,
 
     case dao_records:list_records(View, QueryArgs) of
-        {ok, #view_result{rows = [#view_row{doc = FDoc}]}} ->
-            {ok, FDoc};
         {ok, #view_result{rows = []}} ->
             ?warning("User by ~p: ~p not found", [Key, Value]),
             throw(user_not_found);
+        {ok, #view_result{rows = AllRows}} when Key == name ->
+            {ok, [Doc || #view_row{doc = Doc} <- AllRows]};
+        {ok, #view_result{rows = [#view_row{doc = FDoc}]}} ->
+            {ok, FDoc};
         {ok, #view_result{rows = [#view_row{doc = FDoc} | Tail] = AllRows}} ->
             case length(lists:usort(AllRows)) of
                 Count when Count > 1 ->
