@@ -54,7 +54,7 @@ synchronize_user_groups({UserGID, AccessToken}) ->
             #db_document{record = #user{groups = Groups}} = user_logic:synchronize_groups_info(UserDoc, AccessToken),
             {ok, Groups};
         {error, Reason} ->
-            ?error("Cannot synchronize Spaces of user with ID ~p: ~p", [UserGID, Reason]),
+            ?error("Cannot synchronize Groups of user with ID ~p: ~p", [UserGID, Reason]),
             {error, Reason}
     end.
 

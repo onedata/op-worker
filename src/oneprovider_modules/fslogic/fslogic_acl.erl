@@ -55,9 +55,9 @@ check_permission(ACL, User, write) -> check_permission(ACL, User, ?write_mask);
 check_permission(ACL, User, execute) -> check_permission(ACL, User, ?execute_mask);
 check_permission([], _User, 16#00000000) -> ok;
 check_permission([], _User, _OperationMask) -> throw(?VEPERM);
-check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest],
-    #user{groups = Groups} = User, Operation) when Flags band ?identifier_group_mask == ?identifier_group_mask ->
-    case [Id || #group_details{id = Id} <- Groups, Id =:= GroupId] of
+check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest], #user{groups = Groups} = User, Operation)
+    when (Flags band ?identifier_group_mask) == ?identifier_group_mask ->
+    case lists:filter(fun(#group_details{id = Id}) -> utils:ensure_binary(Id) =:= GroupId end, Groups) of
         [] -> check_permission(Rest, User, Operation); % if no group matches, ignore this ace
         _ -> case Type of
                  ?allow_mask ->
@@ -72,17 +72,22 @@ check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, ace
                      end
              end
     end;
-check_permission([#accesscontrolentity{identifier = UserId} | Rest], #user{global_id = Id} = User, Operation) when UserId =/= Id ->
-    check_permission(Rest, User, Operation);
-check_permission([#accesscontrolentity{acetype = ?allow_mask, acemask = AceMask} | Rest], User, Operation) ->
-    case (Operation band AceMask) of
-        Operation -> ok;
-        OtherAllowedBits -> check_permission(Rest, User, Operation bxor OtherAllowedBits)
-    end;
-check_permission([#accesscontrolentity{acetype = ?deny_mask, acemask = AceMask} | Rest], User, Operation) ->
-    case (Operation band AceMask) of
-        16#00000000 -> check_permission(Rest, User, Operation);
-        _ -> throw(?VEPERM)
+check_permission([#accesscontrolentity{acetype = Type, identifier = UserId, acemask = AceMask} | Rest], #user{global_id = Id} = User, Operation) when UserId =/= Id ->
+    case UserId =/= utils:ensure_binary(Id) of
+        true -> check_permission(Rest, User, Operation); % if ID does not match, ignore this ace
+        false ->
+            case Type of
+                ?allow_mask ->
+                    case (Operation band AceMask) of
+                        Operation -> ok;
+                        OtherAllowedBits -> check_permission(Rest, User, Operation bxor OtherAllowedBits)
+                    end;
+                ?deny_mask ->
+                    case (Operation band AceMask) of
+                        16#00000000 -> check_permission(Rest, User, Operation);
+                        _ -> throw(?VEPERM)
+                    end
+            end
     end;
 check_permission([#accesscontrolentity{} | Rest], User, Operation) ->
     check_permission(Rest, User, Operation).
