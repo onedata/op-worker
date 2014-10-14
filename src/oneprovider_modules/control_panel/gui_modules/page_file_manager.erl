@@ -14,6 +14,7 @@
 -include("oneprovider_modules/control_panel/common.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("oneprovider_modules/fslogic/fslogic_acl.hrl").
+-include("files_common.hrl").
 -include("oneprovider_modules/dao/dao_users.hrl").
 -include("fuse_messages_pb.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -1638,15 +1639,15 @@ item_attr_value(perms, Item) ->
             Perms = item_attr(perms, Item),
             Format = [<<"r">>, <<"w">>, <<"x">>, <<"r">>, <<"w">>, <<"x">>, <<"r">>, <<"w">>, <<"x">>],
             HasPerm = [
-                Perms band 2#100000000 /= 0,
-                Perms band 2#010000000 /= 0,
-                Perms band 2#001000000 /= 0,
-                Perms band 2#000100000 /= 0,
-                Perms band 2#000010000 /= 0,
-                Perms band 2#000001000 /= 0,
-                Perms band 2#000000100 /= 0,
-                Perms band 2#000000010 /= 0,
-                Perms band 2#000000001 /= 0
+                Perms band ?RD_USR_PERM /= 0,
+                Perms band ?WR_USR_PERM /= 0,
+                Perms band ?EX_USR_PERM /= 0,
+                Perms band ?RD_GRP_PERM /= 0,
+                Perms band ?WR_GRP_PERM /= 0,
+                Perms band ?EX_GRP_PERM /= 0,
+                Perms band ?RD_USR_PERM /= 0,
+                Perms band ?RD_GRP_PERM /= 0,
+                Perms band ?RD_OTH_PERM /= 0
             ],
             PermsTiles = lists:zipwith(
                 fun(X, Y) ->
