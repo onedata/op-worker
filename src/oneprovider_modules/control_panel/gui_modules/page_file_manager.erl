@@ -1645,9 +1645,9 @@ item_attr_value(perms, Item) ->
                 Perms band ?RD_GRP_PERM /= 0,
                 Perms band ?WR_GRP_PERM /= 0,
                 Perms band ?EX_GRP_PERM /= 0,
-                Perms band ?RD_USR_PERM /= 0,
-                Perms band ?RD_GRP_PERM /= 0,
-                Perms band ?RD_OTH_PERM /= 0
+                Perms band ?RD_OTH_PERM /= 0,
+                Perms band ?WR_OTH_PERM /= 0,
+                Perms band ?EX_OTH_PERM /= 0
             ],
             PermsTiles = lists:zipwith(
                 fun(X, Y) ->
