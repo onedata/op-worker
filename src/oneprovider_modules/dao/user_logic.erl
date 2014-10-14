@@ -252,24 +252,15 @@ synchronize_spaces_info(#db_document{record = #user{global_id = GlobalId} = User
 %% ====================================================================
 synchronize_groups_info(#db_document{record = #user{global_id = GlobalId} = UserRec} = UserDoc, AccessToken) ->
     case gr_users:get_groups({user, AccessToken}) of
-        GroupIds when is_list(GroupIds) ->
-            GroupDetailsAns = lists:map(fun(GroupId) -> gr_groups:get_details({user, AccessToken}, GroupId) end, GroupIds),
-            ?debug("Synchronized groups for user ~p: ~p", [GlobalId, GroupDetailsAns]),
-
-            case lists:keyfind(error, 1, GroupDetailsAns) of
-                false ->
-                    GroupDetails = [Details || {ok, Details} <- GroupDetailsAns],
-                    UserDoc1 = UserDoc#db_document{record = UserRec#user{groups = GroupDetails}},
-                    case dao_lib:apply(dao_users, save_user, [UserDoc1], 1) of
-                        {ok, _} ->
-                            UserDoc1;
-                        {error, Reason} ->
-                            ?error("Cannot save user (while syncing groups) due to: ~p", [Reason]),
-                            UserDoc
-                    end;
-                Error ->
-                    ?error("Cannot get group deteils due to: ~p", [Error]),
-                    Error
+        {ok, GroupIds} when is_list(GroupIds) ->
+            ?debug("Synchronized groups for user ~p: ~p", [GlobalId, GroupIds]),
+            UserDoc1 = UserDoc#db_document{record = UserRec#user{groups = GroupIds}},
+            case dao_lib:apply(dao_users, save_user, [UserDoc1], 1) of
+                {ok, _} ->
+                    UserDoc1;
+                {error, Reason} ->
+                    ?error("Cannot save user (while syncing groups) due to: ~p", [Reason]),
+                    UserDoc
             end;
         {error, Reason} ->
             ?error("Cannot synchronize user's (~p) groups due to: ~p", [UserDoc#db_document.uuid, Reason]),

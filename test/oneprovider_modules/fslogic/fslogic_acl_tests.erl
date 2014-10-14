@@ -46,7 +46,7 @@ check_group_permission_test() ->
     GId1 = <<"gid1">>,
     GId2 = <<"gid2">>,
     GId3 = <<"gid3">>,
-    Groups1 = [#group_details{id = GId1}, #group_details{id=GId2}],
+    Groups1 = [GId1, GId2],
     User1 = #user{global_id = Id1, groups = Groups1},
 
     Ace1 = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId1, acemask = ?read_mask},

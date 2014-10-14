@@ -22,7 +22,7 @@
     name = "",
     teams = [],
     spaces = [] :: [binary()],
-    groups = [] :: [record(group_details)],
+    groups = [] :: [binary()],
     email_list = [],
     dn_list = [],
     unverified_dn_list = [],

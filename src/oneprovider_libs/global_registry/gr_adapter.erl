@@ -76,13 +76,19 @@ get_space_info(SpaceId, {UserGID, AccessToken}) ->
         } = gr_spaces:get_details({try_user, AccessToken}, utils:ensure_binary(SpaceId)),
         {ok, ProviderIds} = get_space_providers(SpaceId, {UserGID, AccessToken}),
 
+        GroupDetailsList =
+            case get_space_groups(SpaceId, {UserGID, AccessToken}) of
+                {ok, Groups} -> Groups;
+                _           -> []
+            end,
+
         UserIds =
             case gr_spaces:get_users(provider, SpaceId) of
                 {ok, Users} -> Users;
                 _           -> []
             end,
 
-        {ok, #space_info{space_id = BinarySpaceId, name = Name, providers = ProviderIds, users = UserIds}}
+        {ok, #space_info{space_id = BinarySpaceId, name = Name, providers = ProviderIds, groups = GroupDetailsList, users = UserIds}}
     catch
         _:Reason ->
             ?error("Cannot get info of Space with ID ~p: ~p", [SpaceId, Reason]),
@@ -102,6 +108,44 @@ get_space_providers(SpaceId, undefined) ->
 get_space_providers(SpaceId, {_UserGID, AccessToken}) ->
     gr_spaces:get_providers({try_user, AccessToken}, utils:ensure_binary(SpaceId)).
 
+%% get_space_groups/2
+%% ====================================================================
+%% @doc Returns list of IDs of groups that supports Space.
+%% @end
+-spec get_space_groups(SpaceId :: binary(), undefined | {UserGID :: string(), AccessToken :: binary()}) -> Result when
+    Result :: {ok, GroupIds :: [binary()]} | {error, Reason :: term()}.
+%% ====================================================================
+get_space_groups(SpaceId, undefined) ->
+    get_space_groups(SpaceId, {undefined, undefined});
+get_space_groups(SpaceId, {_UserGID, AccessToken}) ->
+    case gr_spaces:get_groups({try_user, AccessToken}, utils:ensure_binary(SpaceId)) of
+        {ok, GroupIds} ->
+            synchronize_space_group_details(SpaceId, GroupIds, {_UserGID, AccessToken}),
+            {ok, GroupIds};
+        Error ->
+            ?error("Cannot get space ~p groups, error: ~p", [SpaceId, Error]),
+            Error
+    end.
+
+%% synchronize_space_group_details/3
+%% ====================================================================
+%% @doc Synchronizes (with globalregistry) group details present in database
+%% @end
+-spec synchronize_space_group_details(SpaceId :: binary(), GroupIds :: [binary()], undefined | {UserGID :: string(), AccessToken :: binary()}) -> Result when
+    Result :: {ok, GroupIds :: [binary()]} | {error, Reason :: term()}.
+%% ====================================================================
+synchronize_space_group_details(SpaceId, GroupIds, undefined) ->
+    synchronize_space_group_details(SpaceId, GroupIds, {undefined, undefined});
+synchronize_space_group_details(SpaceId, GroupIds, {_UserGID, AccessToken}) ->
+    lists:foreach(fun(Id) ->
+        case gr_spaces:get_group_details({try_user, AccessToken}, utils:ensure_binary(SpaceId), utils:ensure_binary(Id)) of
+            {ok, #group_details{id = Id} = GroupDetails} -> dao_groups:save_group(#db_document{uuid = Id, record = GroupDetails});
+            Error ->
+                ?error("Cannot get info of group ~p, error: ~p", [Id, Error]),
+                Error
+        end
+    end, GroupIds),
+    ok.
 
 %% verify_client/2
 %% ====================================================================

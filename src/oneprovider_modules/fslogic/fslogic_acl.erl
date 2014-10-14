@@ -57,7 +57,7 @@ check_permission([], _User, 16#00000000) -> ok;
 check_permission([], _User, _OperationMask) -> throw(?VEPERM);
 check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest], #user{groups = Groups} = User, Operation)
     when (Flags band ?identifier_group_mask) == ?identifier_group_mask ->
-    case lists:filter(fun(#group_details{id = Id}) -> utils:ensure_binary(Id) =:= GroupId end, Groups) of
+    case lists:filter(fun(Id) -> utils:ensure_binary(Id) =:= GroupId end, Groups) of
         [] -> check_permission(Rest, User, Operation); % if no group matches, ignore this ace
         _ -> case Type of
                  ?allow_mask ->
@@ -72,7 +72,7 @@ check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, ace
                      end
              end
     end;
-check_permission([#accesscontrolentity{acetype = Type, identifier = UserId, acemask = AceMask} | Rest], #user{global_id = Id} = User, Operation) when UserId =/= Id ->
+check_permission([#accesscontrolentity{acetype = Type, identifier = UserId, acemask = AceMask} | Rest], #user{global_id = Id} = User, Operation) ->
     case UserId =/= utils:ensure_binary(Id) of
         true -> check_permission(Rest, User, Operation); % if ID does not match, ignore this ace
         false ->
@@ -153,7 +153,7 @@ gruid_to_name(GRUID) ->
     {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
     <<(utils:ensure_unicode_binary(Name))/binary,"#",(binary_part(GRUID, 0, ?username_hash_length))/binary>>.
 
-%% proplist_to_ace/1
+%% name_to_gruid/1
 %% ====================================================================
 %% @doc Transforms acl name representation (name and hash suffix) to global id
 %% i. e. "John Dow#fif3n" -> "fif3nhh238hdfg33f3"
@@ -161,6 +161,36 @@ gruid_to_name(GRUID) ->
 -spec name_to_gruid(Name :: binary()) -> binary().
 %% ====================================================================
 name_to_gruid(Name) ->
+    [UserName, Hash] = case binary:split(Name, <<"#">>, [global]) of
+                           [UserName_] -> [UserName_, <<"">>];
+                           [UserName_, Hash_] -> [UserName_, Hash_]
+                       end,
+    {ok, UserList} = fslogic_objects:get_user({name, utils:ensure_unicode_list(UserName)}),
+
+    GRUIDList = lists:map(fun(#db_document{record = #user{global_id = GRUID}}) -> utils:ensure_unicode_binary(GRUID)  end, UserList),
+    GUIDWithMatchingPrefixList = lists:filter(fun(GRUID) -> binary:longest_common_prefix([Hash, GRUID]) == byte_size(Hash)  end , GRUIDList),
+    [GRUID] = GUIDWithMatchingPrefixList, % todo throw proper error message if more than one user matches given name
+    GRUID.
+
+%% grgid_to_group_name/1
+%% ====================================================================
+%% @doc Transforms global group id to acl group name representation (name and hash suffix)
+%% i. e. "fif3nhh238hdfg33f3" -> "group1#fif3n"
+%% @end
+-spec grgid_to_group_name(GRUID :: binary()) -> binary().
+%% ====================================================================
+grgid_to_group_name(GRUID) ->
+    {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
+    <<(utils:ensure_unicode_binary(Name))/binary,"#",(binary_part(GRUID, 0, ?username_hash_length))/binary>>.
+
+%% group_name_to_grgid/1
+%% ====================================================================
+%% @doc Transforms acl group name representation (name and hash suffix) to global id
+%% i. e. "group1#fif3n" -> "fif3nhh238hdfg33f3"
+%% @end
+-spec group_name_to_grgid(Name :: binary()) -> binary().
+%% ====================================================================
+group_name_to_grgid(Name) ->
     [UserName, Hash] = case binary:split(Name, <<"#">>, [global]) of
                            [UserName_] -> [UserName_, <<"">>];
                            [UserName_, Hash_] -> [UserName_, Hash_]
