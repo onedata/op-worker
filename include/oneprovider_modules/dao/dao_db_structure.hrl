@@ -72,6 +72,8 @@
 %% Spaces
 -define(SPACES_BY_GRUID_VIEW, #view_info{name = "spaces_by_gruid", db_name = ?FILES_DB_NAME, version = 1}).
 
+%% Groups
+-define(GROUP_BY_NAME_VIEW, #view_info{name = "group_by_name", db_name = ?GROUPS_DB_NAME, version = 1}).
 
 %% List of all used databases :: [string()]
 -define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME, ?USERS_DB_NAME, ?COOKIES_DB_NAME, ?GROUPS_DB_NAME]).

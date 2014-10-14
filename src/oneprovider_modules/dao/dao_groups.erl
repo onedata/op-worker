@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API - cluster state
--export([save_group/1, get_group/1, remove_group/1]).
+-export([save_group/1, get_group/1, remove_group/1, get_group_by_name/1]).
 
 
 %% ===================================================================
@@ -40,32 +40,31 @@ save_group(#db_document{record = #group_details{}, uuid = UUID} = GroupDoc) when
     save_group(GroupDoc#db_document{uuid = binary_to_list(UUID)});
 
 save_group(#db_document{record = #group_details{}, uuid = UUID} = GroupDoc) when is_list(UUID), UUID =/= "" ->
-    dao_external:set_db(?COOKIES_DB_NAME),
+    dao_external:set_db(?GROUPS_DB_NAME),
     dao_records:save_record(GroupDoc);
 
 save_group(#db_document{record = #group_details{}} = GroupDoc) ->
-    dao_external:set_db(?COOKIES_DB_NAME),
+    dao_external:set_db(?GROUPS_DB_NAME),
     dao_records:save_record(GroupDoc#db_document{}).
 
 
 %% get_group/1
 %% ====================================================================
-%% @doc Gets a session group from DB by its UUID. UUID should be the same as group value.
+%% @doc Gets a group from DB by its UUID. UUID should be the same as group value.
 %% Non-error return value is always {ok, #db_document{record = #group_details}.
 %% @end
 -spec get_group(UUID :: group() | binary()) -> {ok, group_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_group(UUID) when is_binary(UUID) ->
     get_group(binary_to_list(UUID));
-
 get_group(UUID) ->
-    dao_external:set_db(?COOKIES_DB_NAME),
+    dao_external:set_db(?GROUPS_DB_NAME),
     dao_records:get_record(UUID).
 
 
 %% remove_group/1
 %% ====================================================================
-%% @doc Gets a session group from DB by its UUID. UUID should be the same as group id value.
+%% @doc Gets a group from DB by its UUID. UUID should be the same as group id value.
 %% Non-error return value is always {ok, #db_document{record = #group_details}.
 %% @end
 -spec remove_group(UUID :: group() | binary()) -> ok | {error, any()} | no_return().
@@ -74,6 +73,28 @@ remove_group(UUID) when is_binary(UUID) ->
     remove_group(binary_to_list(UUID));
 
 remove_group(UUID) ->
-    dao_external:set_db(?COOKIES_DB_NAME),
+    dao_external:set_db(?GROUPS_DB_NAME),
     dao_records:remove_record(UUID).
 
+%% get_group_by_name/1
+%% ====================================================================
+%% @doc Gets a session group from DB by its UUID. UUID should be the same as group value.
+%% Non-error return value is always {ok, #db_document{record = #group_details}.
+%% @end
+-spec get_group_by_name(Name :: binary()) -> {ok, [group_doc()]} | {error, any()} | no_return().
+%% ====================================================================
+get_group_by_name(Name) when is_list(Name) ->
+    get_group(list_to_binary(Name));
+get_group_by_name(Name) ->
+    dao_external:set_db(?GROUPS_DB_NAME),
+    QueryArgs = #view_query_args{keys = [Name], include_docs = true},
+    case dao_records:list_records(?GROUP_BY_NAME_VIEW, QueryArgs) of
+        {ok, #view_result{rows = []}} ->
+            ?warning("Group by name ~p not found", [Name]),
+            throw(group_not_found);
+        {ok, #view_result{rows = Rows}} ->
+            {ok, [GroupDetails || #view_row{doc = #db_document{record = GroupDetails}} <- Rows]};
+        Data ->
+            ?error("Invalid group view response: ~p", [Data]),
+            throw({inavlid_data, Data})
+    end.
