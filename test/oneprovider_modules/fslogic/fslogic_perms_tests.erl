@@ -24,12 +24,17 @@ check_file_perms_test() ->
     FileDoc = #db_document{record = #file{uid = "123", perms = ?WR_ALL_PERM}},
     NonWriteableFileDoc = #db_document{record = #file{uid = "123", perms = ?WR_USR_PERM}},
 
+    meck:new(fslogic_file, [unstick]),
+    meck:expect(fslogic_file, get_file_local_location, fun(_) -> #file_location{} end),
+
     GroupPath = "/" ++ ?SPACES_BASE_DIR_NAME ++ "/some/path",
     ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, OwnerUserDoc, FileDoc, owner)),
     ?assertMatch({error, {permission_denied, _}}, fslogic_perms:check_file_perms(GroupPath, UserDoc, FileDoc, owner)),
     ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, UserDoc, FileDoc, write)),
     ?assertMatch({error, {permission_denied, _}}, fslogic_perms:check_file_perms(GroupPath, UserDoc, NonWriteableFileDoc, write)),
     ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, OwnerUserDoc, NonWriteableFileDoc, write)),
-    ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, RootUserDoc, NonWriteableFileDoc, write)).
+    ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, RootUserDoc, NonWriteableFileDoc, write)),
+
+    ok = meck:unload(fslogic_file).
 
 -endif.
