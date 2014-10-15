@@ -70,7 +70,7 @@ update_user_metadata(Filepath, UserMetadata, AllURIMetadataNames) ->
             ({<<"cdmi_acl">>, Value}) ->
                 ACL = try fslogic_acl:from_json_fromat_to_acl(Value)
                       catch _:Error ->
-                          ?error_stacktrace("Acl conversion error ~p", [Error]),
+                          ?debug_stacktrace("Acl conversion error ~p", [Error]),
                           throw({?invalid_acl, Error})
                       end,
                 ok = logical_files_manager:set_acl(Filepath, ACL);
