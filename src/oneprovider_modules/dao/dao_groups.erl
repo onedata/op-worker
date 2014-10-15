@@ -84,16 +84,16 @@ remove_group(UUID) ->
 -spec get_group_by_name(Name :: binary()) -> {ok, [group_doc()]} | {error, any()} | no_return().
 %% ====================================================================
 get_group_by_name(Name) when is_list(Name) ->
-    get_group(list_to_binary(Name));
+    get_group_by_name(list_to_binary(Name));
 get_group_by_name(Name) ->
     dao_external:set_db(?GROUPS_DB_NAME),
-    QueryArgs = #view_query_args{keys = [Name], include_docs = true},
+    QueryArgs = #view_query_args{keys = [<<?RECORD_FIELD_BINARY_PREFIX, Name/binary>>], include_docs = true},
     case dao_records:list_records(?GROUP_BY_NAME_VIEW, QueryArgs) of
         {ok, #view_result{rows = []}} ->
             ?warning("Group by name ~p not found", [Name]),
             throw(group_not_found);
         {ok, #view_result{rows = Rows}} ->
-            {ok, [GroupDetails || #view_row{doc = #db_document{record = GroupDetails}} <- Rows]};
+            {ok, [Doc || #view_row{doc = Doc} <- Rows]};
         Data ->
             ?error("Invalid group view response: ~p", [Data]),
             throw({inavlid_data, Data})
