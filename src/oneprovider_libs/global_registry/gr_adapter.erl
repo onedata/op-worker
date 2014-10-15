@@ -52,6 +52,7 @@ synchronize_user_groups({UserGID, AccessToken}) ->
     case user_logic:get_user({global_id, UserGID}) of
         {ok, UserDoc} ->
             #db_document{record = #user{groups = Groups}} = user_logic:synchronize_groups_info(UserDoc, AccessToken),
+            synchronize_user_group_details(Groups, AccessToken), %todo optimize so we dont synchronize each group every time
             {ok, Groups};
         {error, Reason} ->
             ?error("Cannot synchronize Groups of user with ID ~p: ~p", [UserGID, Reason]),
@@ -129,7 +130,7 @@ get_space_groups(SpaceId, {_UserGID, AccessToken}) ->
 
 %% synchronize_space_group_details/3
 %% ====================================================================
-%% @doc Synchronizes (with globalregistry) group details present in database
+%% @doc Synchronizes (with globalregistry) all space group details present in database
 %% @end
 -spec synchronize_space_group_details(SpaceId :: binary(), GroupIds :: [binary()], undefined | {UserGID :: string(), AccessToken :: binary()}) -> Result when
     Result :: {ok, GroupIds :: [binary()]} | {error, Reason :: term()}.
@@ -139,6 +140,25 @@ synchronize_space_group_details(SpaceId, GroupIds, undefined) ->
 synchronize_space_group_details(SpaceId, GroupIds, {_UserGID, AccessToken}) ->
     lists:foreach(fun(Id) ->
         case gr_spaces:get_group_details({try_user, AccessToken}, utils:ensure_binary(SpaceId), utils:ensure_binary(Id)) of
+            {ok, #group_details{id = Id} = GroupDetails} -> dao_groups:save_group(#db_document{uuid = Id, record = GroupDetails});
+            Error ->
+                ?error("Cannot get info of group ~p, error: ~p", [Id, Error]),
+                Error
+        end
+    end, GroupIds),
+    ok.
+
+
+%% synchronize_user_group_details/2
+%% ====================================================================
+%% @doc Synchronizes (with globalregistry) user group details present in database
+%% @end
+-spec synchronize_user_group_details(GroupIds :: [binary()], undefined |  (AccessToken :: binary())) -> Result when
+    Result :: {ok, GroupIds :: [binary()]} | {error, Reason :: term()}.
+%% ====================================================================
+synchronize_user_group_details(GroupIds, AccessToken) ->
+    lists:foreach(fun(Id) ->
+        case gr_users:get_group_details({user, AccessToken}, utils:ensure_binary(Id)) of
             {ok, #group_details{id = Id} = GroupDetails} -> dao_groups:save_group(#db_document{uuid = Id, record = GroupDetails});
             Error ->
                 ?error("Cannot get info of group ~p, error: ~p", [Id, Error]),
