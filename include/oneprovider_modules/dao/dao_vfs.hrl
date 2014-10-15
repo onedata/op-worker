@@ -21,7 +21,7 @@
 %% Available blocks of the file per file location
 -record(file_block, {file_location_id = "", offset = 0, size = 0}).
 %% Files' location (storage helper id and its relative file ID). Designed for use within #file record (`location` filed).
--record(file_location, {file_id = "", storage_id = "", storage_file_id = ""}).
+-record(file_location, {file_id = "", storage_uuid = "", storage_file_id = ""}).
 %% Files' locks. Designed for use within #file record (`locks` field).
 -record(file_lock, {type = ?REG_TYPE, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
 %% onedata file

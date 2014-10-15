@@ -86,7 +86,7 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
 
     {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
 
-    {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+    {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_uuid}),
 
     {SH, File_id} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.storage_file_id, SpaceId, ForceClusterProxy),
 
@@ -125,15 +125,21 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
 
     CTime = utils:time(),
 
+    FileUUID = dao_helper:gen_uuid(),
     FileRecordInit = #file{type = ?REG_TYPE, name = NewFileName, uid = UserID, parent = ParentDoc#db_document.uuid, perms = Mode, created = false},
     %% Async *times update
     FileRecord = fslogic_meta:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
 
+    FileLocation = #file_location{file_id = FileUUID, storage_uuid = UUID, storage_file_id = FileId},
+    {ok, LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
+
     Validity = ?LOCATION_VALIDITY,
-    FCreateStatus = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, FileRecord], fslogic_context:get_protocol_version()),
+    FCreateStatus = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, FileRecord, FileUUID], fslogic_context:get_protocol_version()),
 
     case FCreateStatus of
         {ok, {waiting_file, ExistingWFile}} ->
+            ok = dao_lib:apply(dao_vfs, remove_file_location, [LocationId], fslogic_context:get_protocol_version()),
+
             ExistingWFileUUID = ExistingWFile#db_document.uuid,
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
             {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), ExistingWFileUUID, fslogic_context:get_fuse_id(), Validity),
@@ -141,49 +147,53 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
             #db_document{record = ExistingWFileLocation} = ExistingWFileLocationDoc = fslogic_file:get_file_local_location_doc(ExistingWFileUUID),
             Available = get_blockavailability(ExistingWFileLocationDoc),
 
-            {ok, #db_document{record = ExistingWFileStorage}} = fslogic_objects:get_storage({uuid, ExistingWFileLocation#file_location.storage_id}),
+            {ok, #db_document{record = ExistingWFileStorage}} = fslogic_objects:get_storage({uuid, ExistingWFileLocation#file_location.storage_uuid}),
             {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), ExistingWFileStorage, ExistingWFileLocation#file_location.storage_file_id, SpaceId, ForceClusterProxy),
             #storage_helper_info{name = ExistingWFileStorageSHName, init_args = ExistingWFileStorageSHArgs} = SH,
-            #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs, available = Available};
+            #filelocation{storage_id = ExistingWFileStorage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs, available = Available};
         {ok, FileUUID} ->
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
             {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), Validity),
-            FileLocation = #file_location{file_id = FileUUID, storage_id = UUID, storage_file_id = FileId},
-            {ok, LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
+
+
+            FuseFileBlocks = [#filelocation_blockavailability{offset = 0, size = ?FILE_BLOCK_SIZE_INF}],
             FileBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
             {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
 
             {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileId, SpaceId, ForceClusterProxy),
             #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
-            #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs, available = [FileBlock]}
+            #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs, available = FuseFileBlocks}
     end.
 
 
 %% register_file_block/3
 %% ====================================================================
-%% @doc Saves information about a new available file block in the database
-%% and distributes it to clients currently using the file.
+%% @doc distributes information about a new available file block
+%% to clients currently using the file. Returns the number of push messages sent.
 %% @end
 -spec register_file_block(FullFileName :: string(), Offset :: non_neg_integer(),
-                          Size :: non_neg_integer()) -> ok.
+                          Size :: non_neg_integer()) -> {ok, non_neg_integer()}.
 %% ====================================================================
 register_file_block(FullFileName, Offset, Size) ->
     {ok, #db_document{} = FileDoc} = fslogic_objects:get_file(FullFileName),
-    #db_document{uuid = LocationId, record = Location} = fslogic_file:get_file_local_location_doc(FileDoc),
-    FileBlock = #file_block{file_location_id = LocationId, offset = Offset, size = Size},
-    {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
+    Location = fslogic_file:get_file_local_location(FileDoc),
+    #file_location{storage_uuid = StorageUUID} = Location,
 
-    #file_location{storage_id = StorageId, storage_file_id = StorageFileId} = Location,
+    {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
+    {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageUUID}),
+
     BlockAvailability = #filelocation_blockavailability{offset = Offset, size = Size},
-    BlocksAvailable = #blocksavailable{storage_id = StorageId, file_id = StorageFileId, blocks = [BlockAvailability]},
 
     {ok, Descriptors} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file, FullFileName}, 10000000000, 0], fslogic_context:get_protocol_version()),
+
     lists:foreach(
         fun(#db_document{record = #file_descriptor{fuse_id = FuseId}}) ->
+            {_, FileId} = fslogic_utils:get_sh_and_id(FuseId, Storage, SpaceId),
+            BlocksAvailable = #blocksavailable{storage_id = Storage#storage_info.id, file_id = FileId, blocks = [BlockAvailability]},
             request_dispatcher:send_to_fuse(FuseId, BlocksAvailable, "fuse_messages")
         end, Descriptors),
 
-    ok.
+    {ok, length(Descriptors)}.
 
 
 %% create_file_ack/1

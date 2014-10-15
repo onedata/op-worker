@@ -31,11 +31,13 @@
 -export([permissions_management_test/1, user_creation_test/1, get_file_links_test/1, fuse_requests_test/1, users_separation_test/1]).
 -export([file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, user_file_size_test/1, dirs_creating_test/1, spaces_test/1]).
 -export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2, get_acl/2, make_dir/2, xattrs_test/1, acl_test/1]).
+-export([get_file_local_location_test/1, block_creation_test/1, block_registration_test/1]).
 
-all() -> 
+all() ->
  [spaces_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
    fuse_requests_test, spaces_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test,
-   concurrent_file_creation_test, get_file_links_test, user_file_size_test, xattrs_test, acl_test
+   concurrent_file_creation_test, get_file_links_test, user_file_size_test, xattrs_test, acl_test, get_file_local_location_test, block_creation_test,
+   block_registration_test
  ].
 
 -define(SH, "DirectIO").
@@ -1285,7 +1287,7 @@ dir_mv_test(Config) ->
   [DN | _] = user_logic:get_dn_list(UserDoc),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
-  ?assertEqual(ok, ConAns),
+  ?assertMatch({ok, _}, {ConAns, Socket}),
 
   {StatusMkdir, AnswerMkdir} = mkdir(Socket, DirName),
   ?assertEqual("ok", StatusMkdir),
@@ -2452,7 +2454,15 @@ acl_test(Config) ->
     ?assertEqual(ok, RemoveStorageAns).
 
 
-get_file_local_location_test() ->
+get_file_local_location_test(Config) ->
+    [Node1 | _] = ?config(nodes, Config),
+
+    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    test_utils:wait_for_cluster_cast(),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    test_utils:wait_for_cluster_init(),
+
     FileId = "1234",
     Doc = #db_document{uuid = FileId, record = #file{}},
     Location = #file_location{file_id = FileId, storage_file_id = "123"},
@@ -2461,6 +2471,51 @@ get_file_local_location_test() ->
     ?assertMatch(#file_location{storage_file_id = "123"}, rpc:call(Node1, fslogic_file, get_file_local_location, [Doc])),
     ?assertMatch(#file_location{storage_file_id = "123"}, rpc:call(Node1, fslogic_file, get_file_local_location, [FileId])).
 
+
+block_creation_test(Config) ->
+    FileName = "/block_creation_test",
+    [Node1 | _] = ?config(nodes, Config),
+
+    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    test_utils:wait_for_cluster_cast(),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    test_utils:wait_for_cluster_init(),
+
+    ?assertMatch({ok, _}, rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT])),
+
+    ?assertEqual(ok, rpc:call(Node1, logical_files_manager, create, [FileName])),
+    {ok, FileDoc} = rpc:call(Node1, fslogic_objects, get_file, [FileName]),
+    #db_document{uuid = LocationId} = rpc:call(Node1, fslogic_file, get_file_local_location_doc, [FileDoc]),
+
+    ExpectedBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
+    {ok, Blocks} = rpc:call(Node1, dao_lib, apply, [dao_vfs, get_file_blocks, [LocationId], ?ProtocolVersion]),
+    ?assertMatch([#db_document{record = ExpectedBlock}], Blocks).
+
+
+block_registration_test(Config) ->
+    FileName = "/block_registration_test",
+    Cert = ?COMMON_FILE("peer.pem"),
+    Host = "localhost",
+    Port = ?config(port, Config),
+    [Node1 | _] = ?config(nodes, Config),
+
+    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    test_utils:wait_for_cluster_cast(),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    test_utils:wait_for_cluster_init(),
+
+    ?assertMatch({ok, _}, rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT])),
+
+    UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+    {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
+
+    ?assertMatch({?VOK, _, _, _, ?VOK}, create_file(Socket, FileName)),
+    ?assertEqual({?VOK, ok}, send_creation_ack(Socket, FileName)),
+    {ok, FullFileName} = rpc:call(Node1, fslogic_path, get_full_file_name, [FileName, cluter_request, ok, UserDoc]),
+
+    ?assertEqual({ok, 1}, rpc:call(Node1, fslogic_req_regular, register_file_block, [FullFileName, 9, 9])).
 
 
 %% ====================================================================

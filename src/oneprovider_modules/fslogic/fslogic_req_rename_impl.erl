@@ -428,7 +428,7 @@ rename_on_storage(UserDoc, TargetSpaceInfo, SourceFilePath, TargetFilePath) ->
     try
         {ok, #db_document{record = #file{}} = FileDoc} = fslogic_objects:get_file(SourceFilePath),
         Location = fslogic_file:get_file_local_location(FileDoc),
-        StorageID   = Location#file_location.storage_id,
+        StorageID   = Location#file_location.storage_uuid,
         FileID      = Location#file_location.storage_file_id,
 
         OPInfo0 = #{transfer_type => none, source_fileid => FileID,
