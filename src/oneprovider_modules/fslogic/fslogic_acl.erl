@@ -18,6 +18,7 @@
 
 %% API
 -export([ace_to_proplist/1, proplist_to_ace/1, from_acl_to_json_format/1, from_json_fromat_to_acl/1, get_virtual_acl/2, check_permission/3]).
+-export([name_to_gruid/1]).
 
 %% get_virtual_acl/1
 %% ====================================================================
