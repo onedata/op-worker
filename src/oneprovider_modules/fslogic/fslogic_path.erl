@@ -263,8 +263,7 @@ get_user_root(#db_document{uuid = ?CLUSTER_USER_ID}) ->
 get_user_root(#db_document{record = #user{spaces = []} = User} = UserDoc) ->
     case fslogic_context:clear_gr_auth() of
         {GRUID, AccessToken} when is_binary(GRUID), is_binary(AccessToken) ->
-            user_logic:synchronize_spaces_info(UserDoc, AccessToken),
-            #db_document{record = #user{} = UpdatedUser} = user_logic:synchronize_groups_info(UserDoc, AccessToken),
+            #db_document{record = #user{} = UpdatedUser} = user_logic:synchronize_spaces_info(UserDoc, AccessToken),
             get_user_root(UpdatedUser);
         _ ->
             get_user_root(User)

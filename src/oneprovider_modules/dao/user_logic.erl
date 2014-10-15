@@ -33,7 +33,7 @@
 -export([get_space_names/1, create_space_dir/1, get_spaces/1]).
 -export([create_dirs_at_storage/2, create_dirs_at_storage/1]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
--export([synchronize_spaces_info/2, synchronize_groups_info/2, create_partial_user/2, get_login_with_uid/1]).
+-export([synchronize_spaces_info/2, synchronize_groups/2, create_partial_user/2, get_login_with_uid/1]).
 
 
 %% ====================================================================
@@ -243,14 +243,14 @@ synchronize_spaces_info(#db_document{record = #user{global_id = GlobalId} = User
             UserDoc
     end.
 
-%% synchronize_groups_info/2
+%% synchronize_groups/2
 %% ====================================================================
 %% @doc Tries to synchronize groups for given local user with globalregistry.
 %% This method never fails. On success, user's document is saved to DB.
 %% @end
--spec synchronize_groups_info(UserDoc :: #db_document{}, AccessToken :: binary()) -> UserDoc :: #db_document{}.
+-spec synchronize_groups(UserDoc :: #db_document{}, AccessToken :: binary()) -> UserDoc :: #db_document{}.
 %% ====================================================================
-synchronize_groups_info(#db_document{record = #user{global_id = GlobalId} = UserRec} = UserDoc, AccessToken) ->
+synchronize_groups(#db_document{record = #user{global_id = GlobalId} = UserRec} = UserDoc, AccessToken) ->
     case gr_users:get_groups({user, AccessToken}) of
         {ok, GroupIds} when is_list(GroupIds) ->
             ?debug("Synchronized groups for user ~p: ~p", [GlobalId, GroupIds]),

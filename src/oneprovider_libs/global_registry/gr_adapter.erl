@@ -51,7 +51,7 @@ synchronize_user_spaces({UserGID, AccessToken}) ->
 synchronize_user_groups({UserGID, AccessToken}) ->
     case user_logic:get_user({global_id, UserGID}) of
         {ok, UserDoc} ->
-            #db_document{record = #user{groups = Groups}} = user_logic:synchronize_groups_info(UserDoc, AccessToken),
+            #db_document{record = #user{groups = Groups}} = user_logic:synchronize_groups(UserDoc, AccessToken),
             synchronize_user_group_details(Groups, AccessToken), %todo optimize so we dont synchronize each group every time
             {ok, Groups};
         {error, Reason} ->
@@ -111,7 +111,7 @@ get_space_providers(SpaceId, {_UserGID, AccessToken}) ->
 
 %% get_space_groups/2
 %% ====================================================================
-%% @doc Returns list of IDs of groups that supports Space.
+%% @doc Returns list of IDs of groups that have access to Space.
 %% @end
 -spec get_space_groups(SpaceId :: binary(), undefined | {UserGID :: string(), AccessToken :: binary()}) -> Result when
     Result :: {ok, GroupIds :: [binary()]} | {error, Reason :: term()}.
@@ -130,7 +130,7 @@ get_space_groups(SpaceId, {_UserGID, AccessToken}) ->
 
 %% synchronize_space_group_details/3
 %% ====================================================================
-%% @doc Synchronizes (with globalregistry) all space group details present in database
+%% @doc Synchronizes (with globalregistry) all space group details
 %% @end
 -spec synchronize_space_group_details(SpaceId :: binary(), GroupIds :: [binary()], undefined | {UserGID :: string(), AccessToken :: binary()}) -> Result when
     Result :: {ok, GroupIds :: [binary()]} | {error, Reason :: term()}.
@@ -153,7 +153,7 @@ synchronize_space_group_details(SpaceId, GroupIds, {_UserGID, AccessToken}) ->
 %% ====================================================================
 %% @doc Synchronizes (with globalregistry) user group details present in database
 %% @end
--spec synchronize_user_group_details(GroupIds :: [binary()], undefined |  (AccessToken :: binary())) -> Result when
+-spec synchronize_user_group_details(GroupIds :: [binary()], AccessToken :: binary()) -> Result when
     Result :: {ok, GroupIds :: [binary()]} | {error, Reason :: term()}.
 %% ====================================================================
 synchronize_user_group_details(GroupIds, AccessToken) ->

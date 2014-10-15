@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc This module gives high level DB API which contain administrative group specific methods.
+%% @doc This module gives high level DB API which contain group management methods.
 %% @end
 %% ===================================================================
 -module(dao_groups).
