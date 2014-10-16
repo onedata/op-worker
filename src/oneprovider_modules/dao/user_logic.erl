@@ -25,7 +25,7 @@
 %% API
 %% ====================================================================
 -export([sign_in/4, create_user/6, create_user/9, get_user/1, remove_user/1, list_all_users/0]).
--export([get_login/1, get_name/1, get_teams/1, update_teams/2, get_space_ids/1]).
+-export([get_login/1, get_name/1, update_name/2, get_teams/1, update_teams/2, get_space_ids/1]).
 -export([get_email_list/1, update_email_list/2, get_role/1, update_role/2, update_access_credentials/4]).
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
@@ -410,6 +410,27 @@ get_name(User) ->
 %% ====================================================================
 get_teams(User) ->
     User#db_document.record#user.teams.
+
+
+%% update_name/2
+%% ====================================================================
+%% @doc
+%% Update #db_document encapsulating #user record with new name and save it to DB.
+%% @end
+-spec update_name(User, NewName) -> Result when
+    User :: user_doc(),
+    NewName :: string(),
+    Result :: {ok, user_doc()} | {error, any()}.
+%% ====================================================================
+update_name(#db_document{record = UserInfo} = UserDoc, NewName) ->
+    NewDoc = UserDoc#db_document{record = UserInfo#user{name = NewName}},
+    case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
+        {ok, UUID} ->
+            dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
+        {error, Reason} ->
+            ?error("Cannot update user ~p teams: ~p", [UserInfo, Reason]),
+            {error, Reason}
+    end.
 
 
 %% update_teams/2
