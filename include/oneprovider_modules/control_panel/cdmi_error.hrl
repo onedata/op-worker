@@ -21,8 +21,9 @@
 -define(invalid_base64, invalid_base64).
 -define(unsupported_version, unsupported_version).
 -define(malformed_request, malformed_request).
-
 -define(invalid_json, invalid_json).
+-define(invalid_acl, invalid_acl).
+
 -define(invalid_token, invalid_token).
 -define(invalid_cert, invalid_cert).
 -define(no_certificate_chain_found, no_certificate_chain_found).

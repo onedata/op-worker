@@ -319,6 +319,7 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                                    {ok, GroupId} = gr_users:create_group({user, AccessToken}, [{<<"name">>, Name}]),
                                    {ok, GroupDetails} = gr_groups:get_details({user, AccessToken}, GroupId),
                                    {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
+                                   gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                                    opn_gui_utils:message(<<"ok_message">>, <<"Created Group ID: <b>", GroupId/binary, "</b>">>),
                                    RowId = <<"group_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_group_row(RowId, Privileges, GroupDetails),
@@ -337,6 +338,7 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                                    {ok, GroupId} = gr_users:join_group({user, AccessToken}, [{<<"token">>, Token}]),
                                    {ok, GroupDetails} = gr_groups:get_details({user, AccessToken}, GroupId),
                                    {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
+                                   gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                                    opn_gui_utils:message(<<"ok_message">>, <<"Joined Group ID: <b>", GroupId/binary, "</b>">>),
                                    RowId = <<"group_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_group_row(RowId, Privileges, GroupDetails),
@@ -353,6 +355,7 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                 {leave_group, RowId, GroupId} ->
                     case gr_users:leave_group({user, AccessToken}, GroupId) of
                         ok ->
+                            gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                             opn_gui_utils:message(<<"ok_message">>, <<"Group with ID: <b>", GroupId/binary, "</b> left successfully.">>),
                             gui_jq:remove(RowId),
                             State#?STATE{groups_details = lists:keydelete(RowId, 1, GroupsDetails)};
@@ -365,6 +368,7 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                 {remove_group, RowId, GroupId} ->
                     case gr_groups:remove({user, AccessToken}, GroupId) of
                         ok ->
+                            gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                             opn_gui_utils:message(<<"ok_message">>, <<"Group with ID: <b>", GroupId/binary, "</b> removed successfully.">>),
                             gui_jq:remove(RowId),
                             State#?STATE{groups_details = lists:keydelete(RowId, 1, GroupsDetails)};
