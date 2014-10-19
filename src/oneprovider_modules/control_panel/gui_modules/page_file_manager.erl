@@ -88,13 +88,7 @@ css() ->
 body() ->
     gui_jq:register_escape_event("escape_pressed_event"),
     gui_jq:wire(#api{name = "confirm_paste_event", tag = "confirm_paste_event"}, false),
-    gui_jq:wire(#api{name = "change_perms_type_event", tag = "change_perms_type_event"}, false),
-    gui_jq:wire(#api{name = "submit_perms_event", tag = "submit_perms_event"}, false),
-    gui_jq:wire(#api{name = "add_acl_event", tag = "add_acl_event"}, false),
-    gui_jq:wire(#api{name = "delete_acl_event", tag = "delete_acl_event"}, false),
-    gui_jq:wire(#api{name = "edit_acl_event", tag = "edit_acl_event"}, false),
-    gui_jq:wire(#api{name = "move_acl_event", tag = "move_acl_event"}, false),
-    gui_jq:wire(#api{name = "submit_acl_event", tag = "submit_acl_event"}, false),
+    pfm_perms:init(),
     Body = [
         #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
@@ -245,50 +239,50 @@ api_event("escape_pressed_event", _, _) ->
     event({action, hide_popup});
 
 api_event("confirm_paste_event", _, _) ->
-    event({action, confirm_paste});
+    event({action, confirm_paste}).%;
 
-api_event("submit_perms_event", Args, _Ctx) ->
-    [Perms, Recursive] = mochijson2:decode(Args),
-    event({action, submit_perms, [Perms, Recursive]});
-
-api_event("change_perms_type_event", Args, _Ctx) ->
-    EnableACL = mochijson2:decode(Args),
-    event({action, change_perms_type, [EnableACL]});
-
-api_event("add_acl_event", _Args, _) ->
-    event({action, add_acl});
-
-api_event("delete_acl_event", Args, _) ->
-    IndexRaw = mochijson2:decode(Args),
-    Index = case IndexRaw of
-                I when is_integer(I) -> I;
-                Bin when is_binary(Bin) -> binary_to_integer(Bin)
-            end,
-    event({action, delete_acl, [Index]});
-
-api_event("edit_acl_event", Args, _) ->
-    IndexRaw = mochijson2:decode(Args),
-    Index = case IndexRaw of
-                I when is_integer(I) -> I;
-                Bin when is_binary(Bin) -> binary_to_integer(Bin)
-            end,
-    event({action, edit_acl, [Index]});
-
-api_event("move_acl_event", Args, _) ->
-    [IndexRaw, MoveUp] = mochijson2:decode(Args),
-    Index = case IndexRaw of
-                I when is_integer(I) -> I;
-                Bin when is_binary(Bin) -> binary_to_integer(Bin)
-            end,
-    event({action, move_acl, [Index, MoveUp]});
-
-api_event("submit_acl_event", Args, _) ->
-    [IndexRaw, Identifier, Type, Read, Write, Execute] = mochijson2:decode(Args),
-    Index = case IndexRaw of
-                I when is_integer(I) -> I;
-                Bin when is_binary(Bin) -> binary_to_integer(Bin)
-            end,
-    event({action, submit_acl, [Index, Identifier, Type, Read, Write, Execute]}).
+%% api_event("submit_perms_event", Args, _Ctx) ->
+%%     [Perms, Recursive] = mochijson2:decode(Args),
+%%     event({action, submit_perms, [Perms, Recursive]});
+%%
+%% api_event("change_perms_type_event", Args, _Ctx) ->
+%%     EnableACL = mochijson2:decode(Args),
+%%     event({action, change_perms_type, [EnableACL]});
+%%
+%% api_event("add_acl_event", _Args, _) ->
+%%     event({action, add_acl});
+%%
+%% api_event("delete_acl_event", Args, _) ->
+%%     IndexRaw = mochijson2:decode(Args),
+%%     Index = case IndexRaw of
+%%                 I when is_integer(I) -> I;
+%%                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
+%%             end,
+%%     event({action, delete_acl, [Index]});
+%%
+%% api_event("edit_acl_event", Args, _) ->
+%%     IndexRaw = mochijson2:decode(Args),
+%%     Index = case IndexRaw of
+%%                 I when is_integer(I) -> I;
+%%                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
+%%             end,
+%%     event({action, edit_acl, [Index]});
+%%
+%% api_event("move_acl_event", Args, _) ->
+%%     [IndexRaw, MoveUp] = mochijson2:decode(Args),
+%%     Index = case IndexRaw of
+%%                 I when is_integer(I) -> I;
+%%                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
+%%             end,
+%%     event({action, move_acl, [Index, MoveUp]});
+%%
+%% api_event("submit_acl_event", Args, _) ->
+%%     [IndexRaw, Identifier, Type, Read, Write, Execute] = mochijson2:decode(Args),
+%%     Index = case IndexRaw of
+%%                 I when is_integer(I) -> I;
+%%                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
+%%             end,
+%%     event({action, submit_acl, [Index, Identifier, Type, Read, Write, Execute]}).
 
 
 event(init) ->
@@ -324,7 +318,7 @@ event({action, Fun, Args}) ->
                     Other
             end
         end, Args),
-    opn_gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, Fun, NewArgs}]).
+    opn_gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, ?MODULE, Fun, NewArgs}]).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -356,14 +350,14 @@ comet_loop(IsUploadInProgress) ->
     NewIsUploadInProgress =
         try
             receive
-                {action, Fun, Args} ->
+                {action, Module, Fun, Args} ->
                     case IsUploadInProgress of
                         true ->
                             gui_jq:info_popup(<<"Upload in progress">>,
                                 <<"Please wait for the upload to finish.">>, <<"">>),
                             gui_comet:flush();
                         false ->
-                            erlang:apply(?MODULE, Fun, Args)
+                            erlang:apply(Module, Fun, Args)
                     end,
                     gui_jq:hide(<<"spinner">>),
                     gui_comet:flush(),
@@ -1995,5 +1989,12 @@ get_item_counter() ->
     integer_to_binary(Val).  % Return binary as this is used for making element IDs
 
 % Holds information what files' ACLs are being edited and what is the current state
+% Stored term is in the following form:
+% {Files, EnableACL, ACLEntries, Users, Groups}
+% Files - list of paths, for which perms are being changed
+% EnableACL - boolean(), determines if POSIX or ACL is selected
+% ACLEntries - current list of ACL entries
+% Users - possible ACL Identifiers of users
+% Groups - possible ACL Identifiers of groups
 set_perms_state(State) -> put(acl_state, State).
 get_perms_state() -> get(acl_state).
