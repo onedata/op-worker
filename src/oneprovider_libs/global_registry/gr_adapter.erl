@@ -46,7 +46,7 @@ synchronize_user_spaces({UserGID, AccessToken}) ->
 %% @doc Synchronizes and returns list of groups that user belongs to.
 %% @end
 -spec synchronize_user_groups({UserGID :: string(), AccessToken :: binary()}) -> Result when
-    Result :: {ok, Groups :: [#group_details{}]} | {error, Reason :: term()}.
+    Result :: {ok, GroupIds :: [binary()]} | {error, Reason :: term()}.
 %% ====================================================================
 synchronize_user_groups({UserGID, AccessToken}) ->
     case user_logic:get_user({global_id, UserGID}) of
@@ -121,7 +121,7 @@ get_space_groups(SpaceId, undefined) ->
 get_space_groups(SpaceId, {_UserGID, AccessToken}) ->
     case gr_spaces:get_groups({try_user, AccessToken}, utils:ensure_binary(SpaceId)) of
         {ok, GroupIds} ->
-            synchronize_space_group_details(SpaceId, GroupIds, {_UserGID, AccessToken}),
+            synchronize_space_group_details(SpaceId, GroupIds, {_UserGID, AccessToken}), %todo optimize so we dont synchronize each group every time
             {ok, GroupIds};
         Error ->
             ?error("Cannot get space ~p groups, error: ~p", [SpaceId, Error]),
@@ -133,20 +133,23 @@ get_space_groups(SpaceId, {_UserGID, AccessToken}) ->
 %% @doc Synchronizes (with globalregistry) all space group details
 %% @end
 -spec synchronize_space_group_details(SpaceId :: binary(), GroupIds :: [binary()], undefined | {UserGID :: string(), AccessToken :: binary()}) -> Result when
-    Result :: {ok, GroupIds :: [binary()]} | {error, Reason :: term()}.
+    Result :: ok | {error, Reason :: term()}.
 %% ====================================================================
 synchronize_space_group_details(SpaceId, GroupIds, undefined) ->
     synchronize_space_group_details(SpaceId, GroupIds, {undefined, undefined});
 synchronize_space_group_details(SpaceId, GroupIds, {_UserGID, AccessToken}) ->
-    lists:foreach(fun(Id) ->
+    AnsList = lists:map(fun(Id) ->
         case gr_spaces:get_group_details({try_user, AccessToken}, utils:ensure_binary(SpaceId), utils:ensure_binary(Id)) of
-            {ok, #group_details{id = Id} = GroupDetails} -> dao_groups:save_group(#db_document{uuid = Id, record = GroupDetails});
+            {ok, #group_details{id = Id} = GroupDetails} -> dao_lib:apply(dao_groups, save_group, [#db_document{uuid = Id, record = GroupDetails}], 1);
             Error ->
                 ?error("Cannot get info of group ~p, error: ~p", [Id, Error]),
                 Error
         end
     end, GroupIds),
-    ok.
+    case lists:dropwhile(fun(Ans) -> Ans == ok end, AnsList) of
+        [] -> ok;
+        [Error | _] -> Error
+    end.
 
 
 %% synchronize_user_group_details/2
@@ -154,18 +157,21 @@ synchronize_space_group_details(SpaceId, GroupIds, {_UserGID, AccessToken}) ->
 %% @doc Synchronizes (with globalregistry) user group details present in database
 %% @end
 -spec synchronize_user_group_details(GroupIds :: [binary()], AccessToken :: binary()) -> Result when
-    Result :: {ok, GroupIds :: [binary()]} | {error, Reason :: term()}.
+    Result :: ok | {error, Reason :: term()}.
 %% ====================================================================
 synchronize_user_group_details(GroupIds, AccessToken) ->
-    lists:foreach(fun(Id) ->
+    AnsList = lists:map(fun(Id) ->
         case gr_users:get_group_details({user, AccessToken}, utils:ensure_binary(Id)) of
-            {ok, #group_details{id = Id} = GroupDetails} -> dao_groups:save_group(#db_document{uuid = Id, record = GroupDetails});
+            {ok, #group_details{id = Id} = GroupDetails} -> dao_lib:apply(dao_groups, save_group, [#db_document{uuid = Id, record = GroupDetails}, 1]);
             Error ->
                 ?error("Cannot get info of group ~p, error: ~p", [Id, Error]),
                 Error
         end
     end, GroupIds),
-    ok.
+    case lists:dropwhile(fun(Ans) -> Ans == ok end, AnsList) of
+        [] -> ok;
+        [Error | _] -> Error
+    end.
 
 %% verify_client/2
 %% ====================================================================
