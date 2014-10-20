@@ -17,6 +17,7 @@
 -include("oneprovider_modules/fslogic/fslogic_acl.hrl").
 -include("fuse_messages_pb.hrl").
 -include("files_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([init/0, perms_popup/1, event/1, api_event/3]).
@@ -87,15 +88,24 @@ perms_popup(Files) ->
                     {acl, List} when is_list(List) -> List;
                     _ -> []
                 end,
-    set_perms_state({Files, EnableACL, CommonACL}),
+    set_files(Files),
+    set_acl_enabled(EnableACL),
+    set_acl_entries(CommonACL),
 
     PathToCheck = case FirstPath of
                       <<"/", ?SPACES_BASE_DIR_NAME>> -> <<"/">>;
                       _ -> FirstPath
                   end,
     {ok, FullFilePath} = fslogic_path:get_full_file_name(gui_str:binary_to_unicode_list(PathToCheck)),
-    {ok, #space_info{users = Users}} = fslogic_utils:get_space_info_for_path(FullFilePath),
-    Identifiers = gruids_to_identifiers(Users),
+    {ok, #space_info{users = Users, groups = Groups}} = fslogic_utils:get_space_info_for_path(FullFilePath),
+
+    UsersAndGRUIDs = uuids_to_identifiers(Users, true),
+    set_user_identifiers(UsersAndGRUIDs),
+    {UserIdentifiers, _} = lists:unzip(UsersAndGRUIDs),
+
+    GroupsAndGRUIDs = uuids_to_identifiers(Groups, false),
+    set_group_identifiers(GroupsAndGRUIDs),
+    {GroupIdentifiers, _} = lists:unzip(GroupsAndGRUIDs),
 
     gui_jq:wire(<<"init_chmod_table(", (integer_to_binary(CommonPerms))/binary, ");">>),
     {POSIXTabStyle, ACLTabStyle} = case EnableACL of
@@ -112,7 +122,7 @@ perms_popup(Files) ->
                     #flatui_radio{id = <<"perms_radio_acl">>, name = <<"perms_radio">>,
                         label_class = <<"radio perms-radio-label">>, body = <<"ACL">>, checked = EnableACL}
                 ]},
-                #link{id = page_file_manager:wire_click(<<"perms_info_button">>, {action, pfm_perms, show_permissions_info}),
+                #link{id = page_file_manager:wire_click(<<"perms_info_button">>, {action, ?MODULE, show_permissions_info}),
                     title = <<"Learn about permissions">>, class = <<"glyph-link">>,
                     body = #span{class = <<"icomoon-question">>}}
             ]},
@@ -194,7 +204,22 @@ perms_popup(Files) ->
                             ]},
                             #td{style = <<"padding-right: 20px;">>, body = [
                                 #select{id = <<"acl_select_name">>, class = <<"select-block">>, body = [
-                                    lists:map(fun(Ident) -> #option{body = Ident} end, Identifiers)
+                                    [
+                                        #optgroup{label = <<"users">>, body = [
+                                            lists:foldl(
+                                                fun(Ident, Counter) ->
+                                                    #option{body = Ident,
+                                                        value = <<"u", (integer_to_binary(Counter))/binary>>}
+                                                end, 1, UserIdentifiers)
+                                        ]},
+                                        #optgroup{label = <<"groups">>, body = [
+                                            lists:foldl(
+                                                fun(Ident, Counter) ->
+                                                    #option{body = Ident,
+                                                        value = <<"g", (integer_to_binary(Counter))/binary>>}
+                                                end, 1, GroupIdentifiers)
+                                        ]}
+                                    ]
                                 ]}
                             ]}
                         ]},
@@ -226,7 +251,7 @@ perms_popup(Files) ->
                             ]},
                             #td{body = [
                                 #button{id = <<"button_discard_acl">>, class = <<"btn btn-danger acl-form-button">>,
-                                    body = <<"Discard">>, postback = {action, populate_acl_list, [-1]}}
+                                    body = <<"Discard">>, postback = {action, ?MODULE, populate_acl_list, [-1]}}
                             ]}
                         ]}
                     ]}
@@ -283,14 +308,14 @@ show_permissions_info() ->
 
 api_event("submit_perms_event", Args, _Ctx) ->
     [Perms, Recursive] = mochijson2:decode(Args),
-    eval_in_comet(submit_perms, [Perms, Recursive]);
+    event({action, submit_perms, [Perms, Recursive]});
 
 api_event("change_perms_type_event", Args, _Ctx) ->
     EnableACL = mochijson2:decode(Args),
-    eval_in_comet(change_perms_type, [EnableACL]);
+    event({action, change_perms_type, [EnableACL]});
 
 api_event("add_acl_event", _Args, _) ->
-    eval_in_comet(add_acl, []);
+    event({action, add_acl, []});
 
 api_event("delete_acl_event", Args, _) ->
     IndexRaw = mochijson2:decode(Args),
@@ -298,7 +323,7 @@ api_event("delete_acl_event", Args, _) ->
                 I when is_integer(I) -> I;
                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
             end,
-    eval_in_comet(delete_acl, [Index]);
+    event({action, delete_acl, [Index]});
 
 api_event("edit_acl_event", Args, _) ->
     IndexRaw = mochijson2:decode(Args),
@@ -306,7 +331,7 @@ api_event("edit_acl_event", Args, _) ->
                 I when is_integer(I) -> I;
                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
             end,
-    eval_in_comet(edit_acl, [Index]);
+    event({action, edit_acl, [Index]});
 
 api_event("move_acl_event", Args, _) ->
     [IndexRaw, MoveUp] = mochijson2:decode(Args),
@@ -314,31 +339,29 @@ api_event("move_acl_event", Args, _) ->
                 I when is_integer(I) -> I;
                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
             end,
-    eval_in_comet(move_acl, [Index, MoveUp]);
+    event({action, move_acl, [Index, MoveUp]});
 
 api_event("submit_acl_event", Args, _) ->
-    [IndexRaw, Identifier, Type, Read, Write, Execute] = mochijson2:decode(Args),
+    [IndexRaw, SelectedIdentifier, Type, Read, Write, Execute] = mochijson2:decode(Args),
     Index = case IndexRaw of
                 I when is_integer(I) -> I;
                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
             end,
-    eval_in_comet(submit_acl, [Index, Identifier, Type, Read, Write, Execute]).
+    event({action, submit_acl, [Index, SelectedIdentifier, Type, Read, Write, Execute]}).
 
 
 event({action, Fun}) ->
-    event({action, Fun, []});
+    page_file_manager:event({action, ?MODULE, Fun, []});
 
 
 event({action, Fun, Args}) ->
-    eval_in_comet(Fun, Args).
-
-
-eval_in_comet(Fun, Args) ->
-    opn_gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, ?MODULE, Fun, Args}]).
+    page_file_manager:event({action, ?MODULE, Fun, Args}).
 
 
 submit_perms(Perms, Recursive) ->
-    {Files, ACLEnabled, ACLEntries} = get_perms_state(),
+    Files = get_files(),
+    ACLEnabled = get_acl_enabled(),
+    ACLEntries = get_acl_entries(),
     {Failed, Message} = case ACLEnabled of
                             true ->
                                 FailedFiles = lists:foldl(
@@ -376,12 +399,21 @@ submit_perms(Perms, Recursive) ->
 
 
 populate_acl_list(SelectedIndex) ->
-    {_Files, _EnableACL, ACLEntries} = get_perms_state(),
+    ACLEntries = get_acl_entries(),
     JSON = rest_utils:encode_to_json(lists:map(
-        fun(#accesscontrolentity{acetype = ACEType, aceflags = _ACEFlags, identifier = Identifier, acemask = ACEMask}) ->
-            {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, Identifier}),
+        fun(#accesscontrolentity{acetype = ACEType, aceflags = ACEFlags, identifier = Identifier, acemask = ACEMask}) ->
+            IsGroup = ACEFlags band ?identifier_group_mask > 0,
+            Ident = case IsGroup of
+                             true ->
+                                 {ok, #db_document{record = #group_details{name = GroupName}}} = dao_lib:apply(dao_groups, get_group, [Identifier], 1),
+                                 GroupName;
+                             false ->
+                                 {ok, #db_document{record = #user{name = UserName}}} = fslogic_objects:get_user({global_id, Identifier}),
+                                 gui_str:unicode_list_to_binary(UserName)
+                         end,
             [
-                {<<"identifier">>, gui_str:unicode_list_to_binary(Name)},
+                {<<"identifier">>, Ident},
+                {<<"is_group">>, IsGroup},
                 {<<"allow">>, ACEType =:= ?allow_mask},
                 {<<"read">>, ACEMask band ?read_mask > 0},
                 {<<"write">>, ACEMask band ?write_mask > 0},
@@ -394,8 +426,7 @@ populate_acl_list(SelectedIndex) ->
 
 
 change_perms_type(EnableACL) ->
-    {Files, _CurrentEnableACL, ACLEntries} = get_perms_state(),
-    set_perms_state({Files, EnableACL, ACLEntries}),
+    set_acl_enabled(EnableACL),
     case EnableACL of
         true ->
             gui_jq:show(<<"tab_acl">>),
@@ -416,15 +447,15 @@ add_acl() ->
 
 
 delete_acl(Index) ->
-    {Files, EnableACL, ACLEntries} = get_perms_state(),
+    ACLEntries = get_files(),
     {Head, [_ | Tail]} = lists:split(Index, ACLEntries),
-    set_perms_state({Files, EnableACL, Head ++ Tail}),
+    set_files(Head ++ Tail),
     populate_acl_list(-1).
 
 
 edit_acl(Index) ->
     gui_jq:show(<<"acl-form">>),
-    {_Files, _EnableACL, ACLEntries} = get_perms_state(),
+    ACLEntries = get_acl_entries(),
     #accesscontrolentity{acetype = ACEType, aceflags = _ACEFlags,
         identifier = Identifier, acemask = ACEMask} = lists:nth(Index + 1, ACLEntries),
     gui_jq:set_value(<<"acl_textbox">>, Identifier),
@@ -448,8 +479,17 @@ edit_acl(Index) ->
     end.
 
 
-submit_acl(Index, Name, Type, ReadFlag, WriteFlag, ExecFlag) ->
-    {Files, EnableACL, ACLEntries} = get_perms_state(),
+submit_acl(Index, SelectedIdentifier, Type, ReadFlag, WriteFlag, ExecFlag) ->
+    {IdentifierUUID, IsGroup} = case SelectedIdentifier of
+                                    <<"u", Number/binary>> ->
+                                        {_, ID} = lists:nth(binary_to_integer(Number), get_user_identifiers()),
+                                        {ID, false};
+                                    <<"g", Number/binary>> ->
+                                        {_, ID} = lists:nth(binary_to_integer(Number), get_group_identifiers()),
+                                        {ID, true}
+                                end,
+    ?dump({IdentifierUUID, IsGroup}),
+    ACLEntries = get_acl_entries(),
     ACEMask = (case ReadFlag of true -> ?read_mask; _ -> 0 end) bor
         (case WriteFlag of true -> ?write_mask; _ -> 0 end) bor
         (case ExecFlag of true -> ?execute_mask; _ -> 0 end),
@@ -460,22 +500,22 @@ submit_acl(Index, Name, Type, ReadFlag, WriteFlag, ExecFlag) ->
         _ ->
             NewEntity = #accesscontrolentity{
                 acetype = (case Type of true -> ?allow_mask; _ -> ?deny_mask end),
-                aceflags = ?no_flags_mask,
-                identifier = fslogic_acl:name_to_gruid(Name),
+                aceflags = case IsGroup of true -> ?identifier_group_mask; false -> ?no_flags_mask end,
+                identifier = IdentifierUUID,
                 acemask = ACEMask},
             case Index of
                 -1 ->
-                    set_perms_state({Files, EnableACL, ACLEntries ++ [NewEntity]});
+                    set_acl_entries(ACLEntries ++ [NewEntity]);
                 _ ->
                     {Head, [_Ident | Tail]} = lists:split(Index, ACLEntries),
-                    set_perms_state({Files, EnableACL, Head ++ [NewEntity] ++ Tail})
+                    set_acl_entries(Head ++ [NewEntity] ++ Tail)
             end,
             populate_acl_list(-1)
     end.
 
 
 move_acl(Index, MoveUp) ->
-    {Files, EnableACL, ACLEntries} = get_perms_state(),
+    ACLEntries = get_acl_entries(),
     MaxIndex = length(ACLEntries) - 1,
     {NewEntries, SelectedIndex} = case {Index, MoveUp} of
                                       {0, true} ->
@@ -495,33 +535,40 @@ move_acl(Index, MoveUp) ->
                                                   {Head ++ [First] ++ [Ident] ++ AllButFirst, Index + 1}
                                           end
                                   end,
-    set_perms_state({Files, EnableACL, NewEntries}),
+    set_acl_entries(NewEntries),
     populate_acl_list(SelectedIndex).
 
 
-gruids_to_identifiers(GRUIDs) ->
+uuids_to_identifiers(UUIDs, ForUsers) ->
     NamesWithGRUIDs = lists:map(
-        fun(GRUID) ->
-            {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
-            {Name, GRUID}
-        end, GRUIDs),
+        fun(UUID) ->
+            Name = case ForUsers of
+                       true ->
+                           {ok, #db_document{record = #user{name = UserName}}} = fslogic_objects:get_user({global_id, UUID}),
+                           gui_str:unicode_list_to_binary(UserName);
+                       false ->
+                           {ok, #db_document{record = #group_details{name = GroupName}}} = dao_lib:apply(dao_groups, get_group, [UUID], 1),
+                           GroupName
+                   end,
+            {Name, UUID}
+        end, UUIDs),
     SortedNames = lists:keysort(1, NamesWithGRUIDs),
     {_, Identifiers} = lists:foldl(fun({Name, GRUID}, {Temp, Acc}) ->
         case Temp of
             [] ->
                 {[{Name, GRUID}], Acc};
-            [{FirstTemp, _} | _] ->
+            [{FirstTemp, FirstGRUID} | _] ->
                 case Name of
                     FirstTemp ->
                         {Temp ++ [{Name, GRUID}], Acc};
                     _ ->
                         case length(Temp) of
                             1 ->
-                                {[{Name, GRUID}], Acc ++ [gui_str:unicode_list_to_binary(FirstTemp)]};
+                                {[{Name, GRUID}], Acc ++ [{FirstTemp, FirstGRUID}]};
                             _ ->
                                 {[{Name, GRUID}], Acc ++ lists:map(
                                     fun({Nam, GRU}) ->
-                                        <<(gui_str:unicode_list_to_binary(Nam))/binary, "#", GRU/binary>>
+                                        {<<Nam/binary, "#", GRU/binary>>, GRU}
                                     end, Temp)}
                         end
                 end
@@ -620,5 +667,93 @@ fs_set_acl(Path, ACLEntries, Recursive, {Successful, Failed}) ->
 % ACLEntries - current list of ACL entries
 % Users - possible ACL Identifiers of users
 % Groups - possible ACL Identifiers of groups
-set_perms_state(State) -> put(acl_state, State).
-get_perms_state() -> get(acl_state).
+
+
+%% set_files/1
+%% ====================================================================
+%% @doc Saves information what files' perms are being edited.
+%% @end
+-spec set_files(Files :: [binary()]) -> term().
+%% ====================================================================
+set_files(Files) -> put(perms_files, Files).
+
+
+%% get_files/0
+%% ====================================================================
+%% @doc Retrieves information what files' perms are being edited.
+%% @end
+-spec get_files() -> [binary()] | term().
+%% ====================================================================
+get_files() -> get(perms_files).
+
+
+%% set_acl_enabled/1
+%% ====================================================================
+%% @doc Saves information if ACL permissions are enabled.
+%% @end
+-spec set_acl_enabled(Flag :: boolean()) -> term().
+%% ====================================================================
+set_acl_enabled(Flag) -> put(acl_enabled, Flag).
+
+
+%% get_acl_enabled/0
+%% ====================================================================
+%% @doc Retrieves information if ACL permissions are enabled.
+%% @end
+-spec get_acl_enabled() -> boolean() | term().
+%% ====================================================================
+get_acl_enabled() -> get(acl_enabled).
+
+
+%% set_acl_entries/1
+%% ====================================================================
+%% @doc Saves current ACL entry list.
+%% @end
+-spec set_acl_entries(Entries :: [#accesscontrolentity{}]) -> term().
+%% ====================================================================
+set_acl_entries(Entries) -> put(acl_entries, Entries).
+
+
+%% get_acl_entries/0
+%% ====================================================================
+%% @doc Retrieves current ACL entry list.
+%% @end
+-spec get_acl_entries() -> boolean() | term().
+%% ====================================================================
+get_acl_entries() -> get(acl_entries).
+
+
+%% set_user_identifiers/1
+%% ====================================================================
+%% @doc Saves user IDs available for ACL for current file(s).
+%% @end
+-spec set_user_identifiers(Identifiers :: [binary()]) -> term().
+%% ====================================================================
+set_user_identifiers(Identifiers) -> put(acl_user_ids, Identifiers).
+
+
+%% get_user_identifiers/0
+%% ====================================================================
+%% @doc Retrieves user IDs available for ACL for current file(s).
+%% @end
+-spec get_user_identifiers() -> boolean() | term().
+%% ====================================================================
+get_user_identifiers() -> get(acl_user_ids).
+
+
+%% set_group_identifiers/1
+%% ====================================================================
+%% @doc Saves group IDs available for ACL for current file(s).
+%% @end
+-spec set_group_identifiers(Identifiers :: [binary()]) -> term().
+%% ====================================================================
+set_group_identifiers(Identifiers) -> put(acl_group_ids, Identifiers).
+
+
+%% get_group_identifiers/0
+%% ====================================================================
+%% @doc Retrieves group IDs available for ACL for current file(s).
+%% @end
+-spec get_group_identifiers() -> boolean() | term().
+%% ====================================================================
+get_group_identifiers() -> get(acl_group_ids).

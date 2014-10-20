@@ -112,7 +112,7 @@ populate_acl_list = function (json_array, select_index) {
 
     for (var i = 0; i < json_array.length; ++i) {
         acl_list.append(
-            render_acl_entry(i, json_array[i].identifier, json_array[i].allow, json_array[i].read, json_array[i].write, json_array[i].exec));
+            render_acl_entry(i, json_array[i].identifier, json_array[i].is_group, json_array[i].allow, json_array[i].read, json_array[i].write, json_array[i].exec));
     }
 
     acl_list.append('<div class="acl-entry" index="-1">' +
@@ -204,8 +204,9 @@ populate_acl_list = function (json_array, select_index) {
 };
 
 // Renders a single ACL entry
-render_acl_entry = function (index, identifier, allow_flag, read_flag, write_flag, exec_flag) {
+render_acl_entry = function (index, identifier, is_group, allow_flag, read_flag, write_flag, exec_flag) {
     var entry_class = allow_flag ? 'acl-entry acl-entry-allow' : 'acl-entry acl-entry-deny';
+    var id_icon_type = is_group ? 'icomoon-users' : 'icomoon-user';
     var icon_type = allow_flag ? 'fui-check-inverted' : 'fui-cross-inverted';
     var icon_read = read_flag ? '<span class="' + icon_type + ' acl-icon-read"></span>' +
         '<span class="acl-symbol-read">R</span>' : '';
@@ -218,7 +219,7 @@ render_acl_entry = function (index, identifier, allow_flag, read_flag, write_fla
         '<a class="glyph-link acl-confirm-no" title="No"><span class="icomoon-close"></span></a>';
 
     return '<div class="' + entry_class + '" index="' + index + '"><div class="acl-identifier">' +
-        '<span class="icomoon-user acl-ident-icon"></span>' +
+        '<span class="' + id_icon_type + ' acl-ident-icon"></span>' +
         '<span class="acl-ident-name">' + identifier + '</span></div>' +
         icon_read + icon_write + icon_exec +
         '<a class="glyph-link acl-button-delete" title="Delete ACL entry"><span class="icomoon-remove"></span></a>' +

@@ -236,50 +236,7 @@ api_event("escape_pressed_event", _, _) ->
     event({action, hide_popup});
 
 api_event("confirm_paste_event", _, _) ->
-    event({action, confirm_paste}).%;
-
-%% api_event("submit_perms_event", Args, _Ctx) ->
-%%     [Perms, Recursive] = mochijson2:decode(Args),
-%%     event({action, submit_perms, [Perms, Recursive]});
-%%
-%% api_event("change_perms_type_event", Args, _Ctx) ->
-%%     EnableACL = mochijson2:decode(Args),
-%%     event({action, change_perms_type, [EnableACL]});
-%%
-%% api_event("add_acl_event", _Args, _) ->
-%%     event({action, add_acl});
-%%
-%% api_event("delete_acl_event", Args, _) ->
-%%     IndexRaw = mochijson2:decode(Args),
-%%     Index = case IndexRaw of
-%%                 I when is_integer(I) -> I;
-%%                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
-%%             end,
-%%     event({action, delete_acl, [Index]});
-%%
-%% api_event("edit_acl_event", Args, _) ->
-%%     IndexRaw = mochijson2:decode(Args),
-%%     Index = case IndexRaw of
-%%                 I when is_integer(I) -> I;
-%%                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
-%%             end,
-%%     event({action, edit_acl, [Index]});
-%%
-%% api_event("move_acl_event", Args, _) ->
-%%     [IndexRaw, MoveUp] = mochijson2:decode(Args),
-%%     Index = case IndexRaw of
-%%                 I when is_integer(I) -> I;
-%%                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
-%%             end,
-%%     event({action, move_acl, [Index, MoveUp]});
-%%
-%% api_event("submit_acl_event", Args, _) ->
-%%     [IndexRaw, Identifier, Type, Read, Write, Execute] = mochijson2:decode(Args),
-%%     Index = case IndexRaw of
-%%                 I when is_integer(I) -> I;
-%%                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
-%%             end,
-%%     event({action, submit_acl, [Index, Identifier, Type, Read, Write, Execute]}).
+    event({action, confirm_paste}).
 
 
 event(init) ->
