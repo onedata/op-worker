@@ -21,7 +21,7 @@
 
 on_doc_save(DbName, #db_document{} = Doc, NewRew, Opts) ->
     ?info("on save ==============================> ~p ~p ~p", [DbName, NewRew, Opts]),
-    ok = gen_server:call(?Dispatcher_Name, {dao_worker, 1, {{event, doc_saved}, {DbName, Doc, NewRew, Opts}}});
+    ok = gen_server:call(?Dispatcher_Name, {dbsync, 1, {{event, doc_saved}, {DbName, Doc, NewRew, Opts}}});
 on_doc_save(DbName, Unkn, NewRew, Opts) ->
     ?info("Unknown doc_save ========================> ~p ~p ~p ~p", [DbName, Unkn, NewRew, Opts]),
     ok.

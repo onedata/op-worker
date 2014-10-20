@@ -1,0 +1,11 @@
+package one.rtproto.dbsync;
+
+message DocUpdated {
+    required bytes document = 1;
+    required int32 depth = 2;
+    required bytes ledge = 3;
+    required bytes redge = 4;
+    required bytes space_id = 5;
+    repeated bytes excluded_providers = 6;
+}
+
