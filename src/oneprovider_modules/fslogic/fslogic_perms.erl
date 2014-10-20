@@ -11,6 +11,8 @@
 -module(fslogic_perms).
 -author("Rafal Slota").
 
+-include("registered_names.hrl").
+-include("files_common.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
 -include("oneprovider_modules/dao/dao_types.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
@@ -19,36 +21,65 @@
 -define(permission_denied_error(UserDoc,FileName,CheckType), {error, {permission_denied, {{user, UserDoc}, {file, FileName}, {check, CheckType}}}}).
 
 %% API
--export([check_file_perms/4]).
+-export([check_file_perms/2, check_file_perms/4]).
 -export([assert_group_access/3]).
+-export([has_permission/4]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
+%% check_file_perms/2
+%% ====================================================================
+%% @doc Checks if the user has permission to modify file (e,g. change owner).
+%% UserDoc and FileDoc is based on current context.
+%% @end
+-spec check_file_perms(FileName :: string(), CheckType :: root | owner | create | delete | read | write | execute | rdwr | '') -> Result when
+    Result :: ok | {error, ErrorDetail},
+    ErrorDetail :: term().
+%% ====================================================================
+check_file_perms(FileName, Mode) ->
+    {ok, UserDoc} = fslogic_objects:get_user(),
+    {ok, FileDoc} = fslogic_objects:get_file(FileName),
+    check_file_perms(FileName, UserDoc, FileDoc, Mode).
+
 %% check_file_perms/4
 %% ====================================================================
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
 %% @end
--spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: root | owner | delete | read | write | execute | rdwr | '') -> Result when
-    Result :: ok | {error, ErrorDetail},
+-spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: root | owner | create | delete | read | write | execute | rdwr | '') -> Result when
+    Result :: ok | {ok, by_acl} | {error, ErrorDetail},
     ErrorDetail :: term().
 %% ====================================================================
-check_file_perms(_FileName, _UserDoc, _FileDoc, '') -> %root, always return ok
+check_file_perms(_FileName, _UserDoc, _FileDoc, '') -> %undefined mode
     ok;
 check_file_perms(_FileName, #db_document{uuid = ?CLUSTER_USER_ID}, _FileDoc, _CheckType) -> %root, always return ok
     ok;
 check_file_perms(FileName, UserDoc, _FileDoc, root = CheckType) -> % check if root
-    ?permission_denied_error(UserDoc,FileName,CheckType);
+    ?permission_denied_error(UserDoc, FileName, CheckType);
 check_file_perms(_FileName, #db_document{uuid = UserUid}, #db_document{record = #file{uid = UserUid}}, owner) -> % check if owner
     ok;
 check_file_perms(FileName, UserDoc, _FileDoc, owner = CheckType) ->
-    ?permission_denied_error(UserDoc,FileName,CheckType);
-check_file_perms(FileName, UserDoc, FileDoc, delete) ->
-    {ok, {_,ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName,fslogic_context:get_protocol_version()),
+    ?permission_denied_error(UserDoc, FileName, CheckType);
+check_file_perms(FileName, UserDoc, _FileDoc, create) ->
+    {ok, {_, ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName, fslogic_context:get_protocol_version()),
     ParentFileName = fslogic_path:strip_path_leaf(FileName),
-    case check_file_perms(ParentFileName,UserDoc,ParentFileDoc,write) of
-        ok -> check_file_perms(FileName,UserDoc,FileDoc,owner);
+    check_file_perms(ParentFileName, UserDoc, ParentFileDoc, write);
+check_file_perms(FileName, UserDoc = #db_document{record = #user{global_id = GlobalId}}, #db_document{record = #file{location = FileLoc, type = Type, perms = FilePerms}} = FileDoc, delete) ->
+    {ok, {_, ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName, fslogic_context:get_protocol_version()),
+    ParentFileName = fslogic_path:strip_path_leaf(FileName),
+    case check_file_perms(ParentFileName, UserDoc, ParentFileDoc, write) of
+        ok ->
+            Ans = check_file_perms(FileName, UserDoc, FileDoc, owner),
+            % cache file perms
+            case FilePerms == 0 andalso Type == ?REG_TYPE andalso Ans == ok of
+                true ->
+                    {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+                    {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+                    gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, utils:ensure_binary(GlobalId), delete}}, ?CACHE_REQUEST_TIMEOUT);
+                false -> ok
+            end,
+            Ans;
         Error -> Error
     end;
 check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
@@ -56,15 +87,39 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
         ok -> check_file_perms(FileName, UserDoc, FileDoc, write);
         Error -> Error
     end;
-check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerUid, perms = FilePerms}}, CheckType) -> %check read/write/execute perms
-    UserUid = UserDoc#db_document.uuid,
+check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerUid, perms = FilePerms, type = Type, meta_doc = MetaUuid, location = FileLoc}}, CheckType) -> %check read/write/execute perms
+    #db_document{uuid = UserUid, record = #user{global_id = GlobalId}} = UserDoc,
     FileSpace = get_group(FileName),
 
-    UserOwnsFile = UserUid=:=FileOwnerUid,
+    UserOwnsFile = UserUid =:= FileOwnerUid,
     UserGroupOwnsFile = is_member_of_space(UserDoc, {name, FileSpace}),
-    case has_permission(CheckType,FilePerms,UserOwnsFile,UserGroupOwnsFile) of
-        true -> ok;
-        false -> ?permission_denied_error(UserDoc,FileName,CheckType)
+    RealAcl =
+        case FilePerms of
+            0 ->
+                {ok, #db_document{record = #file_meta{acl = Acl}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+                Acl;
+            _ -> []
+        end,
+    case RealAcl of
+        [] ->
+            case has_permission(CheckType, FilePerms, UserOwnsFile, UserGroupOwnsFile) of
+                true -> ok;
+                false -> ?permission_denied_error(UserDoc, FileName, CheckType)
+            end;
+        _ ->
+            case (catch fslogic_acl:check_permission(RealAcl, utils:ensure_binary(GlobalId), CheckType)) of
+                ok ->
+                    % cache permissions for storage_files_manager use
+                    case Type of
+                        ?REG_TYPE ->
+                            {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+                            {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+                            gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, utils:ensure_binary(GlobalId), CheckType}}, ?CACHE_REQUEST_TIMEOUT),
+                            ok;
+                        _ -> ok
+                    end;
+                ?VEPERM -> ?permission_denied_error(UserDoc, FileName, CheckType)
+            end
     end.
 
 %% assert_group_access/3
@@ -131,7 +186,7 @@ is_member_of_space3(#db_document{record = #user{}} = UserDoc, {name, SpaceName},
 %% ====================================================================
 assert_grp_access(_UserDoc, Request, [?SPACES_BASE_DIR_NAME]) ->
     lists:member(Request, ?GROUPS_BASE_ALLOWED_ACTIONS);
-assert_grp_access(#db_document{record = #user{}} = UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail] = _PathTokens) ->
+assert_grp_access(#db_document{record = #user{}} = UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail]) ->
     TailCheck = case Tail of
                     [_GroupName] ->
                         lists:member(Request, ?GROUPS_ALLOWED_ACTIONS);
@@ -187,10 +242,9 @@ has_permission(execute, FilePerms, _, _) ->
     Result :: string() | none.
 %% ====================================================================
 get_group(File) ->
-    FileTokens = string:tokens(File, "/"),
-    case lists:nth(1, FileTokens) of
-        ?SPACES_BASE_DIR_NAME ->
-            lists:nth(2, FileTokens);
+    case string:tokens(File, "/") of
+        [?SPACES_BASE_DIR_NAME, SpaceName | _Rest] ->
+            SpaceName;
         _ ->
             none
     end.

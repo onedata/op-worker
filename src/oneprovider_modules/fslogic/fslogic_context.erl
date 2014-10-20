@@ -14,11 +14,12 @@
 
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao_types.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_fuse_id/0, set_fuse_id/1, get_user_dn/0, set_user_dn/1, clear_user_dn/0, set_protocol_version/1, get_protocol_version/0, get_user_id/0]).
--export([set_fs_user_ctx/1, get_fs_user_ctx/0, set_fs_group_ctx/1, get_fs_group_ctx/0]).
+-export([set_fs_user_ctx/1, set_fs_root_user_ctx/0, get_fs_user_ctx/0, set_fs_group_ctx/1, set_fs_root_group_ctx/0, get_fs_group_ctx/0]).
 -export([get_gr_auth/0, set_gr_auth/2]).
 -export([gen_global_fuse_id/2, read_global_fuse_id/1, is_global_fuse_id/1]).
 -export([clear_user_ctx/0, clear_gr_auth/0]).
@@ -101,7 +102,7 @@ clear_user_ctx() ->
 %% get_user_dn/0
 %% ====================================================================
 %% @doc Gets user's DN for current request or 'undefined' when there is none.
--spec get_user_dn() -> Result when Result :: atom() | undefined.
+-spec get_user_dn() -> Result when Result :: string() | undefined.
 %% ====================================================================
 get_user_dn() ->
     get(user_dn).
@@ -110,7 +111,7 @@ get_user_dn() ->
 %% set_user_dn/1
 %% ====================================================================
 %% @doc Sets user's DN for current request.
--spec set_user_dn(UserDN :: term()) -> Result when Result :: term().
+-spec set_user_dn(UserDN :: string() | undefined) -> Result when Result :: term().
 %% ====================================================================
 set_user_dn(UserDN) ->
     put(user_dn, UserDN).
@@ -189,6 +190,17 @@ set_fs_user_ctx(UName) when is_integer(UName) ->
     put(fsctx_uname, UName).
 
 
+%% set_fs_root_user_ctx/0
+%% ====================================================================
+%% @doc SHULD BE ONLY USED WHEN ACL PERMISSION HAS BEEN CONFIRMED
+%% Sets root as user name that shall be used for file system permissions checks.
+%% @end
+-spec set_fs_root_user_ctx() -> OldValue :: term().
+%% ====================================================================
+set_fs_root_user_ctx() ->
+    put(fsctx_uname, undefined).
+
+
 %% get_fs_user_ctx/0
 %% ====================================================================
 %% @doc Gets user name that is used for the file system permissions checks.
@@ -211,6 +223,17 @@ get_fs_user_ctx() ->
 %% ====================================================================
 set_fs_group_ctx(GroupID) ->
     put(fsctx_gname, GroupID).
+
+
+%% set_fs_root_group_ctx/0
+%% ====================================================================
+%% @doc SHULD BE ONLY USED WHEN ACL PERMISSION HAS BEEN CONFIRMED
+%% Sets root as user's group-id that shall be used for file system permissions checks.
+%% @end
+-spec set_fs_root_group_ctx() -> OldValue :: term().
+%% ====================================================================
+set_fs_root_group_ctx() ->
+    put(fsctx_gname, undefined).
 
 
 %% get_fs_group_ctx/0
@@ -273,7 +296,7 @@ is_global_fuse_id(GlobalFuseId) ->
 %% ====================================================================
 %% @doc Gets user DN, accessToken and GRUID
 %% @end
--spec get_user_context() -> {Dn :: binary(), {GRUID :: binary(), Token :: binary()}}.
+-spec get_user_context() -> {DN :: term(), {GRUID :: term(), Token :: term()}}.
 %% ====================================================================
 get_user_context() ->
     {get_user_dn(),{get(gruid), get(access_token)}}.
@@ -281,13 +304,17 @@ get_user_context() ->
 
 %% set_user_context/0
 %% ====================================================================
-%% @doc Gets user DN, accessToken and GRUID
+%% @doc Sets user DN, accessToken and GRUID
 %% @end
--spec set_user_context({Dn :: binary(), {GRUID :: binary(), Token :: binary()}}) -> ok.
+-spec set_user_context(UserDoc :: user_doc() | {DN :: term(), {GRUID :: term(), Token :: term()}}) -> ok.
 %% ====================================================================
-set_user_context({Dn,{GRUID,AccessToken}}) ->
-    set_user_dn(Dn),
-    set_gr_auth(GRUID,AccessToken),
+set_user_context(#db_document{record = #user{global_id = GRUID, access_token = AccessToken, dn_list = [DN | _]}}) ->
+    set_user_context({DN, {GRUID, AccessToken}});
+set_user_context(#db_document{record = #user{global_id = GRUID, access_token = AccessToken}}) ->
+    set_user_context({undefined, {GRUID, AccessToken}});
+set_user_context({DN, {GRUID, AccessToken}}) ->
+    set_user_dn(DN),
+    set_gr_auth(GRUID, AccessToken),
     ok.
 
 %% ====================================================================

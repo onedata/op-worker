@@ -110,6 +110,8 @@ get_answer_decoder_and_type(#fusemessage{input = #createlink{}}) ->
     {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #renewfilelocation{}}) ->
     {fuse_messages, filelocationvalidity};
+get_answer_decoder_and_type(#fusemessage{input = #getfilechildrencount{}}) ->
+    {fuse_messages, filechildrencount};
 get_answer_decoder_and_type(#fusemessage{input = #getfilechildren{}}) ->
     {fuse_messages, filechildren};
 get_answer_decoder_and_type(#fusemessage{input = #getlink{}}) ->
@@ -128,6 +130,10 @@ get_answer_decoder_and_type(#fusemessage{input = #removexattr{}}) ->
     {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #listxattr{}}) ->
     {fuse_messages, xattrlist};
+get_answer_decoder_and_type(#fusemessage{input = #getacl{}}) ->
+    {fuse_messages, acl};
+get_answer_decoder_and_type(#fusemessage{input = #setacl{}}) ->
+    {communication_protocol, atom};
 
 get_answer_decoder_and_type(#remotefilemangement{input = #createfile{}}) ->
     {communication_protocol, atom};

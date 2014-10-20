@@ -189,16 +189,17 @@ handle_multipart_data(Req, _Version, Method, Id) ->
 -spec list_dir_to_json(string()) -> {body, binary()} | {error, binary()}.
 %% ====================================================================
 list_dir_to_json(Path) ->
-    case rest_utils:list_dir(Path) of
-        {error, not_a_dir} ->
-            {error, <<"error: not a dir">>};
-        DirList ->
+    case logical_files_manager:ls_chunked(Path) of
+        {ok, DirList} ->
             DirListBin = lists:map(
                 fun(#dir_entry{name = Name}) ->
                     gui_str:unicode_list_to_binary(Name)
                 end, DirList),
             Body = {array, DirListBin},
-            {body, rest_utils:encode_to_json(Body)}
+            {body, rest_utils:encode_to_json(Body)};
+        Error ->
+            ?error("Listing dir error: ~p, assuming ~p is not a directory.", [Error, Path]),
+            {error, <<"error: not a dir">>}
     end.
 
 

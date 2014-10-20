@@ -13,6 +13,10 @@
 -module(page_file_manager).
 -include("oneprovider_modules/control_panel/common.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic_acl.hrl").
+-include("files_common.hrl").
+-include("oneprovider_modules/dao/dao_users.hrl").
+-include("fuse_messages_pb.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % n2o API
@@ -21,13 +25,14 @@
 -export([get_requested_hostname/0, comet_loop/1]).
 -export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
 -export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0]).
--export([confirm_paste/0, confirm_chmod/2]).
+-export([confirm_paste/0, submit_perms/2, show_permissions_info/0]).
+-export([populate_acl_list/1, change_perms_type/1, add_acl/0, delete_acl/1, edit_acl/1, move_acl/2, submit_acl/6]).
 -export([rename_item/2, create_directory/1, remove_selected/0, search/1, toggle_column/2, show_popup/1, hide_popup/0, path_navigator_body/1]).
 -export([fs_list_dir/1, fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
-
+-export([fs_has_perms/2, fs_chmod/3, fs_get_acl/1, fs_set_acl/3]).
 
 % All file attributes that are supported
--define(ALL_ATTRIBUTES, [mode, size, atime, mtime]).
+-define(ALL_ATTRIBUTES, [perms, size, atime, mtime]).
 
 % Attributes displayed by default
 -define(DEFAULT_ATTRIBUTES, [size, atime, mtime]).
@@ -47,22 +52,49 @@
 
 %% Check if user is logged in and has dn defined.
 main() ->
-    case opn_gui_utils:maybe_redirect(true, true, true) of
+    case opn_gui_utils:maybe_redirect(true, true) of
         true ->
-            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
+            #dtl{file = "bare", app = ?APP_Name, bindings = [
+                {title, <<"">>},
+                {body, <<"">>},
+                {custom, <<"">>},
+                {css, <<"">>}
+            ]};
         false ->
-            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [
+                {title, title()},
+                {body, body()},
+                {custom, custom()},
+                {css, css()}
+            ]}
     end.
 
 
 %% Page title
 title() -> <<"File manager">>.
 
+%% This will be placed in the template instead of {{custom}} tag
+custom() ->
+    <<"<script src=\"/js/oneprovider_upload.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
+    "    <script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>",
+    "    <script src=\"/flatui/bootbox.min.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n">>.
+
+%% This will be placed in the template instead of {{css}} tag
+css() ->
+    <<"<link rel=\"stylesheet\" href=\"/css/file_manager.css\" type=\"text/css\" media=\"screen\" charset=\"utf-8\" />">>.
+
+
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    gui_jq:register_escape_event("escape_pressed"),
-    gui_jq:wire(#api{name = "confirm_paste", tag = "confirm_paste"}, false),
-    gui_jq:wire(#api{name = "submit_chmod_event", tag = "submit_chmod_event"}, false),
+    gui_jq:register_escape_event("escape_pressed_event"),
+    gui_jq:wire(#api{name = "confirm_paste_event", tag = "confirm_paste_event"}, false),
+    gui_jq:wire(#api{name = "change_perms_type_event", tag = "change_perms_type_event"}, false),
+    gui_jq:wire(#api{name = "submit_perms_event", tag = "submit_perms_event"}, false),
+    gui_jq:wire(#api{name = "add_acl_event", tag = "add_acl_event"}, false),
+    gui_jq:wire(#api{name = "delete_acl_event", tag = "delete_acl_event"}, false),
+    gui_jq:wire(#api{name = "edit_acl_event", tag = "edit_acl_event"}, false),
+    gui_jq:wire(#api{name = "move_acl_event", tag = "move_acl_event"}, false),
+    gui_jq:wire(#api{name = "submit_acl_event", tag = "submit_acl_event"}, false),
     Body = [
         #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
@@ -73,12 +105,6 @@ body() ->
     ],
     Body.
 
-%% This will be placed in the template instead of {{custom}} tag
-custom() ->
-    <<"<script src=\"/js/oneprovider_upload.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
-    "    <script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>",
-    "    <script src=\"/flatui/bootbox.min.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n">>.
-
 % Submenu that will be glued below the top menu
 manager_submenu() ->
     [
@@ -86,7 +112,7 @@ manager_submenu() ->
             #panel{class = <<"container">>, style = <<"position: relative; overflow: hidden;">>, body = [
                 #list{class = <<"nav">>, body =
                 tool_button_and_dummy(<<"tb_up_one_level">>, <<"Up one level">>, <<"padding: 10px 7px 10px 15px; font-size: 28px; margin: -2px 0 2px -8px;">>,
-                    <<"icomoon-arrow-left">>, {action, up_one_level})},
+                    <<"icomoon-arrow-left3">>, {action, up_one_level})},
                 #panel{class = <<"breadcrumb-text breadcrumb-background">>, style = <<"overflow: hidden; margin-left: 15px;">>, body = [
                     #p{id = <<"path_navigator">>, class = <<"breadcrumb-content">>, body = <<"~">>}
                 ]},
@@ -106,7 +132,7 @@ manager_submenu() ->
             #panel{class = <<"container">>, body = [
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
                 [#li{id = wire_click(<<"tb_create_dir">>, {action, show_popup, [create_directory]}), body = #link{title = <<"Create directory">>,
-                    style =  <<"padding: 16px 12px;">>, body = #span{class = <<"icomoon-folder-open">>, style = <<"font-size: 24px;">>,
+                    style = <<"padding: 16px 12px;">>, body = #span{class = <<"icomoon-folder-open">>, style = <<"font-size: 24px;">>,
                         body = #span{class = <<"icomoon-plus">>, style = <<"position: absolute; font-size: 10px; right: 5px; top: 16px;">>}}}}] ++
                     tool_button(<<"tb_upload_files">>, <<"Upload file(s)">>, <<"padding: 16px 12px;">>,
                         <<"icomoon-upload">>, {action, show_popup, [file_upload]}) ++
@@ -117,7 +143,7 @@ manager_submenu() ->
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
                 tool_button_and_dummy(<<"tb_rename">>, <<"Rename">>, <<"padding: 16px 12px;">>,
                     <<"icomoon-pencil2">>, {action, show_popup, [rename_item]}) ++
-                    tool_button_and_dummy(<<"tb_chmod">>, <<"Change mode">>, <<"padding: 16px 12px;">>,
+                    tool_button_and_dummy(<<"tb_chmod">>, <<"Change permissions">>, <<"padding: 16px 12px;">>,
                         <<"icomoon-lock">>, {action, show_popup, [chmod]}) ++
                     tool_button_and_dummy(<<"tb_remove">>, <<"Remove">>, <<"padding: 16px 12px;">>,
                         <<"icomoon-remove">>, {action, show_popup, [remove_selected]})
@@ -215,27 +241,65 @@ wire_enter(ID, ButtonToClickID) ->
 
 
 %% Handling events
-api_event("escape_pressed", _, _) ->
+api_event("escape_pressed_event", _, _) ->
     event({action, hide_popup});
 
-api_event("confirm_paste", _, _) ->
+api_event("confirm_paste_event", _, _) ->
     event({action, confirm_paste});
 
-api_event("submit_chmod_event", Args, _Ctx) ->
-    [Mode, Recursive] = mochijson2:decode(Args),
-    event({action, confirm_chmod, [Mode, Recursive]}).
+api_event("submit_perms_event", Args, _Ctx) ->
+    [Perms, Recursive] = mochijson2:decode(Args),
+    event({action, submit_perms, [Perms, Recursive]});
+
+api_event("change_perms_type_event", Args, _Ctx) ->
+    EnableACL = mochijson2:decode(Args),
+    event({action, change_perms_type, [EnableACL]});
+
+api_event("add_acl_event", _Args, _) ->
+    event({action, add_acl});
+
+api_event("delete_acl_event", Args, _) ->
+    IndexRaw = mochijson2:decode(Args),
+    Index = case IndexRaw of
+                I when is_integer(I) -> I;
+                Bin when is_binary(Bin) -> binary_to_integer(Bin)
+            end,
+    event({action, delete_acl, [Index]});
+
+api_event("edit_acl_event", Args, _) ->
+    IndexRaw = mochijson2:decode(Args),
+    Index = case IndexRaw of
+                I when is_integer(I) -> I;
+                Bin when is_binary(Bin) -> binary_to_integer(Bin)
+            end,
+    event({action, edit_acl, [Index]});
+
+api_event("move_acl_event", Args, _) ->
+    [IndexRaw, MoveUp] = mochijson2:decode(Args),
+    Index = case IndexRaw of
+                I when is_integer(I) -> I;
+                Bin when is_binary(Bin) -> binary_to_integer(Bin)
+            end,
+    event({action, move_acl, [Index, MoveUp]});
+
+api_event("submit_acl_event", Args, _) ->
+    [IndexRaw, Identifier, Type, Read, Write, Execute] = mochijson2:decode(Args),
+    Index = case IndexRaw of
+                I when is_integer(I) -> I;
+                Bin when is_binary(Bin) -> binary_to_integer(Bin)
+            end,
+    event({action, submit_acl, [Index, Identifier, Type, Read, Write, Execute]}).
 
 
 event(init) ->
-    case gui_ctx:user_logged_in() and opn_gui_utils:dn_and_storage_defined() of
+    case gui_ctx:user_logged_in() and opn_gui_utils:storage_defined() of
         false ->
             skip;
         true ->
-            VCUID = opn_gui_utils:get_user_dn(),
             GRUID = opn_gui_utils:get_global_user_id(),
             AccessToken = opn_gui_utils:get_access_token(),
             Hostname = gui_ctx:get_requested_hostname(),
-            {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(VCUID, GRUID, AccessToken, Hostname) end),
+            {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(GRUID, AccessToken, Hostname) end),
             put(comet_pid, Pid)
     end;
 
@@ -260,14 +324,13 @@ event({action, Fun, Args}) ->
                     Other
             end
         end, Args),
-    opn_gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, Fun, NewArgs}], true).
+    opn_gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, Fun, NewArgs}]).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Comet loop and functions evaluated by comet
-comet_loop_init(UserId, GRUID, UserAccessToken, RequestedHostname) ->
+comet_loop_init(GRUID, UserAccessToken, RequestedHostname) ->
     % Initialize page state
-    fslogic_context:set_user_dn(UserId),
     fslogic_context:set_gr_auth(GRUID, UserAccessToken),
 
     set_requested_hostname(RequestedHostname),
@@ -296,7 +359,9 @@ comet_loop(IsUploadInProgress) ->
                 {action, Fun, Args} ->
                     case IsUploadInProgress of
                         true ->
-                            gui_jq:wire(#alert{text = <<"Please wait for the upload to finish.">>}), gui_comet:flush();
+                            gui_jq:info_popup(<<"Upload in progress">>,
+                                <<"Please wait for the upload to finish.">>, <<"">>),
+                            gui_comet:flush();
                         false ->
                             erlang:apply(?MODULE, Fun, Args)
                     end,
@@ -545,7 +610,7 @@ paste_from_clipboard() ->
     case is_the_same_space(filename:dirname(FirstPath), get_working_directory()) of
         false ->
             gui_jq:confirm_popup(<<"Do you really want to move your file(s) between spaces and ",
-            "share them with all members of the target space?">>, <<"confirm_paste();">>);
+            "share them with all members of the target space?">>, <<"confirm_paste_event();">>);
         true ->
             confirm_paste()
     end.
@@ -564,13 +629,13 @@ confirm_paste() ->
                         ok ->
                             Acc;
                         {logical_file_system_error, "eperm"} ->
-                            <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.\r\n">>;
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.<br />">>;
                         {logical_file_system_error, "eexist"} ->
-                            <<Acc/binary, "Unable to move ", Basename/binary, " - file exists.\r\n">>;
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - file exists.<br />">>;
                         {logical_file_system_error, "eacces"} ->
-                            <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.\r\n">>;
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.<br />">>;
                         _ ->
-                            <<Acc/binary, "Unable to move ", Basename/binary, " - error occured.\r\n">>
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - error occured.<br />">>
                     end;
                 copy ->
                     % Not yet implemented
@@ -582,17 +647,29 @@ confirm_paste() ->
         <<"">> ->
             ok;
         _ ->
-            gui_jq:wire(#alert{text = ErrorMessage})
+            gui_jq:info_popup(<<"Error(s) occured">>, ErrorMessage, <<"">>)
     end,
     clear_workspace().
 
 
-confirm_chmod(Mode, Recursive) ->
-    Failed = lists:foldl(
-        fun({Path, _Basename}, Acc) ->
-            {_Successful, Failed} = fs_chmod(Path, Mode, Recursive),
-            Acc ++ Failed
-        end, [], get_selected_items()),
+submit_perms(Perms, Recursive) ->
+    {Files, ACLEnabled, ACLEntries} = get_perms_state(),
+    {Failed, Message} = case ACLEnabled of
+                            true ->
+                                FailedFiles = lists:foldl(
+                                    fun(Path, Acc) ->
+                                        {_Successful, Failed} = fs_set_acl(Path, ACLEntries, Recursive),
+                                        Acc ++ Failed
+                                    end, [], Files),
+                                {FailedFiles, <<"Unable to set ACL for following file(s):">>};
+                            false ->
+                                FailedFiles = lists:foldl(
+                                    fun(Path, Acc) ->
+                                        {_Successful, Failed} = fs_chmod(Path, Perms, Recursive),
+                                        Acc ++ Failed
+                                    end, [], Files),
+                                {FailedFiles, <<"Unable to change permissions for following file(s):">>}
+                        end,
     case Failed of
         [] ->
             ok;
@@ -605,9 +682,10 @@ confirm_chmod(Mode, Recursive) ->
                                     _ ->
                                         <<"error occured">>
                                 end,
-                    <<Acc/binary, Path/binary, ": ", ReasonBin/binary, "\r\n">>
+                    <<Acc/binary, Path/binary, ": ", ReasonBin/binary, "<br />">>
                 end, <<"">>, Failed),
-            gui_jq:wire(#alert{text = <<"Unable to change permissions for following file(s):\r\n\r\n", FailedList/binary>>})
+            gui_jq:info_popup(<<"Error(s) occured">>,
+                <<Message/binary, "<br /><br />", FailedList/binary>>, <<"">>)
     end,
     clear_manager().
 
@@ -620,19 +698,24 @@ rename_item(OldPath, NewName) ->
         OldName -> hide_popup();
         _ ->
             NewPath = filename:absname(NewName, get_working_directory()),
-            case fs_mv(OldPath, get_working_directory(), NewName) of
-                ok ->
-                    clear_clipboard(),
-                    clear_manager(),
-                    select_item(NewPath);
-                {logical_file_system_error, "eperm"} ->
-                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>});
-                {logical_file_system_error, "eexist"} ->
-                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - file exists.">>});
-                {logical_file_system_error, "eacces"} ->
-                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>});
-                _ ->
-                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - error occured.">>})
+            ErrorMessage = case fs_mv(OldPath, get_working_directory(), NewName) of
+                               ok ->
+                                   clear_clipboard(),
+                                   clear_manager(),
+                                   select_item(NewPath),
+                                   none;
+                               {logical_file_system_error, "eperm"} ->
+                                   <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>;
+                               {logical_file_system_error, "eexist"} ->
+                                   <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - file exists.">>;
+                               {logical_file_system_error, "eacces"} ->
+                                   <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>;
+                               _ ->
+                                   <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - error occured.">>
+                           end,
+            case ErrorMessage of
+                none -> ok;
+                _ -> gui_jq:info_popup(<<"Error(s) occured">>, ErrorMessage, <<"">>)
             end
     end.
 
@@ -650,9 +733,11 @@ create_directory(Name) ->
                 _ ->
                     case item_find(FullPath) of
                         undefined ->
-                            gui_jq:wire(#alert{text = <<"Cannot create directory - disallowed name.">>});
+                            gui_jq:info_popup(<<"Error(s) occured">>,
+                                <<"Cannot create directory - disallowed name.">>, <<"">>);
                         _ ->
-                            gui_jq:wire(#alert{text = <<"Cannot create directory - file exists.">>})
+                            gui_jq:info_popup(<<"Error(s) occured">>,
+                                <<"Cannot create directory - file exists.">>, <<"">>)
                     end,
                     hide_popup()
             end
@@ -696,6 +781,141 @@ toggle_column(Attr, Flag) ->
     refresh_workspace().
 
 
+show_permissions_info() ->
+    gui_jq:info_popup(<<"POSIX permissions and ACLs">>, <<"Basic POSIX permissions and ACLs are two ways of controlling ",
+    "the access to your data. You can choose to use one of them for each file. They cannot be used together. <br /><br />",
+    "<strong>POSIX permissions</strong> - basic file permissions, can be used to enable certain types ",
+    "of users to read, write or execute given file. The types are: user (the owner of the file), group (all users ",
+    "sharing the space where the file resides), other (not aplicable in GUI, but used in oneclient).<br /><br />",
+    "<strong>ACL</strong> (Access Control List) - CDMI standard (compliant with NFSv4 ACLs), allows ",
+    "defining ordered lists of permissions-granting or permissions-denying entries for users or groups. ",
+    "ACLs are processed from top to bottom - entries higher on list will have higher priority.">>, <<"">>).
+
+
+populate_acl_list(SelectedIndex) ->
+    {_Files, _EnableACL, ACLEntries} = get_perms_state(),
+    JSON = rest_utils:encode_to_json(lists:map(
+        fun(#accesscontrolentity{acetype = ACEType, aceflags = _ACEFlags, identifier = Identifier, acemask = ACEMask}) ->
+            {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, Identifier}),
+            [
+                {<<"identifier">>, gui_str:unicode_list_to_binary(Name)},
+                {<<"allow">>, ACEType =:= ?allow_mask},
+                {<<"read">>, ACEMask band ?read_mask > 0},
+                {<<"write">>, ACEMask band ?write_mask > 0},
+                {<<"exec">>, ACEMask band ?execute_mask > 0}
+            ]
+        end, ACLEntries)),
+    gui_jq:hide(<<"acl-form">>),
+    gui_jq:wire(<<"clicked_index = -2;">>),
+    gui_jq:wire(<<"populate_acl_list(", JSON/binary, ", ", (integer_to_binary(SelectedIndex))/binary, ");">>).
+
+
+change_perms_type(EnableACL) ->
+    {Files, _CurrentEnableACL, ACLEntries} = get_perms_state(),
+    set_perms_state({Files, EnableACL, ACLEntries}),
+    case EnableACL of
+        true ->
+            gui_jq:show(<<"tab_acl">>),
+            gui_jq:hide(<<"tab_posix">>);
+        _ ->
+            gui_jq:hide(<<"tab_acl">>),
+            gui_jq:show(<<"tab_posix">>)
+    end.
+
+
+add_acl() ->
+    gui_jq:show(<<"acl-form">>),
+    gui_jq:wire(<<"$('#acl_textbox').val('');">>),
+    gui_jq:wire(<<"$('#acl_type_checkbox').checkbox('check');">>),
+    gui_jq:wire(<<"$('#acl_read_checkbox').checkbox('uncheck');">>),
+    gui_jq:wire(<<"$('#acl_write_checkbox').checkbox('uncheck');">>),
+    gui_jq:wire(<<"$('#acl_exec_checkbox').checkbox('uncheck');">>).
+
+
+delete_acl(Index) ->
+    {Files, EnableACL, ACLEntries} = get_perms_state(),
+    {Head, [_ | Tail]} = lists:split(Index, ACLEntries),
+    set_perms_state({Files, EnableACL, Head ++ Tail}),
+    populate_acl_list(-1).
+
+
+edit_acl(Index) ->
+    gui_jq:show(<<"acl-form">>),
+    {_Files, _EnableACL, ACLEntries} = get_perms_state(),
+    #accesscontrolentity{acetype = ACEType, aceflags = _ACEFlags,
+        identifier = Identifier, acemask = ACEMask} = lists:nth(Index + 1, ACLEntries),
+    gui_jq:set_value(<<"acl_textbox">>, Identifier),
+    CheckJS = <<"').checkbox('check');">>,
+    UncheckJS = <<"').checkbox('uncheck');">>,
+    case ACEType of
+        ?allow_mask -> gui_jq:wire(<<"$('#acl_type_checkbox", CheckJS/binary>>);
+        _ -> gui_jq:wire(<<"$('#acl_type_checkbox", UncheckJS/binary>>)
+    end,
+    case ACEMask band ?read_mask of
+        0 -> gui_jq:wire(<<"$('#acl_read_checkbox", UncheckJS/binary>>);
+        _ -> gui_jq:wire(<<"$('#acl_read_checkbox", CheckJS/binary>>)
+    end,
+    case ACEMask band ?write_mask of
+        0 -> gui_jq:wire(<<"$('#acl_write_checkbox", UncheckJS/binary>>);
+        _ -> gui_jq:wire(<<"$('#acl_write_checkbox", CheckJS/binary>>)
+    end,
+    case ACEMask band ?execute_mask of
+        0 -> gui_jq:wire(<<"$('#acl_exec_checkbox", UncheckJS/binary>>);
+        _ -> gui_jq:wire(<<"$('#acl_exec_checkbox", CheckJS/binary>>)
+    end.
+
+
+submit_acl(Index, Name, Type, ReadFlag, WriteFlag, ExecFlag) ->
+    {Files, EnableACL, ACLEntries} = get_perms_state(),
+    ACEMask = (case ReadFlag of true -> ?read_mask; _ -> 0 end) bor
+        (case WriteFlag of true -> ?write_mask; _ -> 0 end) bor
+        (case ExecFlag of true -> ?execute_mask; _ -> 0 end),
+    case ACEMask of
+        0 ->
+            gui_jq:info_popup(<<"Invalid values">>,
+                <<"Acess List entry must allow or deny at least one permission.">>, <<"">>);
+        _ ->
+            NewEntity = #accesscontrolentity{
+                acetype = (case Type of true -> ?allow_mask; _ -> ?deny_mask end),
+                aceflags = ?no_flags_mask,
+                identifier = fslogic_acl:name_to_gruid(Name),
+                acemask = ACEMask},
+            case Index of
+                -1 ->
+                    set_perms_state({Files, EnableACL, ACLEntries ++ [NewEntity]});
+                _ ->
+                    {Head, [_Ident | Tail]} = lists:split(Index, ACLEntries),
+                    set_perms_state({Files, EnableACL, Head ++ [NewEntity] ++ Tail})
+            end,
+            populate_acl_list(-1)
+    end.
+
+
+move_acl(Index, MoveUp) ->
+    {Files, EnableACL, ACLEntries} = get_perms_state(),
+    MaxIndex = length(ACLEntries) - 1,
+    {NewEntries, SelectedIndex} = case {Index, MoveUp} of
+                                      {0, true} ->
+                                          {ACLEntries, Index};
+                                      {MaxIndex, false} ->
+                                          {ACLEntries, Index};
+                                      _ ->
+                                          {Head, [Ident | Tail]} = lists:split(Index, ACLEntries),
+                                          case MoveUp of
+                                              true ->
+                                                  % Head length is at least 1, because Index is not 0
+                                                  {AllButLast, Last} = lists:split(length(Head) - 1, Head),
+                                                  {AllButLast ++ [Ident] ++ Last ++ Tail, Index - 1};
+                                              false ->
+                                                  % Tail length is at least 1, because Index is not MaxIndex
+                                                  [First | AllButFirst] = Tail,
+                                                  {Head ++ [First] ++ [Ident] ++ AllButFirst, Index + 1}
+                                          end
+                                  end,
+    set_perms_state({Files, EnableACL, NewEntries}),
+    populate_acl_list(SelectedIndex).
+
+
 % Shows popup with a prompt, form, etc.
 show_popup(Type) ->
     {FooterBody, Script, CloseButtonAction} =
@@ -717,7 +937,8 @@ show_popup(Type) ->
             rename_item ->
                 case fs_has_perms(get_working_directory(), write) of
                     false ->
-                        gui_jq:wire(#alert{text = <<"You need write permissions in this directory to rename files.">>}),
+                        gui_jq:info_popup(<<"Insufficient permissions">>,
+                            <<"You need write permissions in this directory to rename files.">>, <<"">>),
                         {[], undefined, undefined};
                     true ->
                         case length(get_selected_items()) =:= 1 of
@@ -759,95 +980,226 @@ show_popup(Type) ->
                 end;
 
             chmod ->
-                [{FirstItem, _} | Items] = get_selected_items(),
-                CurrentMode = lists:foldl(
-                    fun({ItemPath, _}, Acc) ->
-                        case item_attr(mode, item_find(ItemPath)) of
-                            Acc -> Acc;
-                            _ -> 0
+                Files = lists:map(fun({ItmPath, _}) -> ItmPath end, get_selected_items()),
+                [FirstPath | Items] = Files,
+
+                GetTypeAndValue =
+                    fun(ItemPath) ->
+                        Item = item_find(ItemPath),
+                        case item_attr(has_acl, Item) of
+                            true ->
+                                {acl, fs_get_acl(ItemPath)};
+                            _ ->
+                                {posix, item_attr(perms, Item)}
                         end
-                    end, item_attr(mode, item_find(FirstItem)), Items),
-                gui_jq:wire(<<"init_chmod_table(", (integer_to_binary(CurrentMode))/binary, ");">>),
-                TDStyle = <<"border-color: rgb(82, 100, 118); width: 60px; text-align: center;">>,
-                LabelStyle = <<"margin: 0 auto; width: 20px;">>,
+                    end,
+                {FirstType, FirstValue} = GetTypeAndValue(FirstPath),
+
+                % CommonType can be undefined|acl|posix
+                % CommonValue can be undefined|list()|integer()
+                {CommonType, CommonValue} = lists:foldl(
+                    fun(ItemPath, {AccCommonType, AccCommonValue}) ->
+                        {ItemType, ItemValue} = GetTypeAndValue(ItemPath),
+                        case ItemType of
+                            AccCommonType ->
+                                case ItemValue of
+                                    AccCommonValue -> {AccCommonType, AccCommonValue};
+                                    _ -> {AccCommonType, undefined}
+                                end;
+                            _ ->
+                                {undefined, undefined}
+                        end
+                    end, {FirstType, FirstValue}, Items),
+
+                EnableACL = (CommonType =:= acl) or (CommonType =:= undefined),
+                CommonPerms = case {CommonType, CommonValue} of
+                                  {posix, Int} when is_integer(Int) -> Int;
+                                  _ -> 0
+                              end,
+                CommonACL = case {CommonType, CommonValue} of
+                                {acl, List} when is_list(List) -> List;
+                                _ -> []
+                            end,
+                set_perms_state({Files, EnableACL, CommonACL}),
+
+                PathToCheck = case FirstPath of
+                                  <<"/", ?SPACES_BASE_DIR_NAME>> -> <<"/">>;
+                                  _ -> FirstPath
+                              end,
+                {ok, FullFilePath} = fslogic_path:get_full_file_name(gui_str:binary_to_unicode_list(PathToCheck)),
+                {ok, #space_info{users = Users}} = fslogic_utils:get_space_info_for_path(FullFilePath),
+                Identifiers = gruids_to_identifiers(Users),
+
+                gui_jq:wire(<<"init_chmod_table(", (integer_to_binary(CommonPerms))/binary, ");">>),
+                {POSIXTabStyle, ACLTabStyle} = case EnableACL of
+                                                   true -> {<<"display: none;">>, <<"">>};
+                                                   false -> {<<"">>, <<"display: none;">>}
+                                               end,
                 Body = [
-                    #panel{style = <<"position: relative; text-align: center; overflow: hidden;">>, body = [
-                        #p{body = <<"Change mode">>},
-                        #table{class = <<"table table-bordered">>,
-                            style = <<"margin: 0 auto 15px; table-layout: fixed; width: 200px; border-color: rgb(82, 100, 118);">>,
-                            header = [
+                    #panel{id = <<"perms_wrapper">>, body = [
+                        #panel{id = <<"perms_header">>, body = [
+                            #p{id = <<"perms_header_info">>, body = <<"Permissions type:">>},
+                            #span{id = <<"perms_radios">>, body = [
+                                #flatui_radio{id = <<"perms_radio_posix">>, name = <<"perms_radio">>,
+                                    label_class = <<"radio perms-radio-label">>, body = <<"POSIX">>, checked = not EnableACL},
+                                #flatui_radio{id = <<"perms_radio_acl">>, name = <<"perms_radio">>,
+                                    label_class = <<"radio perms-radio-label">>, body = <<"ACL">>, checked = EnableACL}
+                            ]},
+                            #link{id = wire_click(<<"perms_info_button">>, {action, show_permissions_info}),
+                                title = <<"Learn about permissions">>, class = <<"glyph-link">>,
+                                body = #span{class = <<"icomoon-question">>}}
+                        ]},
+                        #panel{id = <<"tab_posix">>, style = POSIXTabStyle, body = [
+                            #table{class = <<"table table-bordered">>, id = <<"posix_table">>, header = [
                                 #tr{cells = [
-                                    #th{body = <<"">>, style = TDStyle},
-                                    #th{body = <<"read">>, style = TDStyle},
-                                    #th{body = <<"write">>, style = TDStyle},
-                                    #th{body = <<"execute">>, style = TDStyle}
+                                    #th{body = <<"">>, class = <<"posix-cell">>},
+                                    #th{body = <<"read">>, class = <<"posix-cell">>},
+                                    #th{body = <<"write">>, class = <<"posix-cell">>},
+                                    #th{body = <<"execute">>, class = <<"posix-cell">>}
                                 ]}
-                            ], body = [
+                            ], body = #tbody{body = [
                                 #tr{cells = [
-                                    #td{body = <<"user">>, style = <<TDStyle/binary, " font-weight: 700;">>},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_ur">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
+                                    #td{body = <<"user">>, class = <<"posix-cell fw700">>},
+                                    #td{class = <<"posix-cell">>, body = [
+                                        #flatui_checkbox{id = <<"chbx_ur">>,
+                                            label_class = <<"checkbox no-label posix-checkbox">>, value = <<"">>}
                                     ]},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_uw">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
+                                    #td{class = <<"posix-cell">>, body = [
+                                        #flatui_checkbox{id = <<"chbx_uw">>,
+                                            label_class = <<"checkbox no-label posix-checkbox">>, value = <<"">>}
                                     ]},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_ux">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
+                                    #td{class = <<"posix-cell">>, body = [
+                                        #flatui_checkbox{id = <<"chbx_ux">>,
+                                            label_class = <<"checkbox no-label posix-checkbox">>, value = <<"">>}
                                     ]}
                                 ]},
                                 #tr{cells = [
-                                    #td{body = <<"group">>, style = <<TDStyle/binary, " font-weight: 700;">>},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_gr">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
+                                    #td{body = <<"group">>, class = <<"posix-cell fw700">>},
+                                    #td{class = <<"posix-cell">>, body = [
+                                        #flatui_checkbox{id = <<"chbx_gr">>,
+                                            label_class = <<"checkbox no-label posix-checkbox">>, value = <<"">>}
                                     ]},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_gw">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
+                                    #td{class = <<"posix-cell">>, body = [
+                                        #flatui_checkbox{id = <<"chbx_gw">>,
+                                            label_class = <<"checkbox no-label posix-checkbox">>, value = <<"">>}
                                     ]},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_gx">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
+                                    #td{class = <<"posix-cell">>, body = [
+                                        #flatui_checkbox{id = <<"chbx_gx">>,
+                                            label_class = <<"checkbox no-label posix-checkbox">>, value = <<"">>}
                                     ]}
                                 ]},
                                 #tr{cells = [
-                                    #td{body = <<"other">>, style = <<TDStyle/binary, " font-weight: 700;">>},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_or">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
+                                    #td{body = <<"other">>, class = <<"posix-cell fw700">>},
+                                    #td{class = <<"posix-cell">>, body = [
+                                        #flatui_checkbox{id = <<"chbx_or">>,
+                                            label_class = <<"checkbox no-label posix-checkbox">>, value = <<"">>}
                                     ]},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_ow">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
+                                    #td{class = <<"posix-cell">>, body = [
+                                        #flatui_checkbox{id = <<"chbx_ow">>,
+                                            label_class = <<"checkbox no-label posix-checkbox">>, value = <<"">>}
                                     ]},
-                                    #td{style = TDStyle, body = [
-                                        #flatui_checkbox{id = <<"chbx_ox">>, label_class = <<"checkbox no-label">>,
-                                            label_style = LabelStyle, value = <<"">>}
+                                    #td{class = <<"posix-cell">>, body = [
+                                        #flatui_checkbox{id = <<"chbx_ox">>,
+                                            label_class = <<"checkbox no-label posix-checkbox">>, value = <<"">>}
+                                    ]}
+                                ]}
+                            ]}
+                            },
+                            #panel{class = <<"posix-octal-form-wrapper">>, body = [
+                                #p{class = <<"inline-block">>, body = <<"octal form:">>,
+                                    title = <<"Type in octal representation of perms to automatically adjust checkboxes">>},
+                                #textbox{id = <<"posix_octal_form_textbox">>, class = <<"span2">>,
+                                    placeholder = <<"000">>, value = <<"">>}
+                            ]}
+                        ]},
+                        #panel{id = <<"tab_acl">>, style = ACLTabStyle, body = [
+                            #panel{class = <<"acl-info">>, body = [
+                                #p{body = <<"proccessing">>},
+                                #p{body = <<"order">>},
+                                #span{class = <<"icomoon-arrow-down">>}
+                            ]},
+                            #panel{id = <<"acl_list">>},
+                            #panel{id = <<"acl-form">>, body = [
+                                #table{id = <<"acl-form-table">>, body = [
+                                    #tr{cells = [
+                                        #td{body = [
+                                            #label{class = <<"label label-inverse acl-label">>, body = <<"Identifier">>}
+                                        ]},
+                                        #td{style = <<"padding-right: 20px;">>, body = [
+                                            #select{id = <<"acl_select_name">>, class = <<"select-block">>, body = [
+                                                lists:map(fun(Ident) -> #option{body = Ident} end, Identifiers)
+                                            ]}
+                                        ]}
+                                    ]},
+                                    #tr{cells = [
+                                        #td{body = [
+                                            #label{class = <<"label label-inverse acl-label">>, body = <<"Type">>}
+
+                                        ]},
+                                        #td{body = [
+                                            #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_type_checkbox">>,
+                                                checked = true, body = #span{id = <<"acl_type_checkbox_label">>, body = <<"allow">>}}
+                                        ]}
+                                    ]},
+                                    #tr{cells = [
+                                        #td{body = [
+                                            #label{class = <<"label label-inverse acl-label">>, body = <<"Perms">>}
+
+                                        ]},
+                                        #td{body = [
+                                            #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_read_checkbox">>, checked = true, body = <<"read">>},
+                                            #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_write_checkbox">>, checked = true, body = <<"write">>},
+                                            #flatui_checkbox{label_class = <<"checkbox acl-checkbox">>, id = <<"acl_exec_checkbox">>, checked = true, body = <<"execute">>}
+                                        ]}
+                                    ]},
+                                    #tr{cells = [
+                                        #td{body = [
+                                            #button{id = <<"button_save_acl">>, class = <<"btn btn-success acl-form-button">>,
+                                                body = <<"Save">>}
+                                        ]},
+                                        #td{body = [
+                                            #button{id = <<"button_discard_acl">>, class = <<"btn btn-danger acl-form-button">>,
+                                                body = <<"Discard">>, postback = {action, populate_acl_list, [-1]}}
+                                        ]}
                                     ]}
                                 ]}
                             ]},
-                        #panel{style = <<"position: relative; width: 430px; margin: 0 auto;">>, body = [
-                            #p{style = <<"display: inline-block;float: left; ">>, body = <<"octal form:">>,
-                                title = <<"Type in octal representation of mode to automatically adjust checkboxes">>},
-                            #textbox{id = wire_enter(<<"octal_form_textbox">>, <<"octal_form_submit">>), class = <<"span2">>,
-                                style = <<"width: 50px; padding: 5px 5px; position: relative; float: left; margin: 0 50px 0 8px;">>, placeholder = <<"000">>,
-                                value = <<"">>},
-                            #flatui_checkbox{id = <<"chbx_recursive">>, label_class = <<"checkbox no-label">>,
-                                value = <<"">>, checked = false, body = <<"recursive">>,
-                                label_style = <<"position: relative; float: right; margin-top: 6px;;">>,
-                                label_title = <<"Change mode in all subdirectories, recursively">>}
-                        ]},
-                        #panel{style = <<"clear: both;  margin-bottom: 18px;">>},
-                        #form{class = <<"control-group">>, body = [
-                            #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
-                            #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}
+                            #panel{class = <<"acl-info">>}
                         ]}
+                    ]},
+                    #panel{class = <<"clearfix">>},
+                    #panel{id = <<"perms_warning_different">>, class = <<"perms-warning">>, body = [
+                        #span{class = <<"icomoon-warning">>},
+                        #p{body = <<"Selected files have different permissions. They will be overwritten by chosen permissions.">>}
+                    ]},
+                    #panel{id = <<"perms_warning_overwrite">>, class = <<"perms-warning">>, body = [
+                        #span{class = <<"icomoon-warning">>},
+                        #p{body = <<"Changing permissions recursively will overwrite <strong>ALL</strong> permissions in subdirectories.">>}
+                    ]},
+                    #form{class = <<"control-group">>, id = <<"perms_form">>, body = [
+                        #flatui_checkbox{id = <<"chbx_recursive">>, label_class = <<"checkbox">>,
+                            value = <<"">>, checked = false, body = <<"recursive">>,
+                            label_id = <<"perms_recursive_label">>,
+                            label_title = <<"Change perms in all subdirectories, recursively">>},
+                        #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
+                        #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}
                     ]}
                 ],
-                gui_jq:bind_element_click(<<"ok_button">>, <<"function() { submit_chmod(); }">>),
+                flatui_checkbox:init_checkbox(<<"acl_type_checkbox">>),
+                flatui_checkbox:init_checkbox(<<"acl_read_checkbox">>),
+                flatui_checkbox:init_checkbox(<<"acl_write_checkbox">>),
+                flatui_checkbox:init_checkbox(<<"acl_exec_checkbox">>),
+                flatui_radio:init_radio_button(<<"perms_radio_posix">>),
+                gui_jq:wire(<<"$('#acl_select_name').selectpicker({style: 'btn-small', menuStyle: 'dropdown-inverse'});">>),
+                gui_jq:wire(<<"$('#perms_radio_acl').change(function(e){change_perms_type_event($(this).is(':checked'));});">>),
+                flatui_radio:init_radio_button(<<"perms_radio_acl">>),
+                gui_jq:bind_element_click(<<"button_save_acl">>, <<"function() { submit_acl(); }">>),
+                gui_jq:bind_element_click(<<"ok_button">>, <<"function() { submit_perms(); }">>),
+                case CommonValue of
+                    undefined -> gui_jq:show(<<"perms_warning_different">>);
+                    _ -> ok
+                end,
+                populate_acl_list(-1),
                 {Body, undefined, {action, hide_popup}};
 
             share_file ->
@@ -890,7 +1242,8 @@ show_popup(Type) ->
                         ],
                         {Body, undefined, {action, clear_manager}};
                     false ->
-                        gui_jq:wire(#alert{text = <<"You need write permissions in this directory to upload files.">>}),
+                        gui_jq:info_popup(<<"Insufficient permissions">>,
+                            <<"You need write permissions in this directory to upload files.">>, <<"">>),
                         {[], undefined, undefined}
                 end;
 
@@ -898,7 +1251,8 @@ show_popup(Type) ->
                 {_FB, _S, _A} =
                     case fs_has_perms(get_working_directory(), write) of
                         false ->
-                            gui_jq:wire(#alert{text = <<"You need write permissions in this directory to delete files.">>}),
+                            gui_jq:info_popup(<<"Insufficient permissions">>,
+                                <<"You need write permissions in this directory to delete files.">>, <<"">>),
                             {[], undefined, undefined};
                         true ->
                             case get_selected_items() of
@@ -1216,11 +1570,11 @@ item_new(Dir, File) ->
     item_new(FullPath).
 
 item_new(FullPath) ->
-    #fileattributes{type = Type, mode = Mode} = FA = fs_get_attributes(FullPath),
+    #fileattributes{type = Type, mode = Perms} = FA = fs_get_attributes(FullPath),
     % Set size to -1 if the file is a dir, and remove sticky bit from mode representation
     FileAttr = case Type of
-                   "DIR" -> FA#fileattributes{size = -1, mode = Mode band 2#111111111};
-                   _ -> FA#fileattributes{mode = Mode band 2#111111111}
+                   "DIR" -> FA#fileattributes{size = -1, mode = Perms band 2#111111111};
+                   _ -> FA#fileattributes{mode = Perms band 2#111111111}
                end,
     IsShared = case fs_get_share_uuid_by_filepath(FullPath) of
                    undefined -> false;
@@ -1255,7 +1609,7 @@ item_basename(#item{basename = Basename}) ->
     Basename.
 
 item_attr(name, Item) -> gui_str:binary_to_unicode_list(item_basename(Item));
-item_attr(mode, #item{attr = #fileattributes{mode = Value}}) -> Value;
+item_attr(perms, #item{attr = #fileattributes{mode = Value}}) -> Value;
 item_attr(uid, #item{attr = #fileattributes{uid = Value}}) -> Value;
 item_attr(gid, #item{attr = #fileattributes{gid = Value}}) -> Value;
 item_attr(atime, #item{attr = #fileattributes{atime = Value}}) -> Value;
@@ -1264,7 +1618,8 @@ item_attr(ctime, #item{attr = #fileattributes{ctime = Value}}) -> Value;
 item_attr(type, #item{attr = #fileattributes{type = Value}}) -> Value;
 item_attr(size, #item{attr = #fileattributes{size = Value}}) -> Value;
 item_attr(uname, #item{attr = #fileattributes{uname = Value}}) -> Value;
-item_attr(gname, #item{attr = #fileattributes{gname = Value}}) -> Value.
+item_attr(gname, #item{attr = #fileattributes{gname = Value}}) -> Value;
+item_attr(has_acl, #item{attr = #fileattributes{has_acl = Value}}) -> Value.
 
 item_attr_value(name, Item) -> gui_str:to_binary(item_basename(Item));
 item_attr_value(uname, Item) -> gui_str:to_binary(item_attr(uname, Item));
@@ -1276,38 +1631,43 @@ item_attr_value(size, Item) ->
         true -> <<"">>;
         false -> size_to_printable(item_attr(size, Item))
     end;
-item_attr_value(mode, Item) ->
-    Mode = item_attr(mode, Item),
-    Format = [<<"r">>, <<"w">>, <<"x">>, <<"r">>, <<"w">>, <<"x">>, <<"r">>, <<"w">>, <<"x">>],
-    HasPerm = [
-        Mode band 2#100000000 /= 0,
-        Mode band 2#010000000 /= 0,
-        Mode band 2#001000000 /= 0,
-        Mode band 2#000100000 /= 0,
-        Mode band 2#000010000 /= 0,
-        Mode band 2#000001000 /= 0,
-        Mode band 2#000000100 /= 0,
-        Mode band 2#000000010 /= 0,
-        Mode band 2#000000001 /= 0
-    ],
-    ModeTiles = lists:zipwith(
-        fun(X, Y) ->
-            Char = case Y of
-                       true -> X;
-                       false -> <<"-">>
-                   end,
-            #span{style = <<"margin: 0 1px 0 0; display: inline-block; width: 10px; text-align: center;">>, body = Char}
-        end, Format, HasPerm),
-    ModeStr = case Mode of
-                  0 -> <<"000">>;
-                  _ -> gui_str:format_bin("~.8B", [Mode])
-              end,
-    #panel{style = <<"position: relative;">>, body = [ModeTiles, <<"&nbsp;[", ModeStr/binary, "]">>]}.
+item_attr_value(perms, Item) ->
+    case item_attr(has_acl, Item) of
+        true ->
+            #panel{style = <<"position: relative;">>, body = <<"ACL">>};
+        false ->
+            Perms = item_attr(perms, Item),
+            Format = [<<"r">>, <<"w">>, <<"x">>, <<"r">>, <<"w">>, <<"x">>, <<"r">>, <<"w">>, <<"x">>],
+            HasPerm = [
+                Perms band ?RD_USR_PERM /= 0,
+                Perms band ?WR_USR_PERM /= 0,
+                Perms band ?EX_USR_PERM /= 0,
+                Perms band ?RD_GRP_PERM /= 0,
+                Perms band ?WR_GRP_PERM /= 0,
+                Perms band ?EX_GRP_PERM /= 0,
+                Perms band ?RD_OTH_PERM /= 0,
+                Perms band ?WR_OTH_PERM /= 0,
+                Perms band ?EX_OTH_PERM /= 0
+            ],
+            PermsTiles = lists:zipwith(
+                fun(X, Y) ->
+                    Char = case Y of
+                               true -> X;
+                               false -> <<"-">>
+                           end,
+                    #span{class = <<"perms-letter">>, body = Char}
+                end, Format, HasPerm),
+            PermsStr = case Perms of
+                           0 -> <<"000">>;
+                           _ -> gui_str:format_bin("~.8B", [Perms])
+                       end,
+            #panel{style = <<"position: relative;">>, body = [PermsTiles, <<"&nbsp;[", PermsStr/binary, "]">>]}
+    end.
 
 
 attr_to_name(name) -> <<"Name">>;
 attr_to_name(size) -> <<"Size">>;
-attr_to_name(mode) -> <<"Mode">>;
+attr_to_name(perms) -> <<"Permissions">>;
 attr_to_name(uname) -> <<"Owner">>;
 attr_to_name(atime) -> <<"Access">>;
 attr_to_name(mtime) -> <<"Modification">>;
@@ -1370,6 +1730,37 @@ get_space_from_path(<<"/", Path/binary>>) ->
             [#space_info{name = SpaceName} | _] = user_logic:get_spaces(fslogic_context:get_user_query()),
             gui_str:unicode_list_to_binary(SpaceName)
     end.
+
+
+gruids_to_identifiers(GRUIDs) ->
+    NamesWithGRUIDs = lists:map(
+        fun(GRUID) ->
+            {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
+            {Name, GRUID}
+        end, GRUIDs),
+    SortedNames = lists:keysort(1, NamesWithGRUIDs),
+    {_, Identifiers} = lists:foldl(fun({Name, GRUID}, {Temp, Acc}) ->
+        case Temp of
+            [] ->
+                {[{Name, GRUID}], Acc};
+            [{FirstTemp, _} | _] ->
+                case Name of
+                    FirstTemp ->
+                        {Temp ++ [{Name, GRUID}], Acc};
+                    _ ->
+                        case length(Temp) of
+                            1 ->
+                                {[{Name, GRUID}], Acc ++ [gui_str:unicode_list_to_binary(FirstTemp)]};
+                            _ ->
+                                {[{Name, GRUID}], Acc ++ lists:map(
+                                    fun({Nam, GRU}) ->
+                                        <<(gui_str:unicode_list_to_binary(Nam))/binary, "#", GRU/binary>>
+                                    end, Temp)}
+                        end
+                end
+        end
+    end, {[], []}, SortedNames ++ [{<<"">>, <<"">>}]),
+    Identifiers.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1471,21 +1862,21 @@ fs_get_share_uuid_by_filepath(Filepath) ->
 
 % Returns a tuple {Successful, Failed}, where Succesfull is a list of
 % paths for which command succeded and Failed is a list of tuples {Path, Reason}
-% for paths that the command failed .
-fs_chmod(Path, Mode, Recursive) ->
-    fs_chmod(Path, Mode, Recursive, {[], []}).
+% for paths that the command failed.
+fs_chmod(Path, Perms, Recursive) ->
+    fs_chmod(Path, Perms, Recursive, {[], []}).
 
-fs_chmod(Path, Mode, Recursive, {Successful, Failed}) ->
+fs_chmod(Path, Perms, Recursive, {Successful, Failed}) ->
     IsDir = item_is_dir(item_new(Path)),
     {NewSuccessful, NewFailed} =
         case Recursive of
             false ->
-                case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Mode, not IsDir) of
+                case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Perms, not IsDir) of
                     ok -> {[Path], []};
                     Err1 -> {[], [{Path, Err1}]}
                 end;
             true ->
-                case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Mode, not IsDir) of
+                case logical_files_manager:change_file_perm(gui_str:binary_to_unicode_list(Path), Perms, not IsDir) of
                     ok ->
                         case IsDir of
                             false ->
@@ -1493,7 +1884,7 @@ fs_chmod(Path, Mode, Recursive, {Successful, Failed}) ->
                             true ->
                                 lists:foldl(
                                     fun(#item{path = ItemPath}, {SuccAcc, FailAcc}) ->
-                                        {Succ, Fail} = fs_chmod(ItemPath, Mode, Recursive),
+                                        {Succ, Fail} = fs_chmod(ItemPath, Perms, Recursive),
                                         {SuccAcc ++ Succ, FailAcc ++ Fail}
                                     end, {[Path], []}, fs_list_dir(Path))
                         end;
@@ -1503,8 +1894,49 @@ fs_chmod(Path, Mode, Recursive, {Successful, Failed}) ->
         end,
     {Successful ++ NewSuccessful, Failed ++ NewFailed}.
 
+
 fs_has_perms(Path, CheckType) ->
     logical_files_manager:check_file_perm(gui_str:binary_to_unicode_list(Path), CheckType).
+
+fs_get_acl(Path) ->
+    case logical_files_manager:get_acl(gui_str:binary_to_unicode_list(Path)) of
+        {ok, List} -> List;
+        _ -> []
+    end.
+
+% Returns a tuple {Successful, Failed}, where Succesfull is a list of
+% paths for which command succeded and Failed is a list of tuples {Path, Reason}
+% for paths that the command failed.
+fs_set_acl(Path, ACLEntries, Recursive) ->
+    fs_set_acl(Path, ACLEntries, Recursive, {[], []}).
+
+fs_set_acl(Path, ACLEntries, Recursive, {Successful, Failed}) ->
+    IsDir = item_is_dir(item_new(Path)),
+    {NewSuccessful, NewFailed} =
+        case Recursive of
+            false ->
+                case logical_files_manager:set_acl(gui_str:binary_to_unicode_list(Path), ACLEntries) of
+                    ok -> {[Path], []};
+                    Err1 -> {[], [{Path, Err1}]}
+                end;
+            true ->
+                case logical_files_manager:set_acl(gui_str:binary_to_unicode_list(Path), ACLEntries) of
+                    ok ->
+                        case IsDir of
+                            false ->
+                                {[Path], []};
+                            true ->
+                                lists:foldl(
+                                    fun(#item{path = ItemPath}, {SuccAcc, FailAcc}) ->
+                                        {Succ, Fail} = fs_set_acl(ItemPath, ACLEntries, Recursive),
+                                        {SuccAcc ++ Succ, FailAcc ++ Fail}
+                                    end, {[Path], []}, fs_list_dir(Path))
+                        end;
+                    Err3 ->
+                        {[], [{Path, Err3}]}
+                end
+        end,
+    {Successful ++ NewSuccessful, Failed ++ NewFailed}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1561,3 +1993,7 @@ get_item_counter() ->
     Val = get(item_counter),
     put(item_counter, Val + 1),
     integer_to_binary(Val).  % Return binary as this is used for making element IDs
+
+% Holds information what files' ACLs are being edited and what is the current state
+set_perms_state(State) -> put(acl_state, State).
+get_perms_state() -> get(acl_state).

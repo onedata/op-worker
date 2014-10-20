@@ -16,11 +16,12 @@
 -include("fuse_messages_pb.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("registered_names.hrl").
 
 
 %% API
--export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
-    remove_xattr/2, list_xattr/1, delete_file/1, rename_file/2, get_statfs/0]).
+-export([update_times/4, change_file_owner/2, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
+    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0]).
 
 %% ====================================================================
 %% API functions
@@ -56,41 +57,31 @@ update_times(FullFileName, ATime, MTime, CTime) ->
     end.
 
 
-%% change_file_owner/3
+%% change_file_owner/2
 %% ====================================================================
 %% @doc Changes file's owner.
 %% @end
--spec change_file_owner(FullFileName :: string(), NewUID :: non_neg_integer(), NewUName :: string()) ->
+-spec change_file_owner(FullFileName :: string(), NewUID :: non_neg_integer()) ->
     #atom{} | no_return().
 %% ====================================================================
-change_file_owner(FullFileName, NewUID, NewUName) ->
-    ?debug("change_file_owner(FullFileName: ~p, NewUID: ~p, NewUName: ~p)", [FullFileName, NewUID, NewUName]),
+change_file_owner(FullFileName, NewUID) ->
+    ?debug("change_file_owner(FullFileName: ~p, NewUID: ~p)", [FullFileName, NewUID]),
 
     {ok, #db_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
     {ok, UserDoc} = fslogic_objects:get_user(),
 
     ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, root),
 
-    NewFile =
-        case user_logic:get_user({login, NewUName}) of
-            {ok, #db_document{record = #user{}, uuid = UID}} ->
-                File#file{uid = UID};
-            {error, user_not_found} ->
-                ?warning("chown: cannot find user with name ~p. lTrying UID (~p) lookup...", [NewUName, NewUID]),
-                case dao_lib:apply(dao_users, get_user, [{uuid, integer_to_list(NewUID)}], fslogic_context:get_protocol_version()) of
-                    {ok, #db_document{record = #user{}, uuid = UID1}} ->
-                        File#file{uid = UID1};
-                    {error, {not_found, missing}} ->
-                        ?warning("chown: cannot find user with uid ~p", [NewUID]),
-                        throw(?VEINVAL);
-                    {error, Reason1} ->
-                        ?error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
-                        throw(?VEREMOTEIO)
-                end;
-            {error, Reason1} ->
-                ?error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
-                throw(?VEREMOTEIO)
-        end,
+    NewFile = case dao_lib:apply(dao_users, get_user, [{uuid, integer_to_list(NewUID)}], fslogic_context:get_protocol_version()) of
+                  {ok, #db_document{record = #user{}, uuid = UID1}} ->
+                      File#file{uid = UID1};
+                  {error, {not_found, missing}} ->
+                      ?warning("chown: cannot find user with uid ~p", [NewUID]),
+                      throw(?VEINVAL);
+                  {error, Reason1} ->
+                      ?error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
+                      throw(?VEREMOTEIO)
+              end,
     NewFile1 = fslogic_meta:update_meta_attr(NewFile, ctime, utils:time()),
 
     {ok, _} = fslogic_objects:save_file(FileDoc#db_document{record = NewFile1}),
@@ -137,6 +128,7 @@ change_file_perms(FullFileName, Perms) ->
             {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId),
             storage_files_manager:chmod(SH, File_id, Perms)
     end,
+    set_acl(FullFileName, []),
 
     #atom{value = ?VOK}.
 
@@ -178,10 +170,10 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
     {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
 
     %% Get attributes
-    {CTime, MTime, ATime, _SizeFromDB} =
+    {CTime, MTime, ATime, _SizeFromDB, HasAcl} =
         case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
             {ok, #db_document{record = FMeta}} ->
-                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size};
+                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size, FMeta#file_meta.acl =/= []};
             {error, Error} ->
                 ?warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
                 {0, 0, 0, 0}
@@ -200,7 +192,8 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
             end,
 
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID, gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links};
+        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
+        gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links, has_acl = HasAcl};
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
     case fslogic_objects:get_file(FullFileName) of
@@ -234,11 +227,8 @@ get_xattr(FullFileName, Name) ->
     #atom{} | no_return().
 %% ====================================================================
 set_xattr(FullFileName, Name, Value, _Flags) ->
-    {ok, #db_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
-    {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
-    #db_document{record = #file_meta{xattrs = XAttrs}} = FileMetaDoc,
-    UpdatedXAttrs = [{Name,Value} | proplists:delete(Name,XAttrs)],
-    {ok, _} = dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#db_document{record = #file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
+    {ok, #db_document{record = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    #file{} = fslogic_meta:update_meta_attr(FileDoc, xattr_set, {Name,Value}, true),
     #atom{value = ?VOK}.
 
 %% remove_xattr/2
@@ -248,12 +238,9 @@ set_xattr(FullFileName, Name, Value, _Flags) ->
 -spec remove_xattr(FullFileName :: string(), Name :: binary()) ->
     #atom{} | no_return().
 %% ====================================================================
-remove_xattr(FullFileName,Name) ->
-    {ok, #db_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
-    {ok, FileMetaDoc} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
-    #db_document{record = #file_meta{xattrs = XAttrs}} = FileMetaDoc,
-    UpdatedXAttrs = proplists:delete(Name,XAttrs),
-    dao_lib:apply(dao_vfs, save_file_meta, [FileMetaDoc#db_document{record = #file_meta{xattrs = UpdatedXAttrs}}], fslogic_context:get_protocol_version()),
+remove_xattr(FullFileName, Name) ->
+    {ok, #db_document{record = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    #file{} = fslogic_meta:update_meta_attr(FileDoc, xattr_remove, Name, true),
     #atom{value = ?VOK}.
 
 %% list_xattr/1
@@ -267,6 +254,50 @@ list_xattr(FullFileName) ->
     {ok, #db_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
     {ok, #db_document{record = #file_meta{xattrs = XAttrs}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
     #xattrlist{answer = ?VOK, attrs = [#xattrlist_xattrentry{name = Name, value = Value} || {Name,Value} <- XAttrs]}.
+
+%% get_acl/1
+%% ====================================================================
+%% @doc Gets file's access control list.
+%% @end
+-spec get_acl(FullFileName :: string()) ->
+    #acl{} | no_return().
+%% ====================================================================
+get_acl(FullFileName) ->
+    {ok, FileDoc = #db_document{record = #file{meta_doc = MetaUuid}}} = fslogic_objects:get_file(FullFileName),
+    {ok, #db_document{record = #file_meta{acl = Acl}}} = dao_lib:apply(dao_vfs, get_file_meta, [MetaUuid], fslogic_context:get_protocol_version()),
+    VirtualAcl =
+        case Acl of
+            [] -> fslogic_acl:get_virtual_acl(FullFileName, FileDoc);
+            _ -> Acl
+        end,
+    #acl{answer = ?VOK, entities = VirtualAcl}.
+
+%% set_acl/1
+%% ====================================================================
+%% @doc Sets file's access control list.
+%% @end
+-spec set_acl(FullFileName :: string(),Entities :: [#accesscontrolentity{}]) ->
+    #atom{} | no_return().
+%% ====================================================================
+set_acl(FullFileName, Entities) ->
+    true = lists:all(fun(X) -> is_record(X, accesscontrolentity) end, Entities),
+    {ok, #db_document{record = #file{location = FileLoc, type = Type, perms = Perms} = FileDoc}} = fslogic_objects:get_file(FullFileName),
+    case Entities of
+        [] -> ok;
+        _ -> #atom{value = ?VOK} = fslogic_req_generic:change_file_perms(FullFileName, 0)
+    end,
+    #file{} = fslogic_meta:update_meta_attr(FileDoc, acl, Entities, true),
+
+    % invalidate file permission cache
+    case Type of
+        ?REG_TYPE ->
+            {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
+            {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+            gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {invalidate_cache, StorageFileName}}, ?CACHE_REQUEST_TIMEOUT);
+        _ -> ok
+    end,
+
+    #atom{value = ?VOK}.
 
 %% delete_file/1
 %% ====================================================================

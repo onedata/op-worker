@@ -47,13 +47,7 @@ body_devel() ->
             gui_jq:redirect(<<"/">>),
             [];
         false ->
-            ErrorPanelStyle = case gui_ctx:url_param(<<"x">>) of
-                                  undefined -> <<"display: none;">>;
-                                  _ -> <<"">>
-                              end,
             #panel{style = <<"position: relative;">>, body = [
-                #panel{id = <<"error_message">>, style = ErrorPanelStyle, class = <<"dialog dialog-danger">>, body = #p{
-                    body = <<"No session or session expired. Please log in.">>}},
                 #panel{class = <<"alert alert-success login-page">>, body = [
                     #h3{body = <<"Welcome to onedata">>},
                     #p{class = <<"login-info">>, body = <<"THIS IS A NON-PRODUCTION, DEVELOPER-FRIENDLY LOGIN PAGE">>},

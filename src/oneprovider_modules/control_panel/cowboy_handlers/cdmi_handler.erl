@@ -90,7 +90,7 @@ allowed_methods(Req, {error,Error}) ->
         _ -> cdmi_error:error_reply(Req, undefined, {?state_init_error, Error})
     end;
 allowed_methods(Req, #state{handler_module = Handler} = State) ->
-    Handler:allowed_methods(Req,State).
+    ?cdmi_catch(Handler:allowed_methods(Req,State)).
 
 %% malformed_request/2
 %% ====================================================================
@@ -101,24 +101,20 @@ allowed_methods(Req, #state{handler_module = Handler} = State) ->
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 malformed_request(Req, #state{handler_module = Handler} = State) ->
-    try
-        % check cdmi version
-        {CdmiVersionList, Req1} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
-        CdmiVersion = get_supported_version(CdmiVersionList),
+    ?cdmi_catch(
+        begin
+            % check cdmi version
+            {CdmiVersionList, Req1} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
+            CdmiVersion = get_supported_version(CdmiVersionList),
 
-        % set response header
-        Req2 = case CdmiVersion of
-                   undefined -> Req1;
-                   _ -> cowboy_req:set_resp_header(<<"x-cdmi-specification-version">>, CdmiVersion, Req1)
-               end,
+            % set response header
+            Req2 = case CdmiVersion of
+                       undefined -> Req1;
+                       _ -> cowboy_req:set_resp_header(<<"x-cdmi-specification-version">>, CdmiVersion, Req1)
+                   end,
 
-        Handler:malformed_request(Req2,State#state{cdmi_version = CdmiVersion})
-    catch
-        throw:{halt,ErrReq,ErrState}  -> {halt,ErrReq,ErrState};
-        throw:?unsupported_version -> cdmi_error:error_reply(Req, State, ?unsupported_version);
-        _Type:Error -> cdmi_error:error_reply(Req, State, {?malformed_request, Error})
-    end.
-
+            Handler:malformed_request(Req2,State#state{cdmi_version = CdmiVersion})
+        end).
 %% resource_exists/2
 %% ====================================================================
 %% @doc Cowboy callback function
@@ -127,7 +123,7 @@ malformed_request(Req, #state{handler_module = Handler} = State) ->
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
 resource_exists(Req, #state{handler_module = Handler} = State) ->
-    Handler:resource_exists(Req,State).
+    ?cdmi_catch(Handler:resource_exists(Req,State)).
 
 %% content_types_provided/2
 %% ====================================================================
@@ -137,7 +133,7 @@ resource_exists(Req, #state{handler_module = Handler} = State) ->
 -spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
 content_types_provided(Req, #state{handler_module = Handler} = State) ->
-    Handler:content_types_provided(Req,State).
+    ?cdmi_catch(Handler:content_types_provided(Req,State)).
 
 %% content_types_accepted/2
 %% ====================================================================
@@ -148,7 +144,7 @@ content_types_provided(Req, #state{handler_module = Handler} = State) ->
 -spec content_types_accepted(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 content_types_accepted(Req, #state{handler_module = Handler} = State) ->
-    Handler:content_types_accepted(Req,State).
+    ?cdmi_catch(Handler:content_types_accepted(Req,State)).
 
 %% delete_resource/2
 %% ====================================================================
@@ -158,7 +154,7 @@ content_types_accepted(Req, #state{handler_module = Handler} = State) ->
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 delete_resource(Req, #state{handler_module = Handler} = State) ->
-    Handler:delete_resource(Req,State).
+    ?cdmi_catch(Handler:delete_resource(Req,State)).
 
 %% ====================================================================
 %% Content type routing functions
@@ -171,21 +167,20 @@ delete_resource(Req, #state{handler_module = Handler} = State) ->
 %% their responsibility to adequate handler modules
 %% ====================================================================
 get_cdmi_container(Req,State = #state{handler_module = Handler}) ->
-    Handler:get_cdmi_container(Req,State).
+    ?cdmi_catch(Handler:get_cdmi_container(Req,State)).
 get_binary(Req,State = #state{handler_module = Handler}) ->
-    Handler:get_binary(Req,State).
+    ?cdmi_catch(Handler:get_binary(Req,State)).
 get_cdmi_object(Req,State = #state{handler_module = Handler}) ->
-    Handler:get_cdmi_object(Req,State).
+    ?cdmi_catch(Handler:get_cdmi_object(Req,State)).
 get_cdmi_capability(Req,State = #state{handler_module = Handler}) ->
-    Handler:get_cdmi_capability(Req,State).
+    ?cdmi_catch(Handler:get_cdmi_capability(Req,State)).
 put_cdmi_container(Req,State = #state{handler_module = Handler}) ->
-    Handler:put_cdmi_container(Req,State).
+    ?cdmi_catch(Handler:put_cdmi_container(Req,State)).
 put_binary(Req,State = #state{handler_module = Handler}) ->
-    Handler:put_binary(Req,State).
+    ?cdmi_catch(Handler:put_binary(Req,State)).
 put_cdmi_object(Req,State = #state{handler_module = Handler}) ->
-    try Handler:put_cdmi_object(Req,State)
-    catch _:?invalid_base64 -> cdmi_error:error_reply(Req, State, ?invalid_base64)
-    end.
+    ?cdmi_catch(Handler:put_cdmi_object(Req,State)).
+
 
 %% ====================================================================
 %% Internal functions
@@ -228,7 +223,7 @@ parse_opts(RawOpts) ->
 %% ====================================================================
 get_supported_version(undefined) -> undefined;
 get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
-    VersionList = lists:map(fun rest_utils:trim_spaces/1, binary:split(VersionBinary,<<",">>,[global])),
+    VersionList = lists:map(fun utils:trim_spaces/1, binary:split(VersionBinary,<<",">>,[global])),
     get_supported_version(VersionList);
 get_supported_version([]) -> throw(?unsupported_version);
 get_supported_version([<<"1.0.2">> | _Rest]) -> <<"1.0.2">>;

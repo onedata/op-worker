@@ -21,7 +21,7 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case opn_gui_utils:maybe_redirect(true, false, false) of
+    case opn_gui_utils:maybe_redirect(true, false) of
         true ->
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
@@ -256,7 +256,7 @@ event({action, Fun}) ->
     event({action, Fun, []});
 
 event({action, Fun, Args}) ->
-    opn_gui_utils:apply_or_redirect(?MODULE, Fun, Args, false);
+    opn_gui_utils:apply_or_redirect(?MODULE, Fun, Args);
 
 event(terminate) -> ok.
 

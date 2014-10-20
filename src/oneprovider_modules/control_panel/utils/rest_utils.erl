@@ -15,13 +15,14 @@
 -include_lib("public_key/include/public_key.hrl").
 -include("err.hrl").
 -include("oneprovider_modules/control_panel/common.hrl").
+-include("oneprovider_modules/control_panel/cdmi.hrl").
 -include("oneprovider_modules/control_panel/cdmi_error.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
--export([verify_peer_cert/2, prepare_context/1, reply_with_error/4, join_to_path/1, list_dir/1, parse_body/1,
-         validate_body/1, ensure_path_ends_with_slash/1, get_path_leaf_with_ending_slash/1, trim_spaces/1]).
+-export([verify_peer_cert/2, prepare_context/1, reply_with_error/4, join_to_path/1, parse_body/1,
+         validate_body/1, ensure_path_ends_with_slash/1, get_path_leaf_with_ending_slash/1]).
 
 %% ====================================================================
 %% API functions
@@ -94,7 +95,7 @@ encode_to_json(Term) ->
 -spec decode_from_json(binary()) -> term().
 %% ====================================================================
 decode_from_json(JSON) ->
-    mochijson2:decode(JSON, [{format, proplist}]).
+    try mochijson2:decode(JSON, [{format, proplist}]) catch _:_ -> throw(?invalid_json) end.
 
 
 %% success_reply/1
@@ -208,27 +209,6 @@ join_to_path(Path, []) ->
 join_to_path(Path, [Binary|Tail]) ->
     join_to_path(<<Path/binary, "/", Binary/binary>>, Tail).
 
-
-%% list_dir/1
-%% ====================================================================
-%% @doc List the given directory, calling itself recursively if there is more to fetch.
-%% @end
--spec list_dir(string()) -> [#dir_entry{}].
-%% ====================================================================
-list_dir(Path) ->
-    list_dir(Path, 0, 10, []).
-
-list_dir(Path, Offset, Count, Result) ->
-    case logical_files_manager:ls(Path, Count, Offset) of
-        {ok, FileList} ->
-            case length(FileList) of
-                Count -> list_dir(Path, Offset + Count, Count * 10, Result ++ FileList);
-                _ -> Result ++ FileList
-            end;
-        _ ->
-            {error, not_a_dir}
-    end.
-
 %% parse_body/1
 %% ====================================================================
 %% @doc Parses json request body to erlang proplist format.
@@ -236,9 +216,9 @@ list_dir(Path, Offset, Count, Result) ->
 -spec parse_body(binary()) -> list().
 %% ====================================================================
 parse_body(RawBody) ->
-    case gui_str:binary_to_unicode_list(RawBody) of
-        "" -> [];
-        NonEmptyBody -> rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody))
+    case RawBody of
+        <<"">> -> [];
+        NonEmptyBody -> rest_utils:decode_from_json(NonEmptyBody)
     end.
 
 %% validate_body/1
@@ -249,11 +229,15 @@ parse_body(RawBody) ->
 %% ====================================================================
 validate_body(Body) ->
     Keys = proplists:get_keys(Body),
+    KeySet = sets:from_list(Keys),
+    ExclusiveRequiredKeysSet = sets:from_list(?keys_required_to_be_exclusive),
     case length(Keys) =:= length(Body) of
-        true -> ok;
-        false ->
-            ?error("Request body contains duplicated fields."),
-            throw(duplicated_body_fields)
+        true ->
+            case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
+                N when N > 1 -> throw(?conflicting_body_fields);
+                _ -> ok
+            end;
+        false -> throw(?duplicated_body_fields)
     end.
 
 %% ensure_path_ends_with_slash/1
@@ -276,12 +260,4 @@ ensure_path_ends_with_slash(Path) ->
 %% ====================================================================
 get_path_leaf_with_ending_slash(Path) ->
     ensure_path_ends_with_slash(fslogic_path:basename(Path)).
-
-%% trim_spaces/1
-%% ====================================================================
-%% @doc trims spaces from front and end of given binary
--spec trim_spaces(binary()) -> binary().
-%% ====================================================================
-trim_spaces(Binary) when is_binary(Binary) ->
-    list_to_binary(string:strip(binary_to_list(Binary), both, $ )).
 

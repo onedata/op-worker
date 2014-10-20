@@ -25,7 +25,7 @@
 %% API
 %% ====================================================================
 -export([sign_in/4, create_user/6, create_user/9, get_user/1, remove_user/1, list_all_users/0]).
--export([get_login/1, get_name/1, get_teams/1, update_teams/2, get_space_ids/1]).
+-export([get_login/1, get_name/1, update_name/2, get_teams/1, update_teams/2, get_space_ids/1]).
 -export([get_email_list/1, update_email_list/2, get_role/1, update_role/2, update_access_credentials/4]).
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
@@ -77,8 +77,8 @@ create_partial_user(GRUID, Spaces) ->
 %% in the database and info received from OpenID provider.
 %% @end
 -spec sign_in(Proplist, AccessToken :: binary(),
-              RefreshToken :: binary(),
-              AccessExpirationTime :: non_neg_integer()) ->
+    RefreshToken :: binary(),
+    AccessExpirationTime :: non_neg_integer()) ->
     Result when
     Proplist :: list(),
     Result :: {string(), user_doc()} | no_return().
@@ -128,34 +128,31 @@ sign_in(Proplist, AccessToken, RefreshToken, AccessExpirationTime) ->
     DnList :: [string()],
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
-create_user(GlobalId, Login, Name, Teams, Email, DnList) ->
-    create_user(GlobalId, Login, Name, Teams, Email, DnList, <<>>, <<>>, 0).
-create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime) ->
-    ?debug("Creating user: ~p", [{GlobalId, Login, Name, Teams, Email, DnList}]),
+create_user(GlobalId, Logins, Name, Teams, Email, DnList) ->
+    create_user(GlobalId, Logins, Name, Teams, Email, DnList, <<>>, <<>>, 0).
+create_user(GlobalId, Logins, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime) ->
+    ?debug("Creating user: ~p", [{GlobalId, Logins, Name, Teams, Email, DnList}]),
     Quota = #quota{},
     {QuotaAns, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
+
     User = #user
     {
         global_id = GlobalId,
-        logins = Login,
+        logins = Logins,
         name = Name,
         teams = case Teams of
-                    Teams when is_list(Teams) -> Teams;
+                    List when is_list(List) -> List;
                     _ -> []
                 end,
         email_list = case Email of
                          List when is_list(List) -> List;
                          _ -> []
                      end,
-
-        % Add login as first DN that user has - this enables use of GUI without having any
-        % certificates registered. It bases on assumption that every login is unique.
         dn_list = case DnList of
-                      List when is_list(List) -> [Login | List];
-                      _ -> [Login]
+                      List when is_list(List) -> List;
+                      _ -> []
                   end,
         quota_doc = QuotaUUID,
-
         access_token = AccessToken,
         refresh_token = RefreshToken,
         access_expiration_time = AccessExpirationTime
@@ -208,7 +205,6 @@ get_user({rdnSequence, RDNSequence}) ->
 
 get_user(Key) ->
     dao_lib:apply(dao_users, get_user, [Key], 1).
-
 
 
 %% synchronize_spaces_info/2
@@ -391,6 +387,27 @@ get_name(User) ->
 %% ====================================================================
 get_teams(User) ->
     User#db_document.record#user.teams.
+
+
+%% update_name/2
+%% ====================================================================
+%% @doc
+%% Update #db_document encapsulating #user record with new name and save it to DB.
+%% @end
+-spec update_name(User, NewName) -> Result when
+    User :: user_doc(),
+    NewName :: string(),
+    Result :: {ok, user_doc()} | {error, any()}.
+%% ====================================================================
+update_name(#db_document{record = UserInfo} = UserDoc, NewName) ->
+    NewDoc = UserDoc#db_document{record = UserInfo#user{name = NewName}},
+    case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
+        {ok, UUID} ->
+            dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
+        {error, Reason} ->
+            ?error("Cannot update user ~p teams: ~p", [UserInfo, Reason]),
+            {error, Reason}
+    end.
 
 
 %% update_teams/2
@@ -726,7 +743,7 @@ update_access_credentials_int(UserDoc, AccessToken, RefreshToken, ExpirationTime
 %% received from OpenID provider.
 %% @end
 -spec synchronize_user_info(User, Logins, Teams, Emails, DnList, AccessToken :: binary(),
-                            RefreshToken :: binary(), AccessExpiration :: non_neg_integer()) -> Result when
+    RefreshToken :: binary(), AccessExpiration :: non_neg_integer()) -> Result when
     User :: user_doc(),
     Logins :: [#id_token_login{}],
     Teams :: string(),
@@ -838,8 +855,7 @@ create_dirs_at_storage(SpacesInfo) ->
 create_dirs_at_storage(SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
 
-    DN_CTX = fslogic_context:get_user_dn(),
-    {AT_CTX1, AT_CTX2} = fslogic_context:get_gr_auth(),
+    UserCtx = fslogic_context:get_user_context(),
 
     fslogic_context:clear_user_ctx(),
 
@@ -868,8 +884,7 @@ create_dirs_at_storage(SpacesInfo, Storage) ->
     end,
 
     Result = lists:foldl(CreateTeamsDirs, ok, SpacesInfo),
-    fslogic_context:set_user_dn(DN_CTX),
-    fslogic_context:set_gr_auth(AT_CTX1, AT_CTX2),
+    fslogic_context:set_user_context(UserCtx),
 
     Result.
 
@@ -912,7 +927,7 @@ get_space_ids(UserQuery) ->
 %%      or query compatible with user_logic:get_user/1.
 %%      The method assumes that user exists therefore will fail with exception when it doesnt.
 %% @end
--spec get_spaces(UserQuery :: term()) -> [string()] | no_return().
+-spec get_spaces(UserQuery :: term()) -> [#space_info{}] | no_return().
 %% ====================================================================
 get_spaces(#db_document{record = #user{} = User}) ->
     get_spaces(User);
@@ -983,30 +998,32 @@ create_space_dir(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) 
 {rdnSequence, [#'AttributeTypeAndValue'{}]}, ProtocolVersion :: integer()) ->
     {boolean() | no_return()}.
 %% ====================================================================
+quota_exceeded(#db_document{uuid = Uuid, record = #user{}} = UserDoc, ProtocolVersion) ->
+    {ok, SpaceUsed} = user_logic:get_files_size(Uuid, ProtocolVersion),
+    {ok, #quota{size = Quota}} = user_logic:get_quota(UserDoc),
+    ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
+
+    %% TODO: there is one little problem with this - we dont recognize situation in which quota has been manually changed to
+    %% exactly the same value as default_quota
+    {ok, DefaultQuotaSize} = application:get_env(?APP_Name, default_quota),
+    QuotaToInsert = case Quota =:= DefaultQuotaSize of
+                        true -> ?DEFAULT_QUOTA_DB_TAG;
+                        _ -> Quota
+                    end,
+
+    case SpaceUsed > Quota of
+        true ->
+            update_quota(UserDoc, #quota{size = QuotaToInsert, exceeded = true}),
+            true;
+        _ ->
+            update_quota(UserDoc, #quota{size = QuotaToInsert, exceeded = false}),
+            false
+    end;
+
 quota_exceeded(UserQuery, ProtocolVersion) ->
     case user_logic:get_user(UserQuery) of
         {ok, UserDoc} ->
-            Uuid = UserDoc#db_document.uuid,
-            {ok, SpaceUsed} = user_logic:get_files_size(Uuid, ProtocolVersion),
-            {ok, #quota{size = Quota}} = user_logic:get_quota(UserDoc),
-            ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
-
-            %% TODO: there is one little problem with this - we dont recognize situation in which quota has been manually changed to
-            %% exactly the same value as default_quota
-            {ok, DefaultQuotaSize} = application:get_env(?APP_Name, default_quota),
-            QuotaToInsert = case Quota =:= DefaultQuotaSize of
-                                true -> ?DEFAULT_QUOTA_DB_TAG;
-                                _ -> Quota
-                            end,
-
-            case SpaceUsed > Quota of
-                true ->
-                    update_quota(UserDoc, #quota{size = QuotaToInsert, exceeded = true}),
-                    true;
-                _ ->
-                    update_quota(UserDoc, #quota{size = QuotaToInsert, exceeded = false}),
-                    false
-            end;
+            quota_exceeded(UserDoc, ProtocolVersion);
         Error ->
             throw({cannot_fetch_user, Error})
     end.

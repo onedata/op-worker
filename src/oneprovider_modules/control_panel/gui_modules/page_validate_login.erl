@@ -13,6 +13,7 @@
 -module(page_validate_login).
 -include("oneprovider_modules/control_panel/common.hrl").
 -include("oneprovider_modules/dao/dao_spaces.hrl").
+-include("oneprovider_modules/dao/dao_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("dao/include/common.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
@@ -66,19 +67,30 @@ body() ->
                                     _ ->
                                         Nodes = gen_server:call({global, central_cluster_manager}, get_nodes),
                                         AllNodes = Nodes -- [node()],
+
+                                        SpacesBinary = [<<"space1">>, <<"space2">>],
+                                        user_logic:create_user("12435", ["fake_user"], "Fake User", [], [], []),
+                                        user_logic:create_user("abcde", ["fake_user2"], "Fake User", [], [], []),
+                                        user_logic:create_user("54321", ["mock_user"], "Mock User", [], [], []),
+                                        user_logic:create_user("9z8x7", ["dummy_user"], "Dummy User", [], [], []),
+
                                         mock(AllNodes, cluster_manager_lib, get_provider_id, fun() ->
                                             <<"providerId">> end),
-                                        SpacesBinary = [<<"space1">>, <<"space2">>],
                                         mock(AllNodes, gr_users, get_spaces, fun(_) ->
                                             {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
                                         mock(AllNodes, gr_adapter, get_space_info, fun(SpaceId, _) ->
-                                            {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [<<"providerId">>]}} end)
+                                            Users = case SpaceId of
+                                                        <<"space1">> -> [<<"12435">>, <<"abcde">>, <<"54321">>];
+                                                        <<"space2">> -> [<<"12435">>, <<"9z8x7">>]
+                                                    end,
+                                            {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [<<"providerId">>], users = Users}} end)
                                 end,
 
                                 {Login, UserDoc} = user_logic:sign_in(Proplist, <<"">>, <<"">>, <<"">>),
                                 LogoutToken = opn_gui_utils:gen_logout_token(),
                                 gui_ctx:create_session(),
                                 gui_ctx:set_user_id(UserDoc#db_document.uuid),
+                                opn_gui_utils:set_global_user_id(UserDoc#db_document.record#user.global_id),
                                 opn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
                                 opn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
                                 opn_gui_utils:set_logout_token(LogoutToken),

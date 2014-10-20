@@ -25,7 +25,7 @@
 -define(DESCRIPTION_STYLE, <<"border-width: 0; text-align: right; width: 10%; padding-left: 0; padding-right: 0;">>).
 -define(MAIN_STYLE, <<"border-width: 0;  text-align: left; padding-left: 1em; width: 90%;">>).
 -define(LABEL_STYLE, <<"margin: 0 auto; cursor: auto;">>).
--define(PARAGRAPH_STYLE, <<"margin: 0 auto;">>).
+-define(DETAIL_STYLE, <<"font-size: large; font-weight: normal; vertical-align: middle;">>).
 -define(TABLE_STYLE, <<"border-width: 0; width: 100%; border-collapse: inherit;">>).
 
 %% Comet process pid
@@ -33,7 +33,7 @@
 
 %% Comet process state
 -define(STATE, comet_state).
--record(?STATE, {counter = 1, default_row_id, spaces_details = []}).
+-record(?STATE, {counter = 1, default_row_id, spaces_details = [], gruid, access_token}).
 
 %% ====================================================================
 %% API functions
@@ -45,7 +45,7 @@
 -spec main() -> #dtl{}.
 %% ====================================================================
 main() ->
-    case opn_gui_utils:maybe_redirect(true, false, false) of
+    case opn_gui_utils:maybe_redirect(true, false) of
         true ->
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
@@ -100,7 +100,7 @@ body() ->
             body =
             [
                 #h6{
-                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; width: 162px;">>,
+                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; text-align: center;">>,
                     body = <<"Manage Spaces">>
                 },
                 #panel{
@@ -123,7 +123,7 @@ body() ->
                     style = <<"width: 50%; margin: 0 auto; margin-top: 30px; table-layout: fixed;">>,
                     body = #tbody{
                         id = <<"spaces_table">>,
-                        style = <<"display: none;">>
+                        body = spaces_table_collapsed([])
                     }
                 }
             ]
@@ -141,7 +141,7 @@ body() ->
 spaces_table_collapsed(SpacesDetails) ->
     TableName = <<"Spaces">>,
     NavigationBody = opn_gui_utils:expand_button(<<"Expand All">>, {message, expand_spaces_table}),
-    RenderRowFunction = fun space_row_collapsed/2,
+    RenderRowFunction = fun space_row_collapsed/3,
     table(SpacesDetails, TableName, NavigationBody, RenderRowFunction).
 
 
@@ -155,7 +155,7 @@ spaces_table_collapsed(SpacesDetails) ->
 spaces_table_expanded(SpacesDetails) ->
     TableName = <<"Spaces">>,
     NavigationBody = opn_gui_utils:collapse_button(<<"Collapse All">>, {message, collapse_spaces_table}),
-    RenderRowFunction = fun space_row_expanded/2,
+    RenderRowFunction = fun space_row_expanded/3,
     table(SpacesDetails, TableName, NavigationBody, RenderRowFunction).
 
 
@@ -180,24 +180,24 @@ table(Details, TableName, NavigationBody, RenderRowFunction) ->
         ]
     },
 
-    Rows = lists:foldl(fun({RowId, RowDetails}, RowsAcc) ->
+    Rows = lists:foldl(fun({RowId, Privileges, RowDetails}, RowsAcc) ->
         [#tr{
             id = RowId,
-            cells = RenderRowFunction(RowId, RowDetails)
+            cells = RenderRowFunction(RowId, Privileges, RowDetails)
         } | RowsAcc]
     end, [], Details),
 
     [Header | Rows].
 
 
-%% space_row_collapsed/2
+%% space_row_collapsed/3
 %% ====================================================================
 %% @doc Renders collapsed space settings row.
 %% @end
--spec space_row_collapsed(RowId :: binary(), SpaceDetails :: #space_details{}) -> Result when
+-spec space_row_collapsed(RowId :: binary(), Privileges :: [binary()], SpaceDetails :: #space_details{}) -> Result when
     Result :: [#td{}].
 %% ====================================================================
-space_row_collapsed(RowId, #space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
+space_row_collapsed(RowId, Privileges, #space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
     [
         #td{
             style = ?CONTENT_COLUMN_STYLE,
@@ -208,8 +208,8 @@ space_row_collapsed(RowId, #space_details{id = SpaceId, name = SpaceName} = Spac
                         cells = [
                             #td{
                                 style = <<"border-width: 0; text-align: left; padding-left: 0; padding-right: 0;">>,
-                                body = #p{
-                                    style = ?PARAGRAPH_STYLE,
+                                body = #span{
+                                    style = ?DETAIL_STYLE,
                                     body = <<"<b>", SpaceName/binary, "</b> (", SpaceId/binary, ")">>
                                 }
                             },
@@ -224,35 +224,42 @@ space_row_collapsed(RowId, #space_details{id = SpaceId, name = SpaceName} = Spac
         },
         #td{
             style = ?NAVIGATION_COLUMN_STYLE,
-            body = opn_gui_utils:expand_button({message, {expand_space_row, RowId, SpaceDetails}})
+            body = opn_gui_utils:expand_button({message, {expand_space_row, RowId, Privileges, SpaceDetails}})
         }
     ].
 
 
-%% space_row_expanded/2
+%% space_row_expanded/3
 %% ====================================================================
 %% @doc Renders expanded space settings row.
 %% @end
--spec space_row_expanded(RowId :: binary(), SpaceDetails :: #space_details{}) -> Result when
+-spec space_row_expanded(RowId :: binary(), Privileges :: [binary()], SpaceDetails :: #space_details{}) -> Result when
     Result :: [#td{}].
 %% ====================================================================
-space_row_expanded(RowId, #space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
-    SettingsIcons = lists:map(fun({LinkId, LinkTitle, LinkPostback, SpanClass}) ->
-        #link{
-            id = LinkId,
-            title = LinkTitle,
-            style = <<"font-size: large; margin-right: 1em;">>,
-            class = <<"glyph-link">>,
-            postback = LinkPostback,
-            body = #span{
-                class = SpanClass
-            }
-        }
+space_row_expanded(RowId, Privileges, #space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
+    SettingsIcons = lists:filtermap(fun({Privilege, LinkId, LinkTitle, LinkPostback, SpanClass}) ->
+        case lists:member(Privilege, [<<"standard">> | Privileges]) of
+            true ->
+                {true, #link{
+                    id = LinkId,
+                    title = LinkTitle,
+                    style = <<"font-size: large; margin-right: 1em; vertical-align: middle;">>,
+                    class = <<"glyph-link">>,
+                    postback = LinkPostback,
+                    body = #span{
+                        style = <<"vertical-align: middle;">>,
+                        class = SpanClass
+                    }
+                }};
+            _ ->
+                false
+        end
     end, [
-        {<<RowId/binary, "_default_option">>, <<"Set as a default Space">>, {message, {set_default_space, RowId, SpaceDetails}}, <<"icomoon-home">>},
-        {<<RowId/binary, "_manage_option">>, <<"Manage Space">>, {manage_space, SpaceId}, <<"icomoon-cog">>},
-        {<<RowId/binary, "_leave_option">>, <<"Leave Space">>, {leave_space, RowId, SpaceDetails}, <<"icomoon-exit">>},
-        {<<RowId/binary, "_delete_option">>, <<"Delete Space">>, {delete_space, RowId, SpaceDetails}, <<"icomoon-remove">>}
+        {<<"standard">>, <<RowId/binary, "_default_option">>, <<"Set as a default Space">>, {message, {set_default_space, RowId, SpaceDetails}}, <<"icomoon-home">>},
+        {<<"standard">>, <<RowId/binary, "_manage_option">>, <<"Manage Space">>, {manage_space, SpaceId}, <<"icomoon-cog">>},
+        {<<"space_set_privileges">>, <<RowId/binary, "_set_privileges">>, <<"Set privileges">>, {set_privileges, SpaceId}, <<"icomoon-lock">>},
+        {<<"standard">>, <<RowId/binary, "_leave_option">>, <<"Leave Space">>, {leave_space, RowId, SpaceDetails}, <<"icomoon-exit">>},
+        {<<"space_remove">>, <<RowId/binary, "_remove_option">>, <<"Remove Space">>, {remove_space, RowId, SpaceDetails}, <<"icomoon-remove">>}
     ]),
     [
         #td{
@@ -272,8 +279,8 @@ space_row_expanded(RowId, #space_details{id = SpaceId, name = SpaceName} = Space
                             },
                             #td{
                                 style = ?MAIN_STYLE,
-                                body = #p{
-                                    style = ?PARAGRAPH_STYLE,
+                                body = #span{
+                                    style = ?DETAIL_STYLE,
                                     body = Main
                                 }
                             }
@@ -288,7 +295,7 @@ space_row_expanded(RowId, #space_details{id = SpaceId, name = SpaceName} = Space
         },
         #td{
             style = ?NAVIGATION_COLUMN_STYLE,
-            body = opn_gui_utils:collapse_button({message, {collapse_space_row, RowId, SpaceDetails}})
+            body = opn_gui_utils:collapse_button({message, {collapse_space_row, RowId, Privileges, SpaceDetails}})
         }
     ].
 
@@ -308,16 +315,16 @@ default_label(RowId) ->
     }.
 
 
-%% add_space_row/2
+%% add_space_row/3
 %% ====================================================================
 %% @doc Adds collapsed Space settings row to Spaces settings table.
--spec add_space_row(RowId :: binary(), SpaceDetails :: #space_details{}) -> Result when
+-spec add_space_row(RowId :: binary(), Privileges :: [binary()], SpaceDetails :: #space_details{}) -> Result when
     Result :: ok.
 %% ====================================================================
-add_space_row(RowId, SpaceDetails) ->
+add_space_row(RowId, Privileges, SpaceDetails) ->
     Row = #tr{
         id = RowId,
-        cells = space_row_collapsed(RowId, SpaceDetails)
+        cells = space_row_collapsed(RowId, Privileges, SpaceDetails)
     },
     gui_jq:insert_bottom(<<"spaces_table">>, Row).
 
@@ -335,20 +342,20 @@ add_space_row(RowId, SpaceDetails) ->
 comet_loop({error, Reason}) ->
     {error, Reason};
 
-comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_details = SpacesDetails} = State) ->
+comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_details = SpacesDetails, gruid = GRUID, access_token = AccessToken} = State) ->
     NewCometLoopState =
         try
             receive
                 {create_space, Name} ->
                     NewState = try
-                                   AccessToken = opn_gui_utils:get_access_token(),
                                    {ok, SpaceId} = gr_users:create_space({user, AccessToken}, [{<<"name">>, Name}]),
                                    {ok, SpaceDetails} = gr_spaces:get_details({user, AccessToken}, SpaceId),
+                                   {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceId, GRUID),
                                    opn_gui_utils:message(<<"ok_message">>, <<"Created Space ID: <b>", SpaceId/binary, "</b>">>),
-                                   gr_adapter:synchronize_user_spaces({opn_gui_utils:get_global_user_id(), AccessToken}),
+                                   gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                                    RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
-                                   add_space_row(RowId, SpaceDetails),
-                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, SpaceDetails}]}
+                                   add_space_row(RowId, Privileges, SpaceDetails),
+                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, Privileges, SpaceDetails}]}
                                catch
                                    _:Other ->
                                        ?error("Cannot create Space ~p: ~p", [Name, Other]),
@@ -360,27 +367,27 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
 
                 {join_space, Token} ->
                     NewState = try
-                                   AccessToken = opn_gui_utils:get_access_token(),
                                    {ok, SpaceId} = gr_users:join_space({user, AccessToken}, [{<<"token">>, Token}]),
                                    {ok, SpaceDetails} = gr_spaces:get_details({user, AccessToken}, SpaceId),
+                                   {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceId, GRUID),
                                    opn_gui_utils:message(<<"ok_message">>, <<"Joined Space ID: <b>", SpaceId/binary, "</b>">>),
-                                   gr_adapter:synchronize_user_spaces({opn_gui_utils:get_global_user_id(), AccessToken}),
+                                   gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                                    RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
-                                   add_space_row(RowId, SpaceDetails),
-                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, SpaceDetails}]}
+                                   add_space_row(RowId, Privileges, SpaceDetails),
+                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, Privileges, SpaceDetails}]}
                                catch
                                    _:Other ->
                                        ?error("Cannot join Space using token ~p: ~p", [Token, Other]),
                                        opn_gui_utils:message(<<"error_message">>, <<"Cannot join Space using token: <b>", Token/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
-                    gui_jq:prop(<<"create_space_button">>, <<"disabled">>, <<"">>),
+                    gui_jq:prop(<<"join_space_button">>, <<"disabled">>, <<"">>),
                     NewState;
 
                 {set_default_space, RowId, #space_details{id = SpaceId}} ->
-                    case gr_users:set_default_space({user, opn_gui_utils:get_access_token()}, [{<<"spaceId">>, SpaceId}]) of
+                    case gr_users:set_default_space({user, AccessToken}, [{<<"spaceId">>, SpaceId}]) of
                         ok ->
-                            gr_adapter:synchronize_user_spaces({opn_gui_utils:get_global_user_id(), opn_gui_utils:get_access_token()}),
+                            gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                             gui_jq:hide(<<DefaultRowId/binary, "_label">>),
                             gui_jq:show(<<DefaultRowId/binary, "_default_option">>),
                             State#?STATE{default_row_id = RowId};
@@ -391,34 +398,33 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
                     end;
 
                 {leave_space, RowId, SpaceId} ->
-                    case gr_users:leave_space({user, opn_gui_utils:get_access_token()}, SpaceId) of
+                    case gr_users:leave_space({user, AccessToken}, SpaceId) of
                         ok ->
                             opn_gui_utils:message(<<"ok_message">>, <<"Space with ID: <b>", SpaceId/binary, "</b> left successfully.">>),
-                            gr_adapter:synchronize_user_spaces({opn_gui_utils:get_global_user_id(), opn_gui_utils:get_access_token()}),
+                            gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                             gui_jq:remove(RowId),
-                            State#?STATE{spaces_details = proplists:delete(RowId, SpacesDetails)};
+                            State#?STATE{spaces_details = lists:keydelete(RowId, 1, SpacesDetails)};
                         Other ->
                             ?error("Cannot leave Space with ID ~p: ~p", [SpaceId, Other]),
                             opn_gui_utils:message(<<"error_message">>, <<"Cannot leave Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
                             State
                     end;
 
-                {delete_space, RowId, SpaceId} ->
-                    case gr_spaces:remove({user, opn_gui_utils:get_access_token()}, SpaceId) of
+                {remove_space, RowId, SpaceId} ->
+                    case gr_spaces:remove({user, AccessToken}, SpaceId) of
                         ok ->
-                            opn_gui_utils:message(<<"ok_message">>, <<"Space with ID: <b>", SpaceId/binary, "</b> deleted successfully.">>),
-                            gr_adapter:synchronize_user_spaces({opn_gui_utils:get_global_user_id(), opn_gui_utils:get_access_token()}),
+                            opn_gui_utils:message(<<"ok_message">>, <<"Space with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
+                            gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                             gui_jq:remove(RowId),
-                            State#?STATE{spaces_details = proplists:delete(RowId, SpacesDetails)};
+                            State#?STATE{spaces_details = lists:keydelete(RowId, 1, SpacesDetails)};
                         Other ->
-                            ?error("Cannot delete Space with ID ~p: ~p", [SpaceId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot delete Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
+                            ?error("Cannot remove Space with ID ~p: ~p", [SpaceId, Other]),
+                            opn_gui_utils:message(<<"error_message">>, <<"Cannot remove Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
                             State
                     end;
 
                 render_spaces_table ->
                     gui_jq:update(<<"spaces_table">>, spaces_table_collapsed(SpacesDetails)),
-                    gui_jq:fade_in(<<"spaces_table">>, 500),
                     State;
 
                 Event ->
@@ -427,10 +433,10 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
                             gui_jq:update(<<"spaces_table">>, spaces_table_collapsed(SpacesDetails));
                         expand_spaces_table ->
                             gui_jq:update(<<"spaces_table">>, spaces_table_expanded(SpacesDetails));
-                        {collapse_space_row, RowId, SpaceDetails} ->
-                            gui_jq:update(RowId, space_row_collapsed(RowId, SpaceDetails));
-                        {expand_space_row, RowId, SpaceDetails} ->
-                            gui_jq:update(RowId, space_row_expanded(RowId, SpaceDetails));
+                        {collapse_space_row, RowId, Privileges, SpaceDetails} ->
+                            gui_jq:update(RowId, space_row_collapsed(RowId, Privileges, SpaceDetails));
+                        {expand_space_row, RowId, Privileges, SpaceDetails} ->
+                            gui_jq:update(RowId, space_row_expanded(RowId, Privileges, SpaceDetails));
                         _ ->
                             ok
                     end,
@@ -455,31 +461,33 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
 %% ====================================================================
 event(init) ->
     try
+        GRUID = utils:ensure_binary(opn_gui_utils:get_global_user_id()),
         AccessToken = opn_gui_utils:get_access_token(),
-        {ok, SpaceIds} = gr_adapter:synchronize_user_spaces({opn_gui_utils:get_global_user_id(), opn_gui_utils:get_access_token()}),
-        {ok, DefaultSpaceId} = gr_users:get_default_space({user, opn_gui_utils:get_access_token()}),
+        {ok, SpaceIds} = gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
+        {ok, DefaultSpaceId} = gr_users:get_default_space({user, AccessToken}),
         {SpacesDetails, DefaultRowId, Counter} = lists:foldl(fun(SpaceId, {Rows, DefaultId, It}) ->
             {ok, SpaceDetails} = gr_spaces:get_details({user, AccessToken}, SpaceId),
+            {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceId, GRUID),
             RowId = <<"space_", (integer_to_binary(It + 1))/binary>>,
             NewDefaultId = case SpaceId of
                                DefaultSpaceId -> RowId;
                                _ -> DefaultId
                            end,
             {
-                [{RowId, SpaceDetails} | Rows],
+                [{RowId, Privileges, SpaceDetails} | Rows],
                 NewDefaultId,
                 It + 1
             }
         end, {[], <<"">>, 0}, SpaceIds),
 
-        gui_jq:wire(#api{name = "createSpace", tag = "createSpace"}, false),
-        gui_jq:wire(#api{name = "joinSpace", tag = "joinSpace"}, false),
-        gui_jq:wire(#api{name = "leaveSpace", tag = "leaveSpace"}, false),
-        gui_jq:wire(#api{name = "deleteSpace", tag = "deleteSpace"}, false),
+        gui_jq:wire(#api{name = "create_space", tag = "create_space"}, false),
+        gui_jq:wire(#api{name = "join_space", tag = "join_space"}, false),
+        gui_jq:wire(#api{name = "leave_space", tag = "leave_space"}, false),
+        gui_jq:wire(#api{name = "remove_space", tag = "remove_space"}, false),
         gui_jq:bind_key_to_click_on_class(<<"13">>, <<"confirm">>),
 
         {ok, Pid} = gui_comet:spawn(fun() ->
-            comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_details = SpacesDetails})
+            comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_details = SpacesDetails, gruid = GRUID, access_token = AccessToken})
         end),
         Pid ! render_spaces_table,
         put(?COMET_PID, Pid)
@@ -498,7 +506,7 @@ event(create_space) ->
     Script = <<"var alert = $(\"#create_space_alert\");",
     "var name = $.trim($(\"#create_space_name\").val());",
     "if(name.length == 0) { alert.html(\"Please provide Space name.\"); alert.fadeIn(300); return false; }",
-    "else { createSpace([name]); return true; }">>,
+    "else { create_space([name]); return true; }">>,
     gui_jq:dialog_popup(<<"Create Space">>, Message, Script, <<"btn-inverse">>),
     gui_jq:wire(<<"box.on('shown',function(){ $(\"#create_space_name\").focus(); });">>);
 
@@ -510,22 +518,25 @@ event(join_space) ->
     Script = <<"var alert = $(\"#join_space_alert\");",
     "var token = $.trim($(\"#join_space_token\").val());",
     "if(token.length == 0) { alert.html(\"Please provide Space token.\"); alert.fadeIn(300); return false; }",
-    "else { joinSpace([token]); return true; }">>,
+    "else { join_space([token]); return true; }">>,
     gui_jq:dialog_popup(<<"Join Space">>, Message, Script, <<"btn-inverse">>),
     gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_space_token\").focus(); });">>);
 
 event({manage_space, SpaceId}) ->
     gui_jq:redirect(<<"space?id=", SpaceId/binary>>);
 
+event({set_privileges, SpaceId}) ->
+    gui_jq:redirect(<<"privileges/space?id=", SpaceId/binary>>);
+
 event({leave_space, RowId, #space_details{id = SpaceId, name = SpaceName}}) ->
     Message = <<"Are you sure you want to leave Space:<br><b>", SpaceName/binary, " (", SpaceId/binary, ") </b>?">>,
-    Script = <<"leaveSpace(['", RowId/binary, "','", SpaceId/binary, "']);">>,
+    Script = <<"leave_space(['", RowId/binary, "','", SpaceId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Leave Space">>, Message, Script, <<"btn-inverse">>);
 
-event({delete_space, RowId, #space_details{id = SpaceId, name = SpaceName}}) ->
-    Message = <<"Are you sure you want to delete Space:<br><b>", SpaceName/binary, " (", SpaceId/binary, ") </b>?">>,
-    Script = <<"deleteSpace(['", RowId/binary, "','", SpaceId/binary, "']);">>,
-    gui_jq:dialog_popup(<<"Delete Space">>, Message, Script, <<"btn-inverse">>);
+event({remove_space, RowId, #space_details{id = SpaceId, name = SpaceName}}) ->
+    Message = <<"Are you sure you want to remove Space:<br><b>", SpaceName/binary, " (", SpaceId/binary, ") </b>?">>,
+    Script = <<"remove_space(['", RowId/binary, "','", SpaceId/binary, "']);">>,
+    gui_jq:dialog_popup(<<"Remove Space">>, Message, Script, <<"btn-inverse">>);
 
 event({message, Message}) ->
     get(?COMET_PID) ! Message,
@@ -537,29 +548,25 @@ event({close_message, MessageId}) ->
 event(terminate) ->
     ok.
 
+
 %% api_event/3
 %% ====================================================================
 %% @doc Handles page events.
 -spec api_event(Name :: string(), Args :: string(), Req :: string()) -> no_return().
 %% ====================================================================
-api_event("createSpace", Args, _) ->
+api_event("create_space", Args, _) ->
     [Name] = mochijson2:decode(Args),
     get(?COMET_PID) ! {create_space, Name},
     gui_jq:prop(<<"create_space_button">>, <<"disabled">>, <<"disabled">>),
     gui_jq:show(<<"main_spinner">>);
 
-api_event("joinSpace", Args, _) ->
+api_event("join_space", Args, _) ->
     [Token] = mochijson2:decode(Args),
     get(?COMET_PID) ! {join_space, Token},
     gui_jq:prop(<<"join_space_button">>, <<"disabled">>, <<"disabled">>),
     gui_jq:show(<<"main_spinner">>);
 
-api_event("leaveSpace", Args, _) ->
-    [RowId, SpaceId] = mochijson2:decode(Args),
-    get(?COMET_PID) ! {leave_space, RowId, SpaceId},
-    gui_jq:show(<<"main_spinner">>);
-
-api_event("deleteSpace", Args, _) ->
-    [RowId, SpaceId] = mochijson2:decode(Args),
-    get(?COMET_PID) ! {delete_space, RowId, SpaceId},
+api_event(Function, Args, _) ->
+    [RowId, ObjectId] = mochijson2:decode(Args),
+    get(?COMET_PID) ! {list_to_existing_atom(Function), RowId, ObjectId},
     gui_jq:show(<<"main_spinner">>).

@@ -55,7 +55,8 @@
   size = 0,
   uname = [],
   gname = [],
-  links = 0
+  links = 0,
+  has_acl = false
 }).
 
 %% Directory entry: name :: string(), type :: file_type_protocol().
@@ -80,10 +81,10 @@
 -define(FILE_COUNTING_BASE, 256).
 
 %% Which fuse operations (messages) are allowed to operate on base group directory ("/groups")
--define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, getfileuuid, updatetimes, getfilechildren, checkfileperms]).
+-define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, getfileuuid, updatetimes, getfilechildren, getfilechildrencount, getacl, getxattr, listxattr, checkfileperms]).
 
 %% Which fuse operations (messages) are allowed to operate on second level group directory (e.g. "/groups/grpName")
--define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getfileuuid, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren, checkfileperms]).
+-define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getfileuuid, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren, getfilechildrencount, getacl, getxattr, listxattr, checkfileperms]).
 
 % File open modes (open flags)
 -define(UNSPECIFIED_MODE,"").
@@ -99,5 +100,13 @@
 
 %% Default permissions for space directory (i.e. /spaces/SpaceName)
 -define(SpaceDirPerm, 8#1770).
+
+%% Persmission cache definitions
+-define(CACHE_TREE_MAX_DEPTH, 6).
+-define(CACHE_TREE_MAX_WIDTH, 10).
+-define(CACHE_REQUEST_TIMEOUT,1000).
+
+%% default buffer size for copy operation
+-define(default_copy_buffer_size, 1048576).
 
 -endif.
