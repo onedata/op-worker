@@ -645,6 +645,7 @@ comet_loop(#?STATE{counter = Counter, group_id = GroupId, spaces_details = Space
                 {change_group_name, #group_details{id = GroupId} = GroupDetails, NewGroupName} ->
                     case gr_groups:modify_details({user, AccessToken}, GroupId, [{<<"name">>, NewGroupName}]) of
                         ok ->
+                            gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                             gui_jq:update(<<"group_name">>, group_name(GroupDetails#group_details{name = NewGroupName})),
                             gui_jq:show(<<"change_group_name_span">>);
                         Other ->

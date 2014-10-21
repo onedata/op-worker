@@ -17,6 +17,6 @@
 -define(file_space_info_extestion, space_info).
 
 %% Base information about space
--record(space_info, {space_id = "", name = "", providers = [], users = []}).
+-record(space_info, {space_id = "", name = "", providers = [], groups = [], users = []}).
 
 -endif.

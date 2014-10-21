@@ -56,4 +56,8 @@
 -type cookie_info() :: #session_cookie{}.
 -type cookie_doc() :: #db_document{record :: #session_cookie{}}.
 
+-type group() :: uuid().
+-type group_info() :: #group_details{}.
+-type group_doc() :: #db_document{record :: #group_details{}}.
+
 -endif.

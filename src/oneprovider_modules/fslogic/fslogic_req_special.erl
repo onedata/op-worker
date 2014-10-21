@@ -88,6 +88,8 @@ get_file_children(FullFileName, UserPathTokens, ROffset, RCount) ->
 
     TokenizedPath = UserPathTokens,
 
+%%     ok = fslogic_perms:check_file_perms(FullFileName, read), %todo enable after applying gui adjustment
+
     {Num, Offset} =
         case {ROffset, TokenizedPath} of
             {0 = Off0, []} -> %% First iteration over "/" dir has to contain "groups" folder, so fetch `num - 1` files instead `num`
