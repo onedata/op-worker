@@ -201,10 +201,14 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
                              end,
             JsonBodySuffix = <<"\"}">>,
             {DataSize, Encoding} = case Range of
-                           {From,To} when To >= From -> {To - From +1, <<"base64">>};
-                           default -> {Size, get_encoding(Filepath)}
-                       end,
-            Base64EncodedSize = byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4 * ceil(DataSize / 3.0)),
+                                       {From,To} when To >= From -> {To - From +1, <<"base64">>};
+                                       default -> {Size, get_encoding(Filepath)}
+                                   end,
+
+            EncodedDataSize = case Encoding of
+                                  <<"base64">> -> byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4 * ceil(DataSize / 3.0));
+                                  _ -> byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + DataSize
+                              end,
 
             Context = fslogic_context:get_user_context(),
             StreamFun = fun(Socket, Transport) ->
@@ -221,7 +225,7 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
                 end
             end,
 
-            {{stream, Base64EncodedSize, StreamFun}, Req, State};
+            {{stream, EncodedDataSize, StreamFun}, Req, State};
         undefined ->
             Response = rest_utils:encode_to_json({struct, DirCdmi}),
             {Response, Req, State}

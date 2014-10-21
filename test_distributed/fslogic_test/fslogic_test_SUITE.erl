@@ -2419,6 +2419,11 @@ acl_test(Config) ->
         {<<"acemask">>, <<"READ, WRITE">>}]],
         rpc:call(Node1, fslogic_acl,from_acl_to_json_format,[VirtualAcl])),
 
+    GroupName = <<"name">>,
+    GroupId = <<"Id">>,
+    Group = #db_document{record = #group_details{name = GroupName, id= GroupId}},
+    test_utils:ct_mock(Config, dao_groups, get_group_by_name, fun(_) -> {ok, [Group]} end),
+
     % test setting and getting acl
     TestUserNameWithNoHash = <<?TEST_USER, " ", ?TEST_USER, "#">>,
     Acl = rpc:call(Node1, fslogic_acl, from_json_fromat_to_acl,[
@@ -2431,7 +2436,7 @@ acl_test(Config) ->
             ],
             [
                 {<<"acetype">>, <<"DENY">>},
-                {<<"identifier">>, TestUserNameWithNoHash},
+                {<<"identifier">>, GroupId},
                 {<<"aceflags">>, <<"IDENTIFIER_GROUP">>},
                 {<<"acemask">>, <<"WRITE">>}
             ]
@@ -2439,7 +2444,7 @@ acl_test(Config) ->
     ]),
     ?assertEqual(Acl, [
         #accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_", ?TEST_USER>>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
-        #accesscontrolentity{acetype = ?deny_mask, identifier = <<"global_id_for_", ?TEST_USER>>, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+        #accesscontrolentity{acetype = ?deny_mask, identifier = GroupId, aceflags = ?identifier_group_mask, acemask = ?write_mask}
     ]),
 
     Ans1 = rpc:call(Node1, logical_files_manager, set_acl, [DirName, Acl]),

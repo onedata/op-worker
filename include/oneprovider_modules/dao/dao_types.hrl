@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license
+%% This software is released under the MIT license 
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -40,6 +40,8 @@
 
 -type storage_doc() :: #db_document{record :: #storage_info{}}.
 
+-type db_doc() :: #db_document{}.
+
 -type user() :: uuid().
 -type user_info() :: #user{}.
 -type user_doc() :: db_doc(user_info()).
@@ -62,5 +64,9 @@
 -type cookie() :: uuid().
 -type cookie_info() :: #session_cookie{}.
 -type cookie_doc() :: db_doc(cookie_info()).
+
+-type group() :: uuid().
+-type group_info() :: #group_details{}.
+-type group_doc() :: db_doc(group_info()).
 
 -endif.

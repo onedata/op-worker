@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013, ACK CYFRONET AGH
-%% This software is released under the MIT license
+%% This software is released under the MIT license 
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -108,7 +108,7 @@ check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerU
                 false -> ?permission_denied_error(UserDoc, FileName, CheckType)
             end;
         _ ->
-            case (catch fslogic_acl:check_permission(RealAcl, utils:ensure_binary(GlobalId), CheckType)) of
+            case (catch fslogic_acl:check_permission(RealAcl, UserRecord, CheckType)) of
                 ok ->
                     % cache permissions for storage_files_manager use
                     case Type of

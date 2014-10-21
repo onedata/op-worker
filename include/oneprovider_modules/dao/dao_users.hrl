@@ -10,6 +10,7 @@
 %% ===================================================================
 
 -include_lib("public_key/include/public_key.hrl").
+-include_lib("ctool/include/global_registry/gr_groups.hrl").
 
 -ifndef(DAO_USERS).
 -define(DAO_USERS, 1).
@@ -21,6 +22,7 @@
     name = "",
     teams = [],
     spaces = [] :: [binary()],
+    groups = [] :: [binary()],
     email_list = [],
     dn_list = [],
     unverified_dn_list = [],
