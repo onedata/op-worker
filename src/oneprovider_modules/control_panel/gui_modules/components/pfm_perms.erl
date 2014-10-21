@@ -22,8 +22,8 @@
 %% API
 -export([init/0, perms_popup/1, event/1, api_event/3]).
 -export([populate_acl_list/1, change_perms_type/1, submit_perms/2, show_permissions_info/0]).
--export([add_acl/0, delete_acl/1, edit_acl/1, move_acl/2, submit_acl/6]).
--export([fs_has_perms/2, fs_chmod/3, fs_get_acl/1, fs_set_acl/3]).
+-export([edit_acl/1, move_acl/2, submit_acl/6, delete_acl/1]).
+-export([fs_has_perms/2, fs_chmod/3, fs_get_acl/1, fs_set_acl/3, calculate_hash_length/1]).
 
 
 %% init/0
@@ -35,7 +35,6 @@
 init() ->
     gui_jq:wire(#api{name = "change_perms_type_event", tag = "change_perms_type_event", delegate = ?MODULE}, false),
     gui_jq:wire(#api{name = "submit_perms_event", tag = "submit_perms_event", delegate = ?MODULE}, false),
-    gui_jq:wire(#api{name = "add_acl_event", tag = "add_acl_event", delegate = ?MODULE}, false),
     gui_jq:wire(#api{name = "delete_acl_event", tag = "delete_acl_event", delegate = ?MODULE}, false),
     gui_jq:wire(#api{name = "edit_acl_event", tag = "edit_acl_event", delegate = ?MODULE}, false),
     gui_jq:wire(#api{name = "move_acl_event", tag = "move_acl_event", delegate = ?MODULE}, false),
@@ -99,13 +98,9 @@ perms_popup(Files) ->
     {ok, FullFilePath} = fslogic_path:get_full_file_name(gui_str:binary_to_unicode_list(PathToCheck)),
     {ok, #space_info{users = Users, groups = Groups}} = fslogic_utils:get_space_info_for_path(FullFilePath),
 
-    UsersAndGRUIDs = uuids_to_identifiers(Users, true),
-    set_user_identifiers(UsersAndGRUIDs),
-    {UserIdentifiers, _} = lists:unzip(UsersAndGRUIDs),
+    set_user_identifiers(uuids_to_identifiers(Users, true)),
 
-    GroupsAndGRUIDs = uuids_to_identifiers(Groups, false),
-    set_group_identifiers(GroupsAndGRUIDs),
-    {GroupIdentifiers, _} = lists:unzip(GroupsAndGRUIDs),
+    set_group_identifiers(uuids_to_identifiers(Groups, false)),
 
     gui_jq:wire(<<"init_chmod_table(", (integer_to_binary(CommonPerms))/binary, ");">>),
     {POSIXTabStyle, ACLTabStyle} = case EnableACL of
@@ -202,26 +197,7 @@ perms_popup(Files) ->
                             #td{body = [
                                 #label{class = <<"label label-inverse acl-label">>, body = <<"Identifier">>}
                             ]},
-                            #td{style = <<"padding-right: 20px;">>, body = [
-                                #select{id = <<"acl_select_name">>, class = <<"select-block">>, body = [
-                                    [
-                                        #optgroup{label = <<"users">>, body = [
-                                            lists:foldl(
-                                                fun(Ident, Counter) ->
-                                                    #option{body = Ident,
-                                                        value = <<"u", (integer_to_binary(Counter))/binary>>}
-                                                end, 1, UserIdentifiers)
-                                        ]},
-                                        #optgroup{label = <<"groups">>, body = [
-                                            lists:foldl(
-                                                fun(Ident, Counter) ->
-                                                    #option{body = Ident,
-                                                        value = <<"g", (integer_to_binary(Counter))/binary>>}
-                                                end, 1, GroupIdentifiers)
-                                        ]}
-                                    ]
-                                ]}
-                            ]}
+                            #td{style = <<"padding-right: 20px;">>, body = identifiers_dropdown(<<"">>)}
                         ]},
                         #tr{cells = [
                             #td{body = [
@@ -251,7 +227,7 @@ perms_popup(Files) ->
                             ]},
                             #td{body = [
                                 #button{id = <<"button_discard_acl">>, class = <<"btn btn-danger acl-form-button">>,
-                                    body = <<"Discard">>, postback = {action, ?MODULE, populate_acl_list, [-1]}}
+                                    body = <<"Discard">>, postback = {action, ?MODULE, populate_acl_list, [-2]}}
                             ]}
                         ]}
                     ]}
@@ -291,8 +267,31 @@ perms_popup(Files) ->
         undefined -> gui_jq:show(<<"perms_warning_different">>);
         _ -> ok
     end,
-    populate_acl_list(-1),
+    populate_acl_list(-2),
     Body.
+
+
+identifiers_dropdown(SelectedUUID) ->
+    {UserOptions, _} = lists:foldl(
+        fun({Ident, UUID}, {Acc, Counter}) ->
+            Option = #option{body = Ident, selected = (UUID =:= SelectedUUID),
+                value = <<"u", (integer_to_binary(Counter))/binary>>},
+            {Acc ++ [Option], Counter + 1}
+        end, {[], 1}, get_user_identifiers()),
+
+    {GroupOptions, _} = lists:foldl(
+        fun({Ident, UUID}, {Acc, Counter}) ->
+            Option = #option{body = Ident, selected = (UUID =:= SelectedUUID),
+                value = <<"g", (integer_to_binary(Counter))/binary>>},
+            {Acc ++ [Option], Counter + 1}
+        end, {[], 1}, get_group_identifiers()),
+
+    #select{id = <<"acl_select_name">>, class = <<"select-block">>, body = [
+        [
+            #optgroup{label = <<"users">>, body = UserOptions},
+            #optgroup{label = <<"groups">>, body = GroupOptions}
+        ]
+    ]}.
 
 
 show_permissions_info() ->
@@ -313,9 +312,6 @@ api_event("submit_perms_event", Args, _Ctx) ->
 api_event("change_perms_type_event", Args, _Ctx) ->
     EnableACL = mochijson2:decode(Args),
     event({action, change_perms_type, [EnableACL]});
-
-api_event("add_acl_event", _Args, _) ->
-    event({action, add_acl, []});
 
 api_event("delete_acl_event", Args, _) ->
     IndexRaw = mochijson2:decode(Args),
@@ -400,19 +396,14 @@ submit_perms(Perms, Recursive) ->
 
 populate_acl_list(SelectedIndex) ->
     ACLEntries = get_acl_entries(),
+
     JSON = rest_utils:encode_to_json(lists:map(
         fun(#accesscontrolentity{acetype = ACEType, aceflags = ACEFlags, identifier = Identifier, acemask = ACEMask}) ->
             IsGroup = ACEFlags band ?identifier_group_mask > 0,
-            Ident = case IsGroup of
-                             true ->
-                                 {ok, #db_document{record = #group_details{name = GroupName}}} = dao_lib:apply(dao_groups, get_group, [Identifier], 1),
-                                 GroupName;
-                             false ->
-                                 {ok, #db_document{record = #user{name = UserName}}} = fslogic_objects:get_user({global_id, Identifier}),
-                                 gui_str:unicode_list_to_binary(UserName)
-                         end,
+            {Name, Identifier} = lists:keyfind(Identifier, 2,
+                case IsGroup of true -> get_group_identifiers(); false -> get_user_identifiers() end),
             [
-                {<<"identifier">>, Ident},
+                {<<"identifier">>, Name},
                 {<<"is_group">>, IsGroup},
                 {<<"allow">>, ACEType =:= ?allow_mask},
                 {<<"read">>, ACEMask band ?read_mask > 0},
@@ -420,7 +411,6 @@ populate_acl_list(SelectedIndex) ->
                 {<<"exec">>, ACEMask band ?execute_mask > 0}
             ]
         end, ACLEntries)),
-    gui_jq:hide(<<"acl-form">>),
     gui_jq:wire(<<"clicked_index = -2;">>),
     gui_jq:wire(<<"populate_acl_list(", JSON/binary, ", ", (integer_to_binary(SelectedIndex))/binary, ");">>).
 
@@ -437,45 +427,51 @@ change_perms_type(EnableACL) ->
     end.
 
 
-add_acl() ->
-    gui_jq:show(<<"acl-form">>),
-    gui_jq:wire(<<"$('#acl_textbox').val('');">>),
-    gui_jq:wire(<<"$('#acl_type_checkbox').checkbox('check');">>),
-    gui_jq:wire(<<"$('#acl_read_checkbox').checkbox('uncheck');">>),
-    gui_jq:wire(<<"$('#acl_write_checkbox').checkbox('uncheck');">>),
-    gui_jq:wire(<<"$('#acl_exec_checkbox').checkbox('uncheck');">>).
-
-
 delete_acl(Index) ->
-    ACLEntries = get_files(),
+    ACLEntries = get_acl_entries(),
     {Head, [_ | Tail]} = lists:split(Index, ACLEntries),
-    set_files(Head ++ Tail),
-    populate_acl_list(-1).
+    set_acl_entries(Head ++ Tail),
+    case length(get_acl_entries()) of
+        0 -> populate_acl_list(-2);
+        Len when Len > Index -> populate_acl_list(Index);
+        _ -> populate_acl_list(Index - 1)
+    end.
 
 
 edit_acl(Index) ->
     gui_jq:show(<<"acl-form">>),
-    ACLEntries = get_acl_entries(),
-    #accesscontrolentity{acetype = ACEType, aceflags = _ACEFlags,
-        identifier = Identifier, acemask = ACEMask} = lists:nth(Index + 1, ACLEntries),
-    gui_jq:set_value(<<"acl_textbox">>, Identifier),
-    CheckJS = <<"').checkbox('check');">>,
-    UncheckJS = <<"').checkbox('uncheck');">>,
-    case ACEType of
-        ?allow_mask -> gui_jq:wire(<<"$('#acl_type_checkbox", CheckJS/binary>>);
-        _ -> gui_jq:wire(<<"$('#acl_type_checkbox", UncheckJS/binary>>)
-    end,
-    case ACEMask band ?read_mask of
-        0 -> gui_jq:wire(<<"$('#acl_read_checkbox", UncheckJS/binary>>);
-        _ -> gui_jq:wire(<<"$('#acl_read_checkbox", CheckJS/binary>>)
-    end,
-    case ACEMask band ?write_mask of
-        0 -> gui_jq:wire(<<"$('#acl_write_checkbox", UncheckJS/binary>>);
-        _ -> gui_jq:wire(<<"$('#acl_write_checkbox", CheckJS/binary>>)
-    end,
-    case ACEMask band ?execute_mask of
-        0 -> gui_jq:wire(<<"$('#acl_exec_checkbox", UncheckJS/binary>>);
-        _ -> gui_jq:wire(<<"$('#acl_exec_checkbox", CheckJS/binary>>)
+    case Index of
+        -1 ->
+            gui_jq:update(<<"acl_select_name">>, identifiers_dropdown(<<"">>)),
+            gui_jq:wire(<<"$('#acl_type_checkbox').checkbox('check');">>),
+            gui_jq:wire(<<"$('#acl_read_checkbox').checkbox('uncheck');">>),
+            gui_jq:wire(<<"$('#acl_write_checkbox').checkbox('uncheck');">>),
+            gui_jq:wire(<<"$('#acl_exec_checkbox').checkbox('uncheck');">>);
+        _ ->
+            ACLEntries = get_acl_entries(),
+            #accesscontrolentity{acetype = ACEType, aceflags = _ACEFlags,
+                identifier = Identifier, acemask = ACEMask} = lists:nth(Index + 1, ACLEntries),
+            gui_jq:update(<<"acl_select_name">>, identifiers_dropdown(Identifier)),
+            CheckJS = <<"').checkbox('check');">>,
+            UncheckJS = <<"').checkbox('uncheck');">>,
+            case ACEType of
+                ?allow_mask -> gui_jq:wire(<<"$('#acl_type_checkbox", CheckJS/binary>>);
+                _ -> gui_jq:wire(<<"$('#acl_type_checkbox", UncheckJS/binary>>)
+            end,
+            case ACEMask band ?read_mask of
+                0 -> gui_jq:wire(<<"$('#acl_read_checkbox", UncheckJS/binary>>);
+                _ -> gui_jq:wire(<<"$('#acl_read_checkbox", CheckJS/binary>>)
+            end,
+            case ACEMask band ?write_mask of
+                0 -> gui_jq:wire(<<"$('#acl_write_checkbox", UncheckJS/binary>>);
+                _ -> gui_jq:wire(<<"$('#acl_write_checkbox", CheckJS/binary>>)
+            end,
+            case ACEMask band ?execute_mask of
+                0 -> gui_jq:wire(<<"$('#acl_exec_checkbox", UncheckJS/binary>>);
+                _ -> gui_jq:wire(<<"$('#acl_exec_checkbox", CheckJS/binary>>)
+            end
+
+
     end.
 
 
@@ -488,7 +484,6 @@ submit_acl(Index, SelectedIdentifier, Type, ReadFlag, WriteFlag, ExecFlag) ->
                                         {_, ID} = lists:nth(binary_to_integer(Number), get_group_identifiers()),
                                         {ID, true}
                                 end,
-    ?dump({IdentifierUUID, IsGroup}),
     ACLEntries = get_acl_entries(),
     ACEMask = (case ReadFlag of true -> ?read_mask; _ -> 0 end) bor
         (case WriteFlag of true -> ?write_mask; _ -> 0 end) bor
@@ -503,14 +498,16 @@ submit_acl(Index, SelectedIdentifier, Type, ReadFlag, WriteFlag, ExecFlag) ->
                 aceflags = case IsGroup of true -> ?identifier_group_mask; false -> ?no_flags_mask end,
                 identifier = IdentifierUUID,
                 acemask = ACEMask},
-            case Index of
-                -1 ->
-                    set_acl_entries(ACLEntries ++ [NewEntity]);
-                _ ->
-                    {Head, [_Ident | Tail]} = lists:split(Index, ACLEntries),
-                    set_acl_entries(Head ++ [NewEntity] ++ Tail)
-            end,
-            populate_acl_list(-1)
+            SelectIndex = case Index of
+                              -1 ->
+                                  set_acl_entries(ACLEntries ++ [NewEntity]),
+                                  length(get_acl_entries()) - 1;
+                              _ ->
+                                  {Head, [_Ident | Tail]} = lists:split(Index, ACLEntries),
+                                  set_acl_entries(Head ++ [NewEntity] ++ Tail),
+                                  Index
+                          end,
+            populate_acl_list(SelectIndex)
     end.
 
 
@@ -551,30 +548,43 @@ uuids_to_identifiers(UUIDs, ForUsers) ->
                            GroupName
                    end,
             {Name, UUID}
-        end, UUIDs),
+        end, lists:usort(UUIDs)), % remove duplicates of UUIDS
     SortedNames = lists:keysort(1, NamesWithGRUIDs),
-    {_, Identifiers} = lists:foldl(fun({Name, GRUID}, {Temp, Acc}) ->
+    {_, Identifiers} = lists:foldl(fun({Name, UUID}, {Temp, Acc}) ->
         case Temp of
             [] ->
-                {[{Name, GRUID}], Acc};
+                {[{Name, UUID}], Acc};
             [{FirstTemp, FirstGRUID} | _] ->
                 case Name of
                     FirstTemp ->
-                        {Temp ++ [{Name, GRUID}], Acc};
+                        {Temp ++ [{Name, UUID}], Acc};
                     _ ->
                         case length(Temp) of
                             1 ->
-                                {[{Name, GRUID}], Acc ++ [{FirstTemp, FirstGRUID}]};
+                                {[{Name, UUID}], Acc ++ [{FirstTemp, FirstGRUID}]};
                             _ ->
-                                {[{Name, GRUID}], Acc ++ lists:map(
-                                    fun({Nam, GRU}) ->
-                                        {<<Nam/binary, "#", GRU/binary>>, GRU}
+                                HashLength = calculate_hash_length(element(2, lists:unzip(Temp))),
+                                {[{Name, UUID}], Acc ++ lists:map(
+                                    fun({CName, CUUID}) ->
+                                        {<<CName/binary, " (", (binary_part(CUUID, 0, HashLength))/binary, "...)">>, CUUID}
                                     end, Temp)}
                         end
                 end
         end
     end, {[], []}, SortedNames ++ [{<<"">>, <<"">>}]),
     Identifiers.
+
+
+calculate_hash_length(UUIDs) ->
+    MaxCommonPrefixes = lists:map(
+        fun(UUID) ->
+            CommonPrefixes = lists:map(
+                fun(RefUUID) ->
+                    binary:longest_common_prefix([UUID, RefUUID])
+                end, [Elem || Elem <- UUIDs, Elem /= UUID]),
+            lists:max([0 | CommonPrefixes])
+        end, UUIDs),
+    lists:max([0 | MaxCommonPrefixes]) + 2.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -657,16 +667,6 @@ fs_set_acl(Path, ACLEntries, Recursive, {Successful, Failed}) ->
                 end
         end,
     {Successful ++ NewSuccessful, Failed ++ NewFailed}.
-
-
-% Holds information what files' ACLs are being edited and what is the current state
-% Stored term is in the following form:
-% {Files, EnableACL, ACLEntries, Users, Groups}
-% Files - list of paths, for which perms are being changed
-% EnableACL - boolean(), determines if POSIX or ACL is selected
-% ACLEntries - current list of ACL entries
-% Users - possible ACL Identifiers of users
-% Groups - possible ACL Identifiers of groups
 
 
 %% set_files/1

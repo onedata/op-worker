@@ -494,8 +494,15 @@ enable_tool_button(ID, Flag) ->
 
 
 navigate(Path) ->
-    set_working_directory(Path),
-    clear_manager().
+    case pfm_perms:fs_has_perms(Path, read) of
+        true ->
+            set_working_directory(Path),
+            clear_manager();
+        false ->
+            gui_jq:info_popup(<<"Insufficient permissions">>,
+                <<"You need <b>read</b> permissions to enter this directory.">>, <<"">>)
+
+    end.
 
 
 up_one_level() ->
@@ -720,7 +727,7 @@ show_popup(Type) ->
                 case pfm_perms:fs_has_perms(get_working_directory(), write) of
                     false ->
                         gui_jq:info_popup(<<"Insufficient permissions">>,
-                            <<"You need write permissions in this directory to rename files.">>, <<"">>),
+                            <<"You need <b>write</b> permissions in this directory to rename files.">>, <<"">>),
                         {[], undefined, undefined};
                     true ->
                         case length(get_selected_items()) =:= 1 of
@@ -806,7 +813,7 @@ show_popup(Type) ->
                         {Body, undefined, {action, clear_manager}};
                     false ->
                         gui_jq:info_popup(<<"Insufficient permissions">>,
-                            <<"You need write permissions in this directory to upload files.">>, <<"">>),
+                            <<"You need <b>write</b> permissions in this directory to upload files.">>, <<"">>),
                         {[], undefined, undefined}
                 end;
 
@@ -815,7 +822,7 @@ show_popup(Type) ->
                     case pfm_perms:fs_has_perms(get_working_directory(), write) of
                         false ->
                             gui_jq:info_popup(<<"Insufficient permissions">>,
-                                <<"You need write permissions in this directory to delete files.">>, <<"">>),
+                                <<"You need <b>write</b> permissions in this directory to delete files.">>, <<"">>),
                             {[], undefined, undefined};
                         true ->
                             case get_selected_items() of
@@ -1133,11 +1140,15 @@ item_new(Dir, File) ->
     item_new(FullPath).
 
 item_new(FullPath) ->
-    #fileattributes{type = Type, mode = Perms} = FA = fs_get_attributes(FullPath),
-    % Set size to -1 if the file is a dir, and remove sticky bit from mode representation
+    #fileattributes{type = Type, mode = Perms, has_acl = HasACL} = FA = fs_get_attributes(FullPath),
+    NewMode = case HasACL of
+                  true -> -1; % for sorting purposes
+                  false -> Perms band 2#111111111 % Remove sticky bit from mode representation
+              end,
+    % Set size to -1 if the file is a dir
     FileAttr = case Type of
-                   "DIR" -> FA#fileattributes{size = -1, mode = Perms band 2#111111111};
-                   _ -> FA#fileattributes{mode = Perms band 2#111111111}
+                   "DIR" -> FA#fileattributes{size = -1, mode = NewMode};
+                   _ -> FA#fileattributes{mode = NewMode}
                end,
     IsShared = case fs_get_share_uuid_by_filepath(FullPath) of
                    undefined -> false;
@@ -1223,10 +1234,7 @@ item_attr_value(perms, Item) ->
                            end,
                     #span{class = <<"perms-letter">>, body = Char}
                 end, Format, HasPerm),
-            PermsStr = case Perms of
-                           0 -> <<"000">>;
-                           _ -> gui_str:format_bin("~.8B", [Perms])
-                       end,
+            PermsStr = gui_str:format_bin("~3..0s", [gui_str:format("~.8B", [Perms])]),
             #panel{style = <<"position: relative;">>, body = [PermsTiles, <<"&nbsp;[", PermsStr/binary, "]">>]}
     end.
 

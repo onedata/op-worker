@@ -115,41 +115,24 @@ populate_acl_list = function (json_array, select_index) {
             render_acl_entry(i, json_array[i].identifier, json_array[i].is_group, json_array[i].allow, json_array[i].read, json_array[i].write, json_array[i].exec));
     }
 
-    acl_list.append('<div class="acl-entry" index="-1">' +
+    acl_list.append('<div class="acl-entry acl-entry-new" index="-1">' +
         '<a class="glyph-link acl-add-button" title="New ACL Entry"><span class="icomoon-plus"></span></a>' +
         '<span class="acl-add-info">New ACL entry...</span>' +
         '</div>');
 
-    if (select_index > -1) {
-        clicked_index = select_index;
-        $(acl_list.find('.acl-entry')[select_index]).find('[class*="acl-button-"]').show();
+    if (select_index > -2) {
+        select_entry(select_index);
+    } else {
+        $('#acl-form').hide();
     }
 
     $('.acl-entry').click(function (event) {
-        if ($('#acl-form').css('display') == 'none') {
-            document.getSelection().removeAllRanges();
-            var new_index = parseInt($(this).attr('index'));
-            if (clicked_index != new_index) {
-                clicked_index = new_index;
-                $('[class*="acl-button-"]').hide();
-                $(this).find('[class*="acl-button-"]').show();
-            } else {
-                $('[class*="acl-button-"]').hide();
-                if (clicked_index == -1) {
-                    add_acl_event();
-                } else {
-                    $(this).addClass('acl-entry-selected');
-                    edit_acl_event(clicked_index);
-                }
-            }
-        }
+        select_entry(parseInt($(this).attr('index')));
     });
 
     $('.acl-add-button').click(function (event) {
         event.stopPropagation();
-        $('[class*="acl-button-"]').hide();
-        clicked_index = -1;
-        add_acl_event();
+        select_entry(-1);
     });
 
     $('.acl-button-delete').click(function (event) {
@@ -175,14 +158,6 @@ populate_acl_list = function (json_array, select_index) {
         entry_div.find('[class*="acl-confirm-"]').hide();
     });
 
-    $('.acl-button-edit').click(function (event) {
-        event.stopPropagation();
-        var entry_div = $(this).parent();
-        entry_div.addClass('acl-entry-selected');
-        entry_div.find('[class*="acl-button-"]').hide();
-        edit_acl_event(parseInt(entry_div.attr('index')));
-    });
-
     $('.acl-button-move-up').click(function (event) {
         event.stopPropagation();
         move_acl_event([parseInt($(this).parent().attr('index')), true]);
@@ -193,7 +168,6 @@ populate_acl_list = function (json_array, select_index) {
         move_acl_event([parseInt($(this).parent().attr('index')), false]);
     });
 
-
     $('#acl_type_checkbox').change(function (event) {
         if ($(this).is(':checked')) {
             $('#acl_type_checkbox_label').html('allow');
@@ -201,6 +175,18 @@ populate_acl_list = function (json_array, select_index) {
             $('#acl_type_checkbox_label').html('deny');
         }
     });
+};
+
+// Selects a row in ACL table and enables editing the entry
+select_entry = function (index) {
+    clicked_index = index;
+    document.getSelection().removeAllRanges();
+    $('.acl-entry-selected').removeClass('acl-entry-selected');
+    $('[class*="acl-button-"]').hide();
+    var div = $('[index="' + index +'"]');
+    $(div).addClass('acl-entry-selected');
+    $(div).find('[class*="acl-button-"]').show();
+    edit_acl_event(index);
 };
 
 // Renders a single ACL entry
@@ -223,7 +209,6 @@ render_acl_entry = function (index, identifier, is_group, allow_flag, read_flag,
         '<span class="acl-ident-name">' + identifier + '</span></div>' +
         icon_read + icon_write + icon_exec +
         '<a class="glyph-link acl-button-delete" title="Delete ACL entry"><span class="icomoon-remove"></span></a>' +
-        '<a class="glyph-link acl-button-edit" title="Edit ACL entry"><span class="icomoon-pencil2"></span></a>' +
         '<a class="glyph-link acl-button-move-up" title="Move up"><span class="fui-triangle-up-small"></span></a>' +
         '<a class="glyph-link acl-button-move-down" title="Move down"><span class="fui-triangle-down-small"></span></a>' +
         icons_confirm_delete + '</div>';

@@ -88,7 +88,7 @@ get_file_children(FullFileName, UserPathTokens, ROffset, RCount) ->
 
     TokenizedPath = UserPathTokens,
 
-%%     ok = fslogic_perms:check_file_perms(FullFileName, read), %todo enable after applying gui adjustment
+    ok = fslogic_perms:check_file_perms(FullFileName, read),
 
     {Num, Offset} =
         case {ROffset, TokenizedPath} of
