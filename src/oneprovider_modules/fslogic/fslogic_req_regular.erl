@@ -186,7 +186,7 @@ register_file_block(FullFileName, Offset, Size) ->
 
     {ok, Descriptors} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file, FullFileName}, 10000000000, 0], fslogic_context:get_protocol_version()),
 
-    lists:foreach(
+    utils:pforeach(
         fun(#db_document{record = #file_descriptor{fuse_id = FuseId}}) ->
             {_, FileId} = fslogic_utils:get_sh_and_id(FuseId, Storage, SpaceId),
             BlocksAvailable = #blocksavailable{storage_id = Storage#storage_info.id, file_id = FileId, blocks = [BlockAvailability]},

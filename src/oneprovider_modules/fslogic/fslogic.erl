@@ -301,7 +301,6 @@ fslogic_runner(Method, RequestType, RequestBody, ErrorHandler) when is_function(
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went wrong, but it could be expected.
             ?warning_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:{case_clause, Reason} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
@@ -384,7 +383,7 @@ handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mo
 
 handle_fuse_message(Req = #requestfileblock{logical_name = FName, offset = _Offset, size = _Size}) ->
     {ok, _FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    #atom{value = ?VOK};
+    #atom{value = ?VOK}; %% @TODO: To be implemented along with rtransfer logic
 
 handle_fuse_message(Req = #createfileack{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),

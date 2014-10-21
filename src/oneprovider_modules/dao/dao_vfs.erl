@@ -648,7 +648,7 @@ rename_file(File, NewName) ->
 %% @doc Fetches all file locations specified for a given file identified by its UUID.
 %% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
 %% @end
--spec get_file_locations(FileId :: uuid()) -> {ok, [file_location_doc()]}.
+-spec get_file_locations(FileId :: uuid()) -> {ok, [file_location_doc()]} | no_return().
 %% ====================================================================
 get_file_locations(FileId) when is_list(FileId) ->
     QueryArgs =
@@ -664,7 +664,7 @@ get_file_locations(FileId) when is_list(FileId) ->
 %% @doc Fetches UUIDS of all file locations specified for a given file identified by its UUID.
 %% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
 %% @end
--spec list_file_locations(FileId :: uuid()) -> {ok, [uuid()]}.
+-spec list_file_locations(FileId :: uuid()) -> {ok, [uuid()]} | no_return().
 %% ====================================================================
 list_file_locations(FileId) when is_list(FileId) ->
     QueryArgs =
@@ -713,7 +713,7 @@ remove_file_location(LocationId) when is_list(LocationId) ->
 %% @doc Fetches all file blocks for a given file location identified by its UUID.
 %% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
 %% @end
--spec get_file_blocks(LocationId :: uuid()) -> {ok, [file_block_doc()]}.
+-spec get_file_blocks(LocationId :: uuid()) -> {ok, [file_block_doc()]} | no_return().
 %% ====================================================================
 get_file_blocks(LocationId) when is_list(LocationId) ->
     QueryArgs =
@@ -729,7 +729,7 @@ get_file_blocks(LocationId) when is_list(LocationId) ->
 %% @doc Fetches UUIDS of all file blocks specified for a given file location identified by its UUID.
 %% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
 %% @end
--spec list_file_blocks(FileId :: uuid()) -> {ok, [uuid()]}.
+-spec list_file_blocks(FileId :: uuid()) -> {ok, [uuid()]} | no_return().
 %% ====================================================================
 list_file_blocks(LocationId) when is_list(LocationId) ->
     QueryArgs =
