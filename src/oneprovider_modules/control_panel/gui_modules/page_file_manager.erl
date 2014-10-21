@@ -1467,8 +1467,7 @@ get_item_list_rev() -> get(item_list_rev).
 set_clipboard_items(List) -> put(clipboard_items, List).
 get_clipboard_items() -> get(clipboard_items).
 
-set_clipboard_type(Type)
-    -> put(clipboard_type, Type).
+set_clipboard_type(Type) -> put(clipboard_type, Type).
 get_clipboard_type() -> get(clipboard_type).
 
 set_item_counter(Counter) -> put(item_counter, Counter).
