@@ -106,6 +106,7 @@ update_chmod_textbox = function (mode) {
 
 var clicked_index = -2;
 
+// Renders ACL list
 populate_acl_list = function (json_array, select_index) {
     var acl_list = $('#acl_list');
     acl_list.html('');
@@ -225,4 +226,24 @@ submit_acl = function () {
         $('#acl_write_checkbox').is(':checked'),
         $('#acl_exec_checkbox').is(':checked')
     ]);
+};
+
+// Displays a popup with info about file permissions.
+show_permissions_info = function() {
+    bootbox.dialog({
+        title: 'POSIX permissions and ACLs',
+        message: 'Basic POSIX permissions and ACLs are two ways of controlling '+
+        'the access to your data. You can choose to use one of them for each file. They cannot be used together. <br /><br />'+
+        '<strong>POSIX permissions</strong> - basic file permissions, can be used to enable certain types '+
+        'of users to read, write or execute given file. The types are: user (the owner of the file), group (all users '+
+        'sharing the space where the file resides), other (not aplicable in GUI, but used in oneclient).<br /><br />'+
+        '<strong>ACL</strong> (Access Control List) - CDMI standard (compliant with NFSv4 ACLs), allows '+
+        'defining ordered lists of permissions-granting or permissions-denying entries for users or groups. '+
+        'ACLs are processed from top to bottom - entries higher on list will have higher priority.',
+        buttons: {
+            'OK': {
+                className: 'btn-primary confirm'
+            }
+        }
+    });
 };

@@ -23,12 +23,12 @@
 -export([init/0, perms_popup/1, event/1, api_event/3]).
 -export([populate_acl_list/1, change_perms_type/1, submit_perms/2, show_permissions_info/0]).
 -export([edit_acl/1, move_acl/2, submit_acl/6, delete_acl/1]).
--export([fs_has_perms/2, fs_chmod/3, fs_get_acl/1, fs_set_acl/3, calculate_hash_length/1]).
+-export([fs_has_perms/2, fs_chmod/3, fs_get_acl/1, fs_set_acl/3]).
 
 
 %% init/0
 %% ====================================================================
-%% @doc Initializes perms editor component.
+%% @doc Initializes perms editor component and events connected with logic.
 %% @end
 -spec init() -> ok.
 %% ====================================================================
@@ -40,6 +40,9 @@ init() ->
     gui_jq:wire(#api{name = "move_acl_event", tag = "move_acl_event", delegate = ?MODULE}, false),
     gui_jq:wire(#api{name = "submit_acl_event", tag = "submit_acl_event", delegate = ?MODULE}, false).
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Structural parts of ACL editor
 
 %% perms_popup/1
 %% ====================================================================
@@ -271,6 +274,12 @@ perms_popup(Files) ->
     Body.
 
 
+%% identifiers_dropdown/1
+%% ====================================================================
+%% @doc Renders select box (dropdown) with identifiers for ACLs.
+%% @end
+-spec identifiers_dropdown(SelectedUUID :: binary()) -> #select{}.
+%% ====================================================================
 identifiers_dropdown(SelectedUUID) ->
     {UserOptions, _} = lists:foldl(
         fun({Ident, UUID}, {Acc, Counter}) ->
@@ -294,17 +303,25 @@ identifiers_dropdown(SelectedUUID) ->
     ]}.
 
 
+%% show_permissions_info/0
+%% ====================================================================
+%% @doc Displays a popup with info about file permissions.
+%% @end
+-spec show_permissions_info() -> ok.
+%% ====================================================================
 show_permissions_info() ->
-    gui_jq:info_popup(<<"POSIX permissions and ACLs">>, <<"Basic POSIX permissions and ACLs are two ways of controlling ",
-    "the access to your data. You can choose to use one of them for each file. They cannot be used together. <br /><br />",
-    "<strong>POSIX permissions</strong> - basic file permissions, can be used to enable certain types ",
-    "of users to read, write or execute given file. The types are: user (the owner of the file), group (all users ",
-    "sharing the space where the file resides), other (not aplicable in GUI, but used in oneclient).<br /><br />",
-    "<strong>ACL</strong> (Access Control List) - CDMI standard (compliant with NFSv4 ACLs), allows ",
-    "defining ordered lists of permissions-granting or permissions-denying entries for users or groups. ",
-    "ACLs are processed from top to bottom - entries higher on list will have higher priority.">>, <<"">>).
+    gui_jq:wire(<<"show_permissions_info();">>).
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Event hadling
+
+%% api_event/3
+%% ====================================================================
+%% @doc n2o callback, called when a registered function is called from javascript.
+%% @end
+-spec api_event(Tag :: term(), Args :: list(), Ctx :: #context{}) -> term().
+%% ====================================================================
 api_event("submit_perms_event", Args, _Ctx) ->
     [Perms, Recursive] = mochijson2:decode(Args),
     event({action, submit_perms, [Perms, Recursive]});
@@ -346,6 +363,12 @@ api_event("submit_acl_event", Args, _) ->
     event({action, submit_acl, [Index, SelectedIdentifier, Type, Read, Write, Execute]}).
 
 
+%% event/1
+%% ====================================================================
+%% @doc n2o callback, called when a postback is generated.
+%% @end
+-spec event(Tag :: term()) -> term().
+%% ====================================================================
 event({action, Fun}) ->
     page_file_manager:event({action, ?MODULE, Fun, []});
 
@@ -354,6 +377,15 @@ event({action, Fun, Args}) ->
     page_file_manager:event({action, ?MODULE, Fun, Args}).
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ACL editor logic
+
+%% submit_perms/2
+%% ====================================================================
+%% @doc Called when user submits file permissions form.
+%% @end
+-spec submit_perms(Perms :: integer(), Recursive :: boolean()) -> term().
+%% ====================================================================
 submit_perms(Perms, Recursive) ->
     Files = get_files(),
     ACLEnabled = get_acl_enabled(),
@@ -394,6 +426,12 @@ submit_perms(Perms, Recursive) ->
     page_file_manager:clear_manager().
 
 
+%% populate_acl_list/1
+%% ====================================================================
+%% @doc Renders ACL list.
+%% @end
+-spec populate_acl_list(SelectedIndex :: integer()) -> term().
+%% ====================================================================
 populate_acl_list(SelectedIndex) ->
     ACLEntries = get_acl_entries(),
 
@@ -415,6 +453,12 @@ populate_acl_list(SelectedIndex) ->
     gui_jq:wire(<<"populate_acl_list(", JSON/binary, ", ", (integer_to_binary(SelectedIndex))/binary, ");">>).
 
 
+%% change_perms_type/1
+%% ====================================================================
+%% @doc Called when user changes the state of perms type radio button.
+%% @end
+-spec change_perms_type(EnableACL :: boolean()) -> term().
+%% ====================================================================
 change_perms_type(EnableACL) ->
     set_acl_enabled(EnableACL),
     case EnableACL of
@@ -427,6 +471,12 @@ change_perms_type(EnableACL) ->
     end.
 
 
+%% delete_acl/1
+%% ====================================================================
+%% @doc Called when user confirms deletion of an ACL entry.
+%% @end
+-spec delete_acl(Index :: integer()) -> term().
+%% ====================================================================
 delete_acl(Index) ->
     ACLEntries = get_acl_entries(),
     {Head, [_ | Tail]} = lists:split(Index, ACLEntries),
@@ -438,6 +488,12 @@ delete_acl(Index) ->
     end.
 
 
+%% edit_acl/1
+%% ====================================================================
+%% @doc Called when user select an entry to edit.
+%% @end
+-spec edit_acl(Index :: integer()) -> term().
+%% ====================================================================
 edit_acl(Index) ->
     gui_jq:show(<<"acl-form">>),
     case Index of
@@ -475,6 +531,13 @@ edit_acl(Index) ->
     end.
 
 
+%% submit_acl/6
+%% ====================================================================
+%% @doc Called when user submits ACL form.
+%% @end
+-spec submit_acl(Index :: integer(), SelectedIdentifier :: binary(), Type :: boolean(),
+    ReadFlag :: boolean(), WriteFlag :: boolean(), ExecFlag :: boolean()) -> term().
+%% ====================================================================
 submit_acl(Index, SelectedIdentifier, Type, ReadFlag, WriteFlag, ExecFlag) ->
     {IdentifierUUID, IsGroup} = case SelectedIdentifier of
                                     <<"u", Number/binary>> ->
@@ -511,6 +574,12 @@ submit_acl(Index, SelectedIdentifier, Type, ReadFlag, WriteFlag, ExecFlag) ->
     end.
 
 
+%% move_acl/1
+%% ====================================================================
+%% @doc Called when user pushes an ACL entry up or down.
+%% @end
+-spec move_acl(Index :: integer(), MoveUp :: boolean()) -> term().
+%% ====================================================================
 move_acl(Index, MoveUp) ->
     ACLEntries = get_acl_entries(),
     MaxIndex = length(ACLEntries) - 1,
@@ -536,6 +605,14 @@ move_acl(Index, MoveUp) ->
     populate_acl_list(SelectedIndex).
 
 
+%% uuids_to_identifiers/2
+%% ====================================================================
+%% @doc Converts uuids to sorted pairs {Name, UUID}. If names repeat,
+%% a sufficient part of hash is concatenated so the names can be distinguished.
+%% Removes duplicate UUIDs.
+%% @end
+-spec uuids_to_identifiers(UUIDs :: [binary()], ForUsers :: boolean()) -> [{Name :: binary(), UUID :: binary()}].
+%% ====================================================================
 uuids_to_identifiers(UUIDs, ForUsers) ->
     NamesWithGRUIDs = lists:map(
         fun(UUID) ->
@@ -575,6 +652,13 @@ uuids_to_identifiers(UUIDs, ForUsers) ->
     Identifiers.
 
 
+%% calculate_hash_length/1
+%% ====================================================================
+%% @doc Calculates the length of hash to be extracted so gives UUISd can be
+%% distinguished. Returns the longest common prefix of any two UUIDs + 2.
+%% @end
+-spec calculate_hash_length(UUIDs :: [binary()]) -> integer().
+%% ====================================================================
 calculate_hash_length(UUIDs) ->
     MaxCommonPrefixes = lists:map(
         fun(UUID) ->
