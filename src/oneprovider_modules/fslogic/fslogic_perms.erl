@@ -88,7 +88,7 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
         Error -> Error
     end;
 check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerUid, perms = FilePerms, type = Type, meta_doc = MetaUuid, location = FileLoc}}, CheckType) -> %check read/write/execute perms
-    #db_document{uuid = UserUid, record = #user{global_id = GlobalId}} = UserDoc,
+    #db_document{uuid = UserUid, record = #user{global_id = GlobalId} = UserRecord} = UserDoc,
     FileSpace = get_group(FileName),
 
     UserOwnsFile = UserUid =:= FileOwnerUid,
@@ -107,7 +107,7 @@ check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerU
                 false -> ?permission_denied_error(UserDoc, FileName, CheckType)
             end;
         _ ->
-            case (catch fslogic_acl:check_permission(RealAcl, utils:ensure_binary(GlobalId), CheckType)) of
+            case (catch fslogic_acl:check_permission(RealAcl, UserRecord, CheckType)) of
                 ok ->
                     % cache permissions for storage_files_manager use
                     case Type of

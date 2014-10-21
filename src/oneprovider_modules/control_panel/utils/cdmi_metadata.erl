@@ -15,6 +15,8 @@
 -include("oneprovider_modules/control_panel/cdmi_error.hrl").
 -include("oneprovider_modules/control_panel/cdmi_metadata.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -export([get_user_metadata/1, update_user_metadata/2, update_user_metadata/3]).
 -export([prepare_metadata/2, prepare_metadata/3]).
@@ -65,7 +67,13 @@ update_user_metadata(Filepath, UserMetadata, AllURIMetadataNames) ->
         end,
     ReplaceAttributeFunction =
         fun
-            ({<<"cdmi_acl">>, Value}) -> ok = logical_files_manager:set_acl(Filepath, fslogic_acl:from_json_fromat_to_acl(Value));
+            ({<<"cdmi_acl">>, Value}) ->
+                ACL = try fslogic_acl:from_json_fromat_to_acl(Value)
+                      catch _:Error ->
+                          ?debug_stacktrace("Acl conversion error ~p", [Error]),
+                          throw({?invalid_acl, Error})
+                      end,
+                ok = logical_files_manager:set_acl(Filepath, ACL);
             ({Name, Value}) -> ok = logical_files_manager:set_xattr(Filepath, Name, Value)
         end,
     case AllURIMetadataNames of
