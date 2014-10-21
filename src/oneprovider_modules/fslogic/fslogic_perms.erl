@@ -89,7 +89,7 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
         Error -> Error
     end;
 check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerUid, perms = FilePerms, type = Type, meta_doc = MetaUuid}} = FileDoc, CheckType) -> %check read/write/execute perms
-    #db_document{uuid = UserUid, record = #user{global_id = GlobalId}} = UserDoc,
+    #db_document{uuid = UserUid, record = #user{global_id = GlobalId} = UserRecord} = UserDoc,
     FileSpace = get_group(FileName),
 
     UserOwnsFile = UserUid =:= FileOwnerUid,

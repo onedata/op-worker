@@ -40,8 +40,6 @@
 
 -type storage_doc() :: #db_document{record :: #storage_info{}}.
 
--type db_doc() :: #db_document{}.
-
 -type user() :: uuid().
 -type user_info() :: #user{}.
 -type user_doc() :: db_doc(user_info()).
