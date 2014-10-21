@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013, ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -85,9 +85,9 @@ gen_error_message(setacl, Error) ->
 gen_error_message(getfileuuid, Error) ->
     #fileuuid{answer = Error, uuid = ""};
 gen_error_message(getfilelocation, Error) ->
-    #filelocation{answer = Error, storage_id = -1, file_id = "", validity = 0};
+    #filelocation{answer = Error, storage_id = 0, file_id = "", validity = 0};
 gen_error_message(getnewfilelocation, Error) ->
-    #filelocation{answer = Error, storage_id = -1, file_id = "", validity = 0};
+    #filelocation{answer = Error, storage_id = 0, file_id = "", validity = 0};
 gen_error_message(filenotused, Error) ->
     #atom{value = Error};
 gen_error_message(renamefile, Error) ->
