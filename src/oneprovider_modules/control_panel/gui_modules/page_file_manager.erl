@@ -86,15 +86,17 @@ body() ->
     gui_jq:register_escape_event("escape_pressed_event"),
     gui_jq:wire(#api{name = "confirm_paste_event", tag = "confirm_paste_event"}, false),
     pfm_perms:init(),
-    Body = [
-        #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
-            #image{image = <<"/images/spinner.gif">>}
-        ]},
-        opn_gui_utils:top_menu(data_tab, manager_submenu()),
-        manager_workspace(),
-        footer_popup()
-    ],
-    Body.
+    [
+        #panel{class= <<"page-container">>, body = [
+            #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
+                #image{image = <<"/images/spinner.gif">>}
+            ]},
+            opn_gui_utils:top_menu(data_tab, manager_submenu()),
+            manager_workspace(),
+            footer_popup()
+
+        ]}
+    ].
 
 % Submenu that will be glued below the top menu
 manager_submenu() ->

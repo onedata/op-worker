@@ -1,16 +1,8 @@
 .page-container {
-    padding: 60px 20px 20px 20px;
+    /*padding: 60px 20px 20px 20px;*/
     overflow: hidden;
-}
-
-.floating-menu {
-    position: fixed;
-    width: 200px;
-    float: left;
-}
-
-.page-content {
-    margin-top: 50px;
+    min-width: 1024px;
+    position: relative;
 }
 
 .wide {
@@ -19,10 +11,6 @@
 
 .no-margin {
     margin: 0 !important;
-}
-
-.indent-10 {
-    margin-left: 10px;
 }
 
 .login-page {
@@ -37,10 +25,6 @@
 .login-info {
     margin-top: 20px;
     margin-bottom: 30px;
-}
-
-.search-bar {
-    width: 250px;
 }
 
 .table-cell {
