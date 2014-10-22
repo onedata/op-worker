@@ -26,6 +26,10 @@
 -export([fs_has_perms/2, fs_chmod/3, fs_get_acl/1, fs_set_acl/3]).
 
 
+%% ====================================================================
+%% API functions
+%% ====================================================================
+
 %% init/0
 %% ====================================================================
 %% @doc Initializes perms editor component and events connected with logic.
@@ -41,8 +45,9 @@ init() ->
     gui_jq:wire(#api{name = "submit_acl_event", tag = "submit_acl_event", delegate = ?MODULE}, false).
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Structural parts of ACL editor
+%% ====================================================================
+%% Structural parts of perms editor component
+%% ====================================================================
 
 %% perms_popup/1
 %% ====================================================================
@@ -313,8 +318,9 @@ show_permissions_info() ->
     gui_jq:wire(<<"show_permissions_info();">>).
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Event hadling
+%% ====================================================================
+%% Event handling
+%% ====================================================================
 
 %% api_event/3
 %% ====================================================================
@@ -377,8 +383,9 @@ event({action, Fun, Args}) ->
     page_file_manager:event({action, ?MODULE, Fun, Args}).
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ====================================================================
 %% ACL editor logic
+%% ====================================================================
 
 %% submit_perms/2
 %% ====================================================================
@@ -671,12 +678,19 @@ calculate_hash_length(UUIDs) ->
     lists:max([0 | MaxCommonPrefixes]) + 2.
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ====================================================================
 %% logical_files_manager interfacing
+%% ====================================================================
 
-% Returns a tuple {Successful, Failed}, where Succesfull is a list of
-% paths for which command succeded and Failed is a list of tuples {Path, Reason}
-% for paths that the command failed.
+%% fs_chmod/3
+%% ====================================================================
+%% @doc Changes mode for given path, and possibly recursively in all subpaths.
+%% Returns a tuple {Successful, Failed}, where Succesfull is a list of
+%% paths for which command succeded and Failed is a list of tuples {Path, Reason}
+%% for paths that the command failed.
+%% @end
+-spec fs_chmod(Path :: binary(), Perms :: integer(), Recursive :: boolean()) -> {Successful :: [binary()], Failed :: [{binary(), term()}]}.
+%% ====================================================================
 fs_chmod(Path, Perms, Recursive) ->
     fs_chmod(Path, Perms, Recursive, {[], []}).
 
@@ -709,18 +723,38 @@ fs_chmod(Path, Perms, Recursive, {Successful, Failed}) ->
     {Successful ++ NewSuccessful, Failed ++ NewFailed}.
 
 
+%% fs_has_perms/2
+%% ====================================================================
+%% @doc Checks if the user has rights to perform given operation on given path.
+%% @end
+-spec fs_has_perms(Path :: binary(), CheckType :: root | owner | delete | read | write | execute | rdwr | '') -> boolean().
+%% ====================================================================
 fs_has_perms(Path, CheckType) ->
     logical_files_manager:check_file_perm(gui_str:binary_to_unicode_list(Path), CheckType).
 
+
+%% fs_get_acl/1
+%% ====================================================================
+%% @doc Retrieves ACL entry list for given path.
+%% @end
+-spec fs_get_acl(Path :: binary()) -> [#accesscontrolentity{}].
+%% ====================================================================
 fs_get_acl(Path) ->
     case logical_files_manager:get_acl(gui_str:binary_to_unicode_list(Path)) of
         {ok, List} -> List;
         _ -> []
     end.
 
-% Returns a tuple {Successful, Failed}, where Succesfull is a list of
-% paths for which command succeded and Failed is a list of tuples {Path, Reason}
-% for paths that the command failed.
+
+%% fs_set_acl/3
+%% ====================================================================
+%% @doc Changes ACL entry list for given path, and possibly recursively in all subpaths.
+%% Returns a tuple {Successful, Failed}, where Succesfull is a list of
+%% paths for which command succeded and Failed is a list of tuples {Path, Reason}
+%% for paths that the command failed.
+%% @end
+-spec fs_set_acl(Path :: binary(), ACLEntries :: [#accesscontrolentity{}], Recursive :: boolean()) -> {Successful :: [binary()], Failed :: [{binary(), term()}]}.
+%% ====================================================================
 fs_set_acl(Path, ACLEntries, Recursive) ->
     fs_set_acl(Path, ACLEntries, Recursive, {[], []}).
 
@@ -752,6 +786,10 @@ fs_set_acl(Path, ACLEntries, Recursive, {Successful, Failed}) ->
         end,
     {Successful ++ NewSuccessful, Failed ++ NewFailed}.
 
+
+%% ====================================================================
+%% Convenience functions to remember page state in process dictionary
+%% ====================================================================
 
 %% set_files/1
 %% ====================================================================
