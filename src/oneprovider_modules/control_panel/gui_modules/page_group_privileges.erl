@@ -90,7 +90,7 @@ title() ->
 -spec body(GroupDetails :: #group_details{}) -> Result when
     Result :: #panel{}.
 %% ====================================================================
-body(GroupDetails) ->
+body(#group_details{id = GroupId, name = GroupName} = GroupDetails) ->
     MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
     [
         #panel{
@@ -100,7 +100,8 @@ body(GroupDetails) ->
                 image = <<"/images/spinner.gif">>
             }
         },
-        opn_gui_utils:top_menu(groups_tab),
+        opn_gui_utils:top_menu(groups_tab, opn_gui_utils:breadcrumbs([{<<"Groups">>, <<"/groups">>},
+            {GroupName, <<"/group?id=", GroupId/binary>>}, {<<"Privileges">>, <<"/privileges/group?id=", GroupId/binary>>}])),
         #panel{
             id = <<"ok_message">>,
             style = MessageStyle,
