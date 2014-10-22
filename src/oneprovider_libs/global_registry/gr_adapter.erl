@@ -162,7 +162,7 @@ synchronize_space_group_details(SpaceId, GroupIds, {_UserGID, AccessToken}) ->
 synchronize_user_group_details(GroupIds, AccessToken) ->
     AnsList = lists:map(fun(Id) ->
         case gr_users:get_group_details({user, AccessToken}, utils:ensure_binary(Id)) of
-            {ok, #group_details{id = Id} = GroupDetails} -> dao_lib:apply(dao_groups, save_group, [#db_document{uuid = Id, record = GroupDetails}, 1]);
+            {ok, #group_details{id = Id} = GroupDetails} -> dao_lib:apply(dao_groups, save_group, [#db_document{uuid = Id, record = GroupDetails}], 1);
             Error ->
                 ?error("Cannot get info of group ~p, error: ~p", [Id, Error]),
                 Error
