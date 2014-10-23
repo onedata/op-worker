@@ -74,9 +74,9 @@ main_panel() ->
 
         #table{body = [
             #tr{cells = [
-                #td{style = <<"width: 50%; padding: 5px;">>, body = [
+                #td{style = <<"width: 50%; padding: 5px; vertical-align: top;">>, body = [
                     #p{body = <<"Run <strong>oneclient</strong> using certificate">>},
-                    #list{body = [
+                    #list{style = <<"padding: 5px;">>, body = [
                         #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
                         <<"Prepare X.509 certificate (acceptable formats are <i>PEM</i> and <i>PKCS 12</i>)">>
                         },
@@ -100,9 +100,9 @@ main_panel() ->
                         }
                     ]}
                 ]},
-                #td{style = <<"width: 50%; padding: 5px;">>, body = [
+                #td{style = <<"width: 50%; padding: 5px; vertical-align: top;">>, body = [
                     #p{body = <<"Run <strong>oneclient</strong> using token">>},
-                    #list{body = [
+                    #list{style = <<"padding: 5px;">>, body = [
                         #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
                         <<"Set <i>provider_hostname</i> variable in configuration file"
                         " located at <i>{INSTALL_PREFIX}/etc/oneclient.conf.default</i>">>
