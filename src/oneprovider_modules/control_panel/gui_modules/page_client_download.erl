@@ -55,16 +55,18 @@ main_panel() ->
         #p{style = <<"text-align: center;">>, body = <<"<strong>oneclient</strong> is a software based on FUSE ",
         "(Filesystem in Userspace) that allows mounting <strong>onedata</strong> filesystem on Linux systems.">>},
 
-        #table{body = [
+        #p{style = <<"text-align: center;">>, body = <<"Download and install">>},
+
+        #table{style = <<"width: 100%">>, body = [
             #tr{cells = [
-                #td{style = <<"padding: 5px;">>, body = [
-                    #p{body = <<"Download and install <i>RPM</i> package">>},
+                #td{style = <<"width: 50%; padding: 5px;">>, body = [
+                    #p{body = <<"<i>RPM</i> package">>},
                     #pre{body = #code{class = <<"bash">>, body = [
                         <<"curl --url ", (?CLIENT_RPM_URL)/binary, " --output oneclient.rpm<br>sudo yum install oneclient.rpm">>
                     ]}}
                 ]},
-                #td{style = <<"padding: 5px;">>, body = [
-                    #p{body = <<"Download and install <i>DEB</i> package">>},
+                #td{style = <<"width: 50%; padding: 5px;">>, body = [
+                    #p{body = <<"<i>DEB</i> package">>},
                     #pre{body = #code{class = <<"bash">>, body = [
                         <<"curl --url ", (?CLIENT_DEB_URL)/binary, " --output oneclient.deb<br>sudo dpkg -i oneclient.deb">>
                     ]}}
@@ -72,10 +74,12 @@ main_panel() ->
             ]}
         ]},
 
-        #table{body = [
+        #p{style = <<"text-align: center; margin-top: 40px;">>, body = <<"Run <strong>oneclient</strong> using">>},
+
+        #table{style = <<"width: 100%">>, body = [
             #tr{cells = [
                 #td{style = <<"width: 50%; padding: 5px; vertical-align: top;">>, body = [
-                    #p{body = <<"Run <strong>oneclient</strong> using certificate">>},
+                    #p{body = <<"<i>certificate</i>">>},
                     #list{style = <<"padding: 5px;">>, body = [
                         #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
                         <<"Prepare X.509 certificate (acceptable formats are <i>PEM</i> and <i>PKCS 12</i>)">>
@@ -101,7 +105,7 @@ main_panel() ->
                     ]}
                 ]},
                 #td{style = <<"width: 50%; padding: 5px; vertical-align: top;">>, body = [
-                    #p{body = <<"Run <strong>oneclient</strong> using token">>},
+                    #p{body = <<"<i>token</i>">>},
                     #list{style = <<"padding: 5px;">>, body = [
                         #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
                         <<"Set <i>provider_hostname</i> variable in configuration file"
