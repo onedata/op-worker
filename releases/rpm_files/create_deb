@@ -69,21 +69,22 @@ mkdir -p $DEB_TMP_ROOT/files/oneprovider_node
 cp -R ${RUNNER_SCRIPT_DIR}/sources/* $DEB_TMP_ROOT/
 cp -R ${RUNNER_SCRIPT_DIR}/../oneprovider_node/* $DEB_TMP_ROOT/files/oneprovider_node
 sed -i -e s%"/etc/init.d/functions"%"/lib/lsb/init-functions"%g $DEB_TMP_ROOT/oneprovider_init_d
-sed -i -e s%"success"%"log_daemon_msg \"[ok]\""%g $DEB_TMP_ROOT/oneprovider_init_d
-sed -i -e s%"failure"%"log_failure_msg \"[error]\""%g $DEB_TMP_ROOT/oneprovider_init_d
+sed -i -e s%"success"%"echo \"[  OK  ]\""%g $DEB_TMP_ROOT/oneprovider_init_d
+sed -i -e s%"failure"%"echo \"[FAILED]\""%g $DEB_TMP_ROOT/oneprovider_init_d
 sed -i -e s%"/var/lock/subsys"%"/var/lock"%g $DEB_TMP_ROOT/oneprovider_init_d
 sed -i -e s%"/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"%"/etc/ssl/certs/ca-certificates.crt"%g $DEB_TMP_ROOT/files/oneprovider_node/releases/1.0.0/sys.config
 
 # Attach bigcouch release
 mkdir -p $DEB_TMP_ROOT/files/database_node
 cp -R ${BIGCOUCH_RELEASE_DIRECTORY}/*  $DEB_TMP_ROOT/files/database_node
+cp ${BIGCOUCH_RELEASE_DIRECTORY}/../debian_libs/crypto.so $DEB_TMP_ROOT/files/database_node/lib/crypto-2.0.4/priv/lib/crypto.so
 
 # Attach onepanel release
 mkdir -p $DEB_TMP_ROOT/files/onepanel_node
 cp -R ${ONEPANEL_RELEASE_DIRECTORY}/*  $DEB_TMP_ROOT/files/onepanel_node
 sed -i -e s%"/etc/rc.d/init.d/functions"%"/lib/lsb/init-functions"%g $DEB_TMP_ROOT/files/onepanel_node/scripts/onepanel_init_d
-sed -i -e s%"success"%"log_daemon_msg \"[ok]\""%g $DEB_TMP_ROOT/files/onepanel_node/scripts/onepanel_init_d
-sed -i -e s%"failure"%"log_failure_msg \"[error]\""%g $DEB_TMP_ROOT/files/onepanel_node/scripts/onepanel_init_d
+sed -i -e s%"success"%"echo \"[  OK  ]\""%g $DEB_TMP_ROOT/files/onepanel_node/scripts/onepanel_init_d
+sed -i -e s%"failure"%"echo \"[FAILED]\""%g $DEB_TMP_ROOT/files/onepanel_node/scripts/onepanel_init_d
 sed -i -e s%"/var/lock/subsys"%"/var/lock/"%g $DEB_TMP_ROOT/files/onepanel_node/scripts/onepanel_init_d
 
 # Install files with adequate mode
@@ -93,3 +94,6 @@ ${RUNNER_SCRIPT_DIR}/sources/install_rpm $DEB_ROOT /opt/oneprovider
 # Run dpkg-deb build
 cd $DEB_BUILD_DIRECTORY
 dpkg-deb --build $PKG_ID
+
+# Copy result
+cp $DEB_BUILD_DIRECTORY/oneprovider_*.deb RUNNER_SCRIPT_DIR/../
