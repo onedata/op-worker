@@ -77,7 +77,7 @@ custom() ->
 -spec body() -> [#panel{}].
 %% ====================================================================
 body() ->
-    [
+    #panel{class= <<"page-container">>, body = [
         #panel{
             id = <<"main_spinner">>,
             style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>,
@@ -138,7 +138,7 @@ body() ->
                 }
             ]
         }
-    ].
+    ]}.
 
 
 %% tokens_table_collapsed/3

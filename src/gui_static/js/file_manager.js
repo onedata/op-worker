@@ -247,3 +247,27 @@ show_permissions_info = function() {
         }
     });
 };
+
+// -----------------------------
+// list view header table scrolling
+
+initialize_table_header_scrolling = function () {
+    scroll_header_table();
+    $(window).resize(function () {
+        if ($(window).width() >= $(document).width()) {
+            $('#header_table').css('left', '0px').css('right', '0px');
+        } else {
+            scroll_header_table();
+        }
+    });
+    $(window).scroll(function () {
+        scroll_header_table();
+    });
+};
+
+scroll_header_table = function () {
+    if ($(window).width() < $(document).width()) {
+        $('#header_table').css('left', (-1 * $(this).scrollLeft()) + 'px')
+            .css('right', ($(this).scrollLeft() - $(document).width() + $(window).width()) + 'px');
+    }
+};

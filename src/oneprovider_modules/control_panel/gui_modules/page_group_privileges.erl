@@ -92,7 +92,7 @@ title() ->
 %% ====================================================================
 body(GroupDetails) ->
     MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
-    [
+    #panel{class= <<"page-container">>, body = [
         #panel{
             id = <<"main_spinner">>,
             style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>,
@@ -137,7 +137,7 @@ body(GroupDetails) ->
                 ])
             ]
         }
-    ].
+    ]}.
 
 
 %% group_details_table/1

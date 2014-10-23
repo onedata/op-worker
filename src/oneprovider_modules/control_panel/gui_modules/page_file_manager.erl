@@ -993,15 +993,16 @@ list_view_body() ->
     NumAttr = erlang:max(1, length(get_displayed_file_attributes())),
     CellWidth = <<"width: 150px;">>,
     HiddenAttrs = ?ALL_ATTRIBUTES -- get_displayed_file_attributes(),
+    gui_jq:wire(<<"initialize_table_header_scrolling();">>),
     HeaderTable = [
-        #table{class = <<"no-margin table">>, style = <<"position: fixed; top: 173px; z-index: 10;",
-        "background: white; border: 2px solid #bbbdc0; border-collapse: collapse;">>, header = [
+        #table{id = <<"header_table">>, class = <<"no-margin table">>, style = <<"position: fixed; top: 173px; z-index: 10;",
+        "background: white; border: 2px solid #bbbdc0; border-collapse: collapse; min-width: 1024px;">>, header = [
             #tr{cells =
             [
                 #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116);">>, body = [
                     #panel{style = <<"position: relative;">>, body = [
                         <<"Name">>,
-                        #panel{style = <<"position: absolute; right: -22px; top: 0; ">>, body =
+                        #panel{style = <<"position: absolute; right: -22px; top: -4px; ">>, body =
                         lists:map(fun(Attr) ->
                             #span{style = <<"font-size: 12px; font-weight: normal; background-color: #EBEDEF; ",
                             "border: 1px solid #34495E; padding: 1px 3px; margin-right: 4px; cursor: pointer;">>,
