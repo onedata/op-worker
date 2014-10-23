@@ -93,7 +93,7 @@ custom() ->
 -spec body(SpaceDetails :: #space_details{}) -> Result when
     Result :: #panel{}.
 %% ====================================================================
-body(SpaceDetails) ->
+body(#space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
     MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
     [
         #panel{
@@ -103,7 +103,7 @@ body(SpaceDetails) ->
                 image = <<"/images/spinner.gif">>
             }
         },
-        opn_gui_utils:top_menu(spaces_tab),
+        opn_gui_utils:top_menu(spaces_tab, opn_gui_utils:breadcrumbs([{<<"Spaces">>, <<"/spaces">>}, {SpaceName, <<"/space?id=", SpaceId/binary>>}])),
         #panel{
             id = <<"ok_message">>,
             style = MessageStyle,

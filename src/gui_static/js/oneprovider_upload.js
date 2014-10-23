@@ -33,7 +33,7 @@ oneprovider_send_pending_files = function (form, input) {
             file.submit();
         }
     }
-}
+};
 
 oneprovider_attach_upload_handle_dragdrop = function (form, input) {
     if (typeof(form.$pending_files) == "undefined")
@@ -123,7 +123,7 @@ oneprovider_attach_upload_handle_dragdrop = function (form, input) {
             }
         })
     })
-}
+};
 
 oneprovider_increment_pending_upload_counter = function (form, incrementer) {
     var counter = $(form).data("pending_uploads");
@@ -151,7 +151,7 @@ oneprovider_increment_pending_upload_counter = function (form, incrementer) {
         report_upload_finish($('#upload_form').find("input[name=\"pid\"]").val());
         oneprovider_alert_unfinished_files(form);
     }
-}
+};
 
 oneprovider_alert_unfinished_files = function (form) {
     var files = $(PENDING_FILES_LIST_ID).find("span.tag[status='error']");
@@ -162,7 +162,7 @@ oneprovider_alert_unfinished_files = function (form) {
         }).join("\r\n");
         alert("There was an error uploading the following file(s):\r\n" + filenames + "\r\n\r\nPlease try again.");
     }
-}
+};
 
 function findTagByFilename(FileName) {
     var tags = $(PENDING_FILES_LIST_ID).find("span[filename=\"" + FileName + "\"][status=in_progress]");
