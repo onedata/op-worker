@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013, ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -42,19 +42,10 @@ normalize_file_type_test() ->
     ?assertEqual(?LNK_TYPE, fslogic_file:normalize_file_type(internal, ?LNK_TYPE_PROT)).
 
 
-get_file_local_location_test() ->
-    LocationField = #file_location{file_id = "123"},
-    File = #file{location = LocationField},
-    Doc = #db_document{record = File},
-    ?assertMatch(#file_location{file_id = "123"}, fslogic_file:get_file_local_location(Doc)),
-    ?assertMatch(#file_location{file_id = "123"}, fslogic_file:get_file_local_location(File)),
-    ?assertMatch(#file_location{file_id = "123"}, fslogic_file:get_file_local_location(LocationField)).
-
-
 get_real_file_size_test() ->
     %% This call shall be logic-less for non-regular files
-    ?assertEqual({0, -1}, fslogic_file:get_real_file_size_and_uid(#file{type = ?DIR_TYPE})),
-    ?assertEqual({0, -1}, fslogic_file:get_real_file_size_and_uid(#file{type = ?LNK_TYPE})).
+    ?assertEqual({0, -1}, fslogic_file:get_real_file_size_and_uid(#db_document{record = #file{type = ?DIR_TYPE}})),
+    ?assertEqual({0, -1}, fslogic_file:get_real_file_size_and_uid(#db_document{record = #file{type = ?LNK_TYPE}})).
 
 
 get_file_owner_test_() ->

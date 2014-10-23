@@ -90,7 +90,7 @@ title() ->
 -spec body(SpaceDetails :: #space_details{}) -> Result when
     Result :: #panel{}.
 %% ====================================================================
-body(SpaceDetails) ->
+body(#space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
     MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
     [
         #panel{
@@ -100,7 +100,8 @@ body(SpaceDetails) ->
                 image = <<"/images/spinner.gif">>
             }
         },
-        opn_gui_utils:top_menu(spaces_tab),
+        opn_gui_utils:top_menu(spaces_tab, opn_gui_utils:breadcrumbs([{<<"Spaces">>, <<"/spaces">>},
+            {SpaceName, <<"/space?id=", SpaceId/binary>>}, {<<"Privileges">>, <<"/privileges/space?id=", SpaceId/binary>>}])),
         #panel{
             id = <<"ok_message">>,
             style = MessageStyle,
@@ -219,10 +220,14 @@ privileges_table(TableName, ColumnNames, PrivilegesNames, PrivilegesRows) ->
 
     Rows = lists:map(fun({{Name, Id, Privileges}, N}) ->
         RowId = <<TableName/binary, "_", (integer_to_binary(N))/binary>>,
+        ShortHash = case size(Id) > 7 of
+                        true -> <<Id:7/binary, "...">>;
+                        _ -> Id
+                    end,
         #tr{
             cells = [
                 #td{
-                    body = <<"<b>", (gui_str:html_encode(Name))/binary, "</b> (", Id:7/binary, "...)">>,
+                    body = <<"<b>", (gui_str:html_encode(Name))/binary, "</b> (", ShortHash/binary, ")">>,
                     style = ColumnStyle
                 } | lists:map(fun({Privilege, M}) ->
                     CheckboxId = <<RowId/binary, "_", (integer_to_binary(M))/binary>>,
@@ -357,7 +362,6 @@ comet_loop(#?STATE{space_id = SpaceId, new_users_privileges = NewUsersPrivileges
 event(init) ->
     try
         SpaceId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
-        GRUID = utils:ensure_binary(opn_gui_utils:get_global_user_id()),
         AccessToken = opn_gui_utils:get_access_token(),
 
         {ok, UsersIds} = gr_spaces:get_users({user, AccessToken}, SpaceId),
