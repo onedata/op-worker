@@ -1,3 +1,17 @@
+oneprovider 2.0
+==============
+
+oneprovider 2.0 is a part of *onedata 2.0*. *onedata 2.0* provides support for spaces (organization of data), providers (management tool for administrators), logging with many popular services accounts (Google, Facebook etc.) and authorization with tokens.
+
+Issue Summary
+-------------
+
+* Spaces support added.
+* CDMI support added.
+* ACL support added.
+* WebGUI extended.
+* Proxy performance improved.
+
 oneprovider 1.6
 ===============
 
