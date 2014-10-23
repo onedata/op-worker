@@ -6,99 +6,103 @@
 # This software is released under the MIT license
 # cited in 'LICENSE.txt'.
 #####################################################################
-# This script is used by Bamboo agent to set up Global Registry nodes
+# This script is used by Bamboo agent to set up globalregistry nodes
 # during deployment.
 #####################################################################
 
 #####################################################################
-# Check configuration and set defaults
+# platform initialization
 #####################################################################
 
-if [[ -z "$CONFIG_PATH" ]]; then
-    export CONFIG_PATH="/etc/onedata_platform.conf"
-fi
-
-if [[ -z "$SETUP_DIR" ]]; then
-    export SETUP_DIR="/tmp/onedata"
-fi
-
-# Load funcion defs
-source ./functions.sh || exit 1
-
-#####################################################################
-# Load platform configuration
-#####################################################################
+source functions.sh || exit 1
 
 info "Fetching platform configuration from $MASTER:$CONFIG_PATH ..."
-scp ${MASTER}:${CONFIG_PATH} ./conf.sh || error "Cannot fetch platform config file."
-source ./conf.sh || error "Cannot find platform config file. Please try again (redeploy)."
+scp ${MASTER}:${CONFIG_PATH} onedata_platform.cfg || error "Cannot fetch platform configuration file."
+eval `escript config_setup.escript onedata_platform.cfg --source_all` || error "Cannot parse platform configuration file."
 
 #####################################################################
-# Clean platform
+# platform clean-up
 #####################################################################
 
-ALL_NODES="$CLUSTER_NODES ; $CLUSTER_DB_NODES ; $GLOBAL_REGISTRY_NODES ; $GLOBAL_REGISTRY_DB_NODES ; $CLIENT_NODES"
-ALL_NODES=`echo ${ALL_NODES} | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
-for node in ${ALL_NODES}; do
+if [[ "$PLATFORM_CLEANUP" == "yes" ]]; then
 
-    [[
-        "$node" != ""
-    ]] || continue
+    ALL_NODES="$ONEPROVIDER_NODES ; $ONEPROVIDER_DB_NODES ; $GLOBALREGISTRY_NODES ; $GLOBALREGISTRY_DB_NODES ; $ONECLIENT_NODES"
+    ALL_NODES=`echo ${ALL_NODES} | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
+    for node in ${ALL_NODES}; do
 
-    ssh ${node} "mkdir -p $SETUP_DIR"
+        [[
+            "$node" != ""
+        ]] || continue
 
-    remove_cluster            "$node"
-    remove_global_registry    "$node"
-    remove_global_registry_db "$node"
+        remove_oneprovider "$node"
+        remove_globalregistry "$node"
 
-    ssh ${node} "rm -rf $SETUP_DIR"
-    ssh ${node} "killall -KILL beam 2> /dev/null"
-    ssh ${node} "killall -KILL beam.smp 2> /dev/null"
-done
+        ssh ${node} "rm -rf $SETUP_DIR"
+        ssh ${node} "killall -KILL beam 2> /dev/null"
+        ssh ${node} "killall -KILL beam.smp 2> /dev/null"
+    done
+else
 
-#####################################################################
-# Validate platform configuration
-#####################################################################
+    ALL_NODES="$GLOBALREGISTRY_NODES ; $GLOBALREGISTRY_DB_NODES"
+    ALL_NODES=`echo ${ALL_NODES} | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
+    for node in ${ALL_NODES}; do
 
-if [[ `len "$GLOBAL_REGISTRY_NODES"` == 0 ]]; then
-    error "Global Registry nodes are not configured!"
+        [[
+            "$node" != ""
+        ]] || continue
+
+        remove_globalregistry "$node"
+
+        ssh ${node} "rm -rf $SETUP_DIR"
+        ssh ${node} "killall -KILL beam 2> /dev/null"
+        ssh ${node} "killall -KILL beam.smp 2> /dev/null"
+    done
 fi
 
-if [[ `len "$GLOBAL_REGISTRY_DB_NODES"` == 0 ]]; then
-    error "Global Registry DB nodes are not configured!"
+#####################################################################
+# configuration validation
+#####################################################################
+
+if [[ `len "$GLOBALREGISTRY_NODES"` == 0 ]]; then
+    error "globalregistry nodes are not configured!"
+fi
+
+if [[ `len "$GLOBALREGISTRY_DB_NODES"` == 0 ]]; then
+    error "globalregistry DB nodes are not configured!"
 fi
 
 #####################################################################
-# Install Global Registry package
+# globalregistry package installation
 #####################################################################
 
-ALL_NODES="$GLOBAL_REGISTRY_NODES ; $GLOBAL_REGISTRY_DB_NODES"
+ALL_NODES="$GLOBALREGISTRY_NODES ; $GLOBALREGISTRY_DB_NODES"
 ALL_NODES=`echo ${ALL_NODES} | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
 for node in ${ALL_NODES}; do
     [[
         "$node" != ""
-    ]] || error "Invalid Global Registry node!"
+    ]] || error "Invalid globalregistry node!"
 
-    install_global_registry_package ${node} globalregistry.rpm
+    ssh ${node} "mkdir -p $SETUP_DIR" || error "Cannot create tmp setup dir '$SETUP_DIR' on ${node}"
+    install_package ${node} globalregistry.rpm
 done
 
 #####################################################################
-# Start Global Registry DB nodes
+# globalregistry nodes start
 #####################################################################
 
-n_count=`len "$GLOBAL_REGISTRY_DB_NODES"`
-for i in `seq 1 ${n_count}`; do
-    node=`nth "$GLOBAL_REGISTRY_DB_NODES" ${i}`
-
-    start_global_registry_db "$node" ${i}
-    deploy_stamp "$node"
-done
+node=`nth "$GLOBALREGISTRY_NODES" 1`
+start_globalregistry "$node"
 
 #####################################################################
-# Start Global Registry nodes
+# globalregistry database initialization
 #####################################################################
 
-node=`nth "$GLOBAL_REGISTRY_NODES" 1`
-start_global_registry "$node"
+info "Initializing globalregistry database..."
+
+node=`nth "$GLOBALREGISTRY_NODES" 1`
+scp onedata_platform.cfg ${node}:${SETUP_DIR} || error "Cannot copy platform configuration file to ${node}."
+scp globalregistry_setup.escript ${node}:${SETUP_DIR} || error "Cannot copy globalregistry setup escript to ${node}."
+escript_bin=`ssh ${node} "find /opt/globalregistry -name escript | head -1"` || error "Cannot find escript binary on ${node}"
+ssh ${node} "${escript_bin} ${SETUP_DIR}/globalregistry_setup.escript --initialize ${SETUP_DIR}/onedata_platform.cfg ${SETUP_DIR}" || error "Cannot initialize globalregistry database on ${node}"
 
 exit 0

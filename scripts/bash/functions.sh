@@ -7,11 +7,11 @@
 # cited in 'LICENSE.txt'.
 #####################################################################
 # This script contains utility function used by Bamboo agents to
-# build and deploy VeilFS project's components.
+# build and deploy onedata project's components.
 #####################################################################
 
 #####################################################################
-# Check configuration and set defaults
+# platform initialization
 #####################################################################
 
 if [[ -z "$CONFIG_PATH" ]]; then
@@ -29,7 +29,7 @@ fi
 ONEPANEL_MULTICAST_ADDRESS="239.255.`echo ${MASTER} | awk -F '.' '{print $3}'`.`echo ${MASTER} | awk -F '.' '{print $4}'`"
 
 #####################################################################
-# Utility Functions
+# utility functions
 #####################################################################
 
 # $1 - list of items seperated with ';'
@@ -88,13 +88,6 @@ function info {
     echo "---> [Node: $node] $1"
 }
 
-# $1 - platform master's hostname
-function get_platform_config {
-    info "Fetching platform configuration from $1:$CONFIG_PATH ..."
-    scp $1:${CONFIG_PATH} ./conf.sh || error "Cannot fetch platform config file."
-    source ./conf.sh || error "Cannot find platform config file."
-}
-
 # $1 - node
 # $2 - relative path
 function absolute_path_on_node {
@@ -133,44 +126,52 @@ function strip_login {
     echo $1 | sed 's/^[^@]*@//'
 }
 
-#####################################################################
-# VeilCluster Functions
-#####################################################################
-
 # $1 - target host
 # $2 - rpm name
-function install_veilcluster_package {
+function install_package {
     info "Moving $2 package to $1..."
-    ssh $1 "mkdir -p $SETUP_DIR" || error "Cannot create tmp setup dir '$SETUP_DIR' on $1"
     scp *.rpm $1:${SETUP_DIR}/$2 || error "Moving $2 file failed on $1"
 
     info "Installing $2 package on $1..."
     ssh $1 "export ONEPANEL_MULTICAST_ADDRESS=$ONEPANEL_MULTICAST_ADDRESS ; rpm -Uvh $SETUP_DIR/$2 --nodeps --force ; sleep 5" || error "Cannot install $2 package on $1"
 }
 
+#####################################################################
+# oneprovider functions
+#####################################################################
+
 # $1 - target host
-function start_cluster {
-    info "Starting VeilCluster nodes..."
+function start_oneprovider {
+    info "Starting oneprovider nodes..."
+    
+    if [[ "$ONEPROVIDER_DEVELOPER_MODE" == "yes" ]]; then
+        oneprovider_nodes=`echo "$ONEPROVIDER_NODES" | tr ";" "\n"`
+        for oneprovider_node in ${oneprovider_nodes}; do
+            START_ERL=`ssh ${oneprovider_node} "cat /opt/oneprovider/files/oneprovider_node/releases/start_erl.data" 2>/dev/null`
+            APP_VSN=${START_ERL#* }
+            ssh ${oneprovider_node} "sed -i -e \"s/-oneprovider_node developer_mode.*/-oneprovider_node developer_mode true/g\" /opt/oneprovider/files/oneprovider_node/releases/$APP_VSN/vm.args" || error "Cannot enable developer mode on $oneprovider_node"
+        done
+    fi
 
     db_hosts=""
-    db_nodes=`echo "$CLUSTER_DB_NODES" | tr ";" "\n"`
+    db_nodes=`echo "$ONEPROVIDER_DB_NODES" | tr ";" "\n"`
     for db_node in ${db_nodes}; do
         db_hosts="\\\"`node_name "$db_node"`\\\",$db_hosts"
-        ssh ${db_node} "sed -i -e \"s/^bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/veil/files/database_node/etc/default.ini" || error "Cannot set VeilCluster DB bind address on $db_node."
+        ssh ${db_node} "sed -i -e \"s/^bind_address = [0-9\.]*/bind_address = 0.0.0.0/g\" /opt/oneprovider/files/database_node/etc/default.ini" || error "Cannot set oneprovider DB bind address on $db_node."
     done
     db_hosts=`echo "$db_hosts" | sed -e 's/.$//'`
 
     i=1
     ccm_hosts=""
     worker_hosts=""
-    cluster_types=`echo "$CLUSTER_TYPES" | tr ";" "\n"`
-    for cluster_type in ${cluster_types}; do
-        cluster_node=`nth "$CLUSTER_NODES" ${i}`
-        if [[ ${cluster_type} == "ccm_plus_worker" ]]; then
-            ccm_hosts="\\\"`node_name "$cluster_node"`\\\",$ccm_hosts"
-            worker_hosts="\\\"`node_name "$cluster_node"`\\\",$worker_hosts"
+    oneprovider_types=`echo "$ONEPROVIDER_TYPES" | tr ";" "\n"`
+    for oneprovider_type in ${oneprovider_types}; do
+        oneprovider_node=`nth "$ONEPROVIDER_NODES" ${i}`
+        if [[ ${oneprovider_type} == "ccm_plus_worker" ]]; then
+            ccm_hosts="\\\"`node_name "$oneprovider_node"`\\\",$ccm_hosts"
+            worker_hosts="\\\"`node_name "$oneprovider_node"`\\\",$worker_hosts"
         else
-            worker_hosts="\\\"`node_name "$cluster_node"`\\\",$worker_hosts"
+            worker_hosts="\\\"`node_name "$oneprovider_node"`\\\",$worker_hosts"
         fi
         i=$(( i+1 ))
     done
@@ -180,36 +181,29 @@ function start_cluster {
     main_ccm_host=`echo "$ccm_hosts" | awk -F ',' '{print $1}' | xargs`
 
     storage_paths=""
-    cluster_storage_paths=`echo "$CLUSTER_STORAGE_PATHS" | tr ";" "\n"`
-    for storage_path in ${cluster_storage_paths}; do
+    oneprovider_storage_paths=`echo "$ONEPROVIDER_STORAGE_PATHS" | tr ";" "\n"`
+    for storage_path in ${oneprovider_storage_paths}; do
         storage_paths="\\\"$storage_path\\\",$storage_paths"
-        # Add storage paths on all cluster nodes
-        cluster_nodes=`echo "$CLUSTER_NODES" | tr ";" "\n"`
-        for cluster_node in ${cluster_nodes}; do
-            ssh ${cluster_node} "mkdir -p $storage_path"
+        # Add storage paths on all oneprovider nodes
+        oneprovider_nodes=`echo "$ONEPROVIDER_NODES" | tr ";" "\n"`
+        for oneprovider_node in ${oneprovider_nodes}; do
+            ssh ${oneprovider_node} "mkdir -p $storage_path"
         done
     done
     storage_paths=`echo "$storage_paths" | sed -e 's/.$//'`
 
-    if [[ "$CLUSTER_REGISTER_IN_GLOBAL_REGISTRY" == "yes" ]]; then
-        register="yes"
-    else
-        register="no"
-    fi
+    ssh $1 "echo \"{\\\"Main CCM host\\\",  \\\"$main_ccm_host\\\"}.\" >  $SETUP_DIR/install.cfg"
+    ssh $1 "echo \"{\\\"CCM hosts\\\",         [$ccm_hosts]}.\"        >> $SETUP_DIR/install.cfg"
+    ssh $1 "echo \"{\\\"Worker hosts\\\",      [$worker_hosts]}.\"     >> $SETUP_DIR/install.cfg"
+    ssh $1 "echo \"{\\\"Database hosts\\\",    [$db_hosts]}.\"         >> $SETUP_DIR/install.cfg"
+    ssh $1 "echo \"{\\\"Storage paths\\\",     [$storage_paths]}.\"    >> $SETUP_DIR/install.cfg"
 
-    ssh $1 "echo \"{\\\"Main CCM host\\\",       \\\"$main_ccm_host\\\"}.
-    {\\\"CCM hosts\\\",                   [$ccm_hosts]}.
-    {\\\"Worker hosts\\\",                [$worker_hosts]}.
-    {\\\"Database hosts\\\",              [$db_hosts]}.
-    {\\\"Storage paths\\\",               [$storage_paths]}.
-    {\\\"Register in Global Registry\\\", $register}.\" > $SETUP_DIR/install.cfg"
-
-    ssh -tt -q $1 "onepanel_admin --install $SETUP_DIR/install.cfg 2>&1" 2>/dev/null || error "Cannot setup and start VeilCluster."
+    ssh -tt -q $1 "onepanel_admin --install $SETUP_DIR/install.cfg 2>&1" 2>/dev/null || error "Cannot setup and start oneprovider nodes."
 }
 
 # $1 - target host
-function remove_cluster {
-    info "Removing VeilCluster nodes..."
+function remove_oneprovider {
+    info "Removing oneprovider nodes..."
 
     local onepanel_admin
     onepanel_admin=$(ssh $1 "which onepanel_admin 2> /dev/null")
@@ -217,25 +211,25 @@ function remove_cluster {
         ssh -tt -q $1 "onepanel_admin --uninstall 2>&1" 2>/dev/null
     fi
 
-    cluster_storage_paths=`echo "$CLUSTER_STORAGE_PATHS" | tr ";" "\n"`
-    for storage_path in ${cluster_storage_paths}; do
+    oneprovider_storage_paths=`echo "$ONEPROVIDER_STORAGE_PATHS" | tr ";" "\n"`
+    for storage_path in ${oneprovider_storage_paths}; do
         ssh $1 "[ -z $storage_path ] || rm -rf $storage_path/users $storage_path/groups $storage_path/vfs_storage.info"
     done
     
-    ssh $1 "rpm -e veil 2> /dev/null"
-    ssh $1 "rm -rf /opt/veil" || error "Cannot remove VeilCluster directory."
+    ssh $1 "rpm -e oneprovider 2> /dev/null"
+    ssh $1 "rm -rf /opt/oneprovider" || error "Cannot remove oneprovider directory."
 }
 
 #####################################################################
-# VeilClient Functions
+# oneclient functions
 #####################################################################
 
 # $1 - target host
 # $2 - target mountpoint
 # $3 - peer certificate path
-# $4 - target cluster's hostname
-function install_client {
-    info "Moving VeilClient files to $1..."
+# $4 - target oneprovider's hostname
+function install_oneclient {
+    info "Moving oneclient files to $1..."
 
     RUID=`ssh $1 "echo \\\$UID"`
     S_DIR="${SETUP_DIR}_${RUID}"
@@ -244,131 +238,107 @@ function install_client {
     ssh $1 "mkdir -p $S_DIR" || error "Cannot create tmp setup dir '$S_DIR' on $1"
     ssh $1 "mkdir -p $2" || error "Cannot create mountpoint dir '$2' on $1"
 
-    scp VeilClient-Linux.rpm $1:${S_DIR}/veilclient.rpm || error "Moving .rpm file failed"
-    scp veilFuse $1:~/veilFuse || error "Moving veilFuse binary file failed"
-    ( scp $3 tmp.pem && scp tmp.pem $1:${S_DIR}/peer.pem ) || error "Moving $3 file failed"
+    scp oneclient*.rpm $1:${S_DIR}/oneclient.rpm || error "Moving .rpm file failed"
+    scp oneclient $1:~/oneclient || error "Moving oneclient binary file failed"
+    scp $3 $1:${S_DIR}/peer.pem 2>/dev/null || error "Moving $3 file failed"
     ssh $1 "chmod 600 $S_DIR/peer.pem"
-    ssh $1 "chmod +x ~/veilFuse"
+    ssh $1 "chmod +x ~/oneclient"
 
-    info "Installing VeilClient for user with UID: $RUID"
+    info "Installing oneclient for user with UID: $RUID"
 
     if [[ "$RUID" == "0" ]]; then
-        ssh $1 "yum install $S_DIR/veilclient.rpm -y" || error "Cannot install VeilClient on $1"
+        ssh $1 "yum install $S_DIR/oneclient.rpm -y" || error "Cannot install oneclient on $1"
     fi
 }
 
-# $1 - target host
-# $2 - target mountpoint
-# $3 - peer certificate path
-# $4 - client node number
-function start_client {
-    info "Starting VeilClient on $1..."
+# $1 - user id
+# $2 - target host
+# $3 - target mountpoint
+# $4 - peer certificate path
+# $5 - auth type
+# $6 - oneclient node number
+function start_oneclient {
+    info "Starting oneclient on $2..."
 
-    RUID=`ssh $1 "echo \\\$UID"`
+    RUID=`ssh $2 "echo \\\$UID"`
     S_DIR="${SETUP_DIR}_${RUID}"
-    group_id=`nth "$CLIENT_GROUP" "$4"`
-    cl_host_count=`len "$CLUSTER_NODES"`
-    cl_host_i=$(($4 % $cl_host_count))
-    cl_host_i=$(($cl_host_i + 1))
-    cl_host=`nth "$CLUSTER_NODES" "$cl_host_i"`
-    cl_host=${cl_host#*@}
-    no_check_certificate="--no-check-certificate"
+    provider_host_count=`len "$ONEPROVIDER_NODES"`
+    provider_host_i=$(($6 % $provider_host_count))
+    provider_host_i=$(($provider_host_i + 1))
+    provider_host=`nth "$ONEPROVIDER_NODES" "$provider_host_i"`
+    globalregistry_host=`nth "$GLOBALREGISTRY_NODES" 1`
+    provider_host=${provider_host#*@}
 
-    mount_cmd="PEER_CERTIFICATE_FILE=\"$S_DIR/peer.pem\" PATH=\$HOME:\$PATH veilFuse $no_check_certificate $2"
-    if [[ "$group_id" != "" ]]; then
-        mount_cmd="FUSE_OPT_GROUP_ID=\"$group_id\" $mount_cmd"
+    provider_hostname=""
+
+    if [[ "$provider_host" != "" ]]; then
+        provider_hostname="PROVIDER_HOSTNAME=\"$provider_host\""
     fi
-    if [[ "$cl_host" == "" ]]; then
-        ssh $1 "$mount_cmd" || error "Cannot mount VeilFS on $1"
+
+    if [[ "$5" == "token" ]]; then
+        ssh ${globalregistry_host} "mkdir -p ${SETUP_DIR}"
+        scp globalregistry_setup.escript ${globalregistry_host}:${SETUP_DIR} || error "Cannot copy globalregistry setup escript to ${globalregistry_host}."
+        escript_bin=`ssh ${globalregistry_host} "find /opt/globalregistry -name escript | head -1"` || error "Cannot find escript binary on ${globalregistry_host}"
+        token=`ssh ${globalregistry_host} "${escript_bin} ${SETUP_DIR}/globalregistry_setup.escript --get_client_auth_code $1" 2>/dev/null` || error "Cannot get client auth code for user $1"
+
+        ssh $2 "echo $token | $provider_hostname PATH=\$HOME:\$PATH oneclient --no-check-certificate --authentication token $3" || error "Cannot mount oneclient on $2 using token"
     else
-        ssh $1 "CLUSTER_HOSTNAME=\"$cl_host\" $mount_cmd" || error "Cannot mount VeilFS on $1 (using cluster_hostname: $cl_host, mount_cmd: 'CLUSTER_HOSTNAME=\"$cl_host\" $mount_cmd')"
+        ssh $2 "$provider_hostname PEER_CERTIFICATE_FILE=\"$S_DIR/peer.pem\" PATH=\$HOME:\$PATH oneclient --no-check-certificate $3" || error "Cannot mount oneclient on $2 using certificate"
     fi
 }
 
 # $1 - target host
 # $2 - target mountpoint
-function remove_client {
-    info "Removing VeilClient..."
+function remove_oneclient {
+    info "Removing oneclient..."
 
     RUID=`ssh $1 "echo \\\$UID"`
-    ssh $1 "killall -9 veilFuse 2> /dev/null"
+    ssh $1 "killall -9 oneclient 2> /dev/null"
     ssh $1 "fusermount -u $2 2> /dev/null"
     ssh $1 "rm -rf $2"
     ssh $1 "rm -rf ${SETUP_DIR}_${RUID}"
 
-    ssh $1 'rm -rf ~/veilFuse'
+    ssh $1 'rm -rf ~/oneclient'
     if [[ "$RUID" == "0" ]]; then
-        ssh $1 'yum remove veilclient -y 2> /dev/null'
+        ssh $1 'yum remove oneclient -y 2> /dev/null'
     fi
 }
 
 #####################################################################
-# Global Registry Functions
+# globalregistry functions
 #####################################################################
 
 # $1 - target host
-# $2 - rpm name
-function install_global_registry_package {
-    info "Moving $2 package to $1..."
-    ssh $1 "mkdir -p $SETUP_DIR" || error "Cannot create tmp setup dir '$SETUP_DIR' on $1"
-    scp *.rpm $1:${SETUP_DIR}/$2 || error "Moving $2 file failed on $1"
+function start_globalregistry {
+    info "Starting globalregistry nodes..."
 
-    info "Installing $2 package on $1..."
-    ssh $1 "rpm -Uvh $SETUP_DIR/$2 --nodeps --force" || error "Cannot install $2 package on $1"
-}
-
-# $1 - target host
-# $2 - db node numer
-function start_global_registry_db {
-    info "Starting Global Registry DB nodes..."
-
-    ssh $1 "mkdir -p /opt/bigcouch" || error "Cannot create directory for Global Registry DB on $1."
-    ssh $1 "cp -R /var/lib/globalregistry/bigcouchdb/database_node/* /opt/bigcouch" || error "Cannot copy Global Registry DB files on $1."
-    ssh $1 "sed -i -e \"s/^-name .*/-name db@\"`node_name $1`\"/\" /opt/bigcouch/etc/vm.args" || error "Cannot set Global Registry DB hostname on $1."
-    ssh $1 "sed -i -e \"s/^-setcookie .*/-setcookie globalregistry/\" /opt/bigcouch/etc/vm.args" || error "Cannot set Global Registry DB cookie on $1."
-    ssh $1 "sed -i -e \"s/^bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/bigcouch/etc/default.ini" || error "Cannot set Global Registry DB bind address on $1."
-    ssh -tt -q $1 "ulimit -n 65535 ; ulimit -u 65535 ; nohup /opt/bigcouch/bin/bigcouch >/dev/null 2>&1 & ; sleep 5" 2> /dev/null || error "Cannot start Global Registry DB on $1."
-
-    if [[ $2 != 1 ]]; then
-        first_db=`nth_node_name "$GLOBAL_REGISTRY_DB_NODES" 1`
-        current_db_host=`nth_node_name "$GLOBAL_REGISTRY_DB_NODES" "$2"`
-        ssh $1 "curl -u admin:password --connect-timeout 5 -s -X GET http://$first_db:5986/nodes/_all_docs" || error "Cannot establish connection to primary Global Registry DB on $1."
-        ssh $1 "curl -u admin:password --connect-timeout 5 -s -X PUT http://$first_db:5986/nodes/db@$current_db_host -d '{}'" || error "Cannot extend Global Registry DB with node db@$current_db_host on $1."
-    fi
-}
-
-# $1 - target host
-function remove_global_registry_db {
-    info "Removing Global Registry DB nodes..."
-
-    ssh $1 "rm -rf /opt/bigcouch" || error "Cannot remove Global Registry DB copy on $1."
-    ssh $1 "rm -rf /var/lib/globalregistry" || error "Cannot remove Global Registry DB on $1."
-}
-
-# $1 - target host
-function start_global_registry {
-    info "Starting Global Registry nodes..."
-
-    dbs=`echo ${GLOBAL_REGISTRY_DB_NODES} | tr ";" "\n"`
-    db_nodes=""
-    for db in ${dbs}; do
-        db_nodes="'db@`node_name ${db}`',$db_nodes"
+    db_hosts=""
+    db_nodes=`echo "$GLOBALREGISTRY_DB_NODES" | tr ";" "\n"`
+    for db_node in ${db_nodes}; do
+        db_hosts="\\\"`node_name "$db_node"`\\\",$db_hosts"
+        ssh ${db_node} "sed -i -e \"s/^bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/globalregistry/files/database_node/etc/default.ini" || error "Cannot set globalregistry DB bind address on $db_node."
     done
-    db_nodes=`echo ${db_nodes} | sed -e 's/.$//'`
+    db_hosts=`echo "$db_hosts" | sed -e 's/.$//'`
 
-    ssh $1 "sed -i -e \"s/db_nodes, .*/db_nodes, [$db_nodes] },/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry DB nodes on $1."
-    ssh $1 "sed -i -e \"s/rest_cert_domain, .*/rest_cert_domain, \\\"$GLOBAL_REGISTRY_REST_CERT_DOMAIN\\\" }/\" /etc/globalregistry/app.config" || error "Cannot set Global Registry REST certificate domain on $1."
-    ssh $1 "sed -i -e \"s/^-name .*/-name globalregistry@\"`node_name $1`\"/\" /etc/globalregistry/vm.args" || error "Cannot set Global Registry hostname on $1."
-    ssh -tt -q $1 "ulimit -n 65535 ; ulimit -u 65535 ; /etc/init.d/globalregistry start 2>&1" 2> /dev/null || error "Cannot start Global Registry on $1."
+    oneprovider_node=`nth "$GLOBALREGISTRY_NODES" 1`
+    oneprovider_host=`node_name "$oneprovider_node"`
+
+    ssh $1 "echo \"{\\\"Global Registry host\\\", \\\"$oneprovider_host\\\"}.\" >  $SETUP_DIR/install.cfg"
+    ssh $1 "echo \"{\\\"Database hosts\\\",          [$db_hosts]}.\"         >> $SETUP_DIR/install.cfg"
+
+    ssh -tt -q $1 "onepanel_admin --install $SETUP_DIR/install.cfg 2>&1" 2>/dev/null || error "Cannot setup and start globalregistry nodes."
 }
 
 # $1 - target host
-function remove_global_registry {
-    info "Removing Global Registry nodes..."
+function remove_globalregistry {
+    info "Removing globalregistry nodes..."
 
-    ssh $1 "rpm -e globalregistry 2> /dev/null" 2> /dev/null
+    local onepanel_admin
+    onepanel_admin=$(ssh $1 "which onepanel_admin 2> /dev/null")
+    if [[ $? == 0 ]]; then
+        ssh -tt -q $1 "onepanel_admin --uninstall 2>&1" 2>/dev/null
+    fi
 
-    ssh $1 "rm -rf /usr/lib64/globalregistry"
-    ssh $1 "rm -rf /etc/globalregistry"
-    ssh $1 "rm -rf /etc/init.d/globalregistry"
+    ssh $1 "rpm -e globalregistry 2> /dev/null"
+    rm -rf /opt/globalregistry || error "Cannot remove globalregistry directory."
 }

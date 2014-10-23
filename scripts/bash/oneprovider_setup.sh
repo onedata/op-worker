@@ -1,179 +1,119 @@
 #!/bin/sh
 
 #####################################################################
-# @author Rafal Slota
+# @author Krzysztof Trzepla
 # @copyright (C): 2014 ACK CYFRONET AGH
 # This software is released under the MIT license
 # cited in 'LICENSE.txt'.
 #####################################################################
-# This script is used by Bamboo agent to set up VeilCluster nodes
+# This script is used by Bamboo agent to set up oneprovider nodes
 # during deployment.
 #####################################################################
 
 #####################################################################
-# Check configuration and set defaults
+# platform initialization
 #####################################################################
 
-if [[ -z "$CONFIG_PATH" ]]; then
-    export CONFIG_PATH="/etc/onedata_platform.conf"
-fi
-
-if [[ -z "$SETUP_DIR" ]]; then
-    export SETUP_DIR="/tmp/onedata"
-fi
-
-# Load funcion defs
-source ./functions.sh || exit 1
-
-#####################################################################
-# Load platform configuration
-#####################################################################
+source functions.sh || exit 1
 
 info "Fetching platform configuration from $MASTER:$CONFIG_PATH ..."
-scp ${MASTER}:${CONFIG_PATH} ./conf.sh || error "Cannot fetch platform config file."
-source ./conf.sh || error "Cannot find platform config file. Please try again (redeploy)."
+scp ${MASTER}:${CONFIG_PATH} onedata_platform.cfg || error "Cannot fetch platform configuration file."
+eval `escript config_setup.escript onedata_platform.cfg --source_all` || error "Cannot parse platform configuration file."
 
-if [[ -z "$CLUSTER_CREATE_USER_IN_DB" ]]; then
-    export CLUSTER_CREATE_USER_IN_DB="yes"
+#####################################################################
+# platform clean-up
+#####################################################################
+
+ALL_NODES="$ONEPROVIDER_NODES ; $ONEPROVIDER_DB_NODES"
+ALL_NODES=`echo ${ALL_NODES} | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
+for node in ${ALL_NODES}; do
+
+    [[
+        "$node" != ""
+    ]] || continue
+
+    remove_oneprovider   "$node"
+
+    ssh ${node} "rm -rf $SETUP_DIR"
+    ssh ${node} "killall -KILL beam 2> /dev/null"
+    ssh ${node} "killall -KILL beam.smp 2> /dev/null"
+done
+
+#####################################################################
+# configuration validation
+#####################################################################
+
+if [[ `len "$ONEPROVIDER_NODES"` == 0 ]]; then
+    error "oneprovider nodes are not configured!"
+fi
+
+if [[ `len "$ONEPROVIDER_DB_NODES"` == 0 ]]; then
+    error "oneprovider DB nodes are not configured!"
 fi
 
 #####################################################################
-# Validate platform configuration
+# oneprovider package installation
 #####################################################################
 
-if [[ `len "$CLUSTER_NODES"` == 0 ]]; then
-    error "VeilCluster nodes are not configured!"
-fi
-
-if [[ `len "$CLUSTER_DB_NODES"` == 0 ]]; then
-    error "VeilCluster DB nodes are not configured!"
-fi
-
-#####################################################################
-# Install VeilCluster package
-#####################################################################
-
-ALL_NODES="$CLUSTER_NODES ; $CLUSTER_DB_NODES"
+ALL_NODES="$ONEPROVIDER_NODES ; $ONEPROVIDER_DB_NODES"
 ALL_NODES=`echo ${ALL_NODES} | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
 for node in ${ALL_NODES}; do
     [[
         "$node" != ""
-    ]] || error "Invalid VeilCluster node!"
+    ]] || error "Invalid oneprovider node!"
 
-    install_veilcluster_package ${node} veilcluster.rpm
+    ssh ${node} "mkdir -p $SETUP_DIR" || error "Cannot create tmp setup dir '$SETUP_DIR' on ${node}"
+    install_package ${node} oneprovider.rpm
 done
 
 #####################################################################
-# Setup registration in Global Registry
+# registration in globalregistry setup
 #####################################################################
 
-if [[ "$CLUSTER_REGISTER_IN_GLOBAL_REGISTRY" == "yes" ]]; then
+if [[ "$ONEPROVIDER_ID" != "" ]]; then
 
-    if [[ `len "$GLOBAL_REGISTRY_NODES"` == 0 ]]; then
-        error "Global Registry nodes are not configured!"
+    if [[ `len "$GLOBALREGISTRY_NODES"` == 0 ]]; then
+        error "globalregistry nodes are not configured!"
     fi
 
-    cluster_node=`nth "$CLUSTER_NODES" 1`
-    global_registry_node=`nth "$GLOBAL_REGISTRY_NODES" 1`
+    globalregistry_node=`nth "$GLOBALREGISTRY_NODES" 1`
+    globalregistry_ip=`strip_login ${globalregistry_node}`
 
-    global_registry_ip=`strip_login ${global_registry_node}`
-    ssh ${cluster_node} "sed -i -e '/onedata.*/d' /etc/hosts" || error "Cannot remove old mappings from /etc/hosts for onedata domain on $cluster_node"
-    ssh ${cluster_node} "echo \"$global_registry_ip     onedata.org
-    149.156.10.253          onedata.com\" >> /etc/hosts"
+    ALL_NODES=`echo ${ONEPROVIDER_NODES} | tr ";" "\n" | sed -e 's/^ *//g' -e 's/ *$//g' | sort | uniq`
+    for node in ${ALL_NODES}; do
+        ssh ${node} "sed -i -e '/onedata.*/d' /etc/hosts" || error "Cannot remove old mappings from /etc/hosts for onedata domain on $node"
+        ssh ${node} "echo \"$globalregistry_ip    onedata.org\" >> /etc/hosts" || error "Cannot set new mappings in /etc/hosts for onedata domain on $node"
+    done
 fi
 
 #####################################################################
-# Start VeilCluster nodes
+# oneprovider nodes start
 #####################################################################
 
-node=`nth "$CLUSTER_NODES" 1`
-start_cluster ${node}
+node=`nth "$ONEPROVIDER_NODES" 1`
+start_oneprovider ${node}
 
-n_count=`len "$CLUSTER_NODES"`
+n_count=`len "$ONEPROVIDER_NODES"`
 for i in `seq 1 ${n_count}`; do
-    node=`nth "$CLUSTER_NODES" ${i}`
+    node=`nth "$ONEPROVIDER_NODES" ${i}`
 
     deploy_stamp ${node}
 done
 
-info "Waiting for VeilCluster nodes initialization..."
-sleep 120
-
 #####################################################################
-# Validate VeilCluster nodes start
+# oneprovider database initialization
 #####################################################################
 
-info "Validating VeilCluster nodes start..."
+info "Initializing oneprovider database..."
 
-n_count=`len "$CLUSTER_NODES"`
-for i in `seq 1 ${n_count}`; do
-    node=`nth "$CLUSTER_NODES" ${i}`
-    pcount=`ssh ${node} "ps aux | grep beam | wc -l"`
+node=`nth "$GLOBALREGISTRY_NODES" 1`
+ssh ${node} "mkdir -p ${SETUP_DIR}"
+scp globalregistry_setup.escript ${node}:${SETUP_DIR} || error "Cannot copy globalregistry setup escript to ${node}."
 
-    [[
-        ${pcount} -ge 2
-    ]] || error "Could not find VeilCluster processes on $node!"
-done
-
-#####################################################################
-# Nagios VeilCluster nodes health check
-#####################################################################
-
-info "Nagios VeilCluster nodes health check..."
-
-cluster=`nth "$CLUSTER_NODES" 1`
-cluster=${cluster#*@}
-
-curl -k -X GET https://${cluster}/nagios > hc.xml || error "Cannot get Nagios status from node '$cluster'"
-stat=`cat hc.xml | sed -e 's/>/>\n/g' | grep -v "status=\"ok\"" | grep status`
-[[ "$stat" == "" ]] || error "Cluster HealthCheck failed: \n$stat"
-
-#####################################################################
-# Register user in DB
-#####################################################################
-
-cnode=`nth "$CLUSTER_NODES" 1`
-scp reg_user.erl ${cnode}:/tmp
-escript_bin=`ssh ${cnode} "find /opt/veil/files/veil_cluster_node/ -name escript | head -1"`
-reg_run="$escript_bin /tmp/reg_user.erl"
-
-n_count=`len "$CLIENT_NODES"`
-for i in `seq 1 ${n_count}`; do
-
-    node=`nth "$CLIENT_NODES" ${i}`
-    node_name=`node_name ${cnode}`
-    cert=`nth "$CLIENT_CERTS" ${i}`
-
-    [[
-        "$node" != ""
-    ]] || error "Invalid VeilClient node!"
-
-    [[
-        "$cert" != ""
-    ]] || error "Invalid VeilClient certificate!"
-
-    user_name=${node%%@*}
-    if [[ "$user_name" == "" ]]; then
-        user_name="root"
-    fi
-
-    ## Add user to all cluster nodes
-    n_count=`len "$CLUSTER_NODES"`
-    for ci in `seq 1 ${n_count}`; do
-        lcnode=`nth "$CLUSTER_NODES" ${ci}`
-	ssh ${lcnode} "useradd $user_name 2> /dev/null || exit 0"
-    done
-
-    if [[ "$CLUSTER_CREATE_USER_IN_DB" == "yes" ]]; then
-        cmm="$reg_run $node_name $user_name '$user_name@test.com' /tmp/tmp_cert.pem"
-
-        info "Trying to register $user_name using VeilCluster node $cnode (command: $cmm)"
-
-        scp ${cert} tmp_cert.pem
-        scp tmp_cert.pem ${cnode}:/tmp/
-
-        ssh ${cnode} "$cmm"
-    fi
-done
+node=`nth "$ONEPROVIDER_NODES" 1`
+scp onedata_platform.cfg ${node}:${SETUP_DIR} || error "Cannot copy platform configuration file to ${node}."
+scp oneprovider_setup.escript ${node}:${SETUP_DIR} || error "Cannot copy oneprovider setup escript to ${node}."
+escript_bin=`ssh ${node} "find /opt/oneprovider/files/oneprovider_node/ -name escript | head -1"` || error "Cannot find escript binary on ${node}"
+ssh ${node} "${escript_bin} ${SETUP_DIR}/oneprovider_setup.escript --initialize ${SETUP_DIR}/onedata_platform.cfg ${SETUP_DIR}" || error "Cannot initialize oneprovider database on ${node}"
 
 exit 0

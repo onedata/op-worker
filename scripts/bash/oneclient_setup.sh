@@ -1,87 +1,76 @@
 #!/bin/sh
 
 #####################################################################
-# @author Rafal Slota
+# @author Krzysztof Trzepla
 # @copyright (C): 2014 ACK CYFRONET AGH
 # This software is released under the MIT license
 # cited in 'LICENSE.txt'.
 #####################################################################
-# This script is used by Bamboo agent to set up VeilClient nodes
+# This script is used by Bamboo agent to set up oneclient nodes
 # during deployment.
 #####################################################################
 
 #####################################################################
-# Check configuration and set defaults
+# platform initialization
 #####################################################################
 
-if [[ -z "$CONFIG_PATH" ]]; then
-    export CONFIG_PATH="/etc/onedata_platform.conf"
-fi
-
-if [[ -z "$SETUP_DIR" ]]; then
-    export SETUP_DIR="/tmp/onedata"
-fi
-
-# Load funcion defs
-source ./functions.sh || exit 1
-
-#####################################################################
-# Load platform configuration
-#####################################################################
+source functions.sh || exit 1
 
 info "Fetching platform configuration from $MASTER:$CONFIG_PATH ..."
-scp ${MASTER}:${CONFIG_PATH} ./conf.sh || error "Cannot fetch platform config file."
-source ./conf.sh || error "Cannot find platform config file. Please try again (redeploy)."
+scp ${MASTER}:${CONFIG_PATH} onedata_platform.cfg || error "Cannot fetch platform configuration file."
+eval `escript config_setup.escript onedata_platform.cfg --source_all` || error "Cannot parse platform configuration file."
 
 #####################################################################
-# Validate platform configuration
+# configuration validation
 #####################################################################
 
-if [[ `len "$CLIENT_NODES"` == 0 ]]; then
-    error "VeilClient nodes are not configured!"
+if [[ `len "$ONECLIENT_NODES"` == 0 ]]; then
+    error "oneclient nodes are not configured!"
 fi
 
-if [[ `len "$CLIENT_MOUNTS"` == 0 ]]; then
-    error "VeilClient mount points are not configured!"
+if [[ `len "$ONECLIENT_MOUNTS"` == 0 ]]; then
+    error "oneclient mount points are not configured!"
 fi
 
-if [[ `len "$CLIENT_CERTS"` == 0 ]]; then
-    error "VeilClient certificates are not configured!"
+if [[ `len "$ONECLIENT_CERTS"` == 0 ]]; then
+    error "oneclient certificates are not configured!"
 fi
 
 #####################################################################
-# Setup VeilClient nodes
+# oneclient nodes setup
 #####################################################################
 
-n_count=`len "$CLIENT_NODES"`
+n_count=`len "$ONECLIENT_NODES"`
 for i in `seq 1 ${n_count}`; do
-    node=`nth "$CLIENT_NODES" ${i}`
-    mount=`nth "$CLIENT_MOUNTS" ${i}`
-    cert=`nth "$CLIENT_CERTS" ${i}`
+    node=`nth "$ONECLIENT_NODES" ${i}`
+    mount=`nth "$ONECLIENT_MOUNTS" ${i}`
+    cert=`nth "$ONECLIENT_CERTS" ${i}`
 
     [[
         "$node" != "" &&
         "$mount" != "" &&
         "$cert" != ""
-    ]] || error "Invalid VeilClient node!"
+    ]] || error "Invalid oneclient node!"
     
-    echo "Processing VeilClient on node '$node' with mountpoint '$mount' and certificate '$cert'..."
+    echo "Processing oneclient on node '$node' with mountpoint '$mount' and certificate '$cert'..."
     
-    remove_client "$node" "$mount"
-    install_client "$node" "$mount" "$cert"
+    remove_oneclient "$node" "$mount"
+    install_oneclient "$node" "$mount" "$cert"
 done
 
 #####################################################################
-# Start VeilClient nodes
+# oneclient nodes start
 #####################################################################
 
-n_count=`len "$CLIENT_NODES"`
+n_count=`len "$ONECLIENT_NODES"`
 for i in `seq 1 ${n_count}`; do
-    node=`nth "$CLIENT_NODES" ${i}`
-    mount=`nth "$CLIENT_MOUNTS" ${i}`
-    cert=`nth "$CLIENT_CERTS" ${i}`
+    id=`nth "$ONECLIENT_USERS" ${i}`
+    node=`nth "$ONECLIENT_NODES" ${i}`
+    mount=`nth "$ONECLIENT_MOUNTS" ${i}`
+    cert=`nth "$ONECLIENT_CERTS" ${i}`
+    auth=`nth "$ONECLIENT_AUTH" ${i}`
   
-    start_client "$node" "$mount" "$cert" "$i"
+    start_oneclient "$id" "$node" "$mount" "$cert" "$auth" "$i"
     deploy_stamp "$node"
 done
 
