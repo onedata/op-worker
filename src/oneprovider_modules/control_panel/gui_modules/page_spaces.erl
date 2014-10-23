@@ -350,7 +350,7 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
                     NewState = try
                                    {ok, SpaceId} = gr_users:create_space({user, AccessToken}, [{<<"name">>, Name}]),
                                    {ok, SpaceDetails} = gr_spaces:get_details({user, AccessToken}, SpaceId),
-                                   {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceId, GRUID),
+                                   {ok, Privileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceId, GRUID),
                                    opn_gui_utils:message(<<"ok_message">>, <<"Created Space ID: <b>", SpaceId/binary, "</b>">>),
                                    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                                    RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
@@ -369,7 +369,7 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
                     NewState = try
                                    {ok, SpaceId} = gr_users:join_space({user, AccessToken}, [{<<"token">>, Token}]),
                                    {ok, SpaceDetails} = gr_spaces:get_details({user, AccessToken}, SpaceId),
-                                   {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceId, GRUID),
+                                   {ok, Privileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceId, GRUID),
                                    opn_gui_utils:message(<<"ok_message">>, <<"Joined Space ID: <b>", SpaceId/binary, "</b>">>),
                                    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                                    RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
@@ -467,7 +467,7 @@ event(init) ->
         {ok, DefaultSpaceId} = gr_users:get_default_space({user, AccessToken}),
         {SpacesDetails, DefaultRowId, Counter} = lists:foldl(fun(SpaceId, {Rows, DefaultId, It}) ->
             {ok, SpaceDetails} = gr_spaces:get_details({user, AccessToken}, SpaceId),
-            {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceId, GRUID),
+            {ok, Privileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceId, GRUID),
             RowId = <<"space_", (integer_to_binary(It + 1))/binary>>,
             NewDefaultId = case SpaceId of
                                DefaultSpaceId -> RowId;

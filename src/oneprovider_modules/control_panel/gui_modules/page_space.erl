@@ -784,7 +784,7 @@ event(init) ->
         SpaceId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
         GRUID = utils:ensure_binary(opn_gui_utils:get_global_user_id()),
         AccessToken = opn_gui_utils:get_access_token(),
-        {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceId, GRUID),
+        {ok, Privileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceId, GRUID),
 
         GetDetailsFun = fun(Ids, Function, RowPrefix) ->
             lists:foldl(fun(Id, {Rows, It}) ->
