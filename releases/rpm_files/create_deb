@@ -96,4 +96,4 @@ cd $DEB_BUILD_DIRECTORY
 dpkg-deb --build $PKG_ID
 
 # Copy result
-cp $DEB_BUILD_DIRECTORY/oneprovider_*.deb RUNNER_SCRIPT_DIR/../
+cp $DEB_BUILD_DIRECTORY/oneprovider_*.deb $RUNNER_SCRIPT_DIR/../
