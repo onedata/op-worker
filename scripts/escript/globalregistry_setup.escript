@@ -276,13 +276,13 @@ create_space([SpaceConfig]) ->
     UsersPrivileges = lists:map(fun(UserPrivileges) ->
         User = get_value("ID", UserPrivileges),
         Role = get_value("ROLE", UserPrivileges),
-        Privileges = get_privileges(<<"group">>, Role),
+        Privileges = get_privileges(<<"space">>, Role),
         {{user, User}, Privileges}
     end, proplists:get_value("USERS_PRIVILEGES", SpaceConfig, [])),
     GroupsPrivileges = lists:map(fun(GroupPrivileges) ->
         Group = get_value("ID", GroupPrivileges),
         Role = get_value("ROLE", GroupPrivileges),
-        Privileges = get_privileges(<<"group">>, Role),
+        Privileges = get_privileges(<<"space">>, Role),
         {{group, Group}, Privileges}
     end, proplists:get_value("GROUPS_PRIVILEGES", SpaceConfig, [])),
     Providers = get_value("PROVIDERS", SpaceConfig, []),
