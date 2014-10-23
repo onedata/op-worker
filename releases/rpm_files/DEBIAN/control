@@ -1,0 +1,10 @@
+Package: oneprovider
+Source: oneprovider
+Homepage: https://onedata.org/
+Version: {{version}}
+Architecture: amd64
+Section: base
+Priority: optional
+Maintainer: onedata.org
+Description: oneprovider
+ Server providing storage resources, part of onedata project

@@ -121,7 +121,7 @@ stop_db_node() ->
 start_db({db_node, _Name, Path}) ->
     BigcouchStartScript = filename:join([Path, ?db_start_command_suffix]),
     NohupOut = filename:join([Path, ?nohup_output]),
-    open_port({spawn, "sh -c \"" ++ get(set_ulimits_cmd) ++ " ; " ++ "nohup " ++ BigcouchStartScript ++ " > " ++ NohupOut ++ " 2>&1 &" ++ "\" 2>&1 &"}, [out]).
+    open_port({spawn, "bash -c \"" ++ get(set_ulimits_cmd) ++ " ; " ++ "nohup " ++ BigcouchStartScript ++ " > " ++ NohupOut ++ " 2>&1 &" ++ "\" 2>&1 &"}, [out]).
 
 stop_db({db_node, _Name, Path}) ->
     os:cmd("kill -TERM `ps aux | grep beam | grep " ++ Path ++ " | cut -d'\t' -f2 | awk '{print $2}'`").
