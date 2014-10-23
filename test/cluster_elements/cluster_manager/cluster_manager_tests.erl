@@ -341,11 +341,11 @@ update_dispatcher_test() ->
   N1 = node(),
   Loads = [{'node@127.0.0.1', 1}, {N1, 1}],
   Nodes = ['node@127.0.0.1', N1],
-  WorkersList = [{N1, fslogic}, {N1, dao}, {n2, fslogic}, {n3, fslogic}, {n3, dao}, {n4, gateway}, {N1, dns_worker}],
+  WorkersList = [{N1, fslogic}, {N1, dao_worker}, {n2, fslogic}, {n3, fslogic}, {n3, dao_worker}, {n4, gateway}, {N1, dns_worker}],
   cluster_manager:update_dispatcher_state(WorkersList, [], Nodes, 1, Loads, 1),
 
   gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, 1, 1}),
-  Requests = [fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, dao, rtransfer, dao, dns_worker, dns_worker, gateway, gateway],
+  Requests = [fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, dao_worker, rtransfer, dao_worker, dns_worker, dns_worker, gateway, gateway],
   ExpectedAns = [n3, n2, N1, N1, n2, n3, n3, n3, non, N1, N1, N1, n4, n4],
 
   FullAns = lists:foldl(fun(R, TmpAns) ->

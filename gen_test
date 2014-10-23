@@ -31,16 +31,16 @@ get_parameter_from_args()
 	local RETURN_OPTION=$3
 
 	# Find the occurence of desired token. If there isn't one, there was no parameter value specified = error. 
-	# Exception: -opt_ccms could have been left empty intentionally.
+	# Exception: -opt_ccms and -storage_config_path could have been left empty intentionally.
 	local INDEX=`awk -v a=" $ARGS " -v b=" $TOKEN " 'BEGIN{print index(a, b)}'`
 	if [[ $INDEX -eq 0 ]]; then
-		if [[ $TOKEN == '-opt_ccms' ]]; then
+		if [ $TOKEN == '-opt_ccms' ] || [ $TOKEN == '-storage_config_path' ]; then
 			RESULT=""
 			return
 		else
 			echo " "
 			echo "Error: missing parameter"
-			echo "'$TOKEN' must occur in script arguments or 'gen_test.args' file."
+			echo "'$TOKEN' must occur in script arguments."
 			echo "Terminating."
 			echo " "
 			error_bad_args
@@ -133,6 +133,10 @@ OPT_CCMS=$RESULT
 get_parameter_from_args "$*" -db_nodes list
 DB_NODES=$RESULT
 
+# Check for storage_config_path name in script args
+get_parameter_from_args "$*" -storage_config_path single
+STORAGE_CONFIG_PATH=$RESULT
+
 # Initially, don't start the environment
 DO_START=0
 
@@ -161,14 +165,14 @@ if [[ $INDEX -eq 0 ]]; then
         echo "Terminating."
         exit 1
     fi
-	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
-	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster	
+	chmod u+x ./releases/oneprovider_node/bin/oneprovider_node
+	chmod u+x ./releases/oneprovider_node/bin/oneprovider
 
 	# Generate releases for all nodes
 	ALL_NODES="$WORKERS $MAIN_CCM $OPT_CCMS"
 	for NODE in $ALL_NODES
 	do
-		./gen_dev -name $NODE -main_ccm $MAIN_CCM -opt_ccms $OPT_CCMS -db_nodes $DB_NODES -no_generate
+		./gen_dev -name $NODE -main_ccm $MAIN_CCM -opt_ccms $OPT_CCMS -db_nodes $DB_NODES -storage_config_path $STORAGE_CONFIG_PATH -no_generate
 	done
 
 	echo " "
@@ -207,7 +211,7 @@ if [[ $DO_START -eq 1 ]]; then
 		fi
 
 		echo "Starting node: $NODE_NAME_WITHOUT_HOSTNAME..."
-		./releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/bin/veil_cluster_node start
+		./releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/bin/oneprovider_node start
         if [ $? -ne 0 ]; then
             echo ""
             echo "Error during start of node $NODE_NAME_WITHOUT_HOSTNAME. Is the test environment ready?"

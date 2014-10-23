@@ -1,19 +1,23 @@
 About
 =====
 
-VeilCluster is a part of VeilFS system that unifies access to files stored at heterogeneous data storage systems that belong to geographically distributed organizations.
+*oneprovider* is a part of *onedata* system that unifies access to files stored at heterogeneous data storage systems 
+that belong to geographically distributed organizations.
 
 
 Goals
 -----
 
-The main goal of VeilCluster is to provision a self-scalable cluster, which manages the VeilFS system in a single data centre, i.e. it stores meta-data about actual users' data from the data centre, decides how to distribute users' files among available storage systems, and executes data management rules, which can be defined by administrators or users.
+The main goal of *oneprovider* is to provision a self-scalable cluster, which manages the *onedata* system in a single
+data centre, i.e. it stores meta-data about actual users' data from the data centre, decides how to distribute users'
+files among available storage systems, and executes data management rules, which can be defined by administrators or
+users.
 
 
 Getting Started
 ---------------
 
-This is a short tutorial how to start VeilCluster on a single machine.
+This is a short tutorial how to start *oneprovider* on a single machine.
 
 #### Prerequisites
 
@@ -25,29 +29,30 @@ In order to compile the project, you need to have the following libraries:
 * libfuse
 * libboost - filesystem, thread, random, system (version >= 1.49)
 
-Use the following command to install the VeilCluster software and the required dependency packages:
+Use the following command to install the *oneprovider* software and the required dependency packages:
 
 * RHEL/CentOS/Fedora Dependencies (.rpm packages):
 
-        yum install veil-<version>.rpm
+        yum install oneprovider-<version>.rpm
 
 
-VeilCluster is installed in /opt/veil. The setup scripts are executed with the following commands: 
+*oneprovider* is installed in /opt/oneprovider. The setup scripts are executed with the following commands: 
         
-        /opt/veil/setup
+        /opt/oneprovider/setup
 
-The script will guide you through the setup procedure of the VeilCluster. To start the work you should start at least one instance of the CCM component and one worker component instance. 
+The script will guide you through the setup procedure of the *oneprovider*. To start the work you should start at least
+one instance of the CCM component and one worker component instance. 
 
-A sample session of starting VeilCluster from scratch is as follows:
+A sample session of starting *oneprovider* from scratch is as follows:
 
-  	 [root@plgsl64 ~]# /opt/veil/setup 
+  	 [root@plgsl64 ~]# /opt/oneprovider/setup 
 
-	*** Veil SETUP ***
+	*** oneprovider SETUP ***
 	~ Erlang nodes configured on this machine will use its hostname: @172.16.67.111
 	(!) Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)
 	==> What do you want to do?
 	 [1] Manage database nodes
-	 [2] Manage veil nodes
+	 [2] Manage oneprovider nodes
 	 [3] Exit
 	> Your choice: 1
 	==> What do you want to do?
@@ -65,12 +70,12 @@ A sample session of starting VeilCluster from scratch is as follows:
 	~ installation complete
 	~ Starting node...
 
-	*** Veil SETUP ***
+	*** oneprovider SETUP ***
 	~ Erlang nodes configured on this machine will use its hostname: @172.16.67.111
 	(!) Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)
 	==> What do you want to do?
 	 [1] Manage database nodes
-	 [2] Manage veil nodes
+	 [2] Manage oneprovider nodes
 	 [3] Exit
 	> Your choice: 2
 	~ Each machine can only host a single worker or a ccm + worker pair.
@@ -91,7 +96,7 @@ A sample session of starting VeilCluster from scratch is as follows:
 	==> Connection to following database nodes has been confirmed:
 	 - db@172.16.67.111
 	==> Storage setup
-	> Select path where veil can store its files (default: /mnt/vfs):
+	> Select path where oneprovider can store its files (default: /mnt/vfs):
 	(!) IMPORTANT
 	(!) Configuring direct storage (much faster than default proxy storage) for fuse client groups
 	(!) If you don't create any storage now, all the data will go throught proxy
@@ -134,10 +139,10 @@ A sample session of starting VeilCluster from scratch is as follows:
 	~ Starting node(s)...
 
 
-In order to check if the VeilCluster is running you can attach to the CCM component and check heartbeat messages:
+In order to check if the *oneprovider* is running you can attach to the CCM component and check heartbeat messages:
 
-        [root@plgsl63 veilcluster]# /opt/veil/nodes/ccm/bin/veil_cluster_node attach
-        Attaching to /tmp//opt/veil/nodes/ccm/erlang.pipe.1 (^D to exit)
+        [root@plgsl63 oneprovider]# /opt/oneprovider/nodes/ccm/bin/oneprovider_node attach
+        Attaching to /tmp//opt/oneprovider/nodes/ccm/erlang.pipe.1 (^D to exit)
 
         (search)`': 
         (ccm@172.16.67.219)1> 11:07:00.454 [info] Heart beat on node: ccm@172.16.67.219: sent; connection: connected
@@ -146,17 +151,17 @@ In order to check if the VeilCluster is running you can attach to the CCM compon
         (ccm@172.16.67.219)1> 11:07:09.989 [info] Cluster state ok
  
 
-After starting the nodes you have a complete VeilCluster running :) You can now proceed to VeilClient installation.
+After starting the nodes you have a complete *oneprovider* running :) You can now proceed to oneclient installation.
 
 
 Note:
 
-* To have a fully working VeilFS installation, we should also start a BigCouch instance on the same machine, with its cookie set to 'veil_cluster_node' and hostname set to 'db'. 
+* To have a fully working *onedata* installation, we should also start a BigCouch instance on the same machine, with its
+cookie set to *oneprovider_node* and hostname set to 'db'. 
 
 
 -------------------------------------------------------------------------------
 
-
 Support
 -------
-For more information visit project Confluence or write to 'wrzeszcz@agh.edu.pl'.
+For more information visit project *Confluence* or write to <wrzeszcz@agh.edu.pl>.

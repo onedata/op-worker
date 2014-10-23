@@ -12,14 +12,17 @@
 
 -module(caches_test_SUITE).
 
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_node_starter.hrl").
 
 -define(ProtocolVersion, 1).
 -define(CacheClearingTime, 4).
+-define(CacheLocation, control_panel).
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
@@ -63,20 +66,19 @@ cache_loop() ->
 
 %% Tests if caches are updated properly after node recovery
 error_permanent_nodes_cache_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   CacheCheckFun = fun() ->
     Node = node(),
@@ -91,7 +93,7 @@ error_permanent_nodes_cache_test(Config) ->
       ?assertEqual(ok, worker_host:create_permanent_cache(test_cache, CacheCheckFun)),
       cache_loop()
     end),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node}),
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node}),
     [Pid | Ans]
   end,
   CachesPids = lists:foldl(CreateCaches, [], WorkerNodes),
@@ -101,7 +103,7 @@ error_permanent_nodes_cache_test(Config) ->
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key2, test_value2}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key3, test_value3}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {get_atom_from_node(Node, test_key), get_atom_from_node(Node, test_value)}])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(AddDataToCaches, WorkerNodes),
 
@@ -118,11 +120,11 @@ error_permanent_nodes_cache_test(Config) ->
 
   [W1 | _] = WorkerNodes,
   ?assert(rpc:call(CCM, erlang, disconnect_node, [W1])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, W1}),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
 
   ?assertEqual(ok, rpc:call(W1, ?MODULE, worker_code, [])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, W1}),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
+  test_utils:wait_for_cluster_init(),
 
   CheckCaches2 = fun(Node) ->
     ?assertEqual(3, rpc:call(Node, ets, info, [test_cache, size])),
@@ -138,27 +140,26 @@ error_permanent_nodes_cache_test(Config) ->
 
 %% This node-wide permanent caches
 permanent_node_cache_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   CreateCaches = fun(Node, Ans) ->
     Pid = spawn_link(Node, fun() ->
       ?assertEqual(ok, worker_host:create_permanent_cache(test_cache)),
       cache_loop()
     end),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node}),
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node}),
     [Pid | Ans]
   end,
   CachesPids = lists:foldl(CreateCaches, [], WorkerNodes),
@@ -168,7 +169,7 @@ permanent_node_cache_test(Config) ->
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key2, test_value2}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key3, test_value3}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {get_atom_from_node(Node, test_key), get_atom_from_node(Node, test_value)}])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(AddDataToCaches, WorkerNodes),
 
@@ -185,47 +186,46 @@ permanent_node_cache_test(Config) ->
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
-    case lists:member({Node, fslogic}, Workers) of
+    case lists:member({Node, ?CacheLocation}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, ?CacheLocation, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
   lists:foreach(CheckCaches, WorkerNodes),
 
   lists:foreach(fun(Pid) -> Pid ! stop_cache end, CachesPids).
 
 %% Tests if caches are cleared properly after node error
 sub_procs_error_cache_clearing_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
-    case lists:member({Node, fslogic}, Workers) of
+    case lists:member({Node, ?CacheLocation}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, ?CacheLocation, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
 
   ProcFun = fun
     (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
@@ -268,24 +268,24 @@ sub_procs_error_cache_clearing_test(Config) ->
   end,
 
   RegisterSubProc = fun(Node) ->
-    RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, simple}, 1000),
+    RegAns = gen_server:call({?CacheLocation, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, simple}, 1000),
     ?assertEqual(ok, RegAns),
-    nodes_manager:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({?CacheLocation, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
-  nodes_manager:wait_for_request_handling(),
+  test_utils:wait_for_request_handling(),
 
   Pid = self(),
 
   %% send many request to multiply sub_procs
   TestFun = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 21, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 31, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 41, Pid}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 11, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 12, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 13, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 21, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 31, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 41, Pid}}, 500)
     end)
   end,
 
@@ -295,20 +295,20 @@ sub_procs_error_cache_clearing_test(Config) ->
 
   TestFun2 = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
     end)
   end,
   for(1, TestRequestsNum, TestFun2),
   ?assertEqual(7*TestRequestsNum, count_answers2(7*TestRequestsNum, cache_updated)),
 
   VerifyFun = fun(MapVal, Key) ->
-    gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
+    gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
     receive
       {cache_value, Value} -> Value
     after 500 ->
@@ -323,13 +323,13 @@ sub_procs_error_cache_clearing_test(Config) ->
   ?assertEqual(TestRequestsNum, VerifyFun(31, k6)),
   ?assertEqual(TestRequestsNum, VerifyFun(41, k1)),
 
-  W1 = gen_server:call({?Dispatcher_Name, CCM}, {get_worker_node, {{get_from_cache, 11, k1}, fslogic}}, 500),
+  W1 = gen_server:call({?Dispatcher_Name, CCM}, {get_worker_node, {{get_from_cache, 11, k1}, ?CacheLocation}}, 500),
   ?assert(rpc:call(CCM, erlang, disconnect_node, [W1])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, W1}),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
 
   ?assertEqual(ok, rpc:call(W1, ?MODULE, worker_code, [])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, W1}),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
+  test_utils:wait_for_cluster_init(),
 
   VerNums = [11,12,13,21,22,23,31,32,33,41,42,43],
   VerifyAllCaches = fun(Key) ->
@@ -347,27 +347,26 @@ sub_procs_error_cache_clearing_test(Config) ->
 
 %% Tests if caches are cleared properly after node error
 error_nodes_cache_clearing_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   CreateCaches = fun(Node, Ans) ->
     Pid = spawn_link(Node, fun() ->
       ?assertEqual(ok, worker_host:create_simple_cache(test_cache)),
       cache_loop()
     end),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node}),
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node}),
     [Pid | Ans]
   end,
   CachesPids = lists:foldl(CreateCaches, [], WorkerNodes),
@@ -377,7 +376,7 @@ error_nodes_cache_clearing_test(Config) ->
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key2, test_value2}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key3, test_value3}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {get_atom_from_node(Node, test_key), get_atom_from_node(Node, test_value)}])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(AddDataToCaches, WorkerNodes),
 
@@ -394,11 +393,11 @@ error_nodes_cache_clearing_test(Config) ->
 
   [W1 | _] = WorkerNodes,
   ?assert(rpc:call(CCM, erlang, disconnect_node, [W1])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, W1}),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
 
   ?assertEqual(ok, rpc:call(W1, ?MODULE, worker_code, [])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, W1}),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
+  test_utils:wait_for_cluster_init(),
 
   CheckCaches2 = fun(Node) ->
     ?assertEqual(0, rpc:call(Node, ets, info, [test_cache, size]))
@@ -409,32 +408,31 @@ error_nodes_cache_clearing_test(Config) ->
 
 %% Tests if caches are cleared properly if automatic clearing is set
 sub_procs_automatic_cache_clearing_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
-    case lists:member({Node, fslogic}, Workers) of
+    case lists:member({Node, ?CacheLocation}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, ?CacheLocation, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
 
   ProcFun = fun
     (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
@@ -478,24 +476,24 @@ sub_procs_automatic_cache_clearing_test(Config) ->
 
   ClearFun = fun(CacheName) -> ets:delete_all_objects(CacheName) end,
   RegisterSubProc = fun(Node) ->
-    RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, {simple, ?CacheClearingTime, ClearFun}}, 1000),
+    RegAns = gen_server:call({?CacheLocation, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, {simple, ?CacheClearingTime, ClearFun}}, 1000),
     ?assertEqual(ok, RegAns),
-    nodes_manager:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({?CacheLocation, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
-  nodes_manager:wait_for_request_handling(),
+  test_utils:wait_for_request_handling(),
 
   Pid = self(),
 
   %% send many request to multiply sub_procs
   TestFun = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 21, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 31, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 41, Pid}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 11, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 12, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 13, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 21, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 31, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 41, Pid}}, 500)
     end)
   end,
 
@@ -505,20 +503,20 @@ sub_procs_automatic_cache_clearing_test(Config) ->
 
   TestFun2 = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
     end)
   end,
   for(1, TestRequestsNum, TestFun2),
   ?assertEqual(7*TestRequestsNum, count_answers2(7*TestRequestsNum, cache_updated)),
 
   VerifyFun = fun(MapVal, Key) ->
-    gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
+    gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
     receive
       {cache_value, Value} -> Value
     after 500 ->
@@ -545,20 +543,19 @@ sub_procs_automatic_cache_clearing_test(Config) ->
 
 %% Tests if caches are cleared properly if automatic clearing is set
 automatic_nodes_cache_clearing_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   ClearFun = fun() -> ets:delete_all_objects(test_cache) end,
   CreateCaches = fun(Node, Ans) ->
@@ -566,7 +563,7 @@ automatic_nodes_cache_clearing_test(Config) ->
       ?assertEqual(ok, worker_host:create_simple_cache(test_cache, ?CacheClearingTime, ClearFun)),
       cache_loop()
     end),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node}),
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node}),
     [Pid | Ans]
   end,
   CachesPids = lists:foldl(CreateCaches, [], WorkerNodes),
@@ -576,7 +573,7 @@ automatic_nodes_cache_clearing_test(Config) ->
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key2, test_value2}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key3, test_value3}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {get_atom_from_node(Node, test_key), get_atom_from_node(Node, test_value)}])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(AddDataToCaches, WorkerNodes),
 
@@ -601,32 +598,31 @@ automatic_nodes_cache_clearing_test(Config) ->
 
 %% This test checks sub procs management (if requests are forwarded to apropriate sub procs)
 sub_proc_cache_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
-    case lists:member({Node, fslogic}, Workers) of
+    case lists:member({Node, ?CacheLocation}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, ?CacheLocation, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
 
   ProcFun = fun
     (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
@@ -669,24 +665,24 @@ sub_proc_cache_test(Config) ->
   end,
 
   RegisterSubProc = fun(Node) ->
-    RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, simple}, 1000),
+    RegAns = gen_server:call({?CacheLocation, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, simple}, 1000),
     ?assertEqual(ok, RegAns),
-    nodes_manager:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({?CacheLocation, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
-  nodes_manager:wait_for_request_handling(),
+  test_utils:wait_for_request_handling(),
 
   Pid = self(),
 
   %% send many request to multiply sub_procs
   TestFun = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 21, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 31, Pid}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 41, Pid}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 11, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 12, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 13, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 21, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 31, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 41, Pid}}, 500)
     end)
   end,
 
@@ -696,20 +692,20 @@ sub_proc_cache_test(Config) ->
 
   TestFun2 = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
     end)
   end,
   for(1, TestRequestsNum, TestFun2),
   ?assertEqual(7*TestRequestsNum, count_answers2(7*TestRequestsNum, cache_updated)),
 
   VerifyFun = fun(MapVal, Key) ->
-    gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
+    gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
     receive
       {cache_value, Value} -> Value
     after 500 ->
@@ -724,7 +720,7 @@ sub_proc_cache_test(Config) ->
   ?assertEqual(TestRequestsNum, VerifyFun(31, k6)),
   ?assertEqual(TestRequestsNum, VerifyFun(41, k1)),
 
-  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{{sub_proc_cache, {fslogic, sub_proc_test_proccess}}, k1}])),
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{{sub_proc_cache, {?CacheLocation, sub_proc_test_proccess}}, k1}])),
   ?assertEqual(0, VerifyFun(11, k1)),
   ?assertEqual(TestRequestsNum, VerifyFun(11, k2)),
   ?assertEqual(TestRequestsNum, VerifyFun(12, k3)),
@@ -733,7 +729,7 @@ sub_proc_cache_test(Config) ->
   ?assertEqual(TestRequestsNum, VerifyFun(31, k6)),
   ?assertEqual(0, VerifyFun(41, k1)),
 
-  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{{sub_proc_cache, {fslogic, sub_proc_test_proccess}}, [k3, k4, k5]}])),
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{{sub_proc_cache, {?CacheLocation, sub_proc_test_proccess}}, [k3, k4, k5]}])),
   ?assertEqual(0, VerifyFun(11, k1)),
   ?assertEqual(TestRequestsNum, VerifyFun(11, k2)),
   ?assertEqual(0, VerifyFun(12, k3)),
@@ -742,7 +738,7 @@ sub_proc_cache_test(Config) ->
   ?assertEqual(TestRequestsNum, VerifyFun(31, k6)),
   ?assertEqual(0, VerifyFun(41, k1)),
 
-  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{sub_proc_cache, {fslogic, sub_proc_test_proccess}}])),
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{sub_proc_cache, {?CacheLocation, sub_proc_test_proccess}}])),
   ?assertEqual(0, VerifyFun(11, k1)),
   ?assertEqual(0, VerifyFun(11, k2)),
   ?assertEqual(0, VerifyFun(12, k3)),
@@ -753,27 +749,26 @@ sub_proc_cache_test(Config) ->
 
 %% This node-wide caches
 node_cache_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   CreateCaches = fun(Node, Ans) ->
     Pid = spawn_link(Node, fun() ->
       ?assertEqual(ok, worker_host:create_simple_cache(test_cache)),
       cache_loop()
     end),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node}),
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node}),
     [Pid | Ans]
   end,
   CachesPids = lists:foldl(CreateCaches, [], WorkerNodes),
@@ -783,7 +778,7 @@ node_cache_test(Config) ->
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key2, test_value2}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key3, test_value3}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {get_atom_from_node(Node, test_key), get_atom_from_node(Node, test_value)}])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(AddDataToCaches, WorkerNodes),
 
@@ -821,32 +816,31 @@ node_cache_test(Config) ->
 
 %% This test checks sub procs management (if requests are forwarded to apropriate sub procs)
 sub_proc_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
-    case lists:member({Node, fslogic}, Workers) of
+    case lists:member({Node, ?CacheLocation}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, ?CacheLocation, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
 
   ProcFun = fun(_ProtocolVersion, {sub_proc_test, _, AnsPid}) ->
     Pid = self(),
@@ -871,22 +865,22 @@ sub_proc_test(Config) ->
   end,
 
   RegisterSubProc = fun(Node) ->
-    RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 1000),
+    RegAns = gen_server:call({?CacheLocation, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 1000),
     ?assertEqual(ok, RegAns),
-    nodes_manager:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({?CacheLocation, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
-  nodes_manager:wait_for_request_handling(),
+  test_utils:wait_for_request_handling(),
 
   Self = self(),
   TestFun = fun() ->
     spawn_link(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Self}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Self}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Self}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 21, Self}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 31, Self}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 41, Self}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 11, Self}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 12, Self}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 13, Self}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 21, Self}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 31, Self}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {?CacheLocation, 1, {sub_proc_test, 41, Self}}, 500)
     end)
   end,
 
@@ -894,7 +888,6 @@ sub_proc_test(Config) ->
   for(1, TestRequestsNum, TestFun),
 
   Ans = count_answers(6 * TestRequestsNum),
-%%   ct:print("Ans: ~p~n", [Ans]),
   ?assertEqual(10, length(Ans)),
   Keys = proplists:get_keys(Ans),
   ?assertEqual(6* TestRequestsNum, lists:foldl(fun(K, Sum) ->
@@ -923,30 +916,26 @@ sub_proc_test(Config) ->
 %% ====================================================================
 
 init_per_testcase(_, Config) ->
-  ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+  test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(4),
+  NodesUp = test_node_starter:start_test_nodes(4),
   [CCM | _] = NodesUp,
-  DBNode = nodes_manager:get_db_node(),
+  DBNode = ?DB_NODE,
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
-    [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}]]),
+    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp,  [
+    [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config).
+  lists:append([{nodes, NodesUp}, {dbnode, DBNode}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
-  nodes_manager:stop_deps_for_tester_node(),
-
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns).
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS,Nodes),
+  test_node_starter:stop_test_nodes(Nodes),
+  test_node_starter:stop_deps_for_tester_node().
 
 for(N, N, F) -> [F()];
 for(I, N, F) -> [F()|for(I+1, N, F)].

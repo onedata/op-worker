@@ -12,24 +12,33 @@
 
 -module(fslogic_test_SUITE).
 
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
--include("veil_modules/dao/dao.hrl").
--include("veil_modules/dao/dao_vfs.hrl").
--include("veil_modules/dao/dao.hrl").
--include("veil_modules/dao/dao_share.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic_acl.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao_vfs.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao_share.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_node_starter.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([groups_permissions_test/1, files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1, permissions_management_test/1, user_creation_test/1, get_file_links_test/1,
-  fuse_requests_test/1, users_separation_test/1, file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, user_file_size_test/1, dirs_creating_test/1, groups_test/1, get_by_uuid_test/1, concurrent_file_creation_test/1]).
--export([create_standard_share/2, create_share/3, get_share/2]).
 
-all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
-  fuse_requests_test, groups_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test, concurrent_file_creation_test, get_file_links_test, user_file_size_test
-].
+-export([spaces_permissions_test/1, files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1]).
+-export([permissions_management_test/1, user_creation_test/1, get_file_links_test/1, fuse_requests_test/1, users_separation_test/1]).
+-export([file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, user_file_size_test/1, dirs_creating_test/1, spaces_test/1]).
+-export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2, get_acl/2, make_dir/2, xattrs_test/1, acl_test/1]).
+-export([get_file_local_location_test/1, block_creation_test/1, block_registration_test/1]).
+
+all() ->
+ [spaces_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
+   fuse_requests_test, spaces_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test,
+   concurrent_file_creation_test, get_file_links_test, user_file_size_test, xattrs_test, acl_test, get_file_local_location_test, block_creation_test,
+   block_registration_test
+ ].
 
 -define(SH, "DirectIO").
 -define(ProtocolVersion, 1).
@@ -39,8 +48,7 @@ all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_file
 %% ====================================================================
 
 %% Tests if not permitted operations can not be executed by fslogic
-groups_permissions_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
+spaces_permissions_test(Config) ->
   NodesUp = ?config(nodes, Config),
 
   Cert = ?COMMON_FILE("peer.pem"),
@@ -51,49 +59,30 @@ groups_permissions_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
+
+  ?ENABLE_PROVIDER(Config),
 
   Team = ?TEST_GROUP,
   Team2 = ?TEST_GROUP2,
   Team3 = ?TEST_GROUP3,
-  TestFile = "groups/" ++ Team ++ "/groups_permissions_test_file",
+  TestFile = "spaces/" ++ Team ++ "/spaces_permissions_test_file",
   TestFileNewName = TestFile ++ "2",
-  TestFile2 = "groups/" ++ Team2 ++ "/groups_permissions_test_file",
-  TestFile3 = "groups/" ++ Team3 ++ "/groups_permissions_test_file",
+  TestFile2 = "spaces/" ++ Team2 ++ "/spaces_permissions_test_file",
+  TestFile3 = "spaces/" ++ Team3 ++ "/spaces_permissions_test_file",
 
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
-  {ReadFileAns, PemBin} = file:read_file(Cert),
-  ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-  ?assertEqual(ok, ConvertAns),
-  DnList = [DN],
+  UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, Team]),
+  UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, Team, Team2, Team3]),
 
-  Login = ?TEST_USER,
-  Name = "user1 user1",
-  Teams = [Team],
-  Email = "user1@email.net",
-  {CreateUserAns, UserDoc1} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
-  ?assertEqual(ok, CreateUserAns),
+  UID2 = list_to_integer(UserDoc2#db_document.uuid),
 
-  {ReadFileAns2, PemBin2} = file:read_file(Cert2),
-  ?assertEqual(ok, ReadFileAns2),
-  {ExtractAns2, RDNSequence2} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin2]),
-  ?assertEqual(rdnSequence, ExtractAns2),
-  {ConvertAns2, DN2} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence2]),
-  ?assertEqual(ok, ConvertAns2),
-  DnList2 = [DN2],
-
-  Login2 = ?TEST_USER2,
-  Name2 = "user2 user2",
-  Email2 = "user2@email.net",
-  {CreateUserAns2, UserDoc2} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, [Team, Team2], Email2, DnList2]),
-  ?assertEqual(ok, CreateUserAns2),
+  [DN1 | _] = user_logic:get_dn_list(UserDoc1),
+  [DN2 | _] = user_logic:get_dn_list(UserDoc2),
 
   %% Connect to cluster
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
@@ -133,29 +122,29 @@ groups_permissions_test(Config) ->
   ?assertEqual("ok", Status7),
   ?assertEqual(list_to_atom(?VOK), Answer7),
 
-  {Status8, Answer8} = chown(Socket2, TestFileNewName, 0, Login2),
+  {Status8, Answer8} = chown(Socket2, TestFileNewName, UID2),
   ?assertEqual("ok", Status8),
   ?assertEqual(list_to_atom(?VEACCES), Answer8),
 
-  {Status9, Answer9} = chown(Socket, TestFileNewName, 0, Login2),
+  {Status9, Answer9} = chown(Socket, TestFileNewName, UID2),
   ?assertEqual("ok", Status9),
   ?assertEqual(list_to_atom(?VEACCES), Answer9),
 
   {GetFileAns, FileDoc} = rpc:call(FSLogicNode, dao_vfs, get_file, [TestFileNewName]),
   ?assertEqual(ok, GetFileAns),
-  {GetFileMetaAns, FileMetaDoc} = rpc:call(FSLogicNode, dao_vfs, get_file_meta, [FileDoc#veil_document.record#file.meta_doc]),
+  {GetFileMetaAns, FileMetaDoc} = rpc:call(FSLogicNode, dao_vfs, get_file_meta, [FileDoc#db_document.record#file.meta_doc]),
   ?assertEqual(ok, GetFileMetaAns),
-  FileMetaUID = FileMetaDoc#veil_document.record#file_meta.uid,
-  ?assertEqual(UserDoc1#veil_document.uuid, FileMetaUID),
+  FileMetaUID = FileMetaDoc#db_document.record#file_meta.uid,
+  ?assertEqual(UserDoc1#db_document.uuid, FileMetaUID),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [TestFileNewName, Login2, -1])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [TestFileNewName, UID2])),
 
   {GetFileAns1, FileDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file, [TestFileNewName]),
   ?assertEqual(ok, GetFileAns1),
-  {GetFileMetaAns1, FileMetaDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file_meta, [FileDoc1#veil_document.record#file.meta_doc]),
+  {GetFileMetaAns1, FileMetaDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file_meta, [FileDoc1#db_document.record#file.meta_doc]),
   ?assertEqual(ok, GetFileMetaAns1),
-  FileMetaUID1 = FileMetaDoc1#veil_document.record#file_meta.uid,
-  ?assertEqual(UserDoc2#veil_document.uuid, FileMetaUID1),
+  FileMetaUID1 = FileMetaDoc1#db_document.record#file_meta.uid,
+  ?assertEqual(UserDoc2#db_document.uuid, FileMetaUID1),
 
   ?assertNotEqual(FileMetaUID, FileMetaUID1),
 
@@ -175,13 +164,9 @@ groups_permissions_test(Config) ->
   ?assertEqual("ok", Status13),
   ?assertEqual(?VEACCES, AnswerOpt13),
 
+  TestFile4 = "spaces/" ++ Team ++ "/spaces_permissions_test_file4",
 
-
-
-
-  TestFile4 = "groups/" ++ Team ++ "/groups_permissions_test_file4",
-
-  TestDir = "groups/" ++ Team ++ "/groups_permissions_test_dir",
+  TestDir = "spaces/" ++ Team ++ "/spaces_permissions_test_dir",
   TestDirFile = TestDir ++ "/file1",
   TestDirDir = TestDir ++ "/dir1",
 
@@ -295,34 +280,33 @@ groups_permissions_test(Config) ->
   ?assertEqual("ok", Status38),
   ?assertEqual(list_to_atom(?VOK), Answer38),
 
-
-
   wss:close(Socket),
   wss:close(Socket2),
 
-  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team], ?ProtocolVersion]),
-  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion]),
-  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["users/"], ?ProtocolVersion]),
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ Team], ?ProtocolVersion]),
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ Team2], ?ProtocolVersion]),
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_USER], ?ProtocolVersion]),
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ ?TEST_USER2], ?ProtocolVersion]),
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion]),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
-  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
+  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN1}]),
   ?assertEqual(ok, RemoveUserAns),
   RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
   ?assertEqual(ok, RemoveUserAns2).
 
 %% This test checks if creation of file works well when many concurrent creation requests are sent
 concurrent_file_creation_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
@@ -343,17 +327,16 @@ concurrent_file_creation_test(Config) ->
   TestFun(TestFile),
 
   Ans1 = receive
-    {create_ans, Msg} -> Msg
-  after 2000 ->
-    timeout
-  end,
+           {create_ans, Msg} -> Msg
+         after 2000 ->
+           timeout
+         end,
   Ans2 = receive
-    {create_ans, Msg2} -> Msg2
-  after 2000 ->
-    timeout
-  end,
+           {create_ans, Msg2} -> Msg2
+         after 2000 ->
+           timeout
+         end,
 
-%%   ct:print("ans1,2: ~p~n", [{Ans1, Ans2}]),
   CreateAns = [Ans1, Ans2],
   ?assert(lists:member(ok, CreateAns)),
   ?assert(lists:member({error, file_exists}, CreateAns)),
@@ -368,15 +351,14 @@ concurrent_file_creation_test(Config) ->
 
 %% Test file and data getting by uuid (fslogic normally uses path instead of uuid)
 get_by_uuid_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
@@ -393,7 +375,7 @@ get_by_uuid_test(Config) ->
 
   {DocFindStatus, FileDoc} = rpc:call(Node1, fslogic_objects, get_file, [1, TestFile, ?CLUSTER_FUSE_ID]),
   ?assertEqual(ok, DocFindStatus),
-  FileLocation2 = rpc:call(Node1, fslogic, handle, [1, {getfilelocation_uuid, FileDoc#veil_document.uuid}]),
+  FileLocation2 = rpc:call(Node1, fslogic, handle, [1, {getfilelocation_uuid, FileDoc#db_document.uuid}]),
   ?assertEqual(?VOK, FileLocation2#filelocation.answer),
   Root = ?TEST_ROOT,
   ?assertEqual(FileLocation, Root ++ "/" ++ FileLocation2#filelocation.file_id),
@@ -404,7 +386,7 @@ get_by_uuid_test(Config) ->
   ?assertEqual(?ARG_TEST_ROOT, SHI3#storage_helper_info.init_args),
   ?assertEqual(FileLocation, Root ++ "/" ++ FileLocation3),
 
-  {FileLocationAns4, {SHI4, FileLocation4}} = rpc:call(Node1, logical_files_manager, getfilelocation, [{uuid, FileDoc#veil_document.uuid}]),
+  {FileLocationAns4, {SHI4, FileLocation4}} = rpc:call(Node1, logical_files_manager, getfilelocation, [{uuid, FileDoc#db_document.uuid}]),
   ?assertEqual(ok, FileLocationAns4),
   ?assertEqual(SHI3, SHI4),
   ?assertEqual(FileLocation3, FileLocation4),
@@ -412,11 +394,11 @@ get_by_uuid_test(Config) ->
   {FMStatys, FM_Attrs} = rpc:call(Node1, logical_files_manager, getfileattr, [TestFile]),
   ?assertEqual(ok, FMStatys),
 
-  {FMStatys2, FM_Attrs2} = rpc:call(Node1, logical_files_manager, getfileattr, [{uuid, FileDoc#veil_document.uuid}]),
+  {FMStatys2, FM_Attrs2} = rpc:call(Node1, logical_files_manager, getfileattr, [{uuid, FileDoc#db_document.uuid}]),
   ?assertEqual(ok, FMStatys2),
   ?assertEqual(FM_Attrs, FM_Attrs2),
 
-  {FNameAns, FName} = rpc:call(Node1, logical_files_manager, get_file_name_by_uuid, [FileDoc#veil_document.uuid]),
+  {FNameAns, FName} = rpc:call(Node1, logical_files_manager, get_file_name_by_uuid, [FileDoc#db_document.uuid]),
   ?assertEqual(ok, FNameAns),
   ?assertEqual(TestFile, FName),
 
@@ -424,11 +406,11 @@ get_by_uuid_test(Config) ->
   ?assertEqual(8, AnsWrite1),
   ?assertEqual({ok, "abcdefgh"}, rpc:call(Node1, files_tester, read_file, [TestFile, 100])),
 
-  {StatusRead1, AnsRead1} = rpc:call(Node1, logical_files_manager, read, [{uuid, FileDoc#veil_document.uuid}, 2, 2]),
+  {StatusRead1, AnsRead1} = rpc:call(Node1, logical_files_manager, read, [{uuid, FileDoc#db_document.uuid}, 2, 2]),
   ?assertEqual(ok, StatusRead1),
   ?assertEqual("cd", binary_to_list(AnsRead1)),
 
-  {StatusRead2, AnsRead2} = rpc:call(Node1, logical_files_manager, read, [{uuid, FileDoc#veil_document.uuid}, 7, 2]),
+  {StatusRead2, AnsRead2} = rpc:call(Node1, logical_files_manager, read, [{uuid, FileDoc#db_document.uuid}, 7, 2]),
   ?assertEqual(ok, StatusRead2),
   ?assertEqual("h", binary_to_list(AnsRead2)),
 
@@ -440,261 +422,237 @@ get_by_uuid_test(Config) ->
   RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns).
 
-%% This test checks if groups are working as intended.
-%% I.e all users see files moved/created in theirs group directory and users see only their groups
-groups_test(Config) ->
-    nodes_manager:check_start_assertions(Config),
-    NodesUp = ?config(nodes, Config),
-    [Node | _] = NodesUp,
+%% This test checks if spaces are working as intended.
+%% I.e all users see files moved/created in theirs group directory and users see only their spaces
+spaces_test(Config) ->
+  NodesUp = ?config(nodes, Config),
+  [Node | _] = NodesUp,
 
-    Cert1 = ?COMMON_FILE("peer.pem"),
-    Cert2 = ?COMMON_FILE("peer2.pem"),
+  Cert1 = ?COMMON_FILE("peer.pem"),
+  Cert2 = ?COMMON_FILE("peer2.pem"),
 
-    Host = "localhost",
-    Port = ?config(port, Config),
+  Host = "localhost",
+  Port = ?config(port, Config),
 
-    %% Cluster init
-    gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
-    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    nodes_manager:wait_for_cluster_cast(),
-    gen_server:cast({global, ?CCM}, init_cluster),
-    nodes_manager:wait_for_cluster_init(),
+  %% Cluster init
+  gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  test_utils:wait_for_cluster_cast(),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  test_utils:wait_for_cluster_init(),
 
-    %% files_manager call with given user's DN
-    FM = fun(M, A, DN) ->
-            Me = self(),
-            Pid = spawn_link(Node, fun() -> fslogic_context:set_user_dn(DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
-            receive
-                {Pid, Resp} -> Resp
-            end
-         end,
+  %% files_manager call with given user's DN
+  FM = fun(M, A, DN) ->
+    Me = self(),
+    Pid = spawn_link(Node, fun() -> fslogic_context:set_user_dn(DN),
+      Me ! {self(), apply(logical_files_manager, M, A)} end),
+    receive
+      {Pid, Resp} -> Resp
+    end
+  end,
 
-    %% Gets uid by name
-    UID = fun(Name) ->
-              list_to_integer(os:cmd("id -u " ++ Name) -- "\n")
-          end,
+  %% Gets uid by name
+  UID = fun(Name) ->
+    list_to_integer(os:cmd("id -u " ++ Name) -- "\n")
+  end,
 
-    %% Gets gid by name
-    GID = fun(Name) ->
-        list_to_integer(os:cmd("getent group " ++ Name ++" | cut -d: -f3") -- "\n")
-    end,
+  %% Gets gid by name
+  GID = fun(Name) ->
+    list_to_integer(os:cmd("getent group " ++ Name ++ " | cut -d: -f3") -- "\n")
+  end,
 
-    %% Init storage
-    {InsertStorageAns, _} = rpc:call(Node, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
-    ?assertEqual(ok, InsertStorageAns),
+  %% Init storage
+  {InsertStorageAns, _} = rpc:call(Node, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
+  ?assertEqual(ok, InsertStorageAns),
 
-    %% Init users
-    AddUser = fun(Login, Teams, Cert) ->
-        {ReadFileAns, PemBin} = file:read_file(Cert),
-        ?assertEqual(ok, ReadFileAns),
-        {ExtractAns, RDNSequence} = rpc:call(Node, user_logic, extract_dn_from_cert, [PemBin]),
-        ?assertEqual(rdnSequence, ExtractAns),
-        {ConvertAns, DN} = rpc:call(Node, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-        ?assertEqual(ok, ConvertAns),
-        DnList = [DN],
+  UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert1, [?TEST_USER, ?TEST_GROUP]),
+  UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, ?TEST_GROUP, ?TEST_GROUP2]),
 
-        Name = "user1 user1",
-        Email = "user1@email.net",
-        {CreateUserAns, #veil_document{uuid = _UserID1}} = rpc:call(Node, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
-        ?assertEqual(ok, CreateUserAns),
-        DnList
-    end,
+  [DN1 | _] = user_logic:get_dn_list(UserDoc1),
+  [DN2 | _] = user_logic:get_dn_list(UserDoc2),
 
-    DN1 = AddUser(?TEST_USER, [?TEST_GROUP_EXTENDED], Cert1),
-    DN2 = AddUser(?TEST_USER2, [?TEST_GROUP_EXTENDED, ?TEST_GROUP2_EXTENDED], Cert2),
-    %% END init users
+  %% Init connections
+  {ConAns1, Socket1} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}, auto_handshake]),
+  ?assertEqual(ok, ConAns1),
+  {ConAns2, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}, auto_handshake]),
+  ?assertEqual(ok, ConAns2),
+  %% END init connections
 
-    %% Init connections
-    {ConAns1, Socket1} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}, auto_handshake]),
-    ?assertEqual(ok, ConAns1),
-    {ConAns2, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}, auto_handshake]),
-    ?assertEqual(ok, ConAns2),
-    %% END init connections
+  %% Test not allowed operations
+  {"ok", A2} = mkdir(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, "test"])),
+  ?assertEqual(eacces, A2),
 
-    %% Check if groups dirs are created and have valid owners
-    {S0, A0} = rpc:call(Node, dao_lib, apply, [dao_vfs, get_file, ["/groups/" ++ ?TEST_GROUP], ?ProtocolVersion]),
-    ?assertEqual(ok, S0),
-    ?assertEqual([?TEST_GROUP], A0#veil_document.record#file.gids),
+  {"ok", A3} = delete_file(Socket1, ?SPACES_BASE_DIR_NAME),
+  ?assertEqual(eacces, A3),
 
-    {S1, A1} = rpc:call(Node, dao_lib, apply, [dao_vfs, get_file, ["/groups/" ++ ?TEST_GROUP2], ?ProtocolVersion]),
-    ?assertEqual(ok, S1),
-    ?assertEqual([?TEST_GROUP2], A1#veil_document.record#file.gids),
+  {"ok", A10} = delete_file(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP])),
+  ?assertEqual(eacces, A10),
 
+  {"ok", A11} = delete_file(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP2])),
+  ?assertEqual(eacces, A11),
 
-    %% Test not allowed operations
-    {"ok", A2} = mkdir(Socket1, "/groups/test"),
-    ?assertEqual(eacces, A2),
+  {"ok", A4} = rename_file(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP2]), "/test"),
+  ?assertEqual(eacces, A4),
 
-    {"ok", A3} = delete_file(Socket1, "/groups"),
-    ?assertEqual(eacces, A3),
+  {"ok", A5} = rename_file(Socket1, ?SPACES_BASE_DIR_NAME, "/test"),
+  ?assertEqual(eacces, A5),
 
-    {"ok", A10} = delete_file(Socket1, "/groups/" ++ ?TEST_GROUP),
-    ?assertEqual(eacces, A10),
+  {"ok", ok} = mkdir(Socket1, "/test"), %% Test dir
+  {"ok", _, _, _, "ok"} = create_file(Socket1, "/file"), %% Test file
+  {CreationAckStatus, CreationAckAnswerOpt} = send_creation_ack(Socket1, "/file"),
+  ?assertEqual("ok", CreationAckStatus),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt),
 
-    {"ok", A11} = delete_file(Socket1, "/groups/" ++ ?TEST_GROUP2),
-    ?assertEqual(eacces, A11),
+  {"ok", A6} = rename_file(Socket1, "/test", fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, "test"])),
+  ?assertEqual(eacces, A6),
 
-    {"ok", A4} = rename_file(Socket1, "/groups/" ++ ?TEST_GROUP2, "/test"),
-    ?assertEqual(eacces, A4),
+  {"ok", A14} = rename_file(Socket1, "/file", fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, "test"])),
+  ?assertEqual(eacces, A14),
 
-    {"ok", A5} = rename_file(Socket1, "/groups", "/test"),
-    ?assertEqual(eacces, A5),
+  {"ok", A7} = change_file_perms(Socket1, ?SPACES_BASE_DIR_NAME, 8#555),
+  ?assertEqual(eacces, A7),
 
-    {"ok", ok} = mkdir(Socket1, "/test"), %% Test dir
-    {"ok", _, _, _, "ok"} = create_file(Socket1, "/file"), %% Test file
-    {CreationAckStatus, CreationAckAnswerOpt} = send_creation_ack(Socket1, "/file"),
-    ?assertEqual("ok", CreationAckStatus),
-    ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt),
+  {"ok", A8} = change_file_perms(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP]), 8#555),
+  ?assertEqual(eacces, A8),
 
-    {"ok", A6} = rename_file(Socket1, "/test", "/groups/test"),
-    ?assertEqual(eacces, A6),
+  {"ok", A9} = change_file_perms(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP2]), 8#555),
+  ?assertEqual(eacces, A9),
 
-    {"ok", A14} = rename_file(Socket1, "/file", "/groups/test"),
-    ?assertEqual(eacces, A14),
+  {"ok", A12} = chown(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP2]), 500),
+  ?assertEqual(eacces, A12),
 
-    {"ok", A7} = change_file_perms(Socket1, "/groups", 8#555),
-    ?assertEqual(eacces, A7),
+  {"ok", A13} = chown(Socket1, ?SPACES_BASE_DIR_NAME, 500),
+  ?assertEqual(eacces, A13),
 
-    {"ok", A8} = change_file_perms(Socket1, "/groups/" ++ ?TEST_GROUP, 8#555),
-    ?assertEqual(eacces, A8),
+  {"ok", _, _, _, A15} = create_file(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, "file"])),
+  ?assertEqual(eacces, list_to_atom(A15)),
 
-    {"ok", A9} = change_file_perms(Socket1, "/groups/" ++ ?TEST_GROUP2, 8#555),
-    ?assertEqual(eacces, A9),
-
-    {"ok", A12} = chown(Socket1, "/groups/" ++ ?TEST_GROUP2, 500, ?TEST_USER),
-    ?assertEqual(eacces, A12),
-
-    {"ok", A13} = chown(Socket1, "/groups", 500, ?TEST_USER),
-    ?assertEqual(eacces, A13),
-
-    {"ok",  _, _, _, A15} = create_file(Socket1, "/groups/file"),
-    ?assertEqual(eacces, list_to_atom(A15)),
-
-    {"ok", A16} = create_link(Socket1, "/groups/file", "link"),
-    ?assertEqual(eacces, A16),
+  {"ok", A16} = create_link(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, "file"]), "link"),
+  ?assertEqual(eacces, A16),
 
 
-    %% Test groups visibility
-    {"ok", C17, A17} = ls(Socket1, "/groups", 10, 0),
-    ?assertEqual(ok, list_to_atom(A17)),
-    ?assertEqual([?TEST_GROUP], C17),
+  %% Test spaces visibility
+  {"ok", C17, A17} = ls(Socket1, ?SPACES_BASE_DIR_NAME, 10, 0),
+  ?assertEqual(ok, list_to_atom(A17)),
+  ?assert(lists:member(?TEST_USER, C17)),
+  ?assert(lists:member(?TEST_GROUP, C17)),
 
-    {"ok", C18, A18} = ls(Socket2, "/groups", 10, 0),
-    ?assertEqual(ok, list_to_atom(A18)),
-    ?assert(lists:member(?TEST_GROUP, C18)),
-    ?assert(lists:member(?TEST_GROUP2, C18)),
+  {"ok", C18, A18} = ls(Socket2, ?SPACES_BASE_DIR_NAME, 10, 0),
+  ?assertEqual(ok, list_to_atom(A18)),
+  ?assert(lists:member(?TEST_USER2, C18)),
+  ?assert(lists:member(?TEST_GROUP, C18)),
+  ?assert(lists:member(?TEST_GROUP2, C18)),
 
-    %% Try to use group dir that is not visible for the user
-    {"ok", A19} = mkdir(Socket1, "/groups/" ++ ?TEST_GROUP2 ++ "/testdir"),
-    ?assertNotEqual(ok, A19),
-
-
-    %% Files visibility test
-    {"ok", A20} = mkdir(Socket1, "/groups/" ++ ?TEST_GROUP ++ "/dir"),
-    ?assertEqual(ok, A20),
-
-    {"ok", _, _, _, A21} = create_file(Socket2, "/groups/" ++ ?TEST_GROUP ++ "/file"),
-    ?assertEqual(ok, list_to_atom(A21)),
-
-    {CreationAckStatus2, CreationAckAnswerOpt2} = send_creation_ack(Socket2, "/groups/" ++ ?TEST_GROUP ++ "/file"),
-    ?assertEqual("ok", CreationAckStatus2),
-    ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt2),
-
-    {"ok", A22} = mkdir(Socket1, "/groups/" ++ ?TEST_GROUP ++ "/dir"), %% Dir should already exist
-    ?assertEqual(eexist, A22),
-
-    {"ok", A23} = mkdir(Socket2, "/groups/" ++ ?TEST_GROUP ++ "/file"), %% File should already exist
-    ?assertEqual(eexist, A23),
-
-    A24 = FM(create, ["/groups/" ++ ?TEST_GROUP ++ "/file2"], DN1),
-    ?assertEqual(ok, A24),
-
-    ?assert(rpc:call(Node, files_tester, file_exists, ["/groups/" ++ ?TEST_GROUP ++ "/file2"])),
-    {ok, L1} = rpc:call(Node, files_tester, get_file_location, ["/groups/" ++ ?TEST_GROUP ++ "/file2"]),
-    [_, _, BaseDir1, SecDir1 | _] = string:tokens(L1, "/"),
-    ?assertEqual("groups", BaseDir1),
-    ?assertEqual(?TEST_GROUP, SecDir1),
-
-    %% Check if owners are set correctly
-    {"ok", #fileattr{gname = GName0}} = get_file_attr(Socket1, "/groups/" ++ ?TEST_GROUP ++ "/dir"),
-    ?assertEqual(?TEST_GROUP, GName0),
-
-    {"ok", #fileattr{gname = GName0}} = get_file_attr(Socket1, "/groups/" ++ ?TEST_GROUP ++ "/file"),
-    ?assertEqual(?TEST_GROUP, GName0),
-
-    %% Onwer on storage
-    {ok, User1, Grp1} = rpc:call(Node, files_tester, get_owner, [L1]),
-    ?assertEqual(UID(?TEST_USER), User1),
-    ?assertEqual(GID(?TEST_GROUP), Grp1),
+  %% Try to use group dir that is not visible for the user
+  {"ok", A19} = mkdir(Socket1, fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, ?TEST_GROUP2, "testdir"])),
+  ?assertNotEqual(ok, A19),
 
 
-    %% Check if file move changes group owner & storage file location
-    A25 = FM(create, ["/f1"], DN1),
-    ?assertEqual(ok, A25),
+  %% Files visibility test
+  {"ok", A20} = mkdir(Socket1, "/spaces/" ++ ?TEST_GROUP ++ "/dir"),
+  ?assertEqual(ok, A20),
 
-    A26 = FM(create, ["/groups/" ++ ?TEST_GROUP2 ++ "/f2"], DN2),
-    ?assertEqual(ok, A26),
+  {"ok", _, _, _, A21} = create_file(Socket2, "/spaces/" ++ ?TEST_GROUP ++ "/file"),
+  ?assertEqual(ok, list_to_atom(A21)),
 
-    {ok, L2} = rpc:call(Node, files_tester, get_file_location, ["/groups/" ++ ?TEST_GROUP2 ++ "/f2"]),
-    {ok, User2, Grp2} = rpc:call(Node, files_tester, get_owner, [L2]),
-    ?assertEqual(UID(?TEST_USER2), User2),
-    ?assertEqual(GID(?TEST_GROUP2), Grp2),
-    [_, _, BaseDir2, SecDir2 | _] = string:tokens(L2, "/"),
-    ?assertEqual("groups", BaseDir2),
-    ?assertEqual(?TEST_GROUP2, SecDir2),
+  {CreationAckStatus2, CreationAckAnswerOpt2} = send_creation_ack(Socket2, "/spaces/" ++ ?TEST_GROUP ++ "/file"),
+  ?assertEqual("ok", CreationAckStatus2),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt2),
 
-    {ok, L3} = rpc:call(Node, files_tester, get_file_location, ["/" ++ ?TEST_USER ++ "/f1"]),
-    [_, _, BaseDir3, SecDir3 | _] = string:tokens(L3, "/"),
-    ?assertEqual("users", BaseDir3),
-    ?assertEqual(?TEST_USER, SecDir3),
+  {"ok", A22} = mkdir(Socket1, "/spaces/" ++ ?TEST_GROUP ++ "/dir"), %% Dir should already exist
+  ?assertEqual(eexist, A22),
 
-    %% Now move those files
-    A27 = FM(mv, ["/f1", "/groups/" ++ ?TEST_GROUP ++ "/f1"], DN1),
-    ?assertEqual(ok, A27),
+  {"ok", A23} = mkdir(Socket2, "/spaces/" ++ ?TEST_GROUP ++ "/file"), %% File should already exist
+  ?assertEqual(eexist, A23),
 
-    A28 = FM(mv, ["/groups/" ++ ?TEST_GROUP2 ++ "/f2", "/groups/" ++ ?TEST_GROUP ++ "/f2"], DN2),
-    ?assertEqual(ok, A28),
+  A24 = FM(create, ["/spaces/" ++ ?TEST_GROUP ++ "/file2"], DN1),
+  ?assertEqual(ok, A24),
 
-    %% Check its location
-    {ok, L4} = rpc:call(Node, files_tester, get_file_location, ["/groups/" ++ ?TEST_GROUP ++ "/f1"]),
-    {ok, L5} = rpc:call(Node, files_tester, get_file_location, ["/groups/" ++ ?TEST_GROUP ++ "/f2"]),
-    [_, _, BaseDir4, SecDir4 | _] = string:tokens(L4, "/"),
-    [_, _, BaseDir5, SecDir5 | _] = string:tokens(L5, "/"),
-    ?assertEqual("groups", BaseDir4),
-    ?assertEqual(?TEST_GROUP, SecDir4),
-    ?assertEqual("groups", BaseDir5),
-    ?assertEqual(?TEST_GROUP, SecDir5),
+  ?assert(rpc:call(Node, files_tester, file_exists, ["/spaces/" ++ ?TEST_GROUP ++ "/file2"])),
+  {ok, L1} = rpc:call(Node, files_tester, get_file_location, ["/spaces/" ++ ?TEST_GROUP ++ "/file2"]),
+  [_, _, BaseDir1, SecDir1 | _] = string:tokens(L1, "/"),
+  ?assertEqual("spaces", BaseDir1),
+  ?assertEqual(?TEST_GROUP, SecDir1),
 
-    ?assert(rpc:call(Node, files_tester, file_exists, ["/groups/" ++ ?TEST_GROUP ++ "/f1"])),
-    ?assert(rpc:call(Node, files_tester, file_exists, ["/groups/" ++ ?TEST_GROUP ++ "/f2"])),
+  %% Check if owners are set correctly
+  {"ok", #fileattr{gname = GName0}} = get_file_attr(Socket1, "/spaces/" ++ ?TEST_GROUP ++ "/dir"),
+  ?assertEqual(?TEST_GROUP, GName0),
 
-    %% ... and owners
-    {ok, User3, Grp3} = rpc:call(Node, files_tester, get_owner, [L4]),
-    {ok, User4, Grp4} = rpc:call(Node, files_tester, get_owner, [L5]),
-    ?assertEqual(UID(?TEST_USER), User3),
-    ?assertEqual(GID(?TEST_GROUP), Grp3),
+  {"ok", #fileattr{gname = GName0}} = get_file_attr(Socket1, "/spaces/" ++ ?TEST_GROUP ++ "/file"),
+  ?assertEqual(?TEST_GROUP, GName0),
 
-    ?assertEqual(UID(?TEST_USER2), User4),
-    ?assertEqual(GID(?TEST_GROUP), Grp4),
+  %% Onwer on storage
+  {ok, User1, Grp1} = rpc:call(Node, files_tester, get_owner, [L1]),
+  ?assertEqual(UID(?TEST_USER), User1),
+  ?assertEqual(GID(?TEST_GROUP), Grp1),
 
 
-    %% Cleanup
-		wss:close(Socket1),
-		wss:close(Socket2).
+  %% Check if file move changes group owner & storage file location
+  A25 = FM(create, ["/f1"], DN1),
+  ?assertEqual(ok, A25),
+
+  A26 = FM(create, ["/spaces/" ++ ?TEST_GROUP2 ++ "/f2"], DN2),
+  ?assertEqual(ok, A26),
+
+  {ok, L2} = rpc:call(Node, files_tester, get_file_location, ["/spaces/" ++ ?TEST_GROUP2 ++ "/f2"]),
+  {ok, User2, Grp2} = rpc:call(Node, files_tester, get_owner, [L2]),
+  ?assertEqual(UID(?TEST_USER2), User2),
+  ?assertEqual(GID(?TEST_GROUP2), Grp2),
+  [_, _, BaseDir2, SecDir2 | _] = string:tokens(L2, "/"),
+  ?assertEqual("spaces", BaseDir2),
+  ?assertEqual(?TEST_GROUP2, SecDir2),
+
+  {ok, L3} = rpc:call(Node, files_tester, get_file_location, ["/spaces/" ++ ?TEST_USER ++ "/f1"]),
+  [_, _, BaseDir3, SecDir3 | _] = string:tokens(L3, "/"),
+  ?assertEqual("spaces", BaseDir3),
+  ?assertEqual(?TEST_USER, SecDir3),
+
+  %% Now move those files
+  A27 = FM(mv, ["/f1", "/spaces/" ++ ?TEST_GROUP ++ "/f1"], DN1),
+  ?assertEqual(ok, A27),
+
+  A28 = FM(mv, ["/spaces/" ++ ?TEST_GROUP2 ++ "/f2", "/spaces/" ++ ?TEST_GROUP ++ "/f2"], DN2),
+  ?assertEqual(ok, A28),
+
+  %% Check its location
+  {ok, L4} = rpc:call(Node, files_tester, get_file_location, ["/spaces/" ++ ?TEST_GROUP ++ "/f1"]),
+  {ok, L5} = rpc:call(Node, files_tester, get_file_location, ["/spaces/" ++ ?TEST_GROUP ++ "/f2"]),
+  [_, _, BaseDir4, SecDir4 | _] = string:tokens(L4, "/"),
+  [_, _, BaseDir5, SecDir5 | _] = string:tokens(L5, "/"),
+  ?assertEqual("spaces", BaseDir4),
+  ?assertEqual(?TEST_GROUP, SecDir4),
+  ?assertEqual("spaces", BaseDir5),
+  ?assertEqual(?TEST_GROUP, SecDir5),
+
+  ?assert(rpc:call(Node, files_tester, file_exists, ["/spaces/" ++ ?TEST_GROUP ++ "/f1"])),
+  ?assert(rpc:call(Node, files_tester, file_exists, ["/spaces/" ++ ?TEST_GROUP ++ "/f2"])),
+
+  %% ... and owners
+  {ok, User3, Grp3} = rpc:call(Node, files_tester, get_owner, [L4]),
+  {ok, User4, Grp4} = rpc:call(Node, files_tester, get_owner, [L5]),
+  ?assertEqual(UID(?TEST_USER), User3),
+  ?assertEqual(GID(?TEST_GROUP), Grp3),
+
+  ?assertEqual(UID(?TEST_USER2), User4),
+  ?assertEqual(GID(?TEST_GROUP), Grp4),
+
+
+  %% Cleanup
+  wss:close(Socket1),
+  wss:close(Socket2).
 
 %% Checks creating of directories at storage for users' files.
 %% The test creates path for a new file that contains 2 directories
 %% (fslogic uses it when the user has a lot of files).
 dirs_creating_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
 
@@ -705,12 +663,11 @@ dirs_creating_test(Config) ->
 %% Checks user counting view.
 %% The test creates some files for two users, and then checks if the view counts them properly.
 user_file_counting_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   FileBeg = "user_dirs_at_storage_test_file",
-  User1FilesEnding = ["1","2","3","4"],
-  User2FilesEnding = ["x","y","z"],
+  User1FilesEnding = ["1", "2", "3", "4"],
+  User2FilesEnding = ["x", "y", "z"],
 
   Cert = ?COMMON_FILE("peer.pem"),
   Cert2 = ?COMMON_FILE("peer2.pem"),   %% Cert of second test user (the test uses 2 users to check if files of one user are not counted as files of other user)
@@ -720,51 +677,30 @@ user_file_counting_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
-  {ReadFileAns, PemBin} = file:read_file(Cert),
-  ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-  ?assertEqual(ok, ConvertAns),
-  DnList = [DN],
+  UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+  UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, ?TEST_GROUP2]),
 
-  Login = ?TEST_USER,
-  Name = "user1 user1",
-  Teams = [?TEST_GROUP],
-  Email = "user1@email.net",
-  {CreateUserAns, #veil_document{uuid = UserID1}} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
-  ?assertEqual(ok, CreateUserAns),
+  [DN1 | _] = user_logic:get_dn_list(UserDoc1),
+  [DN2 | _] = user_logic:get_dn_list(UserDoc2),
 
-  {ReadFileAns2, PemBin2} = file:read_file(Cert2),
-  ?assertEqual(ok, ReadFileAns2),
-  {ExtractAns2, RDNSequence2} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin2]),
-  ?assertEqual(rdnSequence, ExtractAns2),
-  {ConvertAns2, DN2} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence2]),
-  ?assertEqual(ok, ConvertAns2),
-  DnList2 = [DN2],
-
-  Login2 = ?TEST_USER2,
-  Name2 = "user2 user2",
-  Teams2 = [?TEST_GROUP2],
-  Email2 = "user2@email.net",
-  {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
-  ?assertEqual(ok, CreateUserAns2),
+  UserID1 = UserDoc1#db_document.uuid,
+  UserID2 = UserDoc2#db_document.uuid,
 
   rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, "not_existing_id", 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus0, Count0} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, "not_existing_id", 1]),
   ?assertEqual(ok, CountStatus0),
   ?assertEqual(0, Count0),
 
   rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus00, Count00} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
   ?assertEqual(ok, CountStatus00),
   ?assertEqual(0, Count00),
@@ -800,13 +736,13 @@ user_file_counting_test(Config) ->
   end, User2FilesEnding),
 
   rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus, Count} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
   ?assertEqual(ok, CountStatus),
   ?assertEqual(length(User1FilesEnding), Count),
 
   rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID2, 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus2, Count2} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID2, 1]),
   ?assertEqual(ok, CountStatus2),
   ?assertEqual(length(User2FilesEnding), Count2),
@@ -825,13 +761,13 @@ user_file_counting_test(Config) ->
     ?assertEqual(list_to_atom(?VOK), Answer)
   end, User2FilesEnding),
 
-	wss:close(Socket),
-	wss:close(Socket2),
+  wss:close(Socket),
+  wss:close(Socket2),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
-  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
+  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN1}]),
   ?assertEqual(ok, RemoveUserAns),
   RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
   ?assertEqual(ok, RemoveUserAns2).
@@ -839,7 +775,6 @@ user_file_counting_test(Config) ->
 %% Checks user files size view.
 %% The test creates some files for two users, and then checks if the view counts their size properly.
 user_file_size_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node | _] = NodesUp,
 
@@ -852,14 +787,15 @@ user_file_size_test(Config) ->
   %% Cluster init
   gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   %% files_manager call with given user's DN
   FM = fun(M, A, DN) ->
     Me = self(),
-    Pid = spawn_link(Node, fun() -> fslogic_context:set_user_dn(DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
+    Pid = spawn_link(Node, fun() -> fslogic_context:set_user_dn(DN),
+      Me ! {self(), apply(logical_files_manager, M, A)} end),
     receive
       {Pid, Resp} -> Resp
     end
@@ -869,30 +805,14 @@ user_file_size_test(Config) ->
   {InsertStorageAns, _} = rpc:call(Node, fslogic_storage, insert_storage, [?SH, ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
-  %% Init users
-  AddUser = fun(Login, Teams, Cert) ->
-    {ReadFileAns, PemBin} = file:read_file(Cert),
-    ?assertEqual(ok, ReadFileAns),
-    {ExtractAns, RDNSequence} = rpc:call(Node, user_logic, extract_dn_from_cert, [PemBin]),
-    ?assertEqual(rdnSequence, ExtractAns),
-    {ConvertAns, DN} = rpc:call(Node, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-    ?assertEqual(ok, ConvertAns),
-    DnList = [DN],
+  UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert1, [?TEST_USER, ?TEST_GROUP]),
+  UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, ?TEST_GROUP]),
 
-    Name = "user1 user1",
-    Email = "user1@email.net",
-    {CreateUserAns, #veil_document{uuid = UserID}} = rpc:call(Node, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
-    ?assertEqual(ok, CreateUserAns),
-    {DnList, UserID}
-  end,
+  [DN1 | _] = user_logic:get_dn_list(UserDoc1),
+  [DN2 | _] = user_logic:get_dn_list(UserDoc2),
 
-  Login1 = "veilfstestuser",
-  Teams1 = ["veilfstestgroup(Grp)"],
-  Login2 = "veilfstestuser2",
-  Teams2 = ["veilfstestgroup(Grp)"],
-  {DN1, UserID1} = AddUser(Login1, Teams1, Cert1),
-  {DN2, UserID2} = AddUser(Login2, Teams2, Cert2),
-  %% END init users
+  UserID1 = UserDoc1#db_document.uuid,
+  UserID2 = UserDoc2#db_document.uuid,
 
   %% Init connections
   {ConAns1, Socket1} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}, auto_handshake]),
@@ -902,19 +822,19 @@ user_file_size_test(Config) ->
   %% END init connections
 
   FileBeg = "user_dirs_at_storage_test_file_size",
-  User1FilesEnding = ["1","2","3","4"],
-  User2FilesEnding = ["x","y","z"],
+  User1FilesEnding = ["1", "2", "3", "4"],
+  User2FilesEnding = ["x", "y", "z"],
   User1TestUpdateFile = FileBeg ++ "_update",
   FileSize = 100,
 
   rpc:call(Node, fslogic_utils, get_files_size, ["not_existing_id", 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus0, Count0} = rpc:call(Node, user_logic, get_files_size, ["not_existing_id", 1]),
   ?assertEqual(ok, CountStatus0),
   ?assertEqual(0, Count0),
 
   rpc:call(Node, fslogic_utils, get_files_size, [UserID1, 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus00, Count00} = rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
   ?assertEqual(ok, CountStatus00),
   ?assertEqual(0, Count00),
@@ -940,13 +860,13 @@ user_file_size_test(Config) ->
   end, User2FilesEnding),
 
   rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus, Count} = rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
   ?assertEqual(ok, CountStatus),
   ?assertEqual(length(User1FilesEnding) * FileSize, Count),
 
   rpc:call(Node, user_logic, get_files_size, [UserID2, 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus2, Count2} = rpc:call(Node, user_logic, get_files_size, [UserID2, 1]),
   ?assertEqual(ok, CountStatus2),
   ?assertEqual(length(User2FilesEnding) * FileSize, Count2),
@@ -958,7 +878,7 @@ user_file_size_test(Config) ->
   ?assertEqual(ok, AnsTruncate),
   {AnsGetFileAttr, _} = FM(getfileattr, [User1TestUpdateFile], DN1),
   ?assertEqual(ok, AnsGetFileAttr),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {ok, Interval} = rpc:call(Node, application, get_env, [?APP_Name, user_files_size_view_update_period]),
   timer:sleep(Interval * 1000),
 
@@ -972,15 +892,14 @@ user_file_size_test(Config) ->
 %% Checks permissions management functions
 %% The tests checks some files and then changes their permissions. Erlang functions are used to test if permissions were change properly.
 permissions_management_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
   File = "permissions_management_test_file",
@@ -1033,58 +952,138 @@ permissions_management_test(Config) ->
   {OwnStatus4, User4, Group4} = files_tester:get_owner(?TEST_ROOT ++ "/" ++ File),
   ?assertEqual(ok, OwnStatus4),
   ?assertEqual(User, User4),
-  ?assertEqual(Group, Group4).
+  ?assertEqual(Group, Group4),
+
+  % Test to assert permission setting and checking in user context.
+  {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  Cert1 = ?COMMON_FILE("peer.pem"),
+  UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert1, [?TEST_GROUP]),
+  [DN1 | _] = user_logic:get_dn_list(UserDoc1),
+
+  FilePath = "/file.txt",
+
+  LFM = fun(Fun, Args) ->
+    Me = self(),
+    Pid = spawn_link(Node1, fun() -> fslogic_context:set_user_dn(DN1),
+      Me ! {self(), apply(logical_files_manager, Fun, Args)} end),
+    receive
+      {Pid, Resp} -> Resp
+    end
+  end,
+
+  ?assertEqual(ok, LFM(create, [FilePath])),
+  ?assertEqual(ok, LFM(change_file_perm, [FilePath, 8#000, true])),
+
+  ?assertEqual(true, LFM(check_file_perm, [FilePath, ''])),
+  ?assertEqual(false, LFM(check_file_perm, [FilePath, root])),
+  ?assertEqual(true, LFM(check_file_perm, [FilePath, owner])),
+  ?assertEqual(true, LFM(check_file_perm, [FilePath, delete])),
+
+  ExpectedPerms = [
+    {8#000, [
+      {read, false},
+      {write, false},
+      {execute, false},
+      {rdwr, false}
+    ]},
+    {8#100, [
+      {read, false},
+      {write, false},
+      {execute, true},
+      {rdwr, false}
+    ]},
+    {8#200, [
+      {read, false},
+      {write, true},
+      {execute, false},
+      {rdwr, false}
+    ]},
+    {8#300, [
+      {read, false},
+      {write, true},
+      {execute, true},
+      {rdwr, false}
+    ]},
+    {8#400, [
+      {read, true},
+      {write, false},
+      {execute, false},
+      {rdwr, false}
+    ]},
+    {8#500, [
+      {read, true},
+      {write, false},
+      {execute, true},
+      {rdwr, false}
+    ]},
+    {8#600, [
+      {read, true},
+      {write, true},
+      {execute, false},
+      {rdwr, true}
+    ]},
+    {8#700, [
+      {read, true},
+      {write, true},
+      {execute, true},
+      {rdwr, true}
+    ]}
+  ],
+
+  lists:foreach(
+    fun({PermsInt, Assertions}) ->
+      ?assertEqual(ok, LFM(change_file_perm, [FilePath, PermsInt, true])),
+      lists:foreach(
+        fun({Type, Assertion}) ->
+          ?assertEqual(Assertion, LFM(check_file_perm, [FilePath, Type]))
+        end, Assertions)
+    end, ExpectedPerms),
+
+  RemoveUserAns = rpc:call(Node1, user_logic, remove_user, [{dn, DN1}]),
+  ?assertEqual(ok, RemoveUserAns),
+  RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns).
 
 %% Checks user creation (root and dirs at storage creation).
 %% The test checks if directories for user and group files are created when the user is added to the system,
 %% and when new storage is created (after adding users)
 user_creation_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
-  Cert = ?COMMON_FILE("peer.pem"),
+  Cert1 = ?COMMON_FILE("peer.pem"),
   Cert2 = ?COMMON_FILE("peer2.pem"),
   [FSLogicNode | _] = NodesUp,
   SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
 
-  Login = ?TEST_USER,
-  Name = "user1 user1",
   Team1 = ?TEST_GROUP,
   Team2 = ?TEST_GROUP2,
-  Teams = [Team1 ++ "(G1)", Team2],
-  Email = "user1@email.net",
+
+  Login1 = ?TEST_USER,
+  Teams1 = [Team1, Team2],
 
   Login2 = ?TEST_USER2,
-  Name2 = "user2 user2",
-  Teams2 = Teams,
-  Email2 = "user2@email.net",
+  Teams2 = Teams1,
 
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/users")),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups")),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/spaces")),
 
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users")),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups")),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/spaces")),
 
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login2)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups/" ++ Team1)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups/" ++ Team2)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/spaces/" ++ Team1)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/spaces/" ++ Team2)),
 
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login2)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team1)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team2)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/spaces/" ++ Team1)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/spaces/" ++ Team2)),
 
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/users/" ++ Login)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/users/" ++ Login2)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/groups/" ++ Team1)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/groups/" ++ Team2)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/spaces/" ++ Team1)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/spaces/" ++ Team2)),
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
@@ -1092,68 +1091,36 @@ user_creation_test(Config) ->
   {InsertStorageAns2, StorageUUID2} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT2]),
   ?assertEqual(ok, InsertStorageAns2),
 
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/users")),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups")),
+  UserDoc1 = test_utils:add_user(Config, Login1, Cert1, Teams1),
+  [DN1 | _] = user_logic:get_dn_list(UserDoc1),
 
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users")),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups")),
-
-  {PermStatusUsersDir, PermsUsersDir} = files_tester:get_permissions(?TEST_ROOT ++ "/users"),
-  ?assertEqual(ok, PermStatusUsersDir),
-  ?assertEqual(8#711, PermsUsersDir rem 8#01000),
-
-  {PermStatusGroupsDir, PermsUserGroupsDir} = files_tester:get_permissions(?TEST_ROOT ++ "/groups"),
+  {PermStatusGroupsDir, PermsUserGroupsDir} = files_tester:get_permissions(?TEST_ROOT ++ "/spaces"),
   ?assertEqual(ok, PermStatusGroupsDir),
   ?assertEqual(8#711, PermsUserGroupsDir rem 8#01000),
 
-  {PermStatusUsersDir2, PermsUsersDir2} = files_tester:get_permissions(?TEST_ROOT2 ++ "/users"),
-  ?assertEqual(ok, PermStatusUsersDir2),
-  ?assertEqual(8#711, PermsUsersDir2 rem 8#01000),
-
-  {PermStatusGroupsDir2, PermsUserGroupsDir2} = files_tester:get_permissions(?TEST_ROOT2 ++ "/groups"),
+  {PermStatusGroupsDir2, PermsUserGroupsDir2} = files_tester:get_permissions(?TEST_ROOT2 ++ "/spaces"),
   ?assertEqual(ok, PermStatusGroupsDir2),
   ?assertEqual(8#711, PermsUserGroupsDir2 rem 8#01000),
 
-  {ReadFileAns, PemBin} = file:read_file(Cert),
-  ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-  ?assertEqual(ok, ConvertAns),
-  DnList = [DN],
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/spaces/" ++ Team1)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/spaces/" ++ Team2)),
 
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
-  ?assertEqual(ok, CreateUserAns),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/spaces/" ++ Team1)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/spaces/" ++ Team2)),
 
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login2)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups/" ++ Team1)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups/" ++ Team2)),
-
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login2)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team1)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team2)),
-
-  {PermStatus, Perms} = files_tester:get_permissions(?TEST_ROOT ++ "/users/" ++ Login),
-  ?assertEqual(ok, PermStatus),
-  ?assertEqual(8#300, Perms rem 8#01000),
-  {PermStatus2, Perms2} = files_tester:get_permissions(?TEST_ROOT ++ "/groups/" ++ Team1),
+  {PermStatus2, Perms2} = files_tester:get_permissions(?TEST_ROOT ++ "/spaces/" ++ Team1),
   ?assertEqual(ok, PermStatus2),
-  ?assertEqual(8#730, Perms2 rem 8#01000),
-  {PermStatus3, Perms3} = files_tester:get_permissions(?TEST_ROOT ++ "/groups/" ++ Team2),
+  ?assertEqual(8#731, Perms2 rem 8#01000),
+  {PermStatus3, Perms3} = files_tester:get_permissions(?TEST_ROOT ++ "/spaces/" ++ Team2),
   ?assertEqual(ok, PermStatus3),
-  ?assertEqual(8#730, Perms3 rem 8#01000),
+  ?assertEqual(8#731, Perms3 rem 8#01000),
 
-  {PermStatus4, Perms4} = files_tester:get_permissions(?TEST_ROOT2 ++ "/users/" ++ Login),
-  ?assertEqual(ok, PermStatus4),
-  ?assertEqual(8#300, Perms4 rem 8#01000),
-  {PermStatus5, Perms5} = files_tester:get_permissions(?TEST_ROOT2 ++ "/groups/" ++ Team1),
+  {PermStatus5, Perms5} = files_tester:get_permissions(?TEST_ROOT2 ++ "/spaces/" ++ Team1),
   ?assertEqual(ok, PermStatus5),
-  ?assertEqual(8#730, Perms5 rem 8#01000),
-  {PermStatus6, Perms6} = files_tester:get_permissions(?TEST_ROOT2 ++ "/groups/" ++ Team2),
+  ?assertEqual(8#731, Perms5 rem 8#01000),
+  {PermStatus6, Perms6} = files_tester:get_permissions(?TEST_ROOT2 ++ "/spaces/" ++ Team2),
   ?assertEqual(ok, PermStatus6),
-  ?assertEqual(8#730, Perms6 rem 8#01000),
+  ?assertEqual(8#731, Perms6 rem 8#01000),
 
   File = "user_creation_test_file",
   ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ File)),
@@ -1167,7 +1134,7 @@ user_creation_test(Config) ->
   ?assert(is_integer(User0)),
   ?assert(is_integer(Group0)),
 
-  AnsChown = rpc:call(FSLogicNode, storage_files_manager, chown, [SHInfo, File, Login, Login]),
+  AnsChown = rpc:call(FSLogicNode, storage_files_manager, chown, [SHInfo, File, Login1, Login1]),
   ?assertEqual(ok, AnsChown),
 
   {OwnStatus, User, Group} = files_tester:get_owner(?TEST_ROOT ++ "/" ++ File),
@@ -1183,96 +1150,60 @@ user_creation_test(Config) ->
   ?assertEqual(User, User2),
   ?assertEqual(false, Group =:= Group2),
 
-  {OwnStatus3, User3, _Group3} = files_tester:get_owner(?TEST_ROOT ++ "/users/" ++ Login),
-  ?assertEqual(ok, OwnStatus3),
-  ?assertEqual(User, User3),
-
   %% Groups are not changed currently in this context
   %% ?assertEqual(Group, Group3),
 
-  {OwnStatus4, User4, Group4} = files_tester:get_owner(?TEST_ROOT ++ "/groups/" ++ Team1),
+  {OwnStatus4, User4, Group4} = files_tester:get_owner(?TEST_ROOT ++ "/spaces/" ++ Team1),
   ?assertEqual(ok, OwnStatus4),
   ?assertEqual(User0, User4),
   ?assertEqual(Group2, Group4),
 
-  {OwnStatus5, User5, _Group5} = files_tester:get_owner(?TEST_ROOT2 ++ "/users/" ++ Login),
-  ?assertEqual(ok, OwnStatus5),
-  ?assertEqual(User, User5),
-
   %% Groups are not changed currently in this context
   %% ?assertEqual(Group, Group5),
 
-  {OwnStatus6, User6, Group6} = files_tester:get_owner(?TEST_ROOT2 ++ "/groups/" ++ Team1),
+  {OwnStatus6, User6, Group6} = files_tester:get_owner(?TEST_ROOT2 ++ "/spaces/" ++ Team1),
   ?assertEqual(ok, OwnStatus6),
   ?assertEqual(User0, User6),
   ?assertEqual(Group2, Group6),
 
-  {ReadFileAns2, PemBin2} = file:read_file(Cert2),
-  ?assertEqual(ok, ReadFileAns2),
-  {ExtractAns2, RDNSequence2} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin2]),
-  ?assertEqual(rdnSequence, ExtractAns2),
-  {ConvertAns2, DN2} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence2]),
-  ?assertEqual(ok, ConvertAns2),
-  DnList2 = [DN2],
+  UserDoc2 = test_utils:add_user(Config, Login2, Cert2, Teams2),
+  [DN2 | _] = user_logic:get_dn_list(UserDoc2),
 
-  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
-  ?assertEqual(ok, CreateUserAns2),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/spaces/" ++ Team1)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/spaces/" ++ Team2)),
 
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login2)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups/" ++ Team1)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups/" ++ Team2)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/spaces/" ++ Team1)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/spaces/" ++ Team2)),
 
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login2)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team1)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team2)),
+  % check dirs creation in new storage for existing users
+  {InsertStorageAns3, StorageUUID3} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT3]),
+  ?assertEqual(ok, InsertStorageAns3),
 
-  {PermStatus7, Perms7} = files_tester:get_permissions(?TEST_ROOT ++ "/users/" ++ Login2),
-  ?assertEqual(ok, PermStatus7),
-  ?assertEqual(8#300, Perms7 rem 8#01000),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/spaces/" ++ Team1)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/spaces/" ++ Team2)),
 
-  {PermStatus8, Perms8} = files_tester:get_permissions(?TEST_ROOT2 ++ "/users/" ++ Login2),
-  ?assertEqual(ok, PermStatus8),
-  ?assertEqual(8#300, Perms8 rem 8#01000),
+  {PermStatus11, Perms11} = files_tester:get_permissions(?TEST_ROOT3 ++ "/spaces/" ++ Team1),
+  ?assertEqual(ok, PermStatus11),
+  ?assertEqual(8#731, Perms11 rem 8#01000),
+  {PermStatus12, Perms12} = files_tester:get_permissions(?TEST_ROOT3 ++ "/spaces/" ++ Team2),
+  ?assertEqual(ok, PermStatus12),
+  ?assertEqual(8#731, Perms12 rem 8#01000),
 
-	% check dirs creation in new storage for existing users
-	{InsertStorageAns3, StorageUUID3} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT3]),
-	?assertEqual(ok, InsertStorageAns3),
-
-	?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/users/" ++ Login)),
-	?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/users/" ++ Login2)),
-	?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/groups/" ++ Team1)),
-	?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/groups/" ++ Team2)),
-
-	{PermStatus9, Perms9} = files_tester:get_permissions(?TEST_ROOT3 ++ "/users/" ++ Login),
-	?assertEqual(ok, PermStatus9),
-	?assertEqual(8#300, Perms9 rem 8#01000),
-	{PermStatus10, Perms10} = files_tester:get_permissions(?TEST_ROOT3 ++ "/users/" ++ Login2),
-	?assertEqual(ok, PermStatus10),
-	?assertEqual(8#300, Perms10 rem 8#01000),
-	{PermStatus11, Perms11} = files_tester:get_permissions(?TEST_ROOT3 ++ "/groups/" ++ Team1),
-	?assertEqual(ok, PermStatus11),
-	?assertEqual(8#730, Perms11 rem 8#01000),
-	{PermStatus12, Perms12} = files_tester:get_permissions(?TEST_ROOT3 ++ "/groups/" ++ Team2),
-	?assertEqual(ok, PermStatus12),
-	?assertEqual(8#730, Perms12 rem 8#01000),
-
-	%cleanup
-	RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  %cleanup
+  RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
   RemoveStorageAns2 = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID2}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns2),
 
-	RemoveStorageAns3 = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID3}], ?ProtocolVersion]),
+  RemoveStorageAns3 = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID3}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns3),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team1], ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team2], ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ Team1], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ Team2], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion])),
 
-  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
+  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN1}]),
   ?assertEqual(ok, RemoveUserAns),
 
   RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
@@ -1281,15 +1212,14 @@ user_creation_test(Config) ->
 %% Checks storage management functions
 %% The tests checks if functions used to manage user's files at storage (e.g. mv, mkdir) works well.
 storage_management_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
   File = "storage_management_test_file",
@@ -1334,7 +1264,6 @@ storage_management_test(Config) ->
 %% Checks directory moving.
 %% The test checks if fslogic blocks dir moving to its child.
 dir_mv_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Cert = ?COMMON_FILE("peer.pem"),
@@ -1344,9 +1273,9 @@ dir_mv_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   DirName = "dir_mv_test_dir",
   DirName2 = "dir_mv_test_dir2",
@@ -1354,23 +1283,11 @@ dir_mv_test(Config) ->
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
-  {ReadFileAns, PemBin} = file:read_file(Cert),
-  ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-  ?assertEqual(ok, ConvertAns),
-  DnList = [DN],
-
-  Login = ?TEST_USER,
-  Name = "user1 user1",
-  Teams = [?TEST_GROUP],
-  Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
-  ?assertEqual(ok, CreateUserAns),
+  UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+  [DN | _] = user_logic:get_dn_list(UserDoc),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
-  ?assertEqual(ok, ConAns),
+  ?assertMatch({ok, _}, {ConAns, Socket}),
 
   {StatusMkdir, AnswerMkdir} = mkdir(Socket, DirName),
   ?assertEqual("ok", StatusMkdir),
@@ -1400,7 +1317,7 @@ dir_mv_test(Config) ->
   ?assertEqual("ok", StatusDelete2),
   ?assertEqual(list_to_atom(?VOK), AnswerDelete2),
 
-	wss:close(Socket),
+  wss:close(Socket),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
@@ -1410,7 +1327,6 @@ dir_mv_test(Config) ->
 
 %% Checks file sharing functions
 file_sharing_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Cert = ?COMMON_FILE("peer.pem"),
@@ -1420,9 +1336,9 @@ file_sharing_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   TestFile = "file_sharing_test_file",
   TestFile2 = "file_sharing_test_file2",
@@ -1431,20 +1347,10 @@ file_sharing_test(Config) ->
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
-  {ReadFileAns, PemBin} = file:read_file(Cert),
-  ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-  ?assertEqual(ok, ConvertAns),
-  DnList = [DN],
+  UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+  [DN | _] = user_logic:get_dn_list(UserDoc),
+  Login = rpc:call(FSLogicNode, user_logic, get_login, [UserDoc]),
 
-  Login = ?TEST_USER,
-  Name = "user1 user1",
-  Teams = [?TEST_GROUP],
-  Email = "user1@email.net",
-  {CreateUserAns, User_Doc} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
-  ?assertEqual(ok, CreateUserAns),
   fslogic_context:set_user_dn(DN),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
@@ -1467,20 +1373,20 @@ file_sharing_test(Config) ->
 
   {StatusCreate3, AnsCreate3} = rpc:call(FSLogicNode, fslogic_test_SUITE, create_standard_share, [TestFile, DN]),
   ?assertEqual(exists, StatusCreate3),
-  ?assertEqual(AnsCreate2, AnsCreate3#veil_document.uuid),
+  ?assertEqual(AnsCreate2, AnsCreate3#db_document.uuid),
 
   {StatusGet, AnsGet} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{uuid, AnsCreate2}, DN]),
   ?assertEqual(ok, StatusGet),
-  ?assertEqual(AnsCreate2, AnsGet#veil_document.uuid),
+  ?assertEqual(AnsCreate2, AnsGet#db_document.uuid),
 
   {StatusGet2, AnsGet2} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{file, TestFile}, DN]),
   ?assertEqual(ok, StatusGet2),
-  ?assertEqual(AnsCreate2, AnsGet2#veil_document.uuid),
+  ?assertEqual(AnsCreate2, AnsGet2#db_document.uuid),
 
-  {StatusGet3, AnsGet3} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{user, User_Doc#veil_document.uuid}, DN]),
+  {StatusGet3, AnsGet3} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{user, UserDoc#db_document.uuid}, DN]),
   ?assertEqual(ok, StatusGet3),
-  ?assertEqual(AnsCreate2, AnsGet3#veil_document.uuid),
-  ShareDoc = AnsGet3#veil_document.record,
+  ?assertEqual(AnsCreate2, AnsGet3#db_document.uuid),
+  ShareDoc = AnsGet3#db_document.record,
 
   {StatusCreateFile2, _Helper2, _Id2, _Validity2, AnswerCreateFile2} = create_file(Socket, TestFile2),
   ?assertEqual("ok", StatusCreateFile2),
@@ -1498,12 +1404,12 @@ file_sharing_test(Config) ->
 
   {StatusGet4, AnsGet4} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{uuid, AnsCreate4}, DN]),
   ?assertEqual(ok, StatusGet4),
-  ?assertEqual(AnsCreate4, AnsGet4#veil_document.uuid),
+  ?assertEqual(AnsCreate4, AnsGet4#db_document.uuid),
 
   {StatusGet5, AnsGet5} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{uuid, AnsCreate5}, DN]),
   ?assertEqual(ok, StatusGet5),
-  ?assertEqual(AnsCreate5, AnsGet5#veil_document.uuid),
-  ShareDoc2 = AnsGet5#veil_document.record,
+  ?assertEqual(AnsCreate5, AnsGet5#db_document.uuid),
+  ShareDoc2 = AnsGet5#db_document.record,
 
   {StatusGet6, AnsGet6} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{file, TestFile}, DN]),
   ?assertEqual(ok, StatusGet6),
@@ -1511,7 +1417,7 @@ file_sharing_test(Config) ->
   ?assert(lists:member(AnsGet, AnsGet6)),
   ?assert(lists:member(AnsGet4, AnsGet6)),
 
-  {StatusGet7, AnsGet7} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{user, User_Doc#veil_document.uuid}, DN]),
+  {StatusGet7, AnsGet7} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{user, UserDoc#db_document.uuid}, DN]),
   ?assertEqual(ok, StatusGet7),
   ?assertEqual(3, length(AnsGet7)),
   ?assert(lists:member(AnsGet, AnsGet7)),
@@ -1520,14 +1426,13 @@ file_sharing_test(Config) ->
 
   {StatusGet8, AnsGet8} = rpc:call(FSLogicNode, logical_files_manager, get_file_by_uuid, [ShareDoc#share_desc.file]),
   ?assertEqual(ok, StatusGet8),
-  ?assertEqual(ShareDoc#share_desc.file, AnsGet8#veil_document.uuid),
-  FileRecord = AnsGet8#veil_document.record,
+  ?assertEqual(ShareDoc#share_desc.file, AnsGet8#db_document.uuid),
+  FileRecord = AnsGet8#db_document.record,
   ?assertEqual(TestFile, FileRecord#file.name),
 
   {StatusGet9, AnsGet9} = rpc:call(FSLogicNode, logical_files_manager, get_file_full_name_by_uuid, [ShareDoc#share_desc.file]),
   ?assertEqual(ok, StatusGet9),
-  ?assertEqual(Login ++ "/" ++ TestFile, AnsGet9),
-
+  ?assertEqual("spaces/" ++ Login ++ "/" ++ TestFile, AnsGet9),
 
 
   {StatusMkdir, AnswerMkdir} = mkdir(Socket, DirName),
@@ -1540,7 +1445,7 @@ file_sharing_test(Config) ->
 
   {StatusGet10, AnsGet10} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{file, DirName ++ "/" ++ TestFile2}, DN]),
   ?assertEqual(ok, StatusGet10),
-  ?assertEqual(AnsCreate5, AnsGet10#veil_document.uuid),
+  ?assertEqual(AnsCreate5, AnsGet10#db_document.uuid),
 
   {StatusGet11, AnsGet11} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{file, TestFile2}, DN]),
   ?assertEqual(error, StatusGet11),
@@ -1548,9 +1453,7 @@ file_sharing_test(Config) ->
 
   {StatusGet12, AnsGet12} = rpc:call(FSLogicNode, logical_files_manager, get_file_full_name_by_uuid, [ShareDoc2#share_desc.file]),
   ?assertEqual(ok, StatusGet12),
-  ?assertEqual(Login ++ "/" ++ DirName ++ "/" ++ TestFile2, AnsGet12),
-
-
+  ?assertEqual("spaces/" ++ Login ++ "/" ++ DirName ++ "/" ++ TestFile2, AnsGet12),
 
 
   AnsRemove = rpc:call(FSLogicNode, logical_files_manager, remove_share, [{uuid, AnsCreate2}]),
@@ -1569,7 +1472,7 @@ file_sharing_test(Config) ->
   ?assertEqual("ok", StatusDelete),
   ?assertEqual(list_to_atom(?VOK), AnswerDelete),
 
-	wss:close(Socket),
+  wss:close(Socket),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
@@ -1579,7 +1482,6 @@ file_sharing_test(Config) ->
 
 %% Checks fslogic integration with dao and db
 fuse_requests_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Cert = ?COMMON_FILE("peer.pem"),
@@ -1589,14 +1491,14 @@ fuse_requests_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   TestFile = "fslogic_test_file",
   TestFile2 = "fslogic_test_file2",
   DirName = "fslogic_test_dir",
-  FilesInDirNames = ["file_in_dir1", "file_in_dir2", "file_in_dir3", "file_in_dir4",  "file_in_dir5"],
+  FilesInDirNames = ["file_in_dir1", "file_in_dir2", "file_in_dir3", "file_in_dir4", "file_in_dir5"],
   FilesInDir = lists:map(fun(N) ->
     DirName ++ "/" ++ N
   end, FilesInDirNames),
@@ -1605,20 +1507,8 @@ fuse_requests_test(Config) ->
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
-  {ReadFileAns, PemBin} = file:read_file(Cert),
-  ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-  ?assertEqual(ok, ConvertAns),
-  DnList = [DN],
-
-  Login = ?TEST_USER,
-  Name = "user1 user1",
-  Teams = [?TEST_GROUP],
-  Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
-  ?assertEqual(ok, CreateUserAns),
+  UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+  [DN | _] = user_logic:get_dn_list(UserDoc),
 
   %% Connect to cluster
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
@@ -1659,8 +1549,6 @@ fuse_requests_test(Config) ->
   ?assertEqual(?VEEXIST, AnswerOpt1),
 
 
-
-
   {Status2, Helper2, Id2, _Validity2, AnswerOpt2} = get_file_location(Socket, TestFile),
   ?assertEqual("ok", Status2),
   ?assertEqual(?VOK, AnswerOpt2),
@@ -1679,7 +1567,6 @@ fuse_requests_test(Config) ->
   ?assertEqual(list_to_atom(?VOK), Answer4_1),
 
 
-
   %% Test automatic descriptors cleaning
   {Status4_2, Helper4_2, Id4_2, _Validity4_2, AnswerOpt4_2} = get_file_location(Socket, TestFile),
   ?assertEqual("ok", Status4_2),
@@ -1692,7 +1579,6 @@ fuse_requests_test(Config) ->
   {Status4_4, _Validity4_4, AnswerOpt4_4} = renew_file_location(Socket, TestFile),
   ?assertEqual("ok", Status4_4),
   ?assertEqual(?VENOENT, AnswerOpt4_4),
-
 
 
   {Status5, Answer5} = mkdir(Socket, DirName),
@@ -1744,7 +1630,6 @@ fuse_requests_test(Config) ->
   end, FilesInDirNames),
 
 
-
   [FirstFileInDir | FilesInDirTail] = FilesInDir,
   [_ | FilesInDirNamesTail] = FilesInDirNames,
   {Status8, Answer8} = delete_file(Socket, FirstFileInDir),
@@ -1771,13 +1656,13 @@ fuse_requests_test(Config) ->
 
 
   %% updatetimes message test
-  CurrentTime = vcn_utils:time(),
+  CurrentTime = utils:time(),
   {Status20, Answer20} = update_times(Socket, SecondFileInDir, CurrentTime + 1234, CurrentTime + 4321),
   ?assertEqual("ok", Status20),
   ?assertEqual(list_to_atom(?VOK), Answer20),
 
   %% times update is async so we need to wait for it
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {Status21, Attr4} = get_file_attr(Socket, SecondFileInDir),
   ?assertEqual("ok", Status21),
 
@@ -1786,13 +1671,13 @@ fuse_requests_test(Config) ->
   %% updatetimes message test end
 
 
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {Status10, Answer10} = rename_file(Socket, SecondFileInDir, NewNameOfFIle),
   ?assertEqual("ok", Status10),
   ?assertEqual(list_to_atom(?VOK), Answer10),
 
   %% ctime update is async so we need to wait for it
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
 
   {Status17, Attr1} = get_file_attr(Socket, NewNameOfFIle),
   ?assertEqual("ok", Status17),
@@ -1801,13 +1686,13 @@ fuse_requests_test(Config) ->
   ?assert(Attr1#fileattr.ctime > Attr3#fileattr.ctime),
 
 
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {Status10_2, Answer10_2} = change_file_perms(Socket, NewNameOfFIle, 8#400),
   ?assertEqual("ok", Status10_2),
   ?assertEqual(list_to_atom(?VOK), Answer10_2),
 
   %% ctime update is async so we need to wait for it
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
 
   {Status18, Attr2} = get_file_attr(Socket, NewNameOfFIle),
   ?assertEqual("ok", Status18),
@@ -1852,10 +1737,9 @@ fuse_requests_test(Config) ->
   ?assertEqual("ok", Status_MV4),
   ?assertEqual(list_to_atom(?VOK), AnswerMV4),
 
-  {Status_MV5, AnswerMV5} = delete_file(Socket, DirName ++ "/" ++TestFile2),
+  {Status_MV5, AnswerMV5} = delete_file(Socket, DirName ++ "/" ++ TestFile2),
   ?assertEqual("ok", Status_MV5),
   ?assertEqual(list_to_atom(?VOK), AnswerMV5),
-
 
 
   {Status12, Answer12} = delete_file(Socket, DirName),
@@ -1884,7 +1768,7 @@ fuse_requests_test(Config) ->
   ?assertEqual("ok", Status16),
   ?assertEqual(list_to_atom(?VOK), Answer16),
 
-	wss:close(Socket),
+  wss:close(Socket),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
@@ -1895,10 +1779,9 @@ fuse_requests_test(Config) ->
 %% Checks fslogic integration with dao and db
 %% This test also checks chown & chgrp behaviour
 users_separation_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
-  Cert = ?COMMON_FILE("peer.pem"),
+  Cert1 = ?COMMON_FILE("peer.pem"),
   Cert2 = ?COMMON_FILE("peer2.pem"),
   Host = "localhost",
   Port = ?config(port, Config),
@@ -1908,57 +1791,37 @@ users_separation_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
-  {ReadFileAns, PemBin} = file:read_file(Cert),
-  ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-  ?assertEqual(ok, ConvertAns),
-  DnList = [DN],
+  UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert1, [?TEST_USER, ?TEST_GROUP]),
+  [DN1 | _] = user_logic:get_dn_list(UserDoc1),
+  Login1 = rpc:call(FSLogicNode, user_logic, get_login, [UserDoc1]),
+  UserID1 = UserDoc1#db_document.uuid,
 
-  Login = ?TEST_USER,
-  Name = "user1 user1",
-  Teams = [?TEST_GROUP],
-  Email = "user1@email.net",
-  {CreateUserAns, #veil_document{uuid = UserID1}} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
-  ?assertEqual(ok, CreateUserAns),
-
-  {ReadFileAns2, PemBin2} = file:read_file(Cert2),
-  ?assertEqual(ok, ReadFileAns2),
-  {ExtractAns2, RDNSequence2} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin2]),
-  ?assertEqual(rdnSequence, ExtractAns2),
-  {ConvertAns2, DN2} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence2]),
-  ?assertEqual(ok, ConvertAns2),
-  DnList2 = [DN2],
-
-  Login2 = ?TEST_USER2,
-  Name2 = "user2 user2",
-  Teams2 = [?TEST_GROUP2],
-  Email2 = "user2@email.net",
-  {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
-  ?assertEqual(ok, CreateUserAns2),
+  UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, ?TEST_GROUP2]),
+  [DN2 | _] = user_logic:get_dn_list(UserDoc2),
+  Login2 = rpc:call(FSLogicNode, user_logic, get_login, [UserDoc2]),
+  UserID2 = UserDoc2#db_document.uuid,
 
   %% Open connections
-  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}, auto_handshake]),
   ?assertEqual(ok, ConAns),
 
   {ConAns1, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}, auto_handshake]),
   ?assertEqual(ok, ConAns1),
 
   %% Current time
-  Time = vcn_utils:time(),
-  nodes_manager:wait_for_db_reaction(),
+  Time = utils:time(),
+  test_utils:wait_for_db_reaction(),
 
   %% Users have different (and next to each other) IDs
   UID1 = list_to_integer(UserID1),
-  UID2 = list_to_integer(UserID2),  
+  UID2 = list_to_integer(UserID2),
   ?assertEqual(UID2, UID1 + 1),
 
   {Status, Helper, Id, _Validity, AnswerOpt} = create_file(Socket, TestFile),
@@ -2001,29 +1864,22 @@ users_separation_test(Config) ->
   ?assertEqual("ok", Status22),
 
   %% Check logins
-  ?assertEqual(Login, Attr1#fileattr.uname),
+  ?assertEqual(Login1, Attr1#fileattr.uname),
   ?assertEqual(Login2, Attr2#fileattr.uname),
 
   %% Check UIDs
   ?assertEqual(UID1, Attr1#fileattr.uid),
   ?assertEqual(UID2, Attr2#fileattr.uid),
 
-  nodes_manager:wait_for_db_reaction(),
-  
+  test_utils:wait_for_db_reaction(),
+
   %% chown test
-  {Status23, Answer23} = chown(Socket, TestFile, 77777, "unknown"),
+  {Status23, Answer23} = chown(Socket, TestFile, 77777),
   ?assertEqual("ok", Status23),
   ?assertEqual(list_to_atom(?VEACCES), Answer23),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login ++ "/" ++ TestFile, Login2, 0])),
-%%   {Status24, Answer24} = chown(Socket, TestFile, 0, Login2),
-%%   ?assertEqual("ok", Status24),
-%%   ?assertEqual(list_to_atom(?VOK), Answer24),
-
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login2 ++ "/" ++ TestFile, "unknown", UID1])),
-%%   {Status25, Answer25} = chown(Socket2, TestFile, UID1, "unknown"),
-%%   ?assertEqual("ok", Status25),
-%%   ?assertEqual(list_to_atom(?VOK), Answer25),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login1 ++ "/" ++ TestFile, UID2])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login2 ++ "/" ++ TestFile, UID1])),
 
   %% Check if owners are set properly
   {Status26, Attr3} = get_file_attr(Socket, TestFile),
@@ -2033,7 +1889,7 @@ users_separation_test(Config) ->
 
   %% Check logins
   ?assertEqual(Login2, Attr3#fileattr.uname),
-  ?assertEqual(Login, Attr4#fileattr.uname),
+  ?assertEqual(Login1, Attr4#fileattr.uname),
 
   %% Check UIDs
   ?assertEqual(UID2, Attr3#fileattr.uid),
@@ -2051,20 +1907,20 @@ users_separation_test(Config) ->
   ?assert(Attr4#fileattr.ctime > Attr2#fileattr.ctime),
 
   %% Check attrs in logical_files_manager
-  {FMStatys, FM_Attrs} = rpc:call(FSLogicNode, logical_files_manager, getfileattr, [Login2 ++ "/" ++ TestFile]),
+  {FMStatys, FM_Attrs} = rpc:call(FSLogicNode, logical_files_manager, getfileattr, ["/spaces/" ++ Login2 ++ "/" ++ TestFile]),
   ?assertEqual(ok, FMStatys),
   ?assertEqual(Attr4#fileattr.mode, FM_Attrs#fileattributes.mode),
   ?assertEqual(Attr4#fileattr.uid, FM_Attrs#fileattributes.uid),
   ?assertEqual(Attr4#fileattr.gid, FM_Attrs#fileattributes.gid),
   ?assertEqual(Attr4#fileattr.type, FM_Attrs#fileattributes.type),
   ?assertEqual(Attr4#fileattr.size, FM_Attrs#fileattributes.size),
-  ?assertEqual(Attr4#fileattr.uname, FM_Attrs#fileattributes.uname),
+  ?assertEqual(Attr4#fileattr.uname, utils:ensure_list(FM_Attrs#fileattributes.uname)),
   ?assertEqual(Attr4#fileattr.gname, FM_Attrs#fileattributes.gname),
   ?assertEqual(Attr4#fileattr.ctime, FM_Attrs#fileattributes.ctime),
   ?assertEqual(Attr4#fileattr.mtime, FM_Attrs#fileattributes.mtime),
   ?assertEqual(Attr4#fileattr.atime, FM_Attrs#fileattributes.atime),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login ++ "/" ++ TestFile, Login, UID1])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login1 ++ "/" ++ TestFile, UID1])),
   {Status6, Answer6} = delete_file(Socket, TestFile),
   ?assertEqual("ok", Status6),
   ?assertEqual(list_to_atom(?VOK), Answer6),
@@ -2079,7 +1935,7 @@ users_separation_test(Config) ->
   ?assertEqual(Helper4, Helper8),
   ?assertEqual(Id4, Id8),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login2 ++ "/" ++ TestFile, Login2, UID2])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login2 ++ "/" ++ TestFile, UID2])),
   {Status9, Answer9} = delete_file(Socket2, TestFile),
   ?assertEqual("ok", Status9),
   ?assertEqual(list_to_atom(?VOK), Answer9),
@@ -2115,28 +1971,27 @@ users_separation_test(Config) ->
   ?assertEqual("ok", Status20),
   ?assertEqual(?VENOENT, Answer20),
 
-	wss:close(Socket),
-	wss:close(Socket2),
+  wss:close(Socket),
+  wss:close(Socket2),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
-  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
+  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN1}]),
   ?assertEqual(ok, RemoveUserAns),
   RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
   ?assertEqual(ok, RemoveUserAns2).
 
 %% Checks files manager (manipulation on tmp files copies)
 files_manager_tmp_files_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
   File = "files_manager_test_file1",
@@ -2150,7 +2005,7 @@ files_manager_tmp_files_test(Config) ->
   ?assert(files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ File)),
 
   AnsCreate2 = rpc:call(Node1, storage_files_manager, create, [SHInfo, File]),
-  ?assertEqual({error,file_exists}, AnsCreate2),
+  ?assertEqual({error, file_exists}, AnsCreate2),
 
   AnsWrite1 = rpc:call(Node1, storage_files_manager, write, [SHInfo, File, list_to_binary("abcdefgh")]),
   ?assertEqual(8, AnsWrite1),
@@ -2200,21 +2055,20 @@ files_manager_tmp_files_test(Config) ->
   ?assertEqual(ok, AnsDel),
   ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ File)),
 
-  {StatusDel2, AnsDel2}  = rpc:call(Node1, storage_files_manager, delete, [SHInfo, File]),
+  {StatusDel2, AnsDel2} = rpc:call(Node1, storage_files_manager, delete, [SHInfo, File]),
   ?assertEqual(wrong_getatt_return_code, StatusDel2),
   ?assert(is_integer(AnsDel2)).
 
 %% Checks files manager (manipulation on users' files)
 files_manager_standard_files_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
@@ -2247,7 +2101,7 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, MkDirAns),
 
   MkDirAns2 = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
-  ?assertEqual({error,dir_exists}, MkDirAns2),
+  ?assertEqual({error, dir_exists}, MkDirAns2),
 
   ?assertEqual(false, rpc:call(Node1, logical_files_manager, exists, [File])),
 
@@ -2258,7 +2112,7 @@ files_manager_standard_files_test(Config) ->
   ?assert(rpc:call(Node1, logical_files_manager, exists, [File])),
 
   AnsCreate2 = rpc:call(Node1, logical_files_manager, create, [File]),
-  ?assertEqual({error,file_exists}, AnsCreate2),
+  ?assertEqual({error, file_exists}, AnsCreate2),
 
   AnsWrite1 = rpc:call(Node1, logical_files_manager, write, [File, list_to_binary("abcdefgh")]),
   ?assertEqual(8, AnsWrite1),
@@ -2311,8 +2165,9 @@ files_manager_standard_files_test(Config) ->
   {StatusLs, AnsLs} = rpc:call(Node1, logical_files_manager, ls, [DirName, 100, 0]),
   ?assertEqual(ok, StatusLs),
   ?assertEqual(2, length(AnsLs)),
-  ?assert(lists:member(FileInDir, AnsLs)),
-  ?assert(lists:member(FileInDir2, AnsLs)),
+  FileList1 = lists:map(fun(#dir_entry{name = Name}) -> Name end, AnsLs),
+  ?assert(lists:member(FileInDir, FileList1)),
+  ?assert(lists:member(FileInDir2, FileList1)),
 
   {File2LocationAns, File2Location} = rpc:call(Node1, files_tester, get_file_location, [File2]),
   ?assertEqual(ok, File2LocationAns),
@@ -2324,16 +2179,15 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, File2LocationAns2),
   ?assertEqual(File2Location, File2Location2),
 
-  AnsChPerm = rpc:call(Node1, logical_files_manager, change_file_perm, [File, 8#777]),
+  AnsChPerm = rpc:call(Node1, logical_files_manager, change_file_perm, [File, 8#777, true]),
   ?assertEqual(ok, AnsChPerm),
 
   {StatusLs2, AnsLs2} = rpc:call(Node1, logical_files_manager, ls, [DirName, 100, 0]),
   ?assertEqual(ok, StatusLs2),
   ?assertEqual(2, length(AnsLs2)),
-  ?assert(lists:member(FileInDir, AnsLs2)),
-  ?assert(lists:member(FileInDir2NewName, AnsLs2)),
-
-
+  FileList2 = lists:map(fun(#dir_entry{name = Name}) -> Name end, AnsLs2),
+  ?assert(lists:member(FileInDir, FileList2)),
+  ?assert(lists:member(FileInDir2NewName, FileList2)),
 
 
   %% create file and move to dir
@@ -2402,80 +2256,271 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, RemoveStorageAns).
 
 get_file_links_test(Config) ->
-    nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+  [Node1 | _] = NodesUp,
+
+  gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  test_utils:wait_for_cluster_cast(),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  test_utils:wait_for_cluster_init(),
+
+  {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  DirName = "base_dir",
+
+  AnsDirCreate1 = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
+  ?assertEqual(ok, AnsDirCreate1),
+
+  %% Check number of links for empty directory
+  {AttrAns1, Attrs1} = rpc:call(Node1, logical_files_manager, getfileattr, [DirName]),
+  ?assertEqual(ok, AttrAns1),
+  ?assertEqual(2, Attrs1#fileattributes.links),
+
+  AnsFileCreate1 = rpc:call(Node1, logical_files_manager, create, [DirName ++ "/file"]),
+  ?assertEqual(ok, AnsFileCreate1),
+
+  %% Check number of links for directory with one regular file
+  {AttrAns2, Attrs2} = rpc:call(Node1, logical_files_manager, getfileattr, [DirName]),
+  ?assertEqual(ok, AttrAns2),
+  ?assertEqual(2, Attrs2#fileattributes.links),
+
+  %% Check number of links for regular file
+  {AttrAns3, Attrs3} = rpc:call(Node1, logical_files_manager, getfileattr, [DirName ++ "/file"]),
+  ?assertEqual(ok, AttrAns3),
+  ?assertEqual(1, Attrs3#fileattributes.links),
+
+  AnsDirCreate2 = rpc:call(Node1, logical_files_manager, mkdir, [DirName ++ "/dir1"]),
+  ?assertEqual(ok, AnsDirCreate2),
+
+  AnsDirCreate3 = rpc:call(Node1, logical_files_manager, mkdir, [DirName ++ "/dir2"]),
+  ?assertEqual(ok, AnsDirCreate3),
+
+  AnsDirCreate4 = rpc:call(Node1, logical_files_manager, mkdir, [DirName ++ "/dir1/dir11"]),
+  ?assertEqual(ok, AnsDirCreate4),
+
+  AnsFileCreate2 = rpc:call(Node1, logical_files_manager, create, [DirName ++ "/dir2/file"]),
+  ?assertEqual(ok, AnsFileCreate2),
+
+  %% Check number of links for directory with more complicated structure
+  {AttrAns4, Attrs4} = rpc:call(Node1, logical_files_manager, getfileattr, [DirName]),
+  ?assertEqual(ok, AttrAns4),
+  ?assertEqual(4, Attrs4#fileattributes.links),
+
+  %% Remove created files
+  AnsDel1 = rpc:call(Node1, logical_files_manager, delete, [DirName ++ "/file"]),
+  ?assertEqual(ok, AnsDel1),
+
+  AnsDel2 = rpc:call(Node1, logical_files_manager, delete, [DirName ++ "/dir2/file"]),
+  ?assertEqual(ok, AnsDel2),
+
+  AnsDel3 = rpc:call(Node1, logical_files_manager, rmdir, [DirName ++ "/dir1/dir11"]),
+  ?assertEqual(ok, AnsDel3),
+
+  AnsDel4 = rpc:call(Node1, logical_files_manager, rmdir, [DirName ++ "/dir1"]),
+  ?assertEqual(ok, AnsDel4),
+
+  AnsDel5 = rpc:call(Node1, logical_files_manager, rmdir, [DirName ++ "/dir2"]),
+  ?assertEqual(ok, AnsDel5),
+
+  AnsDel6 = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
+  ?assertEqual(ok, AnsDel6),
+
+  RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns).
+
+xattrs_test(Config) ->
+  NodesUp = ?config(nodes, Config),
+  [Node1 | _] = NodesUp,
+
+  gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  test_utils:wait_for_cluster_cast(),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  test_utils:wait_for_cluster_init(),
+
+  {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  DirName = "test_xattr_dir",
+
+  % make test file
+  AnsDirCreate1 = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
+  ?assertEqual(ok, AnsDirCreate1),
+
+  % test setting and getting xattrs
+  Ans1 = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name1", "value1"]),
+  ?assertEqual(ok, Ans1),
+  Ans2 = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name1"]),
+  ?assertEqual({ok, "value1"}, Ans2),
+
+  % test replacing xattr
+  Ans3 = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name1", "other_value"]),
+  ?assertEqual(ok, Ans3),
+  Ans4 = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name1"]),
+  ?assertEqual({ok, "other_value"}, Ans4),
+
+  % test listing xattr
+  Ans5 = rpc:call(Node1, logical_files_manager, set_xattr, [DirName, "name2", "value2"]),
+  ?assertEqual(ok, Ans5),
+  Ans6 = rpc:call(Node1, logical_files_manager, list_xattr, [DirName]),
+  ?assertEqual({ok, [{"name2", "value2"}, {"name1", "other_value"}]}, Ans6),
+
+  % test removing xattr
+  Ans7 = rpc:call(Node1, logical_files_manager, remove_xattr, [DirName, "name2"]),
+  ?assertEqual(ok, Ans7),
+  Ans8 = rpc:call(Node1, logical_files_manager, list_xattr, [DirName]),
+  ?assertEqual({ok, [{"name1", "other_value"}]}, Ans8),
+
+  % test error reporting
+  Ans9 = rpc:call(Node1, logical_files_manager, get_xattr, [DirName, "name3"]),
+  ?assertEqual({logical_file_system_error, ?VENOATTR}, Ans9),
+
+  % cleanup
+  AnsDel = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
+  ?assertEqual(ok, AnsDel),
+  RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns).
+
+acl_test(Config) ->
     NodesUp = ?config(nodes, Config),
     [Node1 | _] = NodesUp,
 
     gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
     gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    nodes_manager:wait_for_cluster_cast(),
+    test_utils:wait_for_cluster_cast(),
     gen_server:cast({global, ?CCM}, init_cluster),
-    nodes_manager:wait_for_cluster_init(),
+    test_utils:wait_for_cluster_init(),
 
     {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
     ?assertEqual(ok, InsertStorageAns),
 
-    DirName = "base_dir",
+    Cert = ?COMMON_FILE("peer.pem"),
+    UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+    [DN | _] = user_logic:get_dn_list(UserDoc),
+    fslogic_context:set_user_dn(DN),
 
-    AnsDirCreate1 = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
+    DirName = "/spaces/" ++ ?TEST_USER ++ "/test_acl_dir",
+
+    % make test file
+    AnsDirCreate1 = rpc:call(Node1, fslogic_test_SUITE, make_dir, [DirName, DN]),
     ?assertEqual(ok, AnsDirCreate1),
 
-    %% Check number of links for empty directory
-    {AttrAns1, Attrs1} = rpc:call(Node1, logical_files_manager, getfileattr, [DirName]),
-    ?assertEqual(ok, AttrAns1),
-    ?assertEqual(2, Attrs1#fileattributes.links),
+    %test getting virtual acl
+    VirtualAclAns = rpc:call(Node1, fslogic_test_SUITE, get_acl, [DirName, DN]),
+    ?assertEqual({ok,[#accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_", ?TEST_USER>>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask}]}
+        ,VirtualAclAns),
+    {ok, VirtualAcl} = VirtualAclAns,
+    TestUserName = <<?TEST_USER, " ", ?TEST_USER, "#globa">>,
+    ?assertEqual([[{<<"acetype">>,<<"ALLOW">>},
+        {<<"identifier">>, TestUserName},
+        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"acemask">>, <<"READ, WRITE">>}]],
+        rpc:call(Node1, fslogic_acl,from_acl_to_json_format,[VirtualAcl])),
 
-    AnsFileCreate1 = rpc:call(Node1, logical_files_manager, create, [DirName ++ "/file"]),
-    ?assertEqual(ok, AnsFileCreate1),
+    GroupName = <<"name">>,
+    GroupId = <<"Id">>,
+    Group = #db_document{record = #group_details{name = GroupName, id= GroupId}},
+    test_utils:ct_mock(Config, dao_groups, get_group_by_name, fun(_) -> {ok, [Group]} end),
 
-    %% Check number of links for directory with one regular file
-    {AttrAns2, Attrs2} = rpc:call(Node1, logical_files_manager, getfileattr, [DirName]),
-    ?assertEqual(ok, AttrAns2),
-    ?assertEqual(2, Attrs2#fileattributes.links),
+    % test setting and getting acl
+    TestUserNameWithNoHash = <<?TEST_USER, " ", ?TEST_USER, "#">>,
+    Acl = rpc:call(Node1, fslogic_acl, from_json_fromat_to_acl,[
+        [
+            [
+                {<<"acetype">>, <<"ALLOW">>},
+                {<<"identifier">>, TestUserNameWithNoHash},
+                {<<"aceflags">>, <<"NO_FLAGS">>},
+                {<<"acemask">>, <<"READ, WRITE">>}
+            ],
+            [
+                {<<"acetype">>, <<"DENY">>},
+                {<<"identifier">>, GroupId},
+                {<<"aceflags">>, <<"IDENTIFIER_GROUP">>},
+                {<<"acemask">>, <<"WRITE">>}
+            ]
+        ]
+    ]),
+    ?assertEqual(Acl, [
+        #accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_", ?TEST_USER>>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #accesscontrolentity{acetype = ?deny_mask, identifier = GroupId, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+    ]),
 
-    %% Check number of links for regular file
-    {AttrAns3, Attrs3} = rpc:call(Node1, logical_files_manager, getfileattr, [DirName ++ "/file"]),
-    ?assertEqual(ok, AttrAns3),
-    ?assertEqual(1, Attrs3#fileattributes.links),
+    Ans1 = rpc:call(Node1, logical_files_manager, set_acl, [DirName, Acl]),
+    ?assertEqual(ok, Ans1),
+    Ans2 = rpc:call(Node1, logical_files_manager, get_acl, [DirName]),
+    ?assertEqual({ok,Acl}, Ans2),
 
-    AnsDirCreate2 = rpc:call(Node1, logical_files_manager, mkdir, [DirName ++ "/dir1"]),
-    ?assertEqual(ok, AnsDirCreate2),
-
-    AnsDirCreate3 = rpc:call(Node1, logical_files_manager, mkdir, [DirName ++ "/dir2"]),
-    ?assertEqual(ok, AnsDirCreate3),
-
-    AnsDirCreate4 = rpc:call(Node1, logical_files_manager, mkdir, [DirName ++ "/dir1/dir11"]),
-    ?assertEqual(ok, AnsDirCreate4),
-
-    AnsFileCreate2 = rpc:call(Node1, logical_files_manager, create, [DirName ++ "/dir2/file"]),
-    ?assertEqual(ok, AnsFileCreate2),
-
-    %% Check number of links for directory with more complicated structure
-    {AttrAns4, Attrs4} = rpc:call(Node1, logical_files_manager, getfileattr, [DirName]),
-    ?assertEqual(ok, AttrAns4),
-    ?assertEqual(4, Attrs4#fileattributes.links),
-
-    %% Remove created files
-    AnsDel1 = rpc:call(Node1, logical_files_manager, delete, [DirName ++ "/file"]),
-    ?assertEqual(ok, AnsDel1),
-
-    AnsDel2 = rpc:call(Node1, logical_files_manager, delete, [DirName ++ "/dir2/file"]),
-    ?assertEqual(ok, AnsDel2),
-
-    AnsDel3 = rpc:call(Node1, logical_files_manager, rmdir, [DirName ++ "/dir1/dir11"]),
-    ?assertEqual(ok, AnsDel3),
-
-    AnsDel4 = rpc:call(Node1, logical_files_manager, rmdir, [DirName ++ "/dir1"]),
-    ?assertEqual(ok, AnsDel4),
-
-    AnsDel5 = rpc:call(Node1, logical_files_manager, rmdir, [DirName ++ "/dir2"]),
-    ?assertEqual(ok, AnsDel5),
-
-    AnsDel6 = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
-    ?assertEqual(ok, AnsDel6),
-
+    % cleanup
+    AnsDel = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
+    ?assertEqual(ok, AnsDel),
     RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
     ?assertEqual(ok, RemoveStorageAns).
+
+
+get_file_local_location_test(Config) ->
+    [Node1 | _] = ?config(nodes, Config),
+
+    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    test_utils:wait_for_cluster_cast(),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    test_utils:wait_for_cluster_init(),
+
+    FileId = "1234",
+    Doc = #db_document{uuid = FileId, record = #file{}},
+    Location = #file_location{file_id = FileId, storage_file_id = "123"},
+
+    {ok, _} = rpc:call(Node1, dao_lib, apply, [dao_vfs, save_file_location, [Location], ?ProtocolVersion]),
+    ?assertMatch(#file_location{storage_file_id = "123"}, rpc:call(Node1, fslogic_file, get_file_local_location, [Doc])),
+    ?assertMatch(#file_location{storage_file_id = "123"}, rpc:call(Node1, fslogic_file, get_file_local_location, [FileId])).
+
+
+block_creation_test(Config) ->
+    FileName = "/block_creation_test",
+    [Node1 | _] = ?config(nodes, Config),
+
+    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    test_utils:wait_for_cluster_cast(),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    test_utils:wait_for_cluster_init(),
+
+    ?assertMatch({ok, _}, rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT])),
+
+    ?assertEqual(ok, rpc:call(Node1, logical_files_manager, create, [FileName])),
+    {ok, FileDoc} = rpc:call(Node1, fslogic_objects, get_file, [FileName]),
+    #db_document{uuid = LocationId} = rpc:call(Node1, fslogic_file, get_file_local_location_doc, [FileDoc]),
+
+    ExpectedBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
+    {ok, Blocks} = rpc:call(Node1, dao_lib, apply, [dao_vfs, get_file_blocks, [LocationId], ?ProtocolVersion]),
+    ?assertMatch([#db_document{record = ExpectedBlock}], Blocks).
+
+
+block_registration_test(Config) ->
+    FileName = "/block_registration_test",
+    Cert = ?COMMON_FILE("peer.pem"),
+    Host = "localhost",
+    Port = ?config(port, Config),
+    [Node1 | _] = ?config(nodes, Config),
+
+    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    test_utils:wait_for_cluster_cast(),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    test_utils:wait_for_cluster_init(),
+
+    ?assertMatch({ok, _}, rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT])),
+
+    UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+    {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
+
+    ?assertMatch({?VOK, _, _, _, ?VOK}, create_file(Socket, FileName)),
+    ?assertEqual({?VOK, ok}, send_creation_ack(Socket, FileName)),
+    {ok, FullFileName} = rpc:call(Node1, fslogic_path, get_full_file_name, [FileName, cluter_request, ok, UserDoc]),
+
+    ?assertEqual({ok, 1}, rpc:call(Node1, fslogic_req_regular, register_file_block, [FullFileName, 9, 9])).
 
 
 %% ====================================================================
@@ -2483,41 +2528,35 @@ get_file_links_test(Config) ->
 %% ====================================================================
 
 init_per_testcase(user_file_size_test, Config) ->
-  ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  ?INIT_CODE_PATH, ?CLEAN_TEST_DIRS,
+  test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1),
   [FSLogicNode | _] = NodesUp,
 
-  DB_Node = nodes_manager:get_db_node(),
+  DB_Node = ?DB_NODE,
   Port = 6666,
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {user_files_size_view_update_period, 2}, {heart_beat, 1}]]),
-
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config);
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {user_files_size_view_update_period, 2}, {heart_beat, 1}, {nif_prefix, './'}, {ca_dir, './cacerts/'}]]),
+  ?ENABLE_PROVIDER(lists:append([{port, Port}, {nodes, NodesUp}], Config));
 
 init_per_testcase(_, Config) ->
-  ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  ?INIT_CODE_PATH, ?CLEAN_TEST_DIRS,
+  test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1),
   [FSLogicNode | _] = NodesUp,
 
-  DB_Node = nodes_manager:get_db_node(),
+  DB_Node = ?DB_NODE,
   Port = 6666,
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1}, {nif_prefix, './'}, {ca_dir, './cacerts/'}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
+  ?ENABLE_PROVIDER(lists:append([{port, Port}, {nodes, NodesUp}], Config)).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
-  nodes_manager:stop_deps_for_tester_node(),
-
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns).
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes),
+  test_node_starter:stop_test_nodes(Nodes),
+  test_node_starter:stop_deps_for_tester_node().
 
 %% ====================================================================
 %% Helper functions
@@ -2532,8 +2571,8 @@ create_file(Socket, FileName) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "filelocation",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "filelocation",
+    answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2553,8 +2592,8 @@ send_creation_ack(Socket, FileName) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2574,8 +2613,8 @@ get_file_location(Socket, FileName) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "filelocation",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "filelocation",
+    answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2595,8 +2634,8 @@ renew_file_location(Socket, FileName) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "filelocationvalidity",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "filelocationvalidity",
+    answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2616,8 +2655,8 @@ file_not_used(Socket, FileName) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2637,8 +2676,8 @@ mkdir(Socket, DirName) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2661,8 +2700,8 @@ ls(Socket, Dir, Num, Offset) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "filechildren",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "filechildren",
+    answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2672,7 +2711,8 @@ ls(Socket, Dir, Num, Offset) ->
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Files = fuse_messages_pb:decode_filechildren(Bytes),
   Files2 = records_translator:translate(Files, "fuse_messages"),
-  {Status, Files2#filechildren.child_logic_name, Files2#filechildren.answer}.
+  FileList = lists:map(fun(#filechildren_direntry{name = Name}) -> Name end, Files2#filechildren.entry),
+  {Status, FileList, Files2#filechildren.answer}.
 
 delete_file(Socket, FileName) ->
   FslogicMessage = #deletefile{file_logic_name = FileName},
@@ -2682,8 +2722,8 @@ delete_file(Socket, FileName) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2703,8 +2743,8 @@ rename_file(Socket, FileName, NewName) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2724,8 +2764,8 @@ change_file_perms(Socket, FileName, Perms) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2745,8 +2785,8 @@ create_link(Socket, From, To) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2766,8 +2806,8 @@ get_link(Socket, FileName) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "linkinfo",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "linkinfo",
+    answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2787,8 +2827,8 @@ get_file_attr(Socket, FileName) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "fileattr",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    message_decoder_name = "fuse_messages", answer_type = "fileattr",
+    answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2801,74 +2841,73 @@ get_file_attr(Socket, FileName) ->
   {Status, Resp1}.
 
 update_times(Socket, FileName, ATime, MTime) ->
-    FslogicMessage = #updatetimes{file_logic_name = FileName, atime = ATime, mtime = MTime},
-    FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_updatetimes(FslogicMessage)),
+  FslogicMessage = #updatetimes{file_logic_name = FileName, atime = ATime, mtime = MTime},
+  FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_updatetimes(FslogicMessage)),
 
-    FuseMessage = #fusemessage{message_type = "updatetimes", input = FslogicMessageMessageBytes},
-    FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+  FuseMessage = #fusemessage{message_type = "updatetimes", input = FslogicMessageMessageBytes},
+  FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
-    Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+  Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
     answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
-    MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-    wss:send(Socket, MessageBytes),
-    {SendAns, Ans} = wss:recv(Socket, 5000),
-    ?assertEqual(ok, SendAns),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
+  ?assertEqual(ok, SendAns),
 
-    #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
-    Answer = communication_protocol_pb:decode_atom(Bytes),
-    Answer2 = records_translator:translate(Answer, "communication_protocol"),
-    {Status, Answer2}.
+  #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+  Answer = communication_protocol_pb:decode_atom(Bytes),
+  Answer2 = records_translator:translate(Answer, "communication_protocol"),
+  {Status, Answer2}.
 
-chown(Socket, FileName, UID, UName) ->
-    FslogicMessage = #changefileowner{file_logic_name = FileName, uid = UID, uname = UName},
-    FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_changefileowner(FslogicMessage)),
+chown(Socket, FileName, UID) ->
+  FslogicMessage = #changefileowner{file_logic_name = FileName, uid = UID},
+  FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_changefileowner(FslogicMessage)),
 
-    FuseMessage = #fusemessage{message_type = "changefileowner", input = FslogicMessageMessageBytes},
-    FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+  FuseMessage = #fusemessage{message_type = "changefileowner", input = FslogicMessageMessageBytes},
+  FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
-    Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+  Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
     answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
-    MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-    wss:send(Socket, MessageBytes),
-    {SendAns, Ans} = wss:recv(Socket, 5000),
-    ?assertEqual(ok, SendAns),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
+  ?assertEqual(ok, SendAns),
 
-    #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
-    Answer = communication_protocol_pb:decode_atom(Bytes),
-    Answer2 = records_translator:translate(Answer, "communication_protocol"),
-    {Status, Answer2}.
+  #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+  Answer = communication_protocol_pb:decode_atom(Bytes),
+  Answer2 = records_translator:translate(Answer, "communication_protocol"),
+  {Status, Answer2}.
 
-chgrp(Socket, FileName, GID, GName) ->
-    FslogicMessage = #changefilegroup{file_logic_name = FileName, gid = GID, gname = GName},
-    FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_changefilegroup(FslogicMessage)),
-
-    FuseMessage = #fusemessage{message_type = "changefilegroup", input = FslogicMessageMessageBytes},
-    FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
-
-    Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
-    message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
-    MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
-
-    wss:send(Socket, MessageBytes),
-    {SendAns, Ans} = wss:recv(Socket, 5000),
-    ?assertEqual(ok, SendAns),
-
-    #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
-    Answer = communication_protocol_pb:decode_atom(Bytes),
-    Answer2 = records_translator:translate(Answer, "communication_protocol"),
-    {Status, Answer2}.
-
+%% chgrp(Socket, FileName, GID, GName) ->
+%%   FslogicMessage = #changefilegroup{file_logic_name = FileName, gid = GID, gname = GName},
+%%   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_changefilegroup(FslogicMessage)),
+%%
+%%   FuseMessage = #fusemessage{message_type = "changefilegroup", input = FslogicMessageMessageBytes},
+%%   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+%%
+%%   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+%%     message_decoder_name = "fuse_messages", answer_type = "atom",
+%%     answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+%%   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+%%
+%%   wss:send(Socket, MessageBytes),
+%%   {SendAns, Ans} = wss:recv(Socket, 5000),
+%%   ?assertEqual(ok, SendAns),
+%%
+%%   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+%%   Answer = communication_protocol_pb:decode_atom(Bytes),
+%%   Answer2 = records_translator:translate(Answer, "communication_protocol"),
+%%   {Status, Answer2}.
 
 clear_old_descriptors(Node) ->
-  {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
-  Time = 1000000*Megaseconds + Seconds + 60*15 + 1,
+  {Megaseconds, Seconds, _Microseconds} = os:timestamp(),
+  Time = 1000000 * Megaseconds + Seconds + 60 * 15 + 1,
   gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}, 1000),
-  nodes_manager:wait_for_db_reaction().
+  test_utils:wait_for_db_reaction().
 
 create_standard_share(TestFile, DN) ->
   fslogic_context:set_user_dn(DN),
@@ -2881,3 +2920,11 @@ create_share(TestFile, Share_With, DN) ->
 get_share(Key, DN) ->
   fslogic_context:set_user_dn(DN),
   logical_files_manager:get_share(Key).
+
+get_acl(FilePath, DN) ->
+  fslogic_context:set_user_dn(DN),
+  logical_files_manager:get_acl(FilePath).
+
+make_dir(FilePath, DN) ->
+  fslogic_context:set_user_dn(DN),
+  logical_files_manager:mkdir(FilePath).

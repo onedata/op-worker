@@ -1,15 +1,15 @@
-[submodule "veilprotocol"]
-	path = veilprotocol
-	url = ssh://git@git.plgrid.pl:7999/VFS/veilprotocol.git
-[submodule "veilhelpers"]
-	path = veilhelpers
-	url = ssh://git@git.plgrid.pl:7999/vfs/veilhelpers.git
+[submodule "clproto"]
+	path = clproto
+	url = ssh://git@git.plgrid.pl:7999/VFS/clproto.git
+[submodule "helpers"]
+	path = helpers
+	url = ssh://git@git.plgrid.pl:7999/vfs/helpers.git
 [submodule "bigcouchdb"]
 	path = bigcouchdb
 	url = ssh://git@git.plgrid.pl:7999/vfs/bigcouchdb.git
-[submodule "veilclient"]
-	path = veilclient
-	url = ssh://git@git.plgrid.pl:7999/vfs/veilclient.git
+[submodule "oneclient"]
+	path = oneclient
+	url = ssh://git@git.plgrid.pl:7999/vfs/oneclient.git
 [submodule "onepanel"]
 	path = onepanel
 	url = ssh://git@git.plgrid.pl:7999/vfs/onepanel.git

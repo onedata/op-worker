@@ -9,7 +9,10 @@
 %% @end
 %% ===================================================================
 
-%% white lists of messages that can be processed by VeilCluster
+-ifndef(MESSAGES_WHITE_LIST_HRL).
+-define(MESSAGES_WHITE_LIST_HRL, 1).
+
+%% white lists of messages that can be processed by oneprovider
 -define(MessagesWhiteList, [
   clustermsg, answer, atom, channelregistration, channelclose, fusemessage, getfilelocation,
   getnewfilelocation, getfileattr, fileattr, filelocation, createfileack, filenotused, renewfilelocation,
@@ -41,3 +44,5 @@
 %% List of messages that needs FuseId to be present in connection state prior to process them.
 %% If FuseId is not set and one of those messages arrive, cluster will immediately send error.
 -define(SessionDependentMessages, [fusemessage, channelregistration, channelclose]).
+
+-endif.

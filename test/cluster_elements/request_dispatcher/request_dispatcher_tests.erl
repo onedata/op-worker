@@ -10,7 +10,7 @@
 %% @end
 %% ===================================================================
 
-%% TODO sprawdzić zachowanie funkcji kodującej i dekudującej (encode_answer i decode_protocol_buffer) w ws_handler
+%% TODO sprawdzić zachowanie funkcji kodującej i dekudującej (encode_answer i decode_clustermsg_pb) w ws_handler
 %% w przypadku błędnych argumentów (rekordów/protoclo_bufferów)
 
 %% TODO sprawdzić metodę handle_call pod kątem forwardowania różnych typów zapytań do workerów
@@ -34,7 +34,7 @@
 
 %% This test checks if dispatcher uses protocol buffer correctly.
 protocol_buffers_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -44,7 +44,7 @@ protocol_buffers_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {_, _}} = ws_handler:decode_clustermsg_pb(MessageBytes),
   ?assert(Synch),
   ?assert(Msg =:= ping),
   ?assert(Task =:= dao),
@@ -75,7 +75,7 @@ recursive_decoding_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = InternalMessage2Bytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, _} = ws_handler:decode_clustermsg_pb(MessageBytes),
   ?assert(Synch),
   ?assert(Task =:= fslogic),
   ?assert(Answer_decoder_name =:= "communication_protocol"),
@@ -100,7 +100,7 @@ recursive_decoding_error_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = InternalMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, _} = ws_handler:decode_clustermsg_pb(MessageBytes),
   ?assert(Synch),
   ?assert(Task =:= fslogic),
   ?assert(Answer_decoder_name =:= "communication_protocol"),
@@ -125,7 +125,7 @@ recursive_not_supported_message_decoding_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = InternalMessage2Bytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, _} = ws_handler:decode_clustermsg_pb(MessageBytes),
   ?assert(Synch),
   ?assert(Task =:= fslogic),
   ?assert(Answer_decoder_name =:= "communication_protocol"),
@@ -139,10 +139,10 @@ recursive_not_supported_message_decoding_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_wrong_request_structure_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   Ans = try
-    ws_handler:decode_protocol_buffer(some_atom),
+    ws_handler:decode_clustermsg_pb(some_atom),
     ok
   catch
     wrong_message_format -> wrong_message_format;
@@ -152,7 +152,7 @@ protocol_buffers_wrong_request_structure_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_wrong_request_message_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -164,7 +164,7 @@ protocol_buffers_wrong_request_message_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 33, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
   Ans2 = try
-    ws_handler:decode_protocol_buffer(MessageBytes),
+    ws_handler:decode_clustermsg_pb(MessageBytes),
     ok
   catch
     {message_not_supported, 33} -> message_not_supported;
@@ -177,7 +177,7 @@ protocol_buffers_wrong_request_message_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 44, input = NotExistingAtomBytes},
   MessageBytes2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
   Ans3 = try
-    ws_handler:decode_protocol_buffer(MessageBytes2),
+    ws_handler:decode_clustermsg_pb(MessageBytes2),
     ok
          catch
            {message_not_supported, 44} -> message_not_supported;
@@ -190,7 +190,7 @@ protocol_buffers_wrong_request_message_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 55, input = "wrong_input"},
   MessageBytes3 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message3)),
   Ans4 = try
-    ws_handler:decode_protocol_buffer(MessageBytes3),
+    ws_handler:decode_clustermsg_pb(MessageBytes3),
     ok
          catch
            {wrong_internal_message_type, 55} -> wrong_internal_message_type;
@@ -200,7 +200,7 @@ protocol_buffers_wrong_request_message_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_wrong_request_decoder_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -211,7 +211,7 @@ protocol_buffers_wrong_request_decoder_test() ->
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   Ans = try
-    ws_handler:decode_protocol_buffer(MessageBytes),
+    ws_handler:decode_clustermsg_pb(MessageBytes),
     ok
          catch
            {message_not_supported, 66} -> message_not_supported;
@@ -221,7 +221,7 @@ protocol_buffers_wrong_request_decoder_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_wrong_request_module_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -232,7 +232,7 @@ protocol_buffers_wrong_request_module_test() ->
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   Ans = try
-    ws_handler:decode_protocol_buffer(MessageBytes),
+    ws_handler:decode_clustermsg_pb(MessageBytes),
     ok
         catch
           {message_not_supported, 77} -> message_not_supported;
@@ -242,7 +242,7 @@ protocol_buffers_wrong_request_module_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_wrong_answer_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   EncodedPong = ws_handler:encode_answer("wrong_main_answer", 0, "atom", "communication_protocol", pong),
   Pong = communication_protocol_pb:decode_answer(EncodedPong),
@@ -254,7 +254,7 @@ protocol_buffers_wrong_answer_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_answer_encoding_error_test() ->
-  veil_cluster_node_app:activate_white_lists(),
+  oneprovider_node_app:activate_white_lists(),
 
   EncodedAnswer = ws_handler:encode_answer(ok, 0, "atom", "not_existing_decoder", pong),
   Answer = communication_protocol_pb:decode_answer(EncodedAnswer),
@@ -269,9 +269,9 @@ get_worker_node_test() ->
   {ok, _} = request_dispatcher:start_link(),
 
   N1 = node(),
-  WorkersList = [{N1, fslogic}, {N1, dao}, {n2, fslogic}, {n3, fslogic}, {n3, dao}, {n4, gateway}, {N1, dns_worker}],
+  WorkersList = [{N1, fslogic}, {N1, dao_worker}, {n2, fslogic}, {n3, fslogic}, {n3, dao_worker}, {n4, gateway}, {N1, dns_worker}],
   gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, 1, 1}),
-  Requests = [fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, dao, rtransfer, dao, dns_worker, dns_worker, gateway, gateway],
+  Requests = [fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, dao_worker, rtransfer, dao_worker, dns_worker, dns_worker, gateway, gateway],
   ExpectedAns = [n3, n2, N1, N1, n2, n3, n3, n3, non, N1, N1, N1, n4, n4],
 
   FullAns = lists:foldl(fun(R, TmpAns) ->
@@ -288,9 +288,9 @@ check_worker_node_ok_test() ->
   {ok, _} = request_dispatcher:start_link(),
 
   N1 = node(),
-  WorkersList = [{N1, fslogic}, {N1, dao}, {n2, fslogic}, {n3, fslogic}, {n3, dao},{n3, gateway}, {n4, gateway}, {N1, dns_worker}],
+  WorkersList = [{N1, fslogic}, {N1, dao_worker}, {n2, fslogic}, {n3, fslogic}, {n3, dao_worker},{n3, gateway}, {n4, gateway}, {N1, dns_worker}],
   gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, 1, 1}),
-  Requests = [fslogic, fslogic, fslogic, fslogic, dao, rtransfer, dao, dns_worker, dns_worker, gateway, gateway, gateway],
+  Requests = [fslogic, fslogic, fslogic, fslogic, dao_worker, rtransfer, dao_worker, dns_worker, dns_worker, gateway, gateway, gateway],
   ExpectedAns = [N1, N1, N1, N1, N1, non, N1, N1, N1, n4, n3, n3],
 
   FullAns = lists:foldl(fun(R, TmpAns) ->
@@ -361,9 +361,9 @@ check_worker_node_high_load_helper(Current, Avg) ->
   {ok, _} = request_dispatcher:start_link(),
 
   N1 = node(),
-  WorkersList = [{N1, fslogic}, {N1, dao}, {n2, fslogic}, {n3, fslogic}, {n3, dao}, {n4, gateway}, {N1, dns_worker}],
+  WorkersList = [{N1, fslogic}, {N1, dao_worker}, {n2, fslogic}, {n3, fslogic}, {n3, dao_worker}, {n4, gateway}, {N1, dns_worker}],
   gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, Current, Avg}),
-  Requests = [fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, dao, rtransfer, dao, dns_worker, dns_worker, gateway, gateway],
+  Requests = [fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, dao_worker, rtransfer, dao_worker, dns_worker, dns_worker, gateway, gateway],
   ExpectedAns = [n3, n2, N1, N1, n2, n3, n3, n3, non, N1, N1, N1, n4, n4],
 
   FullAns = lists:foldl(fun(R, TmpAns) ->

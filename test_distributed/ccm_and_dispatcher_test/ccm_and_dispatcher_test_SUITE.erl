@@ -11,28 +11,30 @@
 %% ===================================================================
 
 -module(ccm_and_dispatcher_test_SUITE).
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include("records.hrl").
 -include("modules_and_args.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
--include("veil_modules/dao/dao.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_node_starter.hrl").
 
 -define(ProtocolVersion, 1).
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, ping_test/1, application_start_test1/1,
-  veil_handshake_test/1, application_start_test2/1, validation_test/1, callbacks_list_actualization_test/1, monitoring_test/1]).
+  onedata_handshake_test/1, application_start_test2/1, validation_test/1, callbacks_list_actualization_test/1, monitoring_test/1]).
 
 %% export nodes' codes
 -export([application_start_test_code1/0, application_start_test_code2/0]).
 
 all() ->
   [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test,
-    validation_test, ping_test, dispatcher_connection_test, callbacks_list_actualization_test, veil_handshake_test, monitoring_test].
+    validation_test, ping_test, dispatcher_connection_test, callbacks_list_actualization_test, onedata_handshake_test, monitoring_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -50,7 +52,6 @@ application_start_test_code2() ->
 
 %% This function tests if ccm application starts properly
 application_start_test1(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node | _] = NodesUp,
 
@@ -59,7 +60,6 @@ application_start_test1(Config) ->
 
 %% This function tests if worker application starts properly
 application_start_test2(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node | _] = NodesUp,
 
@@ -68,18 +68,17 @@ application_start_test2(Config) ->
 
 %% This function tests if ccm is able to start and connect (using gen_server messages) workers
 modules_start_and_ping_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [CCM | _] = NodesUp,
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, CCM}),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, CCM}),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   ?assertEqual(1, gen_server:call({global, ?CCM}, get_state_num, 1000)),
 
   gen_server:cast({global, ?CCM}, get_state_from_db),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   ?assertEqual(2, gen_server:call({global, ?CCM}, get_state_num, 1000)),
   State = gen_server:call({global, ?CCM}, get_state, 500),
   Workers = State#cm_state.workers,
@@ -90,15 +89,15 @@ modules_start_and_ping_test(Config) ->
 %%   ?assertEqual(3, gen_server:call({global, ?CCM}, get_state_num)),
 
   %% registration of dao dispatcher map
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
 
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
   State2 = gen_server:call({global, ?CCM}, get_state, 500),
   Workers2 = State2#cm_state.workers,
   Jobs = ?Modules,
   ?assertEqual(length(Workers2), length(Jobs)),
-  ?assertEqual(4, gen_server:call({global, ?CCM}, get_state_num, 1000)),
+  ?assertEqual(5, gen_server:call({global, ?CCM}, get_state_num, 1000)),
 
   CheckModules = fun(M, Sum) ->
     Ans = gen_server:call({M, CCM}, {test_call, ?ProtocolVersion, ping}, 1000),
@@ -112,7 +111,6 @@ modules_start_and_ping_test(Config) ->
 
 %% This tests check if client may connect to dispatcher.
 dispatcher_connection_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | _] = NodesUp,
@@ -122,9 +120,9 @@ dispatcher_connection_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {ConAns, Socket} = wss:connect('localhost', Port, [{certfile, PeerCert}]),
   ?assertEqual(ok, ConAns),
@@ -156,48 +154,30 @@ dispatcher_connection_test(Config) ->
 
 
 %% This test checks if FuseId negotiation works correctly
-veil_handshake_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
+onedata_handshake_test(Config) ->
   NodesUp = ?config(nodes, Config),
 
   [CCM | _] = NodesUp,
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
+  ?ENABLE_PROVIDER(Config),
 
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Port = ?config(port, Config),
   Host = "localhost",
-  TeamName = "user1 team",
+  SpaceName = "space1",
 
   Cert1 = ?COMMON_FILE("peer.pem"),
   Cert2 = ?COMMON_FILE("peer2.pem"),
 
   %% Add test users since cluster wont generate FuseId without full authentication
-  AddUser = fun(Login, Cert) ->
-    {ReadFileAns, PemBin} = file:read_file(Cert),
-    ?assertEqual(ok, ReadFileAns),
-    {ExtractAns, RDNSequence} = rpc:call(CCM, user_logic, extract_dn_from_cert, [PemBin]),
-    ?assertEqual(rdnSequence, ExtractAns),
-    {ConvertAns, DN} = rpc:call(CCM, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-    ?assertEqual(ok, ConvertAns),
-    DnList = [DN],
-
-    Name = "user1 user1",
-    Teams = [TeamName],
-    Email = "user1@email.net",
-    {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
-    ?assertEqual(ok, CreateUserAns)
-  end,
-  %% END Add user
-
-  AddUser("user1", Cert1),
+  UserDoc1 = test_utils:add_user(Config, "user1", Cert1, [SpaceName]),
 
   %% Open two connections for first user
   {ok, Socket11} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}]),
@@ -216,7 +196,7 @@ veil_handshake_test(Config) ->
 
 
   %% Add user2 and renegotiate FuseId
-  AddUser("user2", Cert2),
+  UserDoc2 = test_utils:add_user(Config, "user2", Cert2, [SpaceName]),
   FuseId21 = wss:handshakeInit(Socket21, "hostname2", []),
   ?assert(is_list(FuseId21)),
 
@@ -309,7 +289,7 @@ veil_handshake_test(Config) ->
   {DAOStatus, DAOAns} = rpc:call(CCM, dao_lib, apply, [dao_cluster, get_fuse_session, [FuseId11], 1]),
   ?assertEqual(ok, DAOStatus),
 
-  #veil_document{record = #fuse_session{hostname = Hostname, env_vars = Vars}} = DAOAns,
+  #db_document{record = #fuse_session{hostname = Hostname, env_vars = Vars}} = DAOAns,
   ?assertEqual("hostname1", Hostname),
   ?assertEqual([{testname1, "testvalue1"}, {testname2, "testvalue2"}], Vars),
 
@@ -318,16 +298,15 @@ veil_handshake_test(Config) ->
   wss:close(Socket12),
   wss:close(Socket21),
   wss:close(Socket22),
-  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ TeamName], ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/" ++ SpaceName], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["spaces/"], ?ProtocolVersion])),
 
-  ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user1"}])),
-  ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user2"}])).
+  ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{uuid, UserDoc1#db_document.uuid}])),
+  ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{uuid, UserDoc2#db_document.uuid}])).
 
 
 %% This test checks if workers list inside dispatcher is refreshed correctly.
 workers_list_actualization_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Jobs = ?Modules,
@@ -335,9 +314,9 @@ workers_list_actualization_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   CheckModules = fun(M, Sum) ->
     Workers = gen_server:call({?Dispatcher_Name, CCM}, {get_workers, M}, 1000),
@@ -351,17 +330,16 @@ workers_list_actualization_test(Config) ->
 
 %% This test checks if callbacks list inside dispatcher is refreshed correctly.
 callbacks_list_actualization_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [CCM | _] = NodesUp,
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
-  Ans1 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 1, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = self(), node = CCM, action = channelregistration}}}}, 1000),
+  Ans1 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 1, #worker_request{subject = "DN", request = #callback{fuse = fuse1, pid = self(), node = CCM, action = channelregistration}}}}, 1000),
   ?assertEqual(ok, Ans1),
   Ans2 = receive
            {worker_answer, 1, WorkerAns} -> WorkerAns
@@ -379,7 +357,7 @@ callbacks_list_actualization_test(Config) ->
   Test4 = gen_server:call({?Node_Manager_Name, CCM}, {get_all_callbacks, fuse1}, 1000),
   ?assertEqual([self()], Test4),
 
-  Ans3 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 2, #veil_request{subject = "DN", request = #callback{fuse = fuse2, pid = self(), node = CCM, action = channelregistration}}}}, 1000),
+  Ans3 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 2, #worker_request{subject = "DN", request = #callback{fuse = fuse2, pid = self(), node = CCM, action = channelregistration}}}}, 1000),
   ?assertEqual(ok, Ans3),
   Ans4 = receive
            {worker_answer, 2, WorkerAns2} -> WorkerAns2
@@ -397,7 +375,7 @@ callbacks_list_actualization_test(Config) ->
   Test8 = gen_server:call({?Node_Manager_Name, CCM}, {get_all_callbacks, fuse2}, 1000),
   ?assertEqual([self()], Test8),
 
-  Ans5 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 3, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = pid2, node = CCM, action = channelregistration}}}}, 1000),
+  Ans5 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 3, #worker_request{subject = "DN", request = #callback{fuse = fuse1, pid = pid2, node = CCM, action = channelregistration}}}}, 1000),
   ?assertEqual(ok, Ans5),
   Ans6 = receive
            {worker_answer, 3, WorkerAns3} -> WorkerAns3
@@ -415,7 +393,7 @@ callbacks_list_actualization_test(Config) ->
   Test12 = gen_server:call({?Node_Manager_Name, CCM}, {get_all_callbacks, fuse1}, 1000),
   ?assertEqual([pid2, self()], Test12),
 
-  Ans7 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 4, #veil_request{subject = "DN", request = #callback{fuse = fuse2, pid = self(), node = CCM, action = channelclose}}}}, 1000),
+  Ans7 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 4, #worker_request{subject = "DN", request = #callback{fuse = fuse2, pid = self(), node = CCM, action = channelclose}}}}, 1000),
   ?assertEqual(ok, Ans7),
   Ans8 = receive
            {worker_answer, 4, WorkerAns4} -> WorkerAns4
@@ -431,7 +409,7 @@ callbacks_list_actualization_test(Config) ->
   Test15 = gen_server:call({?Node_Manager_Name, CCM}, get_fuses_list, 1000),
   ?assertEqual([fuse1], Test15),
 
-  Ans9 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 5, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = pid2, node = CCM, action = channelclose}}}}, 1000),
+  Ans9 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 5, #worker_request{subject = "DN", request = #callback{fuse = fuse1, pid = pid2, node = CCM, action = channelclose}}}}, 1000),
   ?assertEqual(ok, Ans9),
   Ans10 = receive
             {worker_answer, 5, WorkerAns5} -> WorkerAns5
@@ -449,7 +427,7 @@ callbacks_list_actualization_test(Config) ->
   Test19 = gen_server:call({?Node_Manager_Name, CCM}, {get_all_callbacks, fuse1}, 1000),
   ?assertEqual([self()], Test19),
 
-  Ans11 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 6, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = self(), node = CCM, action = channelclose}}}}, 1000),
+  Ans11 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 6, #worker_request{subject = "DN", request = #callback{fuse = fuse1, pid = self(), node = CCM, action = channelclose}}}}, 1000),
   ?assertEqual(ok, Ans11),
   Ans12 = receive
             {worker_answer, 6, WorkerAns6} -> WorkerAns6
@@ -466,7 +444,6 @@ callbacks_list_actualization_test(Config) ->
   ?assertEqual([], Test22).
 
 validation_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | _] = NodesUp,
@@ -474,9 +451,9 @@ validation_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {ConAns1, _} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
   ?assertEqual(error, ConAns1),
@@ -492,7 +469,6 @@ validation_test(Config) ->
 
 %% This test checks if client outside the cluster can ping all modules via dispatcher.
 ping_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Jobs = ?Modules,
@@ -502,9 +478,9 @@ ping_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {ConAns, Socket} = wss:connect('localhost', Port, [{certfile, PeerCert}]),
   ?assertEqual(ok, ConAns),
@@ -538,16 +514,15 @@ ping_test(Config) ->
 
 %% Tests cluster and nodes monitoring
 monitoring_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   Nodes = ?config(nodes, Config),
   [CCM | _] = Nodes,
 
   % Init cluster
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {ok, MonitoringInitialization} = rpc:call(CCM, application, get_env, [?APP_Name, cluster_monitoring_initialization]),
   timer:sleep(2 * 1000 * MonitoringInitialization),
@@ -574,68 +549,63 @@ monitoring_test(Config) ->
 %% ====================================================================
 
 init_per_testcase(application_start_test1, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
+  lists:append([{nodes, NodesUp}], Config);
 
 init_per_testcase(application_start_test2, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
+  lists:append([{nodes, NodesUp}], Config);
 
 init_per_testcase(type1, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
+  lists:append([{nodes, NodesUp}], Config);
 
 init_per_testcase(type2, Config) ->
-  ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+  test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
 
   PeerCert = ?COMMON_FILE("peer.pem"),
   Port = 6666,
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}, {db_nodes, [nodes_manager:get_db_node()]}, {heart_beat, 1}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}, {db_nodes, [?DB_NODE]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{port, Port}, {peer_cert, PeerCert}, {nodes, NodesUp}, {assertions, Assertions}], Config);
+  lists:append([{port, Port}, {peer_cert, PeerCert}, {nodes, NodesUp}], Config);
 
 init_per_testcase(monitoring_test, Config) ->
-  ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+  test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(4),
+  NodesUp = test_node_starter:start_test_nodes(4),
   [CCM | _] = NodesUp,
-  DBNode = nodes_manager:get_db_node(),
+  DBNode = ?DB_NODE,
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
-    [{node_type, ccm}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [
+    [{node_type, ccm}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config);
+  lists:append([{nodes, NodesUp}, {dbnode, DBNode}], Config);
 
 init_per_testcase(TestCase, Config) ->
   case lists:member(TestCase, [modules_start_and_ping_test, workers_list_actualization_test, callbacks_list_actualization_test]) of
@@ -645,20 +615,14 @@ init_per_testcase(TestCase, Config) ->
 
 end_per_testcase(type1, Config) ->
   Nodes = ?config(nodes, Config),
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
-
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns);
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes),
+  test_node_starter:stop_test_nodes(Nodes);
 
 end_per_testcase(type2, Config) ->
   Nodes = ?config(nodes, Config),
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
-  nodes_manager:stop_deps_for_tester_node(),
-
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns);
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes),
+  test_node_starter:stop_test_nodes(Nodes),
+  test_node_starter:stop_deps_for_tester_node();
 
 end_per_testcase(TestCase, Config) ->
   case lists:member(TestCase, [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test, callbacks_list_actualization_test, monitoring_test]) of

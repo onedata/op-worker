@@ -11,36 +11,36 @@
 
 umask 0
 
-rm -rf /tmp/veilfs
-rm -rf /tmp/veilfs2
-rm -rf /tmp/veilfs3
-mkdir /tmp/veilfs
-mkdir /tmp/veilfs2
-mkdir /tmp/veilfs3
+rm -rf /tmp/onedata
+rm -rf /tmp/onedata2
+rm -rf /tmp/onedata3
+mkdir /tmp/onedata
+mkdir /tmp/onedata2
+mkdir /tmp/onedata3
 
-userdel -r veilfstestuser 2>/dev/null
-userdel -r veilfstestuser2 2>/dev/null
-groupdel veilfstestgroup 2>/dev/null
-groupdel veilfstestgroup2 2>/dev/null
-groupdel veilfstestgroup3 2>/dev/null
-groupdel veilfstestuser 2>/dev/null
-groupdel veilfstestuser2 2>/dev/null
-rm -rf /home/veilfstestuser
-rm -rf /home/veilfstestuser2
+userdel -r onedatatestuser 2>/dev/null
+userdel -r onedatatestuser2 2>/dev/null
+groupdel onedatatestgroup 2>/dev/null
+groupdel onedatatestgroup2 2>/dev/null
+groupdel onedatatestgroup3 2>/dev/null
+groupdel onedatatestuser 2>/dev/null
+groupdel onedatatestuser2 2>/dev/null
+rm -rf /home/onedatatestuser
+rm -rf /home/onedatatestuser2
 
 # User 1
-groupadd veilfstestgroup
-useradd veilfstestuser
-usermod -a -G veilfstestgroup veilfstestuser
+groupadd onedatatestgroup
+useradd onedatatestuser
+usermod -a -G onedatatestgroup onedatatestuser
 
 # User 2
-groupadd veilfstestgroup2
-useradd veilfstestuser2
-usermod -a -G veilfstestgroup2 veilfstestuser2
-usermod -a -G veilfstestgroup veilfstestuser2
+groupadd onedatatestgroup2
+useradd onedatatestuser2
+usermod -a -G onedatatestgroup2 onedatatestuser2
+usermod -a -G onedatatestgroup onedatatestuser2
 
 # Group 3
-groupadd veilfstestgroup3
+groupadd onedatatestgroup3
 
 mkdir -p distributed_tests_out
 cp -R test_distributed/* distributed_tests_out
@@ -48,7 +48,7 @@ cd distributed_tests_out
 cp -R ../cacerts .
 cp -R ../certs .
 cp -R ../c_lib/ .
-cp -R ../src/veil_modules/dao/views .
+cp -R ../src/oneprovider_modules/dao/views .
 cp -R ../src/gui_static .
 cp -R ../config/sys.config .
 
@@ -76,13 +76,13 @@ do
         TEST_NAME=`basename "$TEST" ".spec"`
         echo "{ct_hooks, [{cth_surefire, [{path,\"TEST-$TEST_NAME-report.xml\"}]}]}." >> $TEST
     fi
-    rm -rf /tmp/veilfs
-    rm -rf /tmp/veilfs2
-    rm -rf /tmp/veilfs3
-    mkdir /tmp/veilfs
-    mkdir /tmp/veilfs2
-    mkdir /tmp/veilfs3
-    ct_run -pa ../deps/**/ebin -pa ../.eunit -pa ./ -noshell -name tester -setcookie $COOKIE -spec  $TEST
+    rm -rf /tmp/onedata
+    rm -rf /tmp/onedata2
+    rm -rf /tmp/onedata3
+    mkdir /tmp/onedata
+    mkdir /tmp/onedata2
+    mkdir /tmp/onedata3
+    ct_run -pa ../deps/**/ebin -pa ../ebin -pa ./ -noshell -name tester -setcookie $COOKIE -spec  $TEST
 done
 
 find . -name "*.beam" -exec rm -rf {} \;
@@ -103,12 +103,12 @@ rm -rf views
 rm -rf gui_static
 rm -f sys.config
 
-userdel -r veilfstestuser
-userdel -r veilfstestuser2
-groupdel veilfstestgroup
-groupdel veilfstestgroup2
-groupdel veilfstestgroup3
-rm -rf /home/veilfstestuser
-rm -rf /home/veilfstestuser2
+userdel -r onedatatestuser
+userdel -r onedatatestuser2
+groupdel onedatatestgroup
+groupdel onedatatestgroup2
+groupdel onedatatestgroup3
+rm -rf /home/onedatatestuser
+rm -rf /home/onedatatestuser2
 
 cd ..

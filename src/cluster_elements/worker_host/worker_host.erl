@@ -5,9 +5,9 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module hosts all VeilFS modules (fslogic, cluster_rengin etc.).
+%% @doc: This module hosts all oneprovider modules (fslogic, cluster_rengin etc.).
 %% It makes it easy to manage modules and provides some basic functionality
-%% for its plug-ins (VeilFS modules) e.g. requests management.
+%% for its plug-ins (oneprovider modules) e.g. requests management.
 %% @end
 %% ===================================================================
 
@@ -17,8 +17,8 @@
 -include("records.hrl").
 -include("registered_names.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
--include("logging.hrl").
--include("veil_modules/dao/dao_types.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include("oneprovider_modules/dao/dao_types.hrl").
 
 -define(BORTER_CHILD_WAIT_TIME, 10000).
 -define(MAX_CHILD_WAIT_TIME, 60000000).
@@ -29,7 +29,7 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6, send_to_user/4, send_to_user_with_ack/5, send_to_fuses_with_ack/4]).
--export([create_permanent_cache/1, create_permanent_cache/2, create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_simple_cache/3]).
+-export([create_permanent_cache/1, create_permanent_cache/2, create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, register_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_simple_cache/3]).
 
 %% ====================================================================
 %% Test API
@@ -578,8 +578,13 @@ proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId,
 %% ====================================================================
 preproccess_msg(Msg) ->
     case Msg of
-      #veil_request{subject = Subj, request = Msg1, fuse_id = FuseID} ->
+      #worker_request{subject = Subj, request = Msg1, fuse_id = FuseID, access_token = AccessTokenTuple} ->
         fslogic_context:set_user_dn(Subj),
+        case AccessTokenTuple of
+            {UserID, AccessToken} ->
+                fslogic_context:set_gr_auth(UserID, AccessToken);
+            _ -> undefined
+        end,
         put(fuse_id, FuseID),
         Msg1;
       NotWrapped -> NotWrapped
@@ -1000,7 +1005,7 @@ del_sub_procs(Key, Name) ->
 send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
   case user_logic:get_user(UserKey) of
     {ok, UserDoc} ->
-      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
+      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#db_document.uuid], ProtocolVersion) of
         {ok, FuseIds} ->
           lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, Message, MessageDecoder) end, FuseIds),
           ok;
@@ -1024,7 +1029,7 @@ send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
 send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, ProtocolVersion) ->
   case user_logic:get_user(UserKey) of
     {ok, UserDoc} ->
-      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
+      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#db_document.uuid], ProtocolVersion) of
         {ok, FuseIds} ->
           send_to_fuses_with_ack(FuseIds, Message, MessageDecoder, OnCompleteCallback);
         {error, Error} ->
@@ -1130,7 +1135,7 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPi
     [_ | _]     -> ok
   end,
 
-  register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid).
+  worker_host:register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid).
 
 %% register_simple_cache/5
 %% ====================================================================
@@ -1152,7 +1157,7 @@ register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Clearing
       LoopTime = case CacheLoop of
                    non -> non;
                    Atom when is_atom(Atom) ->
-                     case application:get_env(veil_cluster_node, CacheLoop) of
+                     case application:get_env(oneprovider_node, CacheLoop) of
                        {ok, Interval1} -> Interval1;
                        _               -> loop_time_load_error
                      end;
@@ -1312,7 +1317,7 @@ get_cache_name(SupProcName) ->
   CacheLoop :: integer() | atom().
 %% ====================================================================
 register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, ClearingPid) ->
-  RegAns = register_simple_cache({sub_proc_cache, Name}, CacheLoop, ClearFun, false, ClearingPid),
+  RegAns = worker_host:register_simple_cache({sub_proc_cache, Name}, CacheLoop, ClearFun, false, ClearingPid),
   case RegAns of
     ok ->
       ok;

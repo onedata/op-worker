@@ -11,11 +11,11 @@
 %%       profiling.
 %% ===================================================================
 
--define(default_cookie, veil_cluster_node).
+-define(default_cookie, oneprovider_node).
 -define(default_ccm_name, "ccm").
 -define(default_worker_name, "worker").
 
--define(trace_procs, [rule_manager,rtransfer,request_dispatcher,node_manager,dns_worker,gateway,fslogic,dao,control_panel,cluster_rengine,central_logger]).
+-define(trace_procs, [rule_manager,rtransfer,request_dispatcher,node_manager,dns_worker,gateway,fslogic,dao_worker,control_panel,cluster_rengine,central_logger]).
 
 
 set_up_net_kernel() ->

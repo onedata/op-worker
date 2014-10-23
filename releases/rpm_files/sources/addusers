@@ -8,7 +8,7 @@
 # -uid_range - uid range for new users (i. e. -uid_range 2000 3000 )
 # -gid_range - gid range for new groups (i. e. -gid_range 2000 3000 )
 # -d - if defined, enables debug messages ( -d )
-# Default values can be found in file /opt/veil/scripts/addusers.cfg
+# Default values can be found in file /opt/oneprovider/scripts/addusers.cfg
 #################################################################################
 
-/opt/veil/scripts/erl_launcher escript /opt/veil/scripts/addusers.escript "$@"
+/opt/oneprovider/scripts/erl_launcher escript /opt/oneprovider/scripts/addusers.escript "$@"

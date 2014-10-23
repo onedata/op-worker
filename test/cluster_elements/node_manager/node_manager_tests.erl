@@ -52,13 +52,13 @@ node_type_test() ->
   application:set_env(?APP_Name, short_monitoring_time_window, 60),
   application:set_env(?APP_Name, medium_monitoring_time_window, 300),
   application:set_env(?APP_Name, long_monitoring_time_window, 900),
-  meck:new(veil_cluster_node_app),
-  meck:expect(veil_cluster_node_app, ports_ok, fun() -> true end),
+  meck:new(oneprovider_node_app),
+  meck:expect(oneprovider_node_app, ports_ok, fun() -> true end),
   node_manager:start_link(test_worker),
   NodeType = gen_server:call(?Node_Manager_Name, getNodeType),
   ?assert(NodeType =:= worker),
   node_manager:stop(),
-  meck:unload(veil_cluster_node_app).
+  meck:unload(oneprovider_node_app).
 
 %% This test checks if node manager is able to register in ccm.
 heart_beat_test() ->

@@ -9,7 +9,7 @@ RUNNER_SCRIPT_DIR=$(cd ${0%/*} && pwd)
 
 cd $RUNNER_SCRIPT_DIR/..
 
-RELEASE_PACKAGE_LOCATION=/opt/veil/files/veil_cluster_node
+RELEASE_PACKAGE_LOCATION=/opt/oneprovider/files/oneprovider_node
 
 START_ERL=`cat $RELEASE_PACKAGE_LOCATION/releases/start_erl.data`
 ERTS_VSN=${START_ERL% *}

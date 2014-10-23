@@ -3,7 +3,7 @@
 # @author Krzysztof Trzepla
 # @copyright (C): 2014 ACK CYFRONET AGH
 # This software is released under the MIT license cited in 'LICENSE.txt'.
-# @doc: This script creates rst files from veilclient source code using erl_doc_lexer. @end
+# @doc: This script creates rst files from oneclient source code using erl_doc_lexer. @end
 
 import sys
 import os
@@ -18,9 +18,9 @@ class Main(Sphinx):
 		if not os.path.exists(self.path):
 			os.makedirs(self.path)
 
-		docs = ['veilClient', 'veilCluster']
+		docs = ['oneclient', 'oneprovider']
 		with open(self.path + '/index.rst', 'w') as index:
-			self.w_section(index, 'VeilFS', '=')
+			self.w_section(index, 'onedata', '=')
 			self.w_toctree(index, 1)
 			for doc in docs:
 				index.write('\t\t' + doc + '/index\n')

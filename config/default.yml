@@ -9,7 +9,7 @@ vm_arguments:
   - argument:
       name: cookie
       description: Erlang cookie
-      value: -setcookie veil_cluster_node
+      value: -setcookie oneprovider_node
 
   - argument:
       name: error_logger_warnings
@@ -27,7 +27,21 @@ vm_arguments:
       value: +P 1000000
 
 
-veil_cluster_node_env:
+oneprovider_node_env:
+
+  # GENERAL
+  - parameter:
+      name: developer_mode
+      description: Developer mode unlocks functionalities like logging in without Global Registry
+      value: false
+
+  - parameter:
+      name: trusted_openid_providers
+      description: List of trusted OpenID providers that can provide user's login that can be associated with OS username.
+      value: |
+        ["\'plgrid\'"]
+      erlang_term: |
+        ['plgrid']
 
   # GENERAL
   - parameter:
@@ -55,8 +69,8 @@ veil_cluster_node_env:
       name: storage_config_path
       description: Path to storage config file
       value: |
-        "\'/opt/veil/worker/bin/storage_info.cfg\'"
-      erlang_term: "'/opt/veil/nodes/worker/bin/storage_info.cfg'"
+        "\'/opt/oneprovider/worker/bin/storage_info.cfg\'"
+      erlang_term: "'/opt/oneprovider/nodes/worker/bin/storage_info.cfg'"
 
   - parameter:
       name: initialization_time
@@ -82,8 +96,8 @@ veil_cluster_node_env:
       name: web_ssl_cert_path
       description: Path to certificate used by ranch_ssl in gui handler
       value: |
-        "\'./certs/VeilFSServerWeb.pem\'"
-      erlang_term: "'./certs/VeilFSServerWeb.pem'"
+        "\'./certs/onedataServerWeb.pem\'"
+      erlang_term: "'./certs/onedataServerWeb.pem'"
       # this has to be in double quotes so that single quotes are preserved after
       # conversion to list and it ends up correct in app.src
 
@@ -91,8 +105,8 @@ veil_cluster_node_env:
       name: fuse_ssl_cert_path
       description: Path to certificate used by ranch_ssl in fuse clients handler
       value: |
-        "\'./certs/VeilFSServerFuse.pem\'"
-      erlang_term: "'./certs/VeilFSServerFuse.pem'"
+        "\'./certs/onedataServerFuse.pem\'"
+      erlang_term: "'./certs/onedataServerFuse.pem'"
       # this has to be in double quotes so that single quotes are preserved after
       # conversion to list and it ends up correct in app.src
 
@@ -160,7 +174,7 @@ veil_cluster_node_env:
 
   - parameter:
       name: ports_in_use
-      description: Ports used by application, that need to be free before veil can start
+      description: Ports used by application, that need to be free before oneprovider node can start
       value: |
           ["control_panel_port","control_panel_redirect_port","dns_port","dispatcher_port","rest_port"]
       erlang_term: |
@@ -192,26 +206,6 @@ veil_cluster_node_env:
       erlang_term: |
           [1,24,168,720,8760]
 
-  # LOGGING
-  - parameter:
-      name: current_loglevel
-      description: |
-        Current loglevel in the cluster. Logs with lower importance will be completely discarded
-        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
-      value: 1
-
-  - parameter:
-      name: default_loglevel
-      description: |
-        Used to reset loglevel to default.
-        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
-      value: 1
-
-  - parameter:
-      name: include_stacktrace
-      description: Determines whether the stacktrace should be included in logs (those that could contain it)
-      value: true
-
 
   # DISPATCHER
   - parameter:
@@ -232,7 +226,7 @@ veil_cluster_node_env:
   - parameter:
       name: dispatcher_timeout
       description: Time in ms after witch ranch answers with error
-      value: 10000
+      value: 120000
 
   - parameter:
       name: ca_dir
@@ -315,13 +309,6 @@ veil_cluster_node_env:
       value: 1048576
 
   - parameter:
-      name: root_cacert_file
-      description: Path to .pem or .crt file containing CA certs installed on the system.
-      value: |
-        "\'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem\'"
-      erlang_term: "'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'"
-
-  - parameter:
       name: control_panel_sessions_clearing_period
       description: Period between automatic deletion of expired session tokens, in seconds.
       value: 7200 # two hours
@@ -331,6 +318,42 @@ veil_cluster_node_env:
       description: Cookies time to live - expiration date will be set this many seconds from time of creation (in seconds).
       value: 3600 # one hour
 
+
+  # Global Registry interfacing
+  - parameter:
+      name: global_registry_provider_key_path
+      description: Path to .pem file containing the private key to the grpcert.
+      value: |
+        "\'certs/grpkey.pem\'"
+      erlang_term: "'certs/grpkey.pem'"
+      
+  - parameter:
+      name: global_registry_provider_cert_path
+      description: Path to .pem file containing the certificate signed by Global Registry CA, used for authorizing requests to it.
+      value: |
+        "\'certs/grpcert.pem\'"
+      erlang_term: "'certs/grpcert.pem'"
+      
+  - parameter:
+      name: global_registry_ca_cert_path
+      description: Path to .pem file containing the Global Registry CA certificate.
+      value: |
+        "\'cacerts/grpCA.pem\'"
+      erlang_term: "'cacerts/grpCA.pem'"
+
+  - parameter:
+      name: global_registry_hostname
+      description: Global Registry hostname.
+      value: |
+        "\'https://onedata.org\'"
+      erlang_term: "'https://onedata.org'"
+
+  - parameter:
+      name: global_registry_url
+      description: Global Registry REST API endpoint URL.
+      value: |
+        "\'https://onedata.org:8443\'"
+      erlang_term: "'https://onedata.org:8443'"
 
   # Files management
   - parameter:
@@ -357,6 +380,16 @@ veil_cluster_node_env:
       name: new_dir_storage_mode
       description: Default mode for new directory at storage system (8#1330)
       value: 728
+
+  - parameter:
+      name: lowest_generated_storage_gid
+      description: Lowest GID used for files that shall belong to group that doesn't exist in OS.
+      value: 70000
+
+  - parameter:
+        name: provider_proxy_block_size
+        description: Block size for inter-provider file read/write operation
+        value: 1048576 # 1MB
 
 
   # DNS
@@ -411,8 +444,15 @@ veil_cluster_node_env:
   - parameter:
       name: io_bytes_threshold
       description: |
-           Defines how often io event is generated in terms of read or written bytes
+           Defines how often io event is generated in terms of read or written bytes.
       value: 1048576 # 1MB
+
+  - parameter:
+      name: view_def_location
+      description: Location of database views definitions.
+      value: |
+        "\'views/\'"
+      erlang_term: "'views/'"
 
   # Quota management
   - parameter:

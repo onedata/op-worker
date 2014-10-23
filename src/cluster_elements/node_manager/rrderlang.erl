@@ -13,7 +13,7 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% TEST
 -ifdef(TEST).
@@ -274,7 +274,7 @@ receive_answer(Port, Acc) ->
       receive_answer(Port, [Data | Acc])
   after Timeout ->
     ?error("RRD receive_answer timeout"),
-    {error, <<"timeout">>}
+    {error, <<"Receive answer timeout.">>}
   end.
 
 
@@ -309,7 +309,7 @@ receive_header(Port, Columns, BinaryHeader) ->
       receive_header(Port, Columns, Data)
   after Timeout ->
     ?error("RRD receive_header timeout"),
-    {error, <<"timeout">>}
+    {error, <<"Receive header timeout.">>}
   end.
 
 
@@ -325,7 +325,7 @@ select_header(Header, Columns) ->
     select_header(Header, Columns, 1, [], [])
   catch
     E1:E2 ->
-      ?error("RRD select_header error ~p:~p", [E1, E2]),
+      ?error("RRD select_header error: ~p:~p", [E1, E2]),
       {error, <<"Header selection error.">>}
   end.
 
@@ -408,19 +408,19 @@ receive_body(Port, Columns, Body) ->
     {Port, {data, {eol, <<"OK", _/binary>>}}} ->
       {ok, lists:reverse(Body)};
     {Port, {data, {eol, <<"ERROR: ", Error/binary>>}}} ->
-      ?error("RRD receive_body error ~p", [Error]),
+      ?error("RRD receive_body error: ~p", [Error]),
       {error, Error};
     {Port, {data, {eol, Data}}} ->
       case select_row(Data, Columns) of
         {ok, Row} ->
           receive_body(Port, Columns, [Row | Body]);
         {error, Error} ->
-          ?error("RRD receive_body error ~p", [Error]),
+          ?error("RRD receive_body error: ~p", [Error]),
           {error, Error}
       end
   after Timeout ->
     ?error("RRD receive_body timeout"),
-    {error, <<"timeout">>}
+    {error, <<"Receive body timeout.">>}
   end.
 
 
@@ -436,13 +436,13 @@ select_row(Data, Columns) ->
     case select_row(split(Values), Columns, 1, []) of
       {ok, Row} -> {ok, {binary_to_integer(TimeStamp), lists:reverse(Row)}};
       Error ->
-        ?error("RRD select_row error ~p", [Error]),
-        {error, <<"Body selection error.">>}
+        ?error("RRD select_row error: ~p", [Error]),
+        {error, <<"Row selection error.">>}
     end
   catch
     E1:E2 ->
-      ?error("RRD select_row error ~p:~p", [E1,E2]),
-      {error, <<"Body selection error.">>}
+      ?error("RRD select_row error: ~p:~p", [E1,E2]),
+      {error, <<"Row selection error.">>}
   end.
 
 
@@ -465,7 +465,7 @@ select_row([_ | Values], Columns, N, Acc) ->
 
 %% split/1
 %% ====================================================================
-%% @doc Splits binary using defaulf separator.
+%% @doc Splits binary using space separator.
 %% @end
 -spec split(Data :: binary()) -> Values :: [binary()].
 %% ====================================================================

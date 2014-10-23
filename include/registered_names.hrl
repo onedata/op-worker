@@ -14,7 +14,7 @@
 -define(REGISTERED_NAMES_HRL, 1).
 
 %% Name of the application.
--define(APP_Name, veil_cluster_node).
+-define(APP_Name, oneprovider_node).
 
 %% Global name of gen_server that provides ccm functionality.
 -define(CCM, central_cluster_manager).
@@ -52,5 +52,16 @@
 
 %% name of ETS which contains ack handlers
 -define(ACK_HANDLERS, ack_handlers).
+
+%% name of ETS which caches details about token-based user authentication.
+-define(TOKEN_AUTHENTICATION_CACHE, ws_token_authentication).
+
+%% oneproxy listeners
+-define(ONEPROXY_DISPATCHER, oneproxy_dispatcher).
+-define(ONEPROXY_REST, oneproxy_rest).
+
+%% Storage UID and GID mappings caches
+-define(STORAGE_USER_IDS_CACHE, storage_user_ids_cache).
+-define(STORAGE_GROUP_IDS_CACHE, storage_group_ids_cache).
 
 -endif.

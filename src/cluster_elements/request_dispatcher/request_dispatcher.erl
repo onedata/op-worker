@@ -14,14 +14,16 @@
 -include("registered_names.hrl").
 -include("records.hrl").
 -include("modules_and_args.hrl").
--include("logging.hrl").
+-include("oneprovider_modules/dao/dao_types.hrl").
+-include("oneprovider_modules/dao/dao_cluster.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(CALLBACKS_TABLE, dispatcher_callbacks_table).
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/0, stop/0, send_to_fuse/3, send_to_fuse_ack/4]).
+-export([start_link/0, stop/0, get_connected_fuses/0, send_to_fuse/3, send_to_fuse_ack/4]).
 
 %% TODO zmierzyć czy bardziej się opłaca przechowywać dane o modułach
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
@@ -46,11 +48,11 @@
 %% ====================================================================
 %% @doc Starts the server
 -spec start_link() -> Result when
-  Result ::  {ok,Pid}
+  Result :: {ok, Pid}
   | ignore
-  | {error,Error},
+  | {error, Error},
   Pid :: pid(),
-  Error :: {already_started,Pid} | term().
+  Error :: {already_started, Pid} | term().
 %% ====================================================================
 
 start_link() ->
@@ -61,11 +63,11 @@ start_link() ->
 %% ====================================================================
 %% @doc Starts the server
 -spec start_link(Modules :: list()) -> Result when
-  Result ::  {ok,Pid}
+  Result :: {ok, Pid}
   | ignore
-  | {error,Error},
+  | {error, Error},
   Pid :: pid(),
-  Error :: {already_started,Pid} | term().
+  Error :: {already_started, Pid} | term().
 %% ====================================================================
 
 start_link(Modules) ->
@@ -141,7 +143,8 @@ handle_call({Task, ProtocolVersion, AnsPid, MsgId, Request}, _From, State) ->
             non ->
               case Task of
                 central_logger -> ok;
-                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+                _ ->
+                  ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
               end,
               {reply, worker_not_found, State};
             _N ->
@@ -164,7 +167,8 @@ handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
             non ->
               case Task of
                 central_logger -> ok;
-                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+                _ ->
+                  ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
               end,
               {reply, worker_not_found, State};
             _N ->
@@ -187,7 +191,8 @@ handle_call({Task, ProtocolVersion, Request}, _From, State) ->
             non ->
               case Task of
                 central_logger -> ok;
-                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+                _ ->
+                  ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
               end,
               {reply, worker_not_found, State};
             _N ->
@@ -210,7 +215,8 @@ handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, Request}}, _From, Stat
             non ->
               case Task of
                 central_logger -> ok;
-                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+                _ ->
+                  ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
               end,
               {reply, worker_not_found, State};
             _N ->
@@ -233,7 +239,8 @@ handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, MsgId, Request}}, _Fro
             non ->
               case Task of
                 central_logger -> ok;
-                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+                _ ->
+                  ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
               end,
               {reply, worker_not_found, State};
             _N ->
@@ -256,7 +263,8 @@ handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
             non ->
               case Task of
                 central_logger -> ok;
-                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+                _ ->
+                  ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
               end,
               {reply, worker_not_found, State};
             _N ->
@@ -279,7 +287,8 @@ handle_call({node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId, FuseId
             non ->
               case Task of
                 central_logger -> ok;
-                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+                _ ->
+                  ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
               end,
               {reply, worker_not_found, State};
             _N ->
@@ -390,31 +399,31 @@ handle_cast({update_state, NewStateNum, NewCallbacksNum}, State) ->
 
 handle_cast({update_pulled_state, WorkersList, StateNum, CallbacksList, CallbacksNum}, State) ->
   NewState = case WorkersList of
-    non ->
-      State;
-    error ->
-      ?error("Dispatcher had old state number but could not update data"),
-      State;
-    _ ->
-      TmpState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
-      ?info("Dispatcher state updated, state num: ~p", [StateNum]),
-      TmpState#dispatcher_state{state_num = StateNum}
-  end,
+               non ->
+                 State;
+               error ->
+                 ?error("Dispatcher had old state number but could not update data"),
+                 State;
+               _ ->
+                 TmpState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
+                 ?info("Dispatcher state updated, state num: ~p", [StateNum]),
+                 TmpState#dispatcher_state{state_num = StateNum}
+             end,
 
   NewState2 = case CallbacksList of
-    non ->
-      NewState;
-    error ->
-      ?error("Dispatcher had old callbacks number but could not update data"),
-      NewState;
-    _ ->
-      UpdateCallbacks = fun({Fuse, NodesList}) ->
-        ets:insert(?CALLBACKS_TABLE, {Fuse, NodesList})
-      end,
-      lists:foreach(UpdateCallbacks, CallbacksList),
-      ?info("Dispatcher callbacks updated"),
-      NewState#dispatcher_state{callbacks_num = CallbacksNum}
-  end,
+                non ->
+                  NewState;
+                error ->
+                  ?error("Dispatcher had old callbacks number but could not update data"),
+                  NewState;
+                _ ->
+                  UpdateCallbacks = fun({Fuse, NodesList}) ->
+                    ets:insert(?CALLBACKS_TABLE, {Fuse, NodesList})
+                  end,
+                  lists:foreach(UpdateCallbacks, CallbacksList),
+                  ?info("Dispatcher callbacks updated"),
+                  NewState#dispatcher_state{callbacks_num = CallbacksNum}
+              end,
 
   gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState2#dispatcher_state.state_num, NewState2#dispatcher_state.callbacks_num}),
   {noreply, NewState2};
@@ -498,7 +507,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 %% @doc Gets nodes were module is working.
 -spec get_nodes(Module :: atom(), State :: term()) -> Result when
-  Result ::  term().
+  Result :: term().
 %% ====================================================================
 get_nodes(Module, State) ->
   get_nodes_list(Module, State#dispatcher_state.modules).
@@ -507,7 +516,7 @@ get_nodes(Module, State) ->
 %% ====================================================================
 %% @doc Gets nodes were module is working.
 -spec get_nodes_list(Module :: atom(), Modules :: list()) -> Result when
-  Result ::  term().
+  Result :: term().
 %% ====================================================================
 
 get_nodes_list(_Module, []) ->
@@ -521,8 +530,8 @@ get_nodes_list(Module, [{M, N} | T]) ->
 %% update_nodes/3
 %% ====================================================================
 %% @doc Updates information about nodes (were modules are working).
--spec update_nodes(Module :: atom(), NewNodes:: term(), State :: term()) -> Result when
-  Result ::  term().
+-spec update_nodes(Module :: atom(), NewNodes :: term(), State :: term()) -> Result when
+  Result :: term().
 %% ====================================================================
 update_nodes(Module, NewNodes, State) ->
   Modules = State#dispatcher_state.modules,
@@ -532,8 +541,8 @@ update_nodes(Module, NewNodes, State) ->
 %% update_nodes_list/4
 %% ====================================================================
 %% @doc Updates information about nodes (were modules are working).
--spec update_nodes_list(Module :: atom(), NewNodes:: term(), Modules :: list(), TmpList :: list()) -> Result when
-  Result ::  term().
+-spec update_nodes_list(Module :: atom(), NewNodes :: term(), Modules :: list(), TmpList :: list()) -> Result when
+  Result :: term().
 %% ====================================================================
 update_nodes_list(_Module, _NewNodes, [], Ans) ->
   Ans;
@@ -547,12 +556,12 @@ update_nodes_list(Module, NewNodes, [{M, N} | T], Ans) ->
 %% ====================================================================
 %% @doc Chooses one from nodes where module is working.
 -spec get_worker_node(Module :: atom(), Request :: term(), State :: term()) -> Result when
-  Result ::  term().
+  Result :: term().
 %% ====================================================================
 get_worker_node(Module, Request, State) ->
   case choose_node_by_map(Module, Request, State) of
     use_standard_mode ->
-      Nodes = get_nodes(Module,State),
+      Nodes = get_nodes(Module, State),
       case Nodes of
         {L1, L2} ->
           {N, NewLists} = choose_worker(L1, L2),
@@ -568,19 +577,19 @@ get_worker_node(Module, Request, State) ->
 %% @doc Checks if module is working on this node. If not, chooses other
 %% node from nodes where module is working.
 -spec check_worker_node(Module :: atom(), Request :: term(), State :: term()) -> Result when
-  Result ::  term().
+  Result :: term().
 %% ====================================================================
 check_worker_node(Module, Request, State) ->
   case choose_node_by_map(Module, Request, State) of
     use_standard_mode ->
-      Nodes = get_nodes(Module,State),
+      Nodes = get_nodes(Module, State),
       case Nodes of
         {L1, L2} ->
           ThisNode = node(),
           Check = (lists:member(ThisNode, lists:flatten([L1, L2]))),
           case Check of
             true ->
-              Check2 = ((State#dispatcher_state.current_load =< 3) and (State#dispatcher_state.current_load =< 2*State#dispatcher_state.avg_load)),
+              Check2 = ((State#dispatcher_state.current_load =< 3) and (State#dispatcher_state.current_load =< 2 * State#dispatcher_state.avg_load)),
               case Check2 of
                 true -> {ThisNode, State};
                 false ->
@@ -604,7 +613,7 @@ check_worker_node(Module, Request, State) ->
 %% @doc Helper function used by get_worker_node/3. It chooses node and
 %% put it on recently used nodes list.
 -spec choose_worker(L1 :: term(), L2 :: term()) -> Result when
-  Result ::  term().
+  Result :: term().
 %% ====================================================================
 choose_worker([], []) ->
   {non, {[], []}};
@@ -617,12 +626,12 @@ choose_worker([N | L1], L2) ->
 %% ====================================================================
 %% @doc Adds nodes to list that describes module.
 -spec add_worker(Module :: atom(), Node :: term(), State :: term()) -> Result when
-  Result ::  {ok, NewState} | Error,
+  Result :: {ok, NewState} | Error,
   Error :: term(),
   NewState :: term().
 %% ====================================================================
 add_worker(Module, Node, State) ->
-  Nodes = get_nodes(Module,State),
+  Nodes = get_nodes(Module, State),
   case Nodes of
     {L1, L2} ->
       {ok, update_nodes(Module, {[Node | L1], L2}, State)};
@@ -633,7 +642,7 @@ add_worker(Module, Node, State) ->
 %% ====================================================================
 %% @doc Updates dispatcher state when new workers list appears.
 -spec update_workers(WorkersList :: term(), SNum :: integer(), CLoad :: number(), ALoad :: number(), Modules :: list()) -> Result when
-  Result ::  term().
+  Result :: term().
 %% ====================================================================
 update_workers(WorkersList, SNum, CLoad, ALoad, Modules) ->
   Update = fun({Node, Module}, TmpState) ->
@@ -674,7 +683,7 @@ pull_state(CurrentStateNum) ->
   Result :: term().
 %% ====================================================================
 get_workers(Module, State) ->
-  Nodes = get_nodes(Module,State),
+  Nodes = get_nodes(Module, State),
   case Nodes of
     {L1, L2} -> lists:flatten([L1, L2]);
     _Other -> []
@@ -688,7 +697,7 @@ get_workers(Module, State) ->
 %% ====================================================================
 initState(Modules) ->
   CreateModules = fun(Module, TmpList) ->
-    [{Module, {[],[]}} | TmpList]
+    [{Module, {[], []}} | TmpList]
   end,
   NewModules = lists:foldl(CreateModules, [], Modules),
   #dispatcher_state{modules = NewModules}.
@@ -813,6 +822,35 @@ get_callbacks(Fuse) ->
   [Value] = ets:lookup(?CALLBACKS_TABLE, Fuse),
   [Value | get_callbacks(ets:next(?CALLBACKS_TABLE, Fuse))].
 
+%% get_connected_fuses/0
+%% ====================================================================
+%% @doc Gets information about all callbacks (helper function)
+-spec get_connected_fuses() -> Result when
+  Result :: {ok, no_fuses_connected} | {ok, ClientList :: [{Login :: string(), UUID :: uuid()}]} | {error, Reason :: term()}.
+%% ====================================================================
+get_connected_fuses() ->
+  try
+    Infinity = 10000000000000000000,
+    {ok, List} = dao_lib:apply(dao_cluster, list_fuse_sessions, [{by_valid_to, Infinity}], 1),
+    ClientList = lists:foldl(
+      fun(#db_document{uuid = UUID, record = #fuse_session{uid = UserID}} = SessionDoc, Acc) ->
+        case dao_cluster:check_session(SessionDoc) of
+          ok ->
+            {ok, UserDoc} = user_logic:get_user({uuid, UserID}),
+            Acc ++ [{user_logic:get_login(UserDoc), UUID}];
+          _ ->
+            Acc
+        end
+      end, [], List),
+    case ClientList of
+      [] -> {ok, no_fuses_connected};
+      _ -> {ok, ClientList}
+    end
+  catch Type:Reason ->
+    ?error_stacktrace("Cannot list fuse sessions: ~p:~p", [Type, Reason]),
+    {error, Reason}
+  end.
+
 %% send_to_fuse/3
 %% ====================================================================
 %% @doc Sends message to fuse
@@ -825,10 +863,17 @@ send_to_fuse(FuseId, Message, MessageDecoder) ->
 %% send_to_fuse/4
 %% ====================================================================
 %% @doc Sends message to fuse
-  -spec send_to_fuse(FuseId :: string(), Message :: term(), MessageDecoder :: string(), SendNum :: integer()) -> Result when
-Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
+-spec send_to_fuse(FuseId :: string(), Message :: term(), MessageDecoder :: string(), SendNum :: integer()) -> Result when
+  Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
 %% ====================================================================
 send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
+  case fslogic_context:is_global_fuse_id(FuseId) of
+    true ->
+      provider_proxy:reroute_push_message(fslogic_context:read_global_fuse_id(FuseId), Message, MessageDecoder);
+    false ->
+      send_to_fuse1(FuseId, Message, MessageDecoder, SendNum)
+  end.
+send_to_fuse1(FuseId, Message, MessageDecoder, SendNum) ->
   Ans = try
     Node = gen_server:call(?Dispatcher_Name, {get_callback, FuseId}, 500),
     case Node of
@@ -857,11 +902,11 @@ send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
             node_manager_error
         end
     end
-  catch
-    _:_ ->
-      ?error("Can not get callback node of fuse: ~p", [FuseId]),
-      dispatcher_error
-  end,
+        catch
+          _:_ ->
+            ?error("Can not get callback node of fuse: ~p", [FuseId]),
+            dispatcher_error
+        end,
   case Ans of
     ok -> ok;
     _ ->
@@ -986,67 +1031,67 @@ choose_node_by_map(Module, Msg, State) ->
 forward_request(NodeChosen, Task, Request, Message, State) ->
   ModulesList = proplists:get_value(Task, State#dispatcher_state.modules_const_list, wrong_worker_type),
   Ans = case ModulesList of
-    wrong_worker_type -> wrong_worker_type;
-    _ ->
-      ModulesListLength = length(ModulesList),
-      case ModulesListLength of
-        0 -> worker_not_found;
-        1 ->
-          [Node | _] = ModulesList,
-          gen_server:cast({Task, Node}, Message),
-          ok;
-        _ ->
-          RequestMapList = State#dispatcher_state.request_map,
-          RequestMap = proplists:get_value(Task, RequestMapList, non),
-          case RequestMap of
-            non ->
-              Action = case NodeChosen of
-                true ->
-                  ThisNode = node(),
-                  case lists:member(ThisNode, ModulesList) of
-                    true ->
-                      gen_server:cast({Task, ThisNode}, Message),
-                      forwarded;
-                    false ->
-                      ok
-                  end;
-                false ->
-                  ok
-              end,
-              case Action of
-                forwarded ->
-                  ok;
-                _ ->
-                  random:seed(now()),
-                  Node2 = lists:nth(random:uniform(ModulesListLength), ModulesList),
-                  gen_server:cast({Task, Node2}, Message)
-              end;
-            _ ->
-              spawn(fun() ->
-                try
-                  RequestNum = RequestMap(Message),
-                  case RequestNum of
-                    Num when is_integer(Num) ->
-                      Node3 = lists:nth(Num rem ModulesListLength + 1, ModulesList),
-                      gen_server:cast({Task, Node3}, Message);
-                    WrongAns ->
-                      ?error("Dispatcher (request map) wrong answer for module ~p and request ~p: ~p", [Task, Message, WrongAns]),
-                      random:seed(now()),
-                      Node4 = lists:nth(random:uniform(ModulesListLength), ModulesList),
-                      gen_server:cast({Task, Node4}, Message)
-                  end
-                catch
-                  Type:Error ->
-                    ?error_stacktrace("Dispatcher (request map) error for module ~p and request ~p: ~p:~p", [Task, Message, Type, Error]),
-                    random:seed(now()),
-                    Node5 = lists:nth(random:uniform(ModulesListLength), ModulesList),
-                    gen_server:cast({Task, Node5}, Message)
-                end
-              end)
-          end,
-          ok
-      end
-  end,
+          wrong_worker_type -> wrong_worker_type;
+          _ ->
+            ModulesListLength = length(ModulesList),
+            case ModulesListLength of
+              0 -> worker_not_found;
+              1 ->
+                [Node | _] = ModulesList,
+                gen_server:cast({Task, Node}, Message),
+                ok;
+              _ ->
+                RequestMapList = State#dispatcher_state.request_map,
+                RequestMap = proplists:get_value(Task, RequestMapList, non),
+                case RequestMap of
+                  non ->
+                    Action = case NodeChosen of
+                               true ->
+                                 ThisNode = node(),
+                                 case lists:member(ThisNode, ModulesList) of
+                                   true ->
+                                     gen_server:cast({Task, ThisNode}, Message),
+                                     forwarded;
+                                   false ->
+                                     ok
+                                 end;
+                               false ->
+                                 ok
+                             end,
+                    case Action of
+                      forwarded ->
+                        ok;
+                      _ ->
+                        random:seed(now()),
+                        Node2 = lists:nth(random:uniform(ModulesListLength), ModulesList),
+                        gen_server:cast({Task, Node2}, Message)
+                    end;
+                  _ ->
+                    spawn(fun() ->
+                      try
+                        RequestNum = RequestMap(Message),
+                        case RequestNum of
+                          Num when is_integer(Num) ->
+                            Node3 = lists:nth(Num rem ModulesListLength + 1, ModulesList),
+                            gen_server:cast({Task, Node3}, Message);
+                          WrongAns ->
+                            ?error("Dispatcher (request map) wrong answer for module ~p and request ~p: ~p", [Task, Message, WrongAns]),
+                            random:seed(now()),
+                            Node4 = lists:nth(random:uniform(ModulesListLength), ModulesList),
+                            gen_server:cast({Task, Node4}, Message)
+                        end
+                      catch
+                        Type:Error ->
+                          ?error_stacktrace("Dispatcher (request map) error for module ~p and request ~p: ~p:~p", [Task, Message, Type, Error]),
+                          random:seed(now()),
+                          Node5 = lists:nth(random:uniform(ModulesListLength), ModulesList),
+                          gen_server:cast({Task, Node5}, Message)
+                      end
+                    end)
+                end,
+                ok
+            end
+        end,
   case Ans of
     ok ->
       {reply, ok, State};

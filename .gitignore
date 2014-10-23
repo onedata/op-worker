@@ -4,17 +4,21 @@
 .dialyzer.plt
 .idea
 
+src/gui_static/flatui
+src/gui_static/fonts
+src/gui_static/n2o
+
 *.iml
 *.sublime*
 
-releases/veil_cluster_node
+releases/oneprovider_node
 releases/test_cluster
 releases/files/sys.config
 releases/files/vm.args
 releases/*.rpm
 
 include/*_pb.hrl
-src/veil_cluster_node.app.src
+src/oneprovider_node.app.src
 test/eunit_results
 
 deps
@@ -25,6 +29,7 @@ distributed_tests_out
 
 c_lib
 c_src/gpv_nif/*.o
-c_src/veilhelpers_nif/*.o
+c_src/helpers_nif/*.o
+c_src/oneproxy/build/*
 
 docs/_build/

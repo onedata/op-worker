@@ -29,7 +29,7 @@ test(FSLogicNode) ->
   test("localhost", FSLogicNode).
 
 test(Host, FSLogicNode) ->
-  test(Host, "cacerts/veilfs.pem", 5555, FSLogicNode).
+  test(Host, "cacerts/onedata.pem", 5555, FSLogicNode).
 
 test(Host, Cert, Port, FSLogicNode) ->
   ssl:start(),
@@ -38,7 +38,7 @@ test(Host, Cert, Port, FSLogicNode) ->
   FilesInDir = [DirName ++ "/file_in_dir1", DirName ++ "/file_in_dir2", DirName ++ "/file_in_dir3", DirName ++ "/file_in_dir4", DirName ++ "/file_in_dir5"],
   NewNameOfFIle = "new_name_of_file",
 
-  {ok, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", "/tmp/veilfs"]),
+  {ok, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", "/tmp/onedata"]),
   
   {Status, Helper, Id, Validity, AnswerOpt0} = create_file(Host, Cert, Port, TestFile),
   io:format("Test file creation: aswer status: ~s, helper: ~s, id: ~s, validity: ~b, answer: ~p ~n", [Status, Helper, Id, Validity, AnswerOpt0]),
@@ -264,7 +264,8 @@ ls(Host, Cert, Port, Dir, Num, Offset) ->
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Files = fuse_messages_pb:decode_filechildren(Bytes),
   Files2 = records_translator:translate(Files, "fuse_messages"),
-  {Status, Files2#filechildren.child_logic_name, Files2#filechildren.answer}.
+  FileList1 = lists:map(fun(#filechildren_direntry{name = Name}) -> Name end, Files2#filechildren.entry),
+  {Status, FileList1, Files2#filechildren.answer}.
 
 delete_file(Host, Cert, Port, FileName) ->
   FslogicMessage = #deletefile{file_logic_name = FileName},

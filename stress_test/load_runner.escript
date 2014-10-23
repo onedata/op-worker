@@ -10,7 +10,7 @@
 %%       It's meant to be used by Bamboo for stress test load logging.
 %% ===================================================================
 
--define(default_cookie, veil_cluster_node).
+-define(default_cookie, oneprovider_node).
 
 %% set up net_kernel, which must be running for distributed Erlang to work,
 %% and to provide monitoring of the network
