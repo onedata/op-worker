@@ -6,7 +6,7 @@
 # This software is released under the MIT license
 # cited in 'LICENSE.txt'.
 #####################################################################
-# This script allows to restart Bamboo agents.
+# This script restarts Bamboo agents.
 #####################################################################
 
 ssh 172.16.67.229 "killall -KILL java ; service bamboo-agent restart" &
