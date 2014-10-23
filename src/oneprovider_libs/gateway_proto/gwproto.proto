@@ -1,6 +1,12 @@
 package one.gwproto;
 
-message GatewayMessage {
-    required string sender_pid = 1;
+message FetchRequest {
+    required string file_id = 1;
+    required uint64 offset = 2;
+    required uint64 size = 3;
+}
+
+message FetchReply {
+    required bytes request_hash = 1;
     required bytes content = 2;
 }

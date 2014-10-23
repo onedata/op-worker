@@ -10,6 +10,7 @@
 %% ===================================================================
 
 -module(gateway_protocol).
+-author("Konrad Zemek").
 -behavior(ranch_protocol).
 -behavior(gen_server).
 
@@ -22,6 +23,7 @@
 }).
 
 -include("gwproto_pb.hrl").
+-include("oneprovider_modules/dao/dao_vfs.hrl").
 -include("oneprovider_modules/gateway/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -105,16 +107,21 @@ handle_cast(_Request, State) ->
 handle_info({Ok, Socket, Data}, State) when Ok =:= State#gwproto_state.ok ->
     #gwproto_state{transport = Transport} = State,
     ok = Transport:setopts(Socket, [{active, once}]),
+
+    #fetchrequest{file_id = FileId, offset = Offset, size = Size} = gwproto_pb:decode_fetchrequest(Data),
+    Hash = gateway:compute_request_hash(Data),
+
+    %##file_location{storage_id = } fslogic_file:get_file_local_location(FileId)
+
     #gatewaymessage{sender_pid = SenderPid, content = Content} = gwproto_pb:decode_gatewaymessage(Data),
-    ?info("Received ~p bytes worth of request", [length(Content)]),
-    ReplyContent = crypto:rand_bytes(1024 * 1024),
-    Reply = gwproto_pb:encode_gatewaymessage(#gatewaymessage{sender_pid = SenderPid, content = ReplyContent}),
+%%     ?info("Received ~p bytes worth of request", [byte_size(Content)]),
+    Reply = gwproto_pb:encode_gatewaymessage(#gatewaymessage{sender_pid = SenderPid, content = Content}),
     Transport:send(Socket, Reply),
     {noreply, State};
 
 handle_info({Closed, _Socket}, State) when Closed =:= State#gwproto_state.closed ->
     ?debug("closing"),
-    {stop, closed, State};
+    {stop, normal, State}; %% @TODO: is normal the normal exit state?
 
 handle_info({Error, _Socket, Reason}, State) when Error =:= State#gwproto_state.error ->
     ?debug("closing on error"),

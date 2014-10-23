@@ -10,6 +10,7 @@
 %% ===================================================================
 
 -module(gateway_connection_manager_supervisor).
+-author("Konrad Zemek").
 -behavior(supervisor).
 
 -include("oneprovider_modules/gateway/registered_names.hrl").

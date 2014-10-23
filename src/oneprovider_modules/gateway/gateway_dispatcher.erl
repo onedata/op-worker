@@ -10,6 +10,7 @@
 %% ===================================================================
 
 -module(gateway_dispatcher).
+-author("Konrad Zemek").
 -behavior(gen_server).
 
 -include("oneprovider_modules/gateway/gateway.hrl").
@@ -25,7 +26,7 @@
     connection_managers = queue:new() :: queue:queue(#cmref{})
 }).
 
--export([start_link/1]).
+-export([test/0, test/2, start_link/1]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
@@ -57,6 +58,24 @@ init(MaxConcurrentConnections) ->
             #cmref{number = Number, pid = Pid}
         end, lists:seq(1, MaxConcurrentConnections)),
     {ok, #gwstate{connection_managers = queue:from_list(ConnectionManagers)}}.
+
+test() -> test(1, 1000).
+test(Megabytes, Messages) ->
+    Msg = crypto:rand_bytes(Megabytes * 1024 * 1024),
+    MessagesList = lists:seq(1, Messages),
+    lists:foreach(
+        fun(_) ->
+            gen_server:cast(?GATEWAY_DISPATCHER, {send, Msg, self(), {192,168,122,236}})
+        end, MessagesList),
+    Result = lists:foldl(
+        fun(_, Sum) ->
+            receive
+                Msg -> V = Sum + byte_size(Msg), ?info("~p", [V]), V
+            after
+                timer:seconds(10) -> error
+            end
+        end, 0, MessagesList),
+    Result.
 
 
 -spec handle_call(Request, From, State) -> Result when

@@ -11,6 +11,7 @@
 %% ===================================================================
 
 -module(gateway).
+-author("Konrad Zemek").
 -behaviour(worker_plugin_behaviour).
 
 -include("oneprovider_modules/gateway/gateway.hrl").
@@ -21,10 +22,12 @@
 -define(acceptor_number, 100).
 -define(max_concurrent_connections, 5).
 
+-export([init/1, handle/2, cleanup/0]).
+-export([compute_request_hash/1]).
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([init/1, handle/2, cleanup/0]).
 
 init(_Args) ->
     {ok, _} = ranch:start_listener(?GATEWAY_LISTENER, ?acceptor_number,
@@ -46,8 +49,14 @@ handle(_ProtocolVersion, {send, _Data, _Pid, _Remote} = Request) ->
 
 handle(_ProtocolVersion, _Msg) ->
     ?warning("Wrong request: ~p", [_Msg]),
+    %% @TODO: handle exit from gateway_dispatcher_supervisor
     ok.
 
 cleanup() ->
     ranch:stop_listener(?GATEWAY_LISTENER),
     ok.
+
+
+-spec compute_request_hash(RequestBytes :: binary()) -> Hash :: binary().
+compute_request_hash(RequestBytes) ->
+    crypto:hash(sha256, RequestBytes).
