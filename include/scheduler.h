@@ -47,7 +47,7 @@ public:
 
     /**
      * Runs a task asynchronously in @c Scheduler's thread pool on an object
-     * references by a non-owning pointer.
+     * referenced by a non-owning pointer.
      * @param member The member to invoke.
      * @param subject The subject whose member is to be invoked.
      * @param args Arguments to pass to the member.

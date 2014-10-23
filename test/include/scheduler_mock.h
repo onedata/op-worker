@@ -1,12 +1,12 @@
 /**
- * @file testUtils.h
+ * @file scheduler_mock.h
  * @author Konrad Zemek
  * @copyright (C) 2014 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef ONEHELPERS_SCHEDULER_MOCK_H
-#define ONEHELPERS_SCHEDULER_MOCK_H
+#ifndef HELPERS_SCHEDULER_MOCK_H
+#define HELPERS_SCHEDULER_MOCK_H
 
 
 #include "scheduler.h"
@@ -27,4 +27,4 @@ public:
 };
 
 
-#endif // ONEHELPERS_SCHEDULER_MOCK_H
+#endif // HELPERS_SCHEDULER_MOCK_H
