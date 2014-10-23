@@ -12,6 +12,7 @@
 -module(gateway_connection_manager).
 -behavior(gen_server).
 
+-include("gwproto_pb.hrl").
 -include("oneprovider_modules/gateway/gateway.hrl").
 -include("oneprovider_modules/gateway/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -19,6 +20,7 @@
 -define(CONNECTION_TIMEOUT, timer:seconds(10)).
 
 -record(cmstate, {
+    number :: non_neg_integer(), %% @TODO: printing purposes only
     connections = #{} :: map()
 }).
 
@@ -49,7 +51,7 @@ start_link(Number) ->
      Reason :: term().
 init(Number) ->
     gen_server:cast(?GATEWAY_DISPATCHER, {register_connection_manager, Number, self()}),
-    {ok, #cmstate{}}.
+    {ok, #cmstate{number = Number}}.
 
 
 -spec handle_call(Request, From, State) -> Result when
@@ -79,7 +81,7 @@ handle_call(_Request, _From, State) ->
      Timeout :: timeout(),
      Reason :: term().
 handle_cast({send, Data, Pid, Remote}, State) ->
-    ?warning("handle_cast(~p, ~p)", [{send, Data, Pid, Remote}, State]),
+    ?debug("handle_cast(~p, ~p)", [{send, Data, Pid, Remote}, State]),
     Self = self(),
     spawn_link(fun() ->
         Result = case maps:find(Remote, State#cmstate.connections) of
@@ -101,7 +103,7 @@ handle_cast({send, Data, Pid, Remote}, State) ->
     {noreply, State};
 
 handle_cast({send_internal, Data, Pid, Remote, CreationResult}, State) ->
-    ?warning("handle_cast(~p, ~p)", [{send_internal, Data, Pid, Remote, CreationResult}, State]),
+    ?debug("handle_cast(~p, ~p)", [{send_internal, Data, Pid, Remote, CreationResult}, State]),
     Connections = State#cmstate.connections,
 
     FoundSocket = maps:find(Remote, Connections),
@@ -122,12 +124,13 @@ handle_cast({send_internal, Data, Pid, Remote, CreationResult}, State) ->
             {noreply, State};
 
         _ ->
-            case gen_tcp:send(Socket, term_to_binary({Data, Pid})) of
+            Message = #gatewaymessage{sender_pid = pid_to_list(Pid), content = Data},
+            case gen_tcp:send(Socket, gwproto_pb:encode_gatewaymessage(Message)) of
                 {error, Reason2} ->
                     Pid ! {error, {request_send_error, Reason2}},
                     {noreply, State#cmstate{connections = maps:remove(Remote, Connections)}};
                 ok ->
-                    inet:setopts(Socket, [{active, once}]),
+                    ok = inet:setopts(Socket, [{active, once}]),
                     {noreply, State#cmstate{connections = maps:put(Remote, Socket, Connections)}}
             end
     end;
@@ -146,18 +149,19 @@ handle_cast(_Request, State) ->
      Timeout :: timeout(),
      Reason :: normal | term().
 handle_info({tcp, Socket, Data}, State) ->
-    case binary_to_term(Data) of
-        {ReplyType, Data, Pid} -> Pid ! {ReplyType, Data};
-        _ -> ok
-    end,
-    inet:setopts(Socket, {active, once}),
+    #gatewaymessage{sender_pid = SenderPid, content = Content} = gwproto_pb:decode_gatewaymessage(Data),
+    ?info("Received ~p bytes through connection no ~p", [length(Content), State#cmstate.number]),
+    list_to_pid(SenderPid) ! Content,
+    ok = inet:setopts(Socket, [{active, once}]),
     {noreply, State};
 
 handle_info({tcp_closed, Socket}, State) ->
+    ?debug("closed in cm"),
     NewConnections = remove_value(Socket, State#cmstate.connections),
     {noreply, State#cmstate{connections = NewConnections}};
 
 handle_info({tcp_error, Socket, _Reason}, State) ->
+    ?debug("error in cm"),
     %% We don't know which process (if any) wanted to connect
     %% through the socket, so we just let the gateway request time
     %% out. It happens.
@@ -166,6 +170,7 @@ handle_info({tcp_error, Socket, _Reason}, State) ->
     {noreply, State#cmstate{connections = NewConnections}};
 
 handle_info(_Info, State) ->
+    ?debug("some other stuff ~p", [_Info]),
     {noreply, State}.
 
 

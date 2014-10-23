@@ -86,22 +86,22 @@ handle_call(_Request, _From, State) ->
      Timeout :: timeout(),
      Reason :: term().
 handle_cast({register_connection_manager, Number, Pid}, State) ->
-    ?warning("handle_cast(~p, ~p)", [{register_connection_manager, Number, Pid}, State]),
+    ?debug("handle_cast(~p, ~p)", [{register_connection_manager, Number, Pid}, State]),
     FilteredManagers = queue:filter(
         fun(#cmref{number = Number1}) when Number1 =:= Number -> false;
            (_) -> true
         end, State#gwstate.connection_managers),
     NewCM = #cmref{number = Number, pid = Pid},
     AugmentedConnectionsManagers = queue:in_r(NewCM, FilteredManagers),
-    ?warning("handle_cast(~p, State after: ~p)", [{register_connection_manager, Number, Pid}, State#gwstate{connection_managers = AugmentedConnectionsManagers}]),
+    ?debug("handle_cast(~p, State after: ~p)", [{register_connection_manager, Number, Pid}, State#gwstate{connection_managers = AugmentedConnectionsManagers}]),
     {noreply, State#gwstate{connection_managers = AugmentedConnectionsManagers}};
 
 handle_cast({send, _Data, _Pid, _Remote} = Request, State) ->
-    ?warning("handle_cast(~p, ~p)", [Request, State]),
+    ?debug("handle_cast(~p, ~p)", [Request, State]),
     Managers = State#gwstate.connection_managers,
     {{value, #cmref{pid = MgrPid} = Manager}, PoppedManagers} = queue:out(Managers),
     gen_server:cast(MgrPid, Request),
-    ?warning("handle_cast(~p, State after: ~p)", [Request, State#gwstate{connection_managers = queue:in(Manager, PoppedManagers)}]),
+    ?debug("handle_cast(~p, State after: ~p)", [Request, State#gwstate{connection_managers = queue:in(Manager, PoppedManagers)}]),
     {noreply, State#gwstate{connection_managers = queue:in(Manager, PoppedManagers)}}.
 
 

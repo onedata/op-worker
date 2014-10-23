@@ -1,0 +1,6 @@
+package one.gwproto;
+
+message GatewayMessage {
+    required string sender_pid = 1;
+    required bytes content = 2;
+}

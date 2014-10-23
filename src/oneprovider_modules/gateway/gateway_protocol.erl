@@ -21,6 +21,8 @@
     error
 }).
 
+-include("gwproto_pb.hrl").
+-include("oneprovider_modules/gateway/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% ranch_protocol callbacks
@@ -40,7 +42,7 @@ start_link(Ref, Socket, Transport, Opts) ->
 init(Ref, Socket, Transport, _Opts) ->
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
-    ok = Transport:setopts(Socket, [{active, once}]),
+    ok = Transport:setopts(Socket, [{active, once}, {packet, 4}]),
     {Ok, Closed, Error} = Transport:messages(),
     gen_server:enter_loop(?MODULE, [], #gwproto_state{
         socket = Socket,
@@ -102,14 +104,20 @@ handle_cast(_Request, State) ->
     Reason :: normal | term().
 handle_info({Ok, Socket, Data}, State) when Ok =:= State#gwproto_state.ok ->
     #gwproto_state{transport = Transport} = State,
-    Transport:setopts(Socket, [{active, once}]),
-    ?warning("Received: ~p", [binary_to_term(Data)]),
+    ok = Transport:setopts(Socket, [{active, once}]),
+    #gatewaymessage{sender_pid = SenderPid, content = Content} = gwproto_pb:decode_gatewaymessage(Data),
+    ?info("Received ~p bytes worth of request", [length(Content)]),
+    ReplyContent = crypto:rand_bytes(1024 * 1024),
+    Reply = gwproto_pb:encode_gatewaymessage(#gatewaymessage{sender_pid = SenderPid, content = ReplyContent}),
+    Transport:send(Socket, Reply),
     {noreply, State};
 
 handle_info({Closed, _Socket}, State) when Closed =:= State#gwproto_state.closed ->
+    ?debug("closing"),
     {stop, closed, State};
 
 handle_info({Error, _Socket, Reason}, State) when Error =:= State#gwproto_state.error ->
+    ?debug("closing on error"),
     {stop, Reason, State}.
 
 
