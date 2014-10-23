@@ -56,7 +56,7 @@ main() ->
                     GroupId = gui_str:to_binary(Id),
                     case gr_groups:get_details({user, opn_gui_utils:get_access_token()}, GroupId) of
                         {ok, GroupDetails} ->
-                            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body(GroupDetails)}, {custom, custom()}]};
+                            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body(GroupDetails)}, {custom, <<"">>}]};
                         _ ->
                             page_error:redirect_with_error(?error_group_permission_denied),
                             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]}
@@ -74,15 +74,6 @@ main() ->
 %% ====================================================================
 title() ->
     <<"Group details">>.
-
-
-%% custom/0
-%% ====================================================================
-%% @doc This will be placed instead of {{custom}} tag in template.
--spec custom() -> binary().
-%% ====================================================================
-custom() ->
-    <<"<script src='/flatui/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
 
 
 %% body/0

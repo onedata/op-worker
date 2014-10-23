@@ -50,7 +50,7 @@ main() ->
         true ->
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
     end.
 
 
@@ -60,15 +60,6 @@ main() ->
 -spec title() -> binary().
 %% ====================================================================
 title() -> <<"Manage tokens">>.
-
-
-%% custom/0
-%% ====================================================================
-%% @doc This will be placed instead of {{custom}} tag in template.
--spec custom() -> binary().
-%% ====================================================================
-custom() ->
-    <<"<script src='/flatui/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
 
 
 %% body/0

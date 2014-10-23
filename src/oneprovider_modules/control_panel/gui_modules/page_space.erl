@@ -57,7 +57,7 @@ main() ->
                     SpaceId = gui_str:to_binary(Id),
                     case gr_users:get_space_details({user, opn_gui_utils:get_access_token()}, SpaceId) of
                         {ok, SpaceDetails} ->
-                            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body(SpaceDetails)}, {custom, custom()}]};
+                            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body(SpaceDetails)}, {custom, <<"">>}]};
                         _ ->
                             page_error:redirect_with_error(?error_space_permission_denied),
                             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]}
@@ -75,15 +75,6 @@ main() ->
 %% ====================================================================
 title() ->
     <<"Space details">>.
-
-
-%% custom/0
-%% ====================================================================
-%% @doc This will be placed instead of {{custom}} tag in template.
--spec custom() -> binary().
-%% ====================================================================
-custom() ->
-    <<"<script src='/flatui/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
 
 
 %% body/0
