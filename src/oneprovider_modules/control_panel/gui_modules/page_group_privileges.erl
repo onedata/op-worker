@@ -217,10 +217,14 @@ privileges_table(TableName, ColumnNames, PrivilegesNames, PrivilegesRows) ->
 
     Rows = lists:map(fun({{Name, Id, Privileges}, N}) ->
         RowId = <<TableName/binary, "_", (integer_to_binary(N))/binary>>,
+        ShortHash = case size(Id) > 7 of
+                        true -> <<Id:7/binary, "...">>;
+                        _ -> Id
+                    end,
         #tr{
             cells = [
                 #td{
-                    body = <<"<b>", (gui_str:html_encode(Name))/binary, "</b> (", Id:7/binary, "...)">>,
+                    body = <<"<b>", (gui_str:html_encode(Name))/binary, "</b> (", ShortHash/binary, ")">>,
                     style = ColumnStyle
                 } | lists:map(fun({Privilege, M}) ->
                     CheckboxId = <<RowId/binary, "_", (integer_to_binary(M))/binary>>,
@@ -318,7 +322,6 @@ comet_loop(#?STATE{group_id = GroupId, new_users_privileges = NewUsersPrivileges
 event(init) ->
     try
         GroupId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
-        GRUID = utils:ensure_binary(opn_gui_utils:get_global_user_id()),
         AccessToken = opn_gui_utils:get_access_token(),
 
         {ok, UsersIds} = gr_groups:get_users({user, AccessToken}, GroupId),

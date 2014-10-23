@@ -51,85 +51,85 @@ body() ->
     ]}.
 
 main_panel() ->
+    ProviderHostname = gui_ctx:get_requested_hostname(),
     [
         #p{style = <<"text-align: center;">>, body = <<"<strong>oneclient</strong> is a software based on FUSE ",
         "(Filesystem in Userspace) that allows mounting <strong>onedata</strong> filesystem on Linux systems.">>},
 
-        #p{style = <<"text-align: center;">>, body = <<"Download and install">>},
+        #p{style = <<"font-size: 20px; margin-top: 30px;">>, body = <<"Download and install the <i>RPM</i> package">>},
 
-        #table{style = <<"width: 100%">>, body = [
-            #tr{cells = [
-                #td{style = <<"width: 50%; padding: 5px;">>, body = [
-                    #p{body = <<"<i>RPM</i> package">>},
-                    #pre{body = #code{class = <<"bash">>, body = [
-                        <<"curl --url ", (?CLIENT_RPM_URL)/binary, " --output oneclient.rpm<br>sudo yum install oneclient.rpm">>
-                    ]}}
-                ]},
-                #td{style = <<"width: 50%; padding: 5px;">>, body = [
-                    #p{body = <<"<i>DEB</i> package">>},
-                    #pre{body = #code{class = <<"bash">>, body = [
-                        <<"curl --url ", (?CLIENT_DEB_URL)/binary, " --output oneclient.deb<br>sudo dpkg -i oneclient.deb">>
-                    ]}}
-                ]}
-            ]}
+        #pre{body = #code{class = <<"bash">>, body = [
+            <<"curl -O ", (?CLIENT_RPM_URL)/binary, "<br>sudo yum install oneclient-linux.rpm">>
+        ]}},
+
+        #p{style = <<"font-size: 20px; margin-top: 30px;">>, body = <<"Download and install the <i>DEB</i> package">>},
+
+        #pre{body = #code{class = <<"bash">>, body = [
+            <<"curl -O ", (?CLIENT_DEB_URL)/binary, "<br>sudo apt-get install oneclient-linux.deb">>
+        ]}},
+
+        #p{style = <<"font-size: 20px; margin-top: 30px;">>, body = <<"Run <strong>oneclient</strong> using a <i>certificate</i>">>},
+
+        #list{body = [
+            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
+                <<"Make a copy of the default configuration file: ">>,
+                #pre{style = <<"margin: 0 auto; margin-top: 10px;">>, body = #code{
+                    class = <<"bash">>, body = <<"cp /usr/local/etc/oneclient.conf.default /usr/local/etc/oneclient.conf">>}
+                }
+            ]},
+            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
+                <<"Uncomment and set the <i>provider_hostname</i> value to <strong>", ProviderHostname/binary,
+                "</strong> in the copied configuration file">>
+            ]},
+            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
+            <<"Place your X.509 certificate (acceptable formats are <i>PEM</i> and <i>PKCS 12</i>)",
+            " in <i>$HOME/.globus/usercert.pem</i>">>
+            },
+            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
+                <<"Register the certificate by pasting its content on ">>,
+                #link{body = <<"manage account page">>, href = <<"/manage_account">>}
+            ]},
+            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
+                <<"Start <strong>oneclient</strong>: ">>,
+                #pre{style = <<"margin: 0 auto; margin-top: 10px;">>, body = #code{
+                    class = <<"bash">>, body = <<"oneclient <i>mount-point</i>">>}
+                }
+            ]},
+            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
+            <<"Confirm the certificate (required only once)">>
+            }
         ]},
 
-        #p{style = <<"text-align: center; margin-top: 40px;">>, body = <<"Run <strong>oneclient</strong> using">>},
+        #p{style = <<"font-size: 20px; margin-top: 30px;">>, body = <<"Run <strong>oneclient</strong> using a <i>token</i>">>},
 
-        #table{style = <<"width: 100%">>, body = [
-            #tr{cells = [
-                #td{style = <<"width: 50%; padding: 5px; vertical-align: top;">>, body = [
-                    #p{body = <<"<i>certificate</i>">>},
-                    #list{style = <<"padding: 5px;">>, body = [
-                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
-                        <<"Prepare X.509 certificate (acceptable formats are <i>PEM</i> and <i>PKCS 12</i>)">>
-                        },
-                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
-                        <<"Set <i>provider_hostname</i> and <i>peer_certificate_file</i>"
-                        " variables in configuration file located at "
-                        "<i>{INSTALL_PREFIX}/etc/oneclient.conf.default</i>">>
-                        },
-                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
-                            <<"Register certificate by pasting its content on ">>,
-                            #link{body = <<"manage account page">>, href = <<"/manage_account">>}
-                        ]},
-                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
-                            <<"Start <strong>oneclient</strong>: ">>,
-                            #pre{style = <<"margin: 0 auto; margin-top: 10px;">>, body = #code{
-                                class = <<"bash">>, body = <<"oneclient <i>mount-point</i>">>}
-                            }
-                        ]},
-                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
-                        <<"Confirm certificate (required only once)">>
-                        }
-                    ]}
-                ]},
-                #td{style = <<"width: 50%; padding: 5px; vertical-align: top;">>, body = [
-                    #p{body = <<"<i>token</i>">>},
-                    #list{style = <<"padding: 5px;">>, body = [
-                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
-                        <<"Set <i>provider_hostname</i> variable in configuration file"
-                        " located at <i>{INSTALL_PREFIX}/etc/oneclient.conf.default</i>">>
-                        },
-                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
-                            <<"Generate and copy ">>,
-                            #link{body = <<"authorization code">>, href = <<"/tokens">>}
-                        ]},
-                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
-                            <<"Start <strong>oneclient</strong>: ">>,
-                            #pre{style = <<"margin: 0 auto; margin-top: 10px;">>, body = #code{
-                                class = <<"bash">>, body = <<"oneclient --authorization token <i>mount-point</i>">>}
-                            }
-                        ]},
-                        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<"Paste copied authorization code">>}
-                    ]}
-                ]}
-            ]}
+        #list{body = [
+            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
+                <<"Make a copy of the default configuration file: ">>,
+                #pre{style = <<"margin: 0 auto; margin-top: 10px;">>, body = #code{
+                    class = <<"bash">>, body = <<"cp /usr/local/etc/oneclient.conf.default /usr/local/etc/oneclient.conf">>}
+                }
+            ]},
+            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
+                <<"Uncomment and set the <i>provider_hostname</i> value to <strong>", ProviderHostname/binary,
+                "</strong> in the copied configuration file">>
+            ]},
+            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
+                <<"Generate and copy an ">>,
+                #link{body = <<"authorization code">>, href = <<"/tokens">>}
+            ]},
+            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
+                <<"Start <strong>oneclient</strong>: ">>,
+                #pre{style = <<"margin: 0 auto; margin-top: 10px;">>, body = #code{
+                    class = <<"bash">>, body = <<"oneclient --authorization token <i>mount-point</i>">>}
+                }
+            ]},
+            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<"Paste the authorization code">>}
         ]},
 
-        #h6{style = <<"text-align: center;">>, body = <<"Congratulations! You have successfully mounted <strong>onedata</strong> filesystem.">>}
+        #h6{style = <<"text-align: center; margin-top: 30px;">>, body = <<"Congratulations! You have successfully mounted <strong>onedata</strong> filesystem.">>}
 
     ].
 
 event(init) -> ok;
 event(terminate) -> ok.
+
