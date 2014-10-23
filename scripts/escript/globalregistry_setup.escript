@@ -7,8 +7,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This script initializes globalregistry database with custom
-%% configuration.
+%% @doc: This script sets globalregistry component up by initializing
+%% database with custom configuration.
 %% @end
 %% ===================================================================
 -module(globalregistry_setup).

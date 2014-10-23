@@ -7,8 +7,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This script initializes oneprovider database with custom
-%% configuration.
+%% @doc: This script sets oneprovider and corresponding onepanel 
+%% components up by initializing their databases with custom configuration.
 %% @end
 %% ===================================================================
 -module(oneprovider_setup).
