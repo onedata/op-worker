@@ -30,6 +30,7 @@
         node_state          -> ?record_info_gen(node_state);
         file                -> ?record_info_gen(file);
         file_location       -> ?record_info_gen(file_location);
+        file_block          -> ?record_info_gen(file_block);
         file_descriptor     -> ?record_info_gen(file_descriptor);
         file_meta           -> ?record_info_gen(file_meta);
         file_lock           -> ?record_info_gen(file_lock);

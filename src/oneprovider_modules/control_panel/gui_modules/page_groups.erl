@@ -326,7 +326,7 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                                    State#?STATE{counter = Counter + 1, groups_details = GroupsDetails ++ [{RowId, Privileges, GroupDetails}]}
                                catch
                                    _:Other ->
-                                       ?error("Cannot create group ~p: ~p", [Name, Other]),
+                                       ?error_stacktrace("Cannot create group ~p: ~p", [Name, Other]),
                                        opn_gui_utils:message(<<"error_message">>, <<"Cannot create group: <b>", Name/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,

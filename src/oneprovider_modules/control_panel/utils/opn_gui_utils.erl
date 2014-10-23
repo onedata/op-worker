@@ -26,7 +26,7 @@
 -export([apply_or_redirect/2, apply_or_redirect/3, maybe_redirect/2]).
 
 % Functions to generate page elements
--export([top_menu/1, top_menu/2, empty_page/0, message/2, message/3,
+-export([top_menu/1, top_menu/2, empty_page/0, message/2, message/3, breadcrumbs/1,
     spinner/0, expand_button/1, expand_button/2, collapse_button/1, collapse_button/2]).
 
 
@@ -356,6 +356,45 @@ message(Id, Message, Postback) ->
     ],
     gui_jq:update(Id, Body),
     gui_jq:fade_in(Id, 300).
+
+
+%% breadcrumbs/1
+%% ====================================================================
+%% @doc Renders breadcrumbs in submenu.
+-spec breadcrumbs(Elements :: [{LinkName :: binary(), LinkAddress :: binary()}]) -> Result when
+    Result :: [#panel{}].
+%% ====================================================================
+breadcrumbs(Elements) ->
+    [{LastElementName, LastElementLink} | ReversedTail] = lists:reverse(Elements),
+    [
+        #panel{
+            class = <<"navbar-inner">>,
+            style = <<"background-color: white;">>,
+            body = #panel{
+                class = <<"container">>,
+                body = #list{
+                    style = <<"margin: 0 auto; background-color: inherit;">>,
+                    class = <<"breadcrumb">>,
+                    body = lists:map(fun({Name, Link}) ->
+                        #li{
+                            body = #link{
+                                href = Link,
+                                body = Name
+                            }
+                        }
+                    end, lists:reverse(ReversedTail)) ++ [
+                        #li{
+                            class = <<"active">>,
+                            body = #link{
+                                href = LastElementLink,
+                                body = LastElementName
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    ].
 
 
 %% spinner/0

@@ -93,7 +93,7 @@ custom() ->
 -spec body(SpaceDetails :: #space_details{}) -> Result when
     Result :: #panel{}.
 %% ====================================================================
-body(SpaceDetails) ->
+body(#space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
     MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
     #panel{class= <<"page-container">>, body = [
         #panel{
@@ -103,7 +103,7 @@ body(SpaceDetails) ->
                 image = <<"/images/spinner.gif">>
             }
         },
-        opn_gui_utils:top_menu(spaces_tab),
+        opn_gui_utils:top_menu(spaces_tab, opn_gui_utils:breadcrumbs([{<<"Spaces">>, <<"/spaces">>}, {SpaceName, <<"/space?id=", SpaceId/binary>>}])),
         #panel{
             id = <<"ok_message">>,
             style = MessageStyle,
@@ -784,7 +784,7 @@ event(init) ->
         SpaceId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
         GRUID = utils:ensure_binary(opn_gui_utils:get_global_user_id()),
         AccessToken = opn_gui_utils:get_access_token(),
-        {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceId, GRUID),
+        {ok, Privileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceId, GRUID),
 
         GetDetailsFun = fun(Ids, Function, RowPrefix) ->
             lists:foldl(fun(Id, {Rows, It}) ->

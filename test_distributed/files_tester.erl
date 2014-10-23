@@ -39,14 +39,15 @@
 file_exists(LogicalName) ->
   File = dao_lib:apply(dao_vfs, get_file, [LogicalName], 0),
   case File of
-    {ok, #db_document{record = #file{location = Location}}} ->
-      case dao_lib:apply(dao_vfs, get_storage, [{uuid, Location#file_location.storage_id}], 0) of
+    {ok, #db_document{record = #file{}} = FileDoc} ->
+      Location = fslogic_file:get_file_local_location(FileDoc),
+      case dao_lib:apply(dao_vfs, get_storage, [{uuid, Location#file_location.storage_uuid}], 0) of
         {ok, #db_document{record = Storage}} ->
           SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
           #storage_helper_info{name = SHName, init_args = SHArgs} = SHI,
           case SHName of
             ?SH ->
-              case file_exists_storage(SHArgs ++ "/" ++ Location#file_location.file_id) of
+              case file_exists_storage(SHArgs ++ "/" ++ Location#file_location.storage_file_id) of
                 true -> true;
                 false -> file_not_exists_at_storage;
                 Error -> {storage_error, Error}
@@ -72,14 +73,15 @@ file_exists(LogicalName) ->
 read_file(LogicalName, BytesNum) ->
   File = dao_lib:apply(dao_vfs, get_file, [LogicalName], 0),
   case File of
-    {ok, #db_document{record = #file{location = Location}}} ->
-      case dao_lib:apply(dao_vfs, get_storage, [{uuid, Location#file_location.storage_id}], 0) of
+    {ok, #db_document{record = #file{}} = FileDoc} ->
+      Location = fslogic_file:get_file_local_location(FileDoc),
+      case dao_lib:apply(dao_vfs, get_storage, [{uuid, Location#file_location.storage_uuid}], 0) of
         {ok, #db_document{record = Storage}} ->
           SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
           #storage_helper_info{name = SHName, init_args = SHArgs} = SHI,
           case SHName of
             ?SH ->
-              case read_file_storage(SHArgs ++ "/" ++ Location#file_location.file_id, BytesNum) of
+              case read_file_storage(SHArgs ++ "/" ++ Location#file_location.storage_file_id, BytesNum) of
                 {ok, Data} -> {ok, Data};
                 Error -> {storage_error, Error}
               end;
@@ -163,13 +165,14 @@ delete_dir(File) ->
 get_file_location(LogicalName) ->
   File = dao_lib:apply(dao_vfs, get_file, [LogicalName], 0),
   case File of
-    {ok, #db_document{record = #file{location = Location}}} ->
-      case dao_lib:apply(dao_vfs, get_storage, [{uuid, Location#file_location.storage_id}], 0) of
+    {ok, #db_document{record = #file{}} = FileDoc} ->
+      Location = fslogic_file:get_file_local_location(FileDoc),
+      case dao_lib:apply(dao_vfs, get_storage, [{uuid, Location#file_location.storage_uuid}], 0) of
         {ok, #db_document{record = Storage}} ->
           SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
           #storage_helper_info{name = SHName, init_args = SHArgs} = SHI,
           case SHName of
-            ?SH -> {ok, lists:nth(1, SHArgs) ++ "/" ++ Location#file_location.file_id};
+            ?SH -> {ok, lists:nth(1, SHArgs) ++ "/" ++ Location#file_location.storage_file_id};
             _ -> {wrong_storage_helper, SHName}
           end;
         Other -> {get_storage_error, Other}

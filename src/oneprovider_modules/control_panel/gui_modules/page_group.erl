@@ -92,7 +92,7 @@ custom() ->
 -spec body(GroupDetails :: #group_details{}) -> Result when
     Result :: #panel{}.
 %% ====================================================================
-body(GroupDetails) ->
+body(#group_details{id = GroupId, name = GroupName} = GroupDetails) ->
     MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
     #panel{class= <<"page-container">>, body = [
         #panel{
@@ -102,7 +102,7 @@ body(GroupDetails) ->
                 image = <<"/images/spinner.gif">>
             }
         },
-        opn_gui_utils:top_menu(groups_tab),
+        opn_gui_utils:top_menu(groups_tab, opn_gui_utils:breadcrumbs([{<<"Groups">>, <<"/groups">>}, {GroupName, <<"/group?id=", GroupId/binary>>}])),
         #panel{
             id = <<"ok_message">>,
             style = MessageStyle,
@@ -646,7 +646,8 @@ comet_loop(#?STATE{counter = Counter, group_id = GroupId, spaces_details = Space
                     case gr_groups:modify_details({user, AccessToken}, GroupId, [{<<"name">>, NewGroupName}]) of
                         ok ->
                             gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
-                            gui_jq:update(<<"group_name">>, group_name(GroupDetails#group_details{name = NewGroupName}));
+                            gui_jq:update(<<"group_name">>, group_name(GroupDetails#group_details{name = NewGroupName})),
+                            gui_jq:show(<<"change_group_name_span">>);
                         Other ->
                             ?error("Cannot change name of group ~p: ~p", [GroupDetails, Other]),
                             opn_gui_utils:message(<<"error_message">>, <<"Cannot change name of group with ID:  <b>", GroupId, "</b>."

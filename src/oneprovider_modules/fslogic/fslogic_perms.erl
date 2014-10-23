@@ -65,7 +65,7 @@ check_file_perms(FileName, UserDoc, _FileDoc, create) ->
     {ok, {_, ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName, fslogic_context:get_protocol_version()),
     ParentFileName = fslogic_path:strip_path_leaf(FileName),
     check_file_perms(ParentFileName, UserDoc, ParentFileDoc, write);
-check_file_perms(FileName, UserDoc = #db_document{record = #user{global_id = GlobalId}}, #db_document{record = #file{location = FileLoc, type = Type, perms = FilePerms}} = FileDoc, delete) ->
+check_file_perms(FileName, UserDoc = #db_document{record = #user{global_id = GlobalId}}, #db_document{record = #file{type = Type, perms = FilePerms}} = FileDoc, delete) ->
     {ok, {_, ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName, fslogic_context:get_protocol_version()),
     ParentFileName = fslogic_path:strip_path_leaf(FileName),
     case check_file_perms(ParentFileName, UserDoc, ParentFileDoc, write) of
@@ -74,8 +74,9 @@ check_file_perms(FileName, UserDoc = #db_document{record = #user{global_id = Glo
             % cache file perms
             case FilePerms == 0 andalso Type == ?REG_TYPE andalso Ans == ok of
                 true ->
-                    {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
-                    {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+                    FileLoc = fslogic_file:get_file_local_location(FileDoc),
+                    {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_uuid}),
+                    {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.storage_file_id),
                     gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, utils:ensure_binary(GlobalId), delete}}, ?CACHE_REQUEST_TIMEOUT);
                 false -> ok
             end,
@@ -87,7 +88,7 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
         ok -> check_file_perms(FileName, UserDoc, FileDoc, write);
         Error -> Error
     end;
-check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerUid, perms = FilePerms, type = Type, meta_doc = MetaUuid, location = FileLoc}}, CheckType) -> %check read/write/execute perms
+check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerUid, perms = FilePerms, type = Type, meta_doc = MetaUuid}} = FileDoc, CheckType) -> %check read/write/execute perms
     #db_document{uuid = UserUid, record = #user{global_id = GlobalId} = UserRecord} = UserDoc,
     FileSpace = get_group(FileName),
 
@@ -112,8 +113,9 @@ check_file_perms(FileName, UserDoc, #db_document{record = #file{uid = FileOwnerU
                     % cache permissions for storage_files_manager use
                     case Type of
                         ?REG_TYPE ->
-                            {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
-                            {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+                            FileLoc = fslogic_file:get_file_local_location(FileDoc),
+                            {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_uuid}),
+                            {_SH, StorageFileName} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.storage_file_id),
                             gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {grant_permission, StorageFileName, utils:ensure_binary(GlobalId), CheckType}}, ?CACHE_REQUEST_TIMEOUT),
                             ok;
                         _ -> ok
