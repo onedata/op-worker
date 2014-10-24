@@ -235,10 +235,12 @@ source_provider_key_and_cert(Config) ->
                     SourceFiles
             end, {undefined, undefined}, proplists:get_value("GLOBALREGISTRY_PROVIDERS", Config, [])),
             lists:foreach(fun(Node) ->
-                "0" = os:cmd(erlang:binary_to_list(<<"scp ", SourceKeyFile/binary, " ", Node/binary,
-                ":/opt/oneprovider/nodes/worker/certs/grpkey.pem >/dev/null 2>&1 ; echo -n $?">>)),
-                "0" = os:cmd(erlang:binary_to_list(<<"scp ", SourceCertFile/binary, " ", Node/binary,
-                ":/opt/oneprovider/nodes/worker/certs/grpcert.pem >/dev/null 2>&1 ; echo -n $?">>))
+                lists:foreach(fun(Type) ->
+                    "0" = os:cmd(erlang:binary_to_list(<<"scp ", SourceKeyFile/binary, " ", Node/binary,
+                    ":/opt/oneprovider/nodes/", Type/binary, "/certs/grpkey.pem >/dev/null 2>&1 ; echo -n $?">>)),
+                    "0" = os:cmd(erlang:binary_to_list(<<"scp ", SourceCertFile/binary, " ", Node/binary,
+                    ":/opt/oneprovider/nodes/", Type/binary, "/certs/grpcert.pem >/dev/null 2>&1 ; echo -n $?">>))
+                end, [<<"worker">>, <<"onepanel">>])
             end, get_value("ONEPROVIDER_NODES", Config, [])),
             ok
     end.
