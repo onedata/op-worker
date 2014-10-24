@@ -46,6 +46,7 @@
 
 -record(user, {
     name = <<"">>,
+    alias = <<"">>,
     email_list = [],
     connected_accounts = [],
     spaces = [],
@@ -186,6 +187,7 @@ create_provider([ProviderConfig, SetupDir]) ->
 create_user([UserConfig]) ->
     Id = get_value("ID", UserConfig, <<"">>),
     Name = get_value("NAME", UserConfig, <<"">>),
+    Alias = get_value("ALIAS", UserConfig, Name),
     Emails = get_value("EMAILS", UserConfig, []),
     DefaultSpace = <<Id/binary, "_default_space">>,
     DefaultSpaceProvider = get_value("DEFAULT_SPACE_PROVIDER", UserConfig),
@@ -202,6 +204,7 @@ create_user([UserConfig]) ->
 
     User = #user{
         name = Name,
+        alias = Alias,
         email_list = Emails,
         connected_accounts = ConnectedAccounts
     },
