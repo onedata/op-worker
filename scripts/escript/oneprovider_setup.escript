@@ -139,7 +139,7 @@ create_provider(Config) ->
                         ProviderId ->
                             #provider_details{
                                 id = ProviderId,
-                                client_name = get_value("NAME", ProviderConfig, ProviderId),
+                                name = get_value("NAME", ProviderConfig, ProviderId),
                                 urls = get_value("URLS", ProviderConfig, []),
                                 redirection_point = get_value("REDIRECTION_POINT", ProviderConfig, <<"">>)
                             };
