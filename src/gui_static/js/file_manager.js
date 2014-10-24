@@ -261,7 +261,7 @@ initialize_table_header_scrolling = function () {
         }
     });
     $(window).scroll(function () {
-        scroll_header_table();
+        debounce(scroll_header_table(), 100);
     });
 };
 
