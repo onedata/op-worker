@@ -1,3 +1,15 @@
+oneprovider 2.1
+==============
+
+*oneprovider 2.1* is a part of *onedata 2.1*. This is mainly a bug-fix release. See further details below.
+
+Fixed Bugs
+----------
+
+* Better behaviour when GUI window is small
+* Oneclient is able to use ACLs
+* Users identification for ACL upgraded
+
 oneprovider 2.0
 ==============
 
