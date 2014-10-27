@@ -120,7 +120,7 @@ main_panel() ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
                 <<"Start <strong>oneclient</strong>: ">>,
                 #pre{style = <<"margin: 0 auto; margin-top: 10px;">>, body = #code{
-                    class = <<"bash">>, body = <<"oneclient --authorization token <i>mount-point</i>">>}
+                    class = <<"bash">>, body = <<"oneclient --authentication token <i>mount-point</i>">>}
                 }
             ]},
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<"Paste the authorization code">>}
