@@ -16,10 +16,6 @@
 % Returns true if Bitmask contains all bits from Flag
 -define(has_flag(Bitmask, Flag), ((Bitmask band Flag) =:= Flag)).
 
-% defines the length of hash appended to username/groupname (such hash occures after '#') in acl text representation
--define(username_hash_length, 5).
--define(groupname_hash_length, 5).
-
 % ace types
 -define(allow, <<"ALLOW">>).
 -define(allow_mask, 16#00000000).
