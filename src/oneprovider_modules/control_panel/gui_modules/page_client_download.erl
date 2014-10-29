@@ -18,8 +18,8 @@
 -export([main/0, event/1]).
 
 % URLs for client packages download
--define(CLIENT_RPM_URL, <<"http://packages.onedata.org/oneclient-linux.rpm">>).
--define(CLIENT_DEB_URL, <<"http://packages.onedata.org/oneclient-linux.deb">>).
+-define(CLIENT_RPM_URL, <<"http://packages.onedata.org/oneclient-linux.x86_64.rpm">>).
+-define(CLIENT_DEB_URL, <<"http://packages.onedata.org/oneclient-linux.x86_64.deb">>).
 
 %% Template points to the template file, which will be filled with content
 main() ->
@@ -65,7 +65,7 @@ main_panel() ->
         #p{style = <<"font-size: 20px; margin-top: 30px;">>, body = <<"Download and install the <i>DEB</i> package">>},
 
         #pre{body = #code{class = <<"bash">>, body = [
-            <<"curl -O ", (?CLIENT_DEB_URL)/binary, "<br>sudo apt-get install oneclient-linux.deb">>
+            <<"curl -O ", (?CLIENT_DEB_URL)/binary, "<br>sudo dpkg -i oneclient-linux.deb<br>sudo apt-get -f install">>
         ]}},
 
         #p{style = <<"font-size: 20px; margin-top: 30px;">>, body = <<"Run <strong>oneclient</strong> using a <i>certificate</i>">>},
