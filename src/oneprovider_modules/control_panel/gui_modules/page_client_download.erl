@@ -51,7 +51,6 @@ body() ->
     ]}.
 
 main_panel() ->
-    ProviderHostname = gui_ctx:get_requested_hostname(),
     [
         #p{style = <<"text-align: center;">>, body = <<"<strong>oneclient</strong> is a software based on FUSE ",
         "(Filesystem in Userspace) that allows mounting <strong>onedata</strong> filesystem on Linux systems.">>},
@@ -82,7 +81,7 @@ main_panel() ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
                 <<"Start <strong>oneclient</strong>: ">>,
                 #pre{style = <<"margin: 0 auto; margin-top: 10px;">>, body = #code{
-                    class = <<"bash">>, body = <<"PROVIDER_HOSTNAME=", ProviderHostname/binary, " oneclient <i>mount-point</i>">>}
+                    class = <<"bash">>, body = <<"oneclient --no-check-certificate <i>mount-point</i>">>}
                 }
             ]},
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body =
@@ -100,7 +99,7 @@ main_panel() ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
                 <<"Start <strong>oneclient</strong>: ">>,
                 #pre{style = <<"margin: 0 auto; margin-top: 10px;">>, body = #code{
-                    class = <<"bash">>, body = <<"PROVIDER_HOSTNAME=", ProviderHostname/binary, " oneclient --authentication token <i>mount-point</i>">>}
+                    class = <<"bash">>, body = <<"oneclient --authentication token <i>mount-point</i>">>}
                 }
             ]},
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<"Paste the authorization code">>}
