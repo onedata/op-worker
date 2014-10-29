@@ -59,13 +59,13 @@ main_panel() ->
         #p{style = <<"font-size: 20px; margin-top: 30px;">>, body = <<"Download and install the <i>RPM</i> package">>},
 
         #pre{body = #code{class = <<"bash">>, body = [
-            <<"curl -O ", (?CLIENT_RPM_URL)/binary, "<br>sudo yum install oneclient-linux.rpm">>
+            <<"curl -O ", (?CLIENT_RPM_URL)/binary, "<br>sudo yum install oneclient-linux.x86_64.rpm">>
         ]}},
 
         #p{style = <<"font-size: 20px; margin-top: 30px;">>, body = <<"Download and install the <i>DEB</i> package">>},
 
         #pre{body = #code{class = <<"bash">>, body = [
-            <<"curl -O ", (?CLIENT_DEB_URL)/binary, "<br>sudo dpkg -i oneclient-linux.deb<br>sudo apt-get -f install">>
+            <<"curl -O ", (?CLIENT_DEB_URL)/binary, "<br>sudo dpkg -i oneclient-linux.x86_64.deb<br>sudo apt-get -f install">>
         ]}},
 
         #p{style = <<"font-size: 20px; margin-top: 30px;">>, body = <<"Run <strong>oneclient</strong> using a <i>certificate</i>">>},
