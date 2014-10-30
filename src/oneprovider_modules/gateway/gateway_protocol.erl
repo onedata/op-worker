@@ -109,22 +109,22 @@ handle_info({Ok, Socket, Data}, State) when Ok =:= State#gwproto_state.ok ->
     ok = Transport:setopts(Socket, [{active, once}]),
 
     #fetchrequest{file_id = FileId, offset = Offset, size = Size} = gwproto_pb:decode_fetchrequest(Data),
+
+%%     #file_location{storage_uuid = StorageUUID, storage_file_id = StorageFileId} = fslogic_file:get_file_local_location(FileId),
+%%     Storage = fslogic_objects:get_storage({uuid, StorageUUID}),
+%%     #storage_info{default_storage_helper = StorageHelper} = Storage,
+%%     {ok, Bytes} = storage_files_manager:read(StorageHelper, StorageFileId, Offset, Size),
+
     Hash = gateway:compute_request_hash(Data),
-
-    %##file_location{storage_id = } fslogic_file:get_file_local_location(FileId)
-
-    #gatewaymessage{sender_pid = SenderPid, content = Content} = gwproto_pb:decode_gatewaymessage(Data),
-%%     ?info("Received ~p bytes worth of request", [byte_size(Content)]),
-    Reply = gwproto_pb:encode_gatewaymessage(#gatewaymessage{sender_pid = SenderPid, content = Content}),
-    Transport:send(Socket, Reply),
+    Bytes = <<"lalala">>,
+    Reply = gwproto_pb:encode_fetchreply(#fetchreply{request_hash = Hash, content = Bytes}),
+    ok = Transport:send(Socket, Reply),
     {noreply, State};
 
 handle_info({Closed, _Socket}, State) when Closed =:= State#gwproto_state.closed ->
-    ?debug("closing"),
-    {stop, normal, State}; %% @TODO: is normal the normal exit state?
+    {stop, normal, State};
 
 handle_info({Error, _Socket, Reason}, State) when Error =:= State#gwproto_state.error ->
-    ?debug("closing on error"),
     {stop, Reason, State}.
 
 

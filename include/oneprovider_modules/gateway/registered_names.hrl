@@ -16,5 +16,6 @@
 -define(GATEWAY_DISPATCHER, gateway_dispatcher).
 -define(GATEWAY_DISPATCHER_SUPERVISOR, gateway_dispatcher_supervisor).
 -define(GATEWAY_CONNECTION_MANAGER_SUPERVISOR, gateway_connection_manager_supervisor).
+-define(GATEWAY_CONNECTION_SUPERVISOR, gateway_connection_supervisor).
 
 -endif.

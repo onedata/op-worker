@@ -18,8 +18,6 @@
 -include("oneprovider_modules/gateway/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(CONNECTION_TIMEOUT, timer:seconds(10)).
-
 -record(cmstate, {
     number :: non_neg_integer(), %% @TODO: printing purposes only
     connections = #{} :: map()
@@ -81,59 +79,42 @@ handle_call(_Request, _From, State) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: term().
-handle_cast({send, Data, Pid, Remote}, State) ->
-    Self = self(),
-    spawn_link(fun() ->
-        Result = case maps:find(Remote, State#cmstate.connections) of
-            error ->
-                case gen_tcp:connect(Remote, ?gw_port, [binary, {packet, 4}], ?CONNECTION_TIMEOUT) of
-                    {ok, Socket} ->
-                        case gen_tcp:controlling_process(Socket, Self) of
-                            ok ->
-                                spawn(gateway_reply_processor, loop, [Self, Socket]),
-                                {ok, Socket};
-                            {error, Reason} ->
-                                gen_tcp:close(Socket),
-                                {error, Reason}
-                        end;
-                    Else -> Else
-                end;
-            Else -> Else
-        end,
-        gen_server:cast(Self, {send_internal, Data, Pid, Remote, Result})
-    end),
-    {noreply, State};
+handle_cast(#fetch{remote = Remote, notify = Notify} = Request, State) ->
+    case maps:find(Remote, State#cmstate.connections) of
+        error ->
+            Self = self(),
+            spawn(fun() ->
+                case gateway_connection_supervisor:start_connection(Remote) of
+                    {error, Reason} -> Notify ! {fetch_connect_error, Reason};
+                    {ok, Pid} ->
+                        gen_server:cast(Self, {internal, Request, {new, Pid}}),
+                        {noreply, State}
+                end
+            end);
 
-handle_cast({send_internal, Data, Pid, Remote, CreationResult}, State) ->
-    Connections = State#cmstate.connections,
-
-    FoundSocket = maps:find(Remote, Connections),
-    Socket =
-        case {CreationResult, FoundSocket} of
-                 {{error,  Reason}, error}           -> {error, Reason};
-                 {{error, _Reason}, {ok, OldSocket}} -> OldSocket;
-                 {{ok,  NewSocket}, error}           -> NewSocket;
-                 {{ok,    ASocket}, {ok, ASocket}}   -> ASocket;
-                 {{ok,  NewSocket}, {ok, OldSocket}} ->
-                     gen_tcp:close(NewSocket),
-                     OldSocket
-        end,
-
-    case Socket of
-        {error, Reason1} ->
-            Pid ! {error, {request_connect_error, Reason1}},
-            {noreply, State};
-
-        _ ->
-            Message = #gatewaymessage{sender_pid = pid_to_list(Pid), content = Data},
-            case gen_tcp:send(Socket, gwproto_pb:encode_gatewaymessage(Message)) of
-                {error, Reason2} ->
-                    Pid ! {error, {request_send_error, Reason2}},
-                    {noreply, State#cmstate{connections = maps:remove(Remote, Connections)}};
-                ok ->
-                    {noreply, State#cmstate{connections = maps:put(Remote, Socket, Connections)}}
-            end
+        {Remote, ConnectionPid} ->
+            handle_cast({internal, Request, {old, ConnectionPid}}, State)
     end;
+
+handle_cast({internal, #fetch{remote = Remote} = Request, {Type, CPid}}, State) ->
+    Connections = State#cmstate.connections,
+    {NewConnections, ConnectionPid} =
+        case Type of
+            old -> {Connections, CPid};
+            new ->
+                FoundSocket = maps:find(Remote, Connections),
+                case FoundSocket of
+                    error ->
+                        {maps:put(Remote, CPid, Connections), CPid};
+
+                    {Remote, OldPid} ->
+                        supervisor:terminate_child(?GATEWAY_CONNECTION_SUPERVISOR, CPid),
+                        {Connections, OldPid}
+                end
+        end,
+
+    ok = gen_server:cast(ConnectionPid, Request),
+    {noreply, State#cmstate{connections = NewConnections}};
 
 handle_cast(_Request, State) ->
     {noreply, State}.

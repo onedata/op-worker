@@ -12,12 +12,14 @@
 -ifndef(GATEWAY_HRL).
 -define(GATEWAY_HRL, true).
 
+-include("gwproto_pb.hrl").
+
 -define(gw_port, 8877).
 
--record(file_chunk, {
-    file_path :: binary(),
-    offset = 0 :: non_neg_integer(),
-    size = eof :: pos_integer() | eof
+-record(fetch, {
+    request :: #fetchrequest{},
+    remote :: inet:ip_address(),
+    notify :: pid()
 }).
 
 -endif.

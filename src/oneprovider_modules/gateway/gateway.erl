@@ -43,7 +43,7 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
 
-handle(_ProtocolVersion, {send, _Data, _Pid, _Remote} = Request) ->
+handle(_ProtocolVersion, #fetch{} = Request) ->
     gen_server:cast(?GATEWAY_DISPATCHER, Request),
     ok;
 
