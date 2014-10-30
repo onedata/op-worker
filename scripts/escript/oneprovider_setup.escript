@@ -59,9 +59,9 @@
 %% onepanel records
 -record(provider_details, {
     id = <<"">>,
+    name = <<"">>,
     redirection_point = <<"">>,
-    urls = [],
-    client_name = <<"">>
+    urls = []
 }).
 
 %% ====================================================================
@@ -139,7 +139,7 @@ create_provider(Config) ->
                         ProviderId ->
                             #provider_details{
                                 id = ProviderId,
-                                client_name = get_value("NAME", ProviderConfig, ProviderId),
+                                name = get_value("NAME", ProviderConfig, <<"">>),
                                 urls = get_value("URLS", ProviderConfig, []),
                                 redirection_point = get_value("REDIRECTION_POINT", ProviderConfig, <<"">>)
                             };
@@ -235,10 +235,12 @@ source_provider_key_and_cert(Config) ->
                     SourceFiles
             end, {undefined, undefined}, proplists:get_value("GLOBALREGISTRY_PROVIDERS", Config, [])),
             lists:foreach(fun(Node) ->
-                "0" = os:cmd(erlang:binary_to_list(<<"scp ", SourceKeyFile/binary, " ", Node/binary,
-                ":/opt/oneprovider/nodes/worker/certs/grpkey.pem >/dev/null 2>&1 ; echo -n $?">>)),
-                "0" = os:cmd(erlang:binary_to_list(<<"scp ", SourceCertFile/binary, " ", Node/binary,
-                ":/opt/oneprovider/nodes/worker/certs/grpcert.pem >/dev/null 2>&1 ; echo -n $?">>))
+                lists:foreach(fun(Type) ->
+                    "0" = os:cmd(erlang:binary_to_list(<<"scp ", SourceKeyFile/binary, " ", Node/binary,
+                    ":/opt/oneprovider/nodes/", Type/binary, "/certs/grpkey.pem >/dev/null 2>&1 ; echo -n $?">>)),
+                    "0" = os:cmd(erlang:binary_to_list(<<"scp ", SourceCertFile/binary, " ", Node/binary,
+                    ":/opt/oneprovider/nodes/", Type/binary, "/certs/grpcert.pem >/dev/null 2>&1 ; echo -n $?">>))
+                end, [<<"worker">>, <<"onepanel">>])
             end, get_value("ONEPROVIDER_NODES", Config, [])),
             ok
     end.
