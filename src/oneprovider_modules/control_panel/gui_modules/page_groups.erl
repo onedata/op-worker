@@ -49,7 +49,7 @@ main() ->
         true ->
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
     end.
 
 
@@ -61,22 +61,13 @@ main() ->
 title() -> <<"Groups">>.
 
 
-%% custom/0
-%% ====================================================================
-%% @doc This will be placed instead of {{custom}} tag in template.
--spec custom() -> binary().
-%% ====================================================================
-custom() ->
-    <<"<script src='/flatui/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
-
-
 %% body/0
 %% ====================================================================
 %% @doc This will be placed instead of {{body}} tag in template.
 -spec body() -> [#panel{}].
 %% ====================================================================
 body() ->
-    [
+    #panel{class= <<"page-container">>, body = [
         #panel{
             id = <<"main_spinner">>,
             style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>,
@@ -128,7 +119,7 @@ body() ->
                 }
             ]
         }
-    ].
+    ]}.
 
 
 %% groups_table_collapsed/1
@@ -319,13 +310,14 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                                    {ok, GroupId} = gr_users:create_group({user, AccessToken}, [{<<"name">>, Name}]),
                                    {ok, GroupDetails} = gr_groups:get_details({user, AccessToken}, GroupId),
                                    {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
+                                   gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                                    opn_gui_utils:message(<<"ok_message">>, <<"Created Group ID: <b>", GroupId/binary, "</b>">>),
                                    RowId = <<"group_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_group_row(RowId, Privileges, GroupDetails),
                                    State#?STATE{counter = Counter + 1, groups_details = GroupsDetails ++ [{RowId, Privileges, GroupDetails}]}
                                catch
                                    _:Other ->
-                                       ?error("Cannot create group ~p: ~p", [Name, Other]),
+                                       ?error_stacktrace("Cannot create group ~p: ~p", [Name, Other]),
                                        opn_gui_utils:message(<<"error_message">>, <<"Cannot create group: <b>", Name/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
@@ -337,6 +329,7 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                                    {ok, GroupId} = gr_users:join_group({user, AccessToken}, [{<<"token">>, Token}]),
                                    {ok, GroupDetails} = gr_groups:get_details({user, AccessToken}, GroupId),
                                    {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
+                                   gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                                    opn_gui_utils:message(<<"ok_message">>, <<"Joined Group ID: <b>", GroupId/binary, "</b>">>),
                                    RowId = <<"group_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_group_row(RowId, Privileges, GroupDetails),
@@ -353,6 +346,7 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                 {leave_group, RowId, GroupId} ->
                     case gr_users:leave_group({user, AccessToken}, GroupId) of
                         ok ->
+                            gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                             opn_gui_utils:message(<<"ok_message">>, <<"Group with ID: <b>", GroupId/binary, "</b> left successfully.">>),
                             gui_jq:remove(RowId),
                             State#?STATE{groups_details = lists:keydelete(RowId, 1, GroupsDetails)};
@@ -365,6 +359,7 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                 {remove_group, RowId, GroupId} ->
                     case gr_groups:remove({user, AccessToken}, GroupId) of
                         ok ->
+                            gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                             opn_gui_utils:message(<<"ok_message">>, <<"Group with ID: <b>", GroupId/binary, "</b> removed successfully.">>),
                             gui_jq:remove(RowId),
                             State#?STATE{groups_details = lists:keydelete(RowId, 1, GroupsDetails)};

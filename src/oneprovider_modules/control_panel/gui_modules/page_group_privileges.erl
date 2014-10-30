@@ -90,9 +90,9 @@ title() ->
 -spec body(GroupDetails :: #group_details{}) -> Result when
     Result :: #panel{}.
 %% ====================================================================
-body(GroupDetails) ->
+body(#group_details{id = GroupId, name = GroupName} = GroupDetails) ->
     MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
-    [
+    #panel{class= <<"page-container">>, body = [
         #panel{
             id = <<"main_spinner">>,
             style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>,
@@ -100,7 +100,8 @@ body(GroupDetails) ->
                 image = <<"/images/spinner.gif">>
             }
         },
-        opn_gui_utils:top_menu(groups_tab),
+        opn_gui_utils:top_menu(groups_tab, opn_gui_utils:breadcrumbs([{<<"Groups">>, <<"/groups">>},
+            {GroupName, <<"/group?id=", GroupId/binary>>}, {<<"Privileges">>, <<"/privileges/group?id=", GroupId/binary>>}])),
         #panel{
             id = <<"ok_message">>,
             style = MessageStyle,
@@ -137,7 +138,7 @@ body(GroupDetails) ->
                 ])
             ]
         }
-    ].
+    ]}.
 
 
 %% group_details_table/1
@@ -217,10 +218,14 @@ privileges_table(TableName, ColumnNames, PrivilegesNames, PrivilegesRows) ->
 
     Rows = lists:map(fun({{Name, Id, Privileges}, N}) ->
         RowId = <<TableName/binary, "_", (integer_to_binary(N))/binary>>,
+        ShortHash = case size(Id) > 7 of
+                        true -> <<Id:7/binary, "...">>;
+                        _ -> Id
+                    end,
         #tr{
             cells = [
                 #td{
-                    body = <<"<b>", (gui_str:html_encode(Name))/binary, "</b> (", Id:7/binary, "...)">>,
+                    body = <<"<b>", (gui_str:html_encode(Name))/binary, "</b> (", ShortHash/binary, ")">>,
                     style = ColumnStyle
                 } | lists:map(fun({Privilege, M}) ->
                     CheckboxId = <<RowId/binary, "_", (integer_to_binary(M))/binary>>,
@@ -318,7 +323,6 @@ comet_loop(#?STATE{group_id = GroupId, new_users_privileges = NewUsersPrivileges
 event(init) ->
     try
         GroupId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
-        GRUID = utils:ensure_binary(opn_gui_utils:get_global_user_id()),
         AccessToken = opn_gui_utils:get_access_token(),
 
         {ok, UsersIds} = gr_groups:get_users({user, AccessToken}, GroupId),

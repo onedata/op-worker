@@ -106,50 +106,34 @@ update_chmod_textbox = function (mode) {
 
 var clicked_index = -2;
 
+// Renders ACL list
 populate_acl_list = function (json_array, select_index) {
     var acl_list = $('#acl_list');
     acl_list.html('');
 
     for (var i = 0; i < json_array.length; ++i) {
         acl_list.append(
-            render_acl_entry(i, json_array[i].identifier, json_array[i].allow, json_array[i].read, json_array[i].write, json_array[i].exec));
+            render_acl_entry(i, json_array[i].identifier, json_array[i].is_group, json_array[i].allow, json_array[i].read, json_array[i].write, json_array[i].exec));
     }
 
-    acl_list.append('<div class="acl-entry" index="-1">' +
+    acl_list.append('<div class="acl-entry acl-entry-new" index="-1">' +
         '<a class="glyph-link acl-add-button" title="New ACL Entry"><span class="icomoon-plus"></span></a>' +
         '<span class="acl-add-info">New ACL entry...</span>' +
         '</div>');
 
-    if (select_index > -1) {
-        clicked_index = select_index;
-        $(acl_list.find('.acl-entry')[select_index]).find('[class*="acl-button-"]').show();
+    if (select_index > -2) {
+        select_entry(select_index);
+    } else {
+        $('#acl-form').hide();
     }
 
     $('.acl-entry').click(function (event) {
-        if ($('#acl-form').css('display') == 'none') {
-            document.getSelection().removeAllRanges();
-            var new_index = parseInt($(this).attr('index'));
-            if (clicked_index != new_index) {
-                clicked_index = new_index;
-                $('[class*="acl-button-"]').hide();
-                $(this).find('[class*="acl-button-"]').show();
-            } else {
-                $('[class*="acl-button-"]').hide();
-                if (clicked_index == -1) {
-                    add_acl_event();
-                } else {
-                    $(this).addClass('acl-entry-selected');
-                    edit_acl_event(clicked_index);
-                }
-            }
-        }
+        select_entry(parseInt($(this).attr('index')));
     });
 
     $('.acl-add-button').click(function (event) {
         event.stopPropagation();
-        $('[class*="acl-button-"]').hide();
-        clicked_index = -1;
-        add_acl_event();
+        select_entry(-1);
     });
 
     $('.acl-button-delete').click(function (event) {
@@ -175,14 +159,6 @@ populate_acl_list = function (json_array, select_index) {
         entry_div.find('[class*="acl-confirm-"]').hide();
     });
 
-    $('.acl-button-edit').click(function (event) {
-        event.stopPropagation();
-        var entry_div = $(this).parent();
-        entry_div.addClass('acl-entry-selected');
-        entry_div.find('[class*="acl-button-"]').hide();
-        edit_acl_event(parseInt(entry_div.attr('index')));
-    });
-
     $('.acl-button-move-up').click(function (event) {
         event.stopPropagation();
         move_acl_event([parseInt($(this).parent().attr('index')), true]);
@@ -193,7 +169,6 @@ populate_acl_list = function (json_array, select_index) {
         move_acl_event([parseInt($(this).parent().attr('index')), false]);
     });
 
-
     $('#acl_type_checkbox').change(function (event) {
         if ($(this).is(':checked')) {
             $('#acl_type_checkbox_label').html('allow');
@@ -203,9 +178,22 @@ populate_acl_list = function (json_array, select_index) {
     });
 };
 
+// Selects a row in ACL table and enables editing the entry
+select_entry = function (index) {
+    clicked_index = index;
+    document.getSelection().removeAllRanges();
+    $('.acl-entry-selected').removeClass('acl-entry-selected');
+    $('[class*="acl-button-"]').hide();
+    var div = $('[index="' + index + '"]');
+    $(div).addClass('acl-entry-selected');
+    $(div).find('[class*="acl-button-"]').show();
+    edit_acl_event(index);
+};
+
 // Renders a single ACL entry
-render_acl_entry = function (index, identifier, allow_flag, read_flag, write_flag, exec_flag) {
+render_acl_entry = function (index, identifier, is_group, allow_flag, read_flag, write_flag, exec_flag) {
     var entry_class = allow_flag ? 'acl-entry acl-entry-allow' : 'acl-entry acl-entry-deny';
+    var id_icon_type = is_group ? 'icomoon-users' : 'icomoon-user';
     var icon_type = allow_flag ? 'fui-check-inverted' : 'fui-cross-inverted';
     var icon_read = read_flag ? '<span class="' + icon_type + ' acl-icon-read"></span>' +
         '<span class="acl-symbol-read">R</span>' : '';
@@ -218,11 +206,10 @@ render_acl_entry = function (index, identifier, allow_flag, read_flag, write_fla
         '<a class="glyph-link acl-confirm-no" title="No"><span class="icomoon-close"></span></a>';
 
     return '<div class="' + entry_class + '" index="' + index + '"><div class="acl-identifier">' +
-        '<span class="icomoon-user acl-ident-icon"></span>' +
+        '<span class="' + id_icon_type + ' acl-ident-icon"></span>' +
         '<span class="acl-ident-name">' + identifier + '</span></div>' +
         icon_read + icon_write + icon_exec +
         '<a class="glyph-link acl-button-delete" title="Delete ACL entry"><span class="icomoon-remove"></span></a>' +
-        '<a class="glyph-link acl-button-edit" title="Edit ACL entry"><span class="icomoon-pencil2"></span></a>' +
         '<a class="glyph-link acl-button-move-up" title="Move up"><span class="fui-triangle-up-small"></span></a>' +
         '<a class="glyph-link acl-button-move-down" title="Move down"><span class="fui-triangle-down-small"></span></a>' +
         icons_confirm_delete + '</div>';
@@ -239,4 +226,46 @@ submit_acl = function () {
         $('#acl_write_checkbox').is(':checked'),
         $('#acl_exec_checkbox').is(':checked')
     ]);
+};
+
+// Displays a popup with info about file permissions.
+show_permissions_info = function () {
+    bootbox.dialog({
+        title: 'POSIX permissions and ACLs',
+        message: 'Basic POSIX permissions and ACLs are two ways of controlling ' +
+            'the access to your data. You can choose to use one of them for each file. They cannot be used together. <br /><br />' +
+            '<strong>POSIX permissions</strong> - basic file permissions, can be used to enable certain types ' +
+            'of users to read, write or execute given file. The types are: user (the owner of the file), group (all users ' +
+            'sharing the space where the file resides), other (not aplicable in GUI, but used in oneclient).<br /><br />' +
+            '<strong>ACL</strong> (Access Control List) - CDMI standard (compliant with NFSv4 ACLs), allows ' +
+            'defining ordered lists of permissions-granting or permissions-denying entries for users or groups. ' +
+            'ACLs are processed from top to bottom - entries higher on list will have higher priority.',
+        buttons: {
+            'OK': {
+                className: 'btn-primary confirm'
+            }
+        }
+    });
+};
+
+// -----------------------------
+// list view header table scrolling
+
+initialize_table_header_scrolling = function () {
+    scroll_header_table();
+    $(window).resize(function () {
+        if ($(window).width() >= $(document).width()) {
+            $('#header_table').css('left', '0px').css('right', '0px');
+        } else {
+            scroll_header_table();
+        }
+    });
+    $(window).scroll(debounce(scroll_header_table, 5));
+};
+
+scroll_header_table = function () {
+    if ($(window).width() < $(document).width()) {
+        $('#header_table').css('left', (-1 * $(this).scrollLeft()) + 'px')
+            .css('right', ($(this).scrollLeft() - $(document).width() + $(window).width()) + 'px');
+    }
 };

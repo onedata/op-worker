@@ -49,27 +49,49 @@ get_virtual_acl(FullfileName, FileDoc) ->
 %% @doc Traverses given ACL in order to check if a Principal (in our case GRUID),
 %% has permissions specified in 'OperationMask' (according to this ACL)
 %% @end
--spec check_permission(ACL :: [#accesscontrolentity{}], PrincipalName :: string(), OperationMask :: non_neg_integer() | read | write | execute) -> ok | no_return().
+-spec check_permission(ACL :: [#accesscontrolentity{}], User :: #user{}, OperationMask :: non_neg_integer() | read | write | execute) -> ok | no_return().
 %% ====================================================================
-check_permission(ACL, _PrincipalName, read) -> check_permission(ACL, _PrincipalName, ?read_mask);
-check_permission(ACL, _PrincipalName, write) -> check_permission(ACL, _PrincipalName, ?write_mask);
-check_permission(ACL, _PrincipalName, execute) -> check_permission(ACL, _PrincipalName, ?execute_mask);
-check_permission([], _PrincipalName, 16#00000000) -> ok;
-check_permission([], _PrincipalName, _OperationMask) -> throw(?VEPERM);
-check_permission([#accesscontrolentity{identifier = Name} | Rest], PrincipalName, Operation) when Name =/= PrincipalName ->
-    check_permission(Rest, PrincipalName, Operation);
-check_permission([#accesscontrolentity{acetype = ?allow_mask, acemask = AceMask} | Rest], PrincipalName, Operation) ->
-    case (Operation band AceMask) of
-        Operation -> ok;
-        OtherAllowedBits -> check_permission(Rest, PrincipalName, Operation bxor OtherAllowedBits)
+check_permission(ACL, User, read) -> check_permission(ACL, User, ?read_mask);
+check_permission(ACL, User, write) -> check_permission(ACL, User, ?write_mask);
+check_permission(ACL, User, execute) -> check_permission(ACL, User, ?execute_mask);
+check_permission([], _User, 16#00000000) -> ok;
+check_permission([], _User, _OperationMask) -> throw(?VEPERM);
+check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest], #user{groups = Groups} = User, Operation)
+    when ?has_flag(Flags, ?identifier_group_mask) ->
+    case lists:filter(fun(Id) -> utils:ensure_binary(Id) =:= GroupId end, Groups) of
+        [] -> check_permission(Rest, User, Operation); % if no group matches, ignore this ace
+        _ -> case Type of
+                 ?allow_mask ->
+                     case (Operation band AceMask) of
+                         Operation -> ok;
+                         OtherAllowedBits -> check_permission(Rest, User, Operation bxor OtherAllowedBits)
+                     end;
+                 ?deny_mask ->
+                     case (Operation band AceMask) of
+                         16#00000000 -> check_permission(Rest, User, Operation);
+                         _ -> throw(?VEPERM)
+                     end
+             end
     end;
-check_permission([#accesscontrolentity{acetype = ?deny_mask, acemask = AceMask} | Rest], PrincipalName, Operation) ->
-    case (Operation band AceMask) of
-        16#00000000 -> check_permission(Rest, PrincipalName, Operation);
-        _ -> throw(?VEPERM)
+check_permission([#accesscontrolentity{acetype = Type, identifier = UserId, acemask = AceMask} | Rest], #user{global_id = Id} = User, Operation) ->
+    case UserId =/= utils:ensure_binary(Id) of
+        true -> check_permission(Rest, User, Operation); % if ID does not match, ignore this ace
+        false ->
+            case Type of
+                ?allow_mask ->
+                    case (Operation band AceMask) of
+                        Operation -> ok;
+                        OtherAllowedBits -> check_permission(Rest, User, Operation bxor OtherAllowedBits)
+                    end;
+                ?deny_mask ->
+                    case (Operation band AceMask) of
+                        16#00000000 -> check_permission(Rest, User, Operation);
+                        _ -> throw(?VEPERM)
+                    end
+            end
     end;
-check_permission([#accesscontrolentity{} | Rest], PrincipalName, Operation) ->
-    check_permission(Rest, PrincipalName, Operation).
+check_permission([#accesscontrolentity{} | Rest], User, Operation) ->
+    check_permission(Rest, User, Operation).
 
 %% from_acl_to_json_format/1
 %% ====================================================================
@@ -101,7 +123,11 @@ from_json_fromat_to_acl(JsonAcl) ->
 ace_to_proplist(#accesscontrolentity{acetype = Type, aceflags = Flags, identifier = Who, acemask = AccessMask}) ->
     [
         {<<"acetype">>, bitmask_to_type(Type)},
-        {<<"identifier">>, gruid_to_name(Who)},
+        {<<"identifier">>,
+            case ?has_flag(Type, ?identifier_group_mask) of
+                true -> gid_to_group_name(Who);
+                false -> gruid_to_name(Who)
+            end},
         {<<"aceflags">>, binary_list_to_csv(bitmask_to_flag_list(Flags))},
         {<<"acemask">>, binary_list_to_csv(bitmask_to_perm_list(AccessMask))}
     ].
@@ -114,12 +140,21 @@ ace_to_proplist(#accesscontrolentity{acetype = Type, aceflags = Flags, identifie
 %% @end
 -spec proplist_to_ace(List :: list()) -> #accesscontrolentity{}.
 %% ====================================================================
-proplist_to_ace(List) -> proplist_to_ace2(List,#accesscontrolentity{acetype = undefined, aceflags = undefined, identifier = undefined, acemask = undefined}).
-proplist_to_ace2([], Acc) -> Acc;
-proplist_to_ace2([{<<"acetype">>, Type} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{acetype = type_to_bitmask(Type)});
-proplist_to_ace2([{<<"identifier">>, Identifier} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{identifier = name_to_gruid(Identifier)});
-proplist_to_ace2([{<<"aceflags">>, Flags} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{aceflags = flags_to_bitmask(Flags)});
-proplist_to_ace2([{<<"acemask">>, AceMask} | Rest], Acc) -> proplist_to_ace2(Rest, Acc#accesscontrolentity{acemask = perm_list_to_bitmask(AceMask)}).
+proplist_to_ace(List) ->
+    Type = proplists:get_value(<<"acetype">>, List),
+    Flags = proplists:get_value(<<"aceflags">>, List),
+    Mask = proplists:get_value(<<"acemask">>, List),
+    Name = proplists:get_value(<<"identifier">>, List),
+
+    Acetype = type_to_bitmask(Type),
+    Aceflags = flags_to_bitmask(Flags),
+    Acemask = perm_list_to_bitmask(Mask),
+    Identifier = case ?has_flag(Aceflags, ?identifier_group_mask) of
+             true -> group_name_to_gid(Name);
+             false -> name_to_gruid(Name)
+         end,
+
+    #accesscontrolentity{acetype = Acetype, aceflags = Aceflags, acemask = Acemask, identifier = Identifier}.
 
 %% gruid_to_name/1
 %% ====================================================================
@@ -130,9 +165,14 @@ proplist_to_ace2([{<<"acemask">>, AceMask} | Rest], Acc) -> proplist_to_ace2(Res
 %% ====================================================================
 gruid_to_name(GRUID) ->
     {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
-    <<(utils:ensure_unicode_binary(Name))/binary,"#",(binary_part(GRUID, 0, ?username_hash_length))/binary>>.
+    {ok, UserList} = fslogic_objects:get_user({name, utils:ensure_unicode_list(Name)}),
+    GRUIDList = lists:map(fun(#db_document{record = #user{global_id = GRUID}}) -> utils:ensure_unicode_binary(GRUID)  end, UserList),
+    case GRUIDList of
+        [_] -> utils:ensure_unicode_binary(Name);
+        _ -> <<(utils:ensure_unicode_binary(Name))/binary,"#",(binary_part(GRUID, 0, binary:longest_common_prefix(GRUIDList)+1))/binary>>
+    end.
 
-%% proplist_to_ace/1
+%% name_to_gruid/1
 %% ====================================================================
 %% @doc Transforms acl name representation (name and hash suffix) to global id
 %% i. e. "John Dow#fif3n" -> "fif3nhh238hdfg33f3"
@@ -150,6 +190,41 @@ name_to_gruid(Name) ->
     GUIDWithMatchingPrefixList = lists:filter(fun(GRUID) -> binary:longest_common_prefix([Hash, GRUID]) == byte_size(Hash)  end , GRUIDList),
     [GRUID] = GUIDWithMatchingPrefixList, % todo throw proper error message if more than one user matches given name
     GRUID.
+
+%% gid_to_group_name/1
+%% ====================================================================
+%% @doc Transforms global group id to acl group name representation (name and hash suffix)
+%% i. e. "fif3nhh238hdfg33f3" -> "group1#fif3n"
+%% @end
+-spec gid_to_group_name(GRGroupId :: binary()) -> binary().
+%% ====================================================================
+gid_to_group_name(GRGroupId) ->
+    {ok, #db_document{record = #group_details{name = Name}}} = dao_lib:apply(dao_groups, get_group, [GRGroupId], 1),
+    {ok, GroupList} = fslogic_objects:get_user({name, utils:ensure_unicode_list(Name)}),
+    GIDList = lists:map(fun(#db_document{record = #group_details{id = GID}}) -> utils:ensure_unicode_binary(GID)  end, GroupList),
+    case GIDList of
+        [_] -> utils:ensure_unicode_binary(Name);
+        _ -> <<(utils:ensure_unicode_binary(Name))/binary,"#",(binary_part(GRGroupId, 0, binary:longest_common_prefix(GIDList)+1))/binary>>
+    end.
+
+%% group_name_to_gid/1
+%% ====================================================================
+%% @doc Transforms acl group name representation (name and hash suffix) to global id
+%% i. e. "group1#fif3n" -> "fif3nhh238hdfg33f3"
+%% @end
+-spec group_name_to_gid(Name :: binary()) -> binary().
+%% ====================================================================
+group_name_to_gid(Name) ->
+    [GroupName, Hash] = case binary:split(Name, <<"#">>, [global]) of
+                           [UserName_] -> [UserName_, <<"">>];
+                           [UserName_, Hash_] -> [UserName_, Hash_]
+                       end,
+    {ok, GroupList} = dao_lib:apply(dao_groups, get_group_by_name, [utils:ensure_unicode_list(GroupName)], 1),
+
+    GRGIDList = lists:map(fun(#db_document{record = #group_details{id = ID}}) -> utils:ensure_unicode_binary(ID)  end, GroupList),
+    GRGIDWithMatchingPrefixList = lists:filter(fun(GRUID) -> binary:longest_common_prefix([Hash, GRUID]) == byte_size(Hash)  end , GRGIDList),
+    [GRGroupId] = GRGIDWithMatchingPrefixList, % todo throw proper error message if more than one group matches given name
+    GRGroupId.
 
 %% ====================================================================
 %% Internal Functions
@@ -173,7 +248,7 @@ bitmask_to_type(_) -> undefined.
 -spec bitmask_to_flag_list(non_neg_integer()) -> [binary()].
 %% ====================================================================
 bitmask_to_flag_list(Hex) -> lists:reverse(bitmask_to_flag_list2(Hex, [])).
-bitmask_to_flag_list2(Hex, List) when (Hex band ?identifier_group_mask) == ?identifier_group_mask  ->
+bitmask_to_flag_list2(Hex, List) when ?has_flag(Hex, ?identifier_group_mask) ->
     bitmask_to_flag_list2(Hex bxor ?identifier_group_mask, [?identifier_group | List]);
 bitmask_to_flag_list2(?no_flags_mask, []) -> [?no_flags];
 bitmask_to_flag_list2(?no_flags_mask, List) -> List;
@@ -186,11 +261,11 @@ bitmask_to_flag_list2(_, _) -> undefined.
 -spec bitmask_to_perm_list(non_neg_integer()) -> [binary()].
 %% ====================================================================
 bitmask_to_perm_list(Hex) -> lists:reverse(bitmask_to_perm_list2(Hex, [])).
-bitmask_to_perm_list2(Hex, List) when (Hex band ?read_mask) == ?read_mask  ->
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?read_mask) ->
     bitmask_to_perm_list2(Hex bxor ?read_mask, [?read | List]);
-bitmask_to_perm_list2(Hex, List) when (Hex band ?write_mask) == ?write_mask  ->
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?write_mask) ->
     bitmask_to_perm_list2(Hex bxor ?write_mask, [?write | List]);
-bitmask_to_perm_list2(Hex, List) when (Hex band ?execute_mask) == ?execute_mask  ->
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?execute_mask) ->
     bitmask_to_perm_list2(Hex bxor ?execute_mask, [?execute | List]);
 bitmask_to_perm_list2(16#00000000, List) -> List;
 bitmask_to_perm_list2(_, _) -> undefined.

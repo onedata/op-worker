@@ -22,6 +22,7 @@
 -export([strip_path_leaf/1, basename/1, split/1, is_space_dir/1]).
 -export([get_parent_and_name_from_path/2]).
 -export([get_user_root/0, get_user_root/2, get_user_root/1]).
+-export([ensure_path_begins_with_slash/1]).
 
 %% ====================================================================
 %% API functions
@@ -232,7 +233,6 @@ is_space_dir(Path) ->
 -spec get_parent_and_name_from_path(Path :: string(), ProtocolVersion :: term()) -> Result when
     Result :: tuple().
 %% ====================================================================
-
 get_parent_and_name_from_path(Path, ProtocolVersion) ->
     File = fslogic_path:basename(Path),
     Parent = fslogic_path:strip_path_leaf(Path),
@@ -257,7 +257,6 @@ get_parent_and_name_from_path(Path, ProtocolVersion) ->
     RootDir :: string(),
     ErrorDesc :: atom.
 %% ====================================================================
-
 get_user_root(#db_document{uuid = ?CLUSTER_USER_ID}) ->
     "";
 get_user_root(#db_document{record = #user{spaces = []} = User} = UserDoc) ->
@@ -287,7 +286,6 @@ get_user_root(#user{spaces = [PrimarySpaceId | _]}) ->
     RootDir :: string(),
     ErrorDesc :: atom.
 %% ====================================================================
-
 get_user_root(ok, UserDoc) ->
     {ok, get_user_root(UserDoc)};
 get_user_root(error, Reason) ->
@@ -302,10 +300,18 @@ get_user_root(error, Reason) ->
     RootDir :: string(),
     ErrorDesc :: atom.
 %% ====================================================================
-
 get_user_root() ->
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
     get_user_root(UserDocStatus, UserDoc).
+
+%% ensure_path_begins_with_slash/0
+%% ====================================================================
+%% @doc Ensures that path begins with "/"
+%% @end
+-spec ensure_path_begins_with_slash(Path :: string()) -> string().
+%% ====================================================================
+ensure_path_begins_with_slash([$/ | _] = Path) -> Path;
+ensure_path_begins_with_slash(Path) -> [$/ | Path].
 
 %% ====================================================================
 %% Internal functions

@@ -57,7 +57,7 @@ main() ->
                     SpaceId = gui_str:to_binary(Id),
                     case gr_users:get_space_details({user, opn_gui_utils:get_access_token()}, SpaceId) of
                         {ok, SpaceDetails} ->
-                            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body(SpaceDetails)}, {custom, custom()}]};
+                            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body(SpaceDetails)}, {custom, <<"">>}]};
                         _ ->
                             page_error:redirect_with_error(?error_space_permission_denied),
                             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]}
@@ -77,15 +77,6 @@ title() ->
     <<"Space details">>.
 
 
-%% custom/0
-%% ====================================================================
-%% @doc This will be placed instead of {{custom}} tag in template.
--spec custom() -> binary().
-%% ====================================================================
-custom() ->
-    <<"<script src='/flatui/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
-
-
 %% body/0
 %% ====================================================================
 %% @doc This will be placed instead of {{body}} tag in template.
@@ -93,9 +84,9 @@ custom() ->
 -spec body(SpaceDetails :: #space_details{}) -> Result when
     Result :: #panel{}.
 %% ====================================================================
-body(SpaceDetails) ->
+body(#space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
     MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
-    [
+    #panel{class= <<"page-container">>, body = [
         #panel{
             id = <<"main_spinner">>,
             style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>,
@@ -103,7 +94,7 @@ body(SpaceDetails) ->
                 image = <<"/images/spinner.gif">>
             }
         },
-        opn_gui_utils:top_menu(spaces_tab),
+        opn_gui_utils:top_menu(spaces_tab, opn_gui_utils:breadcrumbs([{<<"Spaces">>, <<"/spaces">>}, {SpaceName, <<"/space?id=", SpaceId/binary>>}])),
         #panel{
             id = <<"ok_message">>,
             style = MessageStyle,
@@ -143,7 +134,7 @@ body(SpaceDetails) ->
                 ])
             ]
         }
-    ].
+    ]}.
 
 
 %% space_details_table/1
@@ -784,7 +775,7 @@ event(init) ->
         SpaceId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
         GRUID = utils:ensure_binary(opn_gui_utils:get_global_user_id()),
         AccessToken = opn_gui_utils:get_access_token(),
-        {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceId, GRUID),
+        {ok, Privileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceId, GRUID),
 
         GetDetailsFun = fun(Ids, Function, RowPrefix) ->
             lists:foldl(fun(Id, {Rows, It}) ->

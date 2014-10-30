@@ -22,7 +22,7 @@
 
 % Definitions
 -define(SH, "DirectIO").
--define(Test_user_name_with_hash, <<?TEST_USER, " ", ?TEST_USER, "#globa">>).
+-define(Test_user_name, <<?TEST_USER, " ", ?TEST_USER>>).
 -define(Test_dir_name, "dir").
 -define(Test_file_name, "file.txt").
 -define(Test_file_content, <<"test_file_content">>).
@@ -355,7 +355,7 @@ metadata_test(_Config) ->
     {struct, Metadata14}= proplists:get_value(<<"metadata">>,CdmiResponse14),
     ?assertEqual(
         [{struct,[{<<"acetype">>,<<"ALLOW">>},
-            {<<"identifier">>,?Test_user_name_with_hash},
+            {<<"identifier">>,?Test_user_name},
             {<<"aceflags">>,<<"NO_FLAGS">>},
             {<<"acemask">>,<<"READ, WRITE">>}]}],
     proplists:get_value(<<"cdmi_acl">>, Metadata14)),
@@ -365,19 +365,19 @@ metadata_test(_Config) ->
     FileName2 = "acl_test_file.txt",
     Ace1 = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,?Test_user_name_with_hash},
+        {<<"identifier">>,?Test_user_name},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ">>}
     ],
     Ace2 = [
         {<<"acetype">>,<<"DENY">>},
-        {<<"identifier">>,?Test_user_name_with_hash},
+        {<<"identifier">>,?Test_user_name},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ, EXECUTE">>}
     ],
     Ace3 = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,?Test_user_name_with_hash},
+        {<<"identifier">>,?Test_user_name},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"WRITE">>}
     ],
@@ -407,7 +407,7 @@ metadata_test(_Config) ->
     %%-- create forbidden by acl ---
     Ace4 = [
         {<<"acetype">>,<<"DENY">>},
-        {<<"identifier">>,?Test_user_name_with_hash},
+        {<<"identifier">>,?Test_user_name},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ, WRITE, EXECUTE">>}],
     RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace4]}]}],
@@ -1236,19 +1236,19 @@ acl_test(_Console) ->
     Dirname1 = "acl_test_dir1/",
     Read = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,?Test_user_name_with_hash},
+        {<<"identifier">>,?Test_user_name},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"READ">>}
     ],
     Write = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,?Test_user_name_with_hash},
+        {<<"identifier">>,?Test_user_name},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"WRITE">>}
     ],
     _Execute = [
         {<<"acetype">>,<<"ALLOW">>},
-        {<<"identifier">>,?Test_user_name_with_hash},
+        {<<"identifier">>,?Test_user_name},
         {<<"aceflags">>,<<"NO_FLAGS">>},
         {<<"acemask">>,<<"EXECUTE">>}
     ],
