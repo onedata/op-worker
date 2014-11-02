@@ -14,7 +14,18 @@
 # RPM package version
 GIT_VERSION=`git describe --tags --always | tr - .`
 GIT_VERSION_NUMBER=${GIT_VERSION:1} #strip the leading 'v'
-VERSION=${GIT_VERSION_NUMBER%.*} #strip hash part of version
+IFS='.' read VERSION_MAJOR VERSION_MINOR VERSION_PATH COMMIT_NUMBER COMMIT_HASH <<<$GIT_VERSION_NUMBER
+
+VERSION=$VERSION_MAJOR
+if [ -n "$VERSION_MINOR" ]; then
+  VERSION=$VERSION.$VERSION_MINOR
+fi
+if [ -n "$VERSION_PATH" ]; then
+  VERSION=$VERSION.$VERSION_PATH
+fi
+if [ -n "$COMMIT_NUMBER" ]; then
+  VERSION=$VERSION.$COMMIT_NUMBER
+fi
 
 # Path, where rpm building will take place
 RPM_BUILD_DIRECTORY=/tmp/oneprovider_rpmbuild
