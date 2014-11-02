@@ -13,7 +13,8 @@
 
 # DEB package version
 GIT_VERSION=`git describe --tags --always | tr - .`
-VERSION=${GIT_VERSION:1} #strip the leading 'v'
+GIT_VERSION_NUMBER=${GIT_VERSION:1} #strip the leading 'v'
+VERSION=${GIT_VERSION_NUMBER%.*} #strip hash part of version
 
 # Path, where deb building will take place
 DEB_BUILD_DIRECTORY=/tmp/oneprovider_debbuild

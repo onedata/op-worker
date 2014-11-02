@@ -12,7 +12,9 @@
 ## ===================================================================
 
 # RPM package version
-VERSION=`git describe --tags --always | tr - .`
+GIT_VERSION=`git describe --tags --always | tr - .`
+GIT_VERSION_NUMBER=${GIT_VERSION:1} #strip the leading 'v'
+VERSION=${GIT_VERSION_NUMBER%.*} #strip hash part of version
 
 # Path, where rpm building will take place
 RPM_BUILD_DIRECTORY=/tmp/oneprovider_rpmbuild
