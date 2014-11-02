@@ -14,17 +14,17 @@
 # DEB package version
 GIT_VERSION=`git describe --tags --always | tr - .`
 GIT_VERSION_NUMBER=${GIT_VERSION:1} #strip the leading 'v'
-IFS='.' read VERSION_MAJOR VERSION_MINOR VERSION_PATH COMMIT_NUMBER COMMIT_HASH <<<$GIT_VERSION_NUMBER
-
-VERSION=$VERSION_MAJOR
-if [ -n "$VERSION_MINOR" ]; then
-  VERSION=$VERSION.$VERSION_MINOR
+IFS='.' read -ra tmp <<< $GIT_VERSION_NUMBER
+v=(`echo ${tmp[*]}`)
+VERSION=${v[0]}
+if [ -n "${v[1]}" ]; then
+  VERSION=$VERSION.${v[1]}
 fi
-if [ -n "$VERSION_PATH" ]; then
-  VERSION=$VERSION.$VERSION_PATH
+if [ -n "${v[2]}" ]; then
+  VERSION=$VERSION.${v[2]}
 fi
-if [ -n "$COMMIT_NUMBER" ]; then
-  VERSION=$VERSION.$COMMIT_NUMBER
+if [ -n "${v[3]}" ]; then
+  VERSION=$VERSION.${v[3]}
 fi
 
 # Path, where deb building will take place
