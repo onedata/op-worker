@@ -184,7 +184,7 @@ select_entry = function (index) {
     document.getSelection().removeAllRanges();
     $('.acl-entry-selected').removeClass('acl-entry-selected');
     $('[class*="acl-button-"]').hide();
-    var div = $('[index="' + index +'"]');
+    var div = $('[index="' + index + '"]');
     $(div).addClass('acl-entry-selected');
     $(div).find('[class*="acl-button-"]').show();
     edit_acl_event(index);
@@ -229,21 +229,43 @@ submit_acl = function () {
 };
 
 // Displays a popup with info about file permissions.
-show_permissions_info = function() {
+show_permissions_info = function () {
     bootbox.dialog({
         title: 'POSIX permissions and ACLs',
-        message: 'Basic POSIX permissions and ACLs are two ways of controlling '+
-        'the access to your data. You can choose to use one of them for each file. They cannot be used together. <br /><br />'+
-        '<strong>POSIX permissions</strong> - basic file permissions, can be used to enable certain types '+
-        'of users to read, write or execute given file. The types are: user (the owner of the file), group (all users '+
-        'sharing the space where the file resides), other (not aplicable in GUI, but used in oneclient).<br /><br />'+
-        '<strong>ACL</strong> (Access Control List) - CDMI standard (compliant with NFSv4 ACLs), allows '+
-        'defining ordered lists of permissions-granting or permissions-denying entries for users or groups. '+
-        'ACLs are processed from top to bottom - entries higher on list will have higher priority.',
+        message: 'Basic POSIX permissions and ACLs are two ways of controlling ' +
+            'the access to your data. You can choose to use one of them for each file. They cannot be used together. <br /><br />' +
+            '<strong>POSIX permissions</strong> - basic file permissions, can be used to enable certain types ' +
+            'of users to read, write or execute given file. The types are: user (the owner of the file), group (all users ' +
+            'sharing the space where the file resides), other (not aplicable in GUI, but used in oneclient).<br /><br />' +
+            '<strong>ACL</strong> (Access Control List) - CDMI standard (compliant with NFSv4 ACLs), allows ' +
+            'defining ordered lists of permissions-granting or permissions-denying entries for users or groups. ' +
+            'ACLs are processed from top to bottom - entries higher on list will have higher priority.',
         buttons: {
             'OK': {
                 className: 'btn-primary confirm'
             }
         }
     });
+};
+
+// -----------------------------
+// list view header table scrolling
+
+initialize_table_header_scrolling = function () {
+    scroll_header_table();
+    $(window).resize(function () {
+        if ($(window).width() >= $(document).width()) {
+            $('#header_table').css('left', '0px').css('right', '0px');
+        } else {
+            scroll_header_table();
+        }
+    });
+    $(window).scroll(debounce(scroll_header_table, 5));
+};
+
+scroll_header_table = function () {
+    if ($(window).width() < $(document).width()) {
+        $('#header_table').css('left', (-1 * $(this).scrollLeft()) + 'px')
+            .css('right', ($(this).scrollLeft() - $(document).width() + $(window).width()) + 'px');
+    }
 };

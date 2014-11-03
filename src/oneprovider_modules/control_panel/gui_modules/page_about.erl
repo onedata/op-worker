@@ -34,7 +34,7 @@ title() -> <<"About">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    #panel{style = <<"position: relative;">>, body = [
+    #panel{class= <<"page-container">>, body = [
         opn_gui_utils:top_menu(about_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
             #h6{style = <<" text-align: center;">>, body = <<"About">>},

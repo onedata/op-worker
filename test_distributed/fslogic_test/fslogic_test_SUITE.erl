@@ -2412,7 +2412,7 @@ acl_test(Config) ->
     ?assertEqual({ok,[#accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_", ?TEST_USER>>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask}]}
         ,VirtualAclAns),
     {ok, VirtualAcl} = VirtualAclAns,
-    TestUserName = <<?TEST_USER, " ", ?TEST_USER, "#globa">>,
+    TestUserName = <<?TEST_USER, " ", ?TEST_USER>>,
     ?assertEqual([[{<<"acetype">>,<<"ALLOW">>},
         {<<"identifier">>, TestUserName},
         {<<"aceflags">>, <<"NO_FLAGS">>},
@@ -2425,7 +2425,7 @@ acl_test(Config) ->
     test_utils:ct_mock(Config, dao_groups, get_group_by_name, fun(_) -> {ok, [Group]} end),
 
     % test setting and getting acl
-    TestUserNameWithNoHash = <<?TEST_USER, " ", ?TEST_USER, "#">>,
+    TestUserNameWithNoHash = <<?TEST_USER, " ", ?TEST_USER>>,
     Acl = rpc:call(Node1, fslogic_acl, from_json_fromat_to_acl,[
         [
             [

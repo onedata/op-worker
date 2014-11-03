@@ -49,7 +49,7 @@ main() ->
         true ->
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
     end.
 
 
@@ -61,22 +61,13 @@ main() ->
 title() -> <<"Groups">>.
 
 
-%% custom/0
-%% ====================================================================
-%% @doc This will be placed instead of {{custom}} tag in template.
--spec custom() -> binary().
-%% ====================================================================
-custom() ->
-    <<"<script src='/flatui/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
-
-
 %% body/0
 %% ====================================================================
 %% @doc This will be placed instead of {{body}} tag in template.
 -spec body() -> [#panel{}].
 %% ====================================================================
 body() ->
-    [
+    #panel{class= <<"page-container">>, body = [
         #panel{
             id = <<"main_spinner">>,
             style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>,
@@ -128,7 +119,7 @@ body() ->
                 }
             ]
         }
-    ].
+    ]}.
 
 
 %% groups_table_collapsed/1

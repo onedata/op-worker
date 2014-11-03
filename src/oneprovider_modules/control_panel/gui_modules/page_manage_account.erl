@@ -26,7 +26,7 @@ main() ->
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()},
-                {custom, <<"<script src=\"/flatui/bootbox.min.js\" type=\"text/javascript\" charset=\"utf-8\"></script>">>}]}
+                {custom, <<"">>}]}
     end.
 
 %% Page title
@@ -35,7 +35,7 @@ title() -> <<"Manage account">>.
 %% This will be placed in the template instead of [[[page:body()]]] tag
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
-    #panel{style = <<"position: relative;">>, body = [
+    #panel{class= <<"page-container">>, body = [
         opn_gui_utils:top_menu(manage_account_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
             #panel{id = <<"unverified_dns_panel">>, style = <<"display: none;">>,

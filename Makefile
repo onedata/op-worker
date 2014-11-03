@@ -66,6 +66,9 @@ rpm: deps generate
 	make -C onepanel rel CONFIG=config/oneprovider.config
 	./releases/rpm_files/create_rpm
 
+deb: deps generate
+	make -C onepanel rel CONFIG=config/oneprovider.config
+	./releases/rpm_files/create_deb
 
 # Builds .dialyzer.plt init file. This is internal target, call dialyzer_init instead
 .dialyzer.plt:
