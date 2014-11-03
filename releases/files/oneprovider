@@ -253,10 +253,10 @@ if [[ $OPT_CCMS == "-no_param" ]]; then
 fi
 
 # And turn them into a formatted list, along with main ccm
-CCMS_LIST="[\"\\\'$MAIN_CCM\\\'\","
+CCMS_LIST="['$MAIN_CCM',"
 for OPT_CCM in $OPT_CCMS
 do
-    CCMS_LIST="$CCMS_LIST\"\\\'$OPT_CCM\\\'\","
+    CCMS_LIST="$CCMS_LIST'$OPT_CCM',"
 
 	# Check if the node name equals current CCM -> this node is a CCM
 	if [[ $NODE_NAME == $OPT_CCM ]]; then
@@ -285,7 +285,7 @@ fi
 DB_NODES_LIST="["
 for DB_NODE in $DB_NODES
 do
-    DB_NODES_LIST="$DB_NODES_LIST\"\\\'$DB_NODE\\\'\","
+    DB_NODES_LIST="$DB_NODES_LIST'$DB_NODE',"
 done
 DB_NODES_LIST="${DB_NODES_LIST%?}]"
 
@@ -304,7 +304,7 @@ if [[ $STORAGE_CONFIG_PATH == "-no_param" ]]; then
 fi
 
 # Format properly
-STORAGE_CONFIG_PATH_FORMATTED=\"\\\\\'$STORAGE_CONFIG_PATH\\\\\'\"
+STORAGE_CONFIG_PATH_FORMATTED="$STORAGE_CONFIG_PATH"
 
 #####################################
 # PUT CONFIGURATION INTO 'VM.ARGS' AND 'SYS.CONFIG'
@@ -328,16 +328,16 @@ APP_VSN=${START_ERL#* }
 sed $SED_OPTS "s/-name.*/-name $NODE_NAME/g" ../releases/$APP_VSN/vm.args
 
 # Replace node type
-sed $SED_OPTS "s/-oneprovider_node node_type.*/-oneprovider_node node_type $NODE_TYPE/g" ../releases/$APP_VSN/vm.args
+sed $SED_OPTS "s/{node_type,.*/{node_type, $NODE_TYPE},/g" ../releases/$APP_VSN/sys.config
 
 # Replace ccm nodes
-sed $SED_OPTS "s/-oneprovider_node ccm_nodes.*/-oneprovider_node ccm_nodes $CCMS_LIST/g" ../releases/$APP_VSN/vm.args
+sed $SED_OPTS "s/{ccm_nodes,.*/{ccm_nodes, $CCMS_LIST},/g" ../releases/$APP_VSN/sys.config
 
 # Replace DBMS nodes
-sed $SED_OPTS "s/-oneprovider_node db_nodes.*/-oneprovider_node db_nodes $DB_NODES_LIST/g" ../releases/$APP_VSN/vm.args
+sed $SED_OPTS "s/{db_nodes,.*/{db_nodes, $DB_NODES_LIST},/g" ../releases/$APP_VSN/sys.config
 
 # Replace STORAGE_CONFIG_PATH
-sed $SED_OPTS "s@-oneprovider_node storage_config_path.*@-oneprovider_node storage_config_path $STORAGE_CONFIG_PATH_FORMATTED@g" ../releases/$APP_VSN/vm.args
+sed $SED_OPTS "s@{storage_config_path,.*@{storage_config_path, $STORAGE_CONFIG_PATH_FORMATTED},@g" ../releases/$APP_VSN/sys.config
 
 # Remove config for distributed application from sys.config
 sed -n $SED_OPTS '1h;1!H;${;g;s/\[.*%% SASL/ %% SASL/g;p;}' ../releases/$APP_VSN/sys.config

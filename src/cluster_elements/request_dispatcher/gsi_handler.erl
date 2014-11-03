@@ -38,8 +38,7 @@ init() ->
     ?info("GSI Handler module is starting"),
     ets:new(gsi_state, [{read_concurrency, true}, public, ordered_set, named_table]),
 
-    {ok, CADir1} = application:get_env(?APP_Name, ca_dir),
-    CADir = atom_to_list(CADir1),
+    {ok, CADir} = application:get_env(?APP_Name, ca_dir),
 
     {SSPid, _Ref} = spawn_monitor(fun() -> start_slaves(?GSI_SLAVE_COUNT) end),
 
@@ -121,8 +120,7 @@ get_ca_certs_from_all_cert_dirs() ->
 -spec get_ca_certs() -> [binary()] | no_return().
 %% ====================================================================
 get_ca_certs() ->
-    {ok, CADir1} = application:get_env(?APP_Name, ca_dir),
-    CADir = atom_to_list(CADir1),
+    {ok, CADir} = application:get_env(?APP_Name, ca_dir),
     get_ca_certs_from_dir(CADir).
 
 %% get_ca_certs_from_dir/1
