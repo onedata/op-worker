@@ -13,6 +13,7 @@
 -define(GATEWAY_HRL, true).
 
 -include("gwproto_pb.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(gw_port, 8877).
 
@@ -21,5 +22,16 @@
     remote :: inet:ip_address(),
     notify :: pid()
 }).
+
+-define(log_terminate(Reason, State),
+    case Reason of
+        normal -> ok;
+        _ -> ?error("~p terminated with ~p (state: ~p)", [?MODULE, Reason, State])
+    end
+).
+
+-define(log_call(Request),
+    ?warning("~p: ~p - bad request ~p", [?MODULE, ?LINE, Request])
+).
 
 -endif.

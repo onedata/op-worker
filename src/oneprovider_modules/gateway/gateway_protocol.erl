@@ -22,10 +22,12 @@
     error
 }).
 
+-define(connection_close_timeout, timer:minutes(1)).
+
 -include("gwproto_pb.hrl").
 -include("oneprovider_modules/dao/dao_vfs.hrl").
+-include("oneprovider_modules/gateway/gateway.hrl").
 -include("oneprovider_modules/gateway/registered_names.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% ranch_protocol callbacks
 -export([start_link/4, init/4]).
@@ -62,7 +64,7 @@ init(Ref, Socket, Transport, _Opts) ->
     Timeout :: timeout(),
     Reason :: term().
 init(State) ->
-    {ok, State}.
+    {ok, State, ?connection_close_timeout}.
 
 
 -spec handle_call(Request, From, State) -> Result when
@@ -79,7 +81,8 @@ init(State) ->
     Timeout :: timeout(),
     Reason :: term().
 handle_call(_Request, _From, State) ->
-    {noreply, State}.
+    ?log_call(_Request),
+    {noreply, State, ?connection_close_timeout}.
 
 
 -spec handle_cast(Request, State) -> Result when
@@ -92,7 +95,8 @@ handle_call(_Request, _From, State) ->
     Timeout :: timeout(),
     Reason :: term().
 handle_cast(_Request, State) ->
-    {noreply, State}.
+    ?log_call(_Request),
+    {noreply, State, ?connection_close_timeout}.
 
 
 -spec handle_info(Info, State) -> Result when
@@ -119,13 +123,20 @@ handle_info({Ok, Socket, Data}, State) when Ok =:= State#gwproto_state.ok ->
     Bytes = <<"lalala">>,
     Reply = gwproto_pb:encode_fetchreply(#fetchreply{request_hash = Hash, content = Bytes}),
     ok = Transport:send(Socket, Reply),
-    {noreply, State};
+    {noreply, State, ?connection_close_timeout};
 
 handle_info({Closed, _Socket}, State) when Closed =:= State#gwproto_state.closed ->
     {stop, normal, State};
 
 handle_info({Error, _Socket, Reason}, State) when Error =:= State#gwproto_state.error ->
-    {stop, Reason, State}.
+    {stop, Reason, State};
+
+handle_info(timeout, State) ->
+    {stop, normal, State};
+
+handle_info(_Request, State) ->
+    ?log_call(_Request),
+    {noreply, State, ?connection_close_timeout}.
 
 
 -spec terminate(Reason, State) -> IgnoredResult when
@@ -133,6 +144,7 @@ handle_info({Error, _Socket, Reason}, State) when Error =:= State#gwproto_state.
     State :: #gwproto_state{},
     IgnoredResult :: any().
 terminate(_Reason, State) ->
+    ?log_terminate(_Reason, State),
     #gwproto_state{transport = Transport, socket = Socket} = State,
     Transport:close(Socket).
 

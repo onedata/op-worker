@@ -31,10 +31,10 @@ start_link() ->
     supervisor:start_link({local, ?GATEWAY_CONNECTION_SUPERVISOR}, ?MODULE, []).
 
 
--spec start_connection(Remote :: inet:ip_address(), Callback :: function()) ->
+-spec start_connection(Remote :: inet:ip_address(), ConnectionManager :: pid()) ->
     supervisor:startchild_ret().
-start_connection(Remote, Callback) ->
-    supervisor:start_child(?GATEWAY_CONNECTION_SUPERVISOR, [Remote, Callback]).
+start_connection(Remote, ConnectionManager) ->
+    supervisor:start_child(?GATEWAY_CONNECTION_SUPERVISOR, [Remote, ConnectionManager]).
 
 
 -spec init(Args) -> Result when

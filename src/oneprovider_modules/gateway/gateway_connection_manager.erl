@@ -16,11 +16,10 @@
 -include("gwproto_pb.hrl").
 -include("oneprovider_modules/gateway/gateway.hrl").
 -include("oneprovider_modules/gateway/registered_names.hrl").
--include_lib("ctool/include/logging.hrl").
 
 -record(cmstate, {
     number :: non_neg_integer(), %% @TODO: printing purposes only
-    connections = #{} :: map()
+    connections = dict:new() :: dict:dict(inet:ip_address(), pid())
 }).
 
 -export([start_link/1]).
@@ -49,6 +48,7 @@ start_link(Number) ->
      Timeout :: timeout(),
      Reason :: term().
 init(Number) ->
+    process_flag(trap_exit, true),
     gen_server:cast(?GATEWAY_DISPATCHER, {register_connection_manager, Number, self()}),
     {ok, #cmstate{number = Number}}.
 
@@ -67,6 +67,7 @@ init(Number) ->
      Timeout :: timeout(),
      Reason :: term().
 handle_call(_Request, _From, State) ->
+    ?log_call(_Request),
     {noreply, State}.
 
 
@@ -80,19 +81,19 @@ handle_call(_Request, _From, State) ->
      Timeout :: timeout(),
      Reason :: term().
 handle_cast(#fetch{remote = Remote, notify = Notify} = Request, State) ->
-    case maps:find(Remote, State#cmstate.connections) of
+    case dict:find(Remote, State#cmstate.connections) of
         error ->
             Self = self(),
-            spawn(fun() ->
-                case gateway_connection_supervisor:start_connection(Remote) of
+%%             spawn(fun() -> @TODO
+                case gateway_connection_supervisor:start_connection(Remote, Self) of
                     {error, Reason} -> Notify ! {fetch_connect_error, Reason};
                     {ok, Pid} ->
                         gen_server:cast(Self, {internal, Request, {new, Pid}}),
                         {noreply, State}
-                end
-            end);
+                end;
+%%             end);
 
-        {Remote, ConnectionPid} ->
+        {ok, ConnectionPid} ->
             handle_cast({internal, Request, {old, ConnectionPid}}, State)
     end;
 
@@ -102,12 +103,11 @@ handle_cast({internal, #fetch{remote = Remote} = Request, {Type, CPid}}, State) 
         case Type of
             old -> {Connections, CPid};
             new ->
-                FoundSocket = maps:find(Remote, Connections),
-                case FoundSocket of
+                case dict:find(Remote, Connections) of
                     error ->
-                        {maps:put(Remote, CPid, Connections), CPid};
+                        {dict:store(Remote, CPid, Connections), CPid};
 
-                    {Remote, OldPid} ->
+                    {ok, OldPid} ->
                         supervisor:terminate_child(?GATEWAY_CONNECTION_SUPERVISOR, CPid),
                         {Connections, OldPid}
                 end
@@ -116,7 +116,11 @@ handle_cast({internal, #fetch{remote = Remote} = Request, {Type, CPid}}, State) 
     ok = gen_server:cast(ConnectionPid, Request),
     {noreply, State#cmstate{connections = NewConnections}};
 
+handle_cast({connection_closed, Remote}, State) ->
+    {noreply, dict:erase(Remote, State#cmstate.connections)};
+
 handle_cast(_Request, State) ->
+    ?log_call(_Request),
     {noreply, State}.
 
 
@@ -129,19 +133,8 @@ handle_cast(_Request, State) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: normal | term().
-handle_info({tcp_closed, Socket}, State) ->
-    NewConnections = remove_value(Socket, State#cmstate.connections),
-    {noreply, State#cmstate{connections = NewConnections}};
-
-handle_info({tcp_error, Socket, _Reason}, State) ->
-    %% We don't know which process (if any) wanted to connect
-    %% through the socket, so we just let the gateway request time
-    %% out. It happens.
-    gen_tcp:close(Socket),
-    NewConnections = remove_value(Socket, State#cmstate.connections),
-    {noreply, State#cmstate{connections = NewConnections}};
-
 handle_info(_Info, State) ->
+    ?log_call(_Info),
     {noreply, State}.
 
 
@@ -150,7 +143,10 @@ handle_info(_Info, State) ->
     State :: #cmstate{},
     IgnoredResult :: any().
 terminate(_Reason, State) ->
-    lists:foreach(fun gen_tcp:close/1, maps:values(State)).
+    ?log_terminate(_Reason, State),
+    dict:map(fun(_, Pid) ->
+        supervisor:terminate_child(?GATEWAY_CONNECTION_SUPERVISOR, Pid)
+    end, State#cmstate.connections).
 
 
 -spec code_change(OldVsn, State, Extra) -> {ok, NewState} | {error, Reason} when
@@ -168,10 +164,3 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ====================================================================
 
-
--spec remove_value(Value :: term(), Map :: map()) -> map().
-remove_value(Value, Map) ->
-    maps:fold(fun
-        (_Key, Value_, Acc) when Value_ =:= Value -> Acc;
-        (Key, Value_, Acc) -> maps:put(Key, Value_, Acc)
-    end, #{}, Map).

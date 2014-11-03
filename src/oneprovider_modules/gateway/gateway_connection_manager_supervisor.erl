@@ -45,7 +45,7 @@ start_connection_manager(ManagerId) ->
      MaxT :: pos_integer(),
      ChildSpec :: supervisor:child_spec().
 init(_Args) ->
-    RestartStrategy = simple_one_for_one,
+    RestartStrategy = one_for_one,
     MaxR = 3,
     MaxT = timer:minutes(1),
     {ok, {{RestartStrategy, MaxR, MaxT}, [connection_supervisor_spec()]}}.
@@ -58,11 +58,11 @@ init(_Args) ->
 
 -spec connection_manager_spec(ManagerId :: non_neg_integer()) -> supervisor:child_spec().
 connection_manager_spec(ManagerId) ->
-    ChildId = Module = gateway_connection_manager,
+    Module = gateway_connection_manager,
     Restart = permanent,
     ExitTimeout = timer:seconds(10),
     Type = worker,
-    {ChildId, {Module, start_link, [ManagerId]},
+    {ManagerId, {Module, start_link, [ManagerId]},
         Restart, ExitTimeout, Type, [Module]}.
 
 

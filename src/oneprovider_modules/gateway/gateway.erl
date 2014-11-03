@@ -25,6 +25,16 @@
 -export([init/1, handle/2, cleanup/0]).
 -export([compute_request_hash/1]).
 
+-export([test/1]).
+test(FileId) ->
+    Req = #fetchrequest{file_id = FileId, offset = 0, size = 128},
+    gen_server:cast(?MODULE, #fetch{remote = {192,168,122,236}, notify = self(), request = Req}),
+    receive
+        A -> A
+    after
+        timer:seconds(3) -> timeout
+    end.
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -48,7 +58,7 @@ handle(_ProtocolVersion, #fetch{} = Request) ->
     ok;
 
 handle(_ProtocolVersion, _Msg) ->
-    ?warning("Wrong request: ~p", [_Msg]),
+    ?log_call(_Msg),
     %% @TODO: handle exit from gateway_dispatcher_supervisor
     ok.
 

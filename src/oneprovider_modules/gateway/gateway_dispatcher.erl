@@ -15,7 +15,6 @@
 
 -include("oneprovider_modules/gateway/gateway.hrl").
 -include("oneprovider_modules/gateway/registered_names.hrl").
--include_lib("ctool/include/logging.hrl").
 
 -record(cmref, {
     number :: non_neg_integer(),
@@ -30,11 +29,6 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
-
--export([test/1]).
-test(FileId) ->
-    Req = #fetchrequest{file_id = FileId, offset = 0, size = 128},
-    gen_server:cast(?MODULE, #fetch{remote = {192,168,122,236}, notify = self(), request = Req}).
 
 %% ====================================================================
 %% API functions
@@ -57,6 +51,7 @@ start_link(MaxConcurrentConnections) ->
      Timeout :: timeout(),
      Reason :: term().
 init(MaxConcurrentConnections) ->
+    process_flag(trap_exit, true),
     ConnectionManagers = lists:map(
         fun(Number) ->
             {ok, Pid} = gateway_connection_manager_supervisor:start_connection_manager(Number),
@@ -79,6 +74,7 @@ init(MaxConcurrentConnections) ->
      Timeout :: timeout(),
      Reason :: term().
 handle_call(_Request, _From, State) ->
+    ?log_call(_Request),
     {noreply, State}.
 
 
@@ -104,7 +100,11 @@ handle_cast(#fetch{} = Request, State) ->
     Managers = State#gwstate.connection_managers,
     {{value, #cmref{pid = MgrPid} = Manager}, PoppedManagers} = queue:out(Managers),
     gen_server:cast(MgrPid, Request),
-    {noreply, State#gwstate{connection_managers = queue:in(Manager, PoppedManagers)}}.
+    {noreply, State#gwstate{connection_managers = queue:in(Manager, PoppedManagers)}};
+
+handle_cast(_Request, State) ->
+    ?log_call(_Request),
+    {noreply, State}.
 
 
 -spec handle_info(Info, State) -> Result when
@@ -117,6 +117,7 @@ handle_cast(#fetch{} = Request, State) ->
      Timeout :: timeout(),
      Reason :: normal | term().
 handle_info(_Request, State) ->
+    ?log_call(_Request),
     {noreply, State}.
 
 
@@ -125,10 +126,10 @@ handle_info(_Request, State) ->
     State :: #gwstate{},
     IgnoredResult :: any().
 terminate(_Reason, State) ->
-    lists:foreach(
-        fun(#cmref{pid = Pid}) ->
-            supervisor:terminate_child(?GATEWAY_CONNECTION_MANAGER_SUPERVISOR, Pid)
-        end, queue:to_list(State#gwstate.connection_managers)).
+    ?log_terminate(_Reason, State),
+    lists:foreach(fun(#cmref{pid = Pid}) ->
+        supervisor:terminate_child(?GATEWAY_CONNECTION_MANAGER_SUPERVISOR, Pid)
+    end, queue:to_list(State#gwstate.connection_managers)).
 
 
 -spec code_change(OldVsn, State, Extra) -> {ok, NewState} | {error, Reason} when
