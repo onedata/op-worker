@@ -304,7 +304,7 @@ if [[ $STORAGE_CONFIG_PATH == "-no_param" ]]; then
 fi
 
 # Format properly
-STORAGE_CONFIG_PATH_FORMATTED="$STORAGE_CONFIG_PATH"
+STORAGE_CONFIG_PATH_FORMATTED="\"$STORAGE_CONFIG_PATH\""
 
 #####################################
 # PUT CONFIGURATION INTO 'VM.ARGS' AND 'SYS.CONFIG'
