@@ -166,7 +166,7 @@ proplist_to_ace(List) ->
 gruid_to_name(GRUID) ->
     {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
     {ok, UserList} = fslogic_objects:get_user({name, utils:ensure_unicode_list(Name)}),
-    GRUIDList = lists:map(fun(#db_document{record = #user{global_id = GRUID}}) -> utils:ensure_unicode_binary(GRUID)  end, UserList),
+    GRUIDList = lists:map(fun(#db_document{record = #user{global_id = GRUID_}}) -> utils:ensure_unicode_binary(GRUID_)  end, UserList),
     case GRUIDList of
         [_] -> utils:ensure_unicode_binary(Name);
         _ -> <<(utils:ensure_unicode_binary(Name))/binary,"#",(binary_part(GRUID, 0, binary:longest_common_prefix(GRUIDList)+1))/binary>>
