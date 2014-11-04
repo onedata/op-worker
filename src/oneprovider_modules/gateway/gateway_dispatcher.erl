@@ -17,7 +17,8 @@
 -include("oneprovider_modules/gateway/registered_names.hrl").
 
 -record(cmref, {
-    number :: non_neg_integer(),
+    id :: term(),
+    addr :: inet:ip_address(),
     pid :: pid()
 }).
 
@@ -34,29 +35,30 @@
 %% API functions
 %% ====================================================================
 
--spec start_link(MaxConcurrentConnections) -> Result when
-    MaxConcurrentConnections :: non_neg_integer(),
+-spec start_link(NetworkInterfaces) -> Result when
+    NetworkInterfaces :: [inet:ip_address()],
     Result :: {ok,Pid} | ignore | {error,Error},
      Pid :: pid(),
      Error :: {already_started,Pid} | term().
-start_link(MaxConcurrentConnections) ->
-    gen_server:start_link({local, ?GATEWAY_DISPATCHER}, ?MODULE, MaxConcurrentConnections, []).
+start_link(NetworkInterfaces) ->
+    gen_server:start_link({local, ?GATEWAY_DISPATCHER}, ?MODULE, NetworkInterfaces, []).
 
 
--spec init(MaxConcurrentConnections) -> Result when
-    MaxConcurrentConnections :: pos_integer(),
+-spec init(NetworkInterfaces) -> Result when
+    NetworkInterfaces :: [inet:ip_address()],
     Result :: {ok,State} | {ok,State,Timeout} | {ok,State,hibernate}
         | {stop,Reason} | ignore,
      State :: #gwstate{},
      Timeout :: timeout(),
      Reason :: term().
-init(MaxConcurrentConnections) ->
+init(NetworkInterfaces) ->
     process_flag(trap_exit, true),
     ConnectionManagers = lists:map(
-        fun(Number) ->
-            {ok, Pid} = gateway_connection_manager_supervisor:start_connection_manager(Number),
-            #cmref{number = Number, pid = Pid}
-        end, lists:seq(1, MaxConcurrentConnections)),
+        fun(IpAddr) ->
+            CMRef = make_ref(),
+            {ok, Pid} = gateway_connection_manager_supervisor:start_connection_manager(IpAddr, CMRef),
+            #cmref{id = CMRef, addr = IpAddr, pid = Pid}
+        end, NetworkInterfaces),
     {ok, #gwstate{connection_managers = queue:from_list(ConnectionManagers)}}.
 
 
@@ -87,12 +89,12 @@ handle_call(_Request, _From, State) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: term().
-handle_cast({register_connection_manager, Number, Pid}, State) ->
+handle_cast({register_connection_manager, Id, Addr, Pid}, State) ->
     FilteredManagers = queue:filter(
-        fun(#cmref{number = Number1}) when Number1 =:= Number -> false;
+        fun(#cmref{id = Id1}) when Id1 =:= Id -> false;
            (_) -> true
         end, State#gwstate.connection_managers),
-    NewCM = #cmref{number = Number, pid = Pid},
+    NewCM = #cmref{id = Id, addr = Addr, pid = Pid},
     AugmentedConnectionsManagers = queue:in_r(NewCM, FilteredManagers),
     {noreply, State#gwstate{connection_managers = AugmentedConnectionsManagers}};
 

@@ -16,7 +16,7 @@
 -include("oneprovider_modules/gateway/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([start_link/0, start_connection/2]).
+-export([start_link/0, start_connection/3]).
 %% supervisor callbacks
 -export([init/1]).
 
@@ -31,10 +31,10 @@ start_link() ->
     supervisor:start_link({local, ?GATEWAY_CONNECTION_SUPERVISOR}, ?MODULE, []).
 
 
--spec start_connection(Remote :: inet:ip_address(), ConnectionManager :: pid()) ->
+-spec start_connection(Remote :: inet:ip_address(), Local :: inet:ip_address(), ConnectionManager :: pid()) ->
     supervisor:startchild_ret().
-start_connection(Remote, ConnectionManager) ->
-    supervisor:start_child(?GATEWAY_CONNECTION_SUPERVISOR, [Remote, ConnectionManager]).
+start_connection(Remote, Local, ConnectionManager) ->
+    supervisor:start_child(?GATEWAY_CONNECTION_SUPERVISOR, [Remote, Local, ConnectionManager]).
 
 
 -spec init(Args) -> Result when

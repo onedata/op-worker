@@ -19,7 +19,7 @@
 
 %% @TODO: config
 -define(acceptor_number, 100).
--define(max_concurrent_connections, 5).
+-define(network_interfaces, [{127,0,0,1}, {127,0,0,1}, {127,0,0,1}]).
 
 -export([init/1, handle/2, cleanup/0]).
 -export([compute_request_hash/1]).
@@ -43,7 +43,8 @@ test(FileId) ->
 init(_Args) ->
     {ok, _} = ranch:start_listener(?GATEWAY_LISTENER, ?acceptor_number,
     	ranch_tcp, [{port, ?gw_port}], gateway_protocol, []),
-	{ok, _} = gateway_dispatcher_supervisor:start_link(?max_concurrent_connections).
+
+	{ok, _} = gateway_dispatcher_supervisor:start_link(?network_interfaces).
 
 handle(_ProtocolVersion, ping) ->
     pong;
@@ -68,6 +69,6 @@ cleanup() ->
     ok.
 
 
--spec compute_request_hash(RequestBytes :: binary()) -> Hash :: binary().
+-spec compute_request_hash(RequestBytes :: iodata()) -> Hash :: binary().
 compute_request_hash(RequestBytes) ->
     crypto:hash(sha256, RequestBytes).

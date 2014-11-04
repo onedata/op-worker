@@ -16,7 +16,7 @@
 -include("oneprovider_modules/gateway/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([start_link/0, start_connection_manager/1]).
+-export([start_link/0, start_connection_manager/2]).
 %% supervisor callbacks
 -export([init/1]).
 
@@ -31,9 +31,10 @@ start_link() ->
     supervisor:start_link({local, ?GATEWAY_CONNECTION_MANAGER_SUPERVISOR}, ?MODULE, []).
 
 
--spec start_connection_manager(ManagerId :: non_neg_integer()) -> supervisor:startchild_ret().
-start_connection_manager(ManagerId) ->
-    ChildSpec = connection_manager_spec(ManagerId),
+-spec start_connection_manager(IpAddr :: inet:ip_address(), ManagerId :: term()) ->
+    supervisor:startchild_ret().
+start_connection_manager(IpAddr, ManagerId) ->
+    ChildSpec = connection_manager_spec(IpAddr, ManagerId),
     supervisor:start_child(?GATEWAY_CONNECTION_MANAGER_SUPERVISOR, ChildSpec).
 
 
@@ -56,13 +57,14 @@ init(_Args) ->
 %% ====================================================================
 
 
--spec connection_manager_spec(ManagerId :: non_neg_integer()) -> supervisor:child_spec().
-connection_manager_spec(ManagerId) ->
+-spec connection_manager_spec(IpAddr :: inet:ip_address(), ManagerId :: term()) ->
+    supervisor:child_spec().
+connection_manager_spec(IpAddr, ManagerId) ->
     Module = gateway_connection_manager,
     Restart = permanent,
     ExitTimeout = timer:seconds(10),
     Type = worker,
-    {ManagerId, {Module, start_link, [ManagerId]},
+    {ManagerId, {Module, start_link, [IpAddr, ManagerId]},
         Restart, ExitTimeout, Type, [Module]}.
 
 

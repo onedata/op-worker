@@ -24,38 +24,38 @@
 %% API functions
 %% ====================================================================
 
--spec start_link(MaxConcurrentConnections) -> Result when
-    MaxConcurrentConnections :: pos_integer(),
+-spec start_link(NetworkInterfaces) -> Result when
+    NetworkInterfaces :: [inet:ip_address()],
     Result :: {ok, pid()} | ignore | {error, Error},
      Error :: {already_started, pid()} | {shutdown, term()} | term().
-start_link(MaxConcurrentConnections) ->
-    supervisor:start_link({local, ?GATEWAY_DISPATCHER_SUPERVISOR}, ?MODULE, MaxConcurrentConnections).
+start_link(NetworkInterfaces) ->
+    supervisor:start_link({local, ?GATEWAY_DISPATCHER_SUPERVISOR}, ?MODULE, NetworkInterfaces).
 
 
--spec init(MaxConcurrentConnections) -> Result when
-    MaxConcurrentConnections :: pos_integer(),
+-spec init(NetworkInterfaces) -> Result when
+    NetworkInterfaces :: [inet:ip_address()],
     Result :: {ok,{{RestartStrategy,MaxR,MaxT},[ChildSpec]}} | ignore,
      RestartStrategy :: supervisor:strategy(),
      MaxR :: non_neg_integer(),
      MaxT :: pos_integer(),
      ChildSpec :: supervisor:child_spec().
-init(MaxConcurrentConnections) ->
+init(NetworkInterfaces) ->
     RestartStrategy = one_for_all,
     MaxR = 3,
     MaxT = timer:minutes(1),
     {ok, {{RestartStrategy, MaxR, MaxT},
         [connection_manager_supervisor_spec(),
-         dispatcher_spec(MaxConcurrentConnections)]}}.
+         dispatcher_spec(NetworkInterfaces)]}}.
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
 
--spec dispatcher_spec(MaxConcurrentConnections :: pos_integer()) ->
+-spec dispatcher_spec(NetworkInterfaces :: [inet:ip_address()]) ->
     supervisor:child_spec().
-dispatcher_spec(MaxConcurrentConnections) ->
+dispatcher_spec(NetworkInterfaces) ->
     ChildId = Module = gateway_dispatcher,
-    Function = {Module, start_link, [MaxConcurrentConnections]},
+    Function = {Module, start_link, [NetworkInterfaces]},
     Restart = permanent,
     ExitTimeout = timer:seconds(10),
     Type = worker,

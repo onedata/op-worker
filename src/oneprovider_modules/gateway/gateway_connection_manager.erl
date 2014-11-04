@@ -18,11 +18,12 @@
 -include("oneprovider_modules/gateway/registered_names.hrl").
 
 -record(cmstate, {
-    number :: non_neg_integer(), %% @TODO: printing purposes only
+    id :: term(),
+    addr :: inet:ip_address(),
     connections = dict:new() :: dict:dict(inet:ip_address(), pid())
 }).
 
--export([start_link/1]).
+-export([start_link/2]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
@@ -31,26 +32,28 @@
 %% API functions
 %% ====================================================================
 
--spec start_link(Number) -> Result when
-    Number :: non_neg_integer(),
+-spec start_link(IpAddr, Id) -> Result when
+    IpAddr :: inet:ip_address(),
+    Id :: term(),
     Result :: {ok,Pid} | ignore | {error,Error},
      Pid :: pid(),
      Error :: {already_started,Pid} | term().
-start_link(Number) ->
-    gen_server:start_link(?MODULE, Number, []).
+start_link(IpAddr, Id) ->
+    gen_server:start_link(?MODULE, {IpAddr, Id}, []).
 
 
--spec init(Number) -> Result when
-    Number :: integer(),
+-spec init({IpAddr, Id}) -> Result when
+    IpAddr :: inet:ip_address(),
+    Id :: term(),
     Result :: {ok,State} | {ok,State,Timeout} | {ok,State,hibernate}
         | {stop,Reason} | ignore,
      State :: #cmstate{},
      Timeout :: timeout(),
      Reason :: term().
-init(Number) ->
+init({IpAddr, Id}) ->
     process_flag(trap_exit, true),
-    gen_server:cast(?GATEWAY_DISPATCHER, {register_connection_manager, Number, self()}),
-    {ok, #cmstate{number = Number}}.
+    gen_server:cast(?GATEWAY_DISPATCHER, {register_connection_manager, Id, IpAddr, self()}),
+    {ok, #cmstate{id = Id, addr = IpAddr}}.
 
 
 -spec handle_call(Request, From, State) -> Result when
@@ -80,12 +83,12 @@ handle_call(_Request, _From, State) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: term().
-handle_cast(#fetch{remote = Remote, notify = Notify} = Request, State) ->
+handle_cast(#fetch{remote = Remote, notify = Notify} = Request, #cmstate{addr = Addr} = State) ->
     case dict:find(Remote, State#cmstate.connections) of
         error ->
             Self = self(),
             spawn(fun() ->
-                case gateway_connection_supervisor:start_connection(Remote, Self) of
+                case gateway_connection_supervisor:start_connection(Remote, Addr, Self) of
                     {error, Reason} ->
                         Notify ! {fetch_connect_error, Reason};
                     {ok, Pid} ->

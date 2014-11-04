@@ -19,14 +19,14 @@
 -record(gwcstate, {
     remote :: inet:ip_address(),
     connection_manager :: pid(),
-    socket :: gen_tcp:socket(),
+    socket :: inet:socket(),
     waiting_requests :: ets:tid() %% @TODO: clear
 }).
 
 -define(CONNECTION_TIMEOUT, timer:seconds(10)).
 -define(REQUEST_COMPLETION_TIMEOUT, timer:seconds(10)).
 
--export([start_link/2]).
+-export([start_link/3]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
@@ -35,28 +35,30 @@
 %% API functions
 %% ====================================================================
 
--spec start_link(Remote, ConnectionManager) -> Result when
+-spec start_link(Remote, Local, ConnectionManager) -> Result when
     Remote :: inet:ip_address(),
+    Local :: inet:ip_address(),
     ConnectionManager :: pid(),
     Result :: {ok,Pid} | ignore | {error,Error},
      Pid :: pid(),
      Error :: {already_started,Pid} | term().
-start_link(Remote, ConnectionManager) ->
-    gen_server:start_link(?MODULE, {Remote, ConnectionManager}, []).
+start_link(Remote, Local, ConnectionManager) ->
+    gen_server:start_link(?MODULE, {Remote, Local, ConnectionManager}, []).
 
 
--spec init({Remote, ConnectionManager}) -> Result when
+-spec init({Remote, Local, ConnectionManager}) -> Result when
     Remote :: inet:ip_address(),
+    Local :: inet:ip_address(),
     ConnectionManager :: pid(),
     Result :: {ok,State} | {ok,State,Timeout} | {ok,State,hibernate}
         | {stop,Reason} | ignore,
      State :: #gwcstate{},
      Timeout :: timeout(),
      Reason :: term().
-init({Remote, ConnectionManager}) ->
+init({Remote, Local, ConnectionManager}) ->
     process_flag(trap_exit, true),
     TID = ets:new(waiting_requests, [private]),
-    {ok, Socket} = gen_tcp:connect(Remote, ?gw_port, [binary, {packet, 4}, {active, once}], ?CONNECTION_TIMEOUT),
+    {ok, Socket} = gen_tcp:connect(Remote, ?gw_port, [binary, {packet, 4}, {active, once}, {ifaddr, Local}], ?CONNECTION_TIMEOUT),
     {ok, #gwcstate{remote = Remote, socket = Socket, connection_manager = ConnectionManager, waiting_requests = TID}}.
 
 
@@ -195,8 +197,10 @@ complete_request(TID, #fetchreply{content = Content, request_hash = RequestHash}
 
 -spec notify(What :: atom(), Action :: #fetch{}) -> ok.
 notify(What, #fetch{notify = Notify, request = Request}) when is_atom(What) ->
-    Notify ! {What, Request}.
+    Notify ! {What, Request},
+    ok.
 
 -spec notify(What :: atom(), Reason :: term(), Action :: #fetch{}) -> ok.
 notify(What, Reason, #fetch{notify = Notify, request = Request}) when is_atom(What) ->
-    Notify ! {What, Reason, Request}.
+    Notify ! {What, Reason, Request},
+    ok.
