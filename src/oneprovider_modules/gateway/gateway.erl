@@ -16,7 +16,6 @@
 
 -include("oneprovider_modules/gateway/gateway.hrl").
 -include("oneprovider_modules/gateway/registered_names.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% @TODO: config
 -define(acceptor_number, 100).
@@ -27,8 +26,10 @@
 
 -export([test/1]).
 test(FileId) ->
-    Req = #fetchrequest{file_id = FileId, offset = 0, size = 128},
-    gen_server:cast(?MODULE, #fetch{remote = {192,168,122,236}, notify = self(), request = Req}),
+    Offset = crypto:rand_uniform(0, 2048),
+    Size = crypto:rand_uniform(0, 2048),
+    Req = #fetchrequest{file_id = FileId, offset = Offset, size = Size},
+    gen_server:cast(?MODULE, {asynch, 1, #fetch{remote = {192,168,122,236}, notify = self(), request = Req}}),
     receive
         A -> A
     after

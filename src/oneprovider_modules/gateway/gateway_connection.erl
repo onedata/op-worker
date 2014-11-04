@@ -24,6 +24,7 @@
 }).
 
 -define(CONNECTION_TIMEOUT, timer:seconds(10)).
+-define(REQUEST_COMPLETION_TIMEOUT, timer:seconds(10)).
 
 -export([start_link/2]).
 %% gen_server callbacks
@@ -86,14 +87,14 @@ handle_call(_Request, _From, State) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: term().
-handle_cast(#fetch{request = Request, notify = Notify} = Action, #gwcstate{socket = Socket, waiting_requests = TID} = State) ->
+handle_cast(#fetch{request = Request} = Action, #gwcstate{socket = Socket, waiting_requests = TID} = State) ->
     Data = gwproto_pb:encode_fetchrequest(Request),
     case gen_tcp:send(Socket, Data) of
-        {error, Reason} ->
-            Notify ! {fetch_send_error, Reason, Request},
-            {stop, Reason, State};
+        {error, Reason} -> {stop, Reason, State};
         ok ->
-            ets:insert(TID, {gateway:compute_request_hash(Data), Action}),
+            Hash = gateway:compute_request_hash(Data),
+            Timer = erlang:send_after(?REQUEST_COMPLETION_TIMEOUT, self(), {request_timeout, Hash}),
+            ets:insert(TID, {Hash, Action, Timer}),
             {noreply, State}
     end;
 
@@ -119,7 +120,6 @@ handle_info({tcp, Socket, Data}, #gwcstate{waiting_requests = TID} = State) ->
     catch
         Error:Reason -> ?warning("~p: Couldn't decode reply: {~p, ~p}", [?MODULE, Error, Reason])
     end,
-
     {noreply, State};
 
 handle_info({tcp_closed, _Socket}, State) ->
@@ -127,6 +127,15 @@ handle_info({tcp_closed, _Socket}, State) ->
 
 handle_info({tcp_error, _Socket, Reason}, State) ->
     {stop, Reason, State};
+
+handle_info({request_timeout, Hash}, #gwcstate{waiting_requests = TID} = State) ->
+    case ets:lookup(TID, Hash) of
+        [] -> ignore;
+        [{_, Action, _}] ->
+            ets:delete(TID, Hash),
+            notify(fetch_timeout, Action)
+    end,
+    {noreply, State};
 
 handle_info(_Request, State) ->
     ?log_call(_Request),
@@ -137,13 +146,21 @@ handle_info(_Request, State) ->
     Reason :: normal | shutdown | {shutdown,term()} | term(),
     State :: #gwcstate{},
     IgnoredResult :: any().
-terminate(Reason, #gwcstate{remote = Remote, socket = Socket, connection_manager = CM} = State) ->
+terminate(Reason, #gwcstate{remote = Remote, socket = Socket, connection_manager = CM, waiting_requests = TID} = State) ->
     ?log_terminate(Reason, State),
-    case Reason of
-        normal -> ok;
-        _ -> gen_tcp:close(Socket)
-    end,
-    gen_server:cast(CM, {connection_closed, Remote}).
+
+    NotifyReason =
+        case Reason of
+            normal -> closed;
+            _ ->
+                gen_tcp:close(Socket),
+                Reason
+        end,
+
+    gen_server:cast(CM, {connection_closed, Remote}),
+    lists:foreach(
+        fun({_, Action, _}) -> notify(fetch_send_error, NotifyReason, Action) end,
+        ets:tab2list(TID)).
 
 
 -spec code_change(OldVsn, State, Extra) -> {ok, NewState} | {error, Reason} when
@@ -165,11 +182,21 @@ code_change(_OldVsn, State, _Extra) ->
 -spec complete_request(TID :: ets:tid(), Reply :: #fetchreply{}) -> ok.
 complete_request(TID, #fetchreply{content = Content, request_hash = RequestHash}) ->
     case ets:lookup(TID, RequestHash) of
-        [] -> ignore;
-        [{_, #fetch{notify = Notify, request = Request}}] ->
+        [] -> ignore, ?warning("Ignored ~p", [Content]);
+        [{_, Action, Timer}] ->
+            erlang:cancel_timer(Timer),
             %% @TODO: actually complete the request
             ets:delete(TID, RequestHash),
-            Notify ! {fetch_complete, Request}
+            ?warning("Received ~p", [Content]),
+            notify(fetch_complete, Action)
     end,
-    ?warning("Received ~p", [Content]),
     ok.
+
+
+-spec notify(What :: atom(), Action :: #fetch{}) -> ok.
+notify(What, #fetch{notify = Notify, request = Request}) when is_atom(What) ->
+    Notify ! {What, Request}.
+
+-spec notify(What :: atom(), Reason :: term(), Action :: #fetch{}) -> ok.
+notify(What, Reason, #fetch{notify = Notify, request = Request}) when is_atom(What) ->
+    Notify ! {What, Reason, Request}.

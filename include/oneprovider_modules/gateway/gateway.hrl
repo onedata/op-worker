@@ -26,6 +26,8 @@
 -define(log_terminate(Reason, State),
     case Reason of
         normal -> ok;
+        shutdown -> ok;
+        {shutdown, _} -> ok;
         _ -> ?error("~p terminated with ~p (state: ~p)", [?MODULE, Reason, State])
     end
 ).

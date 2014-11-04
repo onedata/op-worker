@@ -84,14 +84,15 @@ handle_cast(#fetch{remote = Remote, notify = Notify} = Request, State) ->
     case dict:find(Remote, State#cmstate.connections) of
         error ->
             Self = self(),
-%%             spawn(fun() -> @TODO
+            spawn(fun() ->
                 case gateway_connection_supervisor:start_connection(Remote, Self) of
-                    {error, Reason} -> Notify ! {fetch_connect_error, Reason};
+                    {error, Reason} ->
+                        Notify ! {fetch_connect_error, Reason};
                     {ok, Pid} ->
-                        gen_server:cast(Self, {internal, Request, {new, Pid}}),
-                        {noreply, State}
-                end;
-%%             end);
+                        gen_server:cast(Self, {internal, Request, {new, Pid}})
+                end
+            end),
+            {noreply, State};
 
         {ok, ConnectionPid} ->
             handle_cast({internal, Request, {old, ConnectionPid}}, State)
@@ -117,7 +118,7 @@ handle_cast({internal, #fetch{remote = Remote} = Request, {Type, CPid}}, State) 
     {noreply, State#cmstate{connections = NewConnections}};
 
 handle_cast({connection_closed, Remote}, State) ->
-    {noreply, dict:erase(Remote, State#cmstate.connections)};
+    {noreply, State#cmstate{connections = dict:erase(Remote, State#cmstate.connections)}};
 
 handle_cast(_Request, State) ->
     ?log_call(_Request),
