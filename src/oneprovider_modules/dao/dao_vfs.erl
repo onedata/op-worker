@@ -27,6 +27,7 @@
 -export([get_space_file/1, get_space_files/1]).
 -export([list_file_locations/1, get_file_locations/1, save_file_location/1, remove_file_location/1]).
 -export([list_file_blocks/1, get_file_blocks/1, save_file_block/1, remove_file_block/1]).
+-export([save_remote_location/1]).
 
 
 -ifdef(TEST).
@@ -771,6 +772,19 @@ remove_file_block(BlockId) when is_list(BlockId) ->
     dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:remove_record(BlockId).
 
+%% save_remote_location/1
+%% ====================================================================
+%% @doc Saves a remote location as a new document in the database, or as a new version
+%% of an existing document.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec save_remote_location(remote_location_doc() | remote_location_info()) -> {ok, uuid()} | {error, any()}.
+%% ====================================================================
+save_remote_location(#remote_location{} = RemoteLocation) ->
+    save_remote_location(#db_document{record = RemoteLocation});
+save_remote_location(#db_document{record = #file_block{}} = RemoteLocationDoc) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:save_record(RemoteLocationDoc).
 
 %% list_dir/3
 %% ====================================================================

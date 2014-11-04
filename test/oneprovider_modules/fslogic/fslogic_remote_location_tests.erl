@@ -59,7 +59,21 @@ mark_as_modified_test() ->
     ?assertEqual([
         #remote_file_part{range = #block_range{from = 0, to = 11}, providers = [Pr2]},
         #remote_file_part{range = #block_range{from = 12, to = 100}, providers = [Pr1]}
-    ], List6).
+    ], List6),
+
+    List7 = fslogic_remote_location:mark_as_modified(#block_range{from = 95, to = 105}, List6, Pr3),
+    ?assertEqual([
+        #remote_file_part{range = #block_range{from = 0, to = 11}, providers = [Pr2]},
+        #remote_file_part{range = #block_range{from = 12, to = 94}, providers = [Pr1]},
+        #remote_file_part{range = #block_range{from = 95, to = 105}, providers = [Pr3]}
+    ], List7),
+
+    List8 = fslogic_remote_location:mark_as_modified(#block_range{from = 110, to = 120}, List7, Pr3),
+    ?assertEqual([
+        #remote_file_part{range = #block_range{from = 0, to = 11}, providers = [Pr2]},
+        #remote_file_part{range = #block_range{from = 12, to = 94}, providers = [Pr1]},
+        #remote_file_part{range = #block_range{from = 95, to = 120}, providers = [Pr3]}
+    ], List8).
 
 check_if_synchronized_test() ->
     Pr1 = "uuid1",

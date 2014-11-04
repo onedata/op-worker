@@ -54,6 +54,8 @@ mark_as_modified(#block_range{} = BlockRange, RemoteParts, ProviderId) ->
 %% ====================================================================
 check_if_synchronized(#byte_range{} = ByteRange, RemoteParts, ProviderId) ->
     check_if_synchronized(byte_to_block_range(ByteRange), RemoteParts, ProviderId);
+check_if_synchronized(_, [] , _) ->
+    [];
 check_if_synchronized(#block_range{from = GivenFrom, to = GivenTo}, _ , _) when GivenFrom > GivenTo ->
     [];
 check_if_synchronized(#block_range{from = GivenFrom, to = GivenTo}, [#remote_file_part{range = #block_range{from = From, to = To}, providers = Providers} | _], ProviderId)
@@ -103,7 +105,7 @@ mark_as_modified_recursive(#block_range{from = GivenFrom, to = GivenTo}, [#remot
             false -> [#remote_file_part{range = #block_range{from = GivenTo+1, to = To}, providers = Providers}]
         end,
     FirstRange ++ SecondRange ++ ThirdRange ++ Rest;
-mark_as_modified_recursive(#block_range{from = GivenFrom} = Range, [#remote_file_part{range = #block_range{from = From, to = To}, providers = Providers} | Rest], ProviderId)
+mark_as_modified_recursive(#block_range{from = GivenFrom, to = GivenTo} = Range, [#remote_file_part{range = #block_range{from = From, to = To}, providers = Providers} | Rest], ProviderId)
         when GivenFrom >= From andalso GivenFrom =< To ->
     FirstRange =
         case GivenFrom == From of
@@ -111,10 +113,17 @@ mark_as_modified_recursive(#block_range{from = GivenFrom} = Range, [#remote_file
             false -> [#remote_file_part{range = #block_range{from = From, to = GivenFrom-1}, providers = Providers}]
         end,
     SecondRange = [#remote_file_part{range = #block_range{from = GivenFrom, to = To}, providers = [ProviderId]}],
-    FirstRange ++ SecondRange ++ mark_as_modified_recursive(Range#block_range{from = To + 1}, Rest, ProviderId);
-mark_as_modified_recursive(#block_range{from = GivenFrom} = Range, [#remote_file_part{range = #block_range{to = To}} = First | Rest], ProviderId)
+    case Rest of
+        [] -> FirstRange ++ SecondRange ++ [#remote_file_part{range = #block_range{from = To + 1, to = GivenTo}, providers = [ProviderId]}];
+        _ -> FirstRange ++ SecondRange ++ mark_as_modified_recursive(Range#block_range{from = To + 1}, Rest, ProviderId)
+    end;
+mark_as_modified_recursive(#block_range{from = GivenFrom, to = GivenTo} = Range, [#remote_file_part{range = #block_range{to = To}} = First | Rest], ProviderId)
         when GivenFrom > To ->
-    [First | mark_as_modified_recursive(Range, Rest, ProviderId)].
+    case Rest of
+        [] -> [First, #remote_file_part{range = #block_range{from = To + 1, to = GivenTo}, providers = [ProviderId]}];
+        _ -> [First | mark_as_modified_recursive(Range, Rest, ProviderId)]
+    end.
+
 
 %% byte_to_block_range/1
 %% ====================================================================

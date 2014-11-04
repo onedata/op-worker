@@ -31,6 +31,9 @@
 -type file_block_info() :: #file_block{}.
 -type file_block_doc() :: db_doc(file_block_info()).
 
+-type remote_location_info() :: #remote_location{}.
+-type remote_location_doc() :: db_doc(remote_location_info()).
+
 -type file_criteria() :: #file_criteria{}.
 
 -type fd() :: uuid().
