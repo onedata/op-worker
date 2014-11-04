@@ -1,37 +1,36 @@
 %% ===================================================================
-%% @author Lukasz Opiola
-%% @copyright (C): 2014 ACK CYFRONET AGH
+%% @author Bartosz Polnik
+%% @copyright (C): 2013 ACK CYFRONET AGH
 %% This software is released under the MIT license 
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module implements {@link worker_plugin_behaviour} and
-%% manages a DNS server module.
-%% In addition, it implements {@link dns_query_handler_behaviour} -
-%% DNS query handling logic.
+%% @doc: This module implements {@link worker_plugin_behaviour} to provide
+%% functionality of resolution ipv4 addresses for given worker name.
 %% @end
 %% ===================================================================
--module(dns_worker).
+
+-module(old_dns_worker).
 -behaviour(worker_plugin_behaviour).
--behaviour(dns_query_handler_behaviour).
 
 -include("oneprovider_modules/dns/dns_worker.hrl").
 -include("registered_names.hrl").
 -include("supervision_macros.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-
 %% ====================================================================
 %% API functions
 %% ====================================================================
-%% worker_plugin_behaviour API
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/2, cleanup/0, env_dependencies/0, start_listening/0]).
 
-%% dns_query_handler_behaviour API
--export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1, handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
+env_dependencies() ->
+    [{dns_port, integer}, {dns_response_ttl, integer}, {dispatcher_timeout, integer},
+        {dns_tcp_acceptor_pool_size, integer}, {dns_tcp_timeout, integer},
+        {dns_port, integer}
+    ].
 
 %% ===================================================================
-%% worker_plugin_behaviour API
+%% Behaviour callback functions
 %% ===================================================================
 
 %% init/1
@@ -44,13 +43,7 @@
     Error :: term().
 %% ====================================================================
 init([]) ->
-    ?dump(start_dns_server),
-    {ok, DNSPort} = application:get_env(?APP_Name, dns_port),
-    {ok, DNSResponseTTL} = application:get_env(?APP_Name, dns_response_ttl),
-%%     {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
-    {ok, TCPNumAcceptors} = application:get_env(?APP_Name, dns_tcp_acceptor_pool_size),
-    {ok, TCPTImeout} = application:get_env(?APP_Name, dns_tcp_timeout),
-    dns_server:start(DNSPort, dns_worker, DNSResponseTTL, TCPNumAcceptors, TCPTImeout),
+    {ok, _Pid} = proc_lib:start(?MODULE, start_listening, [], 500),
     #dns_worker_state{};
 
 init(InitialState) when is_record(InitialState, dns_worker_state) ->
@@ -216,8 +209,104 @@ handle(ProtocolVersion, Msg) ->
     Result :: ok.
 %% ====================================================================
 cleanup() ->
-    dns_server:stop().
+    spawn(fun() -> clear_children_and_listeners() end),
+    ok.
 
+
+%% start_listening/0
+%% ====================================================================
+%% @doc Starts dns listeners and terminates dns_worker process in case of error.
+%% @end
+%% ====================================================================
+-spec start_listening() -> ok.
+%% ====================================================================
+start_listening() ->
+    try
+        {ok, DNSPort} = application:get_env(?APP_Name, dns_port),
+        {ok, DNSResponseTTL} = application:get_env(?APP_Name, dns_response_ttl),
+        {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
+        {ok, TcpAcceptorPool} = application:get_env(?APP_Name, dns_tcp_acceptor_pool_size),
+        {ok, TcpTimeout} = application:get_env(?APP_Name, dns_tcp_timeout),
+        {ok, DNSPort} = application:get_env(?APP_Name, dns_port),
+        UDP_Child = ?Sup_Child(?DNS_UDP, dns_udp_handler, permanent, [DNSPort, DNSResponseTTL, DispatcherTimeout]),
+        DNS_TCP_Transport_Options = [{packet, 2}, {dispatcher_timeout, DispatcherTimeout}, {dns_response_ttl, DNSResponseTTL},
+            {dns_tcp_timeout, TcpTimeout}, {keepalive, true}],
+
+        proc_lib:init_ack({ok, self()}),
+
+        try
+            supervisor:delete_child(?Supervisor_Name, ?DNS_UDP),
+            ?debug("DNS UDP child has existed")
+        catch
+            _:_ -> ok
+        end,
+
+        try
+            ranch:stop_listener(dns_tcp_listener),
+            ?debug("dns_tcp_listener has existed")
+        catch
+            _:_ -> ok
+        end,
+
+        {ok, Pid} = supervisor:start_child(?Supervisor_Name, UDP_Child),
+        start_tcp_listener(TcpAcceptorPool, DNSPort, DNS_TCP_Transport_Options, Pid)
+    catch
+        _:Reason -> ?error("DNS Error during starting listeners, ~p", [Reason]),
+            gen_server:cast({global, ?CCM}, {stop_worker, node(), ?MODULE}),
+            ?info("Terminating ~p", [?MODULE])
+    end,
+    ok.
+
+
+%% start_tcp_listener/4
+%% ====================================================================
+%% @doc Starts tcp listener and handles case when udp listener has already started, but
+%% tcp listener is unable to do so.
+%% @end
+%% ====================================================================
+-spec start_tcp_listener(AcceptorPool, Port, TransportOpts, Pid) -> ok when
+    AcceptorPool :: pos_integer(),
+    Port :: pos_integer(),
+    TransportOpts :: list(),
+    Pid :: pid().
+%% ====================================================================
+start_tcp_listener(AcceptorPool, Port, TransportOpts, Pid) ->
+    try
+        {ok, _} = ranch:start_listener(dns_tcp_listener, AcceptorPool, ranch_tcp, [{port, Port}],
+            dns_ranch_tcp_handler, TransportOpts)
+    catch
+        _:RanchError -> ok = supervisor:terminate_child(?Supervisor_Name, Pid),
+            supervisor:delete_child(?Supervisor_Name, Pid),
+            ?error("Start DNS TCP listener error, ~p", [RanchError]),
+            throw(RanchError)
+    end,
+    ok.
+
+%% clear_children_and_listeners/0
+%% ====================================================================
+%% @doc Clears listeners and created children
+%% @end
+%% ====================================================================
+-spec clear_children_and_listeners() -> ok.
+%% ====================================================================
+clear_children_and_listeners() ->
+    SafelyExecute = fun(Invoke, Log) ->
+        try
+            Invoke()
+        catch
+            _:Error -> ?error(Log, [Error])
+        end
+    end,
+
+    SafelyExecute(fun() -> ok = supervisor:terminate_child(?Supervisor_Name, ?DNS_UDP),
+        supervisor:delete_child(?Supervisor_Name, ?DNS_UDP)
+    end,
+        "Error stopping dns udp listener, status ~p"),
+
+    SafelyExecute(fun() -> ok = ranch:stop_listener(dns_tcp_listener)
+    end,
+        "Error stopping dns tcp listener, status ~p"),
+    ok.
 
 %% create_ans/2
 %% ====================================================================
@@ -261,109 +350,3 @@ make_ans_random(Result) ->
             NewRes = lists:sublist(Result, 1, NodeNum - 1) ++ lists:sublist(Result, NodeNum + 1, Len),
             [lists:nth(NodeNum, Result) | make_ans_random(NewRes)]
     end.
-
-
-%% ===================================================================
-%% dns_query_handler_behaviour API
-%% ===================================================================
-
-%% handle_a/1
-%% ====================================================================
-%% @doc Handles DNS queries of type A.
-%% @end
-%% ====================================================================
--spec handle_a(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_a(Domain) -> {ok, [{1, 2, 3, 4}, {1, 2, 3, 5}]}.
-
-
-%% handle_ns/1
-%% ====================================================================
-%% @doc Handles DNS queries of type NS.
-%% @end
-%% ====================================================================
--spec handle_ns(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_ns(Domain) -> {ok, ["handle_ns"]}.
-
-
-%% handle_cname/1
-%% ====================================================================
-%% @doc Handles DNS queries of type CNAME.
-%% @end
-%% ====================================================================
--spec handle_cname(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_cname(Domain) -> {ok, ["handle_cname", "handle_cname2"]}.
-
-
-%% handle_soa/1
-%% ====================================================================
-%% @doc Handles DNS queries of type SOA.
-%% @end
-%% ====================================================================
--spec handle_soa(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_soa(Domain) -> {ok, [{"handle_soa_mname", "handle_soa_rname", 1, 2, 3, 4, 5}]}.
-
-
-%% handle_wks/1
-%% ====================================================================
-%% @doc Handles DNS queries of type WKS.
-%% @end
-%% ====================================================================
--spec handle_wks(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_wks(Domain) -> {ok, [{{2, 3, 4, 5}, 6, [2#11111111,2#00000000,2#00000011]}]}.
-
-
-%% handle_ptr1
-%% ====================================================================
-%% @doc Handles DNS queries of type PTR.
-%% @end
-%% ====================================================================
--spec handle_ptr(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_ptr(Domain) -> {ok, ["handle_ptr"]}.
-
-
-%% handle_hinfo/1
-%% ====================================================================
-%% @doc Handles DNS queries of type HINFO.
-%% @end
-%% ====================================================================
--spec handle_hinfo(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_hinfo(Domain) -> {ok, [{"handle_hinfo_cpu", "handle_hinfo_os"}]}.
-
-
-%% handle_minfo/1
-%% ====================================================================
-%% @doc Handles DNS queries of type MINFO.
-%% @end
-%% ====================================================================
--spec handle_minfo(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_minfo(Domain) -> {ok, [{"handle_hinfo_rm", "handle_hinfo_em"}]}.
-
-
-%% handle_mx/1
-%% ====================================================================
-%% @doc Handles DNS queries of type MX.
-%% @end
-%% ====================================================================
--spec handle_mx(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_mx(Domain) -> {ok, [{123, "handle_mx"}]}.
-
-
-%% handle_txt/1
-%% ====================================================================
-%% @doc Handles DNS queries of type TXT.
-%% @end
-%% ====================================================================
--spec handle_txt(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_txt(Domain) -> {ok, [["handle_txt_siema", "argsgsg"]]}.
-
-

@@ -16,73 +16,71 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/3, loop/3]).
+-export([start_link/1, loop/1]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
-%% start_link/3
+%% start_link/1
 %% ====================================================================
 %% @doc Creates process to handle udp socket.
 %% @end
 %% ====================================================================
--spec start_link(Port, ResponseTTLInSecs, DispatcherTimeout) -> {ok, pid()} when
-	Port :: non_neg_integer(),
-	ResponseTTLInSecs :: non_neg_integer(),
-	DispatcherTimeout :: non_neg_integer().
+-spec start_link(Port) -> {ok, pid()} when
+    Port :: non_neg_integer().
 %% ====================================================================
-start_link(Port, ResponseTTLInSecs, DispatcherTimeout) ->
-	Pid = spawn_link(fun () -> open_socket_and_loop(Port, ResponseTTLInSecs, DispatcherTimeout) end),
-	{ok, Pid}.
+start_link(Port) ->
+    Pid = spawn_link(fun() -> open_socket_and_loop(Port) end),
+    {ok, Pid}.
 
-%% open_socket_and_loop/3
+%% open_socket_and_loop/1
 %% ====================================================================
 %% @doc Creates udp socket and starts looping.
 %% @end
 %% ====================================================================
--spec open_socket_and_loop(Port, ResponseTTL, DispatcherTimeout) -> no_return() when
-	Port :: non_neg_integer(),
-	ResponseTTL :: non_neg_integer(),
-	DispatcherTimeout :: non_neg_integer().
+-spec open_socket_and_loop(Port) -> no_return() when
+    Port :: non_neg_integer().
 %% ====================================================================
-open_socket_and_loop(Port, ResponseTTL, DispatcherTimeout) ->
-	Opts = [binary, {active, false}, {reuseaddr, true}, {recbuf, 32768}],
-	{ok, Socket} = gen_udp:open(Port, Opts),
-	loop(Socket, ResponseTTL, DispatcherTimeout).
+open_socket_and_loop(Port) ->
+    Opts = [binary, {active, false}, {reuseaddr, true}, {recbuf, 32768}],
+    {ok, Socket} = gen_udp:open(Port, Opts),
+    loop(Socket).
 
 
-%% loop/3
+%% loop/1
 %% ====================================================================
 %% @doc Loop maintaining state.
 %% @end
 %% ====================================================================
--spec loop(Socket, ResponseTTL, DispatcherTimeout) -> no_return() when
-	Socket :: inet:socket(),
-	ResponseTTL :: non_neg_integer(),
-	DispatcherTimeout :: non_neg_integer().
+-spec loop(Socket) -> no_return() when
+    Socket :: inet:socket().
 %% ====================================================================
-loop(Socket, ResponseTTL, DispatcherTimeout) ->
-	{ok, {Address, Port, Packet}} = gen_udp:recv(Socket, 0, infinity),
-	spawn(fun () -> handle_request(Socket, Address, Port, Packet, DispatcherTimeout, ResponseTTL) end),
-	?MODULE:loop(Socket, ResponseTTL, DispatcherTimeout).
+loop(Socket) ->
+    {ok, {Address, Port, Packet}} = gen_udp:recv(Socket, 0, infinity),
+    spawn(fun() -> handle_request(Socket, Address, Port, Packet) end),
+    ?MODULE:loop(Socket).
 
 
-%% handle_request/6
+%% handle_request/4
 %% ====================================================================
 %% @doc Handles dns request.
 %% @end
 %% ====================================================================
--spec handle_request(Socket, Address, Port, Packet, DispatcherTimeout, ResponseTTL) -> ok when
-	Socket :: inet:socket(),
-	Address :: inet:ip_address(),
-	Port :: inet:port_number(),
-	Packet :: binary(),
-	DispatcherTimeout :: non_neg_integer(),
-	ResponseTTL :: non_neg_integer().
+-spec handle_request(Socket, Address, Port, Packet) -> ok when
+    Socket :: inet:socket(),
+    Address :: inet:ip_address(),
+    Port :: inet:port_number(),
+    Packet :: binary().
 %% ====================================================================
-handle_request(Socket, Address, Port, Packet, DispatcherTimeout, ResponseTTL) ->
-	case dns_utils:generate_answer(Packet, ?Dispatcher_Name, DispatcherTimeout, ResponseTTL, udp) of
-		{ok, Response} -> gen_udp:send(Socket, Address, Port, Response);
-		{error, Reason} -> ?error("Error processing dns request ~p", [Reason]), ok
-	end.
+handle_request(Socket, Address, Port, Packet) ->
+    try
+        case dns_server:handle_query(Packet, udp) of
+            {ok, Response} ->
+                gen_udp:send(Socket, Address, Port, Response);
+            _ ->
+                ok
+        end
+    catch T:M ->
+        ?error_stacktrace("Error processing UDP DNS request ~p:~p", [T, M])
+    end.

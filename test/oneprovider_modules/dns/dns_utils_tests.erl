@@ -73,7 +73,7 @@ generate_answer__wrong_worker(Protocol) ->
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
 
-		{ok, BinResponse} = dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, 60, Protocol),
+		{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, 60, Protocol),
 		{ok, Response} = inet_dns:decode(BinResponse),
 
 		assert_standard_response(Response),
@@ -108,7 +108,7 @@ generate_answer__request_with_dispatcher_timeout(Protocol) ->
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
 
-		{ok, BinResponse} = dns_utils:generate_answer(BinMessage, Gen_Server, Dispatcher_Timeout, 60, Protocol),
+		{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, Gen_Server, Dispatcher_Timeout, 60, Protocol),
 		{ok, Response} = inet_dns:decode(BinResponse),
 
 		assert_standard_response(Response),
@@ -132,7 +132,7 @@ generate_answer__request_with_one_query_and_empty_answer(Protocol) ->
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
 
-		{ok, BinResponse} = dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, 60, Protocol),
+		{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, 60, Protocol),
 		{ok, Response} = inet_dns:decode(BinResponse),
 
 		assert_standard_response(Response),
@@ -157,7 +157,7 @@ generate_answer__request_with_one_query_and_one_answer(Protocol) ->
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
 
-		{ok, BinResponse} = dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
+		{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
 		{ok, Response} = inet_dns:decode(BinResponse),
 
 		assert_standard_response(Response, Domain, ResponseTTL),
@@ -181,7 +181,7 @@ generate_answer__request_with_one_query_and_multiple_answers(Protocol) ->
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
 
-		{ok, BinResponse} = dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
+		{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
 		{ok, Response} = inet_dns:decode(BinResponse),
 
 		assert_standard_response(Response, Domain, ResponseTTL),
@@ -197,7 +197,7 @@ generate_answer__request_with_no_query_and_no_answer(Protocol) ->
 	Message = create_request(create_standard_header(), []),
 	BinMessage = inet_dns:encode(Message),
 
-	{ok, BinResponse} = dns_utils:generate_answer(BinMessage, dummy_gen_server, 50, dummy_ttl, Protocol),
+	{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, dummy_gen_server, 50, dummy_ttl, Protocol),
 	{ok, Response} = inet_dns:decode(BinResponse),
 
 	assert_standard_response(Response),
@@ -218,7 +218,7 @@ generate_answer__request_with_one_query_and_nearly_truncated_answer(Protocol) ->
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
 
-		{ok, BinResponse} = dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
+		{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
 		{ok, Response} = inet_dns:decode(BinResponse),
 
 		assert_standard_response(Response, Domain, ResponseTTL),
@@ -242,7 +242,7 @@ generate_answer__request_with_one_query_and_truncated_answer(Protocol) ->
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
 
-		{ok, BinResponse} = dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
+		{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
 		{ok, Response} = inet_dns:decode(BinResponse),
 
 		assert_standard_response(Response, Domain, ResponseTTL),
@@ -271,7 +271,7 @@ generate_answer__request_with_multiple_query_and_one_answer(Protocol) ->
 		Message = create_request(create_standard_header(), [create_supported_query(Domain), WrongQuery]),
 		BinMessage = inet_dns:encode(Message),
 
-		{ok, BinResponse} = dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
+		{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
 		{ok, Response} = inet_dns:decode(BinResponse),
 
 		assert_standard_response(Response, Domain, ResponseTTL),
@@ -296,7 +296,7 @@ generate_answer__request_with_multiple_query_and_multiple_answer_number_of_answe
 		Message = create_supported_request(Domain, 3),
 		BinMessage = inet_dns:encode(Message),
 
-		{ok, BinResponse} = dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
+		{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
 		{ok, Response} = inet_dns:decode(BinResponse),
 
 		assert_standard_response(Response, Domain, ResponseTTL),
@@ -321,7 +321,7 @@ generate_answer__request_with_multiple_query_and_multiple_answer_number_of_answe
 		Message = create_supported_request(Domain, 3),
 		BinMessage = inet_dns:encode(Message),
 
-		{ok, BinResponse} = dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
+		{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
 		{ok, Response} = inet_dns:decode(BinResponse),
 
 		assert_standard_response(Response, Domain, ResponseTTL),
@@ -345,7 +345,7 @@ generate_answer__request_with_multiple_query_and_multiple_answer(Protocol) ->
 		Message = create_supported_request(Domain, 3),
 		BinMessage = inet_dns:encode(Message),
 
-		{ok, BinResponse} = dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
+		{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
 		{ok, Response} = inet_dns:decode(BinResponse),
 
 		assert_standard_response(Response, Domain, ResponseTTL),
@@ -369,7 +369,7 @@ generate_answer__request_domain_ending_with_dot(Protocol) ->
 		Message = create_supported_request(Domain ++ "."),
 		BinMessage = inet_dns:encode(Message),
 
-		{ok, BinResponse} = dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
+		{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, Gen_Server, ?DISPATCHER_TIMEOUT, ResponseTTL, Protocol),
 		{ok, Response} = inet_dns:decode(BinResponse),
 
 		assert_standard_response(Response, Domain, ResponseTTL),
@@ -392,7 +392,7 @@ generate_answer__with_query_params(Protocol, Type, Class) ->
 	Message = create_request(create_standard_header(), #dns_query{domain=Domain, type=Type, class=Class}),
 	BinMessage = inet_dns:encode(Message),
 
-	{ok, BinResponse} = dns_utils:generate_answer(BinMessage, dummy_gen_server, ?DISPATCHER_TIMEOUT, 60, Protocol),
+	{ok, BinResponse} = old_dns_utils:generate_answer(BinMessage, dummy_gen_server, ?DISPATCHER_TIMEOUT, 60, Protocol),
 	{ok, Response} = inet_dns:decode(BinResponse),
 
 	assert_standard_response(Response),

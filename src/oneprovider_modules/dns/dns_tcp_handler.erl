@@ -9,7 +9,7 @@
 %% @end
 %% ===================================================================
 
--module(dns_ranch_tcp_handler).
+-module(dns_tcp_handler).
 -behaviour(ranch_protocol).
 
 -include("registered_names.hrl").
@@ -18,7 +18,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/4, loop/5]).
+-export([start_link/4, loop/3]).
 
 %% ====================================================================
 %% API functions
@@ -30,12 +30,12 @@
 %% @end
 %% ====================================================================
 -spec start_link(Ref :: term(), Socket :: term(), Transport :: term(), Opts :: term()) -> Result when
-	Result ::  {ok, Pid},
-	Pid :: pid().
+    Result :: {ok, Pid},
+    Pid :: pid().
 %% ====================================================================
 start_link(Ref, Socket, Transport, Opts) ->
-	Pid = spawn_link(fun () -> init(Ref, Socket, Transport, Opts) end),
-	{ok, Pid}.
+    Pid = spawn_link(fun() -> init(Ref, Socket, Transport, Opts) end),
+    {ok, Pid}.
 
 
 %% init/4
@@ -44,59 +44,58 @@ start_link(Ref, Socket, Transport, Opts) ->
 %% @end
 %% ====================================================================
 -spec init(Ref :: term(), Socket :: term(), Transport :: term(), Opts :: list()) -> Result when
-	Result ::  ok.
+    Result :: ok.
 %% ====================================================================
 init(Ref, Socket, Transport, Opts) ->
-	TransportOpts = ranch:filter_options(Opts, [packet, keepalive], []),
+    TransportOpts = ranch:filter_options(Opts, [packet, keepalive], []),
 
-	ResponseTTL = proplists:get_value(dns_response_ttl, Opts, 60),
-	TCPIdleTimeInSecs = proplists:get_value(dns_tcp_timeout, Opts, 30),
-	DispatcherTimeout = proplists:get_value(dispatcher_timeout, Opts, 30),
-	TCPIdleTime = timer:seconds(TCPIdleTimeInSecs),
+    TCPIdleTimeInSecs = proplists:get_value(dns_tcp_timeout, Opts, 30),
+    TCPIdleTime = timer:seconds(TCPIdleTimeInSecs),
 
-	Transport:setopts(Socket, TransportOpts),
-	ok = ranch:accept_ack(Ref),
-	loop(Socket, Transport, ResponseTTL, TCPIdleTime, DispatcherTimeout).
+    Transport:setopts(Socket, TransportOpts),
+    ok = ranch:accept_ack(Ref),
+    loop(Socket, Transport, TCPIdleTime).
 
 
-%% loop/5
+%% loop/3
 %% ====================================================================
 %% @doc Main handler loop.
 %% @end
 %% ====================================================================
--spec loop(Socket, Transport, ResponseTTL, TCPIdleTime, DispatcherTimeout) -> ok when
-	Socket :: inet:socket(),
-	Transport :: term(),
-	ResponseTTL :: non_neg_integer(),
-	TCPIdleTime :: non_neg_integer(),
-	DispatcherTimeout :: non_neg_integer().
+-spec loop(Socket, Transport, TCPIdleTime) -> ok when
+    Socket :: inet:socket(),
+    Transport :: term(),
+    TCPIdleTime :: non_neg_integer().
 %% ====================================================================
-loop(Socket, Transport, ResponseTTL, TCPIdleTime, DispatcherTimeout) ->
-	case Transport:recv(Socket, 0, TCPIdleTime) of
-		{ok, Packet} -> handle_request(Socket, Transport, Packet, ResponseTTL, DispatcherTimeout),
-						?MODULE:loop(Socket, Transport, ResponseTTL, TCPIdleTime, DispatcherTimeout);
-		{error, closed} -> ok;
-		{error, Reason} -> ?warning("Error receiving packet, reason ~p", [Reason]),
-						   Transport:close(Socket)
-	end.
+loop(Socket, Transport, TCPIdleTime) ->
+    case Transport:recv(Socket, 0, TCPIdleTime) of
+        {ok, Packet} -> handle_request(Socket, Transport, Packet),
+            ?MODULE:loop(Socket, Transport, TCPIdleTime);
+        {error, closed} -> ok;
+        {error, Reason} -> ?warning("Error receiving packet, reason ~p", [Reason]),
+            Transport:close(Socket)
+    end.
 
 
-%% handle_request/5
+%% handle_request/3
 %% ====================================================================
 %% @doc Handles dns request.
 %% @end
 %% ====================================================================
--spec handle_request(Socket, Transport, Packet, ResponseTTL, DispatcherTimeout) -> term() when
-	Socket :: inet:socket(),
-	Transport :: term(),
-	Packet :: binary(),
-	ResponseTTL :: non_neg_integer(),
-	DispatcherTimeout :: non_neg_integer().
-
+-spec handle_request(Socket, Transport, Packet) -> term() when
+    Socket :: inet:socket(),
+    Transport :: term(),
+    Packet :: binary().
 %% ====================================================================
-handle_request(Socket, Transport, Packet, ResponseTTL, DispatcherTimeout) ->
-	case dns_utils:generate_answer(Packet, ?Dispatcher_Name, DispatcherTimeout, ResponseTTL, tcp) of
-		{ok, Response} -> Transport:send(Socket, Response);
-		{error, Reason} -> ?error("Error processing dns request ~p", [Reason]),
-						   Transport:close(Socket)
-	end.
+handle_request(Socket, Transport, Packet) ->
+    try
+        case  dns_server:handle_query(Packet, tcp) of
+            {ok, Response} ->
+                Transport:send(Socket, Response);
+            _ ->
+                Transport:close(Socket)
+        end
+    catch T:M ->
+        ?error_stacktrace("Error processing TCP DNS request ~p:~p", [T, M]),
+        Transport:close(Socket)
+    end.
