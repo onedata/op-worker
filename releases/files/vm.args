@@ -1,8 +1,8 @@
 ## Name of the node
--name {{name}}
+-name nonode@nohost
 
 ## Cookie for distributed erlang
--setcookie {{cookie}}
+-setcookie oneprovider_node
 
 ## Treat lager warnings as warnings
 +W w
