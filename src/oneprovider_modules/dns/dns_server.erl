@@ -18,24 +18,36 @@
 -include("supervision_macros.hrl").
 
 
+% Maximum size of UDP DNS reply (without EDNS) as in RFC1035.
+-define(NOEDNS_UDP_SIZE, 512).
+
+
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start/5, stop/0, handle_query/2, start_listening/3, test/1, test/2]).
+-export([start/6, stop/0, handle_query/2, start_listening/3]).
+
+% Server configuration (in runtime)
+-export([set_handler_module/1, get_handler_module/0, set_dns_response_ttl/1, get_dns_response_ttl/0, set_max_edns_udp_size/1, get_max_edns_udp_size/0]).
+
+% TODO
+-export([test/1, test/2]).
 
 
-%% start/5
+%% start/6
 %% ====================================================================
 %% @doc Starts a DNS server. The server will listen on chosen port (UDP and TCP).
 %% QueryHandlerModule must conform to dns_query_handler_behaviour.
 %% @end
 %% ====================================================================
--spec start(DNSPort :: integer(), QueryHandlerModule :: atom(), DNSResponseTTL :: integer(),
+-spec start(DNSPort :: integer(), QueryHandlerModule :: atom(), DNSResponseTTL :: integer(), EdnsMaxUdpSize :: integer(),
     TCPNumAcceptors :: integer(), TCPTimeout :: integer()) -> ok | {error, Reason :: term()}.
 %% ====================================================================
-start(DNSPort, QueryHandlerModule, DNSResponseTTL, TCPNumAcceptors, TCPTimeout) ->
+start(DNSPort, QueryHandlerModule, DNSResponseTTL, EdnsMaxUdpSize, TCPNumAcceptors, TCPTimeout) ->
+    % TODO supervisor do argsow
     set_handler_module(QueryHandlerModule),
     set_dns_response_ttl(DNSResponseTTL),
+    set_max_edns_udp_size(EdnsMaxUdpSize),
     case proc_lib:start(?MODULE, start_listening, [DNSPort, TCPNumAcceptors, TCPTimeout], 500) of
         {ok, _Pid} ->
             ok;
@@ -58,6 +70,7 @@ handle_query(Packet, Transport) ->
                 bad_version ->
                     generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?BADVERS)}, Transport);
                 ok ->
+                    ?dump(DNSRec),
                     HandlerModule = get_handler_module(),
                     [#dns_query{domain = Domain, type = Type, class = Class}] = QDList,
                     case call_handler_module(HandlerModule, list_to_binary(Domain), Type) of
@@ -79,7 +92,8 @@ handle_query(Packet, Transport) ->
                                         {ttl, get_dns_response_ttl()},
                                         {class, Class}])
                                 end, ResponseList),
-                            ?dump(AnList),
+                            %% Set AA flag (Authoritative Answer) if the server can answer - this DNS server can handle only queries
+                            %% concerning its domain, so all valid answers are authoritative.
                             generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, aa, AnList /= []), anlist = AnList}, Transport)
                     end
             end;
@@ -121,7 +135,6 @@ validate_query(DNSRec) ->
     {ok, [binary()]} | serv_fail | nx_domain  | not_impl | refused.
 %% ====================================================================
 call_handler_module(HandlerModule, Domain, Type) ->
-    ?dump({HandlerModule, Domain, Type}),
     case type_to_fun(Type) of
         not_impl ->
             not_impl;
@@ -160,14 +173,38 @@ type_to_fun(_) -> not_impl.
 -spec generate_answer(DNSRec :: #dns_rec{}, Transport :: atom()) -> {ok, binary()}.
 %% ====================================================================
 generate_answer(DNSRec, Transport) ->
-    %% TODO ustawic aa jesli umiemy odpowiedziec na zadany hostname
+    % Update the header - no recursion available, qr=true -> it's a response
     Header2 = inet_dns:make_header(DNSRec#dns_rec.header, ra, false),
     NewHeader = inet_dns:make_header(Header2, qr, true),
-    Packet = inet_dns:encode(DNSRec#dns_rec{header = NewHeader}),
+    DNSRecUpdatedHeader = DNSRec#dns_rec{header = NewHeader},
+    % Check if OPT RR is present. If so, check client's max upd payload size and set the value to server's max udp.
+    {NewDnsRec, ClientMaxUDP} = case DNSRecUpdatedHeader#dns_rec.arlist of
+                                    [#dns_rr_opt{udp_payload_size = ClMaxUDP} = RROPT] ->
+                                        {DNSRecUpdatedHeader#dns_rec{arlist = [RROPT#dns_rr_opt{udp_payload_size = get_max_edns_udp_size()}]}, ClMaxUDP};
+                                    [] ->
+                                        {DNSRecUpdatedHeader, undefined}
+                                end,
     case Transport of
-        udp -> {ok, Packet};
-        tcp -> {ok, Packet}
+        udp -> {ok, encode_udp(NewDnsRec, ClientMaxUDP)};
+        tcp -> {ok, inet_dns:encode(NewDnsRec)}
     end.
+
+
+%% encode_udp/2
+%% ====================================================================
+%% @doc Encodes a DNS record and truncates it if required.
+%% @end
+%% ====================================================================
+-spec encode_udp(DNSRec :: #dns_rec{}, ClientMaxUDP :: integer() | undefined) -> binary().
+%% ====================================================================
+encode_udp(#dns_rec{arlist = [#dns_rr_opt{} = RROPT]} = DNSRec, ClientMaxUDP) ->
+%%     TruncationSize = case ArList of
+%%                          [] ->
+%%                              ?MAX_UDP_SIZE;
+%%                          [#dns_rr_opt{udp_payload_size = Size}] ->
+%%                              min(?MAX_UDP_SIZE, Size)
+%%                      end,
+    Packet = inet_dns:encode(DNSRec#dns_rec{arlist = [RROPT#dns_rr_opt{udp_payload_size = 1234}]}).
 
 
 %% start_listening/3
@@ -306,16 +343,37 @@ get_dns_response_ttl() ->
     TTLInt.
 
 
+%% set_max_udp_size/1
+%% ====================================================================
+%% @doc Saves DNS response TTL in application env.
+%% @end
+%% ====================================================================
+-spec set_max_edns_udp_size(Size :: integer()) -> ok.
+%% ====================================================================
+set_max_edns_udp_size(Size) ->
+    ok = application:set_env(ctool, edns_max_udp_size, Size).
+
+
+%% get_max_udp_size/0
+%% ====================================================================
+%% @doc Retrieves DNS response TTL from application env.
+%% @end
+%% ====================================================================
+-spec get_max_edns_udp_size() -> integer().
+%% ====================================================================
+get_max_edns_udp_size() ->
+    {ok, Size} = application:get_env(ctool, edns_max_udp_size),
+    Size.
 
 
 test(Domain) ->
-    test(Domain, {8,8,8,8}).
+    test(Domain, {8, 8, 8, 8}).
 
 test(Domain, NS) ->
     Query = inet_dns:encode(
         #dns_rec{
             header = #dns_header{
-                id = crypto:rand_uniform(1,16#FFFF),
+                id = crypto:rand_uniform(1, 16#FFFF),
                 opcode = 'query',
                 rd = true
             },
@@ -323,7 +381,8 @@ test(Domain, NS) ->
                 domain = Domain,
                 type = a,
                 class = in
-            }]
+            }],
+            arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, <<>>}]
         }),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
     gen_udp:send(Socket, NS, 53, Query),

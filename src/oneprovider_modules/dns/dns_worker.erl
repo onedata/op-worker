@@ -47,10 +47,11 @@ init([]) ->
     ?dump(start_dns_server),
     {ok, DNSPort} = application:get_env(?APP_Name, dns_port),
     {ok, DNSResponseTTL} = application:get_env(?APP_Name, dns_response_ttl),
+    {ok, EdnsMaxUdpSize} = application:get_env(?APP_Name, edns_max_udp_size),
 %%     {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
     {ok, TCPNumAcceptors} = application:get_env(?APP_Name, dns_tcp_acceptor_pool_size),
     {ok, TCPTImeout} = application:get_env(?APP_Name, dns_tcp_timeout),
-    dns_server:start(DNSPort, dns_worker, DNSResponseTTL, TCPNumAcceptors, TCPTImeout),
+    dns_server:start(DNSPort, dns_worker, DNSResponseTTL, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout),
     #dns_worker_state{};
 
 init(InitialState) when is_record(InitialState, dns_worker_state) ->
@@ -314,7 +315,7 @@ handle_soa(Domain) -> {ok, [{"handle_soa_mname", "handle_soa_rname", 1, 2, 3, 4,
 %% ====================================================================
 -spec handle_wks(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
 %% ====================================================================
-handle_wks(Domain) -> {ok, [{{2, 3, 4, 5}, 6, [2#11111111,2#00000000,2#00000011]}]}.
+handle_wks(Domain) -> {ok, [{{2, 3, 4, 5}, 6, [2#11111111, 2#00000000, 2#00000011]}]}.
 
 
 %% handle_ptr1
