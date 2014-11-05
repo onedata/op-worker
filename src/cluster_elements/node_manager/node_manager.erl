@@ -24,6 +24,7 @@
 
 %% Path (relative to domain) on which cowboy expects client's requests
 -define(ONECLIENT_URI_PATH, "/oneclient").
+-define(ONEPROVIDER_URI_PATH, "/oneprovider").
 
 %% ------------
 % GUI and cowboy related defines
@@ -1244,7 +1245,10 @@ start_dispatcher_listener() ->
     Pid = spawn_link(fun() -> oneproxy:start(Port, LocalPort, CertFile, verify_peer) end),
     register(?ONEPROXY_DISPATCHER, Pid),
 
-    Dispatch = cowboy_router:compile([{'_', [{?ONECLIENT_URI_PATH, ws_handler, []}]}]),
+    Dispatch = cowboy_router:compile([{'_', [
+        {?ONECLIENT_URI_PATH, ws_handler, []},
+        {?ONEPROVIDER_URI_PATH, provider_handler, []}
+    ]}]),
 
     {ok, _} = cowboy:start_http(?dispatcher_listener, DispatcherPoolSize,
         [

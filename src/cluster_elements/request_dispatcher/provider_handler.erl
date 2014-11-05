@@ -61,7 +61,7 @@ init(_Proto, _Req, _Opts) ->
 -spec websocket_init(TransportName :: atom(), Req :: term(), Opts :: list()) -> {ok, Req :: term(), State :: term()} | {shutdown, Req :: term()}.
 %% ====================================================================
 websocket_init(TransportName, Req, _Opts) ->
-    ?debug("WebSocket connection received. Transport: ~p", [TransportName]),
+    ?info("Provider's WebSocket connection received. Transport: ~p", [TransportName]),
 
     {ClientSubjectDN, _} = cowboy_req:header(<<"onedata-internal-client-subject-dn">>, Req),
     {SessionId, _} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
@@ -114,7 +114,9 @@ websocket_handle({binary, Data}, Req, #handler_state{} = State) ->
     catch
         wrong_message_format                            -> {reply, {binary, encode_rtresponse(wrong_message_format)}, Req, State};
         {wrong_internal_message_type, MsgId2}           -> {reply, {binary, encode_rtresponse(wrong_internal_message_type, MsgId2)}, Req, State};
-        {message_not_supported, MsgId2}                 -> {reply, {binary, encode_rtresponse(message_not_supported, MsgId2)}, Req, State};
+        {message_not_supported, MsgId2}                 ->
+            ?info("Dafuq ~p", [erlang:get_stacktrace()]),
+            {reply, {binary, encode_rtresponse(message_not_supported, MsgId2)}, Req, State};
         {handshake_error, _HError, MsgId2}              -> {reply, {binary, encode_rtresponse(handshake_error, MsgId2)}, Req, State};
         {no_credentials, MsgId2}                        -> {reply, {binary, encode_rtresponse(no_credentials, MsgId2)}, Req, State};
         {no_user_found_error, _HError, MsgId2}          -> {reply, {binary, encode_rtresponse(no_user_found_error, MsgId2)}, Req, State};
@@ -279,7 +281,9 @@ decode_rtrequest_pb(MsgBytes) ->
     {Decoder, DecodingFun, ModuleNameAtom} = try
                                                  {list_to_existing_atom(Message_decoder_name ++ "_pb"), list_to_existing_atom("decode_" ++ Message_type), list_to_existing_atom(ModuleName)}
                                              catch
-                                                 _:_ -> throw({message_not_supported, MsgId})
+                                                 _:_ ->
+                                                     ?info("OMG: ~p ~p ~p", [Message_decoder_name, Message_type, ModuleName]),
+                                                     throw({message_not_supported, MsgId})
                                              end,
 
     Msg =

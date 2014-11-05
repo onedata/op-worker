@@ -179,7 +179,7 @@ handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Me
     catch
         error:{badmatch, {error, Err}} -> {error, Err};
         _Type:Error ->
-%%             ?error("Handling ~p:~p with args ~p interrupted by exception: ~p:~p ~n ~p", [Module, Method, Args, Type, Error, erlang:get_stacktrace()]),
+            ?error_stacktrace("Handling ~p:~p with args ~p interrupted by exception: ~p:~p", [Module, Method, Args, _Type, Error]),
             {error, Error}
     end;
 handle(ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->

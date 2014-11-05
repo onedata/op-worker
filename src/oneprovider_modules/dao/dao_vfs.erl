@@ -24,7 +24,7 @@
 -export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
--export([get_space_file/1, get_space_files/1]).
+-export([get_space_file/1, get_space_files/1, file_by_meta_id/1]).
 
 
 -ifdef(TEST).
@@ -1111,6 +1111,20 @@ find_by_times(FileCriteria) ->
     Result = lists:filter(fun(#view_row{doc = FileDoc}) ->
         lists:member(FileDoc#db_document.record#file.type, DesiredTypes) end, Rows),
     {ok, lists:map(fun(#view_row{id = Id}) -> Id end, Result)}.
+
+
+file_by_meta_id(MetaUUID) ->
+    Rows = fetch_rows(?FILES_BY_META_DOC, #view_query_args{keys = [
+        [dao_helper:name(MetaUUID), 0],
+        [dao_helper:name(MetaUUID), 1],
+        [dao_helper:name(MetaUUID), 2]
+    ], include_docs = true}),
+    Files = lists:map(fun(#view_row{doc = FileDoc}) -> FileDoc end, Rows),
+    case Files of
+        [] -> {error, {not_found, missing}};
+        [#db_document{} = FileDoc] ->
+            {ok, FileDoc}
+    end.
 
 %% get_file_meta_ids/1
 %% ====================================================================

@@ -17,17 +17,32 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([set_db/1, get_db/0, record_info/1, is_valid_record/1, sequential_synch_call/3, view_def_location/0, on_doc_save/4, on_doc_get/2]).
+-export([set_db/1, get_db/0, record_info/1, is_valid_record/1, sequential_synch_call/3, view_def_location/0, on_doc_save/4, on_doc_get/3, on_view_query/3]).
 
 on_doc_save(DbName, #db_document{} = Doc, NewRew, Opts) ->
-    ?info("on save ==============================> ~p ~p ~p", [DbName, NewRew, Opts]),
-    ok = gen_server:call(?Dispatcher_Name, {dbsync, 1, {{event, doc_saved}, {DbName, Doc, NewRew, Opts}}});
+    %% ?info("on doc_save ==============================> ~p ~p ~p ~p", [DbName, Doc, NewRew, Opts]),
+    case lists:member(replicated_changes, Opts) of
+        false ->
+            ok = gen_server:call(?Dispatcher_Name, {dbsync, 1, {{event, doc_saved}, {DbName, Doc, NewRew, Opts}}});
+        true ->
+            ok
+    end;
 on_doc_save(DbName, Unkn, NewRew, Opts) ->
     ?info("Unknown doc_save ========================> ~p ~p ~p ~p", [DbName, Unkn, NewRew, Opts]),
     ok.
 
-on_doc_get(DbName, DBDocument) ->
-    ok.
+on_doc_get(DbName, DocUUID, DocRev) ->
+    case DocUUID of
+        <<"">> -> ok;
+        "" -> ok;
+        _ ->
+            %% ?info("on doc_get ========================> ~p ~p ~p", [DbName, DocUUID, DocRev]),
+            ok = gen_server:call(?Dispatcher_Name, {dbsync, 1, {{event, doc_requested}, {DbName, DocUUID, DocRev}}})
+    end.
+
+on_view_query(ViewInfo, QueryArgs, UUIDs) ->
+    %% ?info("on view_query ========================> ~p ~p ~p", [ViewInfo, QueryArgs, UUIDs]),
+    ok = gen_server:call(?Dispatcher_Name, {dbsync, 1, {{event, view_queried}, {ViewInfo, QueryArgs, UUIDs}}}).
 
 %% set_db/1
 %% ====================================================================

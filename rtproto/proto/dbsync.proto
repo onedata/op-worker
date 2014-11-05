@@ -1,11 +1,27 @@
 package one.rtproto.dbsync;
 
-message DocUpdated {
-    required bytes document = 1;
-    required int32 depth = 2;
-    required bytes ledge = 3;
-    required bytes redge = 4;
-    required bytes space_id = 5;
-    repeated bytes excluded_providers = 6;
+message TreeBroadcast {
+    required string message_type = 1;
+    required bytes input = 2;
+    required int32 depth = 3;
+    required bytes ledge = 4;
+    required bytes redge = 5;
+    required bytes space_id = 6;
+    repeated bytes excluded_providers = 7;
 }
 
+message DocUpdated {
+    required bytes document = 1;
+}
+
+message ReportDocVersion {
+    required bytes doc_db_name = 1;
+    required bytes doc_uuid = 2;
+    required bytes doc_rev = 3;
+}
+
+message ReportViewQueryResult {
+    required bytes view_info = 1;
+    required bytes query_args = 2;
+    repeated bytes uuids = 3;
+}
