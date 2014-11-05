@@ -20,6 +20,9 @@
 % Range of file value given in bytes ('from' and 'to' are inslusive)
 -record(byte_range, {from = 0, to = 0}).
 
+% Range of file value given in offset-size format
+-record(offset_range, {offset = 0, size = 0}).
+
 % Range of file value given in remote_blocks ('from' and 'to' are inslusive)
 -record(block_range, {from = 0, to = 0}).
 

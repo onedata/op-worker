@@ -75,6 +75,37 @@ mark_as_modified_test() ->
         #remote_file_part{range = #block_range{from = 95, to = 120}, providers = [Pr3]}
     ], List8).
 
+mark_as_available_test() ->
+    Pr1 = "uuid1",
+    Pr2 = "uuid2",
+    Pr3 = "uuid3",
+
+    List1 = [
+        #remote_file_part{range = #block_range{from = 0, to = 1}, providers = [Pr2]},
+        #remote_file_part{range = #block_range{from = 2, to = 4}, providers = [Pr1]},
+        #remote_file_part{range = #block_range{from = 5, to = 9}, providers = [Pr2]},
+        #remote_file_part{range = #block_range{from = 10, to = 10}, providers = [Pr3]},
+        #remote_file_part{range = #block_range{from = 11, to = 100}, providers = [Pr1]}
+    ],
+    Result1 = fslogic_remote_location:mark_as_available(
+        [#block_range{from = 1, to = 3}, #block_range{from = 4, to = 4}, #block_range{from = 10, to = 12}, #block_range{from = 22, to = 30}],
+        List1,
+        Pr3
+    ),
+    ?assertEqual(
+        [
+            #remote_file_part{range = #block_range{from = 0, to = 0}, providers = [Pr2]},
+            #remote_file_part{range = #block_range{from = 1, to = 1}, providers = [Pr3, Pr2]},
+            #remote_file_part{range = #block_range{from = 2, to = 4}, providers = [Pr3, Pr1]},
+            #remote_file_part{range = #block_range{from = 5, to = 9}, providers = [Pr2]},
+            #remote_file_part{range = #block_range{from = 10, to = 10}, providers = [Pr3]},
+            #remote_file_part{range = #block_range{from = 11, to = 12}, providers = [Pr3, Pr1]},
+            #remote_file_part{range = #block_range{from = 13, to = 21}, providers = [Pr1]},
+            #remote_file_part{range = #block_range{from = 22, to = 30}, providers = [Pr3,Pr1]},
+            #remote_file_part{range = #block_range{from = 31, to = 100}, providers = [Pr1]}
+        ], Result1).
+
+
 check_if_synchronized_test() ->
     Pr1 = "uuid1",
     Pr2 = "uuid2",

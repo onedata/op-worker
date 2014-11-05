@@ -27,7 +27,7 @@
 -export([get_space_file/1, get_space_files/1]).
 -export([list_file_locations/1, get_file_locations/1, save_file_location/1, remove_file_location/1]).
 -export([list_file_blocks/1, get_file_blocks/1, save_file_block/1, remove_file_block/1]).
--export([save_remote_location/1]).
+-export([save_remote_location/1, get_remote_location/1]).
 
 
 -ifdef(TEST).
@@ -785,6 +785,17 @@ save_remote_location(#remote_location{} = RemoteLocation) ->
 save_remote_location(#db_document{record = #file_block{}} = RemoteLocationDoc) ->
     dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:save_record(RemoteLocationDoc).
+
+%% get_remote_location/1
+%% ====================================================================
+%% @doc Gets remote location document from the database
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec get_remote_location(Uuid :: uuid()) -> {ok, remote_location_doc()} | {error, any()}.
+%% ====================================================================
+get_remote_location(Uuid) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:get_record(Uuid).
 
 %% list_dir/3
 %% ====================================================================

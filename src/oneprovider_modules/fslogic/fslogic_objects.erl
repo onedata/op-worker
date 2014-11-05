@@ -25,6 +25,7 @@
 -export([get_user/0, get_user/1]).
 -export([save_file/1, get_storage/1]).
 -export([get_space/1]).
+-export([get_remote_location/1]).
 
 %% ====================================================================
 %% API functions
@@ -313,6 +314,16 @@ delete_old_descriptors(ProtocolVersion, Time) ->
             ?error("Error during clearing old descriptors: ~p", [Other]),
             Other
     end.
+
+%% get_remote_location/2
+%% ====================================================================
+%% @doc Gets remote_location of file
+%% @end
+-spec get_remote_location(FullFileName :: string()) -> remote_location_doc().
+%% ====================================================================
+get_remote_location(FullFileName) ->
+    {ok, #db_document{record = #file{remote_location = RemoteLocationId}}} = get_file(FullFileName),
+    dao_lib:apply(dao_vfs, get_remote_location, [RemoteLocationId]).
 
 %% ====================================================================
 %% Internal functions

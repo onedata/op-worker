@@ -134,6 +134,8 @@ get_answer_decoder_and_type(#fusemessage{input = #getacl{}}) ->
     {fuse_messages, acl};
 get_answer_decoder_and_type(#fusemessage{input = #setacl{}}) ->
     {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #synchronizefileblock{}}) ->
+    {communication_protocol, atom};
 
 get_answer_decoder_and_type(#remotefilemangement{input = #createfile{}}) ->
     {communication_protocol, atom};

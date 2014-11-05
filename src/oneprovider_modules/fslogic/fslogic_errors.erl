@@ -126,6 +126,8 @@ gen_error_message(storagetestfilemodifiedrequest, _) ->
     #storagetestfilemodifiedresponse{answer = false};
 gen_error_message(clientstorageinfo, Error) ->
     #atom{value = Error};
+gen_error_message(synchronizefileblock, Error) ->
+    #atom{value = Error};
 gen_error_message(RecordName, _Error) ->
     ?error("Unsupported record: ~p", [RecordName]),
     throw({unsupported_record, RecordName}).
