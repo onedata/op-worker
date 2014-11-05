@@ -14,12 +14,9 @@ src/gui_static/n2o
 
 releases/oneprovider_node
 releases/test_cluster
-releases/files/sys.config
-releases/files/vm.args
 releases/*.rpm
 
 include/*_pb.hrl
-src/oneprovider_node.app.src
 test/eunit_results
 
 deps

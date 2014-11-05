@@ -100,4 +100,4 @@ sequential_synch_call(Module,Function,Args) ->
 %% ====================================================================
 view_def_location() ->
     {ok, Location} = application:get_env(oneprovider_node, view_def_location),
-    atom_to_list(Location).
+    Location.
