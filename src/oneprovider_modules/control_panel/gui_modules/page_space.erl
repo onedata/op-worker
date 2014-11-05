@@ -86,7 +86,7 @@ title() ->
 %% ====================================================================
 body(#space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
     MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
-    #panel{class= <<"page-container">>, body = [
+    #panel{class = <<"page-container">>, body = [
         #panel{
             id = <<"main_spinner">>,
             style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>,
@@ -96,20 +96,15 @@ body(#space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
         },
         opn_gui_utils:top_menu(spaces_tab, opn_gui_utils:breadcrumbs([{<<"Spaces">>, <<"/spaces">>}, {SpaceName, <<"/space?id=", SpaceId/binary>>}])),
         #panel{
-            id = <<"ok_message">>,
-            style = MessageStyle,
-            class = <<"dialog dialog-success">>
-        },
-        #panel{
-            id = <<"error_message">>,
-            style = MessageStyle,
-            class = <<"dialog dialog-danger">>
-        },
-        #panel{
-            style = <<"margin-bottom: 100px;">>,
+            style = <<"top: 62px; position: relative;">>,
             body = [
+                #panel{
+                    id = <<"message">>,
+                    style = <<"width: 100%; padding: 0.5em 0; margin: 0 auto; border: 0; display: none;">>,
+                    class = <<"dialog">>
+                },
                 #h6{
-                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; text-align: center;">>,
+                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 30px; text-align: center;">>,
                     body = <<"Manage Space">>
                 },
                 space_details_table(SpaceDetails) |
@@ -640,7 +635,7 @@ comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, use
                             gui_jq:wire(<<"box.on('shown',function(){ $(\"#support_token_textbox\").focus().select(); });">>);
                         Other ->
                             ?error("Cannot get support token for Space with ID ~p: ~p", [SpaceId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get support token for Space with ID: <b>", SpaceId, "</b>."
+                            opn_gui_utils:message(error, <<"Cannot get support token for Space with ID: <b>", SpaceId, "</b>."
                             "<br>Please try again later.">>)
                     end,
                     State;
@@ -655,7 +650,7 @@ comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, use
                             gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_token_textbox\").focus().select(); });">>);
                         Other ->
                             ?error("Cannot get user invitation token for Space with ID ~p: ~p", [SpaceId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."
+                            opn_gui_utils:message(error, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."
                             "<br>Please try again later.">>)
                     end,
                     State;
@@ -670,7 +665,7 @@ comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, use
                             gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_token_textbox\").focus().select(); });">>);
                         Other ->
                             ?error("Cannot get group invitation token for Space with ID ~p: ~p", [SpaceId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."
+                            opn_gui_utils:message(error, <<"Cannot get invitation token for Space with ID: <b>", SpaceId, "</b>."
                             "<br>Please try again later.">>)
                     end,
                     State;
@@ -682,7 +677,7 @@ comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, use
                             gui_jq:update(<<"space_name">>, space_name(SpaceDetails#space_details{name = NewSpaceName}));
                         Other ->
                             ?error("Cannot change name of Space ~p: ~p", [SpaceDetails, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot change name of Space with ID:  <b>", SpaceId, "</b>."
+                            opn_gui_utils:message(error, <<"Cannot change name of Space with ID:  <b>", SpaceId, "</b>."
                             "<br>Please try again later.">>),
                             gui_jq:update(<<"space_name">>, space_name(SpaceDetails))
                     end,
@@ -691,36 +686,36 @@ comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, use
                 {remove_provider, RowId, ProviderId} ->
                     case gr_spaces:remove_provider({user, AccessToken}, SpaceId, ProviderId) of
                         ok ->
-                            opn_gui_utils:message(<<"ok_message">>, <<"Provider with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
+                            opn_gui_utils:message(success, <<"Provider with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
                             gui_jq:remove(RowId),
                             State#?STATE{providers_details = lists:keydelete(RowId, 1, ProvidersDetails)};
                         Other ->
                             ?error("Cannot remove provider with ID ~p: ~p", [ProviderId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot remove provider with ID: <b>", ProviderId/binary, "</b>.<br>Please try again later.">>),
+                            opn_gui_utils:message(error, <<"Cannot remove provider with ID: <b>", ProviderId/binary, "</b>.<br>Please try again later.">>),
                             State
                     end;
 
                 {remove_user, RowId, UserId} ->
                     case gr_spaces:remove_user({user, AccessToken}, SpaceId, UserId) of
                         ok ->
-                            opn_gui_utils:message(<<"ok_message">>, <<"User with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
+                            opn_gui_utils:message(success, <<"User with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
                             gui_jq:remove(RowId),
                             State#?STATE{users_details = lists:keydelete(RowId, 1, UsersDetails)};
                         Other ->
                             ?error("Cannot remove user with ID ~p: ~p", [UserId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot remove user with ID: <b>", UserId/binary, "</b>.<br>Please try again later.">>),
+                            opn_gui_utils:message(error, <<"Cannot remove user with ID: <b>", UserId/binary, "</b>.<br>Please try again later.">>),
                             State
                     end;
 
                 {remove_group, RowId, GroupId} ->
                     case gr_spaces:remove_group({user, AccessToken}, SpaceId, GroupId) of
                         ok ->
-                            opn_gui_utils:message(<<"ok_message">>, <<"Group with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
+                            opn_gui_utils:message(success, <<"Group with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
                             gui_jq:remove(RowId),
                             State#?STATE{groups_details = lists:keydelete(RowId, 1, GroupsDetails)};
                         Other ->
                             ?error("Cannot remove group with ID ~p: ~p", [GroupId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot remove group with ID: <b>", GroupId/binary, "</b>.<br>Please try again later.">>),
+                            opn_gui_utils:message(error, <<"Cannot remove group with ID: <b>", GroupId/binary, "</b>.<br>Please try again later.">>),
                             State
                     end;
 
@@ -757,7 +752,7 @@ comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, use
             end
         catch Type:Reason ->
             ?error_stacktrace("Comet process exception: ~p:~p", [Type, Reason]),
-            opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+            opn_gui_utils:message(error, <<"There has been an error in comet process. Please refresh the page.">>),
             {error, Reason}
         end,
     gui_jq:wire(<<"$('#main_spinner').delay(300).hide(0);">>, false),
@@ -810,7 +805,7 @@ event(init) ->
         _:Reason ->
             ?error("Cannot initialize page ~p: ~p", [?MODULE, Reason]),
             gui_jq:hide(<<"main_spinner">>),
-            opn_gui_utils:message(<<"error_message">>, <<"Cannot fetch Space details.<br>Please try again later.">>)
+            opn_gui_utils:message(error, <<"Cannot fetch Space details.<br>Please try again later.">>)
     end;
 
 event({change_space_name, SpaceDetails}) ->
