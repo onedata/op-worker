@@ -303,9 +303,6 @@ if [[ $STORAGE_CONFIG_PATH == "-no_param" ]]; then
 	STORAGE_CONFIG_PATH=$RESULT
 fi
 
-# Format properly
-STORAGE_CONFIG_PATH_FORMATTED="\"$STORAGE_CONFIG_PATH\""
-
 #####################################
 # PUT CONFIGURATION INTO 'VM.ARGS' AND 'SYS.CONFIG'
 
@@ -337,7 +334,7 @@ sed $SED_OPTS "s/{ccm_nodes,.*/{ccm_nodes, $CCMS_LIST},/g" ../releases/$APP_VSN/
 sed $SED_OPTS "s/{db_nodes,.*/{db_nodes, $DB_NODES_LIST},/g" ../releases/$APP_VSN/sys.config
 
 # Replace STORAGE_CONFIG_PATH
-sed $SED_OPTS "s@{storage_config_path,.*@{storage_config_path, $STORAGE_CONFIG_PATH_FORMATTED},@g" ../releases/$APP_VSN/sys.config
+sed $SED_OPTS "s@{storage_config_path,.*@{storage_config_path, $STORAGE_CONFIG_PATH},@g" ../releases/$APP_VSN/sys.config
 
 # Remove config for distributed application from sys.config
 sed -n $SED_OPTS '1h;1!H;${;g;s/\[.*%% SASL/ %% SASL/g;p;}' ../releases/$APP_VSN/sys.config
