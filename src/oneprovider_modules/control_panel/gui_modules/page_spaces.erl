@@ -77,7 +77,7 @@ body() ->
         },
         opn_gui_utils:top_menu(spaces_tab),
         #panel{
-            style = <<"top: 62px; position: relative;">>,
+            style = <<"margin-top: 56px; padding-top: 1px; margin-bottom: 30px;">>,
             body = [
                 #panel{
                     id = <<"message">>,
@@ -89,7 +89,7 @@ body() ->
                     body = <<"Manage Spaces">>
                 },
                 #panel{
-                    style = <<"margin: 0 auto; width: 50%; margin-top: 30px; text-align: center;">>,
+                    style = <<"margin: 0 auto; width: 50%; margin-top: 30px; margin-bottom: 30px; text-align: center;">>,
                     body = lists:map(fun({ButtonId, ButtonPostback, ButtonBody}) ->
                         #button{
                             id = ButtonId,

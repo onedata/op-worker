@@ -96,7 +96,7 @@ body(#space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
         },
         opn_gui_utils:top_menu(spaces_tab, opn_gui_utils:breadcrumbs([{<<"Spaces">>, <<"/spaces">>}, {SpaceName, <<"/space?id=", SpaceId/binary>>}])),
         #panel{
-            style = <<"top: 62px; position: relative;">>,
+            style = <<"margin-top: 103px; padding: 1px; margin-bottom: 30px;">>,
             body = [
                 #panel{
                     id = <<"message">>,

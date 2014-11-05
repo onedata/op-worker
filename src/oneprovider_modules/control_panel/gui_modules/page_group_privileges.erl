@@ -103,7 +103,7 @@ body(#group_details{id = GroupId, name = GroupName} = GroupDetails) ->
         opn_gui_utils:top_menu(groups_tab, opn_gui_utils:breadcrumbs([{<<"Groups">>, <<"/groups">>},
             {GroupName, <<"/group?id=", GroupId/binary>>}, {<<"Privileges">>, <<"/privileges/group?id=", GroupId/binary>>}])),
         #panel{
-            style = <<"top: 62px; position: relative;">>,
+            style = <<"margin-top: 103px; padding: 1px; margin-bottom: 30px;">>,
             body = [
                 #panel{
                     id = <<"message">>,

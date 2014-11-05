@@ -91,7 +91,6 @@ title() ->
     Result :: #panel{}.
 %% ====================================================================
 body(#space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
-    MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
     #panel{class = <<"page-container">>, body = [
         #panel{
             id = <<"main_spinner">>,
@@ -100,10 +99,13 @@ body(#space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
                 image = <<"/images/spinner.gif">>
             }
         },
-        opn_gui_utils:top_menu(spaces_tab, opn_gui_utils:breadcrumbs([{<<"Spaces">>, <<"/spaces">>},
-            {SpaceName, <<"/space?id=", SpaceId/binary>>}, {<<"Privileges">>, <<"/privileges/space?id=", SpaceId/binary>>}])),
+        opn_gui_utils:top_menu(spaces_tab, opn_gui_utils:breadcrumbs([
+            {<<"Spaces">>, <<"/spaces">>},
+            {SpaceName, <<"/space?id=", SpaceId/binary>>},
+            {<<"Privileges">>, <<"/privileges/space?id=", SpaceId/binary>>}
+        ])),
         #panel{
-            style = <<"top: 62px; position: relative;">>,
+            style = <<"margin-top: 103px; padding-top: 1px; margin-bottom: 30px;">>,
             body = [
                 #panel{
                     id = <<"message">>,

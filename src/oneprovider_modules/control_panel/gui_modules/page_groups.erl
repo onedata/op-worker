@@ -77,7 +77,7 @@ body() ->
         },
         opn_gui_utils:top_menu(groups_tab),
         #panel{
-            style = <<"top: 62px; position: relative;">>,
+            style = <<"margin-top: 56px; padding-top: 1px; margin-bottom: 30px;">>,
             body = [
                 #panel{
                     id = <<"message">>,

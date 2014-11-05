@@ -380,7 +380,7 @@ breadcrumbs(Elements) ->
     [
         #panel{
             class = <<"navbar-inner">>,
-            style = <<"border: 1 solid gray">>,
+            style = <<"border: 1px solid gray">>,
             body = #panel{
                 class = <<"container">>,
                 body = #list{
@@ -389,7 +389,6 @@ breadcrumbs(Elements) ->
                     body = lists:map(fun({Name, Link}) ->
                         #li{
                             body = #link{
-                                style = <<"color: #1abc9c">>,
                                 class = <<"glyph-link">>,
                                 href = Link,
                                 body = Name
@@ -399,6 +398,7 @@ breadcrumbs(Elements) ->
                         #li{
                             class = <<"active">>,
                             body = #link{
+                                style = <<"color: #1abc9c">>,
                                 class = <<"glyph-link">>,
                                 href = LastElementLink,
                                 body = LastElementName
