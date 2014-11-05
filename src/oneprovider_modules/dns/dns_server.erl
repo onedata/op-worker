@@ -198,13 +198,23 @@ generate_answer(DNSRec, Transport) ->
 -spec encode_udp(DNSRec :: #dns_rec{}, ClientMaxUDP :: integer() | undefined) -> binary().
 %% ====================================================================
 encode_udp(#dns_rec{arlist = [#dns_rr_opt{} = RROPT]} = DNSRec, ClientMaxUDP) ->
-%%     TruncationSize = case ArList of
-%%                          [] ->
-%%                              ?MAX_UDP_SIZE;
-%%                          [#dns_rr_opt{udp_payload_size = Size}] ->
-%%                              min(?MAX_UDP_SIZE, Size)
-%%                      end,
-    Packet = inet_dns:encode(DNSRec#dns_rec{arlist = [RROPT#dns_rr_opt{udp_payload_size = 1234}]}).
+    TruncationSize = case ClientMaxUDP of
+                         undefined ->
+                             ?NOEDNS_UDP_SIZE;
+                         Value ->
+                             % If the client advertised a value, accept it but don't exceed the range:
+                             % [512, MAX_UDP_SIZE]
+                             max(?NOEDNS_UDP_SIZE, min(get_max_edns_udp_size(), Value))
+                     end,
+    Packet = inet_dns:encode(DNSRec#dns_rec{arlist = [RROPT#dns_rr_opt{udp_payload_size = 1234}]}),
+    case size(Packet) > TruncationSize of
+        true ->
+            ?dump(Packet),
+            Packet2 = inet_dns:encode(DNSRec#dns_rec{header = inet_dns:make_header(DNSRec#dns_rec.header, tc, true), arlist = [RROPT#dns_rr_opt{udp_payload_size = 1234}]}),
+            ?dump(Packet2);
+        false ->
+            ?dump(ok)
+    end.
 
 
 %% start_listening/3
