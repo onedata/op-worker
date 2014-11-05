@@ -139,6 +139,12 @@ message RequestFileBlock {
     required uint64 size = 3;
 }
 
+message SynchronizeFileBlock {
+  required string logical_name = 1;
+  required uint64 offset = 2;
+  required uint64 size = 3;
+}
+
 message CreateFileAck {
     required string file_logic_name = 1;
 }
