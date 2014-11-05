@@ -380,7 +380,7 @@ breadcrumbs(Elements) ->
     [
         #panel{
             class = <<"navbar-inner">>,
-            style = <<"border: 1px solid gray">>,
+            style = <<"border-bottom: 1px solid gray">>,
             body = #panel{
                 class = <<"container">>,
                 body = #list{

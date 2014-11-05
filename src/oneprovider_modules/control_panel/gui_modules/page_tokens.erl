@@ -197,7 +197,7 @@ token_row_collapsed(TableName, RowId, #token_details{access_id = AccessId, clien
             style = ?CONTENT_COLUMN_STYLE,
             body = #span{
                 style = ?DETAIL_STYLE,
-                body = <<"<b>", ClientName/binary, "</b> (", AccessId/binary, ")">>
+                body = <<"<b>", (gui_str:html_encode(ClientName))/binary, "</b> (", AccessId/binary, ")">>
             }
         },
         #td{
@@ -284,7 +284,7 @@ token_detail(Content, Title, Postback, Class) ->
     Result :: #span{}.
 %% ====================================================================
 client_name(TableName, RowId, #token_details{client_name = ClientName} = TokenDetails) ->
-    token_detail(ClientName, <<"Edit">>, {change_client_name, TableName, RowId, TokenDetails}, <<"icomoon-pencil2">>).
+    token_detail(gui_str:html_encode(ClientName), <<"Edit">>, {change_client_name, TableName, RowId, TokenDetails}, <<"icomoon-pencil2">>).
 
 
 %% change_client_name/3

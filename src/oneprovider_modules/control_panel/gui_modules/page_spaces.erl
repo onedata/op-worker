@@ -195,7 +195,7 @@ space_row_collapsed(RowId, Privileges, #space_details{id = SpaceId, name = Space
                                 style = <<"border-width: 0; text-align: left; padding-left: 0; padding-right: 0;">>,
                                 body = #span{
                                     style = ?DETAIL_STYLE,
-                                    body = <<"<b>", SpaceName/binary, "</b> (", SpaceId/binary, ")">>
+                                    body = <<"<b>", (gui_str:html_encode(SpaceName))/binary, "</b> (", SpaceId/binary, ")">>
                                 }
                             },
                             #td{
@@ -272,7 +272,7 @@ space_row_expanded(RowId, Privileges, #space_details{id = SpaceId, name = SpaceN
                         ]
                     }
                 end, [
-                    {<<"Name">>, [SpaceName, default_label(RowId)]},
+                    {<<"Name">>, [gui_str:html_encode(SpaceName), default_label(RowId)]},
                     {<<"Space ID">>, SpaceId},
                     {<<"Settings">>, SettingsIcons}
                 ])
@@ -340,11 +340,11 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
                                    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                                    RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_space_row(RowId, Privileges, SpaceDetails),
-                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, Privileges, SpaceDetails}]}
+                                   State#?STATE{counter = Counter + 1, spaces_details = [{RowId, Privileges, SpaceDetails} | SpacesDetails]}
                                catch
                                    _:Other ->
                                        ?error("Cannot create Space ~p: ~p", [Name, Other]),
-                                       opn_gui_utils:message(error, <<"Cannot create Space: <b>", Name/binary, "</b>.<br>Please try again later.">>),
+                                       opn_gui_utils:message(error, <<"Cannot create Space: <b>", (gui_str:html_encode(Name))/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
                     gui_jq:prop(<<"create_space_button">>, <<"disabled">>, <<"">>),
@@ -359,11 +359,11 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
                                    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                                    RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_space_row(RowId, Privileges, SpaceDetails),
-                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, Privileges, SpaceDetails}]}
+                                   State#?STATE{counter = Counter + 1, spaces_details = [{RowId, Privileges, SpaceDetails} | SpacesDetails]}
                                catch
                                    _:Other ->
                                        ?error("Cannot join Space using token ~p: ~p", [Token, Other]),
-                                       opn_gui_utils:message(error, <<"Cannot join Space using token: <b>", Token/binary, "</b>.<br>Please try again later.">>),
+                                       opn_gui_utils:message(error, <<"Cannot join Space using token: <b>", (gui_str:html_encode(Token))/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
                     gui_jq:prop(<<"join_space_button">>, <<"disabled">>, <<"">>),
@@ -514,12 +514,12 @@ event({set_privileges, SpaceId}) ->
     gui_jq:redirect(<<"privileges/space?id=", SpaceId/binary>>);
 
 event({leave_space, RowId, #space_details{id = SpaceId, name = SpaceName}}) ->
-    Message = <<"Are you sure you want to leave Space:<br><b>", SpaceName/binary, " (", SpaceId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to leave Space:<br><b>", (gui_str:html_encode(SpaceName))/binary, " (", SpaceId/binary, ") </b>?">>,
     Script = <<"leave_space(['", RowId/binary, "','", SpaceId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Leave Space">>, Message, Script, <<"btn-inverse">>);
 
 event({remove_space, RowId, #space_details{id = SpaceId, name = SpaceName}}) ->
-    Message = <<"Are you sure you want to remove Space:<br><b>", SpaceName/binary, " (", SpaceId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to remove Space:<br><b>", (gui_str:html_encode(SpaceName))/binary, " (", SpaceId/binary, ") </b>?">>,
     Script = <<"remove_space(['", RowId/binary, "','", SpaceId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Remove Space">>, Message, Script, <<"btn-inverse">>);
 

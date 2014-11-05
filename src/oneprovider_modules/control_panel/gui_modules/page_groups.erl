@@ -188,7 +188,7 @@ group_row_collapsed(RowId, Privileges, #group_details{id = GroupId, name = Group
             style = ?CONTENT_COLUMN_STYLE,
             body = #span{
                 style = ?DETAIL_STYLE,
-                body = <<"<b>", GroupName/binary, "</b> (", GroupId/binary, ")">>
+                body = <<"<b>", (gui_str:html_encode(GroupName))/binary, "</b> (", GroupId/binary, ")">>
             }
         },
         #td{
@@ -255,7 +255,7 @@ group_row_expanded(RowId, Privileges, #group_details{id = GroupId, name = GroupN
                         ]
                     }
                 end, [
-                    {<<"Name">>, GroupName},
+                    {<<"Name">>, gui_str:html_encode(GroupName)},
                     {<<"Group ID">>, GroupId},
                     {<<"Settings">>, SettingsIcons}
                 ])
@@ -308,11 +308,11 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                                    opn_gui_utils:message(success, <<"Created Group ID: <b>", GroupId/binary, "</b>">>),
                                    RowId = <<"group_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_group_row(RowId, Privileges, GroupDetails),
-                                   State#?STATE{counter = Counter + 1, groups_details = GroupsDetails ++ [{RowId, Privileges, GroupDetails}]}
+                                   State#?STATE{counter = Counter + 1, groups_details = [{RowId, Privileges, GroupDetails} | GroupsDetails]}
                                catch
                                    _:Other ->
                                        ?error_stacktrace("Cannot create group ~p: ~p", [Name, Other]),
-                                       opn_gui_utils:message(error, <<"Cannot create group: <b>", Name/binary, "</b>.<br>Please try again later.">>),
+                                       opn_gui_utils:message(error, <<"Cannot create group: <b>", (gui_str:html_encode(Name))/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
                     gui_jq:prop(<<"create_group_button">>, <<"disabled">>, <<"">>),
@@ -327,11 +327,11 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                                    opn_gui_utils:message(success, <<"Joined Group ID: <b>", GroupId/binary, "</b>">>),
                                    RowId = <<"group_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_group_row(RowId, Privileges, GroupDetails),
-                                   State#?STATE{counter = Counter + 1, groups_details = GroupsDetails ++ [{RowId, Privileges, GroupDetails}]}
+                                   State#?STATE{counter = Counter + 1, groups_details = [{RowId, Privileges, GroupDetails} | GroupsDetails]}
                                catch
                                    _:Other ->
                                        ?error("Cannot join group using token ~p: ~p", [Token, Other]),
-                                       opn_gui_utils:message(error, <<"Cannot join group using token: <b>", Token/binary, "</b>.<br>Please try again later.">>),
+                                       opn_gui_utils:message(error, <<"Cannot join group using token: <b>", (gui_str:html_encode(Token))/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
                     gui_jq:prop(<<"join_group_button">>, <<"disabled">>, <<"">>),
@@ -461,12 +461,12 @@ event({set_privileges, GroupId}) ->
     gui_jq:redirect(<<"privileges/group?id=", GroupId/binary>>);
 
 event({leave_group, RowId, #group_details{id = GroupId, name = GroupName}}) ->
-    Message = <<"Are you sure you want to leave group:<br><b>", GroupName/binary, " (", GroupId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to leave group:<br><b>", (gui_str:html_encode(GroupName))/binary, " (", GroupId/binary, ") </b>?">>,
     Script = <<"leave_group(['", RowId/binary, "','", GroupId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Leave group">>, Message, Script, <<"btn-inverse">>);
 
 event({remove_group, RowId, #group_details{id = GroupId, name = GroupName}}) ->
-    Message = <<"Are you sure you want to remove group:<br><b>", GroupName/binary, " (", GroupId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to remove group:<br><b>", (gui_str:html_encode(GroupName))/binary, " (", GroupId/binary, ") </b>?">>,
     Script = <<"remove_group(['", RowId/binary, "','", GroupId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Remove group">>, Message, Script, <<"btn-inverse">>);
 

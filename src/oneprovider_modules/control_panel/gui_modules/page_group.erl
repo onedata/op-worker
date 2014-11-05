@@ -178,7 +178,7 @@ group_name(#group_details{name = GroupName} = GroupDetails) ->
     #span{
         style = <<"font-size: large;">>,
         body = [
-            GroupName,
+            gui_str:html_encode(GroupName),
             #link{
                 id = <<"change_group_name_span">>,
                 title = <<"Edit">>,
@@ -385,7 +385,7 @@ space_row_collapsed(RowId, Privileges, #space_details{id = SpaceId, name = Space
 %% ====================================================================
 space_row_expanded(RowId, Privileges, #space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
     Details = [
-        {<<"Name">>, detail(SpaceName, <<"Leave space">>, lists:member(<<"group_leave_space">>, Privileges), {leave_space, RowId, SpaceDetails}, <<"icomoon-exit">>)},
+        {<<"Name">>, detail(gui_str:html_encode(SpaceName), <<"Leave space">>, lists:member(<<"group_leave_space">>, Privileges), {leave_space, RowId, SpaceDetails}, <<"icomoon-exit">>)},
         {<<"Space ID">>, #span{style = ?DETAIL_STYLE, body = SpaceId}}
     ],
     NavigationBody = opn_gui_utils:collapse_button({message, {collapse_space_row, RowId, Privileges, SpaceDetails}}),
@@ -413,7 +413,7 @@ user_row_collapsed(RowId, Privileges, #user_details{id = UserId, name = UserName
 %% ====================================================================
 user_row_expanded(RowId, Privileges, #user_details{id = UserId, name = UserName} = UserDetails) ->
     Details = [
-        {<<"Name">>, detail(UserName, <<"Remove user">>, lists:member(<<"group_remove_user">>, Privileges), {remove_user, RowId, UserDetails}, <<"icomoon-remove">>)},
+        {<<"Name">>, detail(gui_str:html_encode(UserName), <<"Remove user">>, lists:member(<<"group_remove_user">>, Privileges), {remove_user, RowId, UserDetails}, <<"icomoon-remove">>)},
         {<<"User ID">>, #span{style = ?DETAIL_STYLE, body = UserId}}
     ],
     NavigationBody = opn_gui_utils:collapse_button({message, {collapse_user_row, RowId, Privileges, UserDetails}}),
@@ -462,7 +462,7 @@ row_collapsed(Id, Name, NavigationBody) ->
             style = ?CONTENT_COLUMN_STYLE,
             body = #span{
                 style = ?DETAIL_STYLE,
-                body = <<"<b>", Name/binary, "</b> (", Id/binary, ")">>
+                body = <<"<b>", (gui_str:html_encode(Name))/binary, "</b> (", Id/binary, ")">>
             }
         },
         #td{
@@ -570,11 +570,11 @@ comet_loop(#?STATE{counter = Counter, group_id = GroupId, spaces_details = Space
                                    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                                    RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_space_row(RowId, Privileges, SpaceDetails),
-                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, Privileges, SpaceDetails}]}
+                                   State#?STATE{counter = Counter + 1, spaces_details = [{RowId, Privileges, SpaceDetails} | SpacesDetails]}
                                catch
                                    _:Other ->
                                        ?error("Cannot create Space ~p: ~p", [Name, Other]),
-                                       opn_gui_utils:message(error, <<"Cannot create Space: <b>", Name/binary, "</b>.<br>Please try again later.">>),
+                                       opn_gui_utils:message(error, <<"Cannot create Space: <b>", (gui_str:html_encode(Name))/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
                     gui_jq:prop(<<"create_space_button">>, <<"disabled">>, <<"">>),
@@ -589,11 +589,11 @@ comet_loop(#?STATE{counter = Counter, group_id = GroupId, spaces_details = Space
                                    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                                    RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_space_row(RowId, Privileges, SpaceDetails),
-                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, Privileges, SpaceDetails}]}
+                                   State#?STATE{counter = Counter + 1, spaces_details = [{RowId, Privileges, SpaceDetails} | SpacesDetails]}
                                catch
                                    _:Other ->
                                        ?error("Cannot join Space using token ~p: ~p", [Token, Other]),
-                                       opn_gui_utils:message(error, <<"Cannot join Space using token: <b>", Token/binary, "</b>.<br>Please try again later.">>),
+                                       opn_gui_utils:message(error, <<"Cannot join Space using token: <b>", (gui_str:html_encode(Token))/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
                     gui_jq:prop(<<"join_space_button">>, <<"disabled">>, <<"">>),
@@ -633,14 +633,14 @@ comet_loop(#?STATE{counter = Counter, group_id = GroupId, spaces_details = Space
                     case gr_groups:modify_details({user, AccessToken}, GroupId, [{<<"name">>, NewGroupName}]) of
                         ok ->
                             gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
-                            gui_jq:update(<<"group_name">>, group_name(GroupDetails#group_details{name = NewGroupName})),
-                            gui_jq:show(<<"change_group_name_span">>);
+                            gui_jq:update(<<"group_name">>, group_name(GroupDetails#group_details{name = NewGroupName}));
                         Other ->
                             ?error("Cannot change name of group ~p: ~p", [GroupDetails, Other]),
                             opn_gui_utils:message(error, <<"Cannot change name of group with ID:  <b>", GroupId, "</b>."
                             "<br>Please try again later.">>),
                             gui_jq:update(<<"group_name">>, group_name(GroupDetails))
                     end,
+                    gui_jq:show(<<"change_group_name_span">>),
                     State;
 
                 {leave_space, RowId, SpaceId} ->
@@ -758,7 +758,8 @@ event({submit_new_group_name, GroupDetails}) ->
     gui_jq:show(<<"main_spinner">>);
 
 event({cancel_new_group_name_submit, GroupDetails}) ->
-    gui_jq:update(<<"group_name">>, group_name(GroupDetails));
+    gui_jq:update(<<"group_name">>, group_name(GroupDetails)),
+    gui_jq:show(<<"change_group_name_span">>);
 
 event(create_space) ->
     Message = <<"<div style=\"margin: 0 auto; width: 80%;\">",
@@ -785,12 +786,12 @@ event(join_space) ->
     gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_space_token\").focus(); });">>);
 
 event({leave_space, RowId, #space_details{id = SpaceId, name = SpaceName}}) ->
-    Message = <<"Are you sure you want to leave space:<br><b>", SpaceName/binary, " (", SpaceId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to leave space:<br><b>", (gui_str:html_encode(SpaceName))/binary, " (", SpaceId/binary, ") </b>?">>,
     Script = <<"leave_space(['", RowId/binary, "','", SpaceId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Leave space">>, Message, Script, <<"btn-inverse">>);
 
 event({remove_user, RowId, #user_details{id = UserId, name = UserName}}) ->
-    Message = <<"Are you sure you want to remove user:<br><b>", UserName/binary, " (", UserId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to remove user:<br><b>", (gui_str:html_encode(UserName))/binary, " (", UserId/binary, ") </b>?">>,
     Script = <<"remove_user(['", RowId/binary, "','", UserId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Remove user">>, Message, Script, <<"btn-inverse">>);
 

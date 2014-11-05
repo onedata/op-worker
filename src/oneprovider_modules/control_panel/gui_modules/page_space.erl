@@ -179,7 +179,7 @@ space_name(#space_details{name = SpaceName} = SpaceDetails) ->
     #span{
         style = <<"font-size: large;">>,
         body = [
-            SpaceName,
+            gui_str:html_encode(SpaceName),
             #link{
                 id = <<"change_space_name_span">>,
                 title = <<"Edit">>,
@@ -425,7 +425,7 @@ provider_row_collapsed(RowId, Privileges, #provider_details{id = ProviderId, nam
 %% ====================================================================
 provider_row_expanded(RowId, Privileges, #provider_details{id = ProviderId, name = ProviderName, redirection_point = RedirectionPoint, urls = URLs} = ProviderDetails) ->
     Details = [
-        {<<"Name">>, detail(ProviderName, <<"Remove provider">>, lists:member(<<"space_remove_provider">>, Privileges), {remove_provider, RowId, ProviderDetails}, <<"icomoon-remove">>)},
+        {<<"Name">>, detail(gui_str:html_encode(ProviderName), <<"Remove provider">>, lists:member(<<"space_remove_provider">>, Privileges), {remove_provider, RowId, ProviderDetails}, <<"icomoon-remove">>)},
         {<<"Provider ID">>, #span{style = ?DETAIL_STYLE, body = ProviderId}},
         {<<"URLs">>, #list{
             style = <<"list-style-type: none; margin: 0 auto;">>,
@@ -436,7 +436,7 @@ provider_row_expanded(RowId, Privileges, #provider_details{id = ProviderId, name
                 }
             end, lists:sort(URLs))
         }},
-        {<<"Redirection point">>, #span{style = ?DETAIL_STYLE, body = RedirectionPoint}}
+        {<<"Redirection point">>, #span{style = ?DETAIL_STYLE, body = gui_str:html_encode(RedirectionPoint)}}
     ],
     NavigationBody = opn_gui_utils:collapse_button({message, {collapse_provider_row, RowId, Privileges, ProviderDetails}}),
     row_expanded(Details, NavigationBody).
@@ -463,7 +463,7 @@ user_row_collapsed(RowId, Privileges, #user_details{id = UserId, name = UserName
 %% ====================================================================
 user_row_expanded(RowId, Privileges, #user_details{id = UserId, name = UserName} = UserDetails) ->
     Details = [
-        {<<"Name">>, detail(UserName, <<"Remove user">>, lists:member(<<"space_remove_user">>, Privileges), {remove_user, RowId, UserDetails}, <<"icomoon-remove">>)},
+        {<<"Name">>, detail(gui_str:html_encode(UserName), <<"Remove user">>, lists:member(<<"space_remove_user">>, Privileges), {remove_user, RowId, UserDetails}, <<"icomoon-remove">>)},
         {<<"User ID">>, #span{style = ?DETAIL_STYLE, body = UserId}}
     ],
     NavigationBody = opn_gui_utils:collapse_button({message, {collapse_user_row, RowId, Privileges, UserDetails}}),
@@ -491,7 +491,7 @@ group_row_collapsed(RowId, Privileges, #group_details{id = GroupId, name = Group
 %% ====================================================================
 group_row_expanded(RowId, Privileges, #group_details{id = GroupId, name = GroupName} = GroupDetails) ->
     Details = [
-        {<<"Name">>, detail(GroupName, <<"Remove group">>, lists:member(<<"space_remove_group">>, Privileges), {remove_group, RowId, GroupDetails}, <<"icomoon-remove">>)},
+        {<<"Name">>, detail(gui_str:html_encode(GroupName), <<"Remove group">>, lists:member(<<"space_remove_group">>, Privileges), {remove_group, RowId, GroupDetails}, <<"icomoon-remove">>)},
         {<<"Group ID">>, #span{style = ?DETAIL_STYLE, body = GroupId}}
     ],
     NavigationBody = opn_gui_utils:collapse_button({message, {collapse_group_row, RowId, Privileges, GroupDetails}}),
@@ -540,7 +540,7 @@ row_collapsed(Id, Name, NavigationBody) ->
             style = ?CONTENT_COLUMN_STYLE,
             body = #span{
                 style = ?DETAIL_STYLE,
-                body = <<"<b>", Name/binary, "</b> (", Id/binary, ")">>
+                body = <<"<b>", (gui_str:html_encode(Name))/binary, "</b> (", Id/binary, ")">>
             }
         },
         #td{
@@ -681,6 +681,7 @@ comet_loop(#?STATE{space_id = SpaceId, providers_details = ProvidersDetails, use
                             "<br>Please try again later.">>),
                             gui_jq:update(<<"space_name">>, space_name(SpaceDetails))
                     end,
+                    gui_jq:show(<<"change_space_name_span">>),
                     State;
 
                 {remove_provider, RowId, ProviderId} ->
@@ -819,20 +820,21 @@ event({submit_new_space_name, SpaceDetails}) ->
     gui_jq:show(<<"main_spinner">>);
 
 event({cancel_new_space_name_submit, SpaceDetails}) ->
-    gui_jq:update(<<"space_name">>, space_name(SpaceDetails));
+    gui_jq:update(<<"space_name">>, space_name(SpaceDetails)),
+    gui_jq:show(<<"change_space_name_span">>);
 
 event({remove_provider, RowId, #provider_details{id = ProviderId, name = ProviderName}}) ->
-    Message = <<"Are you sure you want to remove provider:<br><b>", ProviderName/binary, " (", ProviderId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to remove provider:<br><b>", (gui_str:html_encode(ProviderName))/binary, " (", ProviderId/binary, ") </b>?">>,
     Script = <<"remove_provider(['", RowId/binary, "','", ProviderId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Remove provider">>, Message, Script, <<"btn-inverse">>);
 
 event({remove_user, RowId, #user_details{id = UserId, name = UserName}}) ->
-    Message = <<"Are you sure you want to remove user:<br><b>", UserName/binary, " (", UserId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to remove user:<br><b>", (gui_str:html_encode(UserName))/binary, " (", UserId/binary, ") </b>?">>,
     Script = <<"remove_user(['", RowId/binary, "','", UserId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Remove user">>, Message, Script, <<"btn-inverse">>);
 
 event({remove_group, RowId, #group_details{id = GroupId, name = GroupName}}) ->
-    Message = <<"Are you sure you want to remove group:<br><b>", GroupName/binary, " (", GroupId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to remove group:<br><b>", (gui_str:html_encode(GroupName))/binary, " (", GroupId/binary, ") </b>?">>,
     Script = <<"remove_group(['", RowId/binary, "','", GroupId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Remove group">>, Message, Script, <<"btn-inverse">>);
 
