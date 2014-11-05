@@ -782,7 +782,7 @@ remove_file_block(BlockId) when is_list(BlockId) ->
 %% ====================================================================
 save_remote_location(#remote_location{} = RemoteLocation) ->
     save_remote_location(#db_document{record = RemoteLocation});
-save_remote_location(#db_document{record = #file_block{}} = RemoteLocationDoc) ->
+save_remote_location(#db_document{record = #remote_location{}} = RemoteLocationDoc) ->
     dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:save_record(RemoteLocationDoc).
 
