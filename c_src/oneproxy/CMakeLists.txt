@@ -53,7 +53,7 @@ set(SOURCE_FILES
 
 add_executable(oneproxy ${SOURCE_FILES})
 
-target_compile_options(oneproxy PRIVATE -std=c++11)
+target_compile_options(oneproxy PRIVATE -std=c++14)
 
 target_include_directories(oneproxy SYSTEM PRIVATE
     ${OPENSSL_INCLUDE_DIR}

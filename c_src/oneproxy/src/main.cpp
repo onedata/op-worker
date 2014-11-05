@@ -5,17 +5,16 @@
  * cited in 'LICENSE.txt'.
 *********************************************************************/
 
-
 #include "log_message.h"
 #include "tls_server.h"
 
+#include <cstdlib>
 #include <iostream>
 #include <vector>
-#include <cstdio>
+#include <string>
 #include <thread>
 
 #include <boost/make_shared.hpp>
-#include <thread>
 
 namespace one {
 namespace proxy {
@@ -28,7 +27,7 @@ constexpr uint16_t WORKER_COUNT = 8;
 
 using std::atoi;
 using namespace one::proxy;
-
+using namespace std::literals::string_literals;
 
 /**
  * Write erlang-port response.
@@ -49,15 +48,27 @@ void command_response(std::vector<std::string> tokens)
     std::cout << std::endl;
 }
 
+enum class proxy_type {
+    reverse,
+    normal
+};
+
+void invalid_argument(const std::string &app_name)
+{
+    LOG(ERROR) << "Invalid argument. Usage:\n\t" << app_name
+               << " reverse_proxy <listen_port> <forward_host> <forward_port> "
+                  "<cert_path> verify_peer|verify_none [ca|crl_dir...]\n\t"
+               << app_name << " proxy <listen_port> <cert_path> "
+                              "verify_peer|verify_none [ca|crl_dir...]";
+}
+
 int main(int argc, char *argv[])
 {
     std::ios_base::sync_with_stdio(false);
     try
     {
-        if (argc < 6) {
-            LOG(ERROR) << "Invalid argument. Usage: " << argv[0]
-                       << " <listen_port> <forward_host> <forward_port> "
-                       << "cert_path verify_peer|verify_none [ca|crl_dir...]";
+        if (argc < 4) {
+            invalid_argument(argv[0]);
             return EXIT_FAILURE;
         }
 
@@ -66,14 +77,29 @@ int main(int argc, char *argv[])
         std::vector<std::thread> workers;
 
         {
-            auto verify_type = (std::string(argv[5]) == "verify_peer"
+            const auto type =
+                argv[1] == "proxy"s ? proxy_type::normal : proxy_type::reverse;
+
+            if (type == proxy_type::reverse && argc < 6) {
+                invalid_argument(argv[0]);
+                return EXIT_FAILURE;
+            }
+
+            const auto verify_type_ind = type == proxy_type::reverse ? 6 : 4;
+            const auto ca_dirs_ind = type == proxy_type::reverse ? 7 : 5;
+
+            auto verify_type = (argv[verify_type_ind] == "verify_peer"s
                                     ? boost::asio::ssl::verify_peer
                                     : boost::asio::ssl::verify_none);
-            std::vector<std::string> ca_dirs{argv + 6, argv + argc};
 
-            auto s = std::make_shared<tls_server>(
-                client_io_service, proxy_io_service, verify_type, argv[4],
-                atoi(argv[1]), argv[2], atoi(argv[3]), ca_dirs);
+            std::vector<std::string> ca_dirs{argv + ca_dirs_ind, argv + argc};
+
+            auto s = type == proxy_type::reverse
+                         ? std::make_shared<tls_server>(
+                               client_io_service, proxy_io_service, verify_type,
+                               argv[5], atoi(argv[2]), argv[3], atoi(argv[4]),
+                               ca_dirs)
+                         : std::shared_ptr<tls_server>();
 
             s->start_accept();
 
@@ -96,13 +122,13 @@ int main(int argc, char *argv[])
                     std::thread{[&]() { proxy_io_service.run(); }});
             }
 
-            LOG(INFO) << "Proxy 0.0.0.0:" << atoi(argv[1]) << " -> " << argv[2]
-                      << ":" << atoi(argv[3]) << " has started with "
+            LOG(INFO) << "Reverse-Proxy 0.0.0.0:" << atoi(argv[2]) << " -> "
+                      << argv[3] << ":" << atoi(argv[4]) << " has started with "
                       << (worker_count * 2) << " workers";
 
             // Simple erlang port dirver
             std::string command, message_id, arg0;
-            for(std::string line; std::getline(std::cin, line); ) {
+            for (std::string line; std::getline(std::cin, line);) {
                 std::stringstream line_stream(line);
 
                 line_stream >> command;

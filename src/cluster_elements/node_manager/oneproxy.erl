@@ -77,7 +77,7 @@ start(ListenerPort, ForwardPort, CertFile, VerifyType) ->
 
     Port = open_port({spawn_executable, ExecPath}, [
         {line, 1024 * 1024}, binary,
-        {args, [integer_to_list(ListenerPort), "127.0.0.1", integer_to_list(ForwardPort), utils:ensure_list(CertFile),
+        {args, ["reverse_proxy", integer_to_list(ListenerPort), "127.0.0.1", integer_to_list(ForwardPort), utils:ensure_list(CertFile),
             utils:ensure_list(VerifyType), filename:join(CADir, ?DER_CERTS_DIR)]}
     ]),
     try
