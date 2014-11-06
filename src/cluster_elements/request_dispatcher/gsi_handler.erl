@@ -38,8 +38,7 @@ init() ->
     ?info("GSI Handler module is starting"),
     ets:new(gsi_state, [{read_concurrency, true}, public, ordered_set, named_table]),
 
-    {ok, CADir1} = application:get_env(?APP_Name, ca_dir),
-    CADir = atom_to_list(CADir1),
+    {ok, CADir} = application:get_env(?APP_Name, ca_dir),
 
     {SSPid, _Ref} = spawn_monitor(fun() -> start_slaves(?GSI_SLAVE_COUNT) end),
 
@@ -121,8 +120,7 @@ get_ca_certs_from_all_cert_dirs() ->
 -spec get_ca_certs() -> [binary()] | no_return().
 %% ====================================================================
 get_ca_certs() ->
-    {ok, CADir1} = application:get_env(?APP_Name, ca_dir),
-    CADir = atom_to_list(CADir1),
+    {ok, CADir} = application:get_env(?APP_Name, ca_dir),
     get_ca_certs_from_dir(CADir).
 
 %% get_ca_certs_from_dir/1
@@ -198,9 +196,17 @@ load_certs(CADir) ->
             fun({Name, {Type, X, _}}, {CAs, CRLs}) ->
                 case Type of
                     'Certificate' ->
-                        {ok, {SerialNumber, Issuer}} = public_key:pkix_issuer_id(X, self),
-                        ets:insert(gsi_state, {{ca, {SerialNumber, Issuer}}, X, Name}),
-                        {CAs + 1, CRLs};
+                        case catch public_key:pkix_issuer_id(X, self) of
+                            {ok, {SerialNumber, Issuer}} ->
+                                ets:insert(gsi_state, {{ca, {SerialNumber, Issuer}}, X, Name}),
+                                {CAs + 1, CRLs};
+                            _ -> case catch public_key:pkix_issuer_id(X, other) of
+                                     {ok, {SerialNumber, Issuer}} ->
+                                         ets:insert(gsi_state, {{ca, {SerialNumber, Issuer}}, X, Name}),
+                                         {CAs + 1, CRLs};
+                                     _ -> {CAs, CRLs}
+                                 end
+                        end;
 
                     'CertificateList' ->
                         CertificateList = public_key:der_decode(Type, X),

@@ -69,8 +69,7 @@ start(ListenerPort, ForwardPort, CertFile, VerifyType) ->
     {ok, CWD} = file:get_cwd(),
     ExecPath = os:find_executable("oneproxy", filename:join(CWD, "c_lib")),
 
-    {ok, CADir1} = application:get_env(?APP_Name, ca_dir),
-    CADir = atom_to_list(CADir1),
+    {ok, CADir} = application:get_env(?APP_Name, ca_dir),
 
     %% Try to load certs before starting proxy
     catch ca_crl_to_der(get_der_certs_dir()),
@@ -100,8 +99,7 @@ start(ListenerPort, ForwardPort, CertFile, VerifyType) ->
 -spec get_der_certs_dir() -> string().
 %% ====================================================================
 get_der_certs_dir() ->
-    {ok, CertDir1} = application:get_env(?APP_Name, ca_dir),
-    CertDir = atom_to_list(CertDir1),
+    {ok, CertDir} = application:get_env(?APP_Name, ca_dir),
     filename:join(CertDir, ?DER_CERTS_DIR).
 
 

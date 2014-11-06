@@ -73,8 +73,7 @@ title() -> <<"File manager">>.
 %% This will be placed in the template instead of {{custom}} tag
 custom() ->
     <<"<script src=\"/js/oneprovider_upload.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
-    "    <script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>",
-    "    <script src=\"/flatui/bootbox.min.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n">>.
+    "<script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>">>.
 
 %% This will be placed in the template instead of {{css}} tag
 css() ->
@@ -86,15 +85,17 @@ body() ->
     gui_jq:register_escape_event("escape_pressed_event"),
     gui_jq:wire(#api{name = "confirm_paste_event", tag = "confirm_paste_event"}, false),
     pfm_perms:init(),
-    Body = [
-        #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
-            #image{image = <<"/images/spinner.gif">>}
-        ]},
-        opn_gui_utils:top_menu(data_tab, manager_submenu()),
-        manager_workspace(),
-        footer_popup()
-    ],
-    Body.
+    [
+        #panel{class= <<"page-container">>, body = [
+            #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
+                #image{image = <<"/images/spinner.gif">>}
+            ]},
+            opn_gui_utils:top_menu(data_tab, manager_submenu()),
+            manager_workspace(),
+            footer_popup()
+
+        ]}
+    ].
 
 % Submenu that will be glued below the top menu
 manager_submenu() ->
@@ -991,15 +992,16 @@ list_view_body() ->
     NumAttr = erlang:max(1, length(get_displayed_file_attributes())),
     CellWidth = <<"width: 150px;">>,
     HiddenAttrs = ?ALL_ATTRIBUTES -- get_displayed_file_attributes(),
+    gui_jq:wire(<<"initialize_table_header_scrolling();">>),
     HeaderTable = [
-        #table{class = <<"no-margin table">>, style = <<"position: fixed; top: 173px; z-index: 10;",
-        "background: white; border: 2px solid #bbbdc0; border-collapse: collapse;">>, header = [
+        #table{id = <<"header_table">>, class = <<"no-margin table">>, style = <<"position: fixed; top: 173px; z-index: 10;",
+        "background: white; border: 2px solid #bbbdc0; border-collapse: collapse; min-width: 1024px;">>, header = [
             #tr{cells =
             [
                 #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116);">>, body = [
                     #panel{style = <<"position: relative;">>, body = [
                         <<"Name">>,
-                        #panel{style = <<"position: absolute; right: -22px; top: 0; ">>, body =
+                        #panel{style = <<"position: absolute; right: -22px; top: -4px; ">>, body =
                         lists:map(fun(Attr) ->
                             #span{style = <<"font-size: 12px; font-weight: normal; background-color: #EBEDEF; ",
                             "border: 1px solid #34495E; padding: 1px 3px; margin-right: 4px; cursor: pointer;">>,

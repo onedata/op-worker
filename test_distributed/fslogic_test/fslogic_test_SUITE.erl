@@ -2412,7 +2412,7 @@ acl_test(Config) ->
     ?assertEqual({ok,[#accesscontrolentity{acetype = ?allow_mask, identifier = <<"global_id_for_", ?TEST_USER>>, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask}]}
         ,VirtualAclAns),
     {ok, VirtualAcl} = VirtualAclAns,
-    TestUserName = <<?TEST_USER, " ", ?TEST_USER, "#globa">>,
+    TestUserName = <<?TEST_USER, " ", ?TEST_USER>>,
     ?assertEqual([[{<<"acetype">>,<<"ALLOW">>},
         {<<"identifier">>, TestUserName},
         {<<"aceflags">>, <<"NO_FLAGS">>},
@@ -2425,7 +2425,7 @@ acl_test(Config) ->
     test_utils:ct_mock(Config, dao_groups, get_group_by_name, fun(_) -> {ok, [Group]} end),
 
     % test setting and getting acl
-    TestUserNameWithNoHash = <<?TEST_USER, " ", ?TEST_USER, "#">>,
+    TestUserNameWithNoHash = <<?TEST_USER, " ", ?TEST_USER>>,
     Acl = rpc:call(Node1, fslogic_acl, from_json_fromat_to_acl,[
         [
             [
@@ -2536,7 +2536,7 @@ init_per_testcase(user_file_size_test, Config) ->
 
   DB_Node = ?DB_NODE,
   Port = 6666,
-  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {user_files_size_view_update_period, 2}, {heart_beat, 1}, {nif_prefix, './'}, {ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {user_files_size_view_update_period, 2}, {heart_beat, 1}]]),
   ?ENABLE_PROVIDER(lists:append([{port, Port}, {nodes, NodesUp}], Config));
 
 init_per_testcase(_, Config) ->
@@ -2548,7 +2548,7 @@ init_per_testcase(_, Config) ->
 
   DB_Node = ?DB_NODE,
   Port = 6666,
-  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1}, {nif_prefix, './'}, {ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1}]]),
 
   ?ENABLE_PROVIDER(lists:append([{port, Port}, {nodes, NodesUp}], Config)).
 

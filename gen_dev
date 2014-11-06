@@ -241,7 +241,7 @@ START_ERL=`cat "releases/oneprovider_node/releases/start_erl.data"`
 APP_VSN=${START_ERL#* }
 
 # Replace developer_mode env to enable developer functionalities in generated package
-sed -i "s/-oneprovider_node developer_mode.*/-oneprovider_node developer_mode true/g" releases/oneprovider_node/releases/$APP_VSN/vm.args
+sed -i "s/{developer_mode,.*/{developer_mode, true},/g" releases/oneprovider_node/releases/$APP_VSN/sys.config
 
 # Copy the release package to proper location (directory named as the node without hostname), preserve mode
 cp -R -p releases/oneprovider_node "releases/${TEST_NODE_DIR}/$NODE_NAME_WITHOUT_HOSTNAME"

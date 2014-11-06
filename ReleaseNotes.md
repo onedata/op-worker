@@ -9,6 +9,8 @@ Fixed Bugs
 * Better behaviour when GUI window is small
 * Oneclient is able to use ACLs
 * Users identification for ACL upgraded
+* Rpm and deb generation updated
+* App config updated
 
 oneprovider 2.0
 ==============

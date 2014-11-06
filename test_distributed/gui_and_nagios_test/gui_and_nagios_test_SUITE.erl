@@ -105,9 +105,8 @@ init_per_testcase(main_test, Config) ->
             {ccm_nodes, [Node1]},
             {dns_port, 1308},
             {heart_beat, 1},
-            {db_nodes, [DB_Node]},
-            {nif_prefix, './'},
-            {ca_dir, './cacerts/'}]]),
+            {db_nodes, [DB_Node]}
+        ]]),
 
     lists:append([{nodes, Nodes}], Config).
 

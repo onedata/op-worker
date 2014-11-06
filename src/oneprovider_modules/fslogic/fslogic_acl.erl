@@ -165,7 +165,12 @@ proplist_to_ace(List) ->
 %% ====================================================================
 gruid_to_name(GRUID) ->
     {ok, #db_document{record = #user{name = Name}}} = fslogic_objects:get_user({global_id, GRUID}),
-    <<(utils:ensure_unicode_binary(Name))/binary,"#",(binary_part(GRUID, 0, ?username_hash_length))/binary>>.
+    {ok, UserList} = fslogic_objects:get_user({name, utils:ensure_unicode_list(Name)}),
+    GRUIDList = lists:map(fun(#db_document{record = #user{global_id = GRUID_}}) -> utils:ensure_unicode_binary(GRUID_)  end, UserList),
+    case GRUIDList of
+        [_] -> utils:ensure_unicode_binary(Name);
+        _ -> <<(utils:ensure_unicode_binary(Name))/binary,"#",(binary_part(GRUID, 0, binary:longest_common_prefix(GRUIDList)+1))/binary>>
+    end.
 
 %% name_to_gruid/1
 %% ====================================================================
@@ -195,7 +200,12 @@ name_to_gruid(Name) ->
 %% ====================================================================
 gid_to_group_name(GRGroupId) ->
     {ok, #db_document{record = #group_details{name = Name}}} = dao_lib:apply(dao_groups, get_group, [GRGroupId], 1),
-    <<(utils:ensure_unicode_binary(Name))/binary,"#",(binary_part(GRGroupId, 0, ?groupname_hash_length))/binary>>.
+    {ok, GroupList} = fslogic_objects:get_user({name, utils:ensure_unicode_list(Name)}),
+    GIDList = lists:map(fun(#db_document{record = #group_details{id = GID}}) -> utils:ensure_unicode_binary(GID)  end, GroupList),
+    case GIDList of
+        [_] -> utils:ensure_unicode_binary(Name);
+        _ -> <<(utils:ensure_unicode_binary(Name))/binary,"#",(binary_part(GRGroupId, 0, binary:longest_common_prefix(GIDList)+1))/binary>>
+    end.
 
 %% group_name_to_gid/1
 %% ====================================================================
