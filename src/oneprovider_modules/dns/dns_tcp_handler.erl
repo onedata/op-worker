@@ -5,14 +5,13 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module is responsible for handling tcp aspects of dns protocol.
+%% @doc: This module is responsible for handling TCP DNS connections.
 %% @end
 %% ===================================================================
 
 -module(dns_tcp_handler).
 -behaviour(ranch_protocol).
 
--include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================

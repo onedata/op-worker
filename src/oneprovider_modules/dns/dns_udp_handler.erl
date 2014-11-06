@@ -5,12 +5,11 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module is responsible for handling udp aspects of dns protocol.
+%% @doc: This module is responsible for handling UDP DNS connections.
 %% @end
 %% ===================================================================
 
 -module(dns_udp_handler).
--include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================

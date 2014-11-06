@@ -11,7 +11,7 @@
 %% ===================================================================
 -module(dns_server).
 
--include_lib("kernel/src/inet_dns.hrl").
+-include("dns.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
@@ -33,11 +33,36 @@
 %% ====================================================================
 -export([start/8, stop/1, handle_query/2, start_listening/5]).
 
+% Functions useful in qury handler modules
+-export([answer_record/3, authority_record/3, additional_record/3, authoritative_answer_flag/1]).
+
 % Server configuration (in runtime)
 -export([set_handler_module/1, get_handler_module/0, set_dns_response_ttl/1, get_dns_response_ttl/0, set_max_edns_udp_size/1, get_max_edns_udp_size/0]).
 
-% TODO
 -export([test/1, test/2]).
+
+test(Domain) ->
+    test(Domain, {8, 8, 8, 8}).
+
+test(Domain, NS) ->
+    Query = inet_dns:encode(
+        #dns_rec{
+            header = #dns_header{
+                id = crypto:rand_uniform(1, 16#FFFF),
+                opcode = 'query',
+                rd = true
+            },
+            qdlist = [#dns_query{
+                domain = Domain,
+                type = soa,
+                class = in
+            }],
+            arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, <<>>}]
+        }),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    gen_udp:send(Socket, NS, 53, Query),
+    {ok, {NS, 53, Reply}} = gen_udp:recv(Socket, 65535),
+    inet_dns:decode(Reply).
 
 
 %% start/8
@@ -88,37 +113,52 @@ stop(SupervisorName) ->
 %% ====================================================================
 handle_query(Packet, Transport) ->
     case inet_dns:decode(Packet) of
-        {ok, #dns_rec{header = Header, qdlist = QDList, anlist = _AnList, nslist = _NSList, arlist = _ARList} = DNSRec} ->
+        {ok, #dns_rec{header = Header, qdlist = QDList, anlist = _AnList, nslist = _NSList, arlist = ARList} = DNSRecWithAdditionalSection} ->
+            % Detach OPT RR from the DNS query record an proceed with processing it - the OPT RR will be added during answer generation
+            DNSRec = DNSRecWithAdditionalSection#dns_rec{arlist = []},
+            OPTRR = case ARList of
+                        [] -> undefined;
+                        [#dns_rr_opt{} = OptRR] -> OptRR
+                    end,
             case validate_query(DNSRec) of
                 form_error ->
-                    generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?FORMERR)}, Transport);
+                    generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?FORMERR)}, OPTRR, Transport);
                 bad_version ->
-                    generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?BADVERS)}, Transport);
+                    generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?BADVERS)}, OPTRR, Transport);
                 ok ->
                     HandlerModule = get_handler_module(),
                     [#dns_query{domain = Domain, type = Type, class = Class}] = QDList,
                     case call_handler_module(HandlerModule, string:to_lower(Domain), Type) of
                         serv_fail ->
-                            generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?SERVFAIL)}, Transport);
+                            generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?SERVFAIL)}, OPTRR, Transport);
                         nx_domain ->
-                            generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?NXDOMAIN)}, Transport);
+                            generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?NXDOMAIN)}, OPTRR, Transport);
                         not_impl ->
-                            generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?NOTIMP)}, Transport);
+                            generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?NOTIMP)}, OPTRR, Transport);
                         refused ->
-                            generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?REFUSED)}, Transport);
+                            generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?REFUSED)}, OPTRR, Transport);
                         {ok, ResponseList} ->
-                            AnList = lists:map(
-                                fun(Data) ->
-                                    inet_dns:make_rr([
-                                        {data, Data},
-                                        {domain, Domain},
-                                        {type, Type},
-                                        {ttl, get_dns_response_ttl()},
-                                        {class, Class}])
-                                end, ResponseList),
-                            %% Set AA flag (Authoritative Answer) if the server can answer - this DNS server can handle only queries
-                            %% concerning its domain, so all valid answers are authoritative.
-                            generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, aa, AnList /= []), anlist = AnList}, Transport)
+                            %% If there was an OPT RR, it will be concated at the end of the process
+                            NewRec = lists:foldl(
+                                fun(CurrentRecord, #dns_rec{header = CurrHeader, anlist = CurrAnList, nslist = CurrNSList, arlist = CurrArList} = CurrRec) ->
+                                    case CurrentRecord of
+                                        {aa, Flag} ->
+                                            CurrRec#dns_rec{header = inet_dns:make_header(CurrHeader, aa, Flag)};
+                                        {Section, CurrDomain, CurrType, CurrData} ->
+                                            RR = inet_dns:make_rr([
+                                                {data, CurrData},
+                                                {domain, CurrDomain},
+                                                {type, CurrType},
+                                                {ttl, get_dns_response_ttl()},
+                                                {class, Class}]),
+                                            case Section of
+                                                answer -> CurrRec#dns_rec{anlist = CurrAnList ++ [RR]};
+                                                authority -> CurrRec#dns_rec{nslist = CurrNSList ++ [RR]};
+                                                additional -> CurrRec#dns_rec{arlist = CurrArList ++ [RR]}
+                                            end
+                                    end
+                                end, DNSRec#dns_rec{}, ResponseList),
+                            generate_answer(NewRec#dns_rec{arlist = NewRec#dns_rec.arlist}, OPTRR, Transport)
                     end
             end;
         _ ->
@@ -189,26 +229,29 @@ type_to_fun(?S_TXT) -> handle_txt;
 type_to_fun(_) -> not_impl.
 
 
-%% generate_answer/2
+%% generate_answer/3
 %% ====================================================================
 %% @doc Encodes a DNS record and returns a tuple accepted by dns_xxx_handler modules.
 %% Modifies flags in header according to server's capabilities.
+%% If there was an OPT RR record in request, it modifies it properly and concates to the ADDITIONAL section.
 %% @end
 %% ====================================================================
--spec generate_answer(DNSRec :: #dns_rec{}, Transport :: atom()) -> {ok, binary()}.
+-spec generate_answer(DNSRec :: #dns_rec{}, OPTRR :: #dns_rr_opt{}, Transport :: atom()) -> {ok, binary()}.
 %% ====================================================================
-generate_answer(DNSRec, Transport) ->
+generate_answer(DNSRec, OPTRR, Transport) ->
     % Update the header - no recursion available, qr=true -> it's a response
     Header2 = inet_dns:make_header(DNSRec#dns_rec.header, ra, false),
     NewHeader = inet_dns:make_header(Header2, qr, true),
     DNSRecUpdatedHeader = DNSRec#dns_rec{header = NewHeader},
     % Check if OPT RR is present. If so, retrieve client's max upd payload size and set the value to server's max udp.
-    {NewDnsRec, ClientMaxUDP} = case DNSRecUpdatedHeader#dns_rec.arlist of
-                                    [#dns_rr_opt{udp_payload_size = ClMaxUDP} = RROPT] ->
-                                        {DNSRecUpdatedHeader#dns_rec{arlist = [RROPT#dns_rr_opt{udp_payload_size = get_max_edns_udp_size()}]}, ClMaxUDP};
-                                    [] ->
-                                        {DNSRecUpdatedHeader, undefined}
+    {NewDnsRec, ClientMaxUDP} = case OPTRR of
+                                    undefined ->
+                                        {DNSRecUpdatedHeader, undefined};
+                                    #dns_rr_opt{udp_payload_size = ClMaxUDP} = RROPT ->
+                                        NewRROPT = RROPT#dns_rr_opt{udp_payload_size = get_max_edns_udp_size()},
+                                        {DNSRecUpdatedHeader#dns_rec{arlist = DNSRecUpdatedHeader#dns_rec.arlist ++ [NewRROPT]}, ClMaxUDP}
                                 end,
+    ?dump(NewDnsRec),
     case Transport of
         udp -> {ok, encode_udp(NewDnsRec, ClientMaxUDP)};
         tcp -> {ok, inet_dns:encode(NewDnsRec)}
@@ -280,43 +323,56 @@ start_listening(SupervisorName, DNSPort, TCPNumAcceptors, TCPTimeout, OnFailureF
     ok.
 
 
-%% clear_children_and_listeners/2
+%% authoritative_answer_flag/1
 %% ====================================================================
-%% @doc Terminates listeners and created children, if they exist.
+%% @doc Convenience function used from a dns query handler. Creates a term that will cause
+%% the AA (authoritative answer) flag to be set to desired value in response.
+%% The term should be put in list returned from handle_xxx function.
 %% @end
 %% ====================================================================
--spec clear_children_and_listeners(SupervisorName :: atom(), ReportErrors :: boolean()) -> ok.
+-spec authoritative_answer_flag(Flag :: boolean()) -> ok.
 %% ====================================================================
-clear_children_and_listeners(SupervisorName, ReportErrors) ->
-    try
-        SupChildren = supervisor:which_children(SupervisorName),
-        case lists:keyfind(?DNS_UDP_LISTENER, 1, SupChildren) of
-            {?DNS_UDP_LISTENER, _, _, _} ->
-                ok = supervisor:terminate_child(SupervisorName, ?DNS_UDP_LISTENER),
-                supervisor:delete_child(SupervisorName, ?DNS_UDP_LISTENER),
-                ?debug("DNS UDP child has exited");
-            _ ->
-                ok
-        end
-    catch
-        _:Error1 ->
-            case ReportErrors of
-                true -> ?error_stacktrace("Error stopping dns udp listener, status ~p", [Error1]);
-                false -> ok
-            end
-    end,
+authoritative_answer_flag(Flag) ->
+    {aa, Flag}.
 
-    try
-        ok = ranch:stop_listener(?DNS_TCP_LISTENER),
-        ?debug("dns_tcp_listener has exited")
-    catch
-        _:Error2 ->
-            case ReportErrors of
-                true -> ?error_stacktrace("Error stopping dns tcp listener, status ~p", [Error2]);
-                false -> ok
-            end
-    end,
-    ok.
+
+%% answer_record/3
+%% ====================================================================
+%% @doc Convenience function used from a dns query handler. Creates a term that will end up
+%% as a record in ANSWER section of DNS reponse.
+%% The term should be put in list returned from handle_xxx function.
+%% @end
+%% ====================================================================
+-spec answer_record(Domain :: string(), Type :: dns_query_type(), Data :: term()) -> ok.
+%% ====================================================================
+answer_record(Domain, Type, Data) ->
+    {answer, Domain, Type, Data}.
+
+
+%% authority_record/3
+%% ====================================================================
+%% @doc Convenience function used from a dns query handler. Creates a term that will end up
+%% as a record in AUTHORITY section of DNS reponse.
+%% The term should be put in list returned from handle_xxx function.
+%% @end
+%% ====================================================================
+-spec authority_record(Domain :: string(), Type :: dns_query_type(), Data :: term()) -> ok.
+%% ====================================================================
+authority_record(Domain, Type, Data) ->
+    {authority, Domain, Type, Data}.
+
+
+%% additional_record/3
+%% ====================================================================
+%% @doc Convenience function used from a dns query handler. Creates a term that will end up
+%% as a record in ADDITIONAL section of DNS reponse.
+%% The term should be put in list returned from handle_xxx function.
+%% @end
+%% ====================================================================
+-spec additional_record(Domain :: string(), Type :: dns_query_type(), Data :: term()) -> ok.
+%% ====================================================================
+additional_record(Domain, Type, Data) ->
+    {additional, Domain, Type, Data}.
 
 
 %% set_handler_module/1
@@ -386,3 +442,46 @@ set_max_edns_udp_size(Size) ->
 get_max_edns_udp_size() ->
     {ok, Size} = application:get_env(ctool, edns_max_udp_size),
     Size.
+
+
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
+
+%% clear_children_and_listeners/2
+%% ====================================================================
+%% @doc Terminates listeners and created children, if they exist.
+%% @end
+%% ====================================================================
+-spec clear_children_and_listeners(SupervisorName :: atom(), ReportErrors :: boolean()) -> ok.
+%% ====================================================================
+clear_children_and_listeners(SupervisorName, ReportErrors) ->
+    try
+        SupChildren = supervisor:which_children(SupervisorName),
+        case lists:keyfind(?DNS_UDP_LISTENER, 1, SupChildren) of
+            {?DNS_UDP_LISTENER, _, _, _} ->
+                ok = supervisor:terminate_child(SupervisorName, ?DNS_UDP_LISTENER),
+                supervisor:delete_child(SupervisorName, ?DNS_UDP_LISTENER),
+                ?debug("DNS UDP child has exited");
+            _ ->
+                ok
+        end
+    catch
+        _:Error1 ->
+            case ReportErrors of
+                true -> ?error_stacktrace("Error stopping dns udp listener, status ~p", [Error1]);
+                false -> ok
+            end
+    end,
+
+    try
+        ok = ranch:stop_listener(?DNS_TCP_LISTENER),
+        ?debug("dns_tcp_listener has exited")
+    catch
+        _:Error2 ->
+            case ReportErrors of
+                true -> ?error_stacktrace("Error stopping dns tcp listener, status ~p", [Error2]);
+                false -> ok
+            end
+    end,
+    ok.

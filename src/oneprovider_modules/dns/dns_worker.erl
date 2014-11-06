@@ -15,6 +15,7 @@
 -behaviour(worker_plugin_behaviour).
 -behaviour(dns_query_handler_behaviour).
 
+-include("dns.hrl").
 -include("oneprovider_modules/dns/dns_worker.hrl").
 -include("registered_names.hrl").
 -include("supervision_macros.hrl").
@@ -288,24 +289,41 @@ make_ans_random(Result) ->
     when Response :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
 %% ====================================================================
 handle_a(Domain) ->
-    case parse_domain(Domain) of
-        nx_domain ->
-            nx_domain;
-        {Prefix, _Suffix} ->
-            if
-                Prefix =:= "" ->
-                    get_workers(control_panel);
-                Prefix =:= "www" ->
-                    get_workers(control_panel);
-                Prefix =:= "cluster" ->
-                    get_nodes();
-                true ->
-                    Module = try list_to_existing_atom(Prefix) catch _:_ -> undefined end,
-                    case lists:member(Module, ?EXTERNALLY_VISIBLE_MODULES) of
-                        true -> get_workers(Module);
-                        false -> nx_domain
-                    end
-            end
+    IPList = case parse_domain(Domain) of
+                 nx_domain ->
+                     nx_domain;
+                 {Prefix, _Suffix} ->
+                     if
+                         Prefix =:= "" ->
+                             get_workers(control_panel);
+                         Prefix =:= "www" ->
+                             get_workers(control_panel);
+                         Prefix =:= "cluster" ->
+                             get_nodes();
+                         true ->
+                             Module = try list_to_existing_atom(Prefix) catch _:_ -> undefined end,
+                             case lists:member(Module, ?EXTERNALLY_VISIBLE_MODULES) of
+                                 false ->
+                                     nx_domain;
+                                 true ->
+                                     get_workers(Module)
+                             end
+                     end
+             end,
+    case IPList of
+        nx_domain -> nx_domain;
+        serv_fail -> serv_fail;
+        _ ->
+            {_, Suffix} = parse_domain(Domain),
+            {ok, [dns_server:answer_record(Domain, ?S_A, Data) || Data <- IPList] ++ [
+                dns_server:authoritative_answer_flag(true),
+                dns_server:authority_record(Suffix, ?S_NS, "ns1.hostname.com"),
+                dns_server:authority_record(Suffix, ?S_NS, "ns2.hostname.com"),
+                dns_server:authority_record(Suffix, ?S_NS, "ns3.hostname.com"),
+                dns_server:additional_record("ns1.hostname.com", ?S_A, {1, 2, 3, 11}),
+                dns_server:additional_record("ns2.hostname.com", ?S_A, {1, 2, 3, 12}),
+                dns_server:additional_record("ns3.hostname.com", ?S_A, {1, 2, 3, 13})
+            ]}
     end.
 
 
@@ -509,7 +527,7 @@ is_prefix_valid(Prefix) ->
 %% @doc Selects couple of nodes hosting given worker and returns their IPs.
 %% @end
 %% ====================================================================
--spec get_workers(Module :: atom()) -> {ok, list()} | serv_fail.
+-spec get_workers(Module :: atom()) -> list() | serv_fail.
 %% ====================================================================
 get_workers(Module) ->
     try
@@ -518,7 +536,7 @@ get_workers(Module) ->
         case DispatcherAns of
             ok -> receive
                       {ok, ListOfIPs} ->
-                          {ok, ListOfIPs};
+                          ListOfIPs;
                       {error, Error} ->
                           ?error("Unexpected dispatcher error ~p", [Error]),
                           serv_fail
@@ -543,7 +561,7 @@ get_workers(Module) ->
 %% @doc Selects couple of nodes from the cluster and returns their IPs.
 %% @end
 %% ====================================================================
--spec get_nodes() -> {ok, list()} | serv_fail.
+-spec get_nodes() -> list() | serv_fail.
 %% ====================================================================
 get_nodes() ->
     try
@@ -552,7 +570,7 @@ get_nodes() ->
         case DispatcherAns of
             ok -> receive
                       {ok, ListOfIPs} ->
-                          {ok, ListOfIPs};
+                          ListOfIPs;
                       {error, Error} ->
                           ?error("Unexpected dispatcher error ~p", [Error]),
                           serv_fail
