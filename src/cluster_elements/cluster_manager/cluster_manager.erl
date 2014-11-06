@@ -20,8 +20,17 @@
 -define(STATS_WEIGHTS, [{"cpu", 100}, {"mem", 100}]).
 -define(CALLBACKS_TABLE, callbacks_table).
 
+-define(ACTION_START_WORKER, start_worker).
+-define(ACTION_STOP_WORKER, stop_worker).
+
+%%
+-define(MODULE_LIFECYCLE_LISTENERS_ETS, module_lifecycle_listeners_table).
+
 %% Singleton modules are modules which are supposed to have only one instance.
--define(SINGLETON_MODULES, [control_panel, central_logger, rule_manager]).
+-define(SINGLETON_MODULES, [control_panel, central_logger, rule_manager, rtransfer]).
+
+%% Modules that are present on all workers.
+-define(PERMAMENT_MODULES, [gateway]).
 
 -record(cluster_stats, {cpu = {0, 0}, memory = {0, 0}, net_rx_b = {0, 0}, net_tx_b = {0, 0}, net_rx_pps = {0, 0},
   net_tx_pps = {0, 0}, ports_rx_b = {0, 0}, ports_tx_b = {0, 0}}).
@@ -111,6 +120,8 @@ stop() ->
 %% ====================================================================
 init([]) ->
   ets:new(?CALLBACKS_TABLE, [named_table, set]),
+  ets:new(?MODULE_LIFECYCLE_LISTENERS_ETS, [named_table, set]),
+
   process_flag(trap_exit, true),
   {ok, Interval} = application:get_env(?APP_Name, initialization_time),
   Pid = self(),
@@ -125,12 +136,42 @@ init([]) ->
   erlang:send_after(LoggerAndDAOInterval * 1000 + 200, Pid, {timer, get_state_from_db}),
   {ok, MonitoringInitialization} = application:get_env(?APP_Name, cluster_monitoring_initialization),
   erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_cluster_monitoring}),
+
+  erlang:send_after(Interval * 1000 + 2300, self(), {timer, register_default_module_listeners}),
+
   {ok, #cm_state{}};
 
 init([test]) ->
   ets:new(?CALLBACKS_TABLE, [named_table, set]),
   process_flag(trap_exit, true),
   {ok, #cm_state{nodes = [node()]}}.
+
+
+add_module_lifecycle_listener(Module, Listener) ->
+  case ets:lookup(?MODULE_LIFECYCLE_LISTENERS_ETS, Module) of
+    [{_Module, Listeners}] ->
+      ets:insert(?MODULE_LIFECYCLE_LISTENERS_ETS, {Module, [Listener, Listeners]});
+    [] -> ets:insert(?MODULE_LIFECYCLE_LISTENERS_ETS, {Module, [Listener]})
+  end.
+
+lifecycle_notification(Node, Module, Action, Workers) ->
+  case ets:lookup(?MODULE_LIFECYCLE_LISTENERS_ETS, Module) of
+    [{_Module, Listeners}] ->
+      NewListeners = send_notifications(Node, Module, Listeners, Action, Workers),
+      ets:insert(?MODULE_LIFECYCLE_LISTENERS_ETS, {Module, NewListeners});
+    [] -> send_notifications(Node, Module, [], Action, Workers)
+  end.
+
+send_notifications(Node, Module, Listeners, Action, Workers) ->
+  ?info("Notification ~p ~p ~p ~p ",[Node, Module, Listeners, Action]),
+
+  [{ ?info("Send: ~p",[{Module2, Node2}]), gen_server:call({Module2, Node2}, {Node, Module, Action}, 500)} || {Node2, Module2, Pid} <- Workers ,
+    lists:member({all_modules}, Listeners)
+      or lists:member({module, Module2}, Listeners)
+      or lists:member({module, Module2, Node2}, Listeners),
+      Node =/= Node2
+  ],
+  Listeners.
 
 %% handle_call/3
 %% ====================================================================
@@ -346,6 +387,16 @@ handle_cast({node_is_up, Node}, State) ->
           end
       end
   end;
+
+handle_cast(register_default_module_listeners, State) ->
+  ?info("Registering modle lifecycle listeners."),
+  add_module_lifecycle_listener(rtransfer, {module, rule_manager}),
+  add_module_lifecycle_listener(rtransfer, {module, gateway}),
+  add_module_lifecycle_listener(gateway, {all_modules}),
+  add_module_lifecycle_listener(rule_manager, {node, gateway, "w2@veildev_132.local"}),
+  add_module_lifecycle_listener(central_logger, {module, gateway, "w2@veildev_132.local"}),
+  add_module_lifecycle_listener(central_logger, {all_modules}),
+  {noreply, State};
 
 handle_cast(init_cluster, State) ->
   NewState = init_cluster(State),
@@ -623,16 +674,36 @@ code_change(_OldVsn, State, _Extra) ->
   NewState :: term().
 %% ====================================================================
 init_cluster(State) ->
-  ?debug("Checking if initialization is needed ~p", [State]),
+  ?info("Checking if initialization is needed ~p", [State]),
+  ?info("Nodes ~p, ~n Workers ~p", [State#cm_state.nodes, State#cm_state.workers]),
   Nodes = State#cm_state.nodes,
   case length(Nodes) > 0 of
     true ->
       JobsAndArgs = ?Modules_With_Args,
 
+      %% Every node is supposed to have a complete set of permament workes.
+      CreatePermamentWorkersList = fun({Worker, Module, _Child}, Workers) ->
+        case lists:member(Module, ?PERMAMENT_MODULES) of
+          true -> [{Worker, Module}, Workers];
+          _ -> Workers
+        end
+      end,
+      PermamentWorkers = lists:foldl(CreatePermamentWorkersList, [], State#cm_state.workers),
+      RequiredPermamentWorkers = [{Node, Module, Args} || Node <- Nodes, Module <- ?PERMAMENT_MODULES,
+                                 {Module2, Args} <- ?Modules_With_Args,
+                                 not lists:member({Node, Module}, PermamentWorkers),
+                                 Module =:= Module2],
+
+      ?info("Permament nodes to create ~p", [RequiredPermamentWorkers]),
+      NewStatePermament = init_permament_nodes(RequiredPermamentWorkers, State),
+
+      NewStatePermament2 = update_dispatchers_and_dns(NewStatePermament, true, true),
+      ?info("New state ~p", [NewStatePermament2]),
+
       CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
         [M | Workers]
       end,
-      Workers = State#cm_state.workers,
+      Workers = NewStatePermament2 #cm_state.workers,
       RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
 
       CreateJobsList = fun({Job, A}, {TmpJobs, TmpArgs}) ->
@@ -647,14 +718,14 @@ init_cluster(State) ->
                     true ->
                       ?info("Initialization of jobs ~p using nodes ~p", [Jobs, Nodes]),
                       NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
-                                   true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
-                                   false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
+                                   true -> init_cluster_nodes_dominance(NewStatePermament2 , Nodes, Jobs, [], Args, []);
+                                   false -> init_cluster_jobs_dominance(NewStatePermament2 , Jobs, Args, Nodes, [])
                                  end,
 
                       NewState2 = update_dispatchers_and_dns(NewState, true, true),
                       save_state(),
                       NewState2;
-                    false -> State
+                    false -> NewStatePermament2
                   end,
 
       plan_next_cluster_state_check(),
@@ -665,6 +736,13 @@ init_cluster(State) ->
       erlang:send_after(1000 * Interval, Pid, {timer, init_cluster}),
       State
   end.
+
+
+init_permament_nodes([], State) ->
+  State;
+init_permament_nodes([{Node, Job, Args}| InitList], State) ->
+  {_Ans, NewState} = start_worker(Node, Job, Args, State),
+  init_permament_nodes(InitList, NewState).
 
 %% init_cluster_nodes_dominance/6
 %% ====================================================================
@@ -704,14 +782,18 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
   NewState :: term().
 %% ====================================================================
 check_cluster_state(State) ->
-  CheckNum = (State#cm_state.cluster_check_num + 1) rem 15,
+  CheckNum = (State#cm_state.cluster_check_num + 1) rem 1,
 
   NewState = case CheckNum of
                0 ->
                  case length(State#cm_state.nodes) > 1 of
                    true ->
                      {NodesLoad, AvgLoad} = calculate_node_load(State#cm_state.nodes, long),
-                     WorkersLoad = calculate_worker_load(State#cm_state.workers),
+
+                     WorkersLoad = [{Worker, [{Module, Load} || {Module, Load} <- LoadList, not lists:member(Module, ?PERMAMENT_MODULES)]} || {Worker, LoadList} <- calculate_worker_load(State#cm_state.workers)],
+
+                     ?info("WorkersLoad ~p", [WorkersLoad]),
+
                      Load = calculate_load(NodesLoad, WorkersLoad),
 
                      MinV = case [NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error] of
@@ -803,6 +885,7 @@ start_worker(Node, Module, WorkerArgs, State) ->
     {ok, ChildPid} = supervisor:start_child({?Supervisor_Name, Node}, ?Sup_Child(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
     Workers = State#cm_state.workers,
     ?info("Worker: ~s started at node: ~s", [Module, Node]),
+    lifecycle_notification(Node, Module, ?ACTION_START_WORKER, Workers),
     {ok, State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}}
   catch
     _:_ ->
@@ -837,6 +920,7 @@ stop_worker(Node, Module, State) ->
                 case Ans3 of
                   ok ->
                     ?info("Worker: ~s stopped at node: ~s", [Module, Node]),
+                    lifecycle_notification(Node, Module, ?ACTION_STOP_WORKER, NewWorkers),
                     ok;
                   {error, Error1} ->
                     ?error("Worker: ~s not stopped at node: ~s, error ~p", [Module, Node, {delete_error, Error1}]),
@@ -925,6 +1009,7 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
       case MapState of
         ok ->
           {MapState2, Ans} = add_children(Node, Children, Workers),
+          lifecycle_notification(Node, Id, ?ACTION_START_WORKER, Workers),
           {MapState2, [{Node, Id, ChildPid} | Ans]};
         _ -> {error, Workers}
       end
@@ -940,7 +1025,9 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
 node_down(Node, State) ->
   CreateNewWorkersList = fun({N, M, Child}, {Workers, Found}) ->
     case N of
-      Node -> {Workers, true};
+      Node ->
+        lifecycle_notification(N, M, ?ACTION_STOP_WORKER, State#cm_state.workers),
+        {Workers, true};
       _N2 -> {[{N, M, Child} | Workers], Found}
     end
   end,
