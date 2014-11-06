@@ -20,31 +20,16 @@
 -include_lib("ctool/include/test/test_node_starter.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([dns_worker_env_test/1, dns_udp_handler_responds_to_dns_queries/1, dns_ranch_tcp_handler_responds_to_dns_queries/1, distributed_test/1]).
+-export([dns_udp_handler_responds_to_dns_queries/1, dns_ranch_tcp_handler_responds_to_dns_queries/1, distributed_test/1]).
 
 %% export nodes' codes
--export([dns_worker_env_test_code/0, ccm_code1/0, ccm_code2/0, worker_code/0]).
+-export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
-all() -> [dns_worker_env_test, dns_ranch_tcp_handler_responds_to_dns_queries, dns_udp_handler_responds_to_dns_queries, distributed_test].
-
-
-%% ====================================================================
-%% Code of nodes used during the test
-%% ====================================================================
-
-dns_worker_env_test_code() ->
-  assert_all_deps_are_met(?APP_Name, dns_worker),
-  ok.
+all() -> [dns_ranch_tcp_handler_responds_to_dns_queries, dns_udp_handler_responds_to_dns_queries, distributed_test].
 
 %% ====================================================================
 %% Test functions
 %% ====================================================================
-
-%% Checks if all necessary variables are declared in application
-dns_worker_env_test(Config) ->
-  {Node, _DNS_Port} = extract_node_and_dns_port(Config),
-
-  ?assertEqual(ok, rpc:call(Node, ?MODULE, dns_worker_env_test_code, [])).
 
 %% Checks if dns_udp_handler responds before and after running dns_worker
 dns_udp_handler_responds_to_dns_queries(Config) ->
@@ -294,23 +279,6 @@ type_of(X) when is_reference(X) -> reference;
 type_of(X) when is_atom(X)      -> atom;
 type_of(_X)                     -> unknown.
 
-
-%% Helper function for asserting that all module dependencies
-%% are set and have declared type
-assert_all_deps_are_met(Application, Deps) when is_list(Deps) ->
-  lists:foreach(fun(Dep) ->
-      assert_all_deps_are_met(Application, Dep)
-    end, Deps);
-
-assert_all_deps_are_met(Application, {VarName, VarType}) when is_atom(VarName) andalso is_atom(VarType) ->
-
-  {ok, Value} = application:get_env(Application, VarName),
-  ?assertEqual(VarType, type_of(Value));
-
-assert_all_deps_are_met(Application, Module) when is_atom(Module) ->
-
-  Dependencies = Module:env_dependencies(),
-  assert_all_deps_are_met(Application, Dependencies).
 
 %% ====================================================================
 %% Code of nodes used during the test
