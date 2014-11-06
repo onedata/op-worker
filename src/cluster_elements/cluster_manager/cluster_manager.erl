@@ -23,14 +23,8 @@
 -define(ACTION_START_WORKER, start_worker).
 -define(ACTION_STOP_WORKER, stop_worker).
 
-%%
--define(MODULE_LIFECYCLE_LISTENERS_ETS, module_lifecycle_listeners_table).
-
 %% Singleton modules are modules which are supposed to have only one instance.
 -define(SINGLETON_MODULES, [control_panel, central_logger, rule_manager, rtransfer]).
-
-%% Modules that are present on all workers.
--define(PERMAMENT_MODULES, [gateway]).
 
 -record(cluster_stats, {cpu = {0, 0}, memory = {0, 0}, net_rx_b = {0, 0}, net_tx_b = {0, 0}, net_rx_pps = {0, 0},
   net_tx_pps = {0, 0}, ports_rx_b = {0, 0}, ports_tx_b = {0, 0}}).
@@ -120,8 +114,6 @@ stop() ->
 %% ====================================================================
 init([]) ->
   ets:new(?CALLBACKS_TABLE, [named_table, set]),
-  ets:new(?MODULE_LIFECYCLE_LISTENERS_ETS, [named_table, set]),
-
   process_flag(trap_exit, true),
   {ok, Interval} = application:get_env(?APP_Name, initialization_time),
   Pid = self(),
@@ -137,7 +129,7 @@ init([]) ->
   {ok, MonitoringInitialization} = application:get_env(?APP_Name, cluster_monitoring_initialization),
   erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_cluster_monitoring}),
 
-  erlang:send_after(Interval * 1000 + 2300, self(), {timer, register_default_module_listeners}),
+  erlang:send_after(Interval * 500 + 100, self(), {timer, register_default_module_listeners}),
 
   {ok, #cm_state{}};
 
@@ -145,33 +137,6 @@ init([test]) ->
   ets:new(?CALLBACKS_TABLE, [named_table, set]),
   process_flag(trap_exit, true),
   {ok, #cm_state{nodes = [node()]}}.
-
-
-add_module_lifecycle_listener(Module, Listener) ->
-  case ets:lookup(?MODULE_LIFECYCLE_LISTENERS_ETS, Module) of
-    [{_Module, Listeners}] ->
-      ets:insert(?MODULE_LIFECYCLE_LISTENERS_ETS, {Module, [Listener, Listeners]});
-    [] -> ets:insert(?MODULE_LIFECYCLE_LISTENERS_ETS, {Module, [Listener]})
-  end.
-
-lifecycle_notification(Node, Module, Action, Workers) ->
-  case ets:lookup(?MODULE_LIFECYCLE_LISTENERS_ETS, Module) of
-    [{_Module, Listeners}] ->
-      NewListeners = send_notifications(Node, Module, Listeners, Action, Workers),
-      ets:insert(?MODULE_LIFECYCLE_LISTENERS_ETS, {Module, NewListeners});
-    [] -> send_notifications(Node, Module, [], Action, Workers)
-  end.
-
-send_notifications(Node, Module, Listeners, Action, Workers) ->
-  ?info("Notification ~p ~p ~p ~p ",[Node, Module, Listeners, Action]),
-
-  [{ ?info("Send: ~p",[{Module2, Node2}]), gen_server:call({Module2, Node2}, {Node, Module, Action}, 500)} || {Node2, Module2, Pid} <- Workers ,
-    lists:member({all_modules}, Listeners)
-      or lists:member({module, Module2}, Listeners)
-      or lists:member({module, Module2, Node2}, Listeners),
-      Node =/= Node2
-  ],
-  Listeners.
 
 %% handle_call/3
 %% ====================================================================
@@ -389,14 +354,14 @@ handle_cast({node_is_up, Node}, State) ->
   end;
 
 handle_cast(register_default_module_listeners, State) ->
-  ?info("Registering modle lifecycle listeners."),
-  add_module_lifecycle_listener(rtransfer, {module, rule_manager}),
-  add_module_lifecycle_listener(rtransfer, {module, gateway}),
-  add_module_lifecycle_listener(gateway, {all_modules}),
-  add_module_lifecycle_listener(rule_manager, {node, gateway, "w2@veildev_132.local"}),
-  add_module_lifecycle_listener(central_logger, {module, gateway, "w2@veildev_132.local"}),
-  add_module_lifecycle_listener(central_logger, {all_modules}),
-  {noreply, State};
+  handle_cast({register_module_listener, gateway, {module, rtransfer}}, State);
+
+handle_cast({register_module_listener, Module, Listener}, State) ->
+  ?info("Registering module lifecycle listeners."),
+  %% NewState = add_module_lifecycle_listener(module_name, [{module, module_name[, node]|[{all_modules}]]}
+  NewState = add_module_lifecycle_listener(Module, Listener, State),
+  save_state(),
+  {noreply, NewState};
 
 handle_cast(init_cluster, State) ->
   NewState = init_cluster(State),
@@ -683,21 +648,20 @@ init_cluster(State) ->
 
       %% Every node is supposed to have a complete set of permament workes.
       CreatePermamentWorkersList = fun({Worker, Module, _Child}, Workers) ->
-        case lists:member(Module, ?PERMAMENT_MODULES) of
+        case lists:member(Module, ?Permament_Modules) of
           true -> [{Worker, Module}, Workers];
           _ -> Workers
         end
       end,
       PermamentWorkers = lists:foldl(CreatePermamentWorkersList, [], State#cm_state.workers),
-      RequiredPermamentWorkers = [{Node, Module, Args} || Node <- Nodes, Module <- ?PERMAMENT_MODULES,
+      RequiredPermamentWorkers = [{Node, Module, Args} || Node <- Nodes, Module <- ?Permament_Modules,
                                  {Module2, Args} <- ?Modules_With_Args,
                                  not lists:member({Node, Module}, PermamentWorkers),
                                  Module =:= Module2],
 
       ?info("Permament nodes to create ~p", [RequiredPermamentWorkers]),
-      NewStatePermament = init_permament_nodes(RequiredPermamentWorkers, State),
+      NewStatePermament2 = init_permament_nodes(RequiredPermamentWorkers, State),
 
-      NewStatePermament2 = update_dispatchers_and_dns(NewStatePermament, true, true),
       ?info("New state ~p", [NewStatePermament2]),
 
       CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
@@ -725,7 +689,11 @@ init_cluster(State) ->
                       NewState2 = update_dispatchers_and_dns(NewState, true, true),
                       save_state(),
                       NewState2;
-                    false -> NewStatePermament2
+                    false ->
+                      case length(RequiredPermamentWorkers) > 0 of
+                        true -> update_dispatchers_and_dns(NewStatePermament2, true, true);
+                        _ -> NewStatePermament2
+                      end
                   end,
 
       plan_next_cluster_state_check(),
@@ -737,7 +705,9 @@ init_cluster(State) ->
       State
   end.
 
-
+%% init_permament_nodes/2
+%% ====================================================================
+%% @doc Starts list of workers.
 init_permament_nodes([], State) ->
   State;
 init_permament_nodes([{Node, Job, Args}| InitList], State) ->
@@ -790,7 +760,7 @@ check_cluster_state(State) ->
                    true ->
                      {NodesLoad, AvgLoad} = calculate_node_load(State#cm_state.nodes, long),
 
-                     WorkersLoad = [{Worker, [{Module, Load} || {Module, Load} <- LoadList, not lists:member(Module, ?PERMAMENT_MODULES)]} || {Worker, LoadList} <- calculate_worker_load(State#cm_state.workers)],
+                     WorkersLoad = [{Worker, [{Module, Load} || {Module, Load} <- LoadList, not lists:member(Module, ?Permament_Modules)]} || {Worker, LoadList} <- calculate_worker_load(State#cm_state.workers)],
 
                      ?info("WorkersLoad ~p", [WorkersLoad]),
 
@@ -870,6 +840,62 @@ plan_next_cluster_state_check() ->
   {ok, Interval} = application:get_env(?APP_Name, cluster_monitoring_period),
   erlang:send_after(Interval * 1000, self(), {timer, check_cluster_state}).
 
+
+
+
+%% add_module_lifecycle_listener/2
+%% ====================================================================
+%% @doc Adds new lifcycle listener to the list of registered listeners
+-spec add_module_lifecycle_listener(Module :: list(), Listener :: term(), State :: term()) -> Result when
+  Result :: term().
+%% ====================================================================
+add_module_lifecycle_listener(Module, Listener, State) ->
+  Listeners = State#cm_state.worker_lifecycle_listeners,
+  ModuleListeners = [{Module2, Listeners2} || {Module2, Listeners2} <- Listeners, Module =:= Module2],
+  RestListeners = [{Module2, Listeners2} || {Module2, Listeners2} <- Listeners, Module =/= Module2],
+
+  NewModuleListeners = case ModuleListeners of
+                         [{M, L}] ->
+                           case lists:member(Listener, L) of
+                             true -> {M, L};
+                             false -> {M, [Listeners | L]}
+                           end;
+                         [] -> {Module, [Listener]}
+                       end,
+
+  State#cm_state{worker_lifecycle_listeners = [NewModuleListeners | RestListeners]}.
+
+
+%% lifecycle_notification/5
+%% ====================================================================
+%% @doc Sends notification to modules that are registered for certain lifecycle acions
+-spec lifecycle_notification(Node :: list(), Module :: atom(), Action :: atom(), Workers :: term(), State :: term()) -> ok.
+%% ====================================================================
+lifecycle_notification(Node, Module, Action, Workers, State) ->
+  Listeners = State#cm_state.worker_lifecycle_listeners,
+  ModuleListeners = [{Module2, Listeners2} || {Module2, Listeners2} <- Listeners, Module =:= Module2],
+  case ModuleListeners of
+    [{_M, L}] -> send_notifications(Node, Module, Action, Workers, L);
+    [] -> ok;
+    X -> ?error("Wrong state ~p", [X])
+  end.
+
+%% send_notifications/2
+%% ====================================================================
+%% @doc Sends notifications to modules that are registered for certain lifecycle acions
+-spec send_notifications(Node :: list(), Module :: atom(), Action :: atom(), Workers :: term(), Listeners ::list()) -> ok.
+send_notifications(Node, Module, Action, Workers,  Listeners) ->
+  ?info("Notification ~p ~p ~p ~p ~p", [Node, Module, Listeners, Action, Workers]),
+  [{ ?info("Send: ~p",[{Module2, Node2}]), gen_server:cast({Module2, Node2}, {asynch, 1, {node_lifecycle_notification, Node, Module, Action, Pid}})} || {Node2, Module2, Pid} <- Workers ,
+    lists:member({all_modules}, Listeners)
+      or lists:member({module, Module2}, Listeners)
+      or lists:member({module, Module2, Node2}, Listeners),
+    ((Node =/= Node2) or (Module =/= Module2))
+  ],
+  ok.
+
+
+
 %% start_worker/4
 %% ====================================================================
 %% @doc Processes client request using PlugIn:handle function. Afterwards,
@@ -885,11 +911,11 @@ start_worker(Node, Module, WorkerArgs, State) ->
     {ok, ChildPid} = supervisor:start_child({?Supervisor_Name, Node}, ?Sup_Child(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
     Workers = State#cm_state.workers,
     ?info("Worker: ~s started at node: ~s", [Module, Node]),
-    lifecycle_notification(Node, Module, ?ACTION_START_WORKER, Workers),
+    lifecycle_notification(Node, Module, ?ACTION_START_WORKER, Workers, State),
     {ok, State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}}
   catch
-    _:_ ->
-      ?error("Error during start of worker: ~s at node: ~s", [Module, Node]),
+    A:B ->
+      ?error("Error during start of worker: ~s at node: ~s ~p ~p", [Module, Node, A, B]),
       {error, State}
   end.
 
@@ -920,7 +946,7 @@ stop_worker(Node, Module, State) ->
                 case Ans3 of
                   ok ->
                     ?info("Worker: ~s stopped at node: ~s", [Module, Node]),
-                    lifecycle_notification(Node, Module, ?ACTION_STOP_WORKER, NewWorkers),
+                    lifecycle_notification(Node, Module, ?ACTION_STOP_WORKER, NewWorkers, State),
                     ok;
                   {error, Error1} ->
                     ?error("Worker: ~s not stopped at node: ~s, error ~p", [Module, Node, {delete_error, Error1}]),
@@ -946,7 +972,7 @@ check_node(Node, State) ->
       pong ->
         Children = supervisor:which_children({?Supervisor_Name, Node}),
         Workers = State#cm_state.workers,
-        {AddState, NewWorkers} = add_children(Node, Children, Workers),
+        {AddState, NewWorkers} = add_children(Node, Children, Workers, State),
         case AddState of
           ok ->
             WorkersFound = length(NewWorkers) > length(Workers),
@@ -985,16 +1011,16 @@ check_node(Node, State) ->
 %% add_children/3
 %% ====================================================================
 %% @doc Add workers that run on node to workers list.
--spec add_children(Node :: atom(), Children :: list(), Workers :: term()) -> NewWorkersList when
+-spec add_children(Node :: atom(), Children :: list(), Workers :: term(), State :: term()) -> NewWorkersList when
   NewWorkersList :: list().
 %% ====================================================================
-add_children(_Node, [], Workers) ->
+add_children(_Node, [], Workers, _State) ->
   {ok, Workers};
 
-add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
+add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers, State) ->
   Jobs = ?Modules,
   case lists:member(Id, Jobs) of
-    false -> add_children(Node, Children, Workers);
+    false -> add_children(Node, Children, Workers, State);
     true ->
       ?info("Worker ~p found at node ~s", [Id, Node]),
 
@@ -1008,8 +1034,8 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
 
       case MapState of
         ok ->
-          {MapState2, Ans} = add_children(Node, Children, Workers),
-          lifecycle_notification(Node, Id, ?ACTION_START_WORKER, Workers),
+          {MapState2, Ans} = add_children(Node, Children, Workers, State),
+          lifecycle_notification(Node, Id, ?ACTION_START_WORKER, Workers, State),
           {MapState2, [{Node, Id, ChildPid} | Ans]};
         _ -> {error, Workers}
       end
@@ -1026,7 +1052,7 @@ node_down(Node, State) ->
   CreateNewWorkersList = fun({N, M, Child}, {Workers, Found}) ->
     case N of
       Node ->
-        lifecycle_notification(N, M, ?ACTION_STOP_WORKER, State#cm_state.workers),
+        lifecycle_notification(N, M, ?ACTION_STOP_WORKER, State#cm_state.workers, State),
         {Workers, true};
       _N2 -> {[{N, M, Child} | Workers], Found}
     end

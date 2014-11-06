@@ -26,7 +26,7 @@
 -define(ProtocolVersion, 1).
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, ping_test/1, application_start_test1/1,
+-export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, workers_list_singleton_and_permanent_test/1, ping_test/1, application_start_test1/1,
   onedata_handshake_test/1, application_start_test2/1, validation_test/1, callbacks_list_actualization_test/1, monitoring_test/1]).
 
 %% export nodes' codes
@@ -34,7 +34,8 @@
 
 all() ->
   [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test,
-    validation_test, ping_test, dispatcher_connection_test, callbacks_list_actualization_test, onedata_handshake_test, monitoring_test].
+    validation_test, ping_test, dispatcher_connection_test, callbacks_list_actualization_test, onedata_handshake_test, monitoring_test,
+    workers_list_singleton_and_permanent_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -328,6 +329,39 @@ workers_list_actualization_test(Config) ->
   OKSum = lists:foldl(CheckModules, 0, Jobs),
   ?assertEqual(OKSum, length(Jobs)).
 
+
+%% This test checks if workers list inside dispatcher is refreshed correctly.
+workers_list_singleton_and_permanent_test(Config) ->
+  Nodes = ?config(nodes, Config),
+  [CCM | _] = Nodes,
+
+  % Init cluster
+  gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  test_utils:wait_for_cluster_cast(),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  test_utils:wait_for_cluster_init(),
+
+  {ok, MonitoringInitialization} = rpc:call(CCM, application, get_env, [?APP_Name, cluster_monitoring_initialization]),
+  timer:sleep(2 * 1000 * MonitoringInitialization),
+
+  CheckStats = fun(Stats) ->
+    ?assert(is_list(Stats)),
+    lists:foreach(fun({_, Stat}) ->
+      ?assert(is_float(Stat)),
+      ?assert(Stat >= 0)
+    end, Stats)
+  end,
+
+  lists:foreach(fun(Node) ->
+    NodeStats = gen_server:call({?Node_Manager_Name, Node}, {get_node_stats, short}, 500),
+    CheckStats(NodeStats)
+  end, Nodes),
+
+  ClusterStats = gen_server:call({global, ?CCM}, {get_cluster_stats, short}, 500),
+  CheckStats(ClusterStats).
+
+
 %% This test checks if callbacks list inside dispatcher is refreshed correctly.
 callbacks_list_actualization_test(Config) ->
   NodesUp = ?config(nodes, Config),
@@ -607,8 +641,27 @@ init_per_testcase(monitoring_test, Config) ->
 
   lists:append([{nodes, NodesUp}, {dbnode, DBNode}], Config);
 
+
+
+init_per_testcase(workers_list_singleton_and_permanent_test, Config) ->
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+  test_node_starter:start_deps_for_tester_node(),
+
+  NodesUp = test_node_starter:start_test_nodes(4),
+  [CCM | _] = NodesUp,
+  DBNode = ?DB_NODE,
+
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [
+    [{node_type, ccm}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+
+  lists:append([{nodes, NodesUp}, {dbnode, DBNode}], Config);
+
+
 init_per_testcase(TestCase, Config) ->
-  case lists:member(TestCase, [modules_start_and_ping_test, workers_list_actualization_test, callbacks_list_actualization_test]) of
+  case lists:member(TestCase, [modules_start_and_ping_test, workers_list_actualization_test, workers_list_singleton_and_permanent_test, callbacks_list_actualization_test]) of
     true -> init_per_testcase(type1, Config);
     false -> init_per_testcase(type2, Config)
   end.
@@ -625,7 +678,7 @@ end_per_testcase(type2, Config) ->
   test_node_starter:stop_deps_for_tester_node();
 
 end_per_testcase(TestCase, Config) ->
-  case lists:member(TestCase, [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test, callbacks_list_actualization_test, monitoring_test]) of
+  case lists:member(TestCase, [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test, callbacks_list_actualization_test, monitoring_test, workers_list_singleton_and_permanent_test]) of
     true -> end_per_testcase(type1, Config);
     false -> end_per_testcase(type2, Config)
   end.
