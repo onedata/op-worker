@@ -385,6 +385,14 @@ handle_fuse_message(Req = #synchronizefileblock{logical_name = FName, offset = O
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_req_generic:synchronize_file_block(FullFileName, Offset, Size);
 
+handle_fuse_message(Req = #fileblockmodified{logical_name = FName, offset = Offset, size = Size}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    fslogic_req_generic:file_block_modified(FullFileName, Offset, Size);
+
+handle_fuse_message(Req = #filetruncated{logical_name = FName, size = Size, size_relative = SizeRelative}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    fslogic_req_generic:file_truncated(FullFileName, Size, SizeRelative);
+
 handle_fuse_message(Req = #requestfileblock{logical_name = FName, offset = _Offset, size = _Size}) ->
     {ok, _FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     #atom{value = ?VOK}; %% @TODO: To be implemented along with rtransfer logic
@@ -494,6 +502,10 @@ extract_logical_path(#getnewfilelocation{file_logic_name = Path}) ->
 extract_logical_path(#requestfileblock{logical_name = Path}) ->
     Path;
 extract_logical_path(#synchronizefileblock{logical_name = Path}) ->
+    Path;
+extract_logical_path(#fileblockmodified{logical_name = Path}) ->
+    Path;
+extract_logical_path(#filetruncated{logical_name = Path}) ->
     Path;
 extract_logical_path(#filenotused{file_logic_name = Path}) ->
     Path;

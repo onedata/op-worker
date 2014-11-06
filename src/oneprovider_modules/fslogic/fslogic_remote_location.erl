@@ -15,7 +15,7 @@
 -include("oneprovider_modules/fslogic/fslogic_remote_location.hrl").
 
 % API
--export([mark_as_modified/3, mark_as_available/3, check_if_synchronized/3]).
+-export([mark_as_modified/3, mark_as_available/3, check_if_synchronized/3, truncate/4]).
 
 % Test API
 -ifdef(TEST).
@@ -38,9 +38,49 @@ mark_as_modified(#byte_range{} = ByteRange, RemoteParts, ProviderId) ->
     mark_as_modified(byte_to_block_range(ByteRange), RemoteParts, ProviderId);
 mark_as_modified(#offset_range{} = OffsetRange, RemoteParts, ProviderId) ->
     mark_as_modified(offset_to_block_range(OffsetRange), RemoteParts, ProviderId);
-mark_as_modified(#block_range{} = BlockRange, RemoteParts, ProviderId) ->
-    NewRemoteParts = mark_as_modified_recursive(BlockRange, RemoteParts, ProviderId),
+mark_as_modified(#block_range{to = To} = BlockRange, RemoteParts, ProviderId) ->
+    NewRemoteParts =
+        case RemoteParts of
+            [] -> [#remote_file_part{range = #block_range{from = 0, to = To}, providers = [ProviderId]}];
+            _ -> mark_as_modified_recursive(BlockRange, RemoteParts, ProviderId)
+        end,
     minimize_remote_parts_list(NewRemoteParts).
+
+%% truncate/4
+%% ====================================================================
+%% @doc Truncates given list of ranges to given size
+%% It extends remote_file_part list if necessary, marking new blocks as modified by "ProviderId".
+%% SizeRelative flag informs that the size value is relative to file's size (relative + file_size = non_relative)
+%% @end
+-spec truncate(Range :: {bytes, integer()} | integer(), RemoteParts :: [#remote_file_part{}], ProviderId :: binary(), SizeRelative :: boolean()) -> [#remote_file_part{}].
+%% ====================================================================
+truncate({bytes, ByteSize}, RemoteParts, ProviderId, SizeRelative) ->
+    truncate(ByteSize div ?remote_block_size, RemoteParts, ProviderId, SizeRelative);
+truncate(BlockSize, RemoteParts, _, true) when BlockSize =< 0 -> RemoteParts;
+truncate(BlockSize, RemoteParts, ProviderId, true) ->
+    case RemoteParts of
+        [] -> truncate(BlockSize, RemoteParts, ProviderId, false);
+        _ ->
+            Last = lists:last(RemoteParts),
+            truncate(BlockSize + Last#remote_file_part.range#block_range.to, RemoteParts, ProviderId, false)
+    end;
+truncate(BlockSize, RemoteParts, ProviderId, false) ->
+    ReversedRemoteParts = lists:reverse(RemoteParts),
+    TruncatedReversedRemoteParts = lists:dropwhile(
+        fun(#remote_file_part{range = #block_range{from = From}}) ->
+            From > BlockSize
+        end, ReversedRemoteParts),
+    case TruncatedReversedRemoteParts == [] of
+        true -> [];
+        _ ->
+            [Last | Rest] = TruncatedReversedRemoteParts,
+            LastTo = Last#remote_file_part.range#block_range.to,
+            LastFrom = Last#remote_file_part.range#block_range.from,
+            case LastTo >= BlockSize orelse Last#remote_file_part.providers == [ProviderId] of
+                true -> lists:reverse([Last#remote_file_part{range = #block_range{from = LastFrom, to = BlockSize}} | Rest]);
+                false -> lists:reverse([#remote_file_part{range = #block_range{from = LastTo + 1,to = BlockSize}, providers = [ProviderId]}, Last | Rest])
+            end
+    end.
 
 %% mark_as_available/3
 %% ====================================================================
