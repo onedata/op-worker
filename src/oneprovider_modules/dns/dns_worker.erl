@@ -15,11 +15,11 @@
 -behaviour(worker_plugin_behaviour).
 -behaviour(dns_query_handler_behaviour).
 
--include("dns.hrl").
 -include("oneprovider_modules/dns/dns_worker.hrl").
 -include("registered_names.hrl").
 -include("supervision_macros.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/dns/dns.hrl").
 
 
 %% ====================================================================
@@ -311,18 +311,13 @@ handle_a(Domain) ->
                      end
              end,
     case IPList of
-        nx_domain -> nx_domain;
-        serv_fail -> serv_fail;
+        nx_domain ->
+            nx_domain;
+        serv_fail ->
+            serv_fail;
         _ ->
-            {_, Suffix} = parse_domain(Domain),
             {ok, [dns_server:answer_record(Domain, ?S_A, Data) || Data <- IPList] ++ [
-                dns_server:authoritative_answer_flag(true),
-                dns_server:authority_record(Suffix, ?S_NS, "ns1.hostname.com"),
-                dns_server:authority_record(Suffix, ?S_NS, "ns2.hostname.com"),
-                dns_server:authority_record(Suffix, ?S_NS, "ns3.hostname.com"),
-                dns_server:additional_record("ns1.hostname.com", ?S_A, {1, 2, 3, 11}),
-                dns_server:additional_record("ns2.hostname.com", ?S_A, {1, 2, 3, 12}),
-                dns_server:additional_record("ns3.hostname.com", ?S_A, {1, 2, 3, 13})
+                dns_server:authoritative_answer_flag(true)
             ]}
     end.
 
@@ -345,7 +340,10 @@ handle_ns(Domain) ->
                 false ->
                     nx_domain;
                 true ->
-                    {ok, [Suffix]}
+                    {ok, [
+                        dns_server:answer_record(Domain, ?S_NS, Suffix),
+                        dns_server:authoritative_answer_flag(true)
+                    ]}
             end
     end.
 
@@ -368,7 +366,10 @@ handle_cname(Domain) ->
                 false ->
                     nx_domain;
                 true ->
-                    {ok, [Suffix]}
+                    {ok, [
+                        dns_server:answer_record(Domain, ?S_CNAME, Suffix),
+                        dns_server:authoritative_answer_flag(true)
+                    ]}
             end
     end.
 
@@ -391,7 +392,10 @@ handle_mx(Domain) ->
                 false ->
                     nx_domain;
                 true ->
-                    {ok, [{0, Suffix}]}
+                    {ok, [
+                        dns_server:answer_record(Domain, ?S_MX, {0, Suffix}),
+                        dns_server:authoritative_answer_flag(true)
+                    ]}
             end
     end.
 

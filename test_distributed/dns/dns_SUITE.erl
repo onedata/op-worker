@@ -171,7 +171,7 @@ init_per_testcase(distributed_test, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(4),
+  NodesUp = test_node_starter:start_test_nodes(4, true),
   [CCM | _] = NodesUp,
   DBNode = ?DB_NODE,
 
@@ -186,7 +186,7 @@ init_per_testcase(distributed_test, Config) ->
 init_per_testcase(_, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
 
-  NodesUp = test_node_starter:start_test_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1, true),
   [Node | _] = NodesUp,
 
   DNS_Port = 1312,
