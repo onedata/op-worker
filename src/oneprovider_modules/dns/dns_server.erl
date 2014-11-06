@@ -13,9 +13,6 @@
 
 -include_lib("kernel/src/inet_dns.hrl").
 -include_lib("ctool/include/logging.hrl").
--include("oneprovider_modules/dns/dns_worker.hrl").
--include("registered_names.hrl").
--include("supervision_macros.hrl").
 
 
 % Maximum size of UDP DNS reply (without EDNS) as in RFC1035.
@@ -260,7 +257,6 @@ start_listening(SupervisorName, DNSPort, TCPNumAcceptors, TCPTimeout, OnFailureF
     try
         proc_lib:init_ack(ok),
         UDPChild = {?DNS_UDP_LISTENER, {dns_udp_handler, start_link, [DNSPort]}, permanent, 5000, worker, [dns_udp_handler]},
-        UDPChild = ?Sup_Child(?DNS_UDP_LISTENER, dns_udp_handler, permanent, [DNSPort]),
         TCPOptions = [{packet, 2}, {dns_tcp_timeout, TCPTimeout}, {keepalive, true}],
 
         % Start the UDP listener
@@ -390,27 +386,3 @@ set_max_edns_udp_size(Size) ->
 get_max_edns_udp_size() ->
     {ok, Size} = application:get_env(ctool, edns_max_udp_size),
     Size.
-
-
-test(Domain) ->
-    test(Domain, {8, 8, 8, 8}).
-
-test(Domain, NS) ->
-    Query = inet_dns:encode(
-        #dns_rec{
-            header = #dns_header{
-                id = crypto:rand_uniform(1, 16#FFFF),
-                opcode = 'query',
-                rd = true
-            },
-            qdlist = [#dns_query{
-                domain = Domain,
-                type = a,
-                class = in
-            }],
-            arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, <<>>}]
-        }),
-    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
-    gen_udp:send(Socket, NS, 53, Query),
-    {ok, {NS, 53, Reply}} = gen_udp:recv(Socket, 65535),
-    inet_dns:decode(Reply).
