@@ -129,8 +129,6 @@ init([]) ->
   {ok, MonitoringInitialization} = application:get_env(?APP_Name, cluster_monitoring_initialization),
   erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_cluster_monitoring}),
 
-  erlang:send_after(Interval * 500 + 100, self(), {timer, register_default_module_listeners}),
-
   {ok, #cm_state{}};
 
 init([test]) ->
@@ -273,6 +271,11 @@ handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
 handle_call(check_state_loaded, _From, State) ->
   handle_test_call(check_state_loaded, _From, State);
 
+handle_call({lifecycle_notification, Node, Module, Action}, _From, State) ->
+  Res = lifecycle_notification(Node, Module, Action, State#cm_state.workers, State),
+  {reply, Res, State};
+
+
 handle_call(_Request, _From, State) ->
   ?warning("Wrong call: ~p", [_Request]),
   {reply, wrong_request, State}.
@@ -352,9 +355,6 @@ handle_cast({node_is_up, Node}, State) ->
           end
       end
   end;
-
-handle_cast(register_default_module_listeners, State) ->
-  handle_cast({register_module_listener, gateway, {module, rtransfer}}, State);
 
 handle_cast({register_module_listener, Module, Listener}, State) ->
   ?info("Registering module lifecycle listeners."),
@@ -752,7 +752,7 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
   NewState :: term().
 %% ====================================================================
 check_cluster_state(State) ->
-  CheckNum = (State#cm_state.cluster_check_num + 1) rem 1,
+  CheckNum = (State#cm_state.cluster_check_num + 1) rem 15,
 
   NewState = case CheckNum of
                0 ->
@@ -886,7 +886,7 @@ lifecycle_notification(Node, Module, Action, Workers, State) ->
 -spec send_notifications(Node :: list(), Module :: atom(), Action :: atom(), Workers :: term(), Listeners ::list()) -> ok.
 send_notifications(Node, Module, Action, Workers,  Listeners) ->
   ?info("Notification ~p ~p ~p ~p ~p", [Node, Module, Listeners, Action, Workers]),
-  [{ ?info("Send: ~p",[{Module2, Node2}]), gen_server:cast({Module2, Node2}, {asynch, 1, {node_lifecycle_notification, Node, Module, Action, Pid}})} || {Node2, Module2, Pid} <- Workers ,
+  [{ gen_server:cast({Module2, Node2}, {asynch, 1, {node_lifecycle_notification, Node, Module, Action, Pid}})} || {Node2, Module2, Pid} <- Workers ,
     lists:member({all_modules}, Listeners)
       or lists:member({module, Module2}, Listeners)
       or lists:member({module, Module2, Node2}, Listeners),

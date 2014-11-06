@@ -33,7 +33,7 @@ handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
 handle(_ProtocolVersion, _Msg) ->
-  ?warning("Wrong request: ~p", [_Msg]),
+  ?warning("Rtransfer Wrong request: ~p", [_Msg]),
 	ok.
 
 cleanup() ->

@@ -429,7 +429,7 @@ main_test(Config) ->
   {Workers, _StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
   Jobs = ?Modules,
   PermamentModules = ?Permament_Modules,
-  ?assertEqual(length(Workers), length(Jobs) + 2 * length(PermamentModules)),
+  ?assertEqual(length(Workers), length(Jobs) + 3 * length(PermamentModules)), % 4 slaves
 
   PeerCert = ?COMMON_FILE("peer.pem"),
   Ping = #atom{value = "ping"},
@@ -466,7 +466,7 @@ main_test(Config) ->
   end,
 
   PongsNum2 = lists:foldl(CheckNodes, 0, Ports),
-  ?assertEqual(PongsNum2, (length(Jobs) + 2 * length(PermamentModules)) * length(Ports)).
+  ?assertEqual(PongsNum2, length(Jobs) * length(Ports)).
 
 callbacks_test(Config) ->
   NodesUp = ?config(nodes, Config),

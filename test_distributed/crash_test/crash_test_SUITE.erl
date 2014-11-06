@@ -104,7 +104,7 @@ main_test(Config) ->
   ?assertEqual(InitialStateNum + 1, StateNum2),
   ?assertEqual(length(Workers2), length(Jobs) + length(PermamentNodes)),
   PongsNum2 = lists:foldl(CheckNodes, 0, Ports),
-  ?assertEqual(PongsNum2, (length(Jobs) + length(PermamentNodes)) * length(Ports)),
+  ?assertEqual(PongsNum2, length(Jobs) * length(Ports)),
 
   NewNode = test_node_starter:start_test_node(?GET_NODE_NAME(CCM),?GET_HOST(CCM),false, CCMParams),
   ?assertEqual(CCM, NewNode),
@@ -119,7 +119,7 @@ main_test(Config) ->
   ?assertEqual(InitialStateNum + 2, StateNum3),
   ?assertEqual(length(Workers3), length(Jobs) + length(PermamentNodes)),
   PongsNum3 = lists:foldl(CheckNodes, 0, Ports),
-  ?assertEqual(PongsNum3, (length(Jobs) + length(PermamentNodes)) * length(Ports)),
+  ?assertEqual(PongsNum3, length(Jobs) * length(Ports)),
 
   test_node_starter:stop_test_nodes([Worker1]),
   test_utils:wait_for_nodes_registration(length(WorkerNodes) - 1),
@@ -128,9 +128,9 @@ main_test(Config) ->
   Ports2 = [8888],
   {Workers4, StateNum4} = gen_server:call({global, ?CCM}, get_workers, 1000),
   ?assertEqual(InitialStateNum + 4, StateNum4),
-  ?assertEqual(length(Workers4), length(Jobs) + length(PermamentNodes)),
+  ?assertEqual(length(Workers4), length(Jobs)),
   PongsNum4 = lists:foldl(CheckNodes, 0, Ports2),
-  ?assertEqual(PongsNum4, (length(Jobs) + length(PermamentNodes)) * length(Ports2)),
+  ?assertEqual(PongsNum4, length(Jobs) * length(Ports2)),
 
   NewNode2 = test_node_starter:start_test_node(?GET_NODE_NAME(Worker1),?GET_HOST(Worker1),false,WorkerParams),
   ?assertEqual(Worker1, NewNode2),
@@ -140,9 +140,9 @@ main_test(Config) ->
 
   {Workers5, StateNum5} = gen_server:call({global, ?CCM}, get_workers, 1000),
   ?assertEqual(InitialStateNum + 4, StateNum5),
-  ?assertEqual(length(Workers5), length(Jobs) + length(PermamentNodes)),
+  ?assertEqual(length(Workers5), length(Jobs)),
   PongsNum5 = lists:foldl(CheckNodes, 0, Ports),
-  ?assertEqual(PongsNum5, (length(Jobs) + length(PermamentNodes)) * length(Ports)).
+  ?assertEqual(PongsNum5, length(Jobs) * length(Ports)).
 
 
 callbacks_test(Config) ->
