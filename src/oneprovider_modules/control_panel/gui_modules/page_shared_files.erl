@@ -34,11 +34,11 @@ title() -> <<"Shared files">>.
 %% This will be placed in the template instead of {{body}} tag
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
-    [
+    #panel{class= <<"page-container">>, body = [
         opn_gui_utils:top_menu(data_tab),
         #panel{style = <<"margin-top: 59px;">>, body = main_panel()},
         footer_popup()
-    ].
+    ]}.
 
 
 % Main table   

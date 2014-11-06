@@ -50,7 +50,7 @@ cp -R ../certs .
 cp -R ../c_lib/ .
 cp -R ../src/oneprovider_modules/dao/views .
 cp -R ../src/gui_static .
-cp -R ../config/sys.config .
+cp -R ../releases/sys.config .
 
 if [ $# -gt 0 ]
 then

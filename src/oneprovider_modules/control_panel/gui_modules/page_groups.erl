@@ -49,7 +49,7 @@ main() ->
         true ->
             #dtl{file = "bare", app = ?APP_Name, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
+            #dtl{file = "bare", app = ?APP_Name, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
     end.
 
 
@@ -61,22 +61,13 @@ main() ->
 title() -> <<"Groups">>.
 
 
-%% custom/0
-%% ====================================================================
-%% @doc This will be placed instead of {{custom}} tag in template.
--spec custom() -> binary().
-%% ====================================================================
-custom() ->
-    <<"<script src='/flatui/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
-
-
 %% body/0
 %% ====================================================================
 %% @doc This will be placed instead of {{body}} tag in template.
 -spec body() -> [#panel{}].
 %% ====================================================================
 body() ->
-    [
+    #panel{class = <<"page-container">>, body = [
         #panel{
             id = <<"main_spinner">>,
             style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>,
@@ -86,21 +77,15 @@ body() ->
         },
         opn_gui_utils:top_menu(groups_tab),
         #panel{
-            id = <<"ok_message">>,
-            style = ?MESSAGE_STYLE,
-            class = <<"dialog dialog-success">>
-        },
-        #panel{
-            id = <<"error_message">>,
-            style = ?MESSAGE_STYLE,
-            class = <<"dialog dialog-danger">>
-        },
-        #panel{
-            style = <<"position: relative; margin-top: 160px; margin-bottom: 100px;">>,
-            body =
-            [
+            style = <<"margin-top: 56px; padding-top: 1px; margin-bottom: 30px;">>,
+            body = [
+                #panel{
+                    id = <<"message">>,
+                    style = <<"width: 100%; padding: 0.5em 0; margin: 0 auto; border: 0; display: none;">>,
+                    class = <<"dialog">>
+                },
                 #h6{
-                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; text-align: center;">>,
+                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 30px; text-align: center;">>,
                     body = <<"Manage groups">>
                 },
                 #panel{
@@ -128,7 +113,7 @@ body() ->
                 }
             ]
         }
-    ].
+    ]}.
 
 
 %% groups_table_collapsed/1
@@ -203,7 +188,7 @@ group_row_collapsed(RowId, Privileges, #group_details{id = GroupId, name = Group
             style = ?CONTENT_COLUMN_STYLE,
             body = #span{
                 style = ?DETAIL_STYLE,
-                body = <<"<b>", GroupName/binary, "</b> (", GroupId/binary, ")">>
+                body = <<"<b>", (gui_str:html_encode(GroupName))/binary, "</b> (", GroupId/binary, ")">>
             }
         },
         #td{
@@ -270,7 +255,7 @@ group_row_expanded(RowId, Privileges, #group_details{id = GroupId, name = GroupN
                         ]
                     }
                 end, [
-                    {<<"Name">>, GroupName},
+                    {<<"Name">>, gui_str:html_encode(GroupName)},
                     {<<"Group ID">>, GroupId},
                     {<<"Settings">>, SettingsIcons}
                 ])
@@ -320,14 +305,14 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                                    {ok, GroupDetails} = gr_groups:get_details({user, AccessToken}, GroupId),
                                    {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
                                    gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
-                                   opn_gui_utils:message(<<"ok_message">>, <<"Created Group ID: <b>", GroupId/binary, "</b>">>),
+                                   opn_gui_utils:message(success, <<"Created Group ID: <b>", GroupId/binary, "</b>">>),
                                    RowId = <<"group_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_group_row(RowId, Privileges, GroupDetails),
-                                   State#?STATE{counter = Counter + 1, groups_details = GroupsDetails ++ [{RowId, Privileges, GroupDetails}]}
+                                   State#?STATE{counter = Counter + 1, groups_details = [{RowId, Privileges, GroupDetails} | GroupsDetails]}
                                catch
                                    _:Other ->
                                        ?error_stacktrace("Cannot create group ~p: ~p", [Name, Other]),
-                                       opn_gui_utils:message(<<"error_message">>, <<"Cannot create group: <b>", Name/binary, "</b>.<br>Please try again later.">>),
+                                       opn_gui_utils:message(error, <<"Cannot create group: <b>", (gui_str:html_encode(Name))/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
                     gui_jq:prop(<<"create_group_button">>, <<"disabled">>, <<"">>),
@@ -339,14 +324,14 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                                    {ok, GroupDetails} = gr_groups:get_details({user, AccessToken}, GroupId),
                                    {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
                                    gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
-                                   opn_gui_utils:message(<<"ok_message">>, <<"Joined Group ID: <b>", GroupId/binary, "</b>">>),
+                                   opn_gui_utils:message(success, <<"Joined Group ID: <b>", GroupId/binary, "</b>">>),
                                    RowId = <<"group_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_group_row(RowId, Privileges, GroupDetails),
-                                   State#?STATE{counter = Counter + 1, groups_details = GroupsDetails ++ [{RowId, Privileges, GroupDetails}]}
+                                   State#?STATE{counter = Counter + 1, groups_details = [{RowId, Privileges, GroupDetails} | GroupsDetails]}
                                catch
                                    _:Other ->
                                        ?error("Cannot join group using token ~p: ~p", [Token, Other]),
-                                       opn_gui_utils:message(<<"error_message">>, <<"Cannot join group using token: <b>", Token/binary, "</b>.<br>Please try again later.">>),
+                                       opn_gui_utils:message(error, <<"Cannot join group using token: <b>", (gui_str:html_encode(Token))/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
                     gui_jq:prop(<<"join_group_button">>, <<"disabled">>, <<"">>),
@@ -356,12 +341,12 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                     case gr_users:leave_group({user, AccessToken}, GroupId) of
                         ok ->
                             gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
-                            opn_gui_utils:message(<<"ok_message">>, <<"Group with ID: <b>", GroupId/binary, "</b> left successfully.">>),
+                            opn_gui_utils:message(success, <<"Group with ID: <b>", GroupId/binary, "</b> left successfully.">>),
                             gui_jq:remove(RowId),
                             State#?STATE{groups_details = lists:keydelete(RowId, 1, GroupsDetails)};
                         Other ->
                             ?error("Cannot leave group with ID ~p: ~p", [GroupId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot leave group with ID: <b>", GroupId/binary, "</b>.<br>Please try again later.">>),
+                            opn_gui_utils:message(error, <<"Cannot leave group with ID: <b>", GroupId/binary, "</b>.<br>Please try again later.">>),
                             State
                     end;
 
@@ -369,12 +354,12 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
                     case gr_groups:remove({user, AccessToken}, GroupId) of
                         ok ->
                             gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
-                            opn_gui_utils:message(<<"ok_message">>, <<"Group with ID: <b>", GroupId/binary, "</b> removed successfully.">>),
+                            opn_gui_utils:message(success, <<"Group with ID: <b>", GroupId/binary, "</b> removed successfully.">>),
                             gui_jq:remove(RowId),
                             State#?STATE{groups_details = lists:keydelete(RowId, 1, GroupsDetails)};
                         Other ->
                             ?error("Cannot remove group with ID ~p: ~p", [GroupId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot remove group with ID: <b>", GroupId/binary, "</b>.<br>Please try again later.">>),
+                            opn_gui_utils:message(error, <<"Cannot remove group with ID: <b>", GroupId/binary, "</b>.<br>Please try again later.">>),
                             State
                     end;
 
@@ -399,7 +384,7 @@ comet_loop(#?STATE{counter = Counter, groups_details = GroupsDetails, gruid = GR
             end
         catch Type:Reason ->
             ?error_stacktrace("Comet process exception: ~p:~p", [Type, Reason]),
-            opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+            opn_gui_utils:message(error, <<"There has been an error in comet process. Please refresh the page.">>),
             {error, Reason}
         end,
     gui_jq:wire(<<"$('#main_spinner').delay(300).hide(0);">>, false),
@@ -442,7 +427,7 @@ event(init) ->
         _:Reason ->
             ?error_stacktrace("Cannot initialize page ~p: ~p", [?MODULE, Reason]),
             gui_jq:hide(<<"main_spinner">>),
-            opn_gui_utils:message(<<"error_message">>, <<"Cannot fetch groups.<br>Please try again later.">>)
+            opn_gui_utils:message(error, <<"Cannot fetch groups.<br>Please try again later.">>)
     end;
 
 event(create_group) ->
@@ -476,12 +461,12 @@ event({set_privileges, GroupId}) ->
     gui_jq:redirect(<<"privileges/group?id=", GroupId/binary>>);
 
 event({leave_group, RowId, #group_details{id = GroupId, name = GroupName}}) ->
-    Message = <<"Are you sure you want to leave group:<br><b>", GroupName/binary, " (", GroupId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to leave group:<br><b>", (gui_str:html_encode(GroupName))/binary, " (", GroupId/binary, ") </b>?">>,
     Script = <<"leave_group(['", RowId/binary, "','", GroupId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Leave group">>, Message, Script, <<"btn-inverse">>);
 
 event({remove_group, RowId, #group_details{id = GroupId, name = GroupName}}) ->
-    Message = <<"Are you sure you want to remove group:<br><b>", GroupName/binary, " (", GroupId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to remove group:<br><b>", (gui_str:html_encode(GroupName))/binary, " (", GroupId/binary, ") </b>?">>,
     Script = <<"remove_group(['", RowId/binary, "','", GroupId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Remove group">>, Message, Script, <<"btn-inverse">>);
 

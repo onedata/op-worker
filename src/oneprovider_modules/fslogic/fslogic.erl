@@ -47,15 +47,15 @@ init(_Args) ->
     % Create acl permission cache
     ProcFun = fun
         (_ProtocolVersion, {grant_permission, StorageFileName, GRUID, Permission}, CacheName) ->
-            ets:insert(CacheName, {{StorageFileName, GRUID, Permission}, true}),
+            ets:insert(CacheName, {{fslogic_path:ensure_path_begins_with_slash(StorageFileName), GRUID, Permission}, true}),
             ok;
         (_ProtocolVersion, {has_permission, StorageFileName, GRUID, Permission}, CacheName) ->
-            case ets:lookup(CacheName, {StorageFileName, GRUID, Permission}) of
+            case ets:lookup(CacheName, {fslogic_path:ensure_path_begins_with_slash(StorageFileName), GRUID, Permission}) of
                 [{_,true}] -> {ok, true};
                 _ -> {ok, false}
             end;
         (_ProtocolVersion, {invalidate_cache, StorageFileName}, CacheName) ->
-            ets:match_delete(CacheName,{{StorageFileName, '_', '_'}, '_'})
+            ets:match_delete(CacheName,{{fslogic_path:ensure_path_begins_with_slash(StorageFileName), '_', '_'}, '_'})
     end,
     MapFun = fun({_, StorageFileName, _, _}) ->
         lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, StorageFileName)

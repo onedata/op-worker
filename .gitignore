@@ -4,6 +4,7 @@
 .dialyzer.plt
 .idea
 
+src/gui_static/common
 src/gui_static/flatui
 src/gui_static/fonts
 src/gui_static/n2o
@@ -13,12 +14,9 @@ src/gui_static/n2o
 
 releases/oneprovider_node
 releases/test_cluster
-releases/files/sys.config
-releases/files/vm.args
 releases/*.rpm
 
 include/*_pb.hrl
-src/oneprovider_node.app.src
 test/eunit_results
 
 deps
