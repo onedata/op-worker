@@ -67,7 +67,7 @@ title() -> <<"Spaces">>.
 -spec body() -> [#panel{}].
 %% ====================================================================
 body() ->
-    #panel{class= <<"page-container">>, body = [
+    #panel{class = <<"page-container">>, body = [
         #panel{
             id = <<"main_spinner">>,
             style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>,
@@ -77,25 +77,19 @@ body() ->
         },
         opn_gui_utils:top_menu(spaces_tab),
         #panel{
-            id = <<"ok_message">>,
-            style = ?MESSAGE_STYLE,
-            class = <<"dialog dialog-success">>
-        },
-        #panel{
-            id = <<"error_message">>,
-            style = ?MESSAGE_STYLE,
-            class = <<"dialog dialog-danger">>
-        },
-        #panel{
-            style = <<"position: relative; margin-top: 160px; margin-bottom: 100px;">>,
-            body =
-            [
+            style = <<"margin-top: 56px; padding-top: 1px; margin-bottom: 30px;">>,
+            body = [
+                #panel{
+                    id = <<"message">>,
+                    style = <<"width: 100%; padding: 0.5em 0; margin: 0 auto; border: 0; display: none;">>,
+                    class = <<"dialog">>
+                },
                 #h6{
-                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; text-align: center;">>,
+                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 30px; text-align: center;">>,
                     body = <<"Manage Spaces">>
                 },
                 #panel{
-                    style = <<"margin: 0 auto; width: 50%; margin-top: 30px; text-align: center;">>,
+                    style = <<"margin: 0 auto; width: 50%; margin-top: 30px; margin-bottom: 30px; text-align: center;">>,
                     body = lists:map(fun({ButtonId, ButtonPostback, ButtonBody}) ->
                         #button{
                             id = ButtonId,
@@ -201,7 +195,7 @@ space_row_collapsed(RowId, Privileges, #space_details{id = SpaceId, name = Space
                                 style = <<"border-width: 0; text-align: left; padding-left: 0; padding-right: 0;">>,
                                 body = #span{
                                     style = ?DETAIL_STYLE,
-                                    body = <<"<b>", SpaceName/binary, "</b> (", SpaceId/binary, ")">>
+                                    body = <<"<b>", (gui_str:html_encode(SpaceName))/binary, "</b> (", SpaceId/binary, ")">>
                                 }
                             },
                             #td{
@@ -278,7 +272,7 @@ space_row_expanded(RowId, Privileges, #space_details{id = SpaceId, name = SpaceN
                         ]
                     }
                 end, [
-                    {<<"Name">>, [SpaceName, default_label(RowId)]},
+                    {<<"Name">>, [gui_str:html_encode(SpaceName), default_label(RowId)]},
                     {<<"Space ID">>, SpaceId},
                     {<<"Settings">>, SettingsIcons}
                 ])
@@ -342,15 +336,15 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
                                    {ok, SpaceId} = gr_users:create_space({user, AccessToken}, [{<<"name">>, Name}]),
                                    {ok, SpaceDetails} = gr_spaces:get_details({user, AccessToken}, SpaceId),
                                    {ok, Privileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceId, GRUID),
-                                   opn_gui_utils:message(<<"ok_message">>, <<"Created Space ID: <b>", SpaceId/binary, "</b>">>),
+                                   opn_gui_utils:message(success, <<"Created Space ID: <b>", SpaceId/binary, "</b>">>),
                                    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                                    RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_space_row(RowId, Privileges, SpaceDetails),
-                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, Privileges, SpaceDetails}]}
+                                   State#?STATE{counter = Counter + 1, spaces_details = [{RowId, Privileges, SpaceDetails} | SpacesDetails]}
                                catch
                                    _:Other ->
                                        ?error("Cannot create Space ~p: ~p", [Name, Other]),
-                                       opn_gui_utils:message(<<"error_message">>, <<"Cannot create Space: <b>", Name/binary, "</b>.<br>Please try again later.">>),
+                                       opn_gui_utils:message(error, <<"Cannot create Space: <b>", (gui_str:html_encode(Name))/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
                     gui_jq:prop(<<"create_space_button">>, <<"disabled">>, <<"">>),
@@ -361,15 +355,15 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
                                    {ok, SpaceId} = gr_users:join_space({user, AccessToken}, [{<<"token">>, Token}]),
                                    {ok, SpaceDetails} = gr_spaces:get_details({user, AccessToken}, SpaceId),
                                    {ok, Privileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceId, GRUID),
-                                   opn_gui_utils:message(<<"ok_message">>, <<"Joined Space ID: <b>", SpaceId/binary, "</b>">>),
+                                   opn_gui_utils:message(success, <<"Joined Space ID: <b>", SpaceId/binary, "</b>">>),
                                    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                                    RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_space_row(RowId, Privileges, SpaceDetails),
-                                   State#?STATE{counter = Counter + 1, spaces_details = SpacesDetails ++ [{RowId, Privileges, SpaceDetails}]}
+                                   State#?STATE{counter = Counter + 1, spaces_details = [{RowId, Privileges, SpaceDetails} | SpacesDetails]}
                                catch
                                    _:Other ->
                                        ?error("Cannot join Space using token ~p: ~p", [Token, Other]),
-                                       opn_gui_utils:message(<<"error_message">>, <<"Cannot join Space using token: <b>", Token/binary, "</b>.<br>Please try again later.">>),
+                                       opn_gui_utils:message(error, <<"Cannot join Space using token: <b>", (gui_str:html_encode(Token))/binary, "</b>.<br>Please try again later.">>),
                                        State
                                end,
                     gui_jq:prop(<<"join_space_button">>, <<"disabled">>, <<"">>),
@@ -384,33 +378,33 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
                             State#?STATE{default_row_id = RowId};
                         Other ->
                             ?error("Cannot set Space with ID ~p as a default Space: ~p", [SpaceId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot set Space with ID: <b>", SpaceId/binary, "</b> as a default Space.<br>Please try again later.">>),
+                            opn_gui_utils:message(error, <<"Cannot set Space with ID: <b>", SpaceId/binary, "</b> as a default Space.<br>Please try again later.">>),
                             State
                     end;
 
                 {leave_space, RowId, SpaceId} ->
                     case gr_users:leave_space({user, AccessToken}, SpaceId) of
                         ok ->
-                            opn_gui_utils:message(<<"ok_message">>, <<"Space with ID: <b>", SpaceId/binary, "</b> left successfully.">>),
+                            opn_gui_utils:message(success, <<"Space with ID: <b>", SpaceId/binary, "</b> left successfully.">>),
                             gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                             gui_jq:remove(RowId),
                             State#?STATE{spaces_details = lists:keydelete(RowId, 1, SpacesDetails)};
                         Other ->
                             ?error("Cannot leave Space with ID ~p: ~p", [SpaceId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot leave Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
+                            opn_gui_utils:message(error, <<"Cannot leave Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
                             State
                     end;
 
                 {remove_space, RowId, SpaceId} ->
                     case gr_spaces:remove({user, AccessToken}, SpaceId) of
                         ok ->
-                            opn_gui_utils:message(<<"ok_message">>, <<"Space with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
+                            opn_gui_utils:message(success, <<"Space with ID: <b>", SpaceId/binary, "</b> removed successfully.">>),
                             gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                             gui_jq:remove(RowId),
                             State#?STATE{spaces_details = lists:keydelete(RowId, 1, SpacesDetails)};
                         Other ->
                             ?error("Cannot remove Space with ID ~p: ~p", [SpaceId, Other]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot remove Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
+                            opn_gui_utils:message(error, <<"Cannot remove Space with ID: <b>", SpaceId/binary, "</b>.<br>Please try again later.">>),
                             State
                     end;
 
@@ -435,7 +429,7 @@ comet_loop(#?STATE{counter = Counter, default_row_id = DefaultRowId, spaces_deta
             end
         catch Type:Reason ->
             ?error_stacktrace("Comet process exception: ~p:~p", [Type, Reason]),
-            opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+            opn_gui_utils:message(error, <<"There has been an error in comet process. Please refresh the page.">>),
             {error, Reason}
         end,
     gui_jq:show(<<(NewCometLoopState#?STATE.default_row_id)/binary, "_label">>),
@@ -486,7 +480,7 @@ event(init) ->
         _:Reason ->
             ?error("Cannot initialize page ~p: ~p", [?MODULE, Reason]),
             gui_jq:hide(<<"main_spinner">>),
-            opn_gui_utils:message(<<"error_message">>, <<"Cannot fetch Spaces.<br>Please try again later.">>)
+            opn_gui_utils:message(error, <<"Cannot fetch Spaces.<br>Please try again later.">>)
     end;
 
 event(create_space) ->
@@ -520,12 +514,12 @@ event({set_privileges, SpaceId}) ->
     gui_jq:redirect(<<"privileges/space?id=", SpaceId/binary>>);
 
 event({leave_space, RowId, #space_details{id = SpaceId, name = SpaceName}}) ->
-    Message = <<"Are you sure you want to leave Space:<br><b>", SpaceName/binary, " (", SpaceId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to leave Space:<br><b>", (gui_str:html_encode(SpaceName))/binary, " (", SpaceId/binary, ") </b>?">>,
     Script = <<"leave_space(['", RowId/binary, "','", SpaceId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Leave Space">>, Message, Script, <<"btn-inverse">>);
 
 event({remove_space, RowId, #space_details{id = SpaceId, name = SpaceName}}) ->
-    Message = <<"Are you sure you want to remove Space:<br><b>", SpaceName/binary, " (", SpaceId/binary, ") </b>?">>,
+    Message = <<"Are you sure you want to remove Space:<br><b>", (gui_str:html_encode(SpaceName))/binary, " (", SpaceId/binary, ") </b>?">>,
     Script = <<"remove_space(['", RowId/binary, "','", SpaceId/binary, "']);">>,
     gui_jq:dialog_popup(<<"Remove Space">>, Message, Script, <<"btn-inverse">>);
 
