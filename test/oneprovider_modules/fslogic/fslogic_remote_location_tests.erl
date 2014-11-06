@@ -172,13 +172,13 @@ truncate_test() ->
     TruncatedList1 = [
         #remote_file_part{range = #block_range{from = 0, to = 5}, providers = [Pr1]},
         #remote_file_part{range = #block_range{from = 6, to = 6}, providers = [Pr1]},
-        #remote_file_part{range = #block_range{from = 7, to = 14}, providers = [Pr2]}
+        #remote_file_part{range = #block_range{from = 7, to = 13}, providers = [Pr2]}
     ],
     ?assertEqual(TruncatedList1, fslogic_remote_location:truncate(14, List, Pr2, false)),
     TruncatedList2 = [
         #remote_file_part{range = #block_range{from = 0, to = 5}, providers = [Pr1]},
         #remote_file_part{range = #block_range{from = 6, to = 6}, providers = [Pr1]},
-        #remote_file_part{range = #block_range{from = 7, to = 11}, providers = [Pr2]}
+        #remote_file_part{range = #block_range{from = 7, to = 10}, providers = [Pr2]}
     ],
     ?assertEqual(TruncatedList2, fslogic_remote_location:truncate(11, List, Pr2, false)),
     TruncatedList3 = [
@@ -189,7 +189,7 @@ truncate_test() ->
         #remote_file_part{range = #block_range{from = 18, to = 22}, providers = [Pr1, Pr3]},
         #remote_file_part{range = #block_range{from = 23, to = 25}, providers = [Pr1, Pr3]},
         #remote_file_part{range = #block_range{from = 26, to = 29}, providers = [Pr1]},
-        #remote_file_part{range = #block_range{from = 30, to = 35}, providers = [Pr2]}
+        #remote_file_part{range = #block_range{from = 30, to = 34}, providers = [Pr2]}
     ],
     ?assertEqual(TruncatedList3, fslogic_remote_location:truncate(35, List, Pr2, false)),
     TruncatedList4 = [
@@ -199,7 +199,10 @@ truncate_test() ->
         #remote_file_part{range = #block_range{from = 15, to = 17}, providers = [Pr3]},
         #remote_file_part{range = #block_range{from = 18, to = 22}, providers = [Pr1, Pr3]},
         #remote_file_part{range = #block_range{from = 23, to = 25}, providers = [Pr1, Pr3]},
-        #remote_file_part{range = #block_range{from = 26, to = 35}, providers = [Pr1]}
+        #remote_file_part{range = #block_range{from = 26, to = 34}, providers = [Pr1]}
     ],
     ?assertEqual(TruncatedList4, fslogic_remote_location:truncate(35, List, Pr1, false)),
-    ?assertEqual(TruncatedList4, fslogic_remote_location:truncate(6, List, Pr1, true)).
+    ?assertEqual(TruncatedList4, fslogic_remote_location:truncate(6, List, Pr1, true)),
+    ?assertEqual([#remote_file_part{range = #block_range{from = 0, to = 0}, providers = [Pr1]}], fslogic_remote_location:truncate({bytes, 6}, [], Pr1, true)),
+    ?assertEqual([#remote_file_part{range = #block_range{from = 0, to = 0}, providers = [Pr1]}], fslogic_remote_location:truncate({bytes, 6}, [], Pr1, false)).
+

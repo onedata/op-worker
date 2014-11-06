@@ -55,7 +55,7 @@ mark_as_modified(#block_range{to = To} = BlockRange, RemoteParts, ProviderId) ->
 -spec truncate(Range :: {bytes, integer()} | integer(), RemoteParts :: [#remote_file_part{}], ProviderId :: binary(), SizeRelative :: boolean()) -> [#remote_file_part{}].
 %% ====================================================================
 truncate({bytes, ByteSize}, RemoteParts, ProviderId, SizeRelative) ->
-    truncate(ByteSize div ?remote_block_size, RemoteParts, ProviderId, SizeRelative);
+    truncate(byte_to_block(ByteSize), RemoteParts, ProviderId, SizeRelative);
 truncate(BlockSize, RemoteParts, _, true) when BlockSize =< 0 -> RemoteParts;
 truncate(BlockSize, RemoteParts, ProviderId, true) ->
     case RemoteParts of
@@ -68,17 +68,17 @@ truncate(BlockSize, RemoteParts, ProviderId, false) ->
     ReversedRemoteParts = lists:reverse(RemoteParts),
     TruncatedReversedRemoteParts = lists:dropwhile(
         fun(#remote_file_part{range = #block_range{from = From}}) ->
-            From > BlockSize
+            From >= BlockSize
         end, ReversedRemoteParts),
     case TruncatedReversedRemoteParts == [] of
-        true -> [];
+        true -> mark_as_modified(#block_range{from = 0, to = BlockSize-1}, [], ProviderId);
         _ ->
             [Last | Rest] = TruncatedReversedRemoteParts,
             LastTo = Last#remote_file_part.range#block_range.to,
             LastFrom = Last#remote_file_part.range#block_range.from,
             case LastTo >= BlockSize orelse Last#remote_file_part.providers == [ProviderId] of
-                true -> lists:reverse([Last#remote_file_part{range = #block_range{from = LastFrom, to = BlockSize}} | Rest]);
-                false -> lists:reverse([#remote_file_part{range = #block_range{from = LastTo + 1,to = BlockSize}, providers = [ProviderId]}, Last | Rest])
+                true -> lists:reverse([Last#remote_file_part{range = #block_range{from = LastFrom, to = BlockSize - 1}} | Rest]);
+                false -> lists:reverse([#remote_file_part{range = #block_range{from = LastTo + 1,to = BlockSize-1}, providers = [ProviderId]}, Last | Rest])
             end
     end.
 
@@ -255,6 +255,15 @@ byte_to_block_range(#byte_range{from = From, to = To}) ->
 offset_to_block_range(#offset_range{offset = Offset, size = Size}) ->
     byte_to_block_range(#byte_range{from = Offset, to = Offset + Size -1}).
 
+%% byte_to_block/1
+%% ====================================================================
+%% @doc Converts bytes to blocks
+%% @end
+-spec byte_to_block(integer()) -> integer().
+%% ====================================================================
+byte_to_block(Byte) ->
+    ceil(Byte / ?remote_block_size).
+
 %% minimize_remote_parts_list/3
 %% ====================================================================
 %% @doc The internal, recursive version of mark_as_modified/3
@@ -274,3 +283,11 @@ minimize_remote_parts_list([
         false -> [El1 | minimize_remote_parts_list([El2 | minimize_remote_parts_list(Rest)])]
     end.
 
+%todo move to ctool
+%% ceil/1
+%% ====================================================================
+%% @doc math ceil function (works on positive values)
+-spec ceil(N :: number()) -> integer().
+%% ====================================================================
+ceil(N) when trunc(N) == N -> N;
+ceil(N) -> trunc(N + 1).

@@ -447,7 +447,8 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     NewRemoteParts = fslogic_remote_location:mark_as_available(OutOfSyncList, RemoteParts, ProviderId),
     case NewRemoteParts == RemoteParts of
         true -> ok;
-        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [RemoteLocationDoc#db_document{record = #remote_location{file_parts = NewRemoteParts}}])
+        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location,
+            [RemoteLocationDoc#db_document{record = #remote_location{file_parts = NewRemoteParts}}], fslogic_context:get_protocol_version())
     end,
     #atom{value = ?VOK}.
 
@@ -465,7 +466,8 @@ file_block_modified(FullFileName, Offset, Size) ->
     NewRemoteParts = fslogic_remote_location:mark_as_modified(#offset_range{offset = Offset, size = Size}, RemoteParts, ProviderId),
     case NewRemoteParts == RemoteParts of
         true -> ok;
-        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [RemoteLocationDoc#db_document{record = #remote_location{file_parts = NewRemoteParts}}])
+        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location,
+            [RemoteLocationDoc#db_document{record = #remote_location{file_parts = NewRemoteParts}}], fslogic_context:get_protocol_version())
     end,
     #atom{value = ?VOK}.
 
@@ -483,7 +485,8 @@ file_truncated(FullFileName, Size, SizeRelative) ->
     NewRemoteParts = fslogic_remote_location:truncate({bytes, Size}, RemoteParts, ProviderId, SizeRelative),
     case NewRemoteParts == RemoteParts of
         true -> ok;
-        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [RemoteLocationDoc#db_document{record = #remote_location{file_parts = NewRemoteParts}}])
+        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location,
+            [RemoteLocationDoc#db_document{record = #remote_location{file_parts = NewRemoteParts}}], fslogic_context:get_protocol_version())
     end,
     #atom{value = ?VOK}.
 
