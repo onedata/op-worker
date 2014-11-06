@@ -39,9 +39,9 @@
 %% ====================================================================
 init(_Args) ->
     Pid = self(),
-    {ok, CleaningInterval} = application:get_env(oneprovider_node, fslogic_cleaning_period),
+    {ok, CleaningInterval} = application:get_env(?APP_Name, fslogic_cleaning_period),
     erlang:send_after(CleaningInterval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
-    {ok, FilesSizeUpdateInterval} = application:get_env(oneprovider_node, user_files_size_view_update_period),
+    {ok, FilesSizeUpdateInterval} = application:get_env(?APP_Name, user_files_size_view_update_period),
     erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
 
     % Create acl permission cache
@@ -131,7 +131,7 @@ handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
 handle(ProtocolVersion, {update_user_files_size_view, Pid}) ->
   ?debug("Updating user file sizes for pid: ~p", [Pid]),
   fslogic_meta:update_user_files_size_view(ProtocolVersion),
-  {ok, Interval} = application:get_env(oneprovider_node, user_files_size_view_update_period),
+  {ok, Interval} = application:get_env(?APP_Name, user_files_size_view_update_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
   ok;
 
@@ -143,7 +143,7 @@ handle(ProtocolVersion, {delete_old_descriptors, Pid}) ->
   {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
   Time = 1000000*Megaseconds + Seconds - 15,
   fslogic_objects:delete_old_descriptors(ProtocolVersion, Time),
-  {ok, Interval} = application:get_env(oneprovider_node, fslogic_cleaning_period),
+  {ok, Interval} = application:get_env(?APP_Name, fslogic_cleaning_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, ProtocolVersion, {delete_old_descriptors, Pid}}}),
   ok;
 

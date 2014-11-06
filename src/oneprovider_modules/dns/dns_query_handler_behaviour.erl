@@ -15,6 +15,7 @@
 %% ====================================================================
 %% @doc Callbacks below handle specific types od DNS queries, in accordance to RFC1035:
 %% {@link https://tools.ietf.org/html/rfc1035#section-3.2.2}
+%% The argument in every function is Domain that was queried for, as a loewr-case string.
 %% @end
 %% ====================================================================
 -callback handle_a(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
@@ -58,16 +59,19 @@
     %   above bitmap will inform the client, that ports: 0 1 2 3 4 5 6 7 22 23 are open.
 
 -callback handle_ptr(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: string(). % Returns hostname(s): (RFC1035 3.3.12)
+    when Response :: string().
+    % Returns hostname(s): (RFC1035 3.3.12)
     % <domain-name> which points to some location in the domain name space.
 
 -callback handle_hinfo(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: {CPU :: string(), OS :: string()}. % Returns: (RFC1035 3.3.2)
+    when Response :: {CPU :: string(), OS :: string()}.
+    % Returns: (RFC1035 3.3.2)
     % CPU: A <character-string> which specifies the CPU type.
     % OS: A <character-string> which specifies the operatings system type.
 
 -callback handle_minfo(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: {RM :: string(), EM :: string()}. % Returns: (RFC1035 3.3.7)
+    when Response :: {RM :: string(), EM :: string()}.
+    % Returns: (RFC1035 3.3.7)
     % RM: A <domain-name> which specifies a mailbox which is responsible for the mailing list or mailbox.  If this
     %   domain name names the root, the owner of the MINFO RR is responsible for itself.  Note that many existing mailing
     %   lists use a mailbox X-request for the RMAILBX field of mailing list X, e.g., Msgroup-request for Msgroup.  This
@@ -77,13 +81,15 @@
     %   this domain name names the root, errors should be returned to the sender of the message.
 
 -callback handle_mx(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: {Pref :: integer(), Exch :: string()}. % Returns: (RFC1035 3.3.9)
+    when Response :: {Pref :: integer(), Exch :: string()}.
+    % Returns: (RFC1035 3.3.9)
     % Pref: A 16 bit integer which specifies the preference given to this RR among others at the same owner.
     %   Lower values are preferred.
     % Exch: A <domain-name> which specifies a host willing to act as a mail exchange for the owner name.
 
 -callback handle_txt(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: [string()]. % Returns text data - one or more <character-string>s: (RFC1035 3.3.14)
+    when Response :: [string()].
+    % Returns text data - one or more <character-string>s: (RFC1035 3.3.14)
     % TXT RRs are used to hold descriptive text. The semantics of the text depends on the domain where it is found.
     % NOTE: Should return list of strings for every record, for example:
     % [["string_1_1", "string_1_2"], ["string_2_1", "string_2_2"]] - two records, each with two strings.

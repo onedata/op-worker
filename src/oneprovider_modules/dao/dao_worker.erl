@@ -24,6 +24,7 @@
 -include_lib("oneprovider_modules/fslogic/fslogic.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("dao/include/common.hrl").
+-include("registered_names.hrl").
 
 -import(dao_helper, [name/1]).
 
@@ -226,7 +227,7 @@ cache_guard() ->
 init_storage() ->
     try
         %get storage config file path
-        GetEnvResult = application:get_env(oneprovider_node, storage_config_path),
+        GetEnvResult = application:get_env(?APP_Name, storage_config_path),
         case GetEnvResult of
             {ok, _} -> ok;
             undefined ->
@@ -307,7 +308,7 @@ init_storage() ->
 -spec set_db() -> ok | {error, Error :: term()}.
 %% ====================================================================
 set_db() ->
-    case application:get_env(oneprovider_node, db_nodes) of
+    case application:get_env(?APP_Name, db_nodes) of
         {ok, Nodes} when is_list(Nodes) ->
             [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
             catch dao_setup:setup_views(?DATABASE_DESIGN_STRUCTURE);

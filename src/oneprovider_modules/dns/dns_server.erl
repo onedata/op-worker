@@ -21,11 +21,20 @@
 % Maximum size of UDP DNS reply (without EDNS) as in RFC1035.
 -define(NOEDNS_UDP_SIZE, 512).
 
+%% Local name of the process waiting for dns udp messages
+-define(DNS_UDP_LISTENER, dns_udp).
+
+%% Module name of dns tcp ranch listener
+-define(DNS_TCP_LISTENER, dns_tcp).
+
+%% Timeout to wait for DNS listeners to start. After it, they are assumed to have failed to start.
+-define(LISTENERS_START_TIMEOUT, 10000).
+
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start/6, stop/0, handle_query/2, start_listening/3]).
+-export([start/8, stop/1, handle_query/2, start_listening/5]).
 
 % Server configuration (in runtime)
 -export([set_handler_module/1, get_handler_module/0, set_dns_response_ttl/1, get_dns_response_ttl/0, set_max_edns_udp_size/1, get_max_edns_udp_size/0]).
@@ -34,33 +43,52 @@
 -export([test/1, test/2]).
 
 
-%% start/6
+%% start/8
 %% ====================================================================
 %% @doc Starts a DNS server. The server will listen on chosen port (UDP and TCP).
 %% QueryHandlerModule must conform to dns_query_handler_behaviour.
+%% The server is started in a new process.
+%% OnFailureFun is evalueated by the process if the server fails to start.
 %% @end
 %% ====================================================================
--spec start(DNSPort :: integer(), QueryHandlerModule :: atom(), DNSResponseTTL :: integer(), EdnsMaxUdpSize :: integer(),
-    TCPNumAcceptors :: integer(), TCPTimeout :: integer()) -> ok | {error, Reason :: term()}.
+-spec start(SupervisorName :: atom(), DNSPort :: integer(), QueryHandlerModule :: atom(), DNSResponseTTL :: integer(), EdnsMaxUdpSize :: integer(),
+    TCPNumAcceptors :: integer(), TCPTimeout :: integer(), OnFailureFun :: function()) -> ok | {error, Reason :: term()}.
 %% ====================================================================
-start(DNSPort, QueryHandlerModule, DNSResponseTTL, EdnsMaxUdpSize, TCPNumAcceptors, TCPTimeout) ->
-    % TODO supervisor do argsow
+start(SupervisorName, DNSPort, QueryHandlerModule, DNSResponseTTL, EdnsMaxUdpSize, TCPNumAcceptors, TCPTimeout, OnFailureFun) ->
     set_handler_module(QueryHandlerModule),
     set_dns_response_ttl(DNSResponseTTL),
     set_max_edns_udp_size(EdnsMaxUdpSize),
-    case proc_lib:start(?MODULE, start_listening, [DNSPort, TCPNumAcceptors, TCPTimeout], 500) of
-        {ok, _Pid} ->
-            ok;
-        Error ->
-            {error, {cannot_start_server, Error}}
+    % Listeners start is done in another process.
+    % This is because this function is often called by the same supervisor process
+    % that supervises the listeners - which causes a deadlock.
+    case proc_lib:start(?MODULE, start_listening, [SupervisorName, DNSPort, TCPNumAcceptors, TCPTimeout, OnFailureFun], ?LISTENERS_START_TIMEOUT) of
+        ok -> ok;
+        {error, Reason} -> {error, Reason}
     end.
 
 
-stop() ->
-    spawn(fun() -> clear_children_and_listeners() end),
+%% stop/1
+%% ====================================================================
+%% @doc Stops the DNS server and cleans up.
+%% @end
+%% ====================================================================
+-spec stop(SupervisorName :: atom()) -> ok.
+%% ====================================================================
+stop(SupervisorName) ->
+    % Cleaning up must be done in another process. This is because this function is often called by the same supervisor process
+    % that supervises the listeners - which causes a deadlock.
+    spawn(fun() -> clear_children_and_listeners(SupervisorName, true) end),
     ok.
 
 
+%% handle_query/2
+%% ====================================================================
+%% @doc Handles a DNS request. This function is called from dns_upd_handler or dns_tcp_handler after
+%% they have received a request. After evaluation, the response is sent back to the client.
+%% @end
+%% ====================================================================
+-spec handle_query(Packet :: binary(), Transport :: udp | tcp) -> ok.
+%% ====================================================================
 handle_query(Packet, Transport) ->
     case inet_dns:decode(Packet) of
         {ok, #dns_rec{header = Header, qdlist = QDList, anlist = _AnList, nslist = _NSList, arlist = _ARList} = DNSRec} ->
@@ -70,10 +98,9 @@ handle_query(Packet, Transport) ->
                 bad_version ->
                     generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?BADVERS)}, Transport);
                 ok ->
-                    ?dump(DNSRec),
                     HandlerModule = get_handler_module(),
                     [#dns_query{domain = Domain, type = Type, class = Class}] = QDList,
-                    case call_handler_module(HandlerModule, list_to_binary(Domain), Type) of
+                    case call_handler_module(HandlerModule, string:to_lower(Domain), Type) of
                         serv_fail ->
                             generate_answer(DNSRec#dns_rec{header = inet_dns:make_header(Header, rcode, ?SERVFAIL)}, Transport);
                         nx_domain ->
@@ -128,7 +155,8 @@ validate_query(DNSRec) ->
 
 %% call_handler_module/3
 %% ====================================================================
-%% @doc Checks if a query is valid.
+%% @doc Calls the handler module to handle the query or returns not_impl if
+%% this kind of query is not accepted by the server.
 %% @end
 %% ====================================================================
 -spec call_handler_module(HandlerModule :: atom(), Domain :: binary(), Type :: atom()) ->
@@ -145,7 +173,7 @@ call_handler_module(HandlerModule, Domain, Type) ->
 
 %% type_to_fun/1
 %% ====================================================================
-%% @doc Returns function name, that should be called to handle a query of given type.
+%% @doc Returns a function that should be called to handle a query of given type.
 %% Those functions are defined in dns_query_handler_behaviour.
 %% @end
 %% ====================================================================
@@ -164,7 +192,7 @@ type_to_fun(?S_TXT) -> handle_txt;
 type_to_fun(_) -> not_impl.
 
 
-%% form_answer/2
+%% generate_answer/2
 %% ====================================================================
 %% @doc Encodes a DNS record and returns a tuple accepted by dns_xxx_handler modules.
 %% Modifies flags in header according to server's capabilities.
@@ -177,7 +205,7 @@ generate_answer(DNSRec, Transport) ->
     Header2 = inet_dns:make_header(DNSRec#dns_rec.header, ra, false),
     NewHeader = inet_dns:make_header(Header2, qr, true),
     DNSRecUpdatedHeader = DNSRec#dns_rec{header = NewHeader},
-    % Check if OPT RR is present. If so, check client's max upd payload size and set the value to server's max udp.
+    % Check if OPT RR is present. If so, retrieve client's max upd payload size and set the value to server's max udp.
     {NewDnsRec, ClientMaxUDP} = case DNSRecUpdatedHeader#dns_rec.arlist of
                                     [#dns_rr_opt{udp_payload_size = ClMaxUDP} = RROPT] ->
                                         {DNSRecUpdatedHeader#dns_rec{arlist = [RROPT#dns_rr_opt{udp_payload_size = get_max_edns_udp_size()}]}, ClMaxUDP};
@@ -197,113 +225,101 @@ generate_answer(DNSRec, Transport) ->
 %% ====================================================================
 -spec encode_udp(DNSRec :: #dns_rec{}, ClientMaxUDP :: integer() | undefined) -> binary().
 %% ====================================================================
-encode_udp(#dns_rec{arlist = [#dns_rr_opt{} = RROPT]} = DNSRec, ClientMaxUDP) ->
+encode_udp(#dns_rec{} = DNSRec, ClientMaxUDP) ->
     TruncationSize = case ClientMaxUDP of
                          undefined ->
                              ?NOEDNS_UDP_SIZE;
                          Value ->
-                             % If the client advertised a value, accept it but don't exceed the range:
-                             % [512, MAX_UDP_SIZE]
+                             % If the client advertised a value, accept it but don't exceed the range [512, MAX_UDP_SIZE]
                              max(?NOEDNS_UDP_SIZE, min(get_max_edns_udp_size(), Value))
                      end,
-    Packet = inet_dns:encode(DNSRec#dns_rec{arlist = [RROPT#dns_rr_opt{udp_payload_size = 1234}]}),
+    Packet = inet_dns:encode(DNSRec),
     case size(Packet) > TruncationSize of
         true ->
-            ?dump(Packet),
-            Packet2 = inet_dns:encode(DNSRec#dns_rec{header = inet_dns:make_header(DNSRec#dns_rec.header, tc, true), arlist = [RROPT#dns_rr_opt{udp_payload_size = 1234}]}),
-            ?dump(Packet2);
+            NumBits = (8 * TruncationSize),
+            % Truncate the packet
+            <<TruncatedPacket:NumBits, _/binary>> = Packet,
+            % Set the TC (truncation) flag, which is the 23th bit in header
+            <<Head:22, _TC:1, LastBit:1, Tail/binary>> = <<TruncatedPacket:NumBits>>,
+            NewPacket = <<Head:22, 1:1, LastBit:1, Tail/binary>>,
+            NewPacket;
         false ->
-            ?dump(ok)
+            Packet
     end.
 
 
-%% start_listening/3
+%% start_listening/5
 %% ====================================================================
 %% @doc Starts dns listeners and terminates dns_worker process in case of error.
+%% OnFailureFun is evalueated if the server fails to start.
 %% @end
 %% ====================================================================
--spec start_listening(DNSPort :: integer(), TCPNumAcceptors :: integer(), TCPTimeout :: integer()) -> ok.
+-spec start_listening(SupervisorName :: atom(), DNSPort :: integer(), TCPNumAcceptors :: integer(), TCPTimeout :: integer(), OnFailureFun :: function()) -> ok.
 %% ====================================================================
-start_listening(DNSPort, TCPNumAcceptors, TCPTimeout) ->
+start_listening(SupervisorName, DNSPort, TCPNumAcceptors, TCPTimeout, OnFailureFun) ->
     try
-        UDPChild = ?Sup_Child(?DNS_UDP, dns_udp_handler, permanent, [DNSPort]),
+        proc_lib:init_ack(ok),
+        UDPChild = {?DNS_UDP_LISTENER, {dns_udp_handler, start_link, [DNSPort]}, permanent, 5000, worker, [dns_udp_handler]},
+        UDPChild = ?Sup_Child(?DNS_UDP_LISTENER, dns_udp_handler, permanent, [DNSPort]),
         TCPOptions = [{packet, 2}, {dns_tcp_timeout, TCPTimeout}, {keepalive, true}],
 
-        proc_lib:init_ack({ok, self()}),
-
+        % Start the UDP listener
+        {ok, Pid} = supervisor:start_child(SupervisorName, UDPChild),
+        % Start the TCP listener. In case of an error, stop the UDP listener
         try
-            supervisor:delete_child(?Supervisor_Name, ?DNS_UDP),
-            ?debug("DNS UDP child has exited")
+            {ok, _} = ranch:start_listener(?DNS_TCP_LISTENER, TCPNumAcceptors, ranch_tcp, [{port, DNSPort}],
+                dns_tcp_handler, TCPOptions)
         catch
-            _:_ -> ok
-        end,
-
-        try
-            ranch:stop_listener(dns_tcp_listener),
-            ?debug("dns_tcp_listener has exited")
-        catch
-            _:_ -> ok
-        end,
-
-        {ok, Pid} = supervisor:start_child(?Supervisor_Name, UDPChild),
-        start_tcp_listener(TCPNumAcceptors, DNSPort, TCPOptions, Pid)
-    catch
-        _:Reason -> ?error("DNS Error during starting listeners, ~p", [Reason]),
-            gen_server:cast({global, ?CCM}, {stop_worker, node(), ?MODULE}),
-            ?info("Terminating ~p", [?MODULE])
-    end,
-    ok.
-
-
-%% start_tcp_listener/4
-%% ====================================================================
-%% @doc Starts tcp listener and handles case when udp listener has already started, but
-%% tcp listener is unable to do so.
-%% @end
-%% ====================================================================
--spec start_tcp_listener(AcceptorPool, Port, TransportOpts, Pid) -> ok when
-    AcceptorPool :: pos_integer(),
-    Port :: pos_integer(),
-    TransportOpts :: list(),
-    Pid :: pid().
-%% ====================================================================
-start_tcp_listener(AcceptorPool, Port, TransportOpts, Pid) ->
-    try
-        {ok, _} = ranch:start_listener(dns_tcp_listener, AcceptorPool, ranch_tcp, [{port, Port}],
-            dns_tcp_handler, TransportOpts)
-    catch
-        _:RanchError -> ok = supervisor:terminate_child(?Supervisor_Name, Pid),
-            supervisor:delete_child(?Supervisor_Name, Pid),
-            ?error("Start DNS TCP listener error, ~p", [RanchError]),
-            throw(RanchError)
-    end,
-    ok.
-
-
-%% clear_children_and_listeners/0
-%% ====================================================================
-%% @doc Clears listeners and created children
-%% @end
-%% ====================================================================
--spec clear_children_and_listeners() -> ok.
-%% ====================================================================
-clear_children_and_listeners() ->
-    SafelyExecute = fun(Invoke, Log) ->
-        try
-            Invoke()
-        catch
-            _:Error -> ?error(Log, [Error])
+            _:RanchError ->
+                supervisor:terminate_child(SupervisorName, Pid),
+                supervisor:delete_child(SupervisorName, Pid),
+                ?error("Error while starting DNS TCP, ~p", [RanchError]),
+                throw(RanchError)
         end
+    catch
+        _:Reason ->
+            ?error("DNS Error during starting listeners, ~p", [Reason]),
+            OnFailureFun()
+    end,
+    ok.
+
+
+%% clear_children_and_listeners/2
+%% ====================================================================
+%% @doc Terminates listeners and created children, if they exist.
+%% @end
+%% ====================================================================
+-spec clear_children_and_listeners(SupervisorName :: atom(), ReportErrors :: boolean()) -> ok.
+%% ====================================================================
+clear_children_and_listeners(SupervisorName, ReportErrors) ->
+    try
+        SupChildren = supervisor:which_children(SupervisorName),
+        case lists:keyfind(?DNS_UDP_LISTENER, 1, SupChildren) of
+            {?DNS_UDP_LISTENER, _, _, _} ->
+                ok = supervisor:terminate_child(SupervisorName, ?DNS_UDP_LISTENER),
+                supervisor:delete_child(SupervisorName, ?DNS_UDP_LISTENER),
+                ?debug("DNS UDP child has exited");
+            _ ->
+                ok
+        end
+    catch
+        _:Error1 ->
+            case ReportErrors of
+                true -> ?error_stacktrace("Error stopping dns udp listener, status ~p", [Error1]);
+                false -> ok
+            end
     end,
 
-    SafelyExecute(fun() -> ok = supervisor:terminate_child(?Supervisor_Name, ?DNS_UDP),
-        supervisor:delete_child(?Supervisor_Name, ?DNS_UDP)
+    try
+        ok = ranch:stop_listener(?DNS_TCP_LISTENER),
+        ?debug("dns_tcp_listener has exited")
+    catch
+        _:Error2 ->
+            case ReportErrors of
+                true -> ?error_stacktrace("Error stopping dns tcp listener, status ~p", [Error2]);
+                false -> ok
+            end
     end,
-        "Error stopping dns udp listener, status ~p"),
-
-    SafelyExecute(fun() -> ok = ranch:stop_listener(dns_tcp_listener)
-    end,
-        "Error stopping dns tcp listener, status ~p"),
     ok.
 
 

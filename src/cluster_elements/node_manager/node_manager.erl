@@ -364,7 +364,7 @@ handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
 handle_cast({node_for_ack, MsgID, Node}, State) ->
     ?debug("Node for ack chosen: ~p", [{MsgID, Node}]),
     ets:insert(?ACK_HANDLERS, {{chosen_node, MsgID}, Node}),
-    {ok, Interval} = application:get_env(oneprovider_node, callback_ack_time),
+    {ok, Interval} = application:get_env(?APP_Name, callback_ack_time),
     Pid = self(),
     erlang:send_after(Interval * 1000, Pid, {delete_node_for_ack, MsgID}),
     {noreply, State};
@@ -495,7 +495,7 @@ code_change(_OldVsn, State, _Extra) ->
 heart_beat(Conn_status, State) ->
     New_conn_status = case Conn_status of
                           not_connected ->
-                              {ok, CCM_Nodes} = application:get_env(oneprovider_node, ccm_nodes),
+                              {ok, CCM_Nodes} = application:get_env(?APP_Name, ccm_nodes),
                               Ans = init_net_connection(CCM_Nodes),
                               case Ans of
                                   ok -> connected;
@@ -504,7 +504,7 @@ heart_beat(Conn_status, State) ->
                           Other -> Other
                       end,
 
-    {ok, Interval} = application:get_env(oneprovider_node, heart_beat),
+    {ok, Interval} = application:get_env(?APP_Name, heart_beat),
     case New_conn_status of
         connected ->
             gen_server:cast({global, ?CCM}, {node_is_up, node()}),
@@ -1265,14 +1265,14 @@ start_dispatcher_listener() ->
 %% ====================================================================
 start_gui_listener() ->
     % Get params from env for gui
-    {ok, DocRoot} = application:get_env(oneprovider_node, control_panel_static_files_root),
+    {ok, DocRoot} = application:get_env(?APP_Name, control_panel_static_files_root),
 
-    {ok, Cert} = application:get_env(oneprovider_node, web_ssl_cert_path),
+    {ok, Cert} = application:get_env(?APP_Name, web_ssl_cert_path),
 
-    {ok, GuiPort} = application:get_env(oneprovider_node, control_panel_port),
-    {ok, GuiNbAcceptors} = application:get_env(oneprovider_node, control_panel_number_of_acceptors),
-    {ok, MaxKeepAlive} = application:get_env(oneprovider_node, control_panel_max_keepalive),
-    {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
+    {ok, GuiPort} = application:get_env(?APP_Name, control_panel_port),
+    {ok, GuiNbAcceptors} = application:get_env(?APP_Name, control_panel_number_of_acceptors),
+    {ok, MaxKeepAlive} = application:get_env(?APP_Name, control_panel_max_keepalive),
+    {ok, Timeout} = application:get_env(?APP_Name, control_panel_socket_timeout),
 
     LocalPort = oneproxy:get_local_port(GuiPort),
     spawn_link(fun() -> oneproxy:start(GuiPort, LocalPort, Cert, verify_none) end),
@@ -1356,9 +1356,9 @@ start_gui_listener() ->
 -spec start_redirector_listener() -> ok | no_return().
 %% ====================================================================
 start_redirector_listener() ->
-    {ok, RedirectPort} = application:get_env(oneprovider_node, control_panel_redirect_port),
-    {ok, RedirectNbAcceptors} = application:get_env(oneprovider_node, control_panel_number_of_http_acceptors),
-    {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
+    {ok, RedirectPort} = application:get_env(?APP_Name, control_panel_redirect_port),
+    {ok, RedirectNbAcceptors} = application:get_env(?APP_Name, control_panel_number_of_http_acceptors),
+    {ok, Timeout} = application:get_env(?APP_Name, control_panel_socket_timeout),
 
     RedirectDispatch = [
         {'_', [
@@ -1389,13 +1389,13 @@ start_redirector_listener() ->
 -spec start_rest_listener() -> ok | no_return().
 %% ====================================================================
 start_rest_listener() ->
-    {ok, NbAcceptors} = application:get_env(oneprovider_node, control_panel_number_of_acceptors),
-    {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
+    {ok, NbAcceptors} = application:get_env(?APP_Name, control_panel_number_of_acceptors),
+    {ok, Timeout} = application:get_env(?APP_Name, control_panel_socket_timeout),
 
-    {ok, Cert} = application:get_env(oneprovider_node, web_ssl_cert_path),
+    {ok, Cert} = application:get_env(?APP_Name, web_ssl_cert_path),
 
     % Get REST port from env and setup dispatch opts for cowboy
-    {ok, RestPort} = application:get_env(oneprovider_node, rest_port),
+    {ok, RestPort} = application:get_env(?APP_Name, rest_port),
 
     LocalPort = oneproxy:get_local_port(RestPort),
     Pid = spawn_link(fun() -> oneproxy:start(RestPort, LocalPort, Cert, verify_peer) end),

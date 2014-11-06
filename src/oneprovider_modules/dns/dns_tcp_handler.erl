@@ -69,10 +69,13 @@ init(Ref, Socket, Transport, Opts) ->
 %% ====================================================================
 loop(Socket, Transport, TCPIdleTime) ->
     case Transport:recv(Socket, 0, TCPIdleTime) of
-        {ok, Packet} -> handle_request(Socket, Transport, Packet),
+        {ok, Packet} ->
+            handle_request(Socket, Transport, Packet),
             ?MODULE:loop(Socket, Transport, TCPIdleTime);
-        {error, closed} -> ok;
-        {error, Reason} -> ?warning("Error receiving packet, reason ~p", [Reason]),
+        {error, closed} ->
+            ok;
+        {error, Reason} ->
+            ?warning("Error receiving packet, reason ~p", [Reason]),
             Transport:close(Socket)
     end.
 

@@ -13,7 +13,7 @@
 -module(old_dns_utils).
 
 -include_lib("kernel/src/inet_dns.hrl").
--include("oneprovider_modules/dns/dns_utils.hrl").
+-include("oneprovider_modules/dns/dns_worker.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -define(BASE_DNS_HEADER_SIZE, 12).  %% header size according to RFC1035#section-4.1.1
@@ -25,7 +25,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([generate_answer/5]).
+-export([generate_answer/5, get_workers/3, get_nodes/2]).
 
 
 %% generate_answer/5
@@ -95,8 +95,6 @@ handle_max_udp_response_size(Header, QuestionList, AnswerList) ->
 generate_answer(Packet, Dispatcher, DispatcherTimeout, ResponseTTL) ->
     case inet_dns:decode(Packet) of
         {ok, DNSRec} ->
-            ?dump(Packet),
-            ?dump(DNSRec),
             UpdatedHeader = inet_dns:make_header(DNSRec#dns_rec.header, ra, false),
             UpdatedHeaderWithQR = inet_dns:make_header(UpdatedHeader, qr, true),
 

@@ -44,14 +44,23 @@
     Error :: term().
 %% ====================================================================
 init([]) ->
-    ?dump(start_dns_server),
     {ok, DNSPort} = application:get_env(?APP_Name, dns_port),
     {ok, DNSResponseTTL} = application:get_env(?APP_Name, dns_response_ttl),
     {ok, EdnsMaxUdpSize} = application:get_env(?APP_Name, edns_max_udp_size),
-%%     {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
     {ok, TCPNumAcceptors} = application:get_env(?APP_Name, dns_tcp_acceptor_pool_size),
     {ok, TCPTImeout} = application:get_env(?APP_Name, dns_tcp_timeout),
-    dns_server:start(DNSPort, dns_worker, DNSResponseTTL, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout),
+    OnFailureFun = fun() ->
+        gen_server:cast({global, ?CCM}, {stop_worker, node(), ?MODULE}),
+        ?error("~p is terminating", [?MODULE])
+    end,
+    ?info("Starting DNS server..."),
+    case dns_server:start(?Supervisor_Name, DNSPort, dns_worker, DNSResponseTTL, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun) of
+        ok ->
+            ok;
+        Error ->
+            ?error("Cannot start DNS server - ~p", Error),
+            OnFailureFun()
+    end,
     #dns_worker_state{};
 
 init(InitialState) when is_record(InitialState, dns_worker_state) ->
@@ -117,9 +126,9 @@ handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
 
 handle(_ProtocolVersion, {get_worker, Module}) ->
     try
-        DNS_State = gen_server:call(?MODULE, getPlugInState),
-        WorkerList = DNS_State#dns_worker_state.workers_list,
-        NodesList = DNS_State#dns_worker_state.nodes_list,
+        DNSState = gen_server:call(?MODULE, getPlugInState),
+        WorkerList = DNSState#dns_worker_state.workers_list,
+        NodesList = DNSState#dns_worker_state.nodes_list,
         Result = proplists:get_value(Module, WorkerList, []),
 
         PrepareResult = fun({Node, V, C}, {TmpAns, TmpWorkers}) ->
@@ -143,7 +152,7 @@ handle(_ProtocolVersion, {get_worker, Module}) ->
         end,
         NewWorkersList = lists:foldl(PrepareState, [], WorkerList),
 
-        New_DNS_State = DNS_State#dns_worker_state{workers_list = NewWorkersList},
+        New_DNS_State = DNSState#dns_worker_state{workers_list = NewWorkersList},
 
         case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
             ok ->
@@ -167,9 +176,9 @@ handle(_ProtocolVersion, {get_worker, Module}) ->
 
 handle(_ProtocolVersion, get_nodes) ->
     try
-        DNS_State = gen_server:call(?MODULE, getPlugInState),
-        NodesList = DNS_State#dns_worker_state.nodes_list,
-        AvgLoad = DNS_State#dns_worker_state.avg_load,
+        DNSState = gen_server:call(?MODULE, getPlugInState),
+        NodesList = DNSState#dns_worker_state.nodes_list,
+        AvgLoad = DNSState#dns_worker_state.avg_load,
 
         case AvgLoad of
             0 ->
@@ -217,7 +226,7 @@ handle(ProtocolVersion, Msg) ->
     Result :: ok.
 %% ====================================================================
 cleanup() ->
-    dns_server:stop().
+    dns_server:stop(?Supervisor_Name).
 
 
 %% create_ans/2
@@ -243,6 +252,7 @@ create_ans(Result, NodesList) ->
                     {ok, Result ++ [NewNode]}
             end
     end.
+
 
 %% make_ans_random/1
 %% ====================================================================
@@ -271,100 +281,293 @@ make_ans_random(Result) ->
 %% handle_a/1
 %% ====================================================================
 %% @doc Handles DNS queries of type A.
+%% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_a(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
+-spec handle_a(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
+    when Response :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
 %% ====================================================================
-handle_a(Domain) -> {ok, [{1, 2, 3, 4}, {1, 2, 3, 5}]}.
+handle_a(Domain) ->
+    case parse_domain(Domain) of
+        nx_domain ->
+            nx_domain;
+        {Prefix, _Suffix} ->
+            if
+                Prefix =:= "" ->
+                    get_workers(control_panel);
+                Prefix =:= "www" ->
+                    get_workers(control_panel);
+                Prefix =:= "cluster" ->
+                    get_nodes();
+                true ->
+                    Module = try list_to_existing_atom(Prefix) catch _:_ -> undefined end,
+                    case lists:member(Module, ?EXTERNALLY_VISIBLE_MODULES) of
+                        true -> get_workers(Module);
+                        false -> nx_domain
+                    end
+            end
+    end.
 
 
 %% handle_ns/1
 %% ====================================================================
 %% @doc Handles DNS queries of type NS.
+%% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_ns(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
+-spec handle_ns(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
+    when Response :: string().
 %% ====================================================================
-handle_ns(Domain) -> {ok, ["handle_ns"]}.
+handle_ns(Domain) ->
+    case parse_domain(Domain) of
+        nx_domain ->
+            nx_domain;
+        {Prefix, Suffix} ->
+            case is_prefix_valid(Prefix) of
+                false ->
+                    nx_domain;
+                true ->
+                    {ok, [Suffix]}
+            end
+    end.
 
 
 %% handle_cname/1
 %% ====================================================================
 %% @doc Handles DNS queries of type CNAME.
+%% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_cname(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
+-spec handle_cname(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
+    when Response :: string().
 %% ====================================================================
-handle_cname(Domain) -> {ok, ["handle_cname", "handle_cname2"]}.
-
-
-%% handle_soa/1
-%% ====================================================================
-%% @doc Handles DNS queries of type SOA.
-%% @end
-%% ====================================================================
--spec handle_soa(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_soa(Domain) -> {ok, [{"handle_soa_mname", "handle_soa_rname", 1, 2, 3, 4, 5}]}.
-
-
-%% handle_wks/1
-%% ====================================================================
-%% @doc Handles DNS queries of type WKS.
-%% @end
-%% ====================================================================
--spec handle_wks(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_wks(Domain) -> {ok, [{{2, 3, 4, 5}, 6, [2#11111111, 2#00000000, 2#00000011]}]}.
-
-
-%% handle_ptr1
-%% ====================================================================
-%% @doc Handles DNS queries of type PTR.
-%% @end
-%% ====================================================================
--spec handle_ptr(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_ptr(Domain) -> {ok, ["handle_ptr"]}.
-
-
-%% handle_hinfo/1
-%% ====================================================================
-%% @doc Handles DNS queries of type HINFO.
-%% @end
-%% ====================================================================
--spec handle_hinfo(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_hinfo(Domain) -> {ok, [{"handle_hinfo_cpu", "handle_hinfo_os"}]}.
-
-
-%% handle_minfo/1
-%% ====================================================================
-%% @doc Handles DNS queries of type MINFO.
-%% @end
-%% ====================================================================
--spec handle_minfo(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
-%% ====================================================================
-handle_minfo(Domain) -> {ok, [{"handle_hinfo_rm", "handle_hinfo_em"}]}.
+handle_cname(Domain) ->
+    case parse_domain(Domain) of
+        nx_domain ->
+            nx_domain;
+        {Prefix, Suffix} ->
+            case is_prefix_valid(Prefix) of
+                false ->
+                    nx_domain;
+                true ->
+                    {ok, [Suffix]}
+            end
+    end.
 
 
 %% handle_mx/1
 %% ====================================================================
 %% @doc Handles DNS queries of type MX.
+%% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_mx(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
+-spec handle_mx(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
+    when Response :: {Pref :: integer(), Exch :: string()}.
 %% ====================================================================
-handle_mx(Domain) -> {ok, [{123, "handle_mx"}]}.
+handle_mx(Domain) ->
+    case parse_domain(Domain) of
+        nx_domain ->
+            nx_domain;
+        {Prefix, Suffix} ->
+            case is_prefix_valid(Prefix) of
+                false ->
+                    nx_domain;
+                true ->
+                    {ok, [{0, Suffix}]}
+            end
+    end.
+
+
+%% handle_soa/1
+%% ====================================================================
+%% @doc Handles DNS queries of type SOA.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_soa(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
+    when Response :: {MName :: string(), RName :: string(), Serial :: integer(), Refresh :: integer(),
+    Retry :: integer(), Expiry :: integer(), Minimum :: integer()}.
+%% ====================================================================
+handle_soa(_Domain) -> not_impl.
+
+
+%% handle_wks/1
+%% ====================================================================
+%% @doc Handles DNS queries of type WKS.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_wks(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
+    when Response :: {{A :: byte(), B :: byte(), C :: byte(), D :: byte()}, Proto :: string(), BitMap :: string()}.
+%% ====================================================================
+handle_wks(_Domain) -> not_impl.
+
+
+%% handle_ptr1
+%% ====================================================================
+%% @doc Handles DNS queries of type PTR.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_ptr(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
+    when Response :: string().
+%% ====================================================================
+handle_ptr(_Domain) -> not_impl.
+
+
+%% handle_hinfo/1
+%% ====================================================================
+%% @doc Handles DNS queries of type HINFO.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_hinfo(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
+    when Response :: {CPU :: string(), OS :: string()}.
+%% ====================================================================
+handle_hinfo(_Domain) -> not_impl.
+
+
+%% handle_minfo/1
+%% ====================================================================
+%% @doc Handles DNS queries of type MINFO.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_minfo(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
+    when Response :: {RM :: string(), EM :: string()}.
+%% ====================================================================
+handle_minfo(_Domain) -> not_impl.
 
 
 %% handle_txt/1
 %% ====================================================================
 %% @doc Handles DNS queries of type TXT.
+%% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_txt(Domain :: binary()) -> {ok, Response :: binary() | [binary()]} | serv_fail | nx_domain  | not_impl | refused.
+-spec handle_txt(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
+    when Response :: [string()].
 %% ====================================================================
-handle_txt(Domain) -> {ok, [["handle_txt_siema", "argsgsg"]]}.
+handle_txt(_Domain) -> not_impl.
 
+
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
+
+%% parse_domain/1
+%% ====================================================================
+%% @doc Split the domain name into prefix and suffix, where suffix matches the
+%% canonical provider's hostname (retrieved from env). The split is made on the dot between prefix and suffix.
+%% If that's not possible, returns nx_domain.
+%% @end
+%% ====================================================================
+-spec parse_domain(Domain :: string()) -> {Prefix :: string(), Suffix :: string()} | nx_domain.
+%% ====================================================================
+parse_domain(Domain) ->
+    {ok, ProviderHostnameWithoutDot} = application:get_env(?APP_Name, provider_hostname),
+    case ProviderHostnameWithoutDot =:= Domain of
+        true ->
+            {"", ProviderHostnameWithoutDot};
+        false ->
+            ProviderHostname = "." ++ ProviderHostnameWithoutDot,
+            HostNamePos = string:rstr(Domain, ProviderHostname),
+            % If hostname is at this position, it's a suffix (the string ends with it)
+            ValidHostNamePos = length(Domain) - length(ProviderHostname) + 1,
+            case HostNamePos =:= ValidHostNamePos of
+                false ->
+                    nx_domain;
+                true ->
+                    {string:sub_string(Domain, 1, HostNamePos - 1), ProviderHostnameWithoutDot}
+            end
+    end.
+
+
+%% is_prefix_valid/1
+%% ====================================================================
+%% @doc Convenience function to check if specific subdomain is existent.
+%% @end
+%% ====================================================================
+-spec is_prefix_valid(Prefix :: string()) -> boolean().
+%% ====================================================================
+is_prefix_valid(Prefix) ->
+    case Prefix of
+        "" ->
+            true;
+        "www" ->
+            true;
+        "cluster" ->
+            true;
+        _ ->
+            Module = try list_to_existing_atom(Prefix) catch _:_ -> undefined end,
+            lists:member(Module, ?EXTERNALLY_VISIBLE_MODULES)
+    end.
+
+
+%% get_workers/1
+%% ====================================================================
+%% @doc Selects couple of nodes hosting given worker and returns their IPs.
+%% @end
+%% ====================================================================
+-spec get_workers(Module :: atom()) -> {ok, list()} | serv_fail.
+%% ====================================================================
+get_workers(Module) ->
+    try
+        {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
+        DispatcherAns = gen_server:call(?Dispatcher_Name, {dns_worker, 1, self(), {get_worker, Module}}),
+        case DispatcherAns of
+            ok -> receive
+                      {ok, ListOfIPs} ->
+                          {ok, ListOfIPs};
+                      {error, Error} ->
+                          ?error("Unexpected dispatcher error ~p", [Error]),
+                          serv_fail
+                  after
+                      DispatcherTimeout ->
+                          ?error("Unexpected dispatcher timeout"),
+                          serv_fail
+                  end;
+            worker_not_found ->
+                ?error("Dispatcher error - worker not found"),
+                serv_fail
+        end
+    catch
+        _:Error2 ->
+            ?error("Dispatcher not responding ~p", [Error2]),
+            serv_fail
+    end.
+
+
+%% get_nodes/0
+%% ====================================================================
+%% @doc Selects couple of nodes from the cluster and returns their IPs.
+%% @end
+%% ====================================================================
+-spec get_nodes() -> {ok, list()} | serv_fail.
+%% ====================================================================
+get_nodes() ->
+    try
+        {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
+        DispatcherAns = gen_server:call(?Dispatcher_Name, {dns_worker, 1, self(), get_nodes}),
+        case DispatcherAns of
+            ok -> receive
+                      {ok, ListOfIPs} ->
+                          {ok, ListOfIPs};
+                      {error, Error} ->
+                          ?error("Unexpected dispatcher error ~p", [Error]),
+                          serv_fail
+                  after
+                      DispatcherTimeout ->
+                          ?error("Unexpected dispatcher timeout"),
+                          serv_fail
+                  end;
+            worker_not_found ->
+                ?error("Dispatcher error - worker not found"),
+                serv_fail
+        end
+    catch
+        _:Error2 ->
+            ?error("Dispatcher not responding ~p", [Error2]),
+            serv_fail
+    end.
 
