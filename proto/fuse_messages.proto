@@ -151,6 +151,11 @@ message FileBlockModified {
   required uint64 size = 3;
 }
 
+message FileTruncated {
+  required string logical_name = 1;
+  required uint64 size = 3;
+}
+
 message CreateFileAck {
     required string file_logic_name = 1;
 }
