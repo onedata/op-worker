@@ -15,7 +15,7 @@
 -include("oneprovider_modules/fslogic/fslogic_remote_location.hrl").
 
 % API
--export([mark_as_modified/3, mark_as_available/3, check_if_synchronized/3, truncate/4]).
+-export([mark_as_modified/3, mark_as_available/3, check_if_synchronized/3, truncate/3]).
 
 % Test API
 -ifdef(TEST).
@@ -46,25 +46,16 @@ mark_as_modified(#block_range{to = To} = BlockRange, RemoteParts, ProviderId) ->
         end,
     minimize_remote_parts_list(NewRemoteParts).
 
-%% truncate/4
+%% truncate/3
 %% ====================================================================
 %% @doc Truncates given list of ranges to given size
 %% It extends remote_file_part list if necessary, marking new blocks as modified by "ProviderId".
-%% SizeRelative flag informs that the size value is relative to file's size (relative + file_size = non_relative)
 %% @end
--spec truncate(Range :: {bytes, integer()} | integer(), RemoteParts :: [#remote_file_part{}], ProviderId :: binary(), SizeRelative :: boolean()) -> [#remote_file_part{}].
+-spec truncate(Range :: {bytes, integer()} | integer(), RemoteParts :: [#remote_file_part{}], ProviderId :: binary()) -> [#remote_file_part{}].
 %% ====================================================================
-truncate({bytes, ByteSize}, RemoteParts, ProviderId, SizeRelative) ->
-    truncate(byte_to_block(ByteSize), RemoteParts, ProviderId, SizeRelative);
-truncate(BlockSize, RemoteParts, _, true) when BlockSize =< 0 -> RemoteParts;
-truncate(BlockSize, RemoteParts, ProviderId, true) ->
-    case RemoteParts of
-        [] -> truncate(BlockSize, RemoteParts, ProviderId, false);
-        _ ->
-            Last = lists:last(RemoteParts),
-            truncate(BlockSize + Last#remote_file_part.range#block_range.to, RemoteParts, ProviderId, false)
-    end;
-truncate(BlockSize, RemoteParts, ProviderId, false) ->
+truncate({bytes, ByteSize}, RemoteParts, ProviderId) ->
+    truncate(byte_to_block(ByteSize), RemoteParts, ProviderId);
+truncate(BlockSize, RemoteParts, ProviderId) ->
     ReversedRemoteParts = lists:reverse(RemoteParts),
     TruncatedReversedRemoteParts = lists:dropwhile(
         fun(#remote_file_part{range = #block_range{from = From}}) ->

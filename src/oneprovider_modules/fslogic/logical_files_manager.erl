@@ -573,7 +573,10 @@ write(File, Buf) ->
                     case is_integer(Res) of
                         true ->
                             % async infrom other providers about modification
-                            apply(fun() -> mark_as_truncated(File, byte_size(Buf), true) end,[]),
+                            apply(fun() ->
+                                {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File),
+                                mark_as_truncated(File, FileSize)
+                            end,[]),
 
                             case event_production_enabled("write_event") of
                                 true ->

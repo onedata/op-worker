@@ -389,9 +389,9 @@ handle_fuse_message(Req = #fileblockmodified{logical_name = FName, offset = Offs
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_req_generic:file_block_modified(FullFileName, Offset, Size);
 
-handle_fuse_message(Req = #filetruncated{logical_name = FName, size = Size, size_relative = SizeRelative}) ->
+handle_fuse_message(Req = #filetruncated{logical_name = FName, size = Size}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    fslogic_req_generic:file_truncated(FullFileName, Size, SizeRelative);
+    fslogic_req_generic:file_truncated(FullFileName, Size);
 
 handle_fuse_message(Req = #requestfileblock{logical_name = FName, offset = _Offset, size = _Size}) ->
     {ok, _FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),

@@ -22,7 +22,7 @@
 
 %% API
 -export([update_times/4, change_file_owner/2, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
-    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0, synchronize_file_block/3, file_block_modified/3, file_truncated/3]).
+    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0, synchronize_file_block/3, file_block_modified/3, file_truncated/2]).
 
 %% ====================================================================
 %% API functions
@@ -444,7 +444,8 @@ synchronize_file_block(FullFileName, Offset, Size) ->
             ?info("Synchronizing ~p of file ~p with any provider from list ~p", [BlockRange, FullFileName, Providers])
             %TODO let rtransfer fetch this data in order to synchronize file
         end, OutOfSyncList),
-    NewRemoteParts = fslogic_remote_location:mark_as_available(OutOfSyncList, RemoteParts, ProviderId),
+    SyncedParts = [ BlockRange || #remote_file_part{range = BlockRange} <- OutOfSyncList],
+    NewRemoteParts = fslogic_remote_location:mark_as_available(SyncedParts, RemoteParts, ProviderId),
     case NewRemoteParts == RemoteParts of
         true -> ok;
         false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location,
@@ -476,13 +477,13 @@ file_block_modified(FullFileName, Offset, Size) ->
 %% @doc Deletes synchronization info of truncated blocks, so other provider would know
 %% that those blocks has been deleted
 %% @end
--spec file_truncated(FullFileName :: string(), Size :: non_neg_integer(), SizeRelative :: boolean()) ->
+-spec file_truncated(FullFileName :: string(), Size :: non_neg_integer()) ->
     #atom{} | no_return().
 %% ====================================================================
-file_truncated(FullFileName, Size, SizeRelative) ->
+file_truncated(FullFileName, Size) ->
     {ok, #db_document{record = #remote_location{file_parts = RemoteParts}} = RemoteLocationDoc} = fslogic_objects:get_remote_location(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
-    NewRemoteParts = fslogic_remote_location:truncate({bytes, Size}, RemoteParts, ProviderId, SizeRelative),
+    NewRemoteParts = fslogic_remote_location:truncate({bytes, Size}, RemoteParts, ProviderId),
     case NewRemoteParts == RemoteParts of
         true -> ok;
         false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location,
