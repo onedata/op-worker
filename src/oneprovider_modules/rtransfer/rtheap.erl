@@ -11,7 +11,7 @@
 -module(rtheap).
 
 %% API
--export([push/1, fetch/0, test/0]).
+-export([push/1, fetch/0, fetch_all/0, test_push/4]).
 
 -on_load(init/0).
 
@@ -51,8 +51,15 @@ fetch() ->
     throw("NIF library not loaded.").
 
 
-test() ->
-    PushAns = push(#rt_block{file_id = "file", offset = 1, size = 2, priority = 3}),
-    io:format("push ans: ~p~n", [PushAns]),
-    BlockAns = #rt_block{} = fetch(),
-    io:format("fetch ans: ~p~n", [BlockAns]).
+%% fetch_all/0
+%% ====================================================================
+%% @doc Fetches all blocks from RTransfer heap.
+%% @end
+-spec fetch_all() -> #rt_block{}.
+%% ====================================================================
+fetch_all() ->
+    throw("NIF library not loaded.").
+
+
+test_push(FileId, Offset, Size, Priority) ->
+    push(#rt_block{file_id = FileId, offset = Offset, size = Size, priority = Priority}).
