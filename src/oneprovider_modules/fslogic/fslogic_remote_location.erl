@@ -6,8 +6,10 @@
 %% @end
 %% ===================================================================
 %% @doc This module provides api which allowes to:
-%% - check if selected part of file is in sync with other providers (and also find out which provider has the newest version)
-%% - mark some file part as modified, so other providers could synchronize it
+%% - check_if_synchronized - check if selected part of file is in sync with other providers (and also find out which provider has the newest version)
+%% - mark_as_modified - mark some file part as modified, so other providers could fetch this data later
+%% - mark_as_available - mark some file part as available, it means that method caller has newest version of file block, on local storage
+%% - truncate - inform that file was truncated, the remote_parts ranges would fit to that new size
 %% @end
 %% ===================================================================
 -module(fslogic_remote_location).

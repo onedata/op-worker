@@ -1334,24 +1334,13 @@ mark_as_modified(File, Offset, Size) ->
 
 %% mark_as_truncated/2
 %% ====================================================================
-%% @doc @equiv mark_as_truncated(File, Size, false)
+%% @doc truncate given byte range in remote location, so other providers would know that they need to synchronize their data.
 %% @end
 -spec mark_as_truncated(FullFileName :: string(), Size :: non_neg_integer()) ->
     ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
 mark_as_truncated(File, Size) ->
-    mark_as_truncated(File, Size, false).
-
-%% mark_as_truncated/3
-%% ====================================================================
-%% @doc truncate given byte range in remote location, so other providers would know that they need to synchronize their data.
-%% SizeRelative flag informs that the size value is relative to file's size (relative + file_size = non_relative)
-%% @end
--spec mark_as_truncated(FullFileName :: string(), Size :: non_neg_integer(), SizeRelative :: boolean()) ->
-    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
-%% ====================================================================
-mark_as_truncated(File, Size, SizeRelative) ->
-    {Status, TmpAns} = contact_fslogic(#filetruncated{logical_name = File, size = Size, size_relative = SizeRelative}),
+    {Status, TmpAns} = contact_fslogic(#filetruncated{logical_name = File, size = Size}),
     case Status of
         ok ->
             case TmpAns#atom.value of

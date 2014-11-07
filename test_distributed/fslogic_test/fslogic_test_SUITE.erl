@@ -31,13 +31,13 @@
 -export([permissions_management_test/1, user_creation_test/1, get_file_links_test/1, fuse_requests_test/1, users_separation_test/1]).
 -export([file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, user_file_size_test/1, dirs_creating_test/1, spaces_test/1]).
 -export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2, get_acl/2, make_dir/2, xattrs_test/1, acl_test/1]).
--export([get_file_local_location_test/1, block_creation_test/1, block_registration_test/1, remote_location_test/1, create_file/3]).
+-export([get_file_local_location_test/1, block_creation_test/1, block_registration_test/1]).
 
 all() ->
  [spaces_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
    fuse_requests_test, spaces_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test,
    concurrent_file_creation_test, get_file_links_test, user_file_size_test, xattrs_test, acl_test, get_file_local_location_test, block_creation_test,
-   block_registration_test, remote_location_test
+   block_registration_test
  ].
 
 -define(SH, "DirectIO").
@@ -2522,26 +2522,6 @@ block_registration_test(Config) ->
 
     ?assertEqual({ok, 1}, rpc:call(Node1, fslogic_req_regular, register_file_block, [FullFileName, 9, 9])).
 
-remote_location_test(Config) ->
-    FileName = "/remote_location_test",
-    Cert = ?COMMON_FILE("peer.pem"),
-    Host = "localhost",
-    Port = ?config(port, Config),
-    [Node1 | _] = ?config(nodes, Config),
-
-    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
-    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    test_utils:wait_for_cluster_cast(),
-    gen_server:cast({global, ?CCM}, init_cluster),
-    test_utils:wait_for_cluster_init(),
-
-    ?assertMatch({ok, _}, rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT])),
-
-    UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
-    [DN | _] = user_logic:get_dn_list(UserDoc),
-
-    ct:print("~p",[rpc:call(Node1, fslogic_test_SUITE, create_file, [FileName, <<"value">>, DN])]).
-
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -2563,7 +2543,7 @@ init_per_testcase(_, Config) ->
   ?INIT_CODE_PATH, ?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(1, true),
+  NodesUp = test_node_starter:start_test_nodes(1),
   [FSLogicNode | _] = NodesUp,
 
   DB_Node = ?DB_NODE,
@@ -2948,9 +2928,3 @@ get_acl(FilePath, DN) ->
 make_dir(FilePath, DN) ->
   fslogic_context:set_user_dn(DN),
   logical_files_manager:mkdir(FilePath).
-
-create_file(FilePath, Value, DN) ->
-  fslogic_context:set_user_dn(DN),
-  logical_files_manager:create(FilePath),
-  logical_files_manager:write(FilePath, Value),
-  logical_files_manager:read(FilePath, 0, 10).
