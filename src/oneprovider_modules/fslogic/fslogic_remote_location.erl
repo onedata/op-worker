@@ -255,7 +255,7 @@ offset_to_block_range(#offset_range{offset = Offset, size = Size}) ->
 -spec byte_to_block(integer()) -> integer().
 %% ====================================================================
 byte_to_block(Byte) ->
-    ceil(Byte / ?remote_block_size).
+    utils:ceil(Byte / ?remote_block_size).
 
 %% minimize_remote_parts_list/3
 %% ====================================================================
@@ -275,12 +275,3 @@ minimize_remote_parts_list([
         true -> minimize_remote_parts_list([#remote_file_part{range = #block_range{from = From1, to = To2}, providers = Providers1} | Rest]);
         false -> [El1 | minimize_remote_parts_list([El2 | minimize_remote_parts_list(Rest)])]
     end.
-
-%todo move to ctool
-%% ceil/1
-%% ====================================================================
-%% @doc math ceil function (works on positive values)
--spec ceil(N :: number()) -> integer().
-%% ====================================================================
-ceil(N) when trunc(N) == N -> N;
-ceil(N) -> trunc(N + 1).
