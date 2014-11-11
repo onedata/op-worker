@@ -81,7 +81,7 @@
 -define(GROUP_BY_NAME_VIEW, #view_info{name = "group_by_name", db_name = ?GROUPS_DB_NAME, version = 1}).
 
 %% List of all used databases :: [string()]
--define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME, ?USERS_DB_NAME, ?COOKIES_DB_NAME, ?GROUPS_DB_NAME]).
+-define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME, ?USERS_DB_NAME, ?COOKIES_DB_NAME, ?GROUPS_DB_NAME, ?REMOTE_LOCATIONS_DB_NAME]).
 
 %% List of all used views :: [#view_info]
 -define(VIEW_LIST, [?FILE_TREE_VIEW, ?WAITING_FILES_TREE_VIEW, ?FILE_CHILDS_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW,
