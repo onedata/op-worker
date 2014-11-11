@@ -26,6 +26,7 @@
 
 -include("gwproto_pb.hrl").
 -include("oneprovider_modules/dao/dao_vfs.hrl").
+-include("oneprovider_modules/dao/dao_types.hrl").
 -include("oneprovider_modules/gateway/gateway.hrl").
 -include("oneprovider_modules/gateway/registered_names.hrl").
 
@@ -64,6 +65,7 @@ init(Ref, Socket, Transport, _Opts) ->
     Timeout :: timeout(),
     Reason :: term().
 init(State) ->
+    ?warning("Someone connected"), %% @todo
     {ok, State, ?connection_close_timeout}.
 
 
@@ -114,13 +116,12 @@ handle_info({Ok, Socket, Data}, State) when Ok =:= State#gwproto_state.ok ->
 
     #fetchrequest{file_id = FileId, offset = Offset, size = Size} = gwproto_pb:decode_fetchrequest(Data),
 
-%%     #file_location{storage_uuid = StorageUUID, storage_file_id = StorageFileId} = fslogic_file:get_file_local_location(FileId),
-%%     Storage = fslogic_objects:get_storage({uuid, StorageUUID}),
-%%     #storage_info{default_storage_helper = StorageHelper} = Storage,
-%%     {ok, Bytes} = storage_files_manager:read(StorageHelper, StorageFileId, Offset, Size),
+    #file_location{storage_uuid = StorageUUID, storage_file_id = StorageFileId} = fslogic_file:get_file_local_location(FileId),
+    {ok, StorageDoc} = fslogic_objects:get_storage({uuid, StorageUUID}),
+    #db_document{record = #storage_info{default_storage_helper = StorageHelper}} = StorageDoc,
+    {ok, Bytes} = storage_files_manager:read(StorageHelper, StorageFileId, Offset, Size),
 
     Hash = gateway:compute_request_hash(Data),
-    Bytes = <<"lalala">>,
     Reply = gwproto_pb:encode_fetchreply(#fetchreply{request_hash = Hash, content = Bytes}),
     ok = Transport:send(Socket, Reply),
     {noreply, State, ?connection_close_timeout};

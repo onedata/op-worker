@@ -1,12 +1,16 @@
-/*********************************************************************
+/**
+ * @file main.cpp
  * @author Rafal Slota
  * @copyright (C): 2014 ACK CYFRONET AGH
  * This software is released under the MIT license
  * cited in 'LICENSE.txt'.
-*********************************************************************/
+ */
 
 #include "log_message.h"
 #include "tls_server.h"
+#include "tls2tcp_session.h"
+#include "tls2tcp_http_session.h"
+#include "tcp_server.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -48,25 +52,22 @@ void command_response(std::vector<std::string> tokens)
     std::cout << std::endl;
 }
 
-enum class proxy_type {
-    reverse,
-    normal
-};
+enum class proxy_type { reverse, normal };
 
 void invalid_argument(const std::string &app_name)
 {
     LOG(ERROR) << "Invalid argument. Usage:\n\t" << app_name
                << " reverse_proxy <listen_port> <forward_host> <forward_port> "
-                  "<cert_path> verify_peer|verify_none [ca|crl_dir...]\n\t"
-               << app_name << " proxy <listen_port> <cert_path> "
-                              "verify_peer|verify_none [ca|crl_dir...]";
+                  "<cert_path> verify_peer|verify_none http|no_http "
+                  "[ca|crl_dir...]\n\t" << app_name
+               << " proxy <listen_port> <cert_path> "
+                  "verify_peer|verify_none [ca|crl_dir...]";
 }
 
 int main(int argc, char *argv[])
 {
     std::ios_base::sync_with_stdio(false);
-    try
-    {
+    try {
         if (argc < 4) {
             invalid_argument(argv[0]);
             return EXIT_FAILURE;
@@ -86,7 +87,7 @@ int main(int argc, char *argv[])
             }
 
             const auto verify_type_ind = type == proxy_type::reverse ? 6 : 4;
-            const auto ca_dirs_ind = type == proxy_type::reverse ? 7 : 5;
+            const auto ca_dirs_ind = type == proxy_type::reverse ? 8 : 5;
 
             auto verify_type = (argv[verify_type_ind] == "verify_peer"s
                                     ? boost::asio::ssl::verify_peer
@@ -94,12 +95,39 @@ int main(int argc, char *argv[])
 
             std::vector<std::string> ca_dirs{argv + ca_dirs_ind, argv + argc};
 
-            auto s = type == proxy_type::reverse
-                         ? std::make_shared<tls_server>(
-                               client_io_service, proxy_io_service, verify_type,
-                               argv[5], atoi(argv[2]), argv[3], atoi(argv[4]),
-                               ca_dirs)
-                         : std::shared_ptr<tls_server>();
+            std::shared_ptr<server> s;
+            switch (type) {
+                case proxy_type::reverse: {
+                    const auto listen_port = atoi(argv[2]);
+                    const auto forward_host = argv[3];
+                    const auto forward_port = atoi(argv[4]);
+                    const auto cert_path = argv[5];
+                    const auto http_mode = argv[7];
+
+                    if (http_mode == "http"s) {
+                        s = std::make_shared<tls_server<tls2tcp_http_session>>(
+                            client_io_service, proxy_io_service, verify_type,
+                            cert_path, listen_port, forward_host, forward_port,
+                            ca_dirs);
+                    } else {
+                        s = std::make_shared<tls_server<tls2tcp_session>>(
+                            client_io_service, proxy_io_service, verify_type,
+                            cert_path, listen_port, forward_host, forward_port,
+                            ca_dirs);
+                    }
+                    break;
+                }
+
+                case proxy_type::normal: {
+                    const auto cert_path = argv[3];
+                    const auto listen_port = atoi(argv[2]);
+
+                    s = std::make_shared<tcp_server>(
+                        client_io_service, proxy_io_service, verify_type,
+                        cert_path, listen_port, ca_dirs);
+                    break;
+                }
+            }
 
             s->start_accept();
 
@@ -122,9 +150,16 @@ int main(int argc, char *argv[])
                     std::thread{[&]() { proxy_io_service.run(); }});
             }
 
-            LOG(INFO) << "Reverse-Proxy 0.0.0.0:" << atoi(argv[2]) << " -> "
-                      << argv[3] << ":" << atoi(argv[4]) << " has started with "
-                      << (worker_count * 2) << " workers";
+            if (type == proxy_type::reverse) {
+                LOG(INFO) << "Reverse-Proxy 0.0.0.0:" << atoi(argv[2]) << " -> "
+                          << argv[3] << ":" << atoi(argv[4])
+                          << " has started with " << (worker_count * 2)
+                          << " workers";
+            } else {
+                LOG(INFO) << "Proxy 127.0.0.1:" << atoi(argv[2])
+                          << " -> the Internet has started with "
+                          << (worker_count * 2) << " workers";
+            }
 
             // Simple erlang port dirver
             std::string command, message_id, arg0;
@@ -156,8 +191,7 @@ int main(int argc, char *argv[])
             worker.join();
         }
     }
-    catch (std::exception &e)
-    {
+    catch (std::exception &e) {
         LOG(ERROR) << "Proxy failed due to exception: " << e.what();
         return EXIT_FAILURE;
     }

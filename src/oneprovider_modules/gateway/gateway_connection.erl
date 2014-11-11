@@ -13,6 +13,9 @@
 -author("Konrad Zemek").
 -behavior(gen_server).
 
+-include("oneproxy_pb.hrl").
+-include("oneprovider_modules/dao/dao_vfs.hrl").
+-include("oneprovider_modules/dao/dao_types.hrl").
 -include("oneprovider_modules/gateway/gateway.hrl").
 -include("oneprovider_modules/gateway/registered_names.hrl").
 
@@ -58,7 +61,12 @@ start_link(Remote, Local, ConnectionManager) ->
 init({Remote, Local, ConnectionManager}) ->
     process_flag(trap_exit, true),
     TID = ets:new(waiting_requests, [private]),
-    {ok, Socket} = gen_tcp:connect(Remote, ?gw_port, [binary, {packet, 4}, {active, once}, {ifaddr, Local}], ?CONNECTION_TIMEOUT),
+    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, oneproxy:get_local_port(gw_proxy), [binary, {packet, 4}, {active, once}, {ifaddr, Local}], ?CONNECTION_TIMEOUT),
+
+    ProxyInit = #proxyinit{host = inet:ntoa(Remote), port = io_lib:format("~p", [?gw_port])},
+    ?warning("sending ~p", [ProxyInit]),
+
+    ok = gen_tcp:send(Socket, oneproxy_pb:encode_proxyinit(ProxyInit)),
     {ok, #gwcstate{remote = Remote, socket = Socket, connection_manager = ConnectionManager, waiting_requests = TID}}.
 
 
@@ -185,11 +193,18 @@ code_change(_OldVsn, State, _Extra) ->
 complete_request(TID, #fetchreply{content = Content, request_hash = RequestHash}) ->
     case ets:lookup(TID, RequestHash) of
         [] -> ignore, ?warning("Ignored ~p", [Content]);
-        [{_, Action, Timer}] ->
+        [{_, #fetch{request = Request} = Action, Timer}] ->
             erlang:cancel_timer(Timer),
-            %% @TODO: actually complete the request
+
+            #fetchrequest{file_id = FileId, offset = Offset, size = Size} = Request,
+            Data = binary_part(Content, 0, Size),
+
+            #file_location{storage_uuid = StorageUUID, storage_file_id = StorageFileId} = fslogic_file:get_file_local_location(FileId),
+            {ok, StorageDoc} = fslogic_objects:get_storage({uuid, StorageUUID}),
+            #db_document{record = #storage_info{default_storage_helper = StorageHelper}} = StorageDoc,
+            storage_files_manager:write(StorageHelper, StorageFileId, Offset, Data), %% @TODO: error handling
+
             ets:delete(TID, RequestHash),
-            ?warning("Received ~p", [Content]),
             notify(fetch_complete, Action)
     end,
     ok.

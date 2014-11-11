@@ -13,6 +13,10 @@ find_package(OpenSSL REQUIRED)
 message(STATUS "Checking for pthreads...")
 find_package(Threads REQUIRED)
 
+# Setup protobuf
+message(STATUS "Checking for protobuf...")
+find_package(Protobuf REQUIRED)
+
 # Setup Boost
 set(Boost_USE_STATIC_LIBS       OFF)
 set(Boost_USE_MULTITHREADED      ON)
@@ -43,17 +47,36 @@ target_include_directories(oneproxy_gsi SYSTEM PUBLIC
 
 target_compile_options(oneproxy_gsi PUBLIC ${Globus_CFLAGS_OTHER})
 
+# protocols
+set(PROTO_FILES proto/oneproxy.proto)
+PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
+
+add_library(proto STATIC ${PROTO_SRCS} ${PROTO_HDRS})
+target_include_directories(proto SYSTEM PUBLIC
+    ${PROTOBUF_INCLUDE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR})
+target_link_libraries(proto INTERFACE
+    ${PROTOBUF_LIBRARY})
+
+
 # oneproxy main target settings
 set(SOURCE_FILES
     src/main.cpp
     src/log_message.h
+    src/server.cpp
+    src/tcp_server.cpp
     src/tls_server.cpp
+    src/session.cpp
+    src/tcp2tls_session.cpp
     src/tls2tcp_session.cpp
+    src/tls2tcp_http_session.cpp
     src/base64.cpp)
 
 add_executable(oneproxy ${SOURCE_FILES})
 
 target_compile_options(oneproxy PRIVATE -std=c++14)
+
+target_compile_definitions(oneproxy PRIVATE -DBOOST_BIND_NO_PLACEHOLDERS)
 
 target_include_directories(oneproxy SYSTEM PRIVATE
     ${OPENSSL_INCLUDE_DIR}
@@ -69,7 +92,7 @@ target_link_libraries(oneproxy
     ${Boost_LIBRARIES}
     ${OPENSSL_LIBRARIES}
     oneproxy_gsi
-    ${CMAKE_THREAD_LIBS_INIT}
-)
+    proto
+    ${CMAKE_THREAD_LIBS_INIT})
 
 install(TARGETS oneproxy DESTINATION .)

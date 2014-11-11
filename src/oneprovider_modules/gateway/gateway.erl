@@ -19,30 +19,41 @@
 
 %% @TODO: config
 -define(acceptor_number, 100).
--define(network_interfaces, [{127,0,0,1}, {127,0,0,1}, {127,0,0,1}]).
+-define(network_interfaces, [{192,168,122,169}, {192,168,122,169}, {192,168,122,169}]).
 
 -export([init/1, handle/2, cleanup/0]).
 -export([compute_request_hash/1]).
 
--export([test/1]).
-test(FileId) ->
-    Offset = crypto:rand_uniform(0, 2048),
-    Size = crypto:rand_uniform(0, 2048),
-    Req = #fetchrequest{file_id = FileId, offset = Offset, size = Size},
-    gen_server:cast(?MODULE, {asynch, 1, #fetch{remote = {192,168,122,236}, notify = self(), request = Req}}),
-    receive
-        A -> A
-    after
-        timer:seconds(3) -> timeout
-    end.
+-export([test/0]).
+test() ->
+    FileId = "05073bf6703dee28bdb5016b3b53bf70",
+
+    lists:foreach(
+        fun(Offset) ->
+            Req = #fetchrequest{file_id = FileId, offset = Offset, size = 1000},
+            gen_server:cast(?MODULE, {asynch, 1, #fetch{remote = {192,168,122,236}, notify = self(), request = Req}}) end,
+        lists:seq(0, 3)).
+
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
 init(_Args) ->
+    LocalServerPort = oneproxy:get_local_port(?gw_port),
+
     {ok, _} = ranch:start_listener(?GATEWAY_LISTENER, ?acceptor_number,
-    	ranch_tcp, [{port, ?gw_port}], gateway_protocol, []),
+    	ranch_tcp, [{port, LocalServerPort}], gateway_protocol, []),
+
+    {ok, Cert} = application:get_env(oneprovider_node, web_ssl_cert_path), %% @TODO: global_registry_provider_cert_path),
+    CertString = atom_to_list(Cert),
+
+    LocalPort = oneproxy:get_local_port(gw_proxy),
+    Pid = spawn_link(fun() -> oneproxy:start(LocalPort, CertString, verify_none) end), %% @TODO: verify_peer
+    register(oneproxy_gateway, Pid),
+
+    Pid2 = spawn_link(fun() -> oneproxy:start(?gw_port, LocalServerPort, CertString, verify_none, no_http) end), %% @TODO: verify_peer
+    register(oneproxy_gw, Pid2),
 
 	{ok, _} = gateway_dispatcher_supervisor:start_link(?network_interfaces).
 
@@ -66,6 +77,7 @@ handle(_ProtocolVersion, _Msg) ->
 
 cleanup() ->
     ranch:stop_listener(?GATEWAY_LISTENER),
+    %% @TODO: stop supervisors, oneproxy
     ok.
 
 
