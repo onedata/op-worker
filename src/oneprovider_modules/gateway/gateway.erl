@@ -21,16 +21,6 @@
 -export([init/1, handle/2, cleanup/0]).
 -export([compute_request_hash/1]).
 
--export([test/0]).
-test() ->
-    FileId = "05073bf6703dee28bdb5016b3b53bf70",
-
-    lists:foreach(
-        fun(Offset) ->
-            Req = #fetchrequest{file_id = FileId, offset = Offset * 1000, size = 1000},
-            gen_server:cast(?MODULE, {asynch, 1, #fetch{remote = {192,168,122,236}, notify = self(), request = Req}}) end,
-        lists:seq(0, 3)).
-
 
 %% ====================================================================
 %% API functions
