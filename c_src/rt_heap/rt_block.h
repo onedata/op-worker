@@ -28,7 +28,7 @@ public:
     /**
      * rt_block constructor.
      * Constructs RTransfer block.
-     * @param file_id ID of file constructed block belongs to
+     * @param file_id ID of file this block is a part of
      * @param offset block offset
      * @param size block size
      * @param priority block priority
@@ -46,7 +46,7 @@ public:
     /**
      * rt_block constructor.
      * Constructs RTransfer block.
-     * @param file_id ID of file constructed block belongs to
+     * @param file_id ID of file this block is a part of
      * @param offset block offset
      * @param size block size
      * @param priority block priority

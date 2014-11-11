@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc This module allows for management of RTransfer file blocks.
+%% @doc This module allows for management of RTransfer heap.
 %% @end
 %% ===================================================================
 -module(rt_heap).
