@@ -133,15 +133,16 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
     FileLocation = #file_location{file_id = FileUUID, storage_uuid = UUID, storage_file_id = FileId},
     {ok, LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
 
-    RemoteLocation = #remote_location{},
+    RemoteLocation = #remote_location{file_id = FileUUID, provider_id = cluster_manager_lib:get_provider_id()},
     {ok, RemoteLocationId} = dao_lib:apply(dao_vfs, save_remote_location, [RemoteLocation], fslogic_context:get_protocol_version()),
 
     Validity = ?LOCATION_VALIDITY,
-    FCreateStatus = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, FileRecord#file{remote_location = RemoteLocationId}, FileUUID], fslogic_context:get_protocol_version()),
+    FCreateStatus = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, FileRecord, FileUUID], fslogic_context:get_protocol_version()),
 
     case FCreateStatus of
         {ok, {waiting_file, ExistingWFile}} ->
             ok = dao_lib:apply(dao_vfs, remove_file_location, [LocationId], fslogic_context:get_protocol_version()),
+            ok = dao_lib:apply(dao_vfs, remove_remote_location, [RemoteLocationId], fslogic_context:get_protocol_version()),
 
             ExistingWFileUUID = ExistingWFile#db_document.uuid,
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),

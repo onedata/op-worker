@@ -317,13 +317,13 @@ delete_old_descriptors(ProtocolVersion, Time) ->
 
 %% get_remote_location/2
 %% ====================================================================
-%% @doc Gets remote_location of file
+%% @doc Gets remote_locations of file
 %% @end
--spec get_remote_location(FullFileName :: string()) -> remote_location_doc().
+-spec get_remote_location(FullFileName :: string()) -> [remote_location_doc()].
 %% ====================================================================
 get_remote_location(FullFileName) ->
-    {ok, #db_document{record = #file{remote_location = RemoteLocationId}}} = get_file(FullFileName),
-    dao_lib:apply(dao_vfs, get_remote_location, [RemoteLocationId], fslogic_context:get_protocol_version()).
+    {ok, #db_document{uuid = FileId}} = get_file(FullFileName),
+    dao_lib:apply(dao_vfs, remote_locations_by_file_id, [FileId], fslogic_context:get_protocol_version()).
 
 %% ====================================================================
 %% Internal functions

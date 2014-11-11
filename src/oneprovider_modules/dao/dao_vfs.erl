@@ -27,7 +27,7 @@
 -export([get_space_file/1, get_space_files/1]).
 -export([list_file_locations/1, get_file_locations/1, save_file_location/1, remove_file_location/1]).
 -export([list_file_blocks/1, get_file_blocks/1, save_file_block/1, remove_file_block/1]).
--export([save_remote_location/1, get_remote_location/1]).
+-export([save_remote_location/1, get_remote_location/1, remove_remote_location/1, remote_locations_by_file_id/1]).
 
 
 -ifdef(TEST).
@@ -462,6 +462,13 @@ remove_file(File) ->
             ?warning("Cannot remove file_locations ~p due to error: ~p", [{file_id, FData#db_document.uuid}, Reason4])
     end,
 
+    %% Remove remote locations
+    case remove_remote_location({file_id, FData#db_document.uuid}) of
+        ok -> ok;
+        {error, Reason4} ->
+            ?warning("Cannot remove remote_locations ~p due to error: ~p", [{file_id, FData#db_document.uuid}, Reason4])
+    end,
+
     dao_external:set_db(?FILES_DB_NAME),
     dao_records:remove_record(FData#db_document.uuid).
 
@@ -772,6 +779,22 @@ remove_file_block(BlockId) when is_list(BlockId) ->
     dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:remove_record(BlockId).
 
+%% remove_remote_location/1
+%% ====================================================================
+%% @doc Removes a remote location from the database.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec remove_remote_location(remote_location_doc() | uuid() | {file_id, uuid()}) -> ok | {error, any()} | no_return().
+%% ====================================================================
+remove_remote_location(#db_document{uuid = Id, record = #remote_location{}}) ->
+    remove_remote_location(Id);
+remove_remote_location({file_id, FileId}) ->
+    {ok, RemoteLocations} = remote_locations_by_file_id(FileId),
+    lists:foreach(fun remove_remote_location/1, RemoteLocations);
+remove_remote_location(RemoteLocationId) when is_list(RemoteLocationId) ->
+    dao_external:set_db(?REMOTE_LOCATIONS_DB_NAME),
+    dao_records:remove_record(RemoteLocationId).
+
 %% save_remote_location/1
 %% ====================================================================
 %% @doc Saves a remote location as a new document in the database, or as a new version
@@ -796,6 +819,22 @@ save_remote_location(#db_document{record = #remote_location{}} = RemoteLocationD
 get_remote_location(Uuid) ->
     dao_external:set_db(?REMOTE_LOCATIONS_DB_NAME),
     dao_records:get_record(Uuid).
+
+%% remote_locations_by_file_id/1
+%% ====================================================================
+%% @doc Gets remote location documents with given file_id from the database
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec remote_locations_by_file_id(FileId :: uuid()) -> {ok, [remote_location_doc()]} | {error, any()}.
+%% ====================================================================
+remote_locations_by_file_id(FileId) ->
+    dao_external:set_db(?REMOTE_LOCATIONS_DB_NAME),
+    QueryArgs =
+        #view_query_args{keys = [dao_helper:name(FileId)], include_docs = true},
+
+    Rows = fetch_rows(?REMOTE_LOCATIONS_BY_FILE_ID, QueryArgs),
+    RemoteLocationDocs = [Row#view_row.doc || Row <- Rows, is_list(Row#view_row.id)],
+    {ok, RemoteLocationDocs}.
 
 %% list_dir/3
 %% ====================================================================

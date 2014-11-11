@@ -436,20 +436,21 @@ rename_file(FullFileName, FullTargetFileName) ->
     #atom{} | no_return().
 %% ====================================================================
 synchronize_file_block(FullFileName, Offset, Size) ->
-    {ok, #db_document{record = #remote_location{file_parts = RemoteParts}} = RemoteLocationDoc} = fslogic_objects:get_remote_location(FullFileName),
+    {ok, RemoteLocationDocs} = fslogic_objects:get_remote_location(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
-    OutOfSyncList = fslogic_remote_location:check_if_synchronized(#offset_range{offset = Offset, size = Size}, RemoteParts, ProviderId),
+    MyRemoteLocationDoc = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    OtherRemoteLocationDocs = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id =/= ProviderId end, RemoteLocationDocs),
+    OutOfSyncList = fslogic_remote_location:check_if_synchronized(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, OtherRemoteLocationDocs),
     lists:foreach(
         fun(#remote_file_part{range = BlockRange, providers = Providers}) ->
             ?info("Synchronizing ~p of file ~p with any provider from list ~p", [BlockRange, FullFileName, Providers])
             %TODO let rtransfer fetch this data in order to synchronize file
         end, OutOfSyncList),
     SyncedParts = [ BlockRange || #remote_file_part{range = BlockRange} <- OutOfSyncList],
-    NewRemoteParts = fslogic_remote_location:mark_as_available(SyncedParts, RemoteParts, ProviderId),
-    case NewRemoteParts == RemoteParts of
+    NewDoc = fslogic_remote_location:mark_as_available(SyncedParts, MyRemoteLocationDoc, ProviderId),
+    case MyRemoteLocationDoc == NewDoc of
         true -> ok;
-        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location,
-            [RemoteLocationDoc#db_document{record = #remote_location{file_parts = NewRemoteParts}}], fslogic_context:get_protocol_version())
+        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [NewDoc], fslogic_context:get_protocol_version())
     end,
     #atom{value = ?VOK}.
 
@@ -462,13 +463,13 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     #atom{} | no_return().
 %% ====================================================================
 file_block_modified(FullFileName, Offset, Size) ->
-    {ok, #db_document{record = #remote_location{file_parts = RemoteParts}} = RemoteLocationDoc} = fslogic_objects:get_remote_location(FullFileName),
+    {ok, RemoteLocationDocs} = fslogic_objects:get_remote_location(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
-    NewRemoteParts = fslogic_remote_location:mark_as_modified(#offset_range{offset = Offset, size = Size}, RemoteParts, ProviderId),
-    case NewRemoteParts == RemoteParts of
+    MyRemoteLocationDoc = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    NewDoc = fslogic_remote_location:mark_as_modified(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, ProviderId),
+    case MyRemoteLocationDoc == NewDoc of
         true -> ok;
-        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location,
-            [RemoteLocationDoc#db_document{record = #remote_location{file_parts = NewRemoteParts}}], fslogic_context:get_protocol_version())
+        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [NewDoc], fslogic_context:get_protocol_version())
     end,
     #atom{value = ?VOK}.
 
@@ -481,13 +482,13 @@ file_block_modified(FullFileName, Offset, Size) ->
     #atom{} | no_return().
 %% ====================================================================
 file_truncated(FullFileName, Size) ->
-    {ok, #db_document{record = #remote_location{file_parts = RemoteParts}} = RemoteLocationDoc} = fslogic_objects:get_remote_location(FullFileName),
+    {ok, RemoteLocationDocs} = fslogic_objects:get_remote_location(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
-    NewRemoteParts = fslogic_remote_location:truncate({bytes, Size}, RemoteParts, ProviderId),
-    case NewRemoteParts == RemoteParts of
+    MyRemoteLocationDoc = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    NewDoc = fslogic_remote_location:truncate({bytes, Size}, MyRemoteLocationDoc, ProviderId),
+    case MyRemoteLocationDoc == NewDoc of
         true -> ok;
-        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location,
-            [RemoteLocationDoc#db_document{record = #remote_location{file_parts = NewRemoteParts}}], fslogic_context:get_protocol_version())
+        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [NewDoc], fslogic_context:get_protocol_version())
     end,
     #atom{value = ?VOK}.
 

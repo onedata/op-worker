@@ -15,6 +15,7 @@
 -module(fslogic_remote_location).
 
 -include("oneprovider_modules/fslogic/fslogic_remote_location.hrl").
+-include("oneprovider_modules/dao/dao.hrl").
 
 % API
 -export([mark_as_modified/3, mark_as_available/3, check_if_synchronized/3, truncate/3]).
@@ -36,6 +37,10 @@
 %% @end
 -spec mark_as_modified(Range :: #byte_range{} | #offset_range{} | #block_range{}, RemoteParts :: [#remote_file_part{}], ProviderId :: binary()) -> [#remote_file_part{}].
 %% ====================================================================
+mark_as_modified(#byte_range{} = ByteRange, #db_document{} = _Mydoc, ProviderId) ->
+    %TODO
+    _Mydoc;
+
 mark_as_modified(#byte_range{} = ByteRange, RemoteParts, ProviderId) ->
     mark_as_modified(byte_to_block_range(ByteRange), RemoteParts, ProviderId);
 mark_as_modified(#offset_range{} = OffsetRange, RemoteParts, ProviderId) ->
@@ -55,6 +60,10 @@ mark_as_modified(#block_range{to = To} = BlockRange, RemoteParts, ProviderId) ->
 %% @end
 -spec truncate(Range :: {bytes, integer()} | integer(), RemoteParts :: [#remote_file_part{}], ProviderId :: binary()) -> [#remote_file_part{}].
 %% ====================================================================
+truncate({bytes, ByteSize}, #db_document{} =  MyDoc, ProviderId) ->
+    %TODO
+    MyDoc;
+
 truncate({bytes, ByteSize}, RemoteParts, ProviderId) ->
     truncate(byte_to_block(ByteSize), RemoteParts, ProviderId);
 truncate(BlockSize, RemoteParts, ProviderId) ->
@@ -89,6 +98,9 @@ truncate(BlockSize, RemoteParts, ProviderId) ->
 %% @end
 -spec mark_as_available(Blocks :: [#block_range{}], RemoteParts :: [#remote_file_part{}], ProviderId :: binary()) -> [#remote_file_part{}].
 %% ====================================================================
+mark_as_available(_Blocks, #db_document{} = _MyDoc, _ProviderId) ->
+    %TODO,
+    _MyDoc;
 mark_as_available(Blocks, RemoteParts, ProviderId) ->
     NewRemoteParts = mark_as_available_recursive(Blocks, RemoteParts, ProviderId),
     minimize_remote_parts_list(NewRemoteParts).
@@ -105,6 +117,10 @@ mark_as_available(Blocks, RemoteParts, ProviderId) ->
 %% @end
 -spec check_if_synchronized(Range :: #byte_range{} | #offset_range{} | #block_range{}, RemoteParts :: [#remote_file_part{}], ProviderId :: binary()) -> [#remote_file_part{}].
 %% ====================================================================
+check_if_synchronized(_Range, #db_document{} = _MyDoc, _OtherDocs) ->
+    %TODO!
+    [];
+
 check_if_synchronized(#byte_range{} = ByteRange, RemoteParts, ProviderId) ->
     check_if_synchronized(byte_to_block_range(ByteRange), RemoteParts, ProviderId);
 check_if_synchronized(#offset_range{} = OffsetRange, RemoteParts, ProviderId) ->

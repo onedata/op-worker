@@ -615,7 +615,6 @@ write(File, Offset, Buf) ->
             case Response of
                 ok ->
                     {Storage_helper_info, FileId} = Response2,
-                    synchronize(File,Offset,byte_size(Buf)),
                     Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
                     case is_integer(Res) of
                         true ->
