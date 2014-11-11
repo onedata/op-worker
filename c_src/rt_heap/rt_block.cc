@@ -22,8 +22,8 @@ bool rt_block::operator<(const rt_block& block) const
     else if(priority_ < block.priority()) return false;
     else if(counter_ > block.counter()) return true;
     else if(counter_ < block.counter()) return false;
-    else if(file_id_ > block.file_id()) return true;
-    else if(file_id_ < block.file_id()) return false;
+    else if(file_id_ < block.file_id()) return true;
+    else if(file_id_ > block.file_id()) return false;
     else if(offset_ < block.offset()) return true;
     else if(offset_ > block.offset()) return false;
     else return size_ < block.size();

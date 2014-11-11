@@ -43,7 +43,8 @@ static ERL_NIF_TERM push_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
         nifpp::resource_ptr< rt_heap > heap;
         nifpp::str_atom record_name;
         std::string file_id;
-        ErlNifUInt64 offset, size, priority;
+        ErlNifUInt64 offset, size;
+        int priority;
         auto record = std::make_tuple(std::ref(record_name),
                                       std::ref(file_id),
                                       std::ref(offset),

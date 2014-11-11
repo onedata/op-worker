@@ -127,7 +127,7 @@ void rt_heap::push_block(const rt_block& block)
             }
         }
 
-        if(offset < block.end())
+        if(offset <= block.end())
         {
             insert(file_blocks, rt_block(block.file_id(),
                                          offset,
