@@ -52,30 +52,30 @@ new(Prefix, BlockSize) ->
 %% ====================================================================
 %% @doc Pushes block on RTransfer heap.
 %% @end
--spec push(Heap :: pid(), Block :: #rt_block{}) -> ok.
+-spec push(Pid :: pid(), Block :: #rt_block{}) -> ok.
 %% ====================================================================
-push(Heap, Block) ->
-    gen_server:cast(Heap, {push, Block}).
+push(Pid, Block) ->
+    gen_server:cast(Pid, {push, Block}).
 
 
 %% fetch/1
 %% ====================================================================
 %% @doc Fetches block from RTransfer heap.
 %% @end
--spec fetch(Heap :: pid()) -> {ok, #rt_block{}} | {error, Error :: string()}.
+-spec fetch(Pid :: pid()) -> {ok, #rt_block{}} | {error, Error :: string()}.
 %% ====================================================================
-fetch(Heap) ->
-    gen_server:call(Heap, fetch).
+fetch(Pid) ->
+    gen_server:call(Pid, fetch).
 
 
 %% delete/1
 %% ====================================================================
 %% @doc Deletes RTransfer heap.
 %% @end
--spec delete(Heap :: pid()) -> ok.
+-spec delete(Pid :: pid()) -> ok.
 %% ====================================================================
-delete(Heap) ->
-    gen_server:cast(Heap, delete).
+delete(Pid) ->
+    gen_server:cast(Pid, delete).
 
 
 %%%===================================================================
@@ -97,7 +97,7 @@ delete(Heap) ->
 %% ====================================================================
 init([Prefix, BlockSize]) ->
     try
-        ok = erlang:load_nif(filename:join(Prefix, "c_lib/rt_heap_drv"), 0),
+        erlang:load_nif(filename:join(Prefix, "c_lib/rt_heap_drv"), 0),
         {ok, Heap} = init_nif(BlockSize),
         {ok, #state{heap = Heap}}
     catch
