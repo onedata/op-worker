@@ -15,7 +15,7 @@
 -include("gwproto_pb.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(gw_port, 8877).
+-define(connection_close_timeout, timer:minutes(1)).
 
 -record(fetch, {
     request :: #fetchrequest{},

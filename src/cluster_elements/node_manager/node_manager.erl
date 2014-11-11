@@ -1,11 +1,11 @@
 %% ===================================================================
 %% @author Michal Wrzeszcz
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module is a gen_server that coordinates the 
+%% @doc: This module is a gen_server that coordinates the
 %% life cycle of node. It starts/stops appropriate services (according
 %% to node type) and communicates with ccm (if node works as worker).
 %%
@@ -1241,7 +1241,7 @@ start_dispatcher_listener() ->
     {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
 
     LocalPort = oneproxy:get_local_port(Port),
-    Pid = spawn_link(fun() -> oneproxy:start(Port, LocalPort, CertFile, verify_peer) end),
+    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_peer) end),
     register(?ONEPROXY_DISPATCHER, Pid),
 
     Dispatch = cowboy_router:compile([{'_', [{?ONECLIENT_URI_PATH, ws_handler, []}]}]),
@@ -1275,7 +1275,7 @@ start_gui_listener() ->
     {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
 
     LocalPort = oneproxy:get_local_port(GuiPort),
-    spawn_link(fun() -> oneproxy:start(GuiPort, LocalPort, Cert, verify_none) end),
+    spawn_link(fun() -> oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none) end),
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
@@ -1398,7 +1398,7 @@ start_rest_listener() ->
     {ok, RestPort} = application:get_env(oneprovider_node, rest_port),
 
     LocalPort = oneproxy:get_local_port(RestPort),
-    Pid = spawn_link(fun() -> oneproxy:start(RestPort, LocalPort, Cert, verify_peer) end),
+    Pid = spawn_link(fun() -> oneproxy:start_rproxy(RestPort, LocalPort, Cert, verify_peer) end),
     register(oneproxy_rest, Pid),
 
     RestDispatch = [

@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @TODO: write me
+%% @doc gateway_dispatcher is responsible for distributing requests between
+%% registered connection_managers.
 %% @end
 %% ===================================================================
 
@@ -35,15 +36,26 @@
 %% API functions
 %% ====================================================================
 
+
+%% start_link/1
+%% ====================================================================
+%% @doc Starts gateway_dispatcher gen_server.
 -spec start_link(NetworkInterfaces) -> Result when
     NetworkInterfaces :: [inet:ip_address()],
     Result :: {ok,Pid} | ignore | {error,Error},
      Pid :: pid(),
      Error :: {already_started,Pid} | term().
+%% ====================================================================
 start_link(NetworkInterfaces) ->
     gen_server:start_link({local, ?GATEWAY_DISPATCHER}, ?MODULE, NetworkInterfaces, []).
 
 
+%% init/1
+%% ====================================================================
+%% @doc Initializes gateway dispatcher, including spinning up connection managers
+%% for each entry in NetworkInterfaces list.
+%% @end
+%% @see gen_server
 -spec init(NetworkInterfaces) -> Result when
     NetworkInterfaces :: [inet:ip_address()],
     Result :: {ok,State} | {ok,State,Timeout} | {ok,State,hibernate}
@@ -51,6 +63,7 @@ start_link(NetworkInterfaces) ->
      State :: #gwstate{},
      Timeout :: timeout(),
      Reason :: term().
+%% ====================================================================
 init(NetworkInterfaces) ->
     process_flag(trap_exit, true),
     ConnectionManagers = lists:map(
@@ -62,6 +75,10 @@ init(NetworkInterfaces) ->
     {ok, #gwstate{connection_managers = queue:from_list(ConnectionManagers)}}.
 
 
+%% handle_call/3
+%% ====================================================================
+%% @doc Handles a call.
+%% @see gen_server
 -spec handle_call(Request, From, State) -> Result when
     Request :: term(),
     From :: {pid(),any()},
@@ -75,11 +92,17 @@ init(NetworkInterfaces) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: term().
+%% ====================================================================
 handle_call(_Request, _From, State) ->
     ?log_call(_Request),
     {noreply, State}.
 
 
+%% handle_cast/3
+%% ====================================================================
+%% @doc Handles a cast. Connection managers register themselves with the
+%% dispatcher, and requests are distributed between registered managers.
+%% @see gen_server
 -spec handle_cast(Request, State) -> Result when
     Request :: term(),
     State :: #gwstate{},
@@ -89,6 +112,7 @@ handle_call(_Request, _From, State) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: term().
+%% ====================================================================
 handle_cast({register_connection_manager, Id, Addr, Pid}, State) ->
     FilteredManagers = queue:filter(
         fun(#cmref{id = Id1}) when Id1 =:= Id -> false;
@@ -109,6 +133,10 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 
+%% handle_info/3
+%% ====================================================================
+%% @doc Handles messages. Mainly handles messages from socket in active mode.
+%% @see gen_server
 -spec handle_info(Info, State) -> Result when
     Info :: timeout | term(),
     State :: #gwstate{},
@@ -118,15 +146,23 @@ handle_cast(_Request, State) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: normal | term().
+%% ====================================================================
 handle_info(_Request, State) ->
     ?log_call(_Request),
     {noreply, State}.
 
 
+%% terminate/2
+%% ====================================================================
+%% @doc Cleans up any state associated with the dispatcher, including terminating
+%% connection managers.
+%% @end
+%% @see gen_server
 -spec terminate(Reason, State) -> IgnoredResult when
     Reason :: normal | shutdown | {shutdown,term()} | term(),
     State :: #gwstate{},
     IgnoredResult :: any().
+%% ====================================================================
 terminate(_Reason, State) ->
     ?log_terminate(_Reason, State),
     lists:foreach(fun(#cmref{pid = Pid}) ->
@@ -134,6 +170,10 @@ terminate(_Reason, State) ->
     end, queue:to_list(State#gwstate.connection_managers)).
 
 
+%% code_change/3
+%% ====================================================================
+%% @doc Performs any actions necessary on code change.
+%% @see gen_server
 -spec code_change(OldVsn, State, Extra) -> {ok, NewState} | {error, Reason} when
     OldVsn :: Vsn | {down, Vsn},
      Vsn :: term(),
@@ -141,6 +181,7 @@ terminate(_Reason, State) ->
     Extra :: term(),
     NewState :: #gwstate{},
     Reason :: term().
+%% ====================================================================
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 

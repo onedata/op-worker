@@ -7,6 +7,7 @@ message FetchRequest {
 }
 
 message FetchReply {
+    // SHA256 hash of the corresponding FetchRequest message
     required bytes request_hash = 1;
-    required bytes content = 2;
+    optional bytes content = 2;
 }

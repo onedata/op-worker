@@ -5,7 +5,10 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @TODO: write me
+%% @doc gateway_connection handles a single connection (socket) to a remote
+%% node. The module is responsible for sending and receiving data through the
+%% socket, and completing the requests when data has been received.
+%% The connection is closed after a period of inactivity.
 %% @end
 %% ===================================================================
 
@@ -18,6 +21,7 @@
 -include("oneprovider_modules/dao/dao_types.hrl").
 -include("oneprovider_modules/gateway/gateway.hrl").
 -include("oneprovider_modules/gateway/registered_names.hrl").
+-include("registered_names.hrl").
 
 -record(gwcstate, {
     remote :: inet:ip_address(),
@@ -34,10 +38,15 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
+
+%% start_link/3
+%% ====================================================================
+%% @doc Starts gateway connection gen_server.
 -spec start_link(Remote, Local, ConnectionManager) -> Result when
     Remote :: inet:ip_address(),
     Local :: inet:ip_address(),
@@ -45,10 +54,17 @@
     Result :: {ok,Pid} | ignore | {error,Error},
      Pid :: pid(),
      Error :: {already_started,Pid} | term().
+%% ====================================================================
 start_link(Remote, Local, ConnectionManager) ->
     gen_server:start_link(?MODULE, {Remote, Local, ConnectionManager}, []).
 
 
+%% init/1
+%% ====================================================================
+%% @doc Initializes gateway connection, including opening sockets and initializing
+%% oneproxy state.
+%% @end
+%% @see gen_server
 -spec init({Remote, Local, ConnectionManager}) -> Result when
     Remote :: inet:ip_address(),
     Local :: inet:ip_address(),
@@ -58,18 +74,24 @@ start_link(Remote, Local, ConnectionManager) ->
      State :: #gwcstate{},
      Timeout :: timeout(),
      Reason :: term().
+%% ====================================================================
 init({Remote, Local, ConnectionManager}) ->
     process_flag(trap_exit, true),
     TID = ets:new(waiting_requests, [private]),
-    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, oneproxy:get_local_port(gw_proxy), [binary, {packet, 4}, {active, once}, {ifaddr, Local}], ?CONNECTION_TIMEOUT),
+    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, oneproxy:get_local_port(gateway_proxy_port), [binary, {packet, 4}, {active, once}, {ifaddr, Local}], ?CONNECTION_TIMEOUT),
 
-    ProxyInit = #proxyinit{host = inet:ntoa(Remote), port = io_lib:format("~p", [?gw_port])},
-    ?warning("sending ~p", [ProxyInit]),
+    {ok, GwPort} = application:get_env(?APP_Name, gateway_listener_port),
+    ProxyInit = #proxyinit{host = inet:ntoa(Remote), port = io_lib:format("~p", [GwPort])},
 
     ok = gen_tcp:send(Socket, oneproxy_pb:encode_proxyinit(ProxyInit)),
-    {ok, #gwcstate{remote = Remote, socket = Socket, connection_manager = ConnectionManager, waiting_requests = TID}}.
+    State = #gwcstate{remote = Remote, socket = Socket, connection_manager = ConnectionManager, waiting_requests = TID},
+    {ok, State, ?connection_close_timeout}.
 
 
+%% handle_call/3
+%% ====================================================================
+%% @doc Handles a call.
+%% @see gen_server
 -spec handle_call(Request, From, State) -> Result when
     Request :: term(),
     From :: {pid(),any()},
@@ -83,11 +105,16 @@ init({Remote, Local, ConnectionManager}) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: term().
+%% ====================================================================
 handle_call(_Request, _From, State) ->
     ?log_call(_Request),
-    {noreply, State}.
+    {noreply, State, ?connection_close_timeout}.
 
 
+%% handle_cast/3
+%% ====================================================================
+%% @doc Handles a cast. The #fetch message is processed and passed to the socket.
+%% @see gen_server
 -spec handle_cast(Request, State) -> Result when
     Request :: term(),
     State :: #gwcstate{},
@@ -97,6 +124,7 @@ handle_call(_Request, _From, State) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: term().
+%% ====================================================================
 handle_cast(#fetch{request = Request} = Action, #gwcstate{socket = Socket, waiting_requests = TID} = State) ->
     Data = gwproto_pb:encode_fetchrequest(Request),
     case gen_tcp:send(Socket, Data) of
@@ -105,7 +133,7 @@ handle_cast(#fetch{request = Request} = Action, #gwcstate{socket = Socket, waiti
             Hash = gateway:compute_request_hash(Data),
             Timer = erlang:send_after(?REQUEST_COMPLETION_TIMEOUT, self(), {request_timeout, Hash}),
             ets:insert(TID, {Hash, Action, Timer}),
-            {noreply, State}
+            {noreply, State, ?connection_close_timeout}
     end;
 
 handle_cast(_Request, State) ->
@@ -113,6 +141,10 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 
+%% handle_info/3
+%% ====================================================================
+%% @doc Handles messages. Mainly handles messages from socket in active mode.
+%% @see gen_server
 -spec handle_info(Info, State) -> Result when
     Info :: timeout | term(),
     State :: #gwcstate{},
@@ -122,15 +154,16 @@ handle_cast(_Request, State) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: normal | term().
+%% ====================================================================
 handle_info({tcp, Socket, Data}, #gwcstate{waiting_requests = TID} = State) ->
     ok = inet:setopts(Socket, [{active, once}]),
     try
         Reply = gwproto_pb:decode_fetchreply(Data),
         complete_request(TID, Reply)
     catch
-        Error:Reason -> ?warning("~p: Couldn't decode reply: {~p, ~p}", [?MODULE, Error, Reason])
+        Error:Reason -> ?warning_stacktrace("~p: Couldn't decode reply: {~p, ~p}", [?MODULE, Error, Reason])
     end,
-    {noreply, State};
+    {noreply, State, ?connection_close_timeout};
 
 handle_info({tcp_closed, _Socket}, State) ->
     {stop, normal, State};
@@ -147,15 +180,23 @@ handle_info({request_timeout, Hash}, #gwcstate{waiting_requests = TID} = State) 
     end,
     {noreply, State};
 
+handle_info(timeout, State) ->
+    {stop, normal, State};
+
 handle_info(_Request, State) ->
     ?log_call(_Request),
-    {noreply, State}.
+    {noreply, State, ?connection_close_timeout}.
 
 
+%% terminate/2
+%% ====================================================================
+%% @doc Cleans up any state associated with the connection.
+%% @see gen_server
 -spec terminate(Reason, State) -> IgnoredResult when
     Reason :: normal | shutdown | {shutdown,term()} | term(),
     State :: #gwcstate{},
     IgnoredResult :: any().
+%% ====================================================================
 terminate(Reason, #gwcstate{remote = Remote, socket = Socket, connection_manager = CM, waiting_requests = TID} = State) ->
     ?log_terminate(Reason, State),
 
@@ -173,6 +214,10 @@ terminate(Reason, #gwcstate{remote = Remote, socket = Socket, connection_manager
         ets:tab2list(TID)).
 
 
+%% code_change/3
+%% ====================================================================
+%% @doc Performs any actions necessary on code change.
+%% @see gen_server
 -spec code_change(OldVsn, State, Extra) -> {ok, NewState} | {error, Reason} when
     OldVsn :: Vsn | {down, Vsn},
      Vsn :: term(),
@@ -180,8 +225,9 @@ terminate(Reason, #gwcstate{remote = Remote, socket = Socket, connection_manager
     Extra :: term(),
     NewState :: #gwcstate{},
     Reason :: term().
+%% ====================================================================
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+    {ok, State, ?connection_close_timeout}.
 
 
 %% ====================================================================
@@ -189,33 +235,45 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 
 
+%% complete_request/2
+%% ====================================================================
+%% @doc Completes a fetch request, saving data to a file and notifying a process
+%% that registered itself for notifications.
+%% @end
 -spec complete_request(TID :: ets:tid(), Reply :: #fetchreply{}) -> ok.
+%% ====================================================================
 complete_request(TID, #fetchreply{content = Content, request_hash = RequestHash}) ->
     case ets:lookup(TID, RequestHash) of
         [] -> ignore, ?warning("Ignored ~p", [Content]);
         [{_, #fetch{request = Request} = Action, Timer}] ->
             erlang:cancel_timer(Timer),
 
-            #fetchrequest{file_id = FileId, offset = Offset, size = Size} = Request,
-            Data = binary_part(Content, 0, Size),
+            case Content of
+                undefined -> notify(fetch_complete, 0, Action);
+                _ ->
+                    #fetchrequest{file_id = FileId, offset = Offset, size = RequestedSize} = Request,
+                    Size = erlang:min(byte_size(Content), RequestedSize),
+                    Data = binary_part(Content, 0, Size),
+                    #file_location{storage_uuid = StorageUUID, storage_file_id = StorageFileId} = fslogic_file:get_file_local_location(FileId),
+                    {ok, StorageDoc} = fslogic_objects:get_storage({uuid, StorageUUID}),
+                    #db_document{record = #storage_info{default_storage_helper = StorageHelper}} = StorageDoc,
 
-            #file_location{storage_uuid = StorageUUID, storage_file_id = StorageFileId} = fslogic_file:get_file_local_location(FileId),
-            {ok, StorageDoc} = fslogic_objects:get_storage({uuid, StorageUUID}),
-            #db_document{record = #storage_info{default_storage_helper = StorageHelper}} = StorageDoc,
-            storage_files_manager:write(StorageHelper, StorageFileId, Offset, Data), %% @TODO: error handling
+                    case storage_files_manager:write(StorageHelper, StorageFileId, Offset, Data) of
+                        {Error, Reason} -> notify(Error, Reason, Action);
+                        Val -> notify(fetch_complete, Val, Action)
+                    end
+            end,
 
-            ets:delete(TID, RequestHash),
-            notify(fetch_complete, Action)
+            ets:delete(TID, RequestHash)
     end,
     ok.
 
 
--spec notify(What :: atom(), Action :: #fetch{}) -> ok.
-notify(What, #fetch{notify = Notify, request = Request}) when is_atom(What) ->
-    Notify ! {What, Request},
-    ok.
-
+%% notify/3
+%% ====================================================================
+%% @doc Notifies a process about something related to the action it required.
 -spec notify(What :: atom(), Reason :: term(), Action :: #fetch{}) -> ok.
-notify(What, Reason, #fetch{notify = Notify, request = Request}) when is_atom(What) ->
-    Notify ! {What, Reason, Request},
+%% ====================================================================
+notify(What, Details, #fetch{notify = Notify, request = Request}) when is_atom(What) ->
+    Notify ! {What, Details, Request},
     ok.

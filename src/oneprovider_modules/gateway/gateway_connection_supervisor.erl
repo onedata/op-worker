@@ -5,7 +5,9 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @TODO: write me
+%% @doc gateway_connection_supervisor is responsible for supervising
+%% gateway_connection gen_servers. Connections are transient, so the supervisor
+%% takes a role of an easy startup and shutdown facility for connections.
 %% @end
 %% ===================================================================
 
@@ -24,19 +26,32 @@
 %% API functions
 %% ====================================================================
 
+
+%% start_link/0
+%% ====================================================================
+%% @doc Starts the supervisor.
 -spec start_link() -> Result when
     Result :: {ok, pid()} | ignore | {error, Error},
     Error :: {already_started, pid()} | {shutdown, term()} | term().
+%% ===================================================================
 start_link() ->
     supervisor:start_link({local, ?GATEWAY_CONNECTION_SUPERVISOR}, ?MODULE, []).
 
 
+%% start_connection/3
+%% ====================================================================
+%% @doc Starts a connection supervised by the supervisor.
 -spec start_connection(Remote :: inet:ip_address(), Local :: inet:ip_address(), ConnectionManager :: pid()) ->
     supervisor:startchild_ret().
+%% ===================================================================
 start_connection(Remote, Local, ConnectionManager) ->
     supervisor:start_child(?GATEWAY_CONNECTION_SUPERVISOR, [Remote, Local, ConnectionManager]).
 
 
+%% init/1
+%% ====================================================================
+%% @doc Initializes supervisor parameters.
+%% @see supervisor
 -spec init(Args) -> Result when
     Args :: term(),
     Result :: {ok,{{RestartStrategy,MaxR,MaxT},[ChildSpec]}} | ignore,
@@ -44,6 +59,7 @@ start_connection(Remote, Local, ConnectionManager) ->
     MaxR :: non_neg_integer(),
     MaxT :: pos_integer(),
     ChildSpec :: supervisor:child_spec().
+%% ===================================================================
 init(_Args) ->
     RestartStrategy = simple_one_for_one,
     MaxR = 3,
@@ -56,7 +72,11 @@ init(_Args) ->
 %% ====================================================================
 
 
+%% connection_spec/2
+%% ====================================================================
+%% @doc Creates a supervisor child_spec for a connection child.
 -spec connection_spec() -> supervisor:child_spec().
+%% ===================================================================
 connection_spec() ->
     ChildId = Module = gateway_connection,
     Restart = temporary,

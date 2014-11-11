@@ -5,7 +5,10 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @TODO: write me
+%% @doc gateway_connection_manager is responsible for managing a simple map
+%% 'remote address' -> 'gateway_connection process'. The manager takes requests
+%% and uses existing connection to fulfill it; if the connection is not open,
+%% the manager starts it.
 %% @end
 %% ===================================================================
 
@@ -32,16 +35,26 @@
 %% API functions
 %% ====================================================================
 
+%% start_link/2
+%% ====================================================================
+%% @doc Starts gateway_connection_manager gen_server.
 -spec start_link(IpAddr, Id) -> Result when
     IpAddr :: inet:ip_address(),
     Id :: term(),
     Result :: {ok,Pid} | ignore | {error,Error},
      Pid :: pid(),
      Error :: {already_started,Pid} | term().
+%% ====================================================================
 start_link(IpAddr, Id) ->
     gen_server:start_link(?MODULE, {IpAddr, Id}, []).
 
 
+%% init/1
+%% ====================================================================
+%% @doc Initializes a connection_manager, including registering itself with
+%% a dispatcher.
+%% @end
+%% @see gen_server
 -spec init({IpAddr, Id}) -> Result when
     IpAddr :: inet:ip_address(),
     Id :: term(),
@@ -50,12 +63,17 @@ start_link(IpAddr, Id) ->
      State :: #cmstate{},
      Timeout :: timeout(),
      Reason :: term().
+%% ====================================================================
 init({IpAddr, Id}) ->
     process_flag(trap_exit, true),
     gen_server:cast(?GATEWAY_DISPATCHER, {register_connection_manager, Id, IpAddr, self()}),
     {ok, #cmstate{id = Id, addr = IpAddr}}.
 
 
+%% handle_call/3
+%% ====================================================================
+%% @doc Handles a call.
+%% @see gen_server
 -spec handle_call(Request, From, State) -> Result when
     Request :: term(),
     From :: {pid(),any()},
@@ -69,11 +87,19 @@ init({IpAddr, Id}) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: term().
+%% ====================================================================
 handle_call(_Request, _From, State) ->
     ?log_call(_Request),
     {noreply, State}.
 
 
+%% handle_cast/3
+%% ====================================================================
+%% @doc Handles a cast. When a request is received, connection manager first
+%% aquires a connection to fulfill it, and then delegates the action to the
+%% connection.
+%% @end
+%% @see gen_server
 -spec handle_cast(Request, State) -> Result when
     Request :: term(),
     State :: #cmstate{},
@@ -83,6 +109,7 @@ handle_call(_Request, _From, State) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: term().
+%% ====================================================================
 handle_cast(#fetch{remote = Remote, notify = Notify} = Request, #cmstate{addr = Addr} = State) ->
     case dict:find(Remote, State#cmstate.connections) of
         error ->
@@ -128,6 +155,10 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 
+%% handle_info/3
+%% ====================================================================
+%% @doc Handles messages.
+%% @see gen_server
 -spec handle_info(Info, State) -> Result when
     Info :: timeout | term(),
     State :: #cmstate{},
@@ -137,15 +168,21 @@ handle_cast(_Request, State) ->
      NewState :: term(),
      Timeout :: timeout(),
      Reason :: normal | term().
+%% ====================================================================
 handle_info(_Info, State) ->
     ?log_call(_Info),
     {noreply, State}.
 
 
+%% terminate/2
+%% ====================================================================
+%% @doc Cleans up any state associated with the connection manager.
+%% @see gen_server
 -spec terminate(Reason, State) -> IgnoredResult when
     Reason :: normal | shutdown | {shutdown,term()} | term(),
     State :: #cmstate{},
     IgnoredResult :: any().
+%% ====================================================================
 terminate(_Reason, State) ->
     ?log_terminate(_Reason, State),
     dict:map(fun(_, Pid) ->
@@ -153,6 +190,10 @@ terminate(_Reason, State) ->
     end, State#cmstate.connections).
 
 
+%% code_change/3
+%% ====================================================================
+%% @doc Performs any actions necessary on code change.
+%% @see gen_server
 -spec code_change(OldVsn, State, Extra) -> {ok, NewState} | {error, Reason} when
     OldVsn :: Vsn | {down, Vsn},
      Vsn :: term(),
@@ -160,6 +201,7 @@ terminate(_Reason, State) ->
     Extra :: term(),
     NewState :: #cmstate{},
     Reason :: term().
+%% ====================================================================
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -167,4 +209,3 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-
