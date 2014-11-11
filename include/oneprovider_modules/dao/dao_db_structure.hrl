@@ -23,6 +23,7 @@
 -define(SYSTEM_DB_NAME, "system_data_test").
 -define(FILES_DB_NAME, "files_test").
 -define(DESCRIPTORS_DB_NAME, "file_descriptors_test").
+-define(REMOTE_LOCATIONS_DB_NAME, "remote_locations_test").
 -define(USERS_DB_NAME, "users_test").
 -define(COOKIES_DB_NAME, "cookies_test").
 -define(GROUPS_DB_NAME, "groups_test").
@@ -30,6 +31,7 @@
 -define(SYSTEM_DB_NAME, "system_data").
 -define(FILES_DB_NAME, "files").
 -define(DESCRIPTORS_DB_NAME, "file_descriptors").
+-define(REMOTE_LOCATIONS_DB_NAME, "remote_locations").
 -define(USERS_DB_NAME, "users").
 -define(COOKIES_DB_NAME, "cookies").
 -define(GROUPS_DB_NAME, "groups").

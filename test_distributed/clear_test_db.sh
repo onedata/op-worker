@@ -12,6 +12,7 @@
 curl -X DELETE 127.0.0.1:5984/files_test
 curl -X DELETE 127.0.0.1:5984/system_data_test
 curl -X DELETE 127.0.0.1:5984/file_descriptors_test
+curl -X DELETE 127.0.0.1:5984/remote_locations_test
 curl -X DELETE 127.0.0.1:5984/users_test
 curl -X DELETE 127.0.0.1:5984/cookies_test
 curl -X DELETE 127.0.0.1:5984/groups_test

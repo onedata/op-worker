@@ -783,7 +783,7 @@ remove_file_block(BlockId) when is_list(BlockId) ->
 save_remote_location(#remote_location{} = RemoteLocation) ->
     save_remote_location(#db_document{record = RemoteLocation});
 save_remote_location(#db_document{record = #remote_location{}} = RemoteLocationDoc) ->
-    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    dao_external:set_db(?REMOTE_LOCATIONS_DB_NAME),
     dao_records:save_record(RemoteLocationDoc).
 
 %% get_remote_location/1
@@ -794,7 +794,7 @@ save_remote_location(#db_document{record = #remote_location{}} = RemoteLocationD
 -spec get_remote_location(Uuid :: uuid()) -> {ok, remote_location_doc()} | {error, any()}.
 %% ====================================================================
 get_remote_location(Uuid) ->
-    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    dao_external:set_db(?REMOTE_LOCATIONS_DB_NAME),
     dao_records:get_record(Uuid).
 
 %% list_dir/3
