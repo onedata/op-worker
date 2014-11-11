@@ -10,18 +10,29 @@ message TreeBroadcast {
     repeated bytes excluded_providers = 7;
 }
 
+
 message DocUpdated {
-    required bytes document = 1;
+    required bytes prev_seq = 1;
+    required bytes curr_seq = 2;
+    required bytes dbname = 3;
+    repeated bytes document = 4;
 }
 
-message ReportDocVersion {
-    required bytes doc_db_name = 1;
-    required bytes doc_uuid = 2;
-    required bytes doc_rev = 3;
+message ReportSpaceState {
+    message CurrentSeqData {
+        required bytes dbname = 1;
+        required bytes seq_num = 3;
+    }
+
+    repeated CurrentSeqData current_seq = 1;
 }
 
-message ReportViewQueryResult {
-    required bytes view_info = 1;
-    required bytes query_args = 2;
-    repeated bytes uuids = 3;
+message RequestSpaceState {
+    required bytes dbname = 1;
+}
+
+message RequestSeqDiff {
+    required bytes space_id = 1;
+    required bytes dbname = 2;
+    required bytes since_seq = 3;
 }

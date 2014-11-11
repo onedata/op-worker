@@ -22,6 +22,7 @@
 -include("registered_names.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("oneprovider_modules/dao/dao_db_structure.hrl").
+-include("oneprovider_modules/dao/dao_cluster.hrl").
 -include_lib("dao/include/couch_db.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_providers.hrl").
@@ -29,11 +30,10 @@
 -define(dbsync_state, dbsync_state).
 
 %% API
--export([init/1, handle/2, cleanup/0, changes_callback/3]).
+-export([init/1, handle/2, cleanup/0, changes_callback/3, state_loop/1, sync_call/1]).
 
--define(call_self(Req), gen_server:call(?Dispatcher_Name, {dbsync, 1, Req})).
+-define(call_self(Req), gen_server:call(request_dispatcher, {dbsync, 1, Req})).
 
--record(shard_info, {node, hostname = "", shard_name = ""}).
 
 
 changes_callback(continuous, Changes, Acc) ->
@@ -46,37 +46,23 @@ changes_callback(continuous, Changes, Acc) ->
 -spec init(Args :: term()) -> list().
 %% ====================================================================
 init(_Args) ->
-    DBNodes = dao_lib:apply(dao_hosts, list, [], 1),
-    Shards = lists:map(
-        fun(NodeName) ->
-            [_, HostName] = string:tokens(atom_to_list(NodeName), "@"),
-            [#shard_info{node = NodeName, hostname =  HostName, shard_name = ShardName} || ShardName <- get_shards_to_watch({NodeName, HostName})]
-        end, DBNodes),
 
-    Shards1 = lists:flatten(Shards),
-
-    ?info("Shards ~p", [Shards1]),
-
-    [watch_shard(ShardInfo) || ShardInfo <- Shards1],
-
-    Res = dao_lib:apply(dao_helper, changes, [?FILES_DB_NAME, {dbsync, changes_callback, [continuous]}, [], #changes_args{feed = "continuous", include_docs = true}], 1),
+    register(dbsync_state, spawn_link(fun state_loop/0)),
+    register(dbsync_ping_service, spawn_link(fun ping_service_loop/0)),
+    %%Res = dao_lib:apply(dao_helper, changes, [?FILES_DB_NAME, {dbsync, changes_callback, [continuous]}, [], #changes_args{feed = "continuous", include_docs = true}], 1),
     ets:new(?dbsync_state, [public, named_table, set]),
+    catch load_state(),
     ChangesReceiver = spawn_link(fun() -> changes_receiver_loop({main_poll, []}) end),
     register(dbsync_changes_receiver, ChangesReceiver),
-    spawn(fun() -> timer:sleep(timer:seconds(1)), {ibrowse_req_id, RequestId} = ibrowse:send_req("http://127.0.0.1:5984/files/_changes?feed=longpoll&since=0", [], get, [], [{stream_to, ChangesReceiver}]) end),
-    ?info("dbsync initialized ~p", [Res]),
+
+    {ok, DBInfo} = dao_lib:apply(dao_helper, get_db_info, [?FILES_DB_NAME], 1),
+    {_, [SeqNum, SeqHash]} = lists:keyfind(update_seq, 1, DBInfo),
+    SeqInfo = {SeqNum, SeqHash},
+    ets:insert(?dbsync_state, {{last_seq, ?FILES_DB_NAME}, SeqInfo}),
+    spawn(fun() -> timer:sleep(timer:seconds(1)), ?call_self({changes_stream, main_poll, eof}) end),
     [].
 
 
-watch_shard(#shard_info{hostname = HostName, shard_name = ShardName} = SI, SeqNum) ->
-    ReceiverPid = case ets:lookup(?dbsync_state, SI) of
-        [{_, Pid}] -> Pid;
-        _ ->
-            spawn_link(fun() -> changes_receiver_loop({SI, []}) end)
-    end,
-
-    {ibrowse_req_id, _RequestId} = ibrowse:send_req("http://" ++ HostName ++ ":5986/" ++ ShardName ++ "/_changes?feed=longpoll&since=" ++ , [], get, [], [{stream_to, ChangesReceiver}]
-    .
 
 get_shards_to_watch({_NodeName, HostName}) ->
     {ok, "200", _, Data} = ibrowse:send_req("http://" ++ HostName ++ ":5986/_all_dbs", [], get, []),
@@ -92,15 +78,36 @@ json_decode(JSON) ->
 
 changes_receiver_loop({StreamId, State}) ->
     NewState = receive
-        {ibrowse_async_response, _RequestId, Data} ->
-            ?call_self({changes_stream, StreamId, Data}),
+        {ibrowse_async_response, RequestId, Data} ->
+            try
+                [{_, {RequestId, SinceSeqInfo}}] = ets:lookup(?dbsync_state, {last_request_id, ?FILES_DB_NAME}),
+                {Decoded} = (mochijson2:decoder([{object_hook, fun({struct,L}) -> {L} end}]))(Data),
+                {_, [SeqNum, SeqHash]} = lists:keyfind(<<"last_seq">>, 1, Decoded),
+                ok = ?call_self({changes_stream, StreamId, Data, SinceSeqInfo}),
+                ets:insert(?dbsync_state, {{last_seq, ?FILES_DB_NAME}, {SeqNum, SeqHash}})
+            catch
+                _:_ -> ok
+            end,
+
             State;
-        {ibrowse_async_response_end, _} ->
+        {ibrowse_async_response_end, WUT} ->
             case StreamId of
-                main_poll -> State;
-                _         -> exit(normal)
-            end
-    after 60 ->
+                main_poll ->
+                    ?info("=============================================================> WUT EXIT1 ~p?!", [WUT]),
+                    ?call_self({changes_stream, StreamId, eof}),
+                    State;
+                _         ->
+                    ?info("=============================================================> WUT EXIT2 ~p?!", [StreamId]),
+                    exit(normal)
+            end;
+        {ibrowse_async_headers, _RequestId, "200", _} ->
+            State;
+        Unk ->
+            ?error("Unknown ============================> ~p", [Unk]),
+            ?call_self({changes_stream, StreamId, eof}),
+            State
+    after timer:seconds(10) ->
+        ?call_self({changes_stream, StreamId, eof}),
         State
     end,
     changes_receiver_loop({StreamId, NewState}).
@@ -130,40 +137,67 @@ handle(ProtocolVersion, Request) ->
             {error, Reason}
     end.
 
-
-handle2(_ProtocolVersion, {changes_stream, main_poll, Data}) ->
-    ?info("Changes ========================> ~p", [Data]),
-    {Decoded} = (mochijson2:decoder([{object_hook, fun({struct,L}) -> {L} end}]))(Data),
-    {_, Results} = lists:keyfind(<<"results">>, 1, Decoded),
-    {_, [SeqNum, SeqHash]} = lists:keyfind(<<"last_seq">>, 1, Decoded),
-    ?info("Changes decoded =======================> ~p ~p ~p", [Results, SeqNum, "http://127.0.0.1:5984/files/_changes?feed=longpoll&since=" ++ integer_to_list(SeqNum)]),
-
+handle2(_ProtocolVersion, {changes_stream, main_poll, eof}) ->
+    [{{last_seq, ?FILES_DB_NAME}, {SeqNum1, SeqHash1}}] = ets:lookup(?dbsync_state, {last_seq, ?FILES_DB_NAME}),
+    SeqReq1 =
+        case SeqNum1 of
+            0 -> "0";
+            _ -> "[" ++ integer_to_list(SeqNum1) ++ ",\"" ++ binary_to_list(SeqHash1) ++ "\"]"
+        end,
     ChangesReceiver = whereis(dbsync_changes_receiver),
-    {ibrowse_req_id, _RequestId} = ibrowse:send_req("http://127.0.0.1:5984/files/_changes?feed=longpoll&since=" ++ integer_to_list(SeqNum), [], get, [], [{stream_to, ChangesReceiver}]),
+    case ets:lookup(?dbsync_state, {last_request_id, ?FILES_DB_NAME}) of
+        [{_, {LastRequestId, _}}] -> catch ibrowse:stream_close(LastRequestId);
+        _                    -> ok
+    end,
+    {ibrowse_req_id, RequestId} = ibrowse:send_req("http://127.0.0.1:5984/files/_changes?feed=longpoll&include_docs=true&limit=100&heartbeat=3000&since=" ++ SeqReq1, [], get, [], [{inactivity_timeout, infinity}, {stream_to, ChangesReceiver}]),
+    ets:insert(?dbsync_state, {{last_request_id, ?FILES_DB_NAME}, {RequestId, {SeqNum1, SeqHash1}}}),
+    ok;
+handle2(_ProtocolVersion, {changes_stream, main_poll, Data, SinceSeqInfo}) ->
+    try
+        ?info("Changes ========================> ~p", [Data]),
+        {Decoded} = (mochijson2:decoder([{object_hook, fun({struct,L}) -> {L} end}]))(Data),
+        {_, Results} = lists:keyfind(<<"results">>, 1, Decoded),
+        {ChangedDocs, {SeqNum, SeqHash}} = changes_json_to_docs(Data),
+        ChangedDocs1 = [ChangedDoc || {#db_document{}, _} = ChangedDoc <- ChangedDocs],
+        ?call_self({docs_updated, {?FILES_DB_NAME, ChangedDocs1, SinceSeqInfo}}),
+
+        SeqReq = "[" ++ integer_to_list(SeqNum) ++ ",\"" ++ binary_to_list(SeqHash) ++ "\"]",
+        ?info("Changes decoded =======================> ~p ~p ~p ~p ~p", [Results, SeqNum, "http://127.0.0.1:5984/files/_changes?feed=longpoll&include_docs=true&since=" ++ SeqReq, length(ChangedDocs), length(ChangedDocs1)])
+    catch
+        _:Reason ->
+            ?error("OMG3 ==============================> ~p", [Reason]),
+            ok
+    end,
     ok;
 
-handle2(_ProtocolVersion, {{event, doc_saved}, {DbName, #db_document{rev_info = 0} = Doc, {NewSeq, NewRev}, Opts}}) ->
-    handle(_ProtocolVersion, {{event, doc_saved}, {DbName, Doc#db_document{rev_info = {0, []}}, {NewSeq, NewRev}, Opts}});
-handle2(_ProtocolVersion, {{event, doc_saved}, {?FILES_DB_NAME = DbName, #db_document{rev_info = {_OldSeq, OldRevs}} = Doc, {NewSeq, NewRev}, Opts}}) ->
-    NewDoc = Doc#db_document{rev_info = {NewSeq, [NewRev | OldRevs]}},
-    ok = emit_document(DbName, NewDoc);
 
-handle2(_ProtocolVersion, {{event, doc_requested}, {?FILES_DB_NAME = DbName, DocUUID, DocRev}}) ->
-    Request = #reportdocversion{doc_uuid = utils:ensure_binary(DocUUID), doc_rev = utils:ensure_binary(DocRev), doc_db_name = utils:ensure_binary(DbName)},
-    {ok, #space_info{providers = SyncWith} = SpaceInfo} = get_space_ctx(DbName, DocUUID),
-    SyncWithSorted = lists:usort(SyncWith),
-    ok = tree_broadcast(SpaceInfo, SyncWithSorted, Request, 3);
-handle2(_ProtocolVersion, {{event, doc_requested}, {_, _DocUUID, _DocRev}}) ->
-    ok;
 
-handle2(_ProtocolVersion, {{event, view_queried}, {#view_info{db_name = ?FILES_DB_NAME} = ViewInfo, QueryArgs, UUIDs}}) ->
-    BinUUIDs = [utils:ensure_binary(UUID) || UUID <- UUIDs],
-    Request = #reportviewqueryresult{view_info = encode_doc(ViewInfo), query_args = encode_doc(QueryArgs), uuids = BinUUIDs},
-    {ok, #space_info{providers = SyncWith} = SpaceInfo} = get_space_ctx(ViewInfo, QueryArgs),
-    SyncWithSorted = lists:usort(SyncWith),
-    ok = tree_broadcast(SpaceInfo, SyncWithSorted, Request, 3);
 
-handle2(_ProtocolVersion, {{event, doc_saved}, {DbName, Doc, NewRew, Opts}}) ->
+%% handle2(_ProtocolVersion, {{event, doc_saved}, {DbName, #db_document{rev_info = 0} = Doc, SeqInfo, Opts}}) ->
+%%     handle(_ProtocolVersion, {{event, doc_saved}, {DbName, Doc#db_document{rev_info = {0, []}}, SeqInfo, Opts}});
+%% handle2(_ProtocolVersion, {{event, doc_saved}, {?FILES_DB_NAME = DbName, #db_document{rev_info = {_OldSeq, OldRevs}} = Doc, SeqInfo, Opts}}) ->
+%%     NewDoc = Doc,
+%%     ok = emit_document(DbName, NewDoc, SeqInfo);
+
+handle2(_ProtocolVersion, {docs_updated, {?FILES_DB_NAME = DbName, DocsWithSeq, SinceSeqInfo}}) ->
+    emit_documents(DbName, DocsWithSeq, SinceSeqInfo);
+
+%% handle2(_ProtocolVersion, {{event, doc_requested}, {?FILES_DB_NAME = DbName, DocUUID, DocRev}}) ->
+%%     Request = #reportdocversion{doc_uuid = utils:ensure_binary(DocUUID), doc_rev = utils:ensure_binary(DocRev), doc_db_name = utils:ensure_binary(DbName)},
+%%     {ok, #space_info{providers = SyncWith} = SpaceInfo} = get_space_ctx(DbName, DocUUID),
+%%     SyncWithSorted = lists:usort(SyncWith),
+%%     ok = tree_broadcast(SpaceInfo, SyncWithSorted, Request, 3);
+%% handle2(_ProtocolVersion, {{event, doc_requested}, {_, _DocUUID, _DocRev}}) ->
+%%     ok;
+%%
+%% handle2(_ProtocolVersion, {{event, view_queried}, {#view_info{db_name = ?FILES_DB_NAME} = ViewInfo, QueryArgs, UUIDs}}) ->
+%%     BinUUIDs = [utils:ensure_binary(UUID) || UUID <- UUIDs],
+%%     Request = #reportviewqueryresult{view_info = encode_doc(ViewInfo), query_args = encode_doc(QueryArgs), uuids = BinUUIDs},
+%%     {ok, #space_info{providers = SyncWith} = SpaceInfo} = get_space_ctx(ViewInfo, QueryArgs),
+%%     SyncWithSorted = lists:usort(SyncWith),
+%%     ok = tree_broadcast(SpaceInfo, SyncWithSorted, Request, 3);
+
+handle2(_ProtocolVersion, {{event, doc_saved}, {DbName, Doc, Opts}}) ->
     %% ?info("OMG wrong DB ~p", [{DbName, Doc, NewRew, Opts}]),
     ok;
 
@@ -178,11 +212,11 @@ handle2(_ProtocolVersion, {reemit, #treebroadcast{ledge = LEdge, redge = REdge, 
     Providers4 = lists:usort([REdge | Providers3]),
     ok = tree_broadcast(SpaceInfo, Providers4, Request, BaseRequest, 3);
 
-handle2(ProtocolVersion, #treebroadcast{input = RequestData, message_type = DecoderName} = BaseRequest) ->
+handle2(ProtocolVersion, #treebroadcast{input = RequestData, message_type = DecoderName, space_id = SpaceId} = BaseRequest) ->
     DecoderMethod = decoder_method(DecoderName),
     Request = apply(dbsync_pb, DecoderMethod, [RequestData]),
     ?call_self({reemit, BaseRequest}),
-    case handle_broadcast(ProtocolVersion, Request, BaseRequest) of
+    case handle_broadcast(ProtocolVersion, SpaceId, Request, BaseRequest) of
         ok -> ok;
         reemit ->
             ?call_self({reemit, BaseRequest}),
@@ -190,6 +224,40 @@ handle2(ProtocolVersion, #treebroadcast{input = RequestData, message_type = Deco
         {error, Reason} ->
             {error, Reason}
     end;
+handle2(ProtocolVersion, #requestseqdiff{space_id = SpaceId, dbname = DbName, since_seq = SinceBin} = BaseRequest) ->
+    SinceSeqInfo = decode_term(SinceBin),
+    {SeqNum, SeqHash} = SinceSeqInfo,
+    SeqReq =
+        case SeqNum of
+            0 -> "0";
+            _ -> "[" ++ integer_to_list(SeqNum) ++ ",\"" ++ binary_to_list(SeqHash) ++ "\"]"
+        end,
+    {ok, "200", _, Data} = ibrowse:send_req("http://127.0.0.1:5984/" ++ utils:ensure_list(DbName) ++ "/_changes?feed=normal&include_docs=true&since=" ++ SeqReq, [], get, []),
+    {ChangedDocs, ReqSeqInfo} = changes_json_to_docs(Data),
+    ChangedDocs1 = [ChangedDoc || {#db_document{}, _} = ChangedDoc <- ChangedDocs],
+
+    SpacesMap = lists:foldl(
+        fun({#db_document{uuid = UUID, rev_info = {RevNum, [RevHash | _]}} = Doc, CSeq}, Acc) ->
+            try
+                {ok, #space_info{providers = SyncWith, space_id = SpaceId} = SpaceInfo} = get_space_ctx(DbName, Doc),
+                SyncWithSorted = lists:usort(SyncWith),
+                {ok, [{ok, #doc{revs = RevInfo}}]} = dao_lib:apply(dao_helper, open_revs, [DbName, UUID, [{RevNum, RevHash}], []], 1),
+                NewDoc = Doc#db_document{rev_info = RevInfo},
+
+                {_, LastSSeq, SpaceDocs} = maps:get(SpaceId, Acc, {SpaceInfo, 0, []}),
+                maps:put(SpaceId, {SpaceInfo, max(LastSSeq, CSeq), [NewDoc | SpaceDocs]}, Acc)
+            catch
+                _:{badmatch,{error,{not_found,missing}}} ->
+                    Acc;
+                _:Reason ->
+                    ?error_stacktrace("OMG2 ==============================> ~p", [Reason]),
+                    Acc
+            end
+        end, #{}, ChangedDocs1),
+
+    {SpaceInfo, _, Docs} = maps:get(SpaceId, SpacesMap),
+    DocsEncoded = [encode_term(Doc) || Doc <- lists:reverse(Docs)],
+    #docupdated{dbname = DbName, document =  DocsEncoded, prev_seq = SinceBin, curr_seq = encode_term(ReqSeqInfo)};
 handle2(_ProtocolVersion, Request) ->
     ?info("Hello ~p", [Request]);
 
@@ -197,67 +265,255 @@ handle2(_ProtocolVersion, _Msg) ->
     ?warning("dbsync: wrong request: ~p", [_Msg]),
     wrong_request.
 
-handle_broadcast(ProtocolVersion, #docupdated{document = DocData} = Request, BaseRequest) ->
-    #db_document{uuid = DocUUID, rev_info = {_, [EmitedRev | _]}} = Doc = decode_doc(DocData),
-    DocDbName = doc_to_db(Doc),
-    {ok, #space_info{} = SpaceInfo} = get_space_ctx(DocDbName, Doc),
-    case dao_lib:apply(dao_records, save_record, [DocDbName, Doc, [replicated_changes]], ProtocolVersion) of
-        {ok, _} ->
-            ?info("UPDATED ~p OMG !!!!", [DocUUID]),
-            ok;
-        {error, Reason2} ->
-            ?error("=================> Error2 while replicating changes ~p", [Reason2]),
-            {error, Reason2}
 
-    end,
-    case dao_lib:apply(dao_records, get_record, [DocDbName, DocUUID, []], ProtocolVersion) of
-        {ok, #db_document{rev_info = {_Seq, [CurrentRev | _]}} = CurrentDoc} ->
-            case utils:ensure_binary(CurrentRev) =:= utils:ensure_binary(EmitedRev) of
-                true ->
-                    reemit;
-                false ->
-                    ok = emit_document(DocDbName, CurrentDoc)
-            end,
-            ok;
-        {error, Reason1} ->
-            ?error("=================> Error1 while replicating changes ~p", [Reason1]),
-            reemit
-    end;
-handle_broadcast(ProtocolVersion, #reportdocversion{doc_uuid = UUID, doc_rev = DocRev, doc_db_name = DbName} = Request, BaseRequest) ->
-    case dao_lib:apply(dao_records, get_record, [DbName, utils:ensure_list(UUID), []], ProtocolVersion) of
-        {ok, #db_document{rev_info = {_, [DocRev | _]}}} ->
-            ok;
-        {ok, #db_document{} = CurrentDoc} ->
-            ?info("Rev missmatch detected, pushing newer revision..."),
-            ok = emit_document(DbName, CurrentDoc);
-        {error, Reason2} ->
-            ?error("=================> Error2 while processing reportdocversion ~p", [Reason2]),
-            {error, Reason2}
+changes_json_to_docs(Data) ->
+    {Decoded} = (mochijson2:decoder([{object_hook, fun({struct,L}) -> {L} end}]))(Data),
+    {_, Results} = lists:keyfind(<<"results">>, 1, Decoded),
+    {_, [SeqNum, SeqHash]} = lists:keyfind(<<"last_seq">>, 1, Decoded),
+    SeqInfo = {SeqNum, SeqHash},
+    ChangedDocs = lists:map(
+        fun({Result}) ->
+            try
+                {_, RawDoc} = lists:keyfind(<<"doc">>, 1, Result),
+                {_,  [SeqNum1, SeqHash1]} = lists:keyfind(<<"seq">>, 1, Result),
+                SeqInfo1 = {SeqNum1, SeqHash1},
+                {_,  UUID} = lists:keyfind(<<"id">>, 1, Result),
+                {_,  [{[{_, RevBin}]}]} = lists:keyfind(<<"changes">>, 1, Result),
+                IsDeleted = proplists:get_value(<<"deleted">>, Result, false),
+                [NumBin, HashBin] = binary:split(RevBin, [<<"-">>]),
+                Record = dao_records:doc_to_term(RawDoc),
+                {#db_document{deleted = IsDeleted, record = Record, uuid = UUID, rev_info = {binary_to_integer(NumBin), [binary:encode_unsigned(erlang:list_to_integer(binary:bin_to_list(HashBin), 16))]}}, SeqInfo1}
+            catch
+                _:Reason ->
+                    ?error("OMG1 ==============================> ~p", [Reason]),
+                    {error, Reason}
+            end
+        end, Results),
+    {ChangedDocs, SeqInfo}.
 
-    end,
+get_current_seq(SpaceId, DbName) ->
+    case ets:lookup(?dbsync_state, last_space_seq_key(SpaceId, DbName)) of
+        [{_, CurrSeqInfo}] -> CurrSeqInfo;
+        _ -> 0
+    end.
+get_current_seq(ProviderId, SpaceId, DbName) ->
+    case ets:lookup(?dbsync_state, last_space_seq_key(ProviderId, SpaceId, DbName)) of
+        [{_, CurrSeqInfo}] -> CurrSeqInfo;
+        _ ->
+            {0, <<>>}
+    end.
+
+
+handle_broadcast(ProtocolVersion, SpaceId, #docupdated{dbname = DbName, document = DocsData, prev_seq = PrevSeqInfoBin, curr_seq = CurrSeqInfoBin} = Request, BaseRequest) ->
+    {provider_id, ProviderId} = get(peer_id),
+    CurrSeqInfo = decode_term(CurrSeqInfoBin),
+    PrevSeqInfo = decode_term(PrevSeqInfoBin),
+    lists:foreach(
+        fun(DocData) ->
+            #db_document{uuid = DocUUID, rev_info = {_, [EmitedRev | _]}} = Doc = decode_term(DocData),
+            DocDbName = doc_to_db(Doc),
+            {ok, #space_info{space_id = SpaceId} = SpaceInfo} = get_space_ctx(DocDbName, Doc),
+            case dao_lib:apply(dao_records, save_record, [DocDbName, Doc, [replicated_changes]], ProtocolVersion) of
+                {ok, _} ->
+                    ?info("UPDATED ~p OMG !!!!", [DocUUID]),
+                    ok;
+                {error, Reason2} ->
+                    ?error("=================> Error2 while replicating changes ~p", [Reason2]),
+                    {error, Reason2}
+
+            end
+        end, DocsData),
+    sync_call(fun(_State) ->
+        case get_current_seq(ProviderId, SpaceId, DbName) of
+            PrevSeqInfo ->
+                ?info("State of space ~p updated to ~p!", [SpaceId, CurrSeqInfo]),
+                ets:insert(?dbsync_state, {last_space_seq_key(ProviderId, SpaceId, DbName), CurrSeqInfo});
+            UnknownSeq ->
+                ?error("Cannot update database with received diff due to seq missmatch ~p vs local ~p", [PrevSeqInfo, UnknownSeq])
+        end
+    end),
     reemit;
 
-handle_broadcast(ProtocolVersion, #reportviewqueryresult{view_info = #view_info{db_name = DbName} = ViewInfo, query_args = QueryArgs, uuids = UUIDs} = Request, BaseRequest) ->
-    case dao_lib:apply(dao_records, list_records, [ViewInfo, QueryArgs, [skip_sync_events]], ProtocolVersion) of
-        {ok, #view_result{rows = Rows}} ->
-            RemoteMissing = [utils:ensure_binary(UUID) || #view_row{id = UUID} <- Rows] -- UUIDs,
-            MissingDocs = [dao_lib:apply(dao_records, get_record, [DbName, UUID, [skip_sync_events]], 1) || UUID <- RemoteMissing],
-            [emit_document(DbName, Doc) || Doc <- MissingDocs],
-            ok;
-        {error, Reason2} ->
-            ?error("=================> Error2 while processing reportdocversion ~p", [Reason2]),
-            {error, Reason2}
+handle_broadcast(ProtocolVersion, SpaceId, #reportspacestate{current_seq = Seqs} = Request, BaseRequest) ->
+    SeqsInfo = [{DbName, decode_term(SeqNumBin)} || #reportspacestate_currentseqdata{dbname = DbName, seq_num = SeqNumBin} <- Seqs],
+    {provider_id, ProviderId} = get(peer_id),
+    lists:foreach(
+        fun({DbName, SeqInfo}) ->
+            case get_current_seq(ProviderId, SpaceId, DbName) of
+                LocalSeq when LocalSeq >= SeqInfo -> ok;
+                LocalSeq ->
+                    ?info("Seq missmatch for space ~p in database ~p for provider ~p: ~p vs local ~p", [SpaceId, DbName, ProviderId, SeqInfo, LocalSeq]),
+                    spawn(fun() -> request_diff(ProviderId, SpaceId, DbName, LocalSeq, 3) end)
+            end
+        end, SeqsInfo),
+    ?info("Got report for space ~p: ~p", [SpaceId, SeqsInfo]),
+    reemit;
 
-    end,
+
+handle_broadcast(ProtocolVersion, SpaceId, #requestspacestate{dbname = DbName} = Request, BaseRequest) ->
+    broadcast_space_state(SpaceId),
     reemit.
 
 
-emit_document(DbName, #db_document{} = Doc) ->
-    {ok, #space_info{providers = SyncWith} = SpaceInfo} = get_space_ctx(DbName, Doc),
-    SyncWithSorted = lists:usort(SyncWith),
+%% handle_broadcast(ProtocolVersion, #reportdocversion{doc_uuid = UUID, doc_rev = DocRev, doc_db_name = DbName} = Request, BaseRequest) ->
+%%     case dao_lib:apply(dao_records, get_record, [DbName, utils:ensure_list(UUID), []], ProtocolVersion) of
+%%         {ok, #db_document{rev_info = {_, [DocRev | _]}}} ->
+%%             ok;
+%%         {ok, #db_document{} = CurrentDoc} ->
+%%             ?info("Rev missmatch detected, pushing newer revision..."),
+%%             ok = emit_document(DbName, CurrentDoc);
+%%         {error, Reason2} ->
+%%             ?error("=================> Error2 while processing reportdocversion ~p", [Reason2]),
+%%             {error, Reason2}
+%%
+%%     end,
+%%     reemit;
+%%
+%% handle_broadcast(ProtocolVersion, #reportviewqueryresult{view_info = #view_info{db_name = DbName} = ViewInfo, query_args = QueryArgs, uuids = UUIDs} = Request, BaseRequest) ->
+%%     case dao_lib:apply(dao_records, list_records, [ViewInfo, QueryArgs, [skip_sync_events]], ProtocolVersion) of
+%%         {ok, #view_result{rows = Rows}} ->
+%%             RemoteMissing = [utils:ensure_binary(UUID) || #view_row{id = UUID} <- Rows] -- UUIDs,
+%%             MissingDocs = [dao_lib:apply(dao_records, get_record, [DbName, UUID, [skip_sync_events]], 1) || UUID <- RemoteMissing],
+%%             [emit_document(DbName, Doc) || Doc <- MissingDocs],
+%%             ok;
+%%         {error, Reason2} ->
+%%             ?error("=================> Error2 while processing reportdocversion ~p", [Reason2]),
+%%             {error, Reason2}
+%%
+%%     end,
+%%     reemit.
 
-    ok = push_doc_changes(SpaceInfo, Doc, SyncWithSorted),
-    ok = push_doc_changes(SpaceInfo, Doc, SyncWithSorted).
+%% emit_document(DbName, Doc) ->
+%%     emit_document(DbName, Doc, undefined).
+%% emit_document(DbName, #db_document{uuid = UUID, rev_info = {RevNum, [RevHash | _]}} = Doc, SeqInfo) ->
+%%     {ok, #space_info{providers = SyncWith, space_id = SpaceId} = SpaceInfo} = get_space_ctx(DbName, Doc),
+%%     SyncWithSorted = lists:usort(SyncWith),
+%%
+%%
+%%     {ok, [{ok, #doc{revs = RevInfo}}]} = dao_lib:apply(dao_helper, open_revs, [DbName, UUID, [{RevNum, RevHash}], []], 1),
+%%     NewDoc = Doc#db_document{rev_info = RevInfo},
+%%     ?info("OMG =====================> ~p ~p", [UUID, DbName]),
+%%
+%%     LastSeq1 = sync_call(fun() ->
+%%         case ets:lookup(?dbsync_state, last_space_seq_key(SpaceId, DbName)) of
+%%             [{_, LastSeq}] when LastSeq < SeqInfo ->
+%%                 ets:insert(?dbsync_state, {last_space_seq_key(SpaceId, DbName), SeqInfo}),
+%%                 LastSeq;
+%%             [] ->
+%%                 ets:insert(?dbsync_state, {last_space_seq_key(SpaceId, DbName), SeqInfo}),
+%%                 0;
+%%             [{_, LastSeq}] -> SeqInfo
+%%         end
+%%     end),
+%%
+%%     ok = push_doc_changes(SpaceInfo, NewDoc, SyncWithSorted),
+%%     ok = push_doc_changes(SpaceInfo, NewDoc, SyncWithSorted).
+
+
+send_direct_message(ProviderId, Request, {AnswerDecoderName, AnswerType} = AnswerConf, Attempts) when Attempts > 0 ->
+    PushTo = ProviderId,
+    ReqEncoder = encoder_method(get_message_type(Request)),
+    RequestData = iolist_to_binary(apply(dbsync_pb, ReqEncoder, [Request])),
+    MsgId = provider_proxy_con:get_msg_id(),
+
+    RTRequest = #rtrequest{answer_decoder_name = a2l(AnswerDecoderName), answer_type = a2l(AnswerType), input = RequestData, message_decoder_name = a2l(dbsync),
+        message_id = MsgId, message_type = a2l(utils:record_type(Request)), module_name = a2l(dbsync), protocol_version = 1, synch = true},
+    RTRequestData = iolist_to_binary(rtcore_pb:encode_rtrequest(RTRequest)),
+
+    URL = get_provider_url(PushTo),
+    Timeout = 1000,
+    provider_proxy_con:send({URL, <<"oneprovider">>}, MsgId, RTRequestData),
+    receive
+        {response, MsgId, AnswerStatus, WorkerAnswer} ->
+            provider_proxy_con:report_ack({URL, <<"oneprovider">>}),
+            ?debug("Answer for inter-provider pull request: ~p ~p", [AnswerStatus, WorkerAnswer]),
+            case AnswerStatus of
+                ?VOK ->
+                    erlang:apply(pb_module(AnswerDecoderName), decoder_method(AnswerType), [WorkerAnswer]);
+                InvalidStatus ->
+                    ?error("Cannot reroute message ~p due to invalid answer status: ~p", [get_message_type(Request), InvalidStatus]),
+                    send_direct_message(ProviderId, Request, AnswerConf, Attempts - 1)
+            end
+    after Timeout ->
+        provider_proxy_con:report_timeout({URL, <<"oneprovider">>}),
+        send_direct_message(ProviderId, Request, AnswerConf, Attempts - 1)
+    end.
+
+request_diff(ProviderId, SpaceId, DbName, SinceSeqInfo, Attempts) ->
+    Request = #requestseqdiff{space_id = SpaceId, dbname = utils:ensure_binary(DbName), since_seq = encode_term(SinceSeqInfo)},
+    #docupdated{document = DocsData, curr_seq = CurrSeqInfoBin, prev_seq = PrevSeqInfoBin} = send_direct_message(ProviderId, Request, {dbsync, docupdated}, 3),
+    CurrSeqInfo = decode_term(CurrSeqInfoBin),
+    PrevSeqInfo = decode_term(PrevSeqInfoBin),
+    lists:foreach(
+        fun(DocData) ->
+            #db_document{uuid = DocUUID, rev_info = {_, [EmitedRev | _]}} = Doc = decode_term(DocData),
+            DocDbName = doc_to_db(Doc),
+            try get_space_ctx(DocDbName, Doc) of
+                {ok, #space_info{space_id = SpaceId} = SpaceInfo} ->
+                    ok;
+                {error, _} -> ok
+            catch
+                _:_ -> ok
+            end,
+            case dao_lib:apply(dao_records, save_record, [DocDbName, Doc, [replicated_changes]], 1) of
+                {ok, _} ->
+                    ?info("UPDATED ~p OMG !!!!", [DocUUID]),
+                    ok;
+                {error, Reason2} ->
+                    ?error("=================> Error2 while replicating changes ~p", [Reason2]),
+                    {error, Reason2}
+
+            end
+        end, DocsData),
+    sync_call(fun(State) ->
+        case get_current_seq(ProviderId, SpaceId, DbName) of
+            PrevSeqInfo ->
+                ?info("State of space ~p updated to ~p!", [SpaceId, CurrSeqInfo]),
+                ets:insert(?dbsync_state, {last_space_seq_key(ProviderId, SpaceId, DbName), CurrSeqInfo});
+            UnknownSeq ->
+                ?error("Cannot update database with requested diff due to seq missmatch ~p vs local ~p", [PrevSeqInfo, UnknownSeq])
+        end
+    end),
+    ok.
+
+emit_documents(DbName, DocsWithSeq, SinceSeqInfo) ->
+    SpacesMap = lists:foldl(
+        fun({#db_document{uuid = UUID, rev_info = {RevNum, [RevHash | _]}} = Doc, CSeq}, Acc) ->
+            try
+                {ok, #space_info{providers = SyncWith, space_id = SpaceId} = SpaceInfo} = get_space_ctx(DbName, Doc),
+                SyncWithSorted = lists:usort(SyncWith),
+                {ok, [{ok, #doc{revs = RevInfo}}]} = dao_lib:apply(dao_helper, open_revs, [DbName, UUID, [{RevNum, RevHash}], []], 1),
+                NewDoc = Doc#db_document{rev_info = RevInfo},
+
+                {_, LastSSeq, SpaceDocs} = maps:get(SpaceId, Acc, {SpaceInfo, 0, []}),
+                maps:put(SpaceId, {SpaceInfo, max(LastSSeq, CSeq), [NewDoc | SpaceDocs]}, Acc)
+            catch
+                _:{badmatch,{error,{not_found,missing}}} ->
+                    Acc;
+                _:Reason ->
+                    ?error_stacktrace("OMG2 ==============================> ~p", [Reason]),
+                    Acc
+            end
+        end, #{}, DocsWithSeq),
+
+    lists:foreach(
+        fun({SpaceId, {#space_info{providers = SyncWith} = SpaceInfo, LastSpaceSeq, Docs}}) ->
+            Docs1 = lists:reverse(Docs),
+            sync_call(fun(_) ->
+                case ets:lookup(?dbsync_state, last_space_seq_key(SpaceId, DbName)) of
+                    [{_, LastSeq}] when LastSeq < LastSpaceSeq ->
+                        ets:insert(?dbsync_state, {last_space_seq_key(SpaceId, DbName), LastSpaceSeq}),
+                        LastSeq;
+                    [] ->
+                        ets:insert(?dbsync_state, {last_space_seq_key(SpaceId, DbName), LastSpaceSeq}),
+                        0;
+                    [{_, LastSeq}] -> LastSpaceSeq
+                end
+            end),
+            SyncWithSorted = lists:usort(SyncWith),
+            ok = push_doc_changes(SpaceInfo, Docs1, SinceSeqInfo, LastSpaceSeq, SyncWithSorted),
+            ok = push_doc_changes(SpaceInfo, Docs1, SinceSeqInfo, LastSpaceSeq, SyncWithSorted)
+        end, maps:to_list(SpacesMap)).
 
 
 %% cleanup/0
@@ -306,14 +562,18 @@ get_space_ctx2(#db_document{uuid = UUID, record = #file_meta{}}, UUIDs) ->
     get_space_ctx2(FileDoc, UUIDs).
 
 
-push_doc_changes(#space_info{} = _SpaceInfo, _Doc, []) ->
+push_doc_changes(#space_info{} = _SpaceInfo, _Docs, _, _, []) ->
     ok;
-push_doc_changes(#space_info{} = SpaceInfo, Doc, SyncWith) ->
-    Request = #docupdated{document = encode_doc(Doc)},
+push_doc_changes(#space_info{} = _SpaceInfo, [], _, _, _) ->
+    ok;
+push_doc_changes(#space_info{} = SpaceInfo, Docs, SinceSeqInfo, LastSpaceSeq, SyncWith) ->
+    [SomeDoc | _] = Docs,
+    Request = #docupdated{dbname = utils:ensure_binary(doc_to_db(SomeDoc)), document = [encode_term(Doc) || Doc <- Docs], curr_seq = encode_term(LastSpaceSeq), prev_seq = encode_term(SinceSeqInfo)},
     ok = tree_broadcast(SpaceInfo, SyncWith, Request, 3).
 
-push_doc_changes(#space_info{} = SpaceInfo, Doc, SyncWith, BaseRequest) ->
-    Request = #docupdated{document = encode_doc(Doc)},
+push_doc_changes(#space_info{} = SpaceInfo, Docs, SyncWith, SinceSeqInfo, LastSpaceSeq, BaseRequest) ->
+    [SomeDoc | _] = Docs,
+    Request = #docupdated{dbname = utils:ensure_binary(doc_to_db(SomeDoc)), document = [encode_term(Doc) || Doc <- Docs], curr_seq = encode_term(LastSpaceSeq), prev_seq = encode_term(SinceSeqInfo)},
     ok = tree_broadcast(SpaceInfo, SyncWith, Request, BaseRequest, 3).
 
 
@@ -381,6 +641,19 @@ do_emit_tree_broadcast(_SpaceInfo, _SyncWith, _Request, _BaseRequest, 0) ->
     {error, 'todo_error_code'}.
 
 
+broadcast_space_state(SpaceId) ->
+    {ok, #space_info{providers = SyncWith} = SpaceInfo} = fslogic_objects:get_space({uuid, SpaceId}),
+    SeqInfo =
+        case ets:lookup(?dbsync_state, last_space_seq_key(SpaceId, ?FILES_DB_NAME)) of
+            [{_, SeqInfo1}] ->
+                SeqInfo1;
+            _ ->
+                [{_, SeqInfo2}] = ets:lookup(?dbsync_state, {last_seq, ?FILES_DB_NAME}),
+                SeqInfo2
+        end,
+    Request = #reportspacestate{current_seq = [#reportspacestate_currentseqdata{dbname = utils:ensure_binary(?FILES_DB_NAME), seq_num = encode_term(SeqInfo)}]},
+    tree_broadcast(SpaceInfo, lists:usort(SyncWith), Request, 3).
+
 get_provider_url(ProviderId) ->
     {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
     _URL = lists:nth(crypto:rand_uniform(1, length(URLs) + 1), URLs).
@@ -441,9 +714,9 @@ get_message_type(Msg) when is_tuple(Msg) ->
     utils:record_type(Msg).
 
 
-encode_doc(Doc) ->
+encode_term(Doc) ->
     term_to_binary(Doc).
-decode_doc(Doc) ->
+decode_term(Doc) ->
     binary_to_term(Doc).
 
 
@@ -452,4 +725,123 @@ doc_to_db(#db_document{record = #file{}}) ->
 doc_to_db(#db_document{record = #file_meta{}}) ->
     ?FILES_DB_NAME.
 
+ping_service_loop() ->
+    timer:sleep(timer:seconds(5)),
+    try
+        {ok, SpaceIds} = gr_providers:get_spaces(provider),
+        lists:foreach(
+            fun(SpaceId) ->
+                Request = #requestspacestate{dbname = utils:ensure_binary(?FILES_DB_NAME)},
+                {ok, #space_info{providers = SyncWith} = SpaceInfo} = fslogic_objects:get_space({uuid, SpaceId}),
+                tree_broadcast(SpaceInfo, lists:usort(SyncWith), Request, 3)
+            end, SpaceIds)
+    catch
+        _:_ -> ok
+    end,
 
+    ping_service_loop([]).
+
+ping_service_loop(State) ->
+    NewState =
+        case gr_providers:get_spaces(provider) of
+            {ok, SpaceIds} ->
+                SpaceIds;
+            {error, Reason} ->
+                State
+        end,
+    Res = [catch broadcast_space_state(SpaceId) || SpaceId <- NewState],
+    catch save_state(),
+    ?info("Ping res =========================> ~p", [Res]),
+    timer:sleep(timer:seconds(30)),
+    ping_service_loop(NewState).
+
+state_loop() ->
+    state_loop(#dbsync_state{}).
+state_loop(State) ->
+    NewState =
+        receive
+            {From, Fun} when is_function(Fun) ->
+                %%?info("[RT state_loop] Call: fun/1 ~p with state: ~p", [Fun, State]),
+                {Response, NState} =
+                    try Fun(State) of
+                        {Response1, #dbsync_state{} = NState1} ->
+                            {Response1, NState1};
+                        OnlyResp -> {OnlyResp, State}
+                    catch
+                        Type:Error -> {{error, {Type, Error}}, State}
+                    end,
+                From ! {self(), Response},
+                %%?info("[RT state_loop] Call: fun/1 ~p with new state: ~p", [Fun, NState]),
+                NState;
+            {From, Module, Method, Args} ->
+                %%?info("[RT state_loop] Call: {~p, ~p, ~p} with state: ~p", [Module, Method, Args, State]),
+                {Response, NState} =
+                    try apply(Module, Method, Args ++ [State]) of
+                        {Response1, #dbsync_state{} = NState1} ->
+                            {Response1, NState1};
+                        OnlyResp -> {OnlyResp, State}
+                    catch
+                        Type:Error ->
+                            Stack = erlang:get_stacktrace(),
+                            ?dump_all([Type, Error, Stack]),
+                            {{error, {Type, Error, Stack}}, State}
+                    end,
+                From ! {self(), Response},
+                %%?info("[RT state_loop] Call: {~p, ~p, ~p} with new state: ~p", [Module, Method, Args, NState]),
+                NState
+        after 10000 ->
+            State
+        end,
+    ?MODULE:state_loop(NewState).
+
+sync_call(Fun) when is_function(Fun) ->
+    dbsync_state ! {self(), Fun},
+    sync_call_get_response();
+sync_call(Method) when is_atom(Method) ->
+    sync_call(Method, []).
+sync_call(Method, Args) ->
+    sync_call(rtransfer_sync, Method, Args).
+sync_call(Module, Method, Args) when is_atom(Module), is_atom(Method), is_list(Args) ->
+    dbsync_state ! {self(), Module, Method, Args},
+    sync_call_get_response().
+
+%% Interal sync_call use only !
+sync_call_get_response() ->
+    StPid = whereis(dbsync_state),
+    receive
+        {StPid, Response} -> Response
+    after 10000 ->
+        {error, sync_timeout}
+    end.
+
+last_space_seq_key(SpaceId, DbName) ->
+    last_space_seq_key(cluster_manager_lib:get_provider_id(), SpaceId, DbName).
+
+last_space_seq_key(ProviderId, SpaceId, DbName) ->
+    {last_space_seq, ProviderId, utils:ensure_binary(SpaceId), utils:ensure_binary(DbName)}.
+
+save_state() ->
+    State = ets:tab2list(?dbsync_state),
+    LocalProviderId = cluster_manager_lib:get_provider_id(),
+    Ignore1 = [Entry || {{uuid_to_spaceid, _}, _} = Entry <- State],
+
+    Ignore2 = [Entry || {{last_space_seq, LocalProviderId1, _, _}, _} = Entry <- State, LocalProviderId1 =:= LocalProviderId],
+    State1 = State -- Ignore1,
+    State2 = State1 -- Ignore2,
+
+    case dao_lib:apply(dao_records, save_record, [?SYSTEM_DB_NAME, #db_document{record = #dbsync_state{ets_list = State2}, force_update = true, uuid = "dbsync_state"}, []], 1) of
+        {ok, _} -> ok;
+        {error, Reason} ->
+            ?error("Cannot save dbsync state due to ~p", [Reason]),
+            {error, Reason}
+    end.
+
+
+load_state() ->
+    case dao_lib:apply(dao_records, get_record, [?SYSTEM_DB_NAME, "dbsync_state", []], 1) of
+        {ok, #db_document{record = #dbsync_state{ets_list = ETSList}}} ->
+            [ets:insert(?dbsync_state, Elem) || Elem <- ETSList],
+            ok;
+        {error, Reason} ->
+            ok
+    end.

@@ -140,14 +140,14 @@ websocket_handle({Type, Data}, Req, State) ->
 %%     ?debug("Got pull msg: ~p from ~p", [CLM, FuseID]),
 %%     handle(Req, CLM, State#handler_state{fuse_id = utils:ensure_list( fslogic_context:gen_global_fuse_id(ProviderId, FuseID) )});
 handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = _RTR,
-    #handler_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout} = State) ->
+    #handler_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, provider_id = ProviderId} = State) ->
     %% Check if received message requires FuseId
     MsgType = case Msg of
                   M0 when is_tuple(M0) -> erlang:element(1, M0); %% Record
                   M1 when is_atom(M1) -> atom                   %% Atom
               end,
 
-    Request = #worker_request{subject = DnString, request = Msg},
+    Request = #worker_request{peer_id = {provider_id, ProviderId}, subject = DnString, request = Msg},
 
     case Synch of
         true ->
