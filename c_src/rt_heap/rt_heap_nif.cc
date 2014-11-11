@@ -5,12 +5,12 @@
  * cited in 'LICENSE.txt'.
 *********************************************************************/
 
+#include "nifpp.h"
+#include "rt_heap.h"
+
 #include <functional>
 #include <string>
 #include <vector>
-
-#include "nifpp.h"
-#include "rt_heap.h"
 
 using namespace one::provider;
 
@@ -26,7 +26,7 @@ static ERL_NIF_TERM init_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
 {
     try
     {
-        long int block_size;
+        ErlNifUInt64 block_size;
         nifpp::get_throws(env, argv[0], block_size);
         auto heap = nifpp::construct_resource< rt_heap >(block_size);
         return nifpp::make(env, std::make_tuple(nifpp::str_atom("ok"),
@@ -43,7 +43,7 @@ static ERL_NIF_TERM push_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
         nifpp::resource_ptr< rt_heap > heap;
         nifpp::str_atom record_name;
         std::string file_id;
-        long int offset, size, priority;
+        ErlNifUInt64 offset, size, priority;
         auto record = std::make_tuple(std::ref(record_name),
                                       std::ref(file_id),
                                       std::ref(offset),

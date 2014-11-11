@@ -12,7 +12,7 @@ namespace provider {
 
 void rt_heap::push(const rt_block& block)
 {
-    long int i;
+    ErlNifUInt64 i;
     for(i = 0; i < block.size() / block_size_; ++i)
         push_block(rt_block(block.file_id(),
                             block.offset() + i * block_size_,
@@ -20,7 +20,7 @@ void rt_heap::push(const rt_block& block)
                             block.priority(),
                             block.counter()));
 
-    long int last_block_size = block.size() % block_size_;
+    ErlNifUInt64 last_block_size = block.size() % block_size_;
     if(last_block_size > 0)
         push_block(rt_block(block.file_id(),
                             block.offset() + i * block_size_,
@@ -72,7 +72,7 @@ void rt_heap::push_block(const rt_block& block)
     }
     else
     {
-        long int offset = block.offset();
+        ErlNifUInt64 offset = block.offset();
 
         if(it->second->offset() < offset)
         {

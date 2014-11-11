@@ -8,7 +8,8 @@
 #ifndef RT_BLOCK_H
 #define RT_BLOCK_H
 
-#include <iostream>
+#include "nifpp.h"
+
 #include <string>
 
 namespace one {
@@ -17,12 +18,24 @@ namespace provider {
 class rt_block
 {
 public:
+    /**
+     * rt_block constructor.
+     * Constructs empty RTransfer block.
+     */
     rt_block()
     : rt_block("", 0, 0, 0) {}
 
+    /**
+     * rt_block constructor.
+     * Constructs RTransfer block.
+     * @param file_id ID of file constructed block belongs to
+     * @param offset block offset
+     * @param size block size
+     * @param priority block priority
+     */
     rt_block(std::string file_id,
-             long int offset,
-             long int size,
+             ErlNifUInt64 offset,
+             ErlNifUInt64 size,
              int priority)
     : rt_block(file_id,
                offset,
@@ -30,9 +43,18 @@ public:
                priority,
                1) {}
 
+    /**
+     * rt_block constructor.
+     * Constructs RTransfer block.
+     * @param file_id ID of file constructed block belongs to
+     * @param offset block offset
+     * @param size block size
+     * @param priority block priority
+     * @param counter defines how many times block was pushed on the rt_heap
+     */
     rt_block(std::string file_id,
-             long int offset,
-             long int size,
+             ErlNifUInt64 offset,
+             ErlNifUInt64 size,
              int priority,
              int counter)
     : file_id_(std::move(file_id))
@@ -41,23 +63,43 @@ public:
     , priority_(priority)
     , counter_(counter) {}
 
+    /**
+     * rt_block destructor.
+     * Destructs RTransfer block.
+     */
     ~rt_block() {}
 
+    /// Getter for block's file ID
     const std::string& file_id() const { return file_id_; }
-    long int offset() const { return offset_; }
-    long int size() const { return size_; }
-    long int end() const { return offset_ + size_ - 1; }
+
+    /// Getter for block's offset
+    ErlNifUInt64 offset() const { return offset_; }
+
+    /// Getter for block's size
+    ErlNifUInt64 size() const { return size_; }
+
+    /// Getter for block's end
+    ErlNifUInt64 end() const { return offset_ + size_ - 1; }
+
+    /// Getter for block's priority
     int priority() const { return priority_; }
+
+    /// Getter for block's addition counter
     int counter() const { return counter_; }
 
+    /**
+     * Modifies this block by merging other block
+     * @param block to be merged
+     * @return merged block
+     */
     const rt_block& merge(const rt_block& block);
 
     bool operator<(const rt_block& block) const;
 
 private:
     std::string file_id_;
-    long int offset_;
-    long int size_;
+    ErlNifUInt64 offset_;
+    ErlNifUInt64 size_;
     int priority_;
     int counter_;
 };

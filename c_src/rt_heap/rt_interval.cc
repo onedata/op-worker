@@ -10,8 +10,8 @@
 namespace one {
 namespace provider {
 
-rt_interval::rt_interval(long int offset,
-                 long int size)
+rt_interval::rt_interval(ErlNifUInt64 offset,
+                 ErlNifUInt64 size)
     : begin_(offset)
     , end_(offset + size - 1)
 {

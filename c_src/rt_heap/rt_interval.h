@@ -8,7 +8,8 @@
 #ifndef RT_INTERVAL_H
 #define RT_INTERVAL_H
 
-#include <iostream>
+#include "nifpp.h"
+
 #include <stdexcept>
 
 namespace one {
@@ -17,19 +18,32 @@ namespace provider {
 class rt_interval
 {
 public:
-    rt_interval(long int offset,
-                long int size);
+    /**
+     * rt_interval constructor.
+     * Constructs RTransfer interval.
+     * @param offset interval offset
+     * @param size interval size
+     */
+    rt_interval(ErlNifUInt64 offset,
+                ErlNifUInt64 size);
 
+    /**
+     * rt_interval destructor.
+     * Destructs RTransfer interval.
+     */
     ~rt_interval() {}
 
-    long int begin() const { return begin_; }
-    long int end() const { return end_; }
+    /// Getter for interval beginning
+    ErlNifUInt64 begin() const { return begin_; }
+
+    /// Getter for interval ending
+    ErlNifUInt64 end() const { return end_; }
 
     bool operator<(const rt_interval& interval) const;
 
 private:
-    long int begin_;
-    long int end_;
+    ErlNifUInt64 begin_;
+    ErlNifUInt64 end_;
 };
 
 } // namespace provider
