@@ -17,10 +17,6 @@
 % n2o API
 -export([main/0, event/1]).
 
-% URLs for client packages download
--define(CLIENT_RPM_URL, <<"http://packages.onedata.org/oneclient-linux.x86_64.rpm">>).
--define(CLIENT_DEB_URL, <<"http://packages.onedata.org/oneclient-linux.x86_64.deb">>).
-
 %% Template points to the template file, which will be filled with content
 main() ->
     case opn_gui_utils:maybe_redirect(true, false) of
@@ -58,13 +54,17 @@ main_panel() ->
         #p{style = <<"font-size: 20px; margin-top: 30px;">>, body = <<"Download and install the <i>RPM</i> package">>},
 
         #pre{body = #code{class = <<"bash">>, body = [
-            <<"curl -O ", (?CLIENT_RPM_URL)/binary, "<br>sudo yum install oneclient-linux.x86_64.rpm">>
+            <<"rpm --import http://packages.onedata.org/GPG-KEY-onedata <br>"
+            "sudo wget -qO /etc/yum.repos.d/onedata.repo http://packages.onedata.org/onedata.repo <br>"
+            "yum install oneprovider">>
         ]}},
 
         #p{style = <<"font-size: 20px; margin-top: 30px;">>, body = <<"Download and install the <i>DEB</i> package">>},
 
         #pre{body = #code{class = <<"bash">>, body = [
-            <<"curl -O ", (?CLIENT_DEB_URL)/binary, "<br>sudo dpkg -i oneclient-linux.x86_64.deb<br>sudo apt-get -f install">>
+            <<"wget -qO - http://packages.onedata.org/GPG-KEY-onedata | sudo apt-key add - <br>"
+            "echo 'deb http://packages.onedata.org/debian/ testing main' >> /etc/apt/sources.list <br>"
+            "sudo apt-get update && sudo apt-get install oneprovider">>
         ]}},
 
         #p{style = <<"font-size: 20px; margin-top: 30px;">>, body = <<"Run <strong>oneclient</strong> using a <i>certificate</i>">>},

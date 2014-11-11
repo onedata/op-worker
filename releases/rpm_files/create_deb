@@ -13,7 +13,19 @@
 
 # DEB package version
 GIT_VERSION=`git describe --tags --always | tr - .`
-VERSION=${GIT_VERSION:1} #strip the leading 'v'
+GIT_VERSION_NUMBER=${GIT_VERSION:1} #strip the leading 'v'
+IFS='.' read -ra tmp <<< $GIT_VERSION_NUMBER
+v=(`echo ${tmp[*]}`)
+VERSION=${v[0]}
+if [ -n "${v[1]}" ]; then
+  VERSION=$VERSION.${v[1]}
+fi
+if [ -n "${v[2]}" ]; then
+  VERSION=$VERSION.${v[2]}
+fi
+if [ -n "${v[3]}" ]; then
+  VERSION=$VERSION.${v[3]}
+fi
 
 # Path, where deb building will take place
 DEB_BUILD_DIRECTORY=/tmp/oneprovider_debbuild
@@ -93,7 +105,7 @@ ${RUNNER_SCRIPT_DIR}/sources/install_rpm $DEB_ROOT /opt/oneprovider
 
 # Run dpkg-deb build
 cd $DEB_BUILD_DIRECTORY
-dpkg-deb --build $PKG_ID
+dpkg-deb -Z gzip --build $PKG_ID
 
 # Copy result
 cp $DEB_BUILD_DIRECTORY/oneprovider_*.deb $RUNNER_SCRIPT_DIR/../
