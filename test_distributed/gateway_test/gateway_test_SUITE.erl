@@ -1,13 +1,11 @@
 %% ===================================================================
 %% @author Konrad Zemek
-%% @copyright (C): 2013 ACK CYFRONET AGH
+%% @copyright (C): 2014 ACK CYFRONET AGH
 %% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc This test is an example that shows how distributed test
-%% should look like.
-%% @end
+%% @doc Tests for gateway oneprovider_module.
 %% ===================================================================
 
 -module(gateway_test_SUITE).

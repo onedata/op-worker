@@ -146,6 +146,7 @@ handle_info({Ok, Socket, Data}, State) when Ok =:= State#gwproto_state.ok ->
 
     #fetchrequest{file_id = FileId, offset = Offset, size = Size} = gwproto_pb:decode_fetchrequest(Data),
 
+    %% @todo Consider using logical_files_manager (current problem: LFM triggers events)
     #file_location{storage_uuid = StorageUUID, storage_file_id = StorageFileId} = fslogic_file:get_file_local_location(FileId),
     {ok, StorageDoc} = fslogic_objects:get_storage({uuid, StorageUUID}),
     #db_document{record = #storage_info{default_storage_helper = StorageHelper}} = StorageDoc,

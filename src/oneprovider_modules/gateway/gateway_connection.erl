@@ -254,6 +254,7 @@ complete_request(TID, #fetchreply{content = Content, request_hash = RequestHash}
             case Content of
                 undefined -> notify(fetch_complete, 0, Action);
                 _ ->
+                    %% @todo Consider using logical_files_manager (current problem: LFM triggers events)
                     #fetchrequest{file_id = FileId, offset = Offset, size = RequestedSize} = Request,
                     Size = erlang:min(byte_size(Content), RequestedSize),
                     Data = binary_part(Content, 0, Size),
