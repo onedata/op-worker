@@ -28,8 +28,8 @@ class server;
  * tls2tcp_session object represents single proxy connection between client and
  * provider
  */
-class tls2tcp_session : public session<tls2tcp_session, ssl_socket, tcp_socket>,
-                        public std::enable_shared_from_this<tls2tcp_session> {
+class tls2tcp_session
+    : public session<tls2tcp_session, ssl_socket, tcp_socket> {
 public:
     /**
      * @copydoc session::session

@@ -52,8 +52,16 @@ void command_response(std::vector<std::string> tokens)
     std::cout << std::endl;
 }
 
+/**
+ * The mode in which the proxy works.
+ * @c normal is a standard proxy mode, @c reverse is a reverse proxy mode.
+ */
 enum class proxy_type { reverse, normal };
 
+/**
+ * Prints a usage message.
+ * @param app_name Name of the application as present in @c argv[0]
+ */
 void invalid_argument(const std::string &app_name)
 {
     LOG(ERROR) << "Invalid argument. Usage:\n\t" << app_name

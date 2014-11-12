@@ -32,10 +32,16 @@ using tcp_socket = boost::asio::ip::tcp::socket;
 using ssl_socket = boost::asio::ssl::stream<tcp_socket>;
 
 /**
- * The session class is a base class for classes representing a single session.
+ * The @c session class is a base class for classes representing a single
+ * session.
+ * Methods of @c session read data from the client socket and pass it to the
+ * proxy socket.
+ * @c derived is the class inheriting from the @c session.
+ * @c client_socket_t is the type of the client socket.
+ * @c proxy_socket_t is the type of the proxy socket.
  */
 template <class derived, class client_socket_t, class proxy_socket_t>
-class session {
+class session : public std::enable_shared_from_this<derived> {
 public:
     /**
      * @returns client-side socket.
@@ -137,12 +143,13 @@ protected:
     std::array<char, buffer_size> client_data_;
     std::array<char, buffer_size> proxy_data_;
 
-    mutable std::mutex socket_mutex_;
-
     std::weak_ptr<server> server_;
     std::string session_id_;
     std::vector<std::string> cert_chain_;
     X509 *peer_cert_ = nullptr;
+
+private:
+    mutable std::mutex socket_mutex_;
 };
 
 template <>

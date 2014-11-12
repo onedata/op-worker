@@ -106,6 +106,7 @@ protected:
     boost::asio::io_service &proxy_io_service_;
     const int verify_type_;
 
+private:
     const uint16_t listen_port_;
 
     const std::vector<std::string> ca_crl_dirs_;
