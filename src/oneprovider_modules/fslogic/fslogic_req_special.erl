@@ -48,11 +48,14 @@ create_dir(FullFileName, Mode) ->
     FileInit = #file{type = ?DIR_TYPE, name = NewFileName, uid = UserId, parent = ParentDoc#db_document.uuid, perms = Mode},
     %% Async *times update
     CTime = utils:time(),
-    File = fslogic_meta:update_meta_attr(FileInit, times, {CTime, CTime, CTime}),
+    File = fslogic_meta:update_meta_attr(FileInit, times, {0, 0, 0}),
 
     {Status, TmpAns} = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, File], fslogic_context:get_protocol_version()),
     case {Status, TmpAns} of
         {ok, _} ->
+            %% @todo: ???
+            fslogic_meta:update_meta_attr(File, times, {CTime, CTime, CTime}),
+
             fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullFileName), CTime),
             #atom{value = ?VOK};
         {error, file_exists} ->
@@ -142,10 +145,13 @@ create_link(FullFileName, LinkValue) ->
 
     LinkDocInit = #file{type = ?LNK_TYPE, name = NewFileName, uid = UserId, ref_file = LinkValue, parent = ParentDoc#db_document.uuid},
     CTime = utils:time(),
-    LinkDoc = fslogic_meta:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
+    LinkDoc = fslogic_meta:update_meta_attr(LinkDocInit, times, {0, 0, 0}),
 
     case dao_lib:apply(dao_vfs, save_new_file, [FullFileName, LinkDoc], fslogic_context:get_protocol_version()) of
         {ok, _} ->
+            %% @todo: ???
+            fslogic_meta:update_meta_attr(LinkDoc, times, {CTime, CTime, CTime}),
+
             fslogic_meta:update_parent_ctime(UserFilePath, CTime),
             #atom{value = ?VOK};
         {error, file_exists} ->

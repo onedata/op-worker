@@ -111,8 +111,7 @@ handle2(_ProtocolVersion, {changes_stream, StreamId, eof}) ->
 
 handle2(_ProtocolVersion, {changes_stream, StreamId, Data, SinceSeqInfo}) ->
     try
-        ?info("Changes ========================> ~p", [Data]),
-        {Decoded} = dbsync_utils:json_decode(Data),
+        ?debug("Changes ========================> ~p", [Data]),
         {ChangedDocs, {_SeqNum, _SeqHash}} = dbsync_utils:changes_json_to_docs(Data),
         ChangedDocs1 = [ChangedDoc || {#db_document{}, _} = ChangedDoc <- ChangedDocs],
 
@@ -213,9 +212,6 @@ handle2(_ProtocolVersion, _Msg) ->
     unknown_request.
 
 
-
-
-
 get_current_seq(ProviderId, SpaceId, DbName) ->
     case dbsync_state:get(last_space_seq_key(ProviderId, SpaceId, DbName)) of
         undefined ->
@@ -235,7 +231,7 @@ replicate_doc(SpaceId, #db_document{uuid = DocUUID} = Doc) ->
     case dao_lib:apply(dao_records, save_record, [DocDbName, Doc, [replicated_changes]], 1) of
         {ok, _} ->
             [catch Callback(DocDbName, SpaceId, DocUUID, Doc) || {_, Callback} <- Hooks],
-            ?info("UPDATED ~p !", [DocUUID]),
+            ?debug("UPDATED ~p !", [DocUUID]),
             ok;
         {error, Reason2} ->
             ?error("Cannot replicate changes due to: ~p", [Reason2]),
