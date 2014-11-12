@@ -828,13 +828,11 @@ get_remote_location(Uuid) ->
 -spec remote_locations_by_file_id(FileId :: uuid()) -> {ok, [remote_location_doc()]} | {error, any()}.
 %% ====================================================================
 remote_locations_by_file_id(FileId) ->
-    ct:print("1"),
     dao_external:set_db(?REMOTE_LOCATIONS_DB_NAME),
     QueryArgs =
         #view_query_args{keys = [dao_helper:name(FileId)], include_docs = true},
 
     Rows = fetch_rows(?REMOTE_LOCATIONS_BY_FILE_ID, QueryArgs),
-    ct:print("ROWS: ~p",[Rows]),
     RemoteLocationDocs = [Row#view_row.doc || Row <- Rows, is_list(Row#view_row.id)],
     {ok, RemoteLocationDocs}.
 
