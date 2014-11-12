@@ -44,7 +44,7 @@ send_request_test(Config) ->
   ssl:start(),
 
   Self = self(),
-  start_link(fun() ->
+  spawn_link(fun() ->
     {ok, ListenSocket} = ssl:listen(9999, [{certfile, ?CERT}, {reuseaddr, true},
                                            {mode, binary}, {active, false}, {packet, 4}]),
     {ok, Socket} = ssl:transport_accept(ListenSocket),
