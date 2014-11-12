@@ -357,7 +357,7 @@ workers_list_singleton_and_permanent_test(Config) ->
 
   gen_server:call({global, ?CCM}, {lifecycle_notification, Worker1, gateway, stop_worker}),
 
-  gen_server:call({?Dispatcher_Name, Worker1}, {gateway, 1, self(),  node_lifecycle_get_notification}),
+  gen_server:call({?Dispatcher_Name, Worker2}, {gateway, 1, self(),  node_lifecycle_get_notification}),
 
   Ans1 = receive
            {ok, {node_lifecycle, X}} -> X
