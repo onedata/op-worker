@@ -447,7 +447,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
             %TODO let rtransfer fetch this data in order to synchronize file
         end, OutOfSyncList),
     SyncedParts = OutOfSyncList, % assume that all parts has been synchronized
-    NewDoc = fslogic_remote_location:mark_as_available(SyncedParts, MyRemoteLocationDoc, ProviderId),
+    NewDoc = fslogic_remote_location:mark_as_available(SyncedParts, MyRemoteLocationDoc),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
         false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [NewDoc], fslogic_context:get_protocol_version())
@@ -466,7 +466,7 @@ file_block_modified(FullFileName, Offset, Size) ->
     {ok, RemoteLocationDocs} = fslogic_objects:get_remote_location(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
     MyRemoteLocationDoc = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
-    NewDoc = fslogic_remote_location:mark_as_modified(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, ProviderId),
+    NewDoc = fslogic_remote_location:mark_as_modified(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
         false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [NewDoc], fslogic_context:get_protocol_version())
@@ -485,7 +485,7 @@ file_truncated(FullFileName, Size) ->
     {ok, RemoteLocationDocs} = fslogic_objects:get_remote_location(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
     MyRemoteLocationDoc = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
-    NewDoc = fslogic_remote_location:truncate({bytes, Size}, MyRemoteLocationDoc, ProviderId),
+    NewDoc = fslogic_remote_location:truncate({bytes, Size}, MyRemoteLocationDoc),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
         false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [NewDoc], fslogic_context:get_protocol_version())
