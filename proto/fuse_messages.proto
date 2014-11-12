@@ -371,6 +371,5 @@ message EventMessage {
     repeated int64 numeric_properties_values = 2;
     repeated string string_properties_keys = 3; // stringPropertiesKeys length is expected to be equal stringPropertiesValues length
     repeated string string_properties_values = 4;
-    repeated string block_properties_keys = 5; // blockPropertiesKeys length is expected to be equal blockPropertiesValues length
-    repeated BlockProperty block_properties_values = 6;
+    repeated BlockProperty block_list = 5;
 }
