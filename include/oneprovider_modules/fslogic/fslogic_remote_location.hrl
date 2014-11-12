@@ -25,7 +25,3 @@
 
 % Range of file value given in remote_blocks ('from' and 'to' are inslusive)
 -record(block_range, {from = 0, to = 0}).
-
-% The remote file part contains block range, and provider ids that have this this range of file on their storages.
--record(remote_file_part, {range = #block_range{}, providers=[]}).
-

@@ -442,11 +442,11 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     OtherRemoteLocationDocs = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id =/= ProviderId end, RemoteLocationDocs),
     OutOfSyncList = fslogic_remote_location:check_if_synchronized(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, OtherRemoteLocationDocs),
     lists:foreach(
-        fun(#remote_file_part{range = BlockRange, providers = Providers}) ->
-            ?info("Synchronizing ~p of file ~p with any provider from list ~p", [BlockRange, FullFileName, Providers])
+        fun(Range) ->
+            ?info("Synchronizing blocks: ~p of file ~p", [Range, FullFileName])
             %TODO let rtransfer fetch this data in order to synchronize file
         end, OutOfSyncList),
-    SyncedParts = [ BlockRange || #remote_file_part{range = BlockRange} <- OutOfSyncList],
+    SyncedParts = OutOfSyncList, % assume that all parts has been synchronized
     NewDoc = fslogic_remote_location:mark_as_available(SyncedParts, MyRemoteLocationDoc, ProviderId),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;

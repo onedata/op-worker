@@ -15,236 +15,95 @@
 -module(fslogic_remote_location).
 
 -include("oneprovider_modules/fslogic/fslogic_remote_location.hrl").
+-include("oneprovider_modules/fslogic/ranges_struct.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao_types.hrl").
+
 
 % API
--export([mark_as_modified/3, mark_as_available/3, check_if_synchronized/3, truncate/3]).
+-export([mark_as_modified/2, mark_as_available/2, check_if_synchronized/3, truncate/2]).
 
 % Test API
 -ifdef(TEST).
--export([byte_to_block_range/1, minimize_remote_parts_list/1]).
+-export([byte_to_block_range/1]).
 -endif.
+
+%% mark_as_modified/2
+%% ====================================================================
+%% @doc @equiv mark_as_modified(Range, Mydoc, get_timestamp())
+%% @end
+-spec mark_as_modified(Range :: #byte_range{} | #offset_range{} | #block_range{}, remote_location_doc()) -> remote_location_doc().
+%% ====================================================================
+mark_as_modified(Range, #db_document{} = Mydoc) ->
+    mark_as_modified(Range, Mydoc, get_timestamp()).
 
 %% mark_as_modified/3
 %% ====================================================================
-%% @doc Marks given block/byte range as modified by provider(ProviderId).
-%% It extends remote_file_part list if necessary, and return's this list in its minimal
-%% representation.
-%% e. g. provider1 and provider2 have whole 100 block file in sync
-%%       so there is one remote part: [#remote_file_part{#block_range{from=0,to=99}, providers=[pr1_id, pr2_id}], in short [{0,99,[pr1,pr2]}]
-%%       the provider 1 makes changes in block 5-10 and marks them as modified, new remote parts are:
-%%       [{0,4,[pr1,pr2]}, {5,10,[pr1]}, {11,99,[pr1,pr2]}]
+%% @doc Marks given block/byte range as modified.
+%% It extends remote_file_part list if necessary, and returns updated doc
 %% @end
--spec mark_as_modified(Range :: #byte_range{} | #offset_range{} | #block_range{}, RemoteParts :: [#remote_file_part{}], ProviderId :: binary()) -> [#remote_file_part{}].
+-spec mark_as_modified(Range :: #byte_range{} | #offset_range{} | #block_range{}, remote_location_doc(), Timestamp :: non_neg_integer()) -> remote_location_doc().
 %% ====================================================================
-mark_as_modified(#byte_range{} = ByteRange, #db_document{} = _Mydoc, ProviderId) ->
-    %TODO
-    _Mydoc;
+mark_as_modified(#byte_range{} = ByteRange, #db_document{} = Mydoc, Timestamp) ->
+    mark_as_modified(byte_to_block_range(ByteRange), Mydoc, Timestamp);
+mark_as_modified(#offset_range{} = OffsetRange, #db_document{} = Mydoc, Timestamp) ->
+    mark_as_modified(offset_to_block_range(OffsetRange), Mydoc, Timestamp);
+mark_as_modified(#block_range{from = From, to = To}, #db_document{record = #remote_location{file_parts = Parts} = RemoteLocation} = MyDoc, Timestamp) ->
+    NewRemoteParts = ranges_struct:minimize(ranges_struct:merge(Parts, #range{from = From, to = To, timestamp = Timestamp})),
+    MyDoc#db_document{record = RemoteLocation#remote_location{file_parts = NewRemoteParts}}.
 
-mark_as_modified(#byte_range{} = ByteRange, RemoteParts, ProviderId) ->
-    mark_as_modified(byte_to_block_range(ByteRange), RemoteParts, ProviderId);
-mark_as_modified(#offset_range{} = OffsetRange, RemoteParts, ProviderId) ->
-    mark_as_modified(offset_to_block_range(OffsetRange), RemoteParts, ProviderId);
-mark_as_modified(#block_range{to = To} = BlockRange, RemoteParts, ProviderId) ->
-    NewRemoteParts =
-        case RemoteParts of
-            [] -> [#remote_file_part{range = #block_range{from = 0, to = To}, providers = [ProviderId]}];
-            _ -> mark_as_modified_recursive(BlockRange, RemoteParts, ProviderId)
-        end,
-    minimize_remote_parts_list(NewRemoteParts).
+%% truncate/2
+%% ====================================================================
+%% @doc @equiv truncate(Size, MyDoc, get_timestamp())
+%% @end
+-spec truncate(Range :: {bytes, integer()} | integer(), MyDoc :: remote_location_doc()) -> remote_location_doc().
+%% ====================================================================
+truncate(Size, #db_document{} =  MyDoc) ->
+    truncate(Size, MyDoc, get_timestamp()).
 
 %% truncate/3
 %% ====================================================================
 %% @doc Truncates given list of ranges to given size
-%% It extends remote_file_part list if necessary, marking new blocks as modified by "ProviderId".
+%% It extends remote_file_part list if necessary and returns updated document.
 %% @end
--spec truncate(Range :: {bytes, integer()} | integer(), RemoteParts :: [#remote_file_part{}], ProviderId :: binary()) -> [#remote_file_part{}].
+-spec truncate(Range :: {bytes, integer()} | integer(), MyDoc :: remote_location_doc(), Timestamp :: non_neg_integer()) -> remote_location_doc().
 %% ====================================================================
-truncate({bytes, ByteSize}, #db_document{} =  MyDoc, ProviderId) ->
-    %TODO
-    MyDoc;
-
-truncate({bytes, ByteSize}, RemoteParts, ProviderId) ->
-    truncate(byte_to_block(ByteSize), RemoteParts, ProviderId);
-truncate(BlockSize, RemoteParts, ProviderId) ->
-    ReversedRemoteParts = lists:reverse(RemoteParts),
-    TruncatedReversedRemoteParts = lists:dropwhile(
-        fun(#remote_file_part{range = #block_range{from = From}}) ->
-            From >= BlockSize
-        end, ReversedRemoteParts),
-    case TruncatedReversedRemoteParts == [] of
-        true -> mark_as_modified(#block_range{from = 0, to = BlockSize-1}, [], ProviderId);
-        _ ->
-            [Last | Rest] = TruncatedReversedRemoteParts,
-            LastTo = Last#remote_file_part.range#block_range.to,
-            LastFrom = Last#remote_file_part.range#block_range.from,
-            case LastTo >= BlockSize orelse Last#remote_file_part.providers == [ProviderId] of
-                true -> lists:reverse([Last#remote_file_part{range = #block_range{from = LastFrom, to = BlockSize - 1}} | Rest]);
-                false -> lists:reverse([#remote_file_part{range = #block_range{from = LastTo + 1,to = BlockSize-1}, providers = [ProviderId]}, Last | Rest])
-            end
-    end.
+truncate({bytes, ByteSize}, #db_document{} =  MyDoc, Timestamp) ->
+    truncate(byte_to_block(ByteSize), MyDoc, Timestamp);
+truncate(BlockSize, #db_document{record = #remote_location{file_parts = Parts} = RemoteLocation} = MyDoc, Timestamp) ->
+    NewRemoteParts = ranges_struct:minimize(ranges_struct:truncate(Parts, #range{to = BlockSize-1, timestamp = Timestamp})),
+    MyDoc#db_document{record = RemoteLocation#remote_location{file_parts = NewRemoteParts}}.
 
 %% mark_as_available/3
 %% ====================================================================
 %% @doc Marks given block range as available for provider(ProviderId).
-%% It extends remote_file_part list if necessary, and return's this list in its minimal
-%% representation.
-%% e. g. the remote parts of 11-block file are: (see mark_as_modified/3 doc)
-%%       RemoteParts = [{0,4,[pr1,pr2]}, {5,10,[pr1]}]
-%%       Provider3 downloads blocks 0-4 from provider2, and 8-10 from provider 1
-%%       He calls this function with args   ([0-4,8-10], RemoteParts, pr3) to indicate that he has newest wersion of this blocks.
-%%       Retured RemoteParts are:
-%%       [{0,4,[pr3,pr1,pr2]}, {5,7,[pr1]}, {8,10,[pr3, pr1]}]
+%% It extends file_parts list if necessary, and returns updated document.
 %% @end
--spec mark_as_available(Blocks :: [#block_range{}], RemoteParts :: [#remote_file_part{}], ProviderId :: binary()) -> [#remote_file_part{}].
+-spec mark_as_available(Blocks :: [#range{}], MyDoc :: remote_location_doc()) -> remote_location_doc().
 %% ====================================================================
-mark_as_available(_Blocks, #db_document{} = _MyDoc, _ProviderId) ->
-    %TODO,
-    _MyDoc;
-mark_as_available(Blocks, RemoteParts, ProviderId) ->
-    NewRemoteParts = mark_as_available_recursive(Blocks, RemoteParts, ProviderId),
-    minimize_remote_parts_list(NewRemoteParts).
+mark_as_available(Blocks, #db_document{record = #remote_location{file_parts = Parts} = RemoteLocation} = MyDoc) ->
+    NewRemoteParts = ranges_struct:minimize(ranges_struct:merge(Parts, Blocks)),
+    MyDoc#db_document{record = RemoteLocation#remote_location{file_parts = NewRemoteParts}}.
 
 %% check_if_synchronized/3
 %% ====================================================================
 %% @doc Checks if given range of bytes/blocks is in sync with other providers.
 %% If so, the empty list is returned. If not, function returns list of unsynchronized parts.
 %% Each remote_file_part contains information about providers that have it up-to-date.
-%% e. g. the remote parts are: (see mark_as_modified/3 doc)
-%%       [{0,4,[pr1,pr2]}, {5,10,[pr1]}, {11,99,[pr1,pr2]}]
-%%       provider2 check blocks 3-7, function returns parts that needs to be synchronized with pr1:
-%%       [{5,7,[pr1]}]
 %% @end
--spec check_if_synchronized(Range :: #byte_range{} | #offset_range{} | #block_range{}, RemoteParts :: [#remote_file_part{}], ProviderId :: binary()) -> [#remote_file_part{}].
+-spec check_if_synchronized(Range :: #byte_range{} | #offset_range{} | #block_range{}, MyDoc :: remote_location_doc(), OtherDocs :: [remote_location_doc()]) -> [remote_location_doc()].
 %% ====================================================================
-check_if_synchronized(_Range, #db_document{} = _MyDoc, _OtherDocs) ->
-    %TODO!
-    [];
-
-check_if_synchronized(#byte_range{} = ByteRange, RemoteParts, ProviderId) ->
-    check_if_synchronized(byte_to_block_range(ByteRange), RemoteParts, ProviderId);
-check_if_synchronized(#offset_range{} = OffsetRange, RemoteParts, ProviderId) ->
-    check_if_synchronized(offset_to_block_range(OffsetRange), RemoteParts, ProviderId);
-check_if_synchronized(_, [] , _) ->
-    [];
-check_if_synchronized(#block_range{from = GivenFrom, to = GivenTo}, _ , _) when GivenFrom > GivenTo ->
-    [];
-check_if_synchronized(#block_range{from = GivenFrom, to = GivenTo}, [#remote_file_part{range = #block_range{from = From, to = To}, providers = Providers} | _], ProviderId)
-        when GivenFrom >= From andalso GivenTo =< To ->
-    case lists:member(ProviderId, Providers) of
-        true -> [];
-        false -> [#remote_file_part{range = #block_range{from = GivenFrom, to = GivenTo}, providers = Providers}]
-    end;
-check_if_synchronized(#block_range{from = GivenFrom} = Range, [#remote_file_part{range = #block_range{from = From, to = To}, providers = Providers} | Rest], ProviderId)
-        when GivenFrom >= From andalso GivenFrom =< To ->
-    case lists:member(ProviderId, Providers) of
-        true -> check_if_synchronized(Range#block_range{from = To + 1}, Rest, ProviderId);
-        false -> [#remote_file_part{range = #block_range{from = GivenFrom, to = To}, providers = Providers} | check_if_synchronized(Range#block_range{from = To + 1}, Rest, ProviderId)]
-    end;
-check_if_synchronized(#block_range{from = GivenFrom} = Range, [#remote_file_part{range = #block_range{to = To}} | Rest], ProviderId)
-        when GivenFrom > To ->
-    check_if_synchronized(Range, Rest, ProviderId).
+check_if_synchronized(#byte_range{} = ByteRange, MyDoc, OtherDocs) ->
+    check_if_synchronized(byte_to_block_range(ByteRange), MyDoc, OtherDocs);
+check_if_synchronized(#offset_range{} = OffsetRange, MyDoc, OtherDocs) ->
+    check_if_synchronized(offset_to_block_range(OffsetRange), MyDoc, OtherDocs);
+check_if_synchronized(#block_range{from = From, to = To}, #db_document{record = #remote_location{file_parts = Parts}}, _OtherDocs) ->
+    _PartsOutOfSync = ranges_struct:minimize(ranges_struct:subtract_newer(#range{from = From, to = To}, Parts)).
+    %todo find parts in other providers
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-
-%% mark_as_modified_recursive/3
-%% ====================================================================
-%% @doc The internal, recursive version of mark_as_modified/3
-%% @end
--spec mark_as_modified_recursive(Range :: #block_range{}, RemoteParts :: [#remote_file_part{}], ProviderId :: binary()) -> [#remote_file_part{}].
-%% ====================================================================
-mark_as_modified_recursive(_, [], _)->
-    [];
-mark_as_modified_recursive(#block_range{from = GivenFrom, to = GivenTo}, RemoteParts, _)
-        when GivenFrom > GivenTo ->
-    RemoteParts;
-mark_as_modified_recursive(#block_range{from = GivenFrom} = Range, [#remote_file_part{range = #block_range{from = From, to = To}, providers = Providers} = First | Rest], ProviderId)
-        when Providers == [ProviderId] andalso GivenFrom >= From andalso GivenFrom =< To ->
-    [First | mark_as_modified_recursive(Range#block_range{from = To + 1}, Rest, ProviderId)];
-mark_as_modified_recursive(#block_range{from = GivenFrom, to = GivenTo}, [#remote_file_part{range = #block_range{from = From, to = To}, providers = Providers} | Rest], ProviderId)
-        when GivenFrom >= From andalso GivenTo =< To ->
-    FirstRange =
-        case GivenFrom == From of
-            true -> [];
-            false -> [#remote_file_part{range = #block_range{from = From, to = GivenFrom-1}, providers = Providers}]
-        end,
-    SecondRange =[#remote_file_part{range = #block_range{from = GivenFrom, to = GivenTo}, providers = [ProviderId]}],
-    ThirdRange =
-        case GivenTo == To of
-            true -> [];
-            false -> [#remote_file_part{range = #block_range{from = GivenTo+1, to = To}, providers = Providers}]
-        end,
-    FirstRange ++ SecondRange ++ ThirdRange ++ Rest;
-mark_as_modified_recursive(#block_range{from = GivenFrom, to = GivenTo} = Range, [#remote_file_part{range = #block_range{from = From, to = To}, providers = Providers} | Rest], ProviderId)
-        when GivenFrom >= From andalso GivenFrom =< To ->
-    FirstRange =
-        case GivenFrom == From of
-            true -> [];
-            false -> [#remote_file_part{range = #block_range{from = From, to = GivenFrom-1}, providers = Providers}]
-        end,
-    SecondRange = [#remote_file_part{range = #block_range{from = GivenFrom, to = To}, providers = [ProviderId]}],
-    case Rest of
-        [] -> FirstRange ++ SecondRange ++ [#remote_file_part{range = #block_range{from = To + 1, to = GivenTo}, providers = [ProviderId]}];
-        _ -> FirstRange ++ SecondRange ++ mark_as_modified_recursive(Range#block_range{from = To + 1}, Rest, ProviderId)
-    end;
-mark_as_modified_recursive(#block_range{from = GivenFrom, to = GivenTo} = Range, [#remote_file_part{range = #block_range{to = To}} = First | Rest], ProviderId)
-        when GivenFrom > To ->
-    case Rest of
-        [] -> [First, #remote_file_part{range = #block_range{from = To + 1, to = GivenTo}, providers = [ProviderId]}];
-        _ -> [First | mark_as_modified_recursive(Range, Rest, ProviderId)]
-    end.
-
-%% mark_as_available_recursive/3
-%% ====================================================================
-%% @doc The internal, recursive version of mark_as_available/3
-%% @end
--spec mark_as_available_recursive(Range :: [#block_range{}], RemoteParts :: [#remote_file_part{}], ProviderId :: binary()) -> [#remote_file_part{}].
-%% ====================================================================
-mark_as_available_recursive(_, [], _)->
-    [];
-mark_as_available_recursive([], RemoteParts, _)->
-    RemoteParts;
-mark_as_available_recursive([#block_range{from = GivenFrom, to = GivenTo} | RestRange], RemoteParts, ProviderId) when GivenFrom > GivenTo ->
-    mark_as_available_recursive(RestRange, RemoteParts, ProviderId);
-mark_as_available_recursive([#block_range{from = GivenFrom, to = GivenTo} | RestRange], [#remote_file_part{range = #block_range{from = From, to = To}, providers = Providers} | Rest] = RemoteParts, ProviderId)
-    when GivenFrom >= From andalso GivenTo =< To ->
-    case lists:member(ProviderId, Providers) of
-        true ->
-            mark_as_available_recursive(RestRange, RemoteParts, ProviderId);
-        false ->
-            FirstRange =
-                case GivenFrom == From of
-                    true -> [];
-                    false -> [#remote_file_part{range = #block_range{from = From, to = GivenFrom-1}, providers = Providers}]
-                end,
-            SecondRange =
-                [#remote_file_part{range = #block_range{from = GivenFrom, to = GivenTo}, providers = [ProviderId | Providers]}],
-            ThirdRange =
-                case GivenTo == To of
-                    true -> [];
-                    false -> [#remote_file_part{range = #block_range{from = GivenTo+1, to = To}, providers = Providers}]
-                end,
-            FirstRange ++ SecondRange ++ mark_as_available_recursive(RestRange, ThirdRange ++ Rest, ProviderId)
-    end;
-mark_as_available_recursive([#block_range{from = GivenFrom} = Range | RestRange], [#remote_file_part{range = #block_range{from = From, to = To}, providers = Providers} = First | Rest], ProviderId)
-    when GivenFrom >= From andalso GivenFrom =< To ->
-    case lists:member(ProviderId, Providers) of
-        true ->
-            [First | mark_as_available_recursive([Range#block_range{from = To + 1} | RestRange], Rest, ProviderId)];
-        false ->
-            FirstRange =
-                case GivenFrom == From of
-                    true -> [];
-                    false -> [#remote_file_part{range = #block_range{from = From, to = GivenFrom-1}, providers = Providers}]
-                end,
-            SecondRange = [#remote_file_part{range = #block_range{from = GivenFrom, to = To}, providers = [ProviderId | Providers]}],
-            FirstRange ++ SecondRange ++ mark_as_available_recursive([Range#block_range{from = To + 1} | RestRange], Rest, ProviderId)
-    end;
-mark_as_available_recursive([#block_range{from = GivenFrom}  | _] = Ranges, [#remote_file_part{range = #block_range{to = To}} = First | Rest], ProviderId)
-    when GivenFrom > To ->
-    [First | mark_as_available_recursive(Ranges, Rest, ProviderId)].
 
 %% byte_to_block_range/1
 %% ====================================================================
@@ -273,21 +132,12 @@ offset_to_block_range(#offset_range{offset = Offset, size = Size}) ->
 byte_to_block(Byte) ->
     utils:ceil(Byte / ?remote_block_size).
 
-%% minimize_remote_parts_list/3
+%% get_timestamp/0
 %% ====================================================================
-%% @doc The internal, recursive version of mark_as_modified/3
+%% @doc gets a timestamp in ms from the epoch
 %% @end
--spec minimize_remote_parts_list(RemoteParts :: [#remote_file_part{}]) -> [#remote_file_part{}].
+-spec get_timestamp() -> non_neg_integer().
 %% ====================================================================
-minimize_remote_parts_list([]) ->
-    [];
-minimize_remote_parts_list([El1]) ->
-    [El1];
-minimize_remote_parts_list([
-        #remote_file_part{range = #block_range{from = From1, to = To1}, providers = Providers1} = El1,
-        #remote_file_part{range = #block_range{from = From2, to = To2}, providers = Providers2} = El2
-        | Rest]) ->
-    case To1 + 1 == From2 andalso Providers1 == Providers2 of
-        true -> minimize_remote_parts_list([#remote_file_part{range = #block_range{from = From1, to = To2}, providers = Providers1} | Rest]);
-        false -> [El1 | minimize_remote_parts_list([El2 | minimize_remote_parts_list(Rest)])]
-    end.
+get_timestamp() ->
+    {Mega,Sec,Micro} = erlang:now(),
+    (Mega*1000000+Sec)*1000000+Micro.
