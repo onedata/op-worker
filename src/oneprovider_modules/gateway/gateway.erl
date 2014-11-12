@@ -42,7 +42,7 @@ init(_Args) ->
     LocalServerPort = oneproxy:get_local_port(gateway_listener_port),
 
     {ok, _} = ranch:start_listener(?GATEWAY_LISTENER, Acceptors, ranch_tcp,
-        [{port, LocalServerPort}], gateway_protocol, []),
+        [{port, LocalServerPort}], gateway_protocol_handler, []),
 
     LocalPort = oneproxy:get_local_port(gateway_proxy_port),
     OpPid = spawn_link(fun() -> oneproxy:start_proxy(LocalPort, Cert, verify_none) end),
