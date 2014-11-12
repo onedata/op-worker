@@ -128,7 +128,6 @@ init([]) ->
   erlang:send_after(LoggerAndDAOInterval * 1000 + 200, Pid, {timer, get_state_from_db}),
   {ok, MonitoringInitialization} = application:get_env(?APP_Name, cluster_monitoring_initialization),
   erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_cluster_monitoring}),
-
   {ok, #cm_state{}};
 
 init([test]) ->
@@ -275,7 +274,6 @@ handle_call({lifecycle_notification, Node, Module, Action}, _From, State) ->
   Res = lifecycle_notification(Node, Module, Action, State#cm_state.workers, State),
   {reply, Res, State};
 
-
 handle_call(_Request, _From, State) ->
   ?warning("Wrong call: ~p", [_Request]),
   {reply, wrong_request, State}.
@@ -357,7 +355,7 @@ handle_cast({node_is_up, Node}, State) ->
   end;
 
 handle_cast({register_module_listener, Module, Listener}, State) ->
-  ?info("Registering module lifecycle listeners."),
+  ?debug("Registering module lifecycle listeners. ~p", [{Module, Listener}]),
   %% NewState = add_module_lifecycle_listener(module_name, [{module, module_name[, node]|[{all_modules}]]}
   NewState = add_module_lifecycle_listener(Module, Listener, State),
   save_state(),
@@ -639,8 +637,7 @@ code_change(_OldVsn, State, _Extra) ->
   NewState :: term().
 %% ====================================================================
 init_cluster(State) ->
-  ?info("Checking if initialization is needed ~p", [State]),
-  ?info("Nodes ~p, ~n Workers ~p", [State#cm_state.nodes, State#cm_state.workers]),
+  ?debug("Checking if initialization is needed ~p", [State]),
   Nodes = State#cm_state.nodes,
   case length(Nodes) > 0 of
     true ->
@@ -659,10 +656,8 @@ init_cluster(State) ->
                                  not lists:member({Node, Module}, PermamentWorkers),
                                  Module =:= Module2],
 
-      ?info("Permament nodes to create ~p", [RequiredPermamentWorkers]),
+      ?debug("Permament nodes to create ~p", [RequiredPermamentWorkers]),
       NewStatePermament2 = init_permament_nodes(RequiredPermamentWorkers, State),
-
-      ?info("New state ~p", [NewStatePermament2]),
 
       CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
         [M | Workers]
@@ -761,8 +756,6 @@ check_cluster_state(State) ->
                      {NodesLoad, AvgLoad} = calculate_node_load(State#cm_state.nodes, long),
 
                      WorkersLoad = [{Worker, [{Module, Load} || {Module, Load} <- LoadList, not lists:member(Module, ?Permament_Modules)]} || {Worker, LoadList} <- calculate_worker_load(State#cm_state.workers)],
-
-                     ?info("WorkersLoad ~p", [WorkersLoad]),
 
                      Load = calculate_load(NodesLoad, WorkersLoad),
 
@@ -876,8 +869,7 @@ lifecycle_notification(Node, Module, Action, Workers, State) ->
   ModuleListeners = [{Module2, Listeners2} || {Module2, Listeners2} <- Listeners, Module =:= Module2],
   case ModuleListeners of
     [{_M, L}] -> send_notifications(Node, Module, Action, Workers, L);
-    [] -> ok;
-    X -> ?error("Wrong state ~p", [X])
+    _ -> ok;
   end.
 
 %% send_notifications/2
@@ -885,7 +877,7 @@ lifecycle_notification(Node, Module, Action, Workers, State) ->
 %% @doc Sends notifications to modules that are registered for certain lifecycle acions
 -spec send_notifications(Node :: list(), Module :: atom(), Action :: atom(), Workers :: term(), Listeners ::list()) -> ok.
 send_notifications(Node, Module, Action, Workers,  Listeners) ->
-  ?info("Notification ~p ~p ~p ~p ~p", [Node, Module, Listeners, Action, Workers]),
+  ?debug("Notification ~p ~p ~p ~p ~p", [Node, Module, Listeners, Action, Workers]),
   [{ gen_server:cast({Module2, Node2}, {asynch, 1, {node_lifecycle_notification, Node, Module, Action, Pid}})} || {Node2, Module2, Pid} <- Workers ,
     lists:member({all_modules}, Listeners)
       or lists:member({module, Module2}, Listeners)
@@ -914,8 +906,8 @@ start_worker(Node, Module, WorkerArgs, State) ->
     lifecycle_notification(Node, Module, ?ACTION_START_WORKER, Workers, State),
     {ok, State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}}
   catch
-    A:B ->
-      ?error("Error during start of worker: ~s at node: ~s ~p ~p", [Module, Node, A, B]),
+    _:_ ->
+      ?error("Error during start of worker: ~s at node: ~s", [Module, Node]),
       {error, State}
   end.
 
