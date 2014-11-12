@@ -438,7 +438,7 @@ rename_file(FullFileName, FullTargetFileName) ->
 synchronize_file_block(FullFileName, Offset, Size) ->
     {ok, RemoteLocationDocs} = fslogic_objects:get_remote_location(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
-    MyRemoteLocationDoc = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
     OtherRemoteLocationDocs = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id =/= ProviderId end, RemoteLocationDocs),
     OutOfSyncList = fslogic_remote_location:check_if_synchronized(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, OtherRemoteLocationDocs),
     lists:foreach(
@@ -450,7 +450,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     NewDoc = fslogic_remote_location:mark_as_available(SyncedParts, MyRemoteLocationDoc),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
-        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [NewDoc], fslogic_context:get_protocol_version())
+        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, FullFileName, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
     end,
     #atom{value = ?VOK}.
 
@@ -465,11 +465,11 @@ synchronize_file_block(FullFileName, Offset, Size) ->
 file_block_modified(FullFileName, Offset, Size) ->
     {ok, RemoteLocationDocs} = fslogic_objects:get_remote_location(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
-    MyRemoteLocationDoc = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
     NewDoc = fslogic_remote_location:mark_as_modified(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
-        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [NewDoc], fslogic_context:get_protocol_version())
+        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, FullFileName, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
     end,
     #atom{value = ?VOK}.
 
@@ -484,11 +484,11 @@ file_block_modified(FullFileName, Offset, Size) ->
 file_truncated(FullFileName, Size) ->
     {ok, RemoteLocationDocs} = fslogic_objects:get_remote_location(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
-    MyRemoteLocationDoc = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
     NewDoc = fslogic_remote_location:truncate({bytes, Size}, MyRemoteLocationDoc),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
-        false -> {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [NewDoc], fslogic_context:get_protocol_version())
+        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, FullFileName, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
     end,
     #atom{value = ?VOK}.
 

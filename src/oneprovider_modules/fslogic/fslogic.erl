@@ -45,7 +45,7 @@ init(_Args) ->
     erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
 
     % Create acl permission cache
-    ProcFun = fun
+    PermissionCacheProcFun = fun
         (_ProtocolVersion, {grant_permission, StorageFileName, GRUID, Permission}, CacheName) ->
             ets:insert(CacheName, {{fslogic_path:ensure_path_begins_with_slash(StorageFileName), GRUID, Permission}, true}),
             ok;
@@ -57,17 +57,40 @@ init(_Args) ->
         (_ProtocolVersion, {invalidate_cache, StorageFileName}, CacheName) ->
             ets:match_delete(CacheName,{{fslogic_path:ensure_path_begins_with_slash(StorageFileName), '_', '_'}, '_'})
     end,
-    MapFun = fun({_, StorageFileName, _, _}) ->
-        lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, StorageFileName)
+    PermissionCacheMapFun = fun
+        ({_, StorageFileName, _, _}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, StorageFileName);
+        ({_, StorageFileName}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, StorageFileName)
     end,
-    SubProcList = worker_host:generate_sub_proc_list(pemission_cache, ?CACHE_TREE_MAX_DEPTH, ?CACHE_TREE_MAX_WIDTH, ProcFun, MapFun, simple),
+
+    % Create remote location dao proxy
+    RemoteLocationProxyProcFun = fun
+        (ProtocolVersion, {save_remote_location_doc, _, Doc}, _CacheName) ->
+            {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [Doc], ProtocolVersion)
+    end,
+    RemoteLocationProxyMapFun = fun
+        ({save_remote_location_doc, FullFileName, _}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FullFileName)
+    end,
+
+    % generate process lists
+    SubProcList = worker_host:generate_sub_proc_list([
+        {pemission_cache, ?CACHE_TREE_MAX_DEPTH, ?CACHE_TREE_MAX_WIDTH, PermissionCacheProcFun, PermissionCacheMapFun, simple},
+        {remote_location_dao_proxy, ?CACHE_TREE_MAX_DEPTH, ?CACHE_TREE_MAX_WIDTH, RemoteLocationProxyProcFun, RemoteLocationProxyMapFun, simple}
+    ]),
+
+    % register map functions for process trees
     RequestMap = fun
         ({grant_permission, _, _, _}) -> pemission_cache;
         ({has_permission, _, _, _}) -> pemission_cache;
         ({invalidate_cache, _}) -> pemission_cache;
+        ({save_remote_location_doc, _, _}) -> remote_location_dao_proxy;
         (_) -> non
     end,
     DispMapFun = fun
+        ({save_remote_location_doc, FullFileName, _}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FullFileName);
         ({invalidate_cache, StorageFileName}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, StorageFileName);
         ({_, StorageFileName, _, _}) ->

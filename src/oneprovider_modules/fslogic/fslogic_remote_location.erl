@@ -49,7 +49,7 @@ mark_as_modified(#byte_range{} = ByteRange, #db_document{} = Mydoc, Timestamp) -
 mark_as_modified(#offset_range{} = OffsetRange, #db_document{} = Mydoc, Timestamp) ->
     mark_as_modified(offset_to_block_range(OffsetRange), Mydoc, Timestamp);
 mark_as_modified(#block_range{from = From, to = To}, #db_document{record = #remote_location{file_parts = Parts} = RemoteLocation} = MyDoc, Timestamp) ->
-    NewRemoteParts = ranges_struct:minimize(ranges_struct:merge(Parts, #range{from = From, to = To, timestamp = Timestamp})),
+    NewRemoteParts = ranges_struct:minimize(ranges_struct:merge(Parts, [#range{from = From, to = To, timestamp = Timestamp}])),
     MyDoc#db_document{record = RemoteLocation#remote_location{file_parts = NewRemoteParts}}.
 
 %% truncate/2
@@ -98,7 +98,7 @@ check_if_synchronized(#byte_range{} = ByteRange, MyDoc, OtherDocs) ->
 check_if_synchronized(#offset_range{} = OffsetRange, MyDoc, OtherDocs) ->
     check_if_synchronized(offset_to_block_range(OffsetRange), MyDoc, OtherDocs);
 check_if_synchronized(#block_range{from = From, to = To}, #db_document{record = #remote_location{file_parts = Parts}}, _OtherDocs) ->
-    _PartsOutOfSync = ranges_struct:minimize(ranges_struct:subtract_newer(#range{from = From, to = To}, Parts)).
+    _PartsOutOfSync = ranges_struct:minimize(ranges_struct:subtract_newer([#range{from = From, to = To}], Parts)).
     %todo find parts in other providers
 
 %% ====================================================================

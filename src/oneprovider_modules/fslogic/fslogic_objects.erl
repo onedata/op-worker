@@ -317,13 +317,20 @@ delete_old_descriptors(ProtocolVersion, Time) ->
 
 %% get_remote_location/2
 %% ====================================================================
-%% @doc Gets remote_locations of file
+%% @doc Gets remote_locations of file, creates it if location for actual provider does not exist
 %% @end
--spec get_remote_location(FullFileName :: string()) -> [remote_location_doc()].
+-spec get_remote_location(FullFileName :: string()) -> {ok, [remote_location_doc()]} | no_return().
 %% ====================================================================
 get_remote_location(FullFileName) ->
     {ok, #db_document{uuid = FileId}} = get_file(FullFileName),
-    dao_lib:apply(dao_vfs, remote_locations_by_file_id, [FileId], fslogic_context:get_protocol_version()).
+    {ok, RemoteLocationList} = dao_lib:apply(dao_vfs, remote_locations_by_file_id, [FileId], fslogic_context:get_protocol_version()),
+    ProviderId = cluster_manager_lib:get_provider_id(),
+    case lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationList) of
+        [] -> dao_lib:apply(dao_vfs, save_remote_location, [#remote_location{file_id = FileId, provider_id = ProviderId}], fslogic_context:get_protocol_version());
+        _ -> ok
+    end,
+    {ok, RemoteLocationList}.
+
 
 %% ====================================================================
 %% Internal functions
