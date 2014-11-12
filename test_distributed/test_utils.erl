@@ -230,7 +230,7 @@ wait_for_cluster_init() ->
   E2 :: term().
 %% ====================================================================
 wait_for_cluster_init(ModulesNum) ->
-  wait_for_cluster_init(ModulesNum + length(?Modules_With_Args), 20).
+  wait_for_cluster_init(ModulesNum + length(?MODULES_WITH_ARGS), 20).
 
 %% wait_for_cluster_init/2
 %% ====================================================================

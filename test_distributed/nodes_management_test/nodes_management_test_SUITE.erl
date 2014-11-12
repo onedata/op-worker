@@ -427,8 +427,8 @@ main_test(Config) ->
   ?assertEqual(length(Nodes2), length(NodesUp)),
 
   {Workers, _StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
-  Jobs = ?Modules,
-  PermamentModules = ?Permament_Modules,
+  Jobs = ?MODULES,
+  PermamentModules = ?PERMANENT_MODULES,
   ?assertEqual(length(Workers), length(Jobs) + 3 * length(PermamentModules)), % 4 slaves
 
   PeerCert = ?COMMON_FILE("peer.pem"),

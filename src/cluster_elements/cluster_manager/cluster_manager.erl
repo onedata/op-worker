@@ -23,9 +23,6 @@
 -define(ACTION_START_WORKER, start_worker).
 -define(ACTION_STOP_WORKER, stop_worker).
 
-%% Singleton modules are modules which are supposed to have only one instance.
--define(SINGLETON_MODULES, [control_panel, central_logger, rule_manager, rtransfer]).
-
 -record(cluster_stats, {cpu = {0, 0}, memory = {0, 0}, net_rx_b = {0, 0}, net_tx_b = {0, 0}, net_rx_pps = {0, 0},
   net_tx_pps = {0, 0}, ports_rx_b = {0, 0}, ports_tx_b = {0, 0}}).
 
@@ -45,10 +42,10 @@
 
 %% ====================================================================
 %% Test API
-%% ====================================================================
+%% ========================== ==========================================
 -ifdef(TEST).
 -export([update_dns_state/3, update_dispatcher_state/6, calculate_load/2, calculate_worker_load/1, calculate_node_load/2,
-  merge_nodes_stats/1, map_node_stats_to_load/1]).
+  merge_nodes_stats/1, map_node_stats_to_load/1, required_permanent_workers/4]).
 -endif.
 
 %% ====================================================================
@@ -340,7 +337,9 @@ handle_cast({node_is_up, Node}, State) ->
               NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
 
               case WorkersFound of
-                true -> gen_server:cast({global, ?CCM}, update_dispatchers_and_dns);
+                true -> gen_server:cast({global, ?CCM}, update_dispatchers_and_dns),
+                        Pid = self(),
+                        erlang:send_after(1000, Pid, {timer, init_cluster});
                 false -> ok
               end,
               save_state(),
@@ -356,7 +355,6 @@ handle_cast({node_is_up, Node}, State) ->
 
 handle_cast({register_module_listener, Module, Listener}, State) ->
   ?debug("Registering module lifecycle listeners. ~p", [{Module, Listener}]),
-  %% NewState = add_module_lifecycle_listener(module_name, [{module, module_name[, node]|[{all_modules}]]}
   NewState = add_module_lifecycle_listener(Module, Listener, State),
   save_state(),
   {noreply, NewState};
@@ -641,22 +639,14 @@ init_cluster(State) ->
   Nodes = State#cm_state.nodes,
   case length(Nodes) > 0 of
     true ->
-      JobsAndArgs = ?Modules_With_Args,
+      JobsAndArgs = ?MODULES_WITH_ARGS,
+      PermanentModules = ?PERMANENT_MODULES,
 
       %% Every node is supposed to have a complete set of permament workes.
-      CreatePermamentWorkersList = fun({Worker, Module, _Child}, Workers) ->
-        case lists:member(Module, ?Permament_Modules) of
-          true -> [{Worker, Module}, Workers];
-          _ -> Workers
-        end
-      end,
-      PermamentWorkers = lists:foldl(CreatePermamentWorkersList, [], State#cm_state.workers),
-      RequiredPermamentWorkers = [{Node, Module, Args} || Node <- Nodes, Module <- ?Permament_Modules,
-                                 {Module2, Args} <- ?Modules_With_Args,
-                                 not lists:member({Node, Module}, PermamentWorkers),
-                                 Module =:= Module2],
+      {_PermamentWorkers, RequiredPermamentWorkers} = required_permanent_workers(PermanentModules, JobsAndArgs, State, Nodes),
 
-      ?debug("Permament nodes to create ~p", [RequiredPermamentWorkers]),
+      ?info("Permament nodes to create ~p", [{PermanentModules, JobsAndArgs, State, Nodes}]),
+      ?info("Permament nodes to create ~p", [{_PermamentWorkers, RequiredPermamentWorkers}]),
       NewStatePermament2 = init_permament_nodes(RequiredPermamentWorkers, State),
 
       CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
@@ -699,6 +689,29 @@ init_cluster(State) ->
       erlang:send_after(1000 * Interval, Pid, {timer, init_cluster}),
       State
   end.
+
+
+
+%% required_permanent_workers/4
+%% ====================================================================
+%% @doc Creates a list of permanent workers, which are going to be initialized.
+required_permanent_workers(PermanentModules, JobsAndArgs, State, Nodes) ->
+    CreatePermamentWorkersList = fun({Worker, Module, _Child}, Workers) ->
+        case lists:member(Module, PermanentModules) of
+          true -> [{Worker, Module}| Workers];
+          _ -> Workers
+        end
+      end,
+    PermamentWorkers = lists:foldl(CreatePermamentWorkersList, [], State#cm_state.workers),
+
+    RequiredPermamentWorkers = [{Node, Module, Args} || Node <- Nodes, Module <- PermanentModules,
+    {Module2, Args} <- JobsAndArgs,
+    not lists:member({Node, Module}, PermamentWorkers),
+    Module =:= Module2],
+
+   {PermamentWorkers, RequiredPermamentWorkers}.
+
+
 
 %% init_permament_nodes/2
 %% ====================================================================
@@ -754,9 +767,7 @@ check_cluster_state(State) ->
                  case length(State#cm_state.nodes) > 1 of
                    true ->
                      {NodesLoad, AvgLoad} = calculate_node_load(State#cm_state.nodes, long),
-
-                     WorkersLoad = [{Worker, [{Module, Load} || {Module, Load} <- LoadList, not lists:member(Module, ?Permament_Modules)]} || {Worker, LoadList} <- calculate_worker_load(State#cm_state.workers)],
-
+                     WorkersLoad = calculate_worker_load(State#cm_state.workers),
                      Load = calculate_load(NodesLoad, WorkersLoad),
 
                      MinV = case [NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error] of
@@ -780,18 +791,13 @@ check_cluster_state(State) ->
                              MinWorkers = [Module || {Module, _MLoad} <- MinNodeModulesLoads, Module == MaxModule],
                              case MinWorkers =:= [] of
                                true ->
-                                 case lists:member(MaxModule, ?SINGLETON_MODULES) of
-                                   true ->
-                                     State;
-                                   _ ->
-                                     ?info("Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
-                                     {WorkerRuns, TmpState} = start_worker(MinNode, MaxModule, proplists:get_value(MaxModule, ?Modules_With_Args, []), State),
-                                     case WorkerRuns of
-                                       ok ->
-                                         save_state(),
-                                         update_dispatchers_and_dns(TmpState, true, true);
-                                       error -> TmpState
-                                     end
+                                 ?info("Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
+                                 {WorkerRuns, TmpState} = start_worker(MinNode, MaxModule, proplists:get_value(MaxModule, ?MODULES_WITH_ARGS, []), State),
+                                 case WorkerRuns of
+                                   ok ->
+                                     save_state(),
+                                     update_dispatchers_and_dns(TmpState, true, true);
+                                   error -> TmpState
                                  end;
                                false ->
                                  ?info("Worker: ~s will be stopped at node: ~s", [MaxModule, MaxNode]),
@@ -836,9 +842,11 @@ plan_next_cluster_state_check() ->
 
 
 
-%% add_module_lifecycle_listener/2
+%% add_module_lifecycle_listener/3
 %% ====================================================================
 %% @doc Adds new lifcycle listener to the list of registered listeners
+%% Module : ModuleName1, ModuleName2
+%% Listener : {module, ModuleName}, {module, ModuleName, Node}, {all_modules}
 -spec add_module_lifecycle_listener(Module :: list(), Listener :: term(), State :: term()) -> Result when
   Result :: term().
 %% ====================================================================
@@ -872,7 +880,7 @@ lifecycle_notification(Node, Module, Action, Workers, State) ->
     _ -> ok
   end.
 
-%% send_notifications/2
+%% send_notifications/5
 %% ====================================================================
 %% @doc Sends notifications to modules that are registered for certain lifecycle acions
 -spec send_notifications(Node :: list(), Module :: atom(), Action :: atom(), Workers :: term(), Listeners ::list()) -> ok.
@@ -1010,7 +1018,7 @@ add_children(_Node, [], Workers, _State) ->
   {ok, Workers};
 
 add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers, State) ->
-  Jobs = ?Modules,
+  Jobs = ?MODULES,
   case lists:member(Id, Jobs) of
     false -> add_children(Node, Children, Workers, State);
     true ->
@@ -1066,6 +1074,8 @@ node_down(Node, State) ->
                                     false -> {State#cm_state.callbacks_num, WorkersFound}
                                   end,
 
+  Pid = self(),
+  erlang:send_after(1000, Pid, {timer, init_cluster}),
   {State#cm_state{workers = NewWorkers, nodes = NewNodes, callbacks_num = CallbacksNum}, WorkersFound2}.
 
 %% start_central_logger/1
@@ -1527,7 +1537,9 @@ map_node_stats_to_load(NodesStats) ->
   Result :: list().
 %% ====================================================================
 calculate_worker_load(Workers) ->
-  WorkersLoad = [{Node, {Module, check_load(Pid)}} || {Node, Module, Pid} <- Workers],
+  WorkersLoad = [{Node, {Module, check_load(Pid)}} || {Node, Module, Pid} <- Workers,
+                 not lists:member(Module, ?PERMANENT_MODULES),
+                 not lists:member(Module, ?SINGLETON_MODULES)],
 
   MergeByFirstElement = fun(List) -> lists:reverse(lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
     ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];

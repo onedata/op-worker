@@ -13,10 +13,13 @@
 -ifndef(MODULES_AND_ARGS_HRL).
 -define(MODULES_AND_ARGS_HRL, 1).
 
--define(Modules, [central_logger, cluster_rengine, control_panel, dao_worker, fslogic, gateway, rtransfer, rule_manager, dns_worker, remote_files_manager]).
--define(Modules_With_Args, [{central_logger, []}, {cluster_rengine, []}, {control_panel, []}, {dao_worker, []}, {fslogic, []}, {gateway, []}, {rtransfer, []}, {rule_manager, []}, {dns_worker, []}, {remote_files_manager, []}]).
+-define(MODULES, [central_logger, cluster_rengine, control_panel, dao_worker, fslogic, gateway, rtransfer, rule_manager, dns_worker, remote_files_manager]).
+-define(MODULES_WITH_ARGS, [{central_logger, []}, {cluster_rengine, []}, {control_panel, []}, {dao_worker, []}, {fslogic, []}, {gateway, []}, {rtransfer, []}, {rule_manager, []}, {dns_worker, []}, {remote_files_manager, []}]).
 
 %% Modules that are present on all workers.
--define(Permament_Modules, [gateway]).
+-define(PERMANENT_MODULES, [gateway]).
+
+%% Singleton modules are modules which are supposed to have only one instance.
+-define(SINGLETON_MODULES, [control_panel, central_logger, rule_manager, rtransfer]).
 
 -endif.

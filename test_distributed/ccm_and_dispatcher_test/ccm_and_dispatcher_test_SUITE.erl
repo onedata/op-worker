@@ -96,7 +96,7 @@ modules_start_and_ping_test(Config) ->
   test_utils:wait_for_cluster_init(),
   State2 = gen_server:call({global, ?CCM}, get_state, 500),
   Workers2 = State2#cm_state.workers,
-  Jobs = ?Modules,
+  Jobs = ?MODULES,
   ?assertEqual(length(Workers2), length(Jobs)),
   ?assertEqual(5, gen_server:call({global, ?CCM}, get_state_num, 1000)),
 
@@ -310,7 +310,7 @@ onedata_handshake_test(Config) ->
 workers_list_actualization_test(Config) ->
   NodesUp = ?config(nodes, Config),
 
-  Jobs = ?Modules,
+  Jobs = ?MODULES,
   [CCM | _] = NodesUp,
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
@@ -513,7 +513,7 @@ validation_test(Config) ->
 ping_test(Config) ->
   NodesUp = ?config(nodes, Config),
 
-  Jobs = ?Modules,
+  Jobs = ?MODULES,
   [CCM | _] = NodesUp,
   PeerCert = ?config(peer_cert, Config),
   Port = ?config(port, Config),

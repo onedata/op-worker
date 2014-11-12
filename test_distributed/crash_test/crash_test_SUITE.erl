@@ -50,11 +50,11 @@ main_test(Config) ->
 
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
   test_utils:wait_for_state_loading(),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(1),
   ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
-  Jobs = ?Modules,
-  PermamentNodes = ?Permament_Modules,
+  Jobs = ?MODULES,
+  PermamentNodes = ?PERMANENT_MODULES,
   PeerCert = ?COMMON_FILE("peer.pem"),
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -90,7 +90,7 @@ main_test(Config) ->
   end,
 
   {Workers, InitialStateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
-  ?assertEqual(length(Workers), length(Jobs) + length(PermamentNodes)),
+  ?assertEqual({length(Workers), Workers, Jobs, NodesUp}, {length(Jobs) + length(PermamentNodes), 30}),
   PongsNum = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum, length(Jobs) * length(Ports)),
 
