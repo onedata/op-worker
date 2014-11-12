@@ -24,10 +24,10 @@
 -include("registered_names.hrl").
 
 -record(gwcstate, {
-    remote :: inet:ip_address(),
+    remote :: {inet:ip_address(), inet:port_number()},
     connection_manager :: pid(),
     socket :: inet:socket(),
-    waiting_requests :: ets:tid() %% @TODO: clear
+    waiting_requests :: ets:tid()
 }).
 
 -define(CONNECTION_TIMEOUT, timer:seconds(10)).
@@ -48,7 +48,7 @@
 %% ====================================================================
 %% @doc Starts gateway connection gen_server.
 -spec start_link(Remote, Local, ConnectionManager) -> Result when
-    Remote :: inet:ip_address(),
+    Remote :: {inet:ip_address(), inet:port_number()},
     Local :: inet:ip_address(),
     ConnectionManager :: pid(),
     Result :: {ok,Pid} | ignore | {error,Error},
@@ -66,7 +66,7 @@ start_link(Remote, Local, ConnectionManager) ->
 %% @end
 %% @see gen_server
 -spec init({Remote, Local, ConnectionManager}) -> Result when
-    Remote :: inet:ip_address(),
+    Remote :: {inet:ip_address(), inet:port_number()},
     Local :: inet:ip_address(),
     ConnectionManager :: pid(),
     Result :: {ok,State} | {ok,State,Timeout} | {ok,State,hibernate}
@@ -78,10 +78,13 @@ start_link(Remote, Local, ConnectionManager) ->
 init({Remote, Local, ConnectionManager}) ->
     process_flag(trap_exit, true),
     TID = ets:new(waiting_requests, [private]),
-    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, oneproxy:get_local_port(gateway_proxy_port), [binary, {packet, 4}, {active, once}, {ifaddr, Local}], ?CONNECTION_TIMEOUT),
 
-    {ok, GwPort} = application:get_env(?APP_Name, gateway_listener_port),
-    ProxyInit = #proxyinit{host = inet:ntoa(Remote), port = io_lib:format("~p", [GwPort])},
+    {ok, GwProxyPort} = application:get_env(?APP_Name, gateway_proxy_port),
+    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, GwProxyPort,
+        [binary, {packet, 4}, {active, once}, {ifaddr, Local}], ?CONNECTION_TIMEOUT),
+
+    {IP, Port} = Remote,
+    ProxyInit = #proxyinit{host = inet:ntoa(IP), port = integer_to_list(Port)},
 
     ok = gen_tcp:send(Socket, oneproxy_pb:encode_proxyinit(ProxyInit)),
     State = #gwcstate{remote = Remote, socket = Socket, connection_manager = ConnectionManager, waiting_requests = TID},
@@ -269,9 +272,21 @@ complete_request(TID, #fetchreply{content = Content, request_hash = RequestHash}
     ok.
 
 
+%% notify/2
+%% ====================================================================
+%% @doc Notifies a process about something related to the action it required.
+-spec notify(What :: atom(), Action :: #fetch{}) -> ok.
+%% ====================================================================
+notify(What, #fetch{notify = Notify, request = Request}) when is_atom(What) ->
+    Notify ! {What, Request},
+    ok.
+
+
 %% notify/3
 %% ====================================================================
 %% @doc Notifies a process about something related to the action it required.
+%% Now including a reason!
+%% @end
 -spec notify(What :: atom(), Reason :: term(), Action :: #fetch{}) -> ok.
 %% ====================================================================
 notify(What, Details, #fetch{notify = Notify, request = Request}) when is_atom(What) ->

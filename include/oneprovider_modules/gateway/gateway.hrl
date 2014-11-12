@@ -5,8 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @TODO: write me
-%% @end
+%% @doc Common includes, defines and macros for gateway modules.
 %% ===================================================================
 
 -ifndef(GATEWAY_HRL).
@@ -17,10 +16,11 @@
 
 -define(connection_close_timeout, timer:minutes(1)).
 
+%% Description for a `fetch` action commisioned to the gateway module
 -record(fetch, {
-    request :: #fetchrequest{},
-    remote :: inet:ip_address(),
-    notify :: pid()
+    request :: #fetchrequest{},                        %% the actual request to be fulfilled
+    remote :: {inet:ip_address(), inet:port_number()}, %% IP address and port of remote node that should fulfill the request
+    notify :: pid() | atom()                           %% a process to be notified of action's results
 }).
 
 -define(log_terminate(Reason, State),

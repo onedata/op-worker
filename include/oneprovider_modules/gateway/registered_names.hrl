@@ -5,8 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @TODO: write me
-%% @end
+%% @doc Registered names for gateway gen_servers and supervisors.
 %% ===================================================================
 
 -ifndef(GATEWAY_REGISTERED_NAMES_HRL).

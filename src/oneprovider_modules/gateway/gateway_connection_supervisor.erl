@@ -41,7 +41,8 @@ start_link() ->
 %% start_connection/3
 %% ====================================================================
 %% @doc Starts a connection supervised by the supervisor.
--spec start_connection(Remote :: inet:ip_address(), Local :: inet:ip_address(), ConnectionManager :: pid()) ->
+-spec start_connection(Remote :: {inet:ip_address(), inet:port_number()},
+                       Local :: inet:ip_address(), ConnectionManager :: pid()) ->
     supervisor:startchild_ret().
 %% ===================================================================
 start_connection(Remote, Local, ConnectionManager) ->

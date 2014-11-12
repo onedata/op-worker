@@ -48,7 +48,8 @@ get_session(OneProxyNameOrPid, SessionId) ->
 %% ====================================================================
 %% @doc Maps TLS endpoint port to local TCP endpoint port.
 %% @end
--spec get_local_port(Port :: non_neg_integer() | atom()) -> LocalPort :: non_neg_integer().
+%% @todo Solve potential conflict with user-defined ports.
+-spec get_local_port(Port :: intet:port()) -> LocalPort :: non_neg_integer().
 %% ====================================================================
 get_local_port(443) ->
     12001;
@@ -56,9 +57,7 @@ get_local_port(5555) ->
     12002;
 get_local_port(8443) ->
     12003;
-get_local_port(gateway_proxy_port) ->
-    12004;
-get_local_port(gateway_listener_port) ->
+get_local_port(8877) ->
     12005;
 get_local_port(Port) ->
     20000 + Port.
@@ -93,7 +92,8 @@ start_rproxy(ListenerPort, ForwardPort, CertFile, VerifyType) ->
 %% @doc Starts oneproxy in reverse proxy mode. This function either does not return or throws exception.
 %% @end
 -spec start_rproxy(ListenerPort :: non_neg_integer(), ForwardPort :: non_neg_integer(),
-    CertFile :: string() | binary(), VerifyType :: verify_peer | verify_none) -> no_return().
+    CertFile :: string() | binary(), VerifyType :: verify_peer | verify_none,
+    Http :: http | no_http) -> no_return().
 %% ====================================================================
 start_rproxy(ListenerPort, ForwardPort, CertFile, VerifyType, Http) ->
     start("reverse_proxy", ListenerPort, ["127.0.0.1",

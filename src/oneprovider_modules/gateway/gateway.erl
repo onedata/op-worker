@@ -35,17 +35,16 @@
 %% ====================================================================
 init(_Args) ->
     {ok, GwPort} = application:get_env(?APP_Name, gateway_listener_port),
+    {ok, GwProxyPort} = application:get_env(?APP_Name, gateway_proxy_port),
     {ok, Cert} = application:get_env(?APP_Name, global_registry_provider_cert_path),
     {ok, Acceptors} = application:get_env(?APP_Name, gateway_acceptor_number),
     {ok, NICs} = application:get_env(?APP_Name, gateway_network_interfaces),
 
-    LocalServerPort = oneproxy:get_local_port(gateway_listener_port),
-
+    LocalServerPort = oneproxy:get_local_port(GwPort),
     {ok, _} = ranch:start_listener(?GATEWAY_LISTENER, Acceptors, ranch_tcp,
         [{port, LocalServerPort}], gateway_protocol_handler, []),
 
-    LocalPort = oneproxy:get_local_port(gateway_proxy_port),
-    OpPid = spawn_link(fun() -> oneproxy:start_proxy(LocalPort, Cert, verify_none) end),
+    OpPid = spawn_link(fun() -> oneproxy:start_proxy(GwProxyPort, Cert, verify_none) end),
     register(gw_oneproxy_outgoing, OpPid),
 
     OpPid2 = spawn_link(fun() -> oneproxy:start_rproxy(GwPort, LocalServerPort, Cert, verify_none, no_http) end),
