@@ -91,15 +91,19 @@ mark_as_available(Blocks, #db_document{record = #remote_location{file_parts = Pa
 %% If so, the empty list is returned. If not, function returns list of unsynchronized parts.
 %% Each remote_file_part contains information about providers that have it up-to-date.
 %% @end
--spec check_if_synchronized(Range :: #byte_range{} | #offset_range{} | #block_range{}, MyDoc :: remote_location_doc(), OtherDocs :: [remote_location_doc()]) -> [remote_location_doc()].
+-spec check_if_synchronized(Range :: #byte_range{} | #offset_range{} | #block_range{}, MyDoc :: remote_location_doc(), OtherDocs :: [remote_location_doc()]) ->
+    [{ProviderId :: string(), AvailableBlocks :: remote_location_doc()}].
 %% ====================================================================
 check_if_synchronized(#byte_range{} = ByteRange, MyDoc, OtherDocs) ->
     check_if_synchronized(byte_to_block_range(ByteRange), MyDoc, OtherDocs);
 check_if_synchronized(#offset_range{} = OffsetRange, MyDoc, OtherDocs) ->
     check_if_synchronized(offset_to_block_range(OffsetRange), MyDoc, OtherDocs);
-check_if_synchronized(#block_range{from = From, to = To}, #db_document{record = #remote_location{file_parts = Parts}}, _OtherDocs) ->
-    _PartsOutOfSync = ranges_struct:minimize(ranges_struct:subtract_newer([#range{from = From, to = To}], Parts)).
-    %todo find parts in other providers
+check_if_synchronized(#block_range{from = From, to = To}, #db_document{record = #remote_location{file_parts = Parts}}, OtherDocs) ->
+    PartsOutOfSync = ranges_struct:minimize(ranges_struct:subtract([#range{from = From, to = To}], Parts)),
+    lists:map(
+        fun(#db_document{record = #remote_location{file_parts = Parts, provider_id = Id}}) ->
+            {Id, ranges_struct:minimize(ranges_struct:subtract(PartsOutOfSync, ranges_struct:subtract(PartsOutOfSync, Parts)))}
+        end, OtherDocs).
 
 %% ====================================================================
 %% Internal functions

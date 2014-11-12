@@ -12,7 +12,7 @@
 -include("oneprovider_modules/fslogic/ranges_struct.hrl").
 
 %% API
--export([merge/2, truncate/2, minimize/1, subtract_newer/2]).
+-export([merge/2, truncate/2, minimize/1, subtract_newer/2, subtract/2]).
 
 merge([], Ranges2) ->
     Ranges2;
@@ -72,6 +72,9 @@ minimize([#range{to = To1, timestamp = Time1} = El1, #range{from = From2, to = T
         true -> minimize([El1#range{to = To2} | Rest]);
         false -> [El1 | minimize([El2 | Rest])]
     end.
+
+subtract(Ranges1, Ranges2) ->
+    subtract_newer(Ranges1, [Range#range{timestamp = ?infinity} || Range <- Ranges2]).
 
 subtract_newer([], _) ->
     [];
