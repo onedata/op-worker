@@ -13,35 +13,35 @@ namespace provider {
 
 const rt_block &rt_block::merge(const rt_block &block)
 {
-    size_ += block.size();
+    size_ += block.size_;
     return *this;
 }
 
 bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
 {
-    return file_id_ == block.file_id() && offset_ + size_ == block.offset()
-           && size_ + block.size() <= block_size;
+    return file_id_ == block.file_id_ && offset_ + size_ == block.offset_
+           && size_ + block.size_ <= block_size;
 }
 
 bool rt_block::operator<(const rt_block &block) const
 {
-    if (priority_ > block.priority())
+    if (priority_ > block.priority_)
         return true;
-    if (priority_ < block.priority())
+    if (priority_ < block.priority_)
         return false;
-    if (counter_ > block.counter())
+    if (counter_ > block.counter_)
         return true;
-    if (counter_ < block.counter())
+    if (counter_ < block.counter_)
         return false;
-    if (file_id_ < block.file_id())
+    if (file_id_ < block.file_id_)
         return true;
-    if (file_id_ > block.file_id())
+    if (file_id_ > block.file_id_)
         return false;
-    if (offset_ < block.offset())
+    if (offset_ < block.offset_)
         return true;
-    if (offset_ > block.offset())
+    if (offset_ > block.offset_)
         return false;
-    return size_ < block.size();
+    return size_ < block.size_;
 }
 
 } // namespace provider
