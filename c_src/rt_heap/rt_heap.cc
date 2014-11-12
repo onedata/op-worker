@@ -1,9 +1,10 @@
-/*********************************************************************
+/**
+ * @file rt_heap.cc
  * @author Krzysztof Trzepla
  * @copyright (C): 2014 ACK CYFRONET AGH
  * This software is released under the MIT license
  * cited in 'LICENSE.txt'.
-*********************************************************************/
+ */
 
 #include "rt_heap.h"
 
@@ -12,18 +13,18 @@ namespace provider {
 
 void rt_heap::push(const rt_block& block)
 {
-    ErlNifUInt64 i;
-    for(i = 0; i < block.size() / block_size_; ++i)
-        push_block(rt_block(block.file_id(),
+    for(ErlNifUInt64 i = 0; i < block.size() / block_size_; ++i)
+        do_push(rt_block(block.file_id(),
                             block.offset() + i * block_size_,
                             block_size_,
                             block.priority(),
                             block.counter()));
 
+    ErlNifUInt64 full_block_amount = block.size() / block_size_;
     ErlNifUInt64 last_block_size = block.size() % block_size_;
     if(last_block_size > 0)
-        push_block(rt_block(block.file_id(),
-                            block.offset() + i * block_size_,
+        do_push(rt_block(block.file_id(),
+                            block.offset() + full_block_amount * block_size_,
                             last_block_size,
                             block.priority(),
                             block.counter()));
@@ -34,7 +35,7 @@ rt_block rt_heap::fetch()
     if(blocks_.empty())
         throw std::runtime_error("Empty heap");
 
-    rt_block block = *(blocks_.begin());
+    rt_block block = std::move(*(blocks_.begin()));
 
     blocks_.erase(blocks_.begin());
     auto& file_blocks = files_blocks_[block.file_id()];
@@ -43,7 +44,7 @@ rt_block rt_heap::fetch()
     while(!file_blocks.empty())
     {
         rt_block next_block = *(blocks_.begin());
-        if(is_mergeable(block, next_block))
+        if(block.is_mergeable(next_block, block_size_))
         {
             block.merge(next_block);
             blocks_.erase(blocks_.begin());
@@ -58,10 +59,10 @@ rt_block rt_heap::fetch()
     if(file_blocks.empty())
         files_blocks_.erase(block.file_id());
 
-    return std::move(block);
+    return block;
 }
 
-void rt_heap::push_block(const rt_block& block)
+void rt_heap::do_push(const rt_block& block)
 {
     auto& file_blocks = files_blocks_[block.file_id()];
     auto it = file_blocks.lower_bound(rt_interval(block.offset(), 1));
@@ -138,29 +139,19 @@ void rt_heap::push_block(const rt_block& block)
     }
 }
 
-bool rt_heap::is_mergeable(const rt_block& lhs, const rt_block& rhs)
-{
-    return lhs.file_id() == rhs.file_id() &&
-           lhs.offset() + lhs.size() == rhs.offset() &&
-           lhs.size() + rhs.size() <= block_size_;
-}
-
 void rt_heap::insert(std::map< rt_interval, std::set< rt_block >::iterator >& file_blocks,
                      const rt_block& block)
 {
-    auto it = blocks_.insert(block);
-    file_blocks[rt_interval(block.offset(), block.size())] = it.first;
+    auto result = blocks_.insert(block);
+    file_blocks[rt_interval(block.offset(), block.size())] = result.first;
 }
 
 std::map< rt_interval, std::set< rt_block >::iterator >::iterator rt_heap::erase
     (std::map< rt_interval, std::set< rt_block >::iterator >& file_blocks,
      const std::map< rt_interval, std::set< rt_block >::iterator >::iterator& it)
 {
-    auto it2 = it;
-    ++it2;
     blocks_.erase(it->second);
-    file_blocks.erase(it);
-    return it2;
+    return file_blocks.erase(it);
 }
 
 } // namespace provider

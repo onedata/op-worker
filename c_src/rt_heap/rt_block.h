@@ -1,9 +1,10 @@
-/*********************************************************************
+/**
+ * @file rt_block.h
  * @author Krzysztof Trzepla
  * @copyright (C): 2014 ACK CYFRONET AGH
  * This software is released under the MIT license
  * cited in 'LICENSE.txt'.
-*********************************************************************/
+ */
 
 #ifndef RT_BLOCK_H
 #define RT_BLOCK_H
@@ -15,6 +16,10 @@
 namespace one {
 namespace provider {
 
+/**
+ * The rt_block class.
+ * rt_block object represents single block pushed on RTransfer heap
+ */
 class rt_block
 {
 public:
@@ -32,42 +37,18 @@ public:
      * @param offset block offset
      * @param size block size
      * @param priority block priority
-     */
-    rt_block(std::string file_id,
-             ErlNifUInt64 offset,
-             ErlNifUInt64 size,
-             int priority)
-    : rt_block(file_id,
-               offset,
-               size,
-               priority,
-               1) {}
-
-    /**
-     * rt_block constructor.
-     * Constructs RTransfer block.
-     * @param file_id ID of file this block is a part of
-     * @param offset block offset
-     * @param size block size
-     * @param priority block priority
      * @param counter defines how many times block was pushed on the rt_heap
      */
     rt_block(std::string file_id,
              ErlNifUInt64 offset,
              ErlNifUInt64 size,
              int priority,
-             int counter)
+             int counter = 1)
     : file_id_(std::move(file_id))
     , offset_(offset)
     , size_(size)
     , priority_(priority)
     , counter_(counter) {}
-
-    /**
-     * rt_block destructor.
-     * Destructs RTransfer block.
-     */
-    ~rt_block() {}
 
     /// Getter for block's file ID
     const std::string& file_id() const { return file_id_; }
@@ -94,6 +75,25 @@ public:
      */
     const rt_block& merge(const rt_block& block);
 
+    /**
+     * Checks whether this block can be merge with other block. That is
+     * both belong to the same file, are successive and summary size is
+     * less than maximal RTransfer block size.
+     * @param block to be merged
+     * @return merged block
+     */
+    bool is_mergeable(const rt_block& block, ErlNifUInt64 block_size);
+
+    /**
+     * Compares this block with other block. Order of comparison criteria:
+     * 1) priority - block with higher priority comes first
+     * 2) counter - block with higher addition count comes first
+     * 3) file_id - block with lexicographically less file ID comes first
+     * 4) offset - block with smaller offset comes first
+     * 5) size - block with smaller size comes first
+     * @param block to be compared with
+     * @return true if this block comes before the other, otherwise false
+     */
     bool operator<(const rt_block& block) const;
 
 private:

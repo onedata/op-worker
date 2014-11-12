@@ -10,10 +10,11 @@
 %% ===================================================================
 -module(rt_heap).
 
+-include("registered_names.hrl").
 -include("oneprovider_modules/rtransfer/rt_heap.hrl").
 
 %% API
--export([new/0, new/2, delete/1, push/2, fetch/1]).
+-export([new/0, new/1, new/2, new/3, delete/1, push/2, fetch/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -29,12 +30,30 @@
 
 %% new/0
 %% ====================================================================
-%% @equiv new(".", ?RT_BLOCK_SIZE)
+%% @doc Creates RTransfer heap with default prefix and maximal RTransfer
+%% block size.
 %% @end
 -spec new() -> {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
 new() ->
-    new(".", ?RT_BLOCK_SIZE).
+    {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
+    new(".", BlockSize).
+
+
+%% new/1
+%% ====================================================================
+%% @doc Same as new/0, but allows to register heap under given name.
+%% @end
+-spec new(HeapName) -> {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
+    HeapName :: {local, Name} | {global, GlobalName} | {via, Module, ViaName},
+    Name :: atom(),
+    Module :: module(),
+    GlobalName :: term(),
+    ViaName :: term().
+%% ====================================================================
+new(HeapName) ->
+    {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
+    new(HeapName, ".", BlockSize).
 
 
 %% new/2
@@ -48,34 +67,71 @@ new(Prefix, BlockSize) ->
     gen_server:start_link(?MODULE, [Prefix, BlockSize], []).
 
 
+%% new/3
+%% ====================================================================
+%% @doc Creates RTransfer heap and registeres it under given name.
+%% @end
+-spec new(HeapName, Prefix :: string(), BlockSize :: integer()) ->
+    {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
+    HeapName :: {local, Name} | {global, GlobalName} | {via, Module, ViaName},
+    Name :: atom(),
+    Module :: module(),
+    GlobalName :: term(),
+    ViaName :: term().
+%% ====================================================================
+new(HeapName, Prefix, BlockSize) ->
+    gen_server:start_link(HeapName, ?MODULE, [Prefix, BlockSize], []).
+
+
 %% push/2
 %% ====================================================================
 %% @doc Pushes block on RTransfer heap.
 %% @end
--spec push(Pid :: pid(), Block :: #rt_block{}) -> ok.
+-spec push(HeapRef, Block :: #rt_block{}) -> ok when
+    HeapRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
+    Pid :: pid(),
+    Name :: atom(),
+    Node :: node(),
+    Module :: module(),
+    GlobalName :: term(),
+    ViaName :: term().
 %% ====================================================================
-push(Pid, Block) ->
-    gen_server:cast(Pid, {push, Block}).
+push(HeapRef, Block) ->
+    gen_server:cast(HeapRef, {push, Block}).
 
 
 %% fetch/1
 %% ====================================================================
 %% @doc Fetches block from RTransfer heap.
 %% @end
--spec fetch(Pid :: pid()) -> {ok, #rt_block{}} | {error, Error :: string()}.
+-spec fetch(HeapRef) -> {ok, #rt_block{}} | {error, Error :: string()} when
+    HeapRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
+    Pid :: pid(),
+    Name :: atom(),
+    Node :: node(),
+    Module :: module(),
+    GlobalName :: term(),
+    ViaName :: term().
 %% ====================================================================
-fetch(Pid) ->
-    gen_server:call(Pid, fetch).
+fetch(HeapRef) ->
+    gen_server:call(HeapRef, fetch).
 
 
 %% delete/1
 %% ====================================================================
 %% @doc Deletes RTransfer heap.
 %% @end
--spec delete(Pid :: pid()) -> ok.
+-spec delete(HeapRef) -> ok when
+    HeapRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
+    Pid :: pid(),
+    Name :: atom(),
+    Node :: node(),
+    Module :: module(),
+    GlobalName :: term(),
+    ViaName :: term().
 %% ====================================================================
-delete(Pid) ->
-    gen_server:cast(Pid, delete).
+delete(HeapRef) ->
+    gen_server:call(HeapRef, delete).
 
 
 %%%===================================================================
@@ -125,6 +181,8 @@ init([Prefix, BlockSize]) ->
 %% ====================================================================
 handle_call(fetch, _From, #state{heap = Heap} = State) ->
     {reply, fetch_nif(Heap), State};
+handle_call(delete, _From, State) ->
+    {stop, normal, ok, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -144,8 +202,6 @@ handle_call(_Request, _From, State) ->
 handle_cast({push, Block}, #state{heap = Heap} = State) ->
     push_nif(Heap, Block),
     {noreply, State};
-handle_cast(delete, State) ->
-    {stop, normal, State};
 handle_cast(_Request, State) ->
     {noreply, State}.
 

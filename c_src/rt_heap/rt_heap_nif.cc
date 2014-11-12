@@ -1,9 +1,10 @@
-/*********************************************************************
+/**
+ * @file rt_heap_nif.cc
  * @author Krzysztof Trzepla
  * @copyright (C): 2014 ACK CYFRONET AGH
  * This software is released under the MIT license
  * cited in 'LICENSE.txt'.
-*********************************************************************/
+ */
 
 #include "nifpp.h"
 #include "rt_heap.h"
@@ -13,8 +14,6 @@
 #include <vector>
 
 using namespace one::provider;
-
-extern "C" {
 
 static int load(ErlNifEnv* env, void** priv, ERL_NIF_TERM load_info)
 {
@@ -32,8 +31,10 @@ static ERL_NIF_TERM init_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
         return nifpp::make(env, std::make_tuple(nifpp::str_atom("ok"),
                                                 nifpp::make(env, std::move(heap))));
     }
-    catch(...) {}
-    return enif_make_badarg(env);
+    catch(...)
+    {
+        return enif_make_badarg(env);
+    }
 }
 
 static ERL_NIF_TERM push_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -65,8 +66,10 @@ static ERL_NIF_TERM push_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
         return nifpp::make(env, std::make_tuple(nifpp::str_atom("error"),
                                                 message));
     }
-    catch(...) {}
-    return enif_make_badarg(env);
+    catch(...)
+    {
+        return enif_make_badarg(env);
+    }
 }
 
 static ERL_NIF_TERM fetch_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -92,8 +95,10 @@ static ERL_NIF_TERM fetch_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
         return nifpp::make(env, std::make_tuple(nifpp::str_atom("error"),
                                                 message));
     }
-    catch(...) {}
-    return enif_make_badarg(env);
+    catch(...)
+    {
+        return enif_make_badarg(env);
+    }
 }
 
 static ErlNifFunc nif_funcs[] = {
@@ -103,5 +108,3 @@ static ErlNifFunc nif_funcs[] = {
 };
 
 ERL_NIF_INIT(rt_heap, nif_funcs, load, NULL, NULL, NULL)
-
-} //extern C

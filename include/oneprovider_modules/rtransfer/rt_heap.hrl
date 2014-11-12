@@ -16,6 +16,3 @@
 
 %% RTransfer heap element
 -record(rt_block, {file_id = "", offset = 0, size = 0, priority = 0}).
-
-%% maximal RTransfer block size (100 KB)
--define(RT_BLOCK_SIZE, 100000).
