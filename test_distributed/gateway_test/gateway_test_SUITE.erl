@@ -41,8 +41,6 @@ send_request_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   test_utils:wait_for_cluster_init(),
 
-  ssl:start(),
-
   Self = self(),
   spawn_link(fun() ->
     {ok, ListenSocket} = ssl:listen(9999, [{certfile, ?CERT}, {reuseaddr, true},
