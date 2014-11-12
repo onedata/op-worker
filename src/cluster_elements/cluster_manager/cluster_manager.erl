@@ -869,7 +869,7 @@ lifecycle_notification(Node, Module, Action, Workers, State) ->
   ModuleListeners = [{Module2, Listeners2} || {Module2, Listeners2} <- Listeners, Module =:= Module2],
   case ModuleListeners of
     [{_M, L}] -> send_notifications(Node, Module, Action, Workers, L);
-    _ -> ok;
+    _ -> ok
   end.
 
 %% send_notifications/2
