@@ -30,8 +30,8 @@ class tcp_server;
  * provider, where the client connects through a tcp socket, and the connection
  * is then wrapped in ssl.
  */
-class tcp2tls_session : public session<tcp2tls_session, tcp_socket, ssl_socket>,
-                        public std::enable_shared_from_this<tcp2tls_session> {
+class tcp2tls_session
+    : public session<tcp2tls_session, tcp_socket, ssl_socket> {
 public:
     /**
      * @copydoc session::session
