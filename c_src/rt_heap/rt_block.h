@@ -20,15 +20,13 @@ namespace provider {
  * The rt_block class.
  * rt_block object represents single block pushed on RTransfer heap
  */
-class rt_block
-{
+class rt_block {
 public:
     /**
      * rt_block constructor.
      * Constructs empty RTransfer block.
      */
-    rt_block()
-    : rt_block("", 0, 0, 0) {}
+    rt_block() : rt_block("", 0, 0, 0) {}
 
     /**
      * rt_block constructor.
@@ -39,19 +37,18 @@ public:
      * @param priority block priority
      * @param counter defines how many times block was pushed on the rt_heap
      */
-    rt_block(std::string file_id,
-             ErlNifUInt64 offset,
-             ErlNifUInt64 size,
-             int priority,
-             int counter = 1)
-    : file_id_(std::move(file_id))
-    , offset_(offset)
-    , size_(size)
-    , priority_(priority)
-    , counter_(counter) {}
+    rt_block(std::string file_id, ErlNifUInt64 offset, ErlNifUInt64 size,
+             int priority, int counter = 1)
+        : file_id_(std::move(file_id))
+        , offset_(offset)
+        , size_(size)
+        , priority_(priority)
+        , counter_(counter)
+    {
+    }
 
     /// Getter for block's file ID
-    const std::string& file_id() const { return file_id_; }
+    const std::string &file_id() const { return file_id_; }
 
     /// Getter for block's offset
     ErlNifUInt64 offset() const { return offset_; }
@@ -73,7 +70,7 @@ public:
      * @param block to be merged
      * @return merged block
      */
-    const rt_block& merge(const rt_block& block);
+    const rt_block &merge(const rt_block &block);
 
     /**
      * Checks whether this block can be merge with other block. That is
@@ -82,7 +79,7 @@ public:
      * @param block to be merged
      * @return merged block
      */
-    bool is_mergeable(const rt_block& block, ErlNifUInt64 block_size);
+    bool is_mergeable(const rt_block &block, ErlNifUInt64 block_size);
 
     /**
      * Compares this block with other block. Order of comparison criteria:
@@ -94,7 +91,7 @@ public:
      * @param block to be compared with
      * @return true if this block comes before the other, otherwise false
      */
-    bool operator<(const rt_block& block) const;
+    bool operator<(const rt_block &block) const;
 
 private:
     std::string file_id_;

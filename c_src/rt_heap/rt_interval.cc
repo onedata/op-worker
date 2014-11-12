@@ -11,16 +11,14 @@
 namespace one {
 namespace provider {
 
-rt_interval::rt_interval(ErlNifUInt64 offset,
-                 ErlNifUInt64 size)
-    : begin_(offset)
-    , end_(offset + size - 1)
+rt_interval::rt_interval(ErlNifUInt64 offset, ErlNifUInt64 size)
+    : begin_(offset), end_(offset + size - 1)
 {
-    if(size == 0)
+    if (size == 0)
         throw std::runtime_error("Invalid interval");
 }
 
-bool rt_interval::operator<(const rt_interval& interval) const
+bool rt_interval::operator<(const rt_interval &interval) const
 {
     return end_ < interval.end();
 }

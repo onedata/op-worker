@@ -18,10 +18,10 @@ namespace provider {
 
 /**
  * The rt_interval class.
- * rt_interval object represents bytes segment of rt_block - [offset, offset + size)
+ * rt_interval object represents bytes segment of rt_block - [offset, offset +
+ * size)
  */
-class rt_interval
-{
+class rt_interval {
 public:
     /**
      * rt_interval constructor.
@@ -29,8 +29,7 @@ public:
      * @param offset interval offset
      * @param size interval size
      */
-    rt_interval(ErlNifUInt64 offset,
-                ErlNifUInt64 size);
+    rt_interval(ErlNifUInt64 offset, ErlNifUInt64 size);
 
     /// Getter for interval beginning
     ErlNifUInt64 begin() const { return begin_; }
@@ -44,7 +43,7 @@ public:
      * @param interval to be compared with
      * @return true if this interval comes before the other, otherwise false
      */
-    bool operator<(const rt_interval& interval) const;
+    bool operator<(const rt_interval &interval) const;
 
 private:
     ErlNifUInt64 begin_;
