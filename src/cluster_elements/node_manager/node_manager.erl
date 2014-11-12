@@ -30,7 +30,7 @@
 % GUI and cowboy related defines
 
 % Paths in gui static directory
--define(static_paths, ["/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
+-define(static_paths, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
 
 % Session logic module
 -define(session_logic_module, session_logic).
@@ -1272,7 +1272,6 @@ start_gui_listener() ->
     {ok, DocRoot} = application:get_env(oneprovider_node, control_panel_static_files_root),
 
     {ok, Cert} = application:get_env(oneprovider_node, web_ssl_cert_path),
-    CertString = atom_to_list(Cert),
 
     {ok, GuiPort} = application:get_env(oneprovider_node, control_panel_port),
     {ok, GuiNbAcceptors} = application:get_env(oneprovider_node, control_panel_number_of_acceptors),
@@ -1280,7 +1279,7 @@ start_gui_listener() ->
     {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
 
     LocalPort = oneproxy:get_local_port(GuiPort),
-    spawn_link(fun() -> oneproxy:start(GuiPort, LocalPort, CertString, verify_none) end),
+    spawn_link(fun() -> oneproxy:start(GuiPort, LocalPort, Cert, verify_none) end),
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
@@ -1296,7 +1295,7 @@ start_gui_listener() ->
             ]}
         ]},
         % Proper requests are routed to handler modules
-        {'_', static_dispatches(atom_to_list(DocRoot), ?static_paths) ++ [
+        {'_', static_dispatches(DocRoot, ?static_paths) ++ [
             {"/nagios/[...]", opn_cowboy_bridge,
                 [
                     {delegation, true},
@@ -1398,13 +1397,12 @@ start_rest_listener() ->
     {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
 
     {ok, Cert} = application:get_env(oneprovider_node, web_ssl_cert_path),
-    CertString = atom_to_list(Cert),
 
     % Get REST port from env and setup dispatch opts for cowboy
     {ok, RestPort} = application:get_env(oneprovider_node, rest_port),
 
     LocalPort = oneproxy:get_local_port(RestPort),
-    Pid = spawn_link(fun() -> oneproxy:start(RestPort, LocalPort, CertString, verify_peer) end),
+    Pid = spawn_link(fun() -> oneproxy:start(RestPort, LocalPort, Cert, verify_peer) end),
     register(oneproxy_rest, Pid),
 
     RestDispatch = [

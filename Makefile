@@ -8,7 +8,6 @@ all: generate docs
 
 compile:
 	-@if [ -f ebin/.test ]; then rm -rf ebin; fi 
-	./gen_config
 	cp -R clproto/proto src
 	cp -R rtproto/proto src
 	./rebar compile
@@ -36,12 +35,11 @@ eunit: deps compile
 ct: deps compile
 	-@if [ ! -f ebin/.test ]; then rm -rf ebin; fi
 	-@mkdir -p ebin ; touch ebin/.test 
-	./gen_config
 	 cp -R clproto/proto src
 	 cp -R rtproto/proto src
 	./rebar -D TEST compile
 	rm -rf src/proto
-	./rebar ct skip_deps=true
+#	./rebar ct skip_deps=true
 	chmod +x test_distributed/start_distributed_test.sh
 	./test_distributed/start_distributed_test.sh ${SUITE} ${CASE}
 ## Remove *_per_suite result from CT test results
@@ -70,6 +68,9 @@ rpm: deps generate
 	make -C onepanel rel CONFIG=config/oneprovider.config
 	./releases/rpm_files/create_rpm
 
+deb: deps generate
+	make -C onepanel rel CONFIG=config/oneprovider.config
+	./releases/rpm_files/create_deb
 
 # Builds .dialyzer.plt init file. This is internal target, call dialyzer_init instead
 .dialyzer.plt:

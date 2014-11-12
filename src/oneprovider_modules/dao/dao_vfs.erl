@@ -21,10 +21,12 @@
 %% API - File system management
 -export([list_dir/3, count_subdirs/1, count_childs/1, rename_file/2, lock_file/3, unlock_file/3, find_files/1]). %% High level API functions
 -export([save_descriptor/1, remove_descriptor/1, exist_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
--export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
+-export([save_new_file/2, save_new_file/3, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
 -export([get_space_file/2, get_space_file/1, get_space_files/1, file_by_meta_id/1]).
+-export([list_file_locations/1, get_file_locations/1, save_file_location/1, remove_file_location/1]).
+-export([list_file_blocks/1, get_file_blocks/1, save_file_block/1, remove_file_block/1]).
 
 
 -ifdef(TEST).
@@ -284,40 +286,48 @@ get_file_meta(FMetaUUID) ->
 
 %% save_new_file/2
 %% ====================================================================
+%% @equiv save_new_file(FilePath, File, dao_helper:gen_uuid())
+-spec save_new_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
+%% ====================================================================
+save_new_file(FilePath, #file{} = File) ->
+    save_new_file(FilePath, File, dao_helper:gen_uuid()).
+
+%% save_new_file/3
+%% ====================================================================
 %% @doc Saves new file to DB
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #db_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
--spec save_new_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
+-spec save_new_file(FilePath :: string(), File :: file_info(), UUID :: uuid()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
-save_new_file(FilePath, #file{} = File) ->
+save_new_file(FilePath, #file{} = File, UUID) ->
     try
         case File#file.type of
             ?REG_TYPE ->
-                save_new_reg_file(FilePath, File);
+                save_new_reg_file(FilePath, File, UUID);
             _ ->
-                save_new_not_reg_file(FilePath, File)
+                save_new_not_reg_file(FilePath, File, UUID)
         end
     catch
         _:Error3 ->
             {error, Error3}
     end.
 
-%% save_new_reg_file/2
+%% save_new_reg_file/3
 %% ====================================================================
 %% @doc Saves new regular file to DB
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #db_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
--spec save_new_reg_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
+-spec save_new_reg_file(FilePath :: string(), File :: file_info(), UUID :: uuid()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
-save_new_reg_file(FilePath, #file{type = Type} = File) when Type == ?REG_TYPE ->
+save_new_reg_file(FilePath, #file{type = Type} = File, UUID) when Type == ?REG_TYPE ->
     AnalyzedPath = file_path_analyze(FilePath),
     case exist_waiting_file(AnalyzedPath) of
         {ok, false} ->
             case exist_file(AnalyzedPath) of
                 {ok, false} ->
-                    SaveAns = save_file(File),
+                    SaveAns = save_file(#db_document{uuid = UUID, record = File}),
                     case SaveAns of
                         {ok, UUID} ->
                             %% check if file was not created by disconnected node in parallel
@@ -361,19 +371,19 @@ save_new_reg_file(FilePath, #file{type = Type} = File) when Type == ?REG_TYPE ->
             Other
     end.
 
-%% save_new_not_reg_file/2
+%% save_new_not_reg_file/3
 %% ====================================================================
 %% @doc Saves new not regular file (dir, link) to DB
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #db_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
--spec save_new_not_reg_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
+-spec save_new_not_reg_file(FilePath :: string(), File :: file_info(), UUID :: uuid()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
-save_new_not_reg_file(FilePath, #file{type = Type} = File) when Type > ?REG_TYPE ->
+save_new_not_reg_file(FilePath, #file{type = Type} = File, UUID) when Type > ?REG_TYPE ->
     AnalyzedPath = file_path_analyze(FilePath),
     case exist_file(AnalyzedPath) of
         {ok, false} ->
-            SaveAns = save_file(File),
+            SaveAns = save_file(#db_document{uuid = UUID, record = File}),
             case SaveAns of
                 {ok, UUID} ->
                     try
@@ -423,7 +433,6 @@ save_file(#db_document{record = #file{name = FName} = FileRec} = FileDoc) when i
 -spec remove_file(File :: file()) -> ok | {error, any()} | no_return().
 %% ====================================================================
 remove_file(File) ->
-    dao_external:set_db(?FILES_DB_NAME),
     {ok, FData} = get_file(File),
 
     %% Remove file meta
@@ -455,6 +464,14 @@ remove_file(File) ->
             ?warning("Cannot remove file_descriptors ~p due to error: ~p", [{by_file, {uuid, FData#db_document.uuid}}, Reason1])
     end,
 
+    %% Remove locations
+    case remove_file_location({file_id, FData#db_document.uuid}) of
+        ok -> ok;
+        {error, Reason4} ->
+            ?warning("Cannot remove file_locations ~p due to error: ~p", [{file_id, FData#db_document.uuid}, Reason4])
+    end,
+
+    dao_external:set_db(?FILES_DB_NAME),
     dao_records:remove_record(FData#db_document.uuid).
 
 %% exist_file/1
@@ -634,6 +651,135 @@ get_path_info(File) ->
 rename_file(File, NewName) ->
     {ok, #db_document{record = FileInfo} = FileDoc} = get_file(File),
     {ok, _} = save_file(FileDoc#db_document{record = FileInfo#file{name = NewName}}).
+
+
+%% get_file_locations/1
+%% ====================================================================
+%% @doc Fetches all file locations specified for a given file identified by its UUID.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec get_file_locations(FileId :: uuid()) -> {ok, [file_location_doc()]} | no_return().
+%% ====================================================================
+get_file_locations(FileId) when is_list(FileId) ->
+    QueryArgs =
+        #view_query_args{keys = [dao_helper:name(FileId)], include_docs = true},
+
+    Rows = fetch_rows(?FILE_LOCATIONS_BY_FILE, QueryArgs),
+    LocationDocs = [#db_document{record = #file_location{}} = Row#view_row.doc || Row <- Rows],
+    {ok, LocationDocs}.
+
+
+%% list_file_locations/1
+%% ====================================================================
+%% @doc Fetches UUIDS of all file locations specified for a given file identified by its UUID.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec list_file_locations(FileId :: uuid()) -> {ok, [uuid()]} | no_return().
+%% ====================================================================
+list_file_locations(FileId) when is_list(FileId) ->
+    QueryArgs =
+        #view_query_args{keys = [dao_helper:name(FileId)], include_docs = false},
+
+    Rows = fetch_rows(?FILE_LOCATIONS_BY_FILE, QueryArgs),
+    LocationDocs = [Row#view_row.id || Row <- Rows, is_list(Row#view_row.id)],
+    {ok, LocationDocs}.
+
+
+%% save_file_location/1
+%% ====================================================================
+%% @doc Saves a file location as a new document in the database, or as a new version
+%% of an existing document.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec save_file_location(file_location_doc() | file_location_info()) -> {ok, uuid()} | {error, any()}.
+%% ====================================================================
+save_file_location(#file_location{} = FileLocation) ->
+    save_file_location(#db_document{record = FileLocation});
+save_file_location(#db_document{record = #file_location{}} = FileLocationDoc) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:save_record(FileLocationDoc).
+
+
+%% remove_file_location/1
+%% ====================================================================
+%% @doc Removes a file location document from the database.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec remove_file_location(file_location_doc() | uuid()) -> ok | {error, any()} | no_return().
+%% ====================================================================
+remove_file_location(#db_document{uuid = LocationId, record = #file_location{}}) ->
+    remove_file_location(LocationId);
+remove_file_location({file_id, FileId}) ->
+    {ok, Locations} = list_file_locations(FileId),
+    lists:foreach(fun remove_file_location/1, Locations);
+remove_file_location(LocationId) when is_list(LocationId) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    ok = dao_records:remove_record(LocationId),
+    remove_file_block({file_location_id, LocationId}).
+
+
+%% get_file_blocks/1
+%% ====================================================================
+%% @doc Fetches all file blocks for a given file location identified by its UUID.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec get_file_blocks(LocationId :: uuid()) -> {ok, [file_block_doc()]} | no_return().
+%% ====================================================================
+get_file_blocks(LocationId) when is_list(LocationId) ->
+    QueryArgs =
+        #view_query_args{keys = [dao_helper:name(LocationId)], include_docs = true},
+
+    Rows = fetch_rows(?FILE_BLOCKS_BY_FILE_LOCATION, QueryArgs),
+    BlockDocs = [#db_document{record = #file_block{}} = Row#view_row.doc || Row <- Rows],
+    {ok, BlockDocs}.
+
+
+%% list_file_blocks/1
+%% ====================================================================
+%% @doc Fetches UUIDS of all file blocks specified for a given file location identified by its UUID.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec list_file_blocks(FileId :: uuid()) -> {ok, [uuid()]} | no_return().
+%% ====================================================================
+list_file_blocks(LocationId) when is_list(LocationId) ->
+    QueryArgs =
+        #view_query_args{keys = [dao_helper:name(LocationId)], include_docs = false},
+
+    Rows = fetch_rows(?FILE_BLOCKS_BY_FILE_LOCATION, QueryArgs),
+    BlockDocs = [Row#view_row.id || Row <- Rows, is_list(Row#view_row.id)],
+    {ok, BlockDocs}.
+
+
+%% save_file_block/1
+%% ====================================================================
+%% @doc Saves a file block as a new document in the database, or as a new version
+%% of an existing document.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec save_file_block(file_block_doc() | file_block_info()) -> {ok, uuid()} | {error, any()}.
+%% ====================================================================
+save_file_block(#file_block{} = FileBlock) ->
+    save_file_block(#db_document{record = FileBlock});
+save_file_block(#db_document{record = #file_block{}} = FileBlockDoc) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:save_record(FileBlockDoc).
+
+
+%% remove_file_block/1
+%% ====================================================================
+%% @doc Removes a file block from the database.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec remove_file_block(file_block_doc() | uuid()) -> ok | {error, any()} | no_return().
+%% ====================================================================
+remove_file_block(#db_document{uuid = BlockId, record = #file_block{}}) ->
+    remove_file_block(BlockId);
+remove_file_block({file_location_id, LocationId}) ->
+    {ok, Blocks} = list_file_blocks(LocationId),
+    lists:foreach(fun remove_file_block/1, Blocks);
+remove_file_block(BlockId) when is_list(BlockId) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:remove_record(BlockId).
 
 
 %% list_dir/3

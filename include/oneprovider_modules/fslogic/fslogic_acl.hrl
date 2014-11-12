@@ -13,8 +13,8 @@
 -ifndef(FSLOGIC_ACL_HRL).
 -define(FSLOGIC_ACL_HRL, 1).
 
-% defines the length of hash appended to username (such hash occures after '#') in acl text representation
--define(username_hash_length, 5).
+% Returns true if Bitmask contains all bits from Flag
+-define(has_flag(Bitmask, Flag), ((Bitmask band Flag) =:= Flag)).
 
 % ace types
 -define(allow, <<"ALLOW">>).

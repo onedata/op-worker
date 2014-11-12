@@ -554,7 +554,7 @@ init_per_testcase(application_start_test1, Config) ->
   NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1}]]),
 
   lists:append([{nodes, NodesUp}], Config);
 
@@ -564,7 +564,7 @@ init_per_testcase(application_start_test2, Config) ->
   NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1}]]),
 
   lists:append([{nodes, NodesUp}], Config);
 
@@ -574,7 +574,7 @@ init_per_testcase(type1, Config) ->
   NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1}]]),
 
   lists:append([{nodes, NodesUp}], Config);
 
@@ -587,7 +587,7 @@ init_per_testcase(type2, Config) ->
 
   PeerCert = ?COMMON_FILE("peer.pem"),
   Port = 6666,
-  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}, {db_nodes, [?DB_NODE]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}, {db_nodes, [?DB_NODE]}, {heart_beat, 1}]]),
 
   lists:append([{port, Port}, {peer_cert, PeerCert}, {nodes, NodesUp}], Config);
 
@@ -600,10 +600,10 @@ init_per_testcase(monitoring_test, Config) ->
   DBNode = ?DB_NODE,
 
   test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [
-    [{node_type, ccm}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+    [{node_type, ccm}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1}]]),
 
   lists:append([{nodes, NodesUp}, {dbnode, DBNode}], Config);
 

@@ -26,7 +26,7 @@
 -export([apply_or_redirect/2, apply_or_redirect/3, maybe_redirect/2]).
 
 % Functions to generate page elements
--export([top_menu/1, top_menu/2, empty_page/0, message/2, message/3,
+-export([top_menu/1, top_menu/2, empty_page/0, message/2, message/4, breadcrumbs/1,
     spinner/0, expand_button/1, expand_button/2, collapse_button/1, collapse_button/2]).
 
 
@@ -310,8 +310,9 @@ top_menu(ActiveTabID, SubMenuBody) ->
         }
     ]),
 
+    gui_jq:wire(<<"initialize_top_menu();">>),
     [
-        #panel{class = <<"navbar navbar-fixed-top">>, body = [
+        #panel{id = <<"top_menu">>, class = <<"navbar navbar-fixed-top">>, body = [
             #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 1px solid gray;">>, body = [
                 #panel{class = <<"container">>, body = [
                     #list{class = <<"nav pull-left">>, body = MenuCaptions},
@@ -324,28 +325,31 @@ top_menu(ActiveTabID, SubMenuBody) ->
 
 %% message/2
 %% ====================================================================
-%% @doc Renders a message in given element and allows to hide it with
+%% @doc Renders a message below given element and allows to hide it with
 %% default postback.
--spec message(Id :: binary(), Message :: binary()) -> Result when
+%% @end
+-spec message(Type :: success | error, Message :: binary()) -> Result when
     Result :: ok.
 %% ====================================================================
-message(Id, Message) ->
-    message(Id, Message, {close_message, Id}).
+message(Type, Message) ->
+    message(<<"message">>, Type, Message, {close_message, <<"message">>}).
 
 
-%% message/3
+%% message/4
 %% ====================================================================
-%% @doc Renders a message in given element and allows to hide it with
+%% @doc Renders a message below given element and allows to hide it with
 %% custom postback.
--spec message(Id :: binary(), Message :: binary(), Postback :: term()) -> Result when
+%% @end
+-spec message(Id :: binary(), Type :: success | error, Message :: binary(), Postback :: term()) -> Result when
     Result :: ok.
 %% ====================================================================
-message(Id, Message, Postback) ->
+message(Id, Type, Message, Postback) ->
     Body = [
         Message,
         #link{
+            id = <<"close_message_button">>,
             title = <<"Close">>,
-            style = <<"position: absolute; top: 1em; right: 1em;">>,
+            style = <<"position: absolute; top: 0.5em; right: 0.5em;">>,
             class = <<"glyph-link">>,
             postback = Postback,
             body = #span{
@@ -353,8 +357,58 @@ message(Id, Message, Postback) ->
             }
         }
     ],
+    case Type of
+        success ->
+            gui_jq:add_class(Id, <<"dialog-success">>),
+            gui_jq:remove_class(Id, <<"dialog-danger">>);
+        _ ->
+            gui_jq:add_class(Id, <<"dialog-danger">>),
+            gui_jq:remove_class(Id, <<"dialog-success">>)
+    end,
     gui_jq:update(Id, Body),
     gui_jq:fade_in(Id, 300).
+
+
+%% breadcrumbs/1
+%% ====================================================================
+%% @doc Renders breadcrumbs in submenu.
+-spec breadcrumbs(Elements :: [{LinkName :: binary(), LinkAddress :: binary()}]) -> Result when
+    Result :: [#panel{}].
+%% ====================================================================
+breadcrumbs(Elements) ->
+    [{LastElementName, LastElementLink} | ReversedTail] = lists:reverse(Elements),
+    [
+        #panel{
+            class = <<"navbar-inner">>,
+            style = <<"border-bottom: 1px solid gray">>,
+            body = #panel{
+                class = <<"container">>,
+                body = #list{
+                    style = <<"margin: 0 auto; background-color: inherit;">>,
+                    class = <<"breadcrumb">>,
+                    body = lists:map(fun({Name, Link}) ->
+                        #li{
+                            body = #link{
+                                class = <<"glyph-link">>,
+                                href = Link,
+                                body = Name
+                            }
+                        }
+                    end, lists:reverse(ReversedTail)) ++ [
+                        #li{
+                            class = <<"active">>,
+                            body = #link{
+                                style = <<"color: #1abc9c">>,
+                                class = <<"glyph-link">>,
+                                href = LastElementLink,
+                                body = LastElementName
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    ].
 
 
 %% spinner/0
