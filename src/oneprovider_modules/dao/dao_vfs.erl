@@ -24,7 +24,7 @@
 -export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
--export([get_space_file/1, get_space_files/1, file_by_meta_id/1]).
+-export([get_space_file/2, get_space_file/1, get_space_files/1, file_by_meta_id/1]).
 
 
 -ifdef(TEST).
@@ -49,14 +49,24 @@
 %% @todo: cache
 -spec get_space_file(Space :: file()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
 %% ====================================================================
-get_space_file({uuid, UUID}) ->
-    get_space_file1({uuid, UUID});
-get_space_file(SpacePath) ->
-    get_space_file1(fslogic_path:absolute_join(filename:split(SpacePath))).
+get_space_file(Request) ->
+    get_space_file(Request, true).
 
--spec get_space_file1(Space :: file()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
-get_space_file1(InitArg) ->
-    case ets:lookup(spaces_cache, InitArg) of
+
+get_space_file({uuid, UUID}, UseCache) ->
+    get_space_file1({uuid, UUID}, UseCache);
+get_space_file(SpacePath, UseCache) ->
+    get_space_file1(fslogic_path:absolute_join(filename:split(SpacePath)), UseCache).
+
+-spec get_space_file1(Space :: file(), UseCache :: boolean()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
+get_space_file1(InitArg, UseCache) ->
+    CacheRes =
+        case UseCache of
+            false -> [];
+            true  -> ets:lookup(spaces_cache, InitArg)
+        end,
+
+    case CacheRes of
         [{_, Value}] -> {ok, Value};
         _ ->
             case get_file(InitArg) of

@@ -7,7 +7,8 @@ message TreeBroadcast {
     required bytes ledge = 4;
     required bytes redge = 5;
     required bytes space_id = 6;
-    repeated bytes excluded_providers = 7;
+    required bytes request_id = 7;
+    repeated bytes excluded_providers = 8;
 }
 
 
