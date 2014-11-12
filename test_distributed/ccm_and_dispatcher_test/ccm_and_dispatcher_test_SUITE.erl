@@ -336,7 +336,8 @@ workers_list_singleton_and_permanent_test(Config) ->
 
   [CCM | NodesUp2] = NodesUp,
   [_ | WorkerNodes] = NodesUp2,
-  [Worker1 | _] = WorkerNodes,
+  [Worker1 | WorkerNodes2] = WorkerNodes,
+  [Worker2 | _] = WorkerNodes2,
 
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
   test_utils:wait_for_state_loading(),
