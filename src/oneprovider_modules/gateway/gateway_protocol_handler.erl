@@ -81,7 +81,6 @@ init(Ref, Socket, Transport, _Opts) ->
     Timeout :: timeout(),
     Reason :: term().
 init(State) ->
-    ?warning("Someone connected"), %% @todo
     {ok, State, ?connection_close_timeout}.
 
 
