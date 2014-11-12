@@ -31,7 +31,7 @@
 -define(dbs_to_sync, [?FILES_DB_NAME]).
 
 %% API
--export([init/1, handle/2, cleanup/0, state_loop/1, sync_call/1]).
+-export([init/1, handle/2, cleanup/0]).
 
 -define(dbsync_cast(Req), gen_server:call(request_dispatcher, {dbsync, 1, Req})).
 
@@ -42,12 +42,11 @@
 -spec init(Args :: term()) -> list().
 %% ====================================================================
 init(_Args) ->
-    register(dbsync_state, spawn_link(fun state_loop/0)),
+    register(dbsync_state, spawn_link(dbsync_state, state_loop, [])),
     register(dbsync_ping_service, spawn_link(fun ping_service_loop/0)),
 
     ets:new(?dbsync_state, [public, named_table, set]),
     catch state_load(), %% Try to load state from DB
-
 
     lists:foreach(
         fun(DbName) ->
@@ -126,7 +125,7 @@ handle2(_ProtocolVersion, {changes_stream, StreamId, Data, SinceSeqInfo}) ->
 
 
 handle2(_ProtocolVersion, {docs_updated, {DbName, DocsWithSeq, SinceSeqInfo}}) ->
-    case lists:member(?FILES_DB_NAME, ?dbs_to_sync) of
+    case lists:member(DbName, ?dbs_to_sync) of
         true ->
             ok = emit_documents(DbName, DocsWithSeq, SinceSeqInfo);
         false ->
@@ -146,10 +145,10 @@ handle2(_ProtocolVersion, {reemit, #treebroadcast{ledge = LEdge, redge = REdge, 
 
 handle2(ProtocolVersion, #treebroadcast{input = RequestData, message_type = DecoderName, space_id = SpaceId, request_id = ReqId} = BaseRequest) ->
 
-    Ignore = sync_call(fun(_State) ->
-        case state_get({request, ReqId}) of
+    Ignore = dbsync_state:call(fun(_State) ->
+        case dbsync_state:get({request, ReqId}) of
             undefined ->
-                state_set({request, ReqId}, utils:mtime()),
+                dbsync_state:set({request, ReqId}, utils:mtime()),
                 false;
             _MTime ->
                 true
@@ -218,33 +217,43 @@ handle2(_ProtocolVersion, _Msg) ->
 
 
 get_current_seq(ProviderId, SpaceId, DbName) ->
-    case state_get(last_space_seq_key(ProviderId, SpaceId, DbName)) of
+    case dbsync_state:get(last_space_seq_key(ProviderId, SpaceId, DbName)) of
         undefined ->
             {0, <<>>};
         CurrSeqInfo -> CurrSeqInfo
     end.
 
+replicate_doc(SpaceId, #db_document{uuid = DocUUID} = Doc) ->
+    Hooks =
+        case dbsync_state:get(hooks) of
+            undefined -> [];
+            Hooks0 -> Hooks0
+        end,
 
-handle_broadcast(ProtocolVersion, SpaceId, #docupdated{dbname = DbName, document = DocsData, prev_seq = PrevSeqInfoBin, curr_seq = CurrSeqInfoBin} = Request, BaseRequest) ->
+    DocDbName = dbsync_records:doc_to_db(Doc),
+    {ok, #space_info{space_id = SpaceId} = _SpaceInfo} = get_space_ctx(DocDbName, Doc),
+    case dao_lib:apply(dao_records, save_record, [DocDbName, Doc, [replicated_changes]], 1) of
+        {ok, _} ->
+            [catch Callback(DocDbName, SpaceId, DocUUID, Doc) || {_, Callback} <- Hooks],
+            ?info("UPDATED ~p !", [DocUUID]),
+            ok;
+        {error, Reason2} ->
+            ?error("Cannot replicate changes due to: ~p", [Reason2]),
+            {error, Reason2}
+
+    end.
+
+
+handle_broadcast(_ProtocolVersion, SpaceId, #docupdated{dbname = DbName, document = DocsData, prev_seq = PrevSeqInfoBin, curr_seq = CurrSeqInfoBin} = Request, BaseRequest) ->
     {provider_id, ProviderId} = get(peer_id),
     CurrSeqInfo = dbsync_utils:decode_term(CurrSeqInfoBin),
     PrevSeqInfo = dbsync_utils:decode_term(PrevSeqInfoBin),
     lists:foreach(
         fun(DocData) ->
-            #db_document{uuid = DocUUID, rev_info = {_, [EmitedRev | _]}} = Doc = dbsync_utils:decode_term(DocData),
-            DocDbName = doc_to_db(Doc),
-            {ok, #space_info{space_id = SpaceId} = SpaceInfo} = get_space_ctx(DocDbName, Doc),
-            case dao_lib:apply(dao_records, save_record, [DocDbName, Doc, [replicated_changes]], ProtocolVersion) of
-                {ok, _} ->
-                    ?info("UPDATED ~p OMG !!!!", [DocUUID]),
-                    ok;
-                {error, Reason2} ->
-                    ?error("=================> Error2 while replicating changes ~p", [Reason2]),
-                    {error, Reason2}
-
-            end
+            #db_document{uuid = _DocUUID, rev_info = {_, [_EmitedRev | _]}} = Doc = dbsync_utils:decode_term(DocData),
+            replicate_doc(SpaceId, Doc)
         end, DocsData),
-    sync_call(fun(_State) ->
+    dbsync_state:call(fun(_State) ->
         case get_current_seq(ProviderId, SpaceId, DbName) of
             PrevSeqInfo ->
                 ?debug("State of space ~p updated to ~p!", [SpaceId, CurrSeqInfo]),
@@ -313,27 +322,11 @@ request_diff(ProviderId, SpaceId, DbName, SinceSeqInfo, Attempts) ->
     PrevSeqInfo = dbsync_utils:decode_term(PrevSeqInfoBin),
     lists:foreach(
         fun(DocData) ->
-            #db_document{uuid = DocUUID, rev_info = {_, [_EmitedRev | _]}} = Doc = dbsync_utils:decode_term(DocData),
-            DocDbName = doc_to_db(Doc),
-            try get_space_ctx(DocDbName, Doc) of
-                {ok, #space_info{space_id = SpaceId} = _SpaceInfo} ->
-                    ok;
-                {error, _} -> ok
-            catch
-                _:_ -> ok
-            end,
-            case dao_lib:apply(dao_records, save_record, [DocDbName, Doc, [replicated_changes]], 1) of
-                {ok, _} ->
-                    ?debug("UPDATED ~p OMG !!!!", [DocUUID]),
-                    ok;
-                {error, Reason2} ->
-                    ?error("Cannot replicate changes dur to: ~p", [Reason2]),
-                    {error, Reason2}
-
-            end
+            #db_document{uuid = _DocUUID, rev_info = {_, [_EmitedRev | _]}} = Doc = dbsync_utils:decode_term(DocData),
+            catch replicate_doc(SpaceId, Doc)
         end, DocsData),
 
-    sync_call(fun(_State) ->
+    dbsync_state:call(fun(_State) ->
         case get_current_seq(ProviderId, SpaceId, DbName) of
             PrevSeqInfo ->
                 ?debug("State of space ~p updated to ~p!", [SpaceId, CurrSeqInfo]),
@@ -367,7 +360,7 @@ emit_documents(DbName, DocsWithSeq, SinceSeqInfo) ->
     lists:foreach(
         fun({SpaceId, {#space_info{providers = SyncWith} = SpaceInfo, LastSpaceSeq, Docs}}) ->
             Docs1 = lists:reverse(Docs),
-            sync_call(fun(_) ->
+            dbsync_state:call(fun(_) ->
                 case ets:lookup(?dbsync_state, last_space_seq_key(SpaceId, DbName)) of
                     [{_, LastSeq}] when LastSeq < LastSpaceSeq ->
                         ets:insert(?dbsync_state, {last_space_seq_key(SpaceId, DbName), LastSpaceSeq}),
@@ -393,38 +386,6 @@ cleanup() ->
     ok.
 
 
-get_space_ctx(_DbName, #db_document{uuid = UUID} = Doc) ->
-    case ets:lookup(?dbsync_state, {uuid_to_spaceid, UUID}) of
-        [{{uuid_to_spaceid, UUID}, SpaceId}] ->
-            {ok, SpaceId};
-        [] ->
-            case get_space_ctx2(Doc, []) of
-                {ok, {UUIDs, SpaceInfo}} ->
-                    lists:foreach(
-                        fun(FUUID) ->
-                            ets:insert(?dbsync_state, {{uuid_to_spaceid, FUUID}, SpaceInfo})
-                        end, UUIDs),
-                    {ok, SpaceInfo};
-                {error, Reason} ->
-                    {error, Reason}
-            end
-    end;
-get_space_ctx(DbName, UUID) ->
-    {ok, Doc} = dao_lib:apply(dao_records, get_record, [DbName, UUID, []], 1),
-    get_space_ctx(DbName, Doc).
-get_space_ctx2(#db_document{uuid = "", record = #file{}}, []) ->
-    {error, no_space};
-get_space_ctx2(#db_document{uuid = UUID, record = #file{extensions = Exts, parent = Parent}} = Doc, UUIDs) ->
-    case lists:keyfind(?file_space_info_extestion, 1, Exts) of
-        {?file_space_info_extestion, #space_info{} = SpaceInfo} ->
-            {ok, {UUIDs, SpaceInfo}};
-        false ->
-            {ok, ParentDoc} = dao_lib:apply(vfs, get_file, [{uuid, Parent}], 1),
-            get_space_ctx2(ParentDoc, [UUID | UUIDs])
-    end;
-get_space_ctx2(#db_document{uuid = UUID, record = #file_meta{}}, UUIDs) ->
-    {ok, #db_document{} = FileDoc} = dao_lib:apply(dao_vfs, file_by_meta_id, [UUID], 1),
-    get_space_ctx2(FileDoc, UUIDs).
 
 
 push_doc_changes(#space_info{} = _SpaceInfo, _Docs, _, _, []) ->
@@ -433,7 +394,7 @@ push_doc_changes(#space_info{} = _SpaceInfo, [], _, _, _) ->
     ok;
 push_doc_changes(#space_info{} = SpaceInfo, Docs, SinceSeqInfo, LastSpaceSeq, SyncWith) ->
     [SomeDoc | _] = Docs,
-    Request = #docupdated{dbname = utils:ensure_binary(doc_to_db(SomeDoc)), document = [dbsync_utils:encode_term(Doc) || Doc <- Docs], curr_seq = dbsync_utils:encode_term(LastSpaceSeq), prev_seq = dbsync_utils:encode_term(SinceSeqInfo)},
+    Request = #docupdated{dbname = utils:ensure_binary(dbsync_records:doc_to_db(SomeDoc)), document = [dbsync_utils:encode_term(Doc) || Doc <- Docs], curr_seq = dbsync_utils:encode_term(LastSpaceSeq), prev_seq = dbsync_utils:encode_term(SinceSeqInfo)},
     ok = tree_broadcast(SpaceInfo, SyncWith, Request, 3).
 
 
@@ -503,15 +464,21 @@ do_emit_tree_broadcast(_SpaceInfo, _SyncWith, _Request, _BaseRequest, 0) ->
 
 broadcast_space_state(SpaceId) ->
     {ok, #space_info{providers = SyncWith} = SpaceInfo} = fslogic_objects:get_space({uuid, SpaceId}),
-    SeqInfo =
-        case ets:lookup(?dbsync_state, last_space_seq_key(SpaceId, ?FILES_DB_NAME)) of
-            [{_, SeqInfo1}] ->
-                SeqInfo1;
-            _ ->
-                [{_, SeqInfo2}] = ets:lookup(?dbsync_state, {last_seq, ?FILES_DB_NAME}),
-                SeqInfo2
-        end,
-    Request = #reportspacestate{current_seq = [#reportspacestate_currentseqdata{dbname = utils:ensure_binary(?FILES_DB_NAME), seq_num = dbsync_utils:encode_term(SeqInfo)}]},
+    SeqData =
+        lists:map(
+            fun(DbName) ->
+                SeqInfo =
+                    case ets:lookup(?dbsync_state, last_space_seq_key(SpaceId, DbName)) of
+                        [{_, SeqInfo1}] ->
+                            SeqInfo1;
+                        _ ->
+                            [{_, SeqInfo2}] = ets:lookup(?dbsync_state, {last_seq, DbName}),
+                            SeqInfo2
+                    end,
+                #reportspacestate_currentseqdata{dbname = utils:ensure_binary(DbName), seq_num = dbsync_utils:encode_term(SeqInfo)}
+            end, ?dbs_to_sync),
+
+    Request = #reportspacestate{current_seq = SeqData},
     tree_broadcast(SpaceInfo, lists:usort(SyncWith), Request, 3).
 
 
@@ -574,15 +541,6 @@ pb_module(ModuleName) ->
 %% ====================================================================
 get_message_type(Msg) when is_tuple(Msg) ->
     utils:record_type(Msg).
-
-
-
-
-
-doc_to_db(#db_document{record = #file{}}) ->
-    ?FILES_DB_NAME;
-doc_to_db(#db_document{record = #file_meta{}}) ->
-    ?FILES_DB_NAME.
 
 
 changes_receiver_loop({StreamId, State}) ->
@@ -667,10 +625,13 @@ state_save() ->
     Ignore1 = [Entry || {{uuid_to_spaceid, _}, _} = Entry <- State],
 
     Ignore2 = [Entry || {{last_space_seq, LocalProviderId1, _, _}, _} = Entry <- State, LocalProviderId1 =:= LocalProviderId],
+    Ignore3 = [Entry || {hooks, _} = Entry <- State],
+
     State1 = State -- Ignore1,
     State2 = State1 -- Ignore2,
+    State3 = State2 -- Ignore3,
 
-    case dao_lib:apply(dao_records, save_record, [?SYSTEM_DB_NAME, #db_document{record = #dbsync_state{ets_list = State2}, force_update = true, uuid = "dbsync_state"}, []], 1) of
+    case dao_lib:apply(dao_records, save_record, [?SYSTEM_DB_NAME, #db_document{record = #dbsync_state{ets_list = State3}, force_update = true, uuid = "dbsync_state"}, []], 1) of
         {ok, _} -> ok;
         {error, Reason} ->
             ?error("Cannot save DBSync state due to ~p", [Reason]),
@@ -693,67 +654,22 @@ changes_receiver_name(StreamId) ->
     list_to_atom("changes_receiver_" ++ utils:ensure_list(StreamId)).
 
 
-state_set(Key, Value) ->
-    ets:insert(?dbsync_state, {Key, Value}).
-
-state_get(Key) ->
-    case ets:lookup(?dbsync_state, Key) of
-        [{_, Value}] -> Value;
-        _ -> undefined
-    end.
-
-
-state_loop() ->
-    state_loop(#dbsync_state{}).
-state_loop(State) ->
-    NewState =
-        receive
-            {From, Fun} when is_function(Fun) ->
-                {Response, NState} =
-                    try Fun(State) of
-                        {Response1, #dbsync_state{} = NState1} ->
-                            {Response1, NState1};
-                        OnlyResp -> {OnlyResp, State}
-                    catch
-                        Type:Error -> {{error, {Type, Error}}, State}
-                    end,
-                From ! {self(), Response},
-                NState;
-            {From, Module, Method, Args} ->
-                {Response, NState} =
-                    try apply(Module, Method, Args ++ [State]) of
-                        {Response1, #dbsync_state{} = NState1} ->
-                            {Response1, NState1};
-                        OnlyResp -> {OnlyResp, State}
-                    catch
-                        Type:Error ->
-                            Stack = erlang:get_stacktrace(),
-                            ?dump_all([Type, Error, Stack]),
-                            {{error, {Type, Error, Stack}}, State}
-                    end,
-                From ! {self(), Response},
-                NState
-        after 10000 ->
-            State
-        end,
-    ?MODULE:state_loop(NewState).
-
-sync_call(Fun) when is_function(Fun) ->
-    ?dbsync_state ! {self(), Fun},
-    sync_call_get_response();
-sync_call(Method) when is_atom(Method) ->
-    sync_call(Method, []).
-sync_call(Method, Args) ->
-    sync_call(rtransfer_sync, Method, Args).
-sync_call(Module, Method, Args) when is_atom(Module), is_atom(Method), is_list(Args) ->
-    ?dbsync_state ! {self(), Module, Method, Args},
-    sync_call_get_response().
-
-%% Interal sync_call use only !
-sync_call_get_response() ->
-    StPid = whereis(?dbsync_state),
-    receive
-        {StPid, Response} -> Response
-    after 10000 ->
-        {error, sync_timeout}
-    end.
+get_space_ctx(_DbName, #db_document{uuid = UUID} = Doc) ->
+    case dbsync_state:get({uuid_to_spaceid, UUID}) of
+        undefined ->
+            case dbsync_records:get_space_ctx(Doc, []) of
+                {ok, {UUIDs, SpaceInfo}} ->
+                    lists:foreach(
+                        fun(FUUID) ->
+                            dbsync_state:set({uuid_to_spaceid, FUUID}, SpaceInfo)
+                        end, UUIDs),
+                    {ok, SpaceInfo};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        SpaceId ->
+            {ok, SpaceId}
+    end;
+get_space_ctx(DbName, UUID) ->
+    {ok, Doc} = dao_lib:apply(dao_records, get_record, [DbName, UUID, []], 1),
+    get_space_ctx(DbName, Doc).
