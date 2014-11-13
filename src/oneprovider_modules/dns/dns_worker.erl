@@ -111,7 +111,7 @@ handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
 handle(_ProtocolVersion, {handle_a, Domain}) ->
     IPList = case parse_domain(Domain) of
                  unknown_domain ->
-                     nx_domain;
+                     refused;
                  {Prefix, _Suffix} ->
                      % Accept all prefixes that consist of one part
                      case string:str(Prefix, ".") of
@@ -139,27 +139,29 @@ handle(_ProtocolVersion, {handle_a, Domain}) ->
             nx_domain;
         serv_fail ->
             serv_fail;
+        refused ->
+            refused;
         _ ->
             {ok, TTL} = application:get_env(?APP_Name, dns_a_response_ttl),
-            ?dump(IPList),
-            {ok, [dns_server:answer_record(Domain, TTL, ?S_A, Data) || Data <- IPList] ++ [
-                dns_server:authoritative_answer_flag(true)
-            ]}
+            {ok,
+                    [dns_server:answer_record(Domain, TTL, ?S_A, IP) || IP <- IPList] ++
+                    [dns_server:authoritative_answer_flag(true)]
+            }
     end;
 
 handle(_ProtocolVersion, {handle_ns, Domain}) ->
     case parse_domain(Domain) of
         unknown_domain ->
-            nx_domain;
+            refused;
         {Prefix, Suffix} ->
             % Accept all prefixes that consist of one part
             case string:str(Prefix, ".") of
                 0 ->
                     {ok, TTL} = application:get_env(?APP_Name, dns_ns_response_ttl),
-                    {ok, [
-                        dns_server:answer_record(Domain, TTL, ?S_NS, Suffix),
-                        dns_server:authoritative_answer_flag(true)
-                    ]};
+                    {ok,
+                            [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP <- get_nodes()] ++
+                            [dns_server:authoritative_answer_flag(true)]
+                    };
                 _ ->
                     nx_domain
             end
