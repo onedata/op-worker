@@ -110,22 +110,22 @@ distributed_test(Config) ->
   {ConAns, Socket} = gen_tcp:connect(Host, DNS_Port, [{active, false}, binary, {packet, 2}]),
   ?assertEqual(ok, ConAns),
 
-  Request = create_request("dns_worker.veilfs.plgrid.pl"),
+  Request = create_request("dns_worker.onedata.org"),
   Sender = fun () -> gen_tcp:send(Socket, Request) end,
 
-  Request2 = create_request("control_panel.veilfs.plgrid.pl"),
+  Request2 = create_request("control_panel.onedata.org"),
   Sender2 = fun () -> gen_tcp:send(Socket, Request2) end,
 
-  Request3 = create_request("fslogic.veilfs.plgrid.pl"),
+  Request3 = create_request("fslogic.onedata.org"),
   Sender3 = fun () -> gen_tcp:send(Socket, Request3) end,
 
-  Request4 = create_request("veilfs.plgrid.pl"),
+  Request4 = create_request("onedata.org"),
   Sender4 = fun () -> gen_tcp:send(Socket, Request4) end,
 
-  Request5 = create_request("www.veilfs.plgrid.pl"),
+  Request5 = create_request("www.onedata.org"),
   Sender5 = fun () -> gen_tcp:send(Socket, Request5) end,
 
-  Request6 = create_request("xxx.cluster.veilfs.plgrid.pl"),
+  Request6 = create_request("cluster.onedata.org"),
   Sender6 = fun () -> gen_tcp:send(Socket, Request6) end,
 
   Receiver = fun () -> gen_tcp:recv(Socket, 0, infinity) end,
