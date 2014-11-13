@@ -128,13 +128,10 @@ message FileLocation {
 }
 
 message BlocksAvailable {
-    required uint32 storage_id = 1;
-    required string file_id = 2;
-    repeated FileLocation.BlockAvailability blocks = 3;
-}
-
-message UpdateFileBlockMap {
-    repeated BlocksAvailable blocks_available = 1;
+    optional bool clear_map = 1 [default = false];
+    required uint32 storage_id = 2;
+    required string file_id = 3;
+    repeated FileLocation.BlockAvailability blocks = 4;
 }
 
 message RequestFileBlock {
