@@ -199,13 +199,15 @@ handle2(_ProtocolVersion, #requestseqdiff{space_id = SpaceId, dbname = DbName, s
             catch
                 _:{badmatch,{error,{not_found,missing}}} ->
                     Acc;
+                _:{badmatch,{ok, #space_info{}}} ->
+                    Acc;
                 _:Reason ->
                     ?error_stacktrace("OMG2 ==============================> ~p", [Reason]),
                     Acc
             end
         end, #{}, ChangedDocs1),
 
-    {SpaceInfo, _, Docs} = maps:get(SpaceId, SpacesMap),
+    {SpaceInfo, _, Docs} = maps:get(SpaceId, SpacesMap, {#space_info{}, 0, []}),
     DocsEncoded = [dbsync_utils:encode_term(Doc) || Doc <- lists:reverse(Docs)],
     #docupdated{dbname = DbName, document =  DocsEncoded, prev_seq = SinceBin, curr_seq = dbsync_utils:encode_term(ReqSeqInfo)};
 
