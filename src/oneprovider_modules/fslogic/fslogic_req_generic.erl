@@ -18,6 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 -include("registered_names.hrl").
 -include("oneprovider_modules/fslogic/fslogic_remote_location.hrl").
+-include("oneprovider_modules/fslogic/ranges_struct.hrl").
+-include("oneprovider_modules/gateway/gateway.hrl").
 
 
 %% API
@@ -442,9 +444,9 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     OtherRemoteLocationDocs = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id =/= ProviderId end, RemoteLocationDocs),
     OutOfSyncList = fslogic_remote_location:check_if_synchronized(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, OtherRemoteLocationDocs),
     lists:foreach(
-        fun(Range) ->
-            ?info("Synchronizing blocks: ~p of file ~p", [Range, FullFileName])
-            %TODO let rtransfer fetch this data in order to synchronize file
+        fun({Id, Range = #range{from = From, to = To}}) ->
+            ?info("Synchronizing blocks: ~p of file ~p", [Range, FullFileName]),
+            {ok, _} = gateway:do_stuff(Id, #fetchrequest{file_id = MyRemoteLocationDoc#remote_location.file_id, offset = From, size = To-From+1})
         end, OutOfSyncList),
     SyncedParts = OutOfSyncList, % assume that all parts has been synchronized
     NewDoc = fslogic_remote_location:mark_as_available(SyncedParts, MyRemoteLocationDoc),

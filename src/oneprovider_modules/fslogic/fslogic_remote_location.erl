@@ -92,7 +92,7 @@ mark_as_available(Blocks, #db_document{record = #remote_location{file_parts = Pa
 %% Each remote_file_part contains information about providers that have it up-to-date.
 %% @end
 -spec check_if_synchronized(Range :: #byte_range{} | #offset_range{} | #block_range{}, MyDoc :: remote_location_doc(), OtherDocs :: [remote_location_doc()]) ->
-    [{ProviderId :: string(), AvailableBlocks :: remote_location_doc()}].
+    [{ProviderId :: string(), AvailableBlocks :: [#range{}]}].
 %% ====================================================================
 check_if_synchronized(#byte_range{} = ByteRange, MyDoc, OtherDocs) ->
     check_if_synchronized(byte_to_block_range(ByteRange), MyDoc, OtherDocs);
