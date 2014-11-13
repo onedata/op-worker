@@ -18,7 +18,11 @@
 -include_lib("ctool/include/global_registry/gr_providers.hrl").
 
 %% API
--export([normalize_seq_info/1, json_decode/1, seq_info_to_url/1, encode_term/1, decode_term/1, changes_json_to_docs/1, gen_request_id/0]).
+-export([get_provider_url/1, normalize_seq_info/1, json_decode/1, seq_info_to_url/1, encode_term/1, decode_term/1, changes_json_to_docs/1, gen_request_id/0]).
+
+get_provider_url(ProviderId) ->
+    {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
+    _URL = lists:nth(crypto:rand_uniform(1, length(URLs) + 1), URLs).
 
 
 normalize_seq_info(SeqNum) when is_integer(SeqNum) ->
