@@ -20,11 +20,21 @@
 %% API
 -export([get_provider_url/1, normalize_seq_info/1, json_decode/1, seq_info_to_url/1, encode_term/1, decode_term/1, changes_json_to_docs/1, gen_request_id/0]).
 
+%% get_provider_url/1
+%% ====================================================================
+%% @doc Selects URL of the provider
+-spec get_provider_url(ProviderId :: binary()) -> URL :: string() | no_return().
+%% ====================================================================
 get_provider_url(ProviderId) ->
     {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
     _URL = lists:nth(crypto:rand_uniform(1, length(URLs) + 1), URLs).
 
 
+%% normalize_seq_info/1
+%% ====================================================================
+%% @doc Normalizes sequence info format
+-spec normalize_seq_info(term()) -> {SeqNum :: integer(), SeqHash :: bianry()}.
+%% ====================================================================
 normalize_seq_info(SeqNum) when is_integer(SeqNum) ->
     normalize_seq_info({SeqNum, <<>>});
 normalize_seq_info({SeqNum, SeqHash}) when is_integer(SeqNum), is_binary(SeqHash) ->
@@ -35,10 +45,20 @@ normalize_seq_info([SeqNum, SeqHash]) ->
     normalize_seq_info({SeqNum, SeqHash}).
 
 
+%% json_decode/1
+%% ====================================================================
+%% @doc Decodes JSON using CouchDB format
+-spec json_decode(JSON :: iolist()) -> term().
+%% ====================================================================
 json_decode(JSON) ->
     (mochijson2:decoder([{object_hook, fun({struct,L}) -> {L} end}]))(JSON).
 
 
+%% seq_info_to_url/1
+%% ====================================================================
+%% @doc Converts sequence info to CouchDB's URL format
+-spec seq_info_to_url({SeqNum :: integer(), SeqHash :: bianry()}) -> string().
+%% ====================================================================
 seq_info_to_url({SeqNum, SeqHash}) ->
     case SeqNum of
         0 -> "0";
