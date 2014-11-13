@@ -79,7 +79,7 @@ spaces_permissions_test(Config) ->
   UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, Team]),
   UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, Team, Team2, Team3]),
 
-  UID2 = list_to_integer(UserDoc2#db_document.uuid),
+  %% UID2 = list_to_integer(UserDoc2#db_document.uuid),
 
   [DN1 | _] = user_logic:get_dn_list(UserDoc1),
   [DN2 | _] = user_logic:get_dn_list(UserDoc2),
@@ -122,11 +122,11 @@ spaces_permissions_test(Config) ->
   ?assertEqual("ok", Status7),
   ?assertEqual(list_to_atom(?VOK), Answer7),
 
-  {Status8, Answer8} = chown(Socket2, TestFileNewName, UID2),
+  {Status8, Answer8} = chown(Socket2, TestFileNewName, 20000),
   ?assertEqual("ok", Status8),
   ?assertEqual(list_to_atom(?VEACCES), Answer8),
 
-  {Status9, Answer9} = chown(Socket, TestFileNewName, UID2),
+  {Status9, Answer9} = chown(Socket, TestFileNewName, 20000),
   ?assertEqual("ok", Status9),
   ?assertEqual(list_to_atom(?VEACCES), Answer9),
 
@@ -137,7 +137,8 @@ spaces_permissions_test(Config) ->
   FileMetaUID = FileMetaDoc#db_document.record#file_meta.uid,
   ?assertEqual(UserDoc1#db_document.uuid, FileMetaUID),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [TestFileNewName, UID2])),
+  %% @todo: remove this assertion since chown is no longer supported
+  %% ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [TestFileNewName, UID2])),
 
   {GetFileAns1, FileDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file, [TestFileNewName]),
   ?assertEqual(ok, GetFileAns1),
@@ -1819,10 +1820,8 @@ users_separation_test(Config) ->
   Time = utils:time(),
   test_utils:wait_for_db_reaction(),
 
-  %% Users have different (and next to each other) IDs
-  UID1 = list_to_integer(UserID1),
-  UID2 = list_to_integer(UserID2),
-  ?assertEqual(UID2, UID1 + 1),
+  %% Users have different IDs
+  ?assert(UserID1 =/= UserID2),
 
   {Status, Helper, Id, _Validity, AnswerOpt} = create_file(Socket, TestFile),
   ?assertEqual("ok", Status),

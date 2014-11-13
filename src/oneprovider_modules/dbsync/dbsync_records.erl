@@ -39,4 +39,4 @@ get_space_ctx(#db_document{uuid = UUID, record = #file{extensions = Exts, parent
     end;
 get_space_ctx(#db_document{uuid = UUID, record = #file_meta{}}, UUIDs) ->
     {ok, #db_document{} = FileDoc} = dao_lib:apply(dao_vfs, file_by_meta_id, [UUID], 1),
-    get_space_ctx(FileDoc, UUIDs).
+    get_space_ctx(FileDoc, [UUID | UUIDs]).
