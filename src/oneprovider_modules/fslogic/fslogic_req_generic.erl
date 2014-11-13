@@ -455,7 +455,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     FileId = MyRemoteLocationDoc#db_document.record#remote_location.file_id,
 
     case dao_vfs:list_file_locations(FileId) of
-        [] -> create_file_location_for_remote_file(FullFileName, FileId);
+        {ok, []} -> create_file_location_for_remote_file(FullFileName, FileId);
         _ -> ok
     end,
 
@@ -530,7 +530,12 @@ create_file_location_for_remote_file(FullFileName, FileUuid) ->
     FileId = fslogic_storage:get_new_file_id(SpaceInfo, FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
 
     FileLocation = #file_location{file_id = FileUuid, storage_uuid = UUID, storage_file_id = FileId},
-    {ok, _} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
+    {ok, _LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
+
+    {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), ?LOCATION_VALIDITY),
+%%     _FuseFileBlocks = [#filelocation_blockavailability{offset = 0, size = ?FILE_BLOCK_SIZE_INF}],
+%%     FileBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
+%%     {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
 
     {SH, FileId} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileId, SpaceId, false),
     #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
