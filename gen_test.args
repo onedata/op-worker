@@ -1,1 +1,1 @@
--workers w1@veildev_145.local -main_ccm ccm1@veildev_146.local -db_nodes db@veildev_146.local -storage_config_path "/root/oneprovider/storage.cfg"
+-workers w1@127.0.0.1 w2@127.0.0.1 -opt_ccms ccm2@127.0.0.1 ccm3@127.0.0.1 -main_ccm ccm1@127.0.0.1 -db_nodes db1@127.0.0.1 db2@127.0.0.1 "/root/oneprovider/storage.cfg"
