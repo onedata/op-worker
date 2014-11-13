@@ -536,4 +536,4 @@ create_file_location_for_remote_file(FullFileName, FileUuid) ->
     #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
 
     Storage_helper_info = #storage_helper_info{name = SHName, init_args = SHArgs},
-    ok = storage_files_manager:create(Storage_helper_info, FileId),
+    ok = storage_files_manager:create(Storage_helper_info, FileId).
