@@ -79,7 +79,6 @@ handle_node_lifecycle_notification(_Node, _Module, _Action, _Pid) ->
 -spec node_lifecycle_get_notification() -> ok | term().
 %% ====================================================================
 -ifdef(TEST).
-
 node_lifecycle_get_notification() ->
   Notification = ets:lookup(?NOTIFICATION_STATE, node_lifecycle_notification),
   {ok, {node_lifecycle, Notification}}.

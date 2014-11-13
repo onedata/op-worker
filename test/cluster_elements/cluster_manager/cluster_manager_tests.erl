@@ -415,36 +415,41 @@ count_required_permanent_workers_test() ->
                                ]},
   Nodes = ["ccm_worker1@veildev_45.local", "ccm_worker2@veildev_45.local", "ccm_worker3@veildev_45.local"],
 
+  CompareWorkerLists = fun(WorkersExpected, Workers) ->
+                         ?assertEqual(length(WorkersExpected),length(Workers)),
+                         FilteredWorkers = [Worker || Worker <- Workers, lists:member(Worker, WorkersExpected)],
+                         ?assertEqual(length(WorkersExpected),length(FilteredWorkers))
+                       end,
   {PermamentWorkers1, RequiredPermamentWorkers1} = cluster_manager:required_permanent_workers(PermanentModules1, ModulesWithArgs, State1, Nodes),
-  ?assertEqual([], PermamentWorkers1),
-  ?assertEqual([], RequiredPermamentWorkers1),
+  CompareWorkerLists([], PermamentWorkers1),
+  CompareWorkerLists([], RequiredPermamentWorkers1),
 
   PermanentModules2 = [gateway],
   {PermamentWorkers2, RequiredPermamentWorkers2} = cluster_manager:required_permanent_workers(PermanentModules2, ModulesWithArgs, State1, Nodes),
-  ?assertEqual([{"ccm_worker1@veildev_45.local", gateway}], PermamentWorkers2),
-  ?assertEqual([{"ccm_worker2@veildev_45.local", gateway, []},
+  CompareWorkerLists([{"ccm_worker1@veildev_45.local", gateway}], PermamentWorkers2),
+  CompareWorkerLists([{"ccm_worker2@veildev_45.local", gateway, []},
                 {"ccm_worker3@veildev_45.local", gateway, []}
                ], RequiredPermamentWorkers2),
 
 
   PermanentModules3 = [gateway, dao_worker],
   {PermamentWorkers3, RequiredPermamentWorkers3} = cluster_manager:required_permanent_workers(PermanentModules3, ModulesWithArgs, State1, Nodes),
-  ?assertEqual([{"ccm_worker2@veildev_45.local", dao_worker},
+  CompareWorkerLists([{"ccm_worker2@veildev_45.local", dao_worker},
                 {"ccm_worker1@veildev_45.local", gateway},
                 {"ccm_worker1@veildev_45.local", dao_worker}
                ], PermamentWorkers3),
-  ?assertEqual([{"ccm_worker2@veildev_45.local", gateway, []},
+  CompareWorkerLists([{"ccm_worker2@veildev_45.local", gateway, []},
                 {"ccm_worker3@veildev_45.local", gateway, []},
                 {"ccm_worker3@veildev_45.local", dao_worker, []}
                ], RequiredPermamentWorkers3),
 
   PermanentModules4 = [gateway, dao_worker, fslogic],
   {PermamentWorkers4, RequiredPermamentWorkers4} = cluster_manager:required_permanent_workers(PermanentModules4, ModulesWithArgs, State1, Nodes),
-  ?assertEqual([{"ccm_worker2@veildev_45.local", dao_worker},
+  CompareWorkerLists([{"ccm_worker2@veildev_45.local", dao_worker},
                 {"ccm_worker1@veildev_45.local", gateway},
                 {"ccm_worker1@veildev_45.local", dao_worker}
                ], PermamentWorkers4),
-  ?assertEqual([{"ccm_worker1@veildev_45.local", fslogic, []},
+  CompareWorkerLists([{"ccm_worker1@veildev_45.local", fslogic, []},
                 {"ccm_worker2@veildev_45.local", gateway, []},
                 {"ccm_worker2@veildev_45.local", fslogic, []},
                 {"ccm_worker3@veildev_45.local", gateway, []},
