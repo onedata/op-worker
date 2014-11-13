@@ -1389,8 +1389,6 @@ init_per_suite(Config) ->
             {dns_port, 1308},
             {db_nodes, [?DB_NODE]},
             {heart_beat, 1},
-            {nif_prefix, './'},
-            {ca_dir, './cacerts/'},
             {control_panel_download_buffer,4}
         ]]),
 

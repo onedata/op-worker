@@ -128,7 +128,7 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
     FileUUID = dao_helper:gen_uuid(),
     FileRecordInit = #file{type = ?REG_TYPE, name = NewFileName, uid = UserID, parent = ParentDoc#db_document.uuid, perms = Mode, created = false},
     %% Async *times update
-    FileRecord = fslogic_meta:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
+    FileRecord = fslogic_meta:update_meta_attr(FileRecordInit, times, {0, 0, 0}),
 
     FileLocation = #file_location{file_id = FileUUID, storage_uuid = UUID, storage_file_id = FileId},
     {ok, LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
@@ -156,6 +156,9 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
             #storage_helper_info{name = ExistingWFileStorageSHName, init_args = ExistingWFileStorageSHArgs} = SH,
             #filelocation{storage_id = ExistingWFileStorage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs, available = Available};
         {ok, FileUUID} ->
+            %% @todo: ???
+            fslogic_meta:update_meta_attr(FileRecord, times, {CTime, CTime, CTime}),
+
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
             {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), Validity),
 

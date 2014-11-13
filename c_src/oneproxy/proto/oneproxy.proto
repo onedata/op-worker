@@ -1,0 +1,6 @@
+package one.proxy.proto;
+
+message ProxyInit {
+    required string host = 1;
+    required string port = 2;
+}

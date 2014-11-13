@@ -157,7 +157,7 @@ create_user(GlobalId, Logins, Name, Teams, Email, DnList, AccessToken, RefreshTo
         refresh_token = RefreshToken,
         access_expiration_time = AccessExpirationTime
     },
-    {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
+    {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [#db_document{record = User, uuid = GlobalId}], 1),
     GetUserAns = get_user({uuid, UUID}),
     try
         case {DaoAns, QuotaAns} of
@@ -975,9 +975,9 @@ create_space_dir(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) 
 
     SpaceDirName = unicode:characters_to_list(SpaceName),
 
-    GroupsBase = case dao_lib:apply(dao_vfs, exist_file, ["/" ++ ?SPACES_BASE_DIR_NAME], 1) of
+    GroupsBase = case dao_lib:apply(dao_vfs, exist_file, [{uuid, ?SPACES_BASE_DIR_NAME}], 1) of
                      {ok, true} ->
-                         case dao_lib:apply(dao_vfs, get_file, ["/" ++ ?SPACES_BASE_DIR_NAME], 1) of
+                         case dao_lib:apply(dao_vfs, get_file, [{uuid, ?SPACES_BASE_DIR_NAME}], 1) of
                              {ok, #db_document{uuid = UUID}} ->
                                  UUID;
                              {error, Reason} ->
@@ -987,7 +987,7 @@ create_space_dir(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) 
                      {ok, false} ->
                          GFile = #file{type = ?DIR_TYPE, name = ?SPACES_BASE_DIR_NAME, uid = "0", parent = "", perms = 8#755},
                          GFileDoc = fslogic_meta:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
-                         case dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?SPACES_BASE_DIR_NAME, GFileDoc], 1) of
+                         case dao_lib:apply(dao_vfs, save_file, [#db_document{record = GFileDoc, uuid = ?SPACES_BASE_DIR_NAME}], 1) of
                              {ok, UUID} -> UUID;
                              {error, Reason} ->
                                  ?error("Error while creating groups base dir: ~p", [Reason]),

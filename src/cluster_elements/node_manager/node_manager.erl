@@ -1,11 +1,11 @@
 %% ===================================================================
 %% @author Michal Wrzeszcz
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module is a gen_server that coordinates the 
+%% @doc: This module is a gen_server that coordinates the
 %% life cycle of node. It starts/stops appropriate services (according
 %% to node type) and communicates with ccm (if node works as worker).
 %%
@@ -24,6 +24,7 @@
 
 %% Path (relative to domain) on which cowboy expects client's requests
 -define(ONECLIENT_URI_PATH, "/oneclient").
+-define(ONEPROVIDER_URI_PATH, "/oneprovider").
 
 %% ------------
 % GUI and cowboy related defines
@@ -1241,10 +1242,13 @@ start_dispatcher_listener() ->
     {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
 
     LocalPort = oneproxy:get_local_port(Port),
-    Pid = spawn_link(fun() -> oneproxy:start(Port, LocalPort, CertFile, verify_peer) end),
+    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_peer) end),
     register(?ONEPROXY_DISPATCHER, Pid),
 
-    Dispatch = cowboy_router:compile([{'_', [{?ONECLIENT_URI_PATH, ws_handler, []}]}]),
+    Dispatch = cowboy_router:compile([{'_', [
+        {?ONECLIENT_URI_PATH, ws_handler, []},
+        {?ONEPROVIDER_URI_PATH, provider_handler, []}
+    ]}]),
 
     {ok, _} = cowboy:start_http(?dispatcher_listener, DispatcherPoolSize,
         [
@@ -1268,7 +1272,6 @@ start_gui_listener() ->
     {ok, DocRoot} = application:get_env(oneprovider_node, control_panel_static_files_root),
 
     {ok, Cert} = application:get_env(oneprovider_node, web_ssl_cert_path),
-    CertString = atom_to_list(Cert),
 
     {ok, GuiPort} = application:get_env(oneprovider_node, control_panel_port),
     {ok, GuiNbAcceptors} = application:get_env(oneprovider_node, control_panel_number_of_acceptors),
@@ -1276,7 +1279,7 @@ start_gui_listener() ->
     {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
 
     LocalPort = oneproxy:get_local_port(GuiPort),
-    spawn_link(fun() -> oneproxy:start(GuiPort, LocalPort, CertString, verify_none) end),
+    spawn_link(fun() -> oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none) end),
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
@@ -1292,7 +1295,7 @@ start_gui_listener() ->
             ]}
         ]},
         % Proper requests are routed to handler modules
-        {'_', static_dispatches(atom_to_list(DocRoot), ?static_paths) ++ [
+        {'_', static_dispatches(DocRoot, ?static_paths) ++ [
             {"/nagios/[...]", opn_cowboy_bridge,
                 [
                     {delegation, true},
@@ -1394,13 +1397,12 @@ start_rest_listener() ->
     {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
 
     {ok, Cert} = application:get_env(oneprovider_node, web_ssl_cert_path),
-    CertString = atom_to_list(Cert),
 
     % Get REST port from env and setup dispatch opts for cowboy
     {ok, RestPort} = application:get_env(oneprovider_node, rest_port),
 
     LocalPort = oneproxy:get_local_port(RestPort),
-    Pid = spawn_link(fun() -> oneproxy:start(RestPort, LocalPort, CertString, verify_peer) end),
+    Pid = spawn_link(fun() -> oneproxy:start_rproxy(RestPort, LocalPort, Cert, verify_peer) end),
     register(oneproxy_rest, Pid),
 
     RestDispatch = [

@@ -32,8 +32,5 @@
             cowboy
         ]},
         {mod, {oneprovider_node_app, []}},
-        {env, [
-            %% This part is auto-generated
-            %% Don't modify "{env, [" line an whatever comes after it
-        ]}
+        {env, []}
     ]}.

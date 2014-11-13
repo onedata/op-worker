@@ -29,7 +29,7 @@
 %% ====================================================================
 get_gr_url() ->
     {ok, URL} = application:get_env(?APP_Name, global_registry_url),
-    atom_to_list(URL).
+    URL.
 
 
 %% get_key_path/0
@@ -40,7 +40,7 @@ get_gr_url() ->
 %% ====================================================================
 get_key_path() ->
     {ok, KeyFile} = application:get_env(?APP_Name, global_registry_provider_key_path),
-    atom_to_list(KeyFile).
+    KeyFile.
 
 
 %% get_cert_path/0
@@ -52,7 +52,7 @@ get_key_path() ->
 %% ====================================================================
 get_cert_path() ->
     {ok, CertFile} = application:get_env(?APP_Name, global_registry_provider_cert_path),
-    atom_to_list(CertFile).
+    CertFile.
 
 
 %% get_cacert_path/0
@@ -64,4 +64,4 @@ get_cert_path() ->
 %% ====================================================================
 get_cacert_path() ->
     {ok, CACertFile} = application:get_env(?APP_Name, global_registry_ca_cert_path),
-    atom_to_list(CACertFile).
+    CACertFile.

@@ -101,7 +101,7 @@ exec(SUID, GroupId, Method, Args) when is_atom(Method), is_list(Args) ->
 %% ====================================================================
 load_helpers() ->
     {ok, Prefix} = application:get_env(?APP_Name, nif_prefix),
-    case gsi_handler:call(helpers_nif, start, [atom_to_list(Prefix)]) of
+    case gsi_handler:call(helpers_nif, start, [Prefix]) of
         ok -> ok;
         {error,{reload, _}} -> ok;
         {error, Reason} -> 

@@ -287,7 +287,7 @@ handle(Req, {pull, FuseID, CLM}, #handler_state{peer_type = provider, provider_i
     ?debug("Got pull msg: ~p from ~p", [CLM, FuseID]),
     handle(Req, CLM, State#handler_state{fuse_id = utils:ensure_list( fslogic_context:gen_global_fuse_id(ProviderId, FuseID) )});
 handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = _CLM,
-        #handler_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
+        #handler_state{peer_type = PeerType, provider_id = ProviderId, peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
                       access_token = SessionAccessToken, user_global_id = SessionUserGID} = State) ->
     %% Check if received message requires FuseId
     MsgType = case Msg of
@@ -328,15 +328,22 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         false -> throw({no_credentials, MsgId})
     end,
 
+    PeerId =
+        case PeerType of
+            provider ->
+                {provider_id, ProviderId};
+            _ ->
+                {gruid, UserGID}
+        end,
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->
-                      #worker_request{subject = DnString, request =
+                      #worker_request{peer_id = PeerId, subject = DnString, request =
                       #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}, access_token = {UserGID, AccessToken}};
                   CallbackMsg2 when is_record(CallbackMsg2, channelclose) ->
-                      #worker_request{subject = DnString, request =
+                      #worker_request{peer_id = PeerId, subject = DnString, request =
                       #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}, access_token = {UserGID, AccessToken}};
                   _ ->
-                      #worker_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
+                      #worker_request{peer_id = PeerId, subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
               end,
 
     case Synch of

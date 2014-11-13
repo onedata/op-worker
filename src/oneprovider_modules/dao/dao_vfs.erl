@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license
+%% This software is released under the MIT license 
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -24,7 +24,7 @@
 -export([save_new_file/2, save_new_file/3, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
--export([get_space_file/1, get_space_files/1]).
+-export([get_space_file/2, get_space_file/1, get_space_files/1, file_by_meta_id/1]).
 -export([list_file_locations/1, get_file_locations/1, save_file_location/1, remove_file_location/1]).
 -export([list_file_blocks/1, get_file_blocks/1, save_file_block/1, remove_file_block/1]).
 -export([save_remote_location/1, get_remote_location/1, remove_remote_location/1, remote_locations_by_file_id/1]).
@@ -52,14 +52,24 @@
 %% @todo: cache
 -spec get_space_file(Space :: file()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
 %% ====================================================================
-get_space_file({uuid, UUID}) ->
-    get_space_file1({uuid, UUID});
-get_space_file(SpacePath) ->
-    get_space_file1(fslogic_path:absolute_join(filename:split(SpacePath))).
+get_space_file(Request) ->
+    get_space_file(Request, true).
 
--spec get_space_file1(Space :: file()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
-get_space_file1(InitArg) ->
-    case ets:lookup(spaces_cache, InitArg) of
+
+get_space_file({uuid, UUID}, UseCache) ->
+    get_space_file1({uuid, UUID}, UseCache);
+get_space_file(SpacePath, UseCache) ->
+    get_space_file1(fslogic_path:absolute_join(filename:split(SpacePath)), UseCache).
+
+-spec get_space_file1(Space :: file(), UseCache :: boolean()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
+get_space_file1(InitArg, UseCache) ->
+    CacheRes =
+        case UseCache of
+            false -> [];
+            true  -> ets:lookup(spaces_cache, InitArg)
+        end,
+
+    case CacheRes of
         [{_, Value}] -> {ok, Value};
         _ ->
             case get_file(InitArg) of
@@ -1322,6 +1332,20 @@ find_by_times(FileCriteria) ->
         lists:member(FileDoc#db_document.record#file.type, DesiredTypes) end, Rows),
     {ok, lists:map(fun(#view_row{id = Id}) -> Id end, Result)}.
 
+
+file_by_meta_id(MetaUUID) ->
+    Rows = fetch_rows(?FILES_BY_META_DOC, #view_query_args{keys = [
+        [dao_helper:name(MetaUUID), 0],
+        [dao_helper:name(MetaUUID), 1],
+        [dao_helper:name(MetaUUID), 2]
+    ], include_docs = true}),
+    Files = lists:map(fun(#view_row{doc = FileDoc}) -> FileDoc end, Rows),
+    case Files of
+        [] -> {error, {not_found, missing}};
+        [#db_document{} = FileDoc] ->
+            {ok, FileDoc}
+    end.
+
 %% get_file_meta_ids/1
 %% ====================================================================
 %% @doc Get file_meta ids using file_meta_by_times view
@@ -1379,7 +1403,7 @@ file_path_analyze(Path) ->
 
 %% uca_increment/1
 %% ====================================================================
-%% @doc Returns "incremented string" based on Unicode Collation Algorithm.
+%% @doc Returns "incremented string" based on Unicode Collation Algorithm. 
 %%      This method works only for alpha-numeric strings.
 %% @end
 -spec uca_increment(Id :: string()) -> string().

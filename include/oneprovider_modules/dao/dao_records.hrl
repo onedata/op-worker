@@ -46,6 +46,7 @@
         storage_helper_info -> ?record_info_gen(storage_helper_info);
         space_info          -> ?record_info_gen(space_info);
         id_token_login      -> ?record_info_gen(id_token_login);
+        dbsync_state        -> ?record_info_gen(dbsync_state);
         group_details       -> ?record_info_gen(group_details);
     %next_record        -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
