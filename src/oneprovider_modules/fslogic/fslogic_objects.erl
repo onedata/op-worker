@@ -325,11 +325,14 @@ get_remote_location(FullFileName) ->
     {ok, #db_document{uuid = FileId}} = get_file(FullFileName),
     {ok, RemoteLocationList} = dao_lib:apply(dao_vfs, remote_locations_by_file_id, [FileId], fslogic_context:get_protocol_version()),
     ProviderId = cluster_manager_lib:get_provider_id(),
-    case lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationList) of
-        [] -> dao_lib:apply(dao_vfs, save_remote_location, [#remote_location{file_id = FileId, provider_id = ProviderId}], fslogic_context:get_protocol_version());
-        _ -> ok
+    CreatedDocs = case lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationList) of
+        [] ->
+            {ok, Uuid} = dao_lib:apply(dao_vfs, save_remote_location, [#remote_location{file_id = FileId, provider_id = ProviderId}], fslogic_context:get_protocol_version()),
+            {ok, Doc} = dao_lib:apply(dao_vfs, get_remote_location, [Uuid], fslogic_context:get_protocol_version()),
+            [Doc];
+        _ -> []
     end,
-    {ok, RemoteLocationList}.
+    {ok, CreatedDocs ++ RemoteLocationList}.
 
 
 %% ====================================================================
