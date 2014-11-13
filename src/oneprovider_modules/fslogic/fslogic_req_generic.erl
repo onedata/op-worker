@@ -452,6 +452,13 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     ProviderId = cluster_manager_lib:get_provider_id(),
     [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
     OtherRemoteLocationDocs = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id =/= ProviderId end, RemoteLocationDocs),
+    FileId = MyRemoteLocationDoc#db_document.record#remote_location.file_id,
+
+    case dao_vfs:list_file_locations(FileId) of
+        [] -> create_file_location_for_remote_file(FullFileName, FileId);
+        _ -> ok
+    end,
+
     OutOfSyncList = fslogic_remote_location:check_if_synchronized(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, OtherRemoteLocationDocs),
     lists:foreach(
         fun({Id, Ranges}) ->
@@ -510,3 +517,23 @@ file_truncated(FullFileName, Size) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+create_file_location_for_remote_file(FullFileName, FileUuid) ->
+    {ok, #space_info{space_id = SpaceId} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FullFileName),
+
+    {ok, UserDoc} = fslogic_objects:get_user(),
+    FileBaseName = fslogic_path:get_user_file_name(FullFileName, UserDoc),
+
+    {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], fslogic_context:get_protocol_version()),
+    #db_document{uuid = UUID, record = #storage_info{} = Storage} = fslogic_storage:select_storage(fslogic_context:get_fuse_id(), StorageList),
+    SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+    FileId = fslogic_storage:get_new_file_id(SpaceInfo, FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
+
+    FileLocation = #file_location{file_id = FileUuid, storage_uuid = UUID, storage_file_id = FileId},
+    {ok, _} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
+
+    {SH, FileId} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileId, SpaceId, false),
+    #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
+
+    Storage_helper_info = #storage_helper_info{name = SHName, init_args = SHArgs},
+    ok = storage_files_manager:create(Storage_helper_info, FileId),
