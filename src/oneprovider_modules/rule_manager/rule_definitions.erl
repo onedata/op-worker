@@ -96,6 +96,7 @@ register_for_write_events(Bytes) ->
 %% Registers handler which will be called every Bytes will be written.
 register_for_write_events_block_updates(Bytes) ->
   EventHandler = fun(Event) ->
+     ?info("FFFF"),
     ?dump(Event),
     _Blocks = proplists:get_value("blocks", Event)
     %todo update blocks

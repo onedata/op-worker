@@ -660,6 +660,7 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
                 file_stats ->
                     {ErrorCode, Stat} = case get({File, stats}) of
                                             undefined ->
+                                                ct:print("DBG: ~p ~p",[Storage_helper_info, File])
                                                 {TmpErrorCode, TmpStat} = helpers:exec(getattr, Storage_helper_info, [File]),
                                                 case TmpErrorCode of
                                                     0 -> put({File, stats}, TmpStat);
