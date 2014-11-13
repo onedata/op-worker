@@ -108,7 +108,124 @@ handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
             udpate_error
     end;
 
-handle(_ProtocolVersion, {get_worker, Module}) ->
+handle(_ProtocolVersion, {handle_a, Domain}) ->
+    IPList = case parse_domain(Domain) of
+                 unknown_domain ->
+                     nx_domain;
+                 {Prefix, _Suffix} ->
+                     % Accept all prefixes that consist of one part
+                     case string:str(Prefix, ".") of
+                         0 ->
+                             case Prefix of
+                                 "cluster" ->
+                                     % Return all nodes when asked about cluster
+                                     get_nodes();
+                                 _ ->
+                                     % Check if query concers any specific module, if not assume it's a http request
+                                     Module = try list_to_existing_atom(Prefix) catch _:_ -> undefined end,
+                                     case lists:member(Module, ?EXTERNALLY_VISIBLE_MODULES) of
+                                         false ->
+                                             get_workers(control_panel);
+                                         true ->
+                                             get_workers(Module)
+                                     end
+                             end;
+                         _ ->
+                             nx_domain
+                     end
+             end,
+    case IPList of
+        nx_domain ->
+            nx_domain;
+        serv_fail ->
+            serv_fail;
+        _ ->
+            {ok, TTL} = application:get_env(?APP_Name, dns_a_response_ttl),
+            ?dump(IPList),
+            {ok, [dns_server:answer_record(Domain, TTL, ?S_A, Data) || Data <- IPList] ++ [
+                dns_server:authoritative_answer_flag(true)
+            ]}
+    end;
+
+handle(_ProtocolVersion, {handle_ns, Domain}) ->
+    case parse_domain(Domain) of
+        unknown_domain ->
+            nx_domain;
+        {Prefix, Suffix} ->
+            % Accept all prefixes that consist of one part
+            case string:str(Prefix, ".") of
+                0 ->
+                    {ok, TTL} = application:get_env(?APP_Name, dns_ns_response_ttl),
+                    {ok, [
+                        dns_server:answer_record(Domain, TTL, ?S_NS, Suffix),
+                        dns_server:authoritative_answer_flag(true)
+                    ]};
+                _ ->
+                    nx_domain
+            end
+    end;
+
+handle(ProtocolVersion, Msg) ->
+    ?warning("Wrong request: ~p", [Msg]),
+    throw({unsupported_request, ProtocolVersion, Msg}).
+
+%% cleanup/0
+%% ====================================================================
+%% @doc {@link worker_plugin_behaviour} callback cleanup/0
+%% @end
+%% ====================================================================
+-spec cleanup() -> Result when
+    Result :: ok.
+%% ====================================================================
+cleanup() ->
+    dns_server:stop(?Supervisor_Name).
+
+
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
+
+%% parse_domain/1
+%% ====================================================================
+%% @doc Split the domain name into prefix and suffix, where suffix matches the
+%% canonical provider's hostname (retrieved from env). The split is made on the dot between prefix and suffix.
+%% If that's not possible, returns unknown_domain.
+%% @end
+%% ====================================================================
+-spec parse_domain(Domain :: string()) -> {Prefix :: string(), Suffix :: string()} | unknown_domain.
+%% ====================================================================
+parse_domain(DomainArg) ->
+    % If requested domain starts with 'www.', ignore it
+    Domain = case DomainArg of
+                 [$w, $w, $w, $. | Rest] -> Rest;
+                 Other -> Other
+             end,
+    {ok, ProviderHostnameWithoutDot} = application:get_env(?APP_Name, global_registry_hostname),
+    case ProviderHostnameWithoutDot =:= Domain of
+        true ->
+            {"", ProviderHostnameWithoutDot};
+        false ->
+            ProviderHostname = "." ++ ProviderHostnameWithoutDot,
+            HostNamePos = string:rstr(Domain, ProviderHostname),
+            % If hostname is at this position, it's a suffix (the string ends with it)
+            ValidHostNamePos = length(Domain) - length(ProviderHostname) + 1,
+            case HostNamePos =:= ValidHostNamePos of
+                false ->
+                    unknown_domain;
+                true ->
+                    {string:sub_string(Domain, 1, HostNamePos - 1), ProviderHostnameWithoutDot}
+            end
+    end.
+
+
+%% get_workers/1
+%% ====================================================================
+%% @doc Selects couple of nodes hosting given worker and returns their IPs.
+%% @end
+%% ====================================================================
+-spec get_workers(Module :: atom()) -> list() | serv_fail.
+%% ====================================================================
+get_workers(Module) ->
     try
         DNSState = gen_server:call(?MODULE, getPlugInState),
         WorkerList = DNSState#dns_worker_state.workers_list,
@@ -144,7 +261,7 @@ handle(_ProtocolVersion, {get_worker, Module}) ->
                 Result3 = make_ans_random(Result2),
                 case Module of
                     control_panel ->
-                        {ok, Result3};
+                        Result3;
                     _ ->
                         create_ans(Result3, NodesList)
                 end;
@@ -156,9 +273,17 @@ handle(_ProtocolVersion, {get_worker, Module}) ->
         E1:E2 ->
             ?error("DNS get_worker error: ~p:~p", [E1, E2]),
             {error, dns_get_worker_error}
-    end;
+    end.
 
-handle(_ProtocolVersion, get_nodes) ->
+
+%% get_nodes/0
+%% ====================================================================
+%% @doc Selects couple of nodes from the cluster and returns their IPs.
+%% @end
+%% ====================================================================
+-spec get_nodes() -> list() | serv_fail.
+%% ====================================================================
+get_nodes() ->
     try
         DNSState = gen_server:call(?MODULE, getPlugInState),
         NodesList = DNSState#dns_worker_state.nodes_list,
@@ -170,7 +295,7 @@ handle(_ProtocolVersion, get_nodes) ->
                     fun({Node, _}) ->
                         Node
                     end, NodesList)),
-                {ok, Res};
+                Res;
             _ ->
                 random:seed(now()),
                 ChooseNodes = fun({Node, NodeLoad}, TmpAns) ->
@@ -195,22 +320,7 @@ handle(_ProtocolVersion, get_nodes) ->
         E1:E2 ->
             ?error("DNS get_nodes error: ~p:~p", [E1, E2]),
             {error, get_nodes}
-    end;
-
-handle(ProtocolVersion, Msg) ->
-    ?warning("Wrong request: ~p", [Msg]),
-    throw({unsupported_request, ProtocolVersion, Msg}).
-
-%% cleanup/0
-%% ====================================================================
-%% @doc {@link worker_plugin_behaviour} callback cleanup/0
-%% @end
-%% ====================================================================
--spec cleanup() -> Result when
-    Result :: ok.
-%% ====================================================================
-cleanup() ->
-    dns_server:stop(?Supervisor_Name).
+    end.
 
 
 %% create_ans/2
@@ -218,22 +328,20 @@ cleanup() ->
 %% @doc Creates answer from results list (adds additional node if needed).
 %% @end
 %% ====================================================================
--spec create_ans(Result :: list(), NodesList :: list()) -> Ans when
-    Ans :: {ok, IPs},
-    IPs :: list().
+-spec create_ans(Result :: list(), NodesList :: list()) -> IPs :: [term()].
 %% ====================================================================
 create_ans(Result, NodesList) ->
     case (length(Result) > 1) or (length(NodesList) =< 1) of
-        true -> {ok, Result};
+        true -> Result;
         false ->
             NodeNum = random:uniform(length(NodesList)),
             {NewNode, _} = lists:nth(NodeNum, NodesList),
             case Result =:= [NewNode] of
                 true ->
                     {NewNode2, _} = lists:nth((NodeNum rem length(NodesList) + 1), NodesList),
-                    {ok, Result ++ [NewNode2]};
+                    Result ++ [NewNode2];
                 false ->
-                    {ok, Result ++ [NewNode]}
+                    Result ++ [NewNode]
             end
     end.
 
@@ -243,8 +351,7 @@ create_ans(Result, NodesList) ->
 %% @doc Makes order of nodes in answer random.
 %% @end
 %% ====================================================================
--spec make_ans_random(Result :: list()) -> IPs when
-    IPs :: list().
+-spec make_ans_random(Result :: list()) -> IPs :: [term()].
 %% ====================================================================
 make_ans_random(Result) ->
     Len = length(Result),
@@ -272,37 +379,7 @@ make_ans_random(Result) ->
     when Response :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
 %% ====================================================================
 handle_a(Domain) ->
-    IPList = case parse_domain(Domain) of
-                 nx_domain ->
-                     nx_domain;
-                 {Prefix, _Suffix} ->
-                     if
-                         Prefix =:= "" ->
-                             get_workers(control_panel);
-                         Prefix =:= "www" ->
-                             get_workers(control_panel);
-                         Prefix =:= "cluster" ->
-                             get_nodes();
-                         true ->
-                             Module = try list_to_existing_atom(Prefix) catch _:_ -> undefined end,
-                             case lists:member(Module, ?EXTERNALLY_VISIBLE_MODULES) of
-                                 false ->
-                                     nx_domain;
-                                 true ->
-                                     get_workers(Module)
-                             end
-                     end
-             end,
-    case IPList of
-        nx_domain ->
-            nx_domain;
-        serv_fail ->
-            serv_fail;
-        _ ->
-            {ok, [dns_server:answer_record(Domain, ?S_A, Data) || Data <- IPList] ++ [
-                dns_server:authoritative_answer_flag(true)
-            ]}
-    end.
+    call_dns_worker({handle_a, Domain}).
 
 
 %% handle_ns/1
@@ -315,20 +392,7 @@ handle_a(Domain) ->
     when Response :: string().
 %% ====================================================================
 handle_ns(Domain) ->
-    case parse_domain(Domain) of
-        nx_domain ->
-            nx_domain;
-        {Prefix, Suffix} ->
-            case is_prefix_valid(Prefix) of
-                false ->
-                    nx_domain;
-                true ->
-                    {ok, [
-                        dns_server:answer_record(Domain, ?S_NS, Suffix),
-                        dns_server:authoritative_answer_flag(true)
-                    ]}
-            end
-    end.
+    call_dns_worker({handle_ns, Domain}).
 
 
 %% handle_cname/1
@@ -340,21 +404,7 @@ handle_ns(Domain) ->
 -spec handle_cname(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
     when Response :: string().
 %% ====================================================================
-handle_cname(Domain) ->
-    case parse_domain(Domain) of
-        nx_domain ->
-            nx_domain;
-        {Prefix, Suffix} ->
-            case is_prefix_valid(Prefix) of
-                false ->
-                    nx_domain;
-                true ->
-                    {ok, [
-                        dns_server:answer_record(Domain, ?S_CNAME, Suffix),
-                        dns_server:authoritative_answer_flag(true)
-                    ]}
-            end
-    end.
+handle_cname(_Domain) -> not_impl.
 
 
 %% handle_mx/1
@@ -366,21 +416,7 @@ handle_cname(Domain) ->
 -spec handle_mx(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
     when Response :: {Pref :: integer(), Exch :: string()}.
 %% ====================================================================
-handle_mx(Domain) ->
-    case parse_domain(Domain) of
-        nx_domain ->
-            nx_domain;
-        {Prefix, Suffix} ->
-            case is_prefix_valid(Prefix) of
-                false ->
-                    nx_domain;
-                true ->
-                    {ok, [
-                        dns_server:answer_record(Domain, ?S_MX, {0, Suffix}),
-                        dns_server:authoritative_answer_flag(true)
-                    ]}
-            end
-    end.
+handle_mx(_Domain) -> not_impl.
 
 
 %% handle_soa/1
@@ -456,82 +492,31 @@ handle_minfo(_Domain) -> not_impl.
 handle_txt(_Domain) -> not_impl.
 
 
-%% ===================================================================
-%% Internal functions
-%% ===================================================================
-
-%% parse_domain/1
+%% call_dns_worker/1
 %% ====================================================================
-%% @doc Split the domain name into prefix and suffix, where suffix matches the
-%% canonical provider's hostname (retrieved from env). The split is made on the dot between prefix and suffix.
-%% If that's not possible, returns nx_domain.
+%% @doc Calls dns_worker module gen_server with given request. Used to delegate
+%% DNS query processing to dns_worker.
 %% @end
 %% ====================================================================
--spec parse_domain(Domain :: string()) -> {Prefix :: string(), Suffix :: string()} | nx_domain.
+-spec call_dns_worker(Request :: term()) -> term() | serv_fail.
 %% ====================================================================
-parse_domain(Domain) ->
-    {ok, ProviderHostnameWithoutDot} = application:get_env(?APP_Name, provider_hostname),
-    case ProviderHostnameWithoutDot =:= Domain of
-        true ->
-            {"", ProviderHostnameWithoutDot};
-        false ->
-            ProviderHostname = "." ++ ProviderHostnameWithoutDot,
-            HostNamePos = string:rstr(Domain, ProviderHostname),
-            % If hostname is at this position, it's a suffix (the string ends with it)
-            ValidHostNamePos = length(Domain) - length(ProviderHostname) + 1,
-            case HostNamePos =:= ValidHostNamePos of
-                false ->
-                    nx_domain;
-                true ->
-                    {string:sub_string(Domain, 1, HostNamePos - 1), ProviderHostnameWithoutDot}
-            end
-    end.
-
-
-%% is_prefix_valid/1
-%% ====================================================================
-%% @doc Convenience function to check if specific subdomain is existent.
-%% @end
-%% ====================================================================
--spec is_prefix_valid(Prefix :: string()) -> boolean().
-%% ====================================================================
-is_prefix_valid(Prefix) ->
-    case Prefix of
-        "" ->
-            true;
-        "www" ->
-            true;
-        "cluster" ->
-            true;
-        _ ->
-            Module = try list_to_existing_atom(Prefix) catch _:_ -> undefined end,
-            lists:member(Module, ?EXTERNALLY_VISIBLE_MODULES)
-    end.
-
-
-%% get_workers/1
-%% ====================================================================
-%% @doc Selects couple of nodes hosting given worker and returns their IPs.
-%% @end
-%% ====================================================================
--spec get_workers(Module :: atom()) -> list() | serv_fail.
-%% ====================================================================
-get_workers(Module) ->
+call_dns_worker(Request) ->
     try
         {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
-        DispatcherAns = gen_server:call(?Dispatcher_Name, {dns_worker, 1, self(), {get_worker, Module}}),
+        DispatcherAns = gen_server:call(?Dispatcher_Name, {dns_worker, 1, self(), Request}),
         case DispatcherAns of
-            ok -> receive
-                      {ok, ListOfIPs} ->
-                          ListOfIPs;
-                      {error, Error} ->
-                          ?error("Unexpected dispatcher error ~p", [Error]),
-                          serv_fail
-                  after
-                      DispatcherTimeout ->
-                          ?error("Unexpected dispatcher timeout"),
-                          serv_fail
-                  end;
+            ok ->
+                receive
+                    {error, Error} ->
+                        ?error("Unexpected dispatcher error ~p", [Error]),
+                        serv_fail;
+                    Answer ->
+                        Answer
+                after
+                    DispatcherTimeout ->
+                        ?error("Unexpected dispatcher timeout"),
+                        serv_fail
+                end;
             worker_not_found ->
                 ?error("Dispatcher error - worker not found"),
                 serv_fail
@@ -542,37 +527,4 @@ get_workers(Module) ->
             serv_fail
     end.
 
-
-%% get_nodes/0
-%% ====================================================================
-%% @doc Selects couple of nodes from the cluster and returns their IPs.
-%% @end
-%% ====================================================================
--spec get_nodes() -> list() | serv_fail.
-%% ====================================================================
-get_nodes() ->
-    try
-        {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
-        DispatcherAns = gen_server:call(?Dispatcher_Name, {dns_worker, 1, self(), get_nodes}),
-        case DispatcherAns of
-            ok -> receive
-                      {ok, ListOfIPs} ->
-                          ListOfIPs;
-                      {error, Error} ->
-                          ?error("Unexpected dispatcher error ~p", [Error]),
-                          serv_fail
-                  after
-                      DispatcherTimeout ->
-                          ?error("Unexpected dispatcher timeout"),
-                          serv_fail
-                  end;
-            worker_not_found ->
-                ?error("Dispatcher error - worker not found"),
-                serv_fail
-        end
-    catch
-        _:Error2 ->
-            ?error("Dispatcher not responding ~p", [Error2]),
-            serv_fail
-    end.
 
