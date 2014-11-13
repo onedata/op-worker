@@ -63,7 +63,8 @@ init(_) ->
 %% Calling handle(_, ping) returns pong.
 %% Calling handle(_, get_version) returns current version of application.
 %% Calling handle(_. {update_state, _}) updates plugin state.
-%% Calling handle(_, {get_worker, Name}) returns list of ipv4 addresses of workers with specified name.
+%% Calling handle(_, {handle_a, Domain}) processes a DNS query of type A.
+%% Calling handle(_, {handle_ns, Domain}) processes a DNS query of type NS.
 %% @end
 %% ====================================================================
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
@@ -114,8 +115,8 @@ handle(_ProtocolVersion, {handle_a, Domain}) ->
                      refused;
                  {Prefix, _Suffix} ->
                      % Accept all prefixes that consist of one part
-                     case string:str(Prefix, ".") of
-                         0 ->
+                     case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
+                         true ->
                              case Prefix of
                                  "cluster" ->
                                      % Return all nodes when asked about cluster
@@ -130,7 +131,7 @@ handle(_ProtocolVersion, {handle_a, Domain}) ->
                                              get_workers(Module)
                                      end
                              end;
-                         _ ->
+                         false ->
                              nx_domain
                      end
              end,
@@ -153,16 +154,16 @@ handle(_ProtocolVersion, {handle_ns, Domain}) ->
     case parse_domain(Domain) of
         unknown_domain ->
             refused;
-        {Prefix, Suffix} ->
+        {Prefix, _Suffix} ->
             % Accept all prefixes that consist of one part
-            case string:str(Prefix, ".") of
-                0 ->
+            case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
+                true ->
                     {ok, TTL} = application:get_env(?APP_Name, dns_ns_response_ttl),
                     {ok,
                             [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP <- get_nodes()] ++
                             [dns_server:authoritative_answer_flag(true)]
                     };
-                _ ->
+                false ->
                     nx_domain
             end
     end;
@@ -190,7 +191,7 @@ cleanup() ->
 %% parse_domain/1
 %% ====================================================================
 %% @doc Split the domain name into prefix and suffix, where suffix matches the
-%% canonical provider's hostname (retrieved from env). The split is made on the dot between prefix and suffix.
+%% canonical globalregistry hostname (retrieved from env). The split is made on the dot between prefix and suffix.
 %% If that's not possible, returns unknown_domain.
 %% @end
 %% ====================================================================
@@ -377,8 +378,7 @@ make_ans_random(Result) ->
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_a(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
+-spec handle_a(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 %% ====================================================================
 handle_a(Domain) ->
     call_dns_worker({handle_a, Domain}).
@@ -390,8 +390,7 @@ handle_a(Domain) ->
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_ns(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: string().
+-spec handle_ns(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 %% ====================================================================
 handle_ns(Domain) ->
     call_dns_worker({handle_ns, Domain}).
@@ -403,8 +402,7 @@ handle_ns(Domain) ->
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_cname(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: string().
+-spec handle_cname(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 %% ====================================================================
 handle_cname(_Domain) -> not_impl.
 
@@ -415,8 +413,7 @@ handle_cname(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_mx(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: {Pref :: integer(), Exch :: string()}.
+-spec handle_mx(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 %% ====================================================================
 handle_mx(_Domain) -> not_impl.
 
@@ -427,9 +424,7 @@ handle_mx(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_soa(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: {MName :: string(), RName :: string(), Serial :: integer(), Refresh :: integer(),
-    Retry :: integer(), Expiry :: integer(), Minimum :: integer()}.
+-spec handle_soa(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 %% ====================================================================
 handle_soa(_Domain) -> not_impl.
 
@@ -440,8 +435,7 @@ handle_soa(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_wks(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: {{A :: byte(), B :: byte(), C :: byte(), D :: byte()}, Proto :: string(), BitMap :: string()}.
+-spec handle_wks(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 %% ====================================================================
 handle_wks(_Domain) -> not_impl.
 
@@ -452,8 +446,7 @@ handle_wks(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_ptr(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: string().
+-spec handle_ptr(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 %% ====================================================================
 handle_ptr(_Domain) -> not_impl.
 
@@ -464,8 +457,7 @@ handle_ptr(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_hinfo(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: {CPU :: string(), OS :: string()}.
+-spec handle_hinfo(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 %% ====================================================================
 handle_hinfo(_Domain) -> not_impl.
 
@@ -476,8 +468,7 @@ handle_hinfo(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_minfo(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: {RM :: string(), EM :: string()}.
+-spec handle_minfo(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 %% ====================================================================
 handle_minfo(_Domain) -> not_impl.
 
@@ -488,8 +479,7 @@ handle_minfo(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %% ====================================================================
--spec handle_txt(Domain :: string()) -> {ok, [Response]} | serv_fail | nx_domain | not_impl | refused
-    when Response :: [string()].
+-spec handle_txt(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 %% ====================================================================
 handle_txt(_Domain) -> not_impl.
 
