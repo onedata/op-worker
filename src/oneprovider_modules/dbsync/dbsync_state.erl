@@ -18,12 +18,23 @@
 -define(dbsync_state, dbsync_state).
 
 %% API
--export([get/1, set/2, save/0, load/0, call/1, state_loop/1, state_loop/0]).
+-export([get/1, set/2, save/0, load/0, call/1, call/3, state_loop/1, state_loop/0]).
 
 
+%% set/2
+%% ====================================================================
+%% @doc Saves Key -> Value in dbsync's state
+-spec set(Key :: term(), Value :: term()) -> true.
+%% ====================================================================
 set(Key, Value) ->
     ets:insert(?dbsync_state, {Key, Value}).
 
+
+%% get/1
+%% ====================================================================
+%% @doc Gets Value for given Key form dbsync's state
+-spec get(Key :: term()) -> undefined | term().
+%% ====================================================================
 get(Key) ->
     case ets:lookup(?dbsync_state, Key) of
         [{_, Value}] -> Value;
@@ -31,6 +42,11 @@ get(Key) ->
     end.
 
 
+%% save/0
+%% ====================================================================
+%% @doc Saves dbsync's state to DB
+-spec save() -> ok | {error, Reason :: any()}.
+%% ====================================================================
 save() ->
     State = ets:tab2list(?dbsync_state),
     LocalProviderId = cluster_manager_lib:get_provider_id(),
@@ -51,6 +67,11 @@ save() ->
     end.
 
 
+%% load/0
+%% ====================================================================
+%% @doc Loads dbsync's state from DB
+-spec load() -> ok | {error, Reason :: any()}.
+%% ====================================================================
 load() ->
     case dao_lib:apply(dao_records, get_record, [?SYSTEM_DB_NAME, "dbsync_state", []], 1) of
         {ok, #db_document{record = #dbsync_state{ets_list = ETSList}}} ->
@@ -62,6 +83,11 @@ load() ->
     end.
 
 
+%% state_loop/0
+%% ====================================================================
+%% @doc dbsync's state loop that allows for mutually exclusive calls via call/1-3
+-spec state_loop() -> no_return().
+%% ====================================================================
 state_loop() ->
     state_loop(#dbsync_state{}).
 state_loop(State) ->
@@ -97,13 +123,23 @@ state_loop(State) ->
         end,
     ?MODULE:state_loop(NewState).
 
+
+%% call/1
+%% ====================================================================
+%% @doc Executes given function within state process.
+-spec call(Fun :: fun((State :: term()) -> {Result :: term(), NewState :: term()})) ->
+    Result :: term().
+%% ====================================================================
 call(Fun) when is_function(Fun) ->
     ?dbsync_state ! {self(), Fun},
-    sync_call_get_response();
-call(Method) when is_atom(Method) ->
-    call(Method, []).
-call(Method, Args) ->
-    call(dbsync_state, Method, Args).
+    sync_call_get_response().
+
+%% call/3
+%% ====================================================================
+%% @doc Executes given function within state process.
+-spec call(Module :: atom(), Method :: atom(), Args :: [term()]) ->
+    Result :: term().
+%% ====================================================================
 call(Module, Method, Args) when is_atom(Module), is_atom(Method), is_list(Args) ->
     ?dbsync_state ! {self(), Module, Method, Args},
     sync_call_get_response().
