@@ -20,8 +20,8 @@
 
 %% API
 -export([get_file_location/2, get_file_location/3, get_new_file_location/3,
-    register_file_block/3, update_file_block_map/2, create_file_ack/1,
-    file_not_used/1, renew_file_location/1]).
+    register_file_block/3, update_file_block_map/2, update_file_block_map/3,
+    create_file_ack/1, file_not_used/1, renew_file_location/1]).
 
 %% ====================================================================
 %% API functions
