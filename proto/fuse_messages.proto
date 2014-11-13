@@ -16,71 +16,71 @@ message FuseMessage {
 message GetFileLocation {
     required string file_logic_name = 1;
     optional string open_mode = 2 [default = ""];
-    optional bool   force_cluster_proxy = 3 [default = false];
+    optional bool force_cluster_proxy = 3 [default = false];
 }
 
 message GetNewFileLocation {
     required string file_logic_name = 1;
     required uint32 mode = 2;
-    optional bool   force_cluster_proxy = 3 [default = false];
+    optional bool force_cluster_proxy = 3 [default = false];
 }
 
 message SetXAttr {
-  required string file_logic_name = 1;
-  required string name = 2;
-  required string value = 3;
-  optional int32 flags = 4 [default = 0];
+    required string file_logic_name = 1;
+    required string name = 2;
+    required string value = 3;
+    optional int32 flags = 4 [default = 0];
 }
 
 message GetXAttr {
-  required string file_logic_name = 1;
-  required string name = 2;
+    required string file_logic_name = 1;
+    required string name = 2;
 }
 
 message ListXAttr {
-  required string file_logic_name = 1;
+    required string file_logic_name = 1;
 }
 
 message RemoveXAttr {
-  required string file_logic_name = 1;
-  required string name = 2;
+    required string file_logic_name = 1;
+    required string name = 2;
 }
 
 message XAttr {
-  optional string answer = 1 [default = "ok"];
-  required string name = 2;
-  required string value = 3;
+    optional string answer = 1 [default = "ok"];
+    required string name = 2;
+    required string value = 3;
 }
 
 message XAttrList {
-  message XAttrEntry {
-    required string name = 1;
-    required string value = 2;
-  }
+    message XAttrEntry {
+        required string name = 1;
+        required string value = 2;
+    }
 
-  optional string answer = 1 [default = "ok"];
-  repeated XAttrEntry attrs = 2;
+    optional string answer = 1 [default = "ok"];
+    repeated XAttrEntry attrs = 2;
 }
 
 message AccessControlEntity {
-  required uint32 acetype = 1;
-  required string identifier = 2;
-  required uint32 aceflags = 3;
-  required uint32 acemask = 4;
+    required uint32 acetype = 1;
+    required string identifier = 2;
+    required uint32 aceflags = 3;
+    required uint32 acemask = 4;
 }
 
 message GetAcl {
-  required string file_logic_name = 1;
+    required string file_logic_name = 1;
 }
 
 message Acl {
-  optional string answer = 1 [default = "ok"];
-  repeated AccessControlEntity entities = 2;
+    optional string answer = 1 [default = "ok"];
+    repeated AccessControlEntity entities = 2;
 }
 
 message SetAcl {
-  required string file_logic_name = 1;
-  repeated AccessControlEntity entities = 2;
+    required string file_logic_name = 1;
+    repeated AccessControlEntity entities = 2;
 }
 
 message GetFileAttr {
@@ -104,12 +104,12 @@ message FileAttr {
 }
 
 message GetFileUuid {
-  required string file_logic_name = 1;
+    required string file_logic_name = 1;
 }
 
 message FileUuid {
-  optional string answer = 1 [default = "ok"];
-  required string uuid = 2;
+    optional string answer = 1 [default = "ok"];
+    required string uuid = 2;
 }
 
 message FileLocation {
@@ -133,6 +133,10 @@ message BlocksAvailable {
     repeated FileLocation.BlockAvailability blocks = 3;
 }
 
+message UpdateFileBlockMap {
+    repeated BlocksAvailable blocks_available = 1;
+}
+
 message RequestFileBlock {
     required string logical_name = 1;
     required uint64 offset = 2;
@@ -140,20 +144,20 @@ message RequestFileBlock {
 }
 
 message SynchronizeFileBlock {
-  required string logical_name = 1;
-  required uint64 offset = 2;
-  required uint64 size = 3;
+    required string logical_name = 1;
+    required uint64 offset = 2;
+    required uint64 size = 3;
 }
 
 message FileBlockModified {
-  required string logical_name = 1;
-  required uint64 offset = 2;
-  required uint64 size = 3;
+    required string logical_name = 1;
+    required uint64 offset = 2;
+    required uint64 size = 3;
 }
 
 message FileTruncated {
-  required string logical_name = 1;
-  required uint64 size = 2;
+    required string logical_name = 1;
+    required uint64 size = 2;
 }
 
 message CreateFileAck {
@@ -174,12 +178,12 @@ message FileLocationValidity {
 }
 
 message GetFileChildrenCount {
-  required string dir_logic_name = 1;
+    required string dir_logic_name = 1;
 }
 
 message FileChildrenCount {
-  optional string answer = 1 [default = "ok"];
-  required uint32 count = 2;
+    optional string answer = 1 [default = "ok"];
+    required uint32 count = 2;
 }
 
 message GetFileChildren {
