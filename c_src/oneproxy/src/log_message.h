@@ -1,10 +1,8 @@
-/*********************************************************************
+/**
  * @author Rafal Slota
  * @copyright (C): 2014 ACK CYFRONET AGH
- * This software is released under the MIT license
- * cited in 'LICENSE.txt'.
-*********************************************************************/
-
+ * This software is released under the MIT license cited in 'LICENSE.txt'.
+ */
 
 #ifndef LOG_MESSAGE_H
 #define LOG_MESSAGE_H
@@ -16,10 +14,12 @@
 
 #ifdef NDEBUG
 #define LOG(SEVERITY)                                                          \
-    one::proxy::log_message(one::proxy::log_message::SEVERITY, std::cout, stdout_mutex, false)
+    one::proxy::log_message(one::proxy::log_message::SEVERITY, std::cout,      \
+                            stdout_mutex, false)
 #else
 #define LOG(SEVERITY)                                                          \
-    one::proxy::log_message(one::proxy::log_message::SEVERITY, std::cout, stdout_mutex, true)
+    one::proxy::log_message(one::proxy::log_message::SEVERITY, std::cout,      \
+                            stdout_mutex, true)
 #endif
 
 namespace one {
@@ -34,14 +34,8 @@ extern std::mutex stdout_mutex;
  */
 class log_message : public std::ostream {
 public:
-
     /// Log severity
-    enum severity {
-        DEBUG,
-        INFO,
-        WARNING,
-        ERROR
-    };
+    enum severity { DEBUG, INFO, WARNING, ERROR };
 
     /**
      * Logs message to given @c ostream
@@ -49,7 +43,8 @@ public:
      * @param sink Output ostream
      * @param debug_enabled Tells whether debug logs shall be logged
      */
-    log_message(severity s, std::ostream &sink, std::mutex &sink_mutex, bool debug_enabled = false)
+    log_message(severity s, std::ostream &sink, std::mutex &sink_mutex,
+                bool debug_enabled = false)
         : sink_(sink)
         , severity_(s)
         , debug_enabled_(debug_enabled)

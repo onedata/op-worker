@@ -68,7 +68,7 @@ title() -> <<"Manage tokens">>.
 -spec body() -> [#panel{}].
 %% ====================================================================
 body() ->
-    #panel{class= <<"page-container">>, body = [
+    #panel{class = <<"page-container">>, body = [
         #panel{
             id = <<"main_spinner">>,
             style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>,
@@ -78,20 +78,15 @@ body() ->
         },
         opn_gui_utils:top_menu(tokens_tab),
         #panel{
-            id = <<"ok_message">>,
-            style = ?MESSAGE_STYLE,
-            class = <<"dialog dialog-success">>
-        },
-        #panel{
-            id = <<"error_message">>,
-            style = ?MESSAGE_STYLE,
-            class = <<"dialog dialog-danger">>
-        },
-        #panel{
-            style = <<"margin-bottom: 100px;">>,
+            style = <<"margin-top: 56px; padding-top: 1px; margin-bottom: 30px;">>,
             body = [
+                #panel{
+                    id = <<"message">>,
+                    style = <<"width: 100%; padding: 0.5em 0; margin: 0 auto; border: 0; display: none;">>,
+                    class = <<"dialog">>
+                },
                 #h6{
-                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; text-align: center;">>,
+                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 30px; text-align: center;">>,
                     body = <<"Manage tokens">>
                 },
                 #panel{
@@ -202,7 +197,7 @@ token_row_collapsed(TableName, RowId, #token_details{access_id = AccessId, clien
             style = ?CONTENT_COLUMN_STYLE,
             body = #span{
                 style = ?DETAIL_STYLE,
-                body = <<"<b>", ClientName/binary, "</b> (", AccessId/binary, ")">>
+                body = <<"<b>", (gui_str:html_encode(ClientName))/binary, "</b> (", AccessId/binary, ")">>
             }
         },
         #td{
@@ -289,7 +284,7 @@ token_detail(Content, Title, Postback, Class) ->
     Result :: #span{}.
 %% ====================================================================
 client_name(TableName, RowId, #token_details{client_name = ClientName} = TokenDetails) ->
-    token_detail(ClientName, <<"Edit">>, {change_client_name, TableName, RowId, TokenDetails}, <<"icomoon-pencil2">>).
+    token_detail(gui_str:html_encode(ClientName), <<"Edit">>, {change_client_name, TableName, RowId, TokenDetails}, <<"icomoon-pencil2">>).
 
 
 %% change_client_name/3
@@ -365,7 +360,7 @@ comet_loop(#?STATE{client_tokens = ClientTokens, provider_tokens = ProviderToken
                             gui_jq:info_popup(<<"Authorization code">>, Message, <<"return true;">>, <<"btn-inverse">>),
                             gui_jq:wire(<<"box.on('shown',function(){ $(\"#authorization_code_textbox\").focus().select(); });">>);
                         _ ->
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot get authorization code.">>)
+                            opn_gui_utils:message(error, <<"Cannot get authorization code.">>)
                     end,
                     State;
 
@@ -396,7 +391,7 @@ comet_loop(#?STATE{client_tokens = ClientTokens, provider_tokens = ProviderToken
                                 SuccessfulState;
                             Other ->
                                 ?error("Cannot change client name for token ~p: ~p", [AccessId, Other]),
-                                opn_gui_utils:message(<<"error_message">>, <<"Cannot change name for token: <b>", AccessId/binary, "</b>."
+                                opn_gui_utils:message(error, <<"Cannot change name for token: <b>", AccessId/binary, "</b>."
                                 "<br>Please try again later.">>),
                                 gui_jq:update(<<RowId/binary, "_client_name">>, client_name(TableName, RowId, TokenDetails)),
                                 State
@@ -414,12 +409,12 @@ comet_loop(#?STATE{client_tokens = ClientTokens, provider_tokens = ProviderToken
                     NextState =
                         case RevokeTokenFun({user, opn_gui_utils:get_access_token()}, AccessId) of
                             ok ->
-                                opn_gui_utils:message(<<"ok_message">>, <<"Token: <b>", AccessId/binary, "</b> has been successfully revoked.">>),
+                                opn_gui_utils:message(success, <<"Token: <b>", AccessId/binary, "</b> has been successfully revoked.">>),
                                 gui_jq:remove(RowId),
                                 SuccessfulState;
                             Other ->
                                 ?error("Cannot revoke token ~p: ~p", [AccessId, Other]),
-                                opn_gui_utils:message(<<"error_message">>, <<"Cannot revoke token: <b>", AccessId/binary, "</b>."
+                                opn_gui_utils:message(error, <<"Cannot revoke token: <b>", AccessId/binary, "</b>."
                                 "<br>Please try again later.">>),
                                 State
                         end,
@@ -446,7 +441,7 @@ comet_loop(#?STATE{client_tokens = ClientTokens, provider_tokens = ProviderToken
             end
         catch Type:Reason ->
             ?error_stacktrace("Comet process exception: ~p:~p", [Type, Reason]),
-            opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+            opn_gui_utils:message(error, <<"There has been an error in comet process. Please refresh the page.">>),
             {error, Reason}
         end,
     gui_jq:wire(<<"$('#main_spinner').delay(300).hide(0);">>, false),
@@ -487,7 +482,7 @@ event(init) ->
         _:Reason ->
             ?error("Cannot initialize page ~p: ~p", [?MODULE, Reason]),
             gui_jq:hide(<<"main_spinner">>),
-            opn_gui_utils:message(<<"error_message">>, <<"Cannot fetch supported Spaces.<br>Please try again later.">>)
+            opn_gui_utils:message(error, <<"Cannot fetch supported Spaces.<br>Please try again later.">>)
     end;
 
 event({change_client_name, TableName, RowId, TokenDetails}) ->
