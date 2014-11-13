@@ -5,7 +5,9 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @todo: write me!
+%% @doc: This module acts as configuration for records supported by dbsync worker.
+%%       Each record that needs to be synchronized has to be supported by all
+%%       methods in this module.
 %% @end
 %% ===================================================================
 -module(dbsync_records).
@@ -27,7 +29,7 @@ doc_to_db(#db_document{record = #file_meta{}}) ->
 
 get_space_ctx(#db_document{uuid = "", record = #file{}}, []) ->
     {error, no_space};
-get_space_ctx(#db_document{uuid = UUID, record = #file{extensions = Exts, parent = Parent}} = Doc, UUIDs) ->
+get_space_ctx(#db_document{uuid = UUID, record = #file{extensions = Exts, parent = Parent}} = _Doc, UUIDs) ->
     case lists:keyfind(?file_space_info_extestion, 1, Exts) of
         {?file_space_info_extestion, #space_info{} = SpaceInfo} ->
             {ok, {UUIDs, SpaceInfo}};

@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @todo: write me!
+%% @doc: Utility module for DBSync worker
 %% @end
 %% ===================================================================
 -module(dbsync_utils).
@@ -71,7 +71,7 @@ changes_json_to_docs(Data) ->
                 {#db_document{deleted = IsDeleted, record = Record, uuid = UUID, rev_info = {binary_to_integer(NumBin), [binary:encode_unsigned(erlang:list_to_integer(binary:bin_to_list(HashBin), 16))]}}, SeqInfo1}
             catch
                 _:Reason ->
-                    ?error("OMG1 ==============================> ~p", [Reason]),
+                    ?error("Cannot decode 'changes' JSON response due to ~p", [Reason]),
                     {error, Reason}
             end
         end, Results),

@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @todo: write me!
+%% @doc: DBSync changes hooks management for dbsync worker
 %% @end
 %% ===================================================================
 -module(dbsync_hooks).

@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @todo: write me !
+%% @doc: Handler for inter-provider requests.
+%%       @todo: Extract code that is common with ws_handler
 %% @end
 %% ===================================================================
 

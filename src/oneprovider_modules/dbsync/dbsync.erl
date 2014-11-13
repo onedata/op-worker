@@ -228,7 +228,7 @@ handle_broadcast(_ProtocolVersion, SpaceId, #docupdated{dbname = DbName, documen
     dbsync_state:call(fun(_State) ->
         case get_current_seq(ProviderId, SpaceId, DbName) of
             PrevSeqInfo ->
-                ?debug("State of space ~p updated to ~p!", [SpaceId, CurrSeqInfo]),
+                ?debug("State of space ~p updated to ~p", [SpaceId, CurrSeqInfo]),
                 ets:insert(?dbsync_state, {last_space_seq_key(ProviderId, SpaceId, DbName), CurrSeqInfo});
             UnknownSeq ->
                 ?debug("Cannot update database with received diff due to seq missmatch ~p vs local ~p", [PrevSeqInfo, UnknownSeq])
@@ -379,7 +379,6 @@ select_db_url() ->
                 HostNames0
         end,
     HostName = lists:nth(crypto:rand_uniform(0, length(HostNames1)) + 1, HostNames1),
-    ?info("DB HostName ~p", [HostName]),
     "http://" ++ HostName ++ ":5984".
 
 
@@ -420,7 +419,7 @@ changes_receiver_loop({StreamId, State}) ->
                    {ibrowse_async_headers, _RequestId, "200", _} ->
                        State;
                    Unk ->
-                       ?error("Unknown ============================> ~p", [Unk]),
+                       ?error("Unknown response from changes stream: ~p", [Unk]),
                        ?dbsync_cast({changes_stream, StreamId, eof}),
                        State
                after timer:seconds(10) ->
