@@ -57,7 +57,7 @@ json_decode(JSON) ->
 %% seq_info_to_url/1
 %% ====================================================================
 %% @doc Converts sequence info to CouchDB's URL format
--spec seq_info_to_url({SeqNum :: integer(), SeqHash :: bianry()}) -> string().
+-spec seq_info_to_url({SeqNum :: integer(), SeqHash :: binary()}) -> string().
 %% ====================================================================
 seq_info_to_url({SeqNum, SeqHash}) ->
     case SeqNum of
