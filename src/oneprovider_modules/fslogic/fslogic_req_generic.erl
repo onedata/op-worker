@@ -456,7 +456,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     lists:foreach(
         fun({Id, Range = #range{from = From, to = To}}) ->
             ?info("Synchronizing blocks: ~p of file ~p", [Range, FullFileName]),
-            {ok, _} = gateway:do_stuff(Id, #fetchrequest{file_id = MyRemoteLocationDoc#remote_location.file_id, offset = From, size = To-From+1})
+            {ok, _} = gateway:do_stuff(Id, #fetchrequest{file_id = MyRemoteLocationDoc#remote_location.file_id, offset = From*?remote_block_size, size = (To-From+1)*?remote_block_size})
         end, OutOfSyncList),
     SyncedParts = OutOfSyncList, % assume that all parts has been synchronized
     NewDoc = fslogic_remote_location:mark_as_available(SyncedParts, MyRemoteLocationDoc),
