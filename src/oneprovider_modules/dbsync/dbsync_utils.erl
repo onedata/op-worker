@@ -33,7 +33,7 @@ get_provider_url(ProviderId) ->
 %% normalize_seq_info/1
 %% ====================================================================
 %% @doc Normalizes sequence info format
--spec normalize_seq_info(term()) -> {SeqNum :: integer(), SeqHash :: bianry()}.
+-spec normalize_seq_info(term()) -> {SeqNum :: integer(), SeqHash :: binary()}.
 %% ====================================================================
 normalize_seq_info(SeqNum) when is_integer(SeqNum) ->
     normalize_seq_info({SeqNum, <<>>});
