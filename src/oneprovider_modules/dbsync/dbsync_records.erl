@@ -28,7 +28,7 @@ doc_to_db(#db_document{record = #remote_location{}}) ->
 
 get_space_ctx(#db_document{uuid = "", record = #file{}}, []) ->
     {error, no_space};
-get_space_ctx(#db_document{uuid = UUID, record = #file{extensions = Exts, parent = Parent}} = Doc, UUIDs) ->
+get_space_ctx(#db_document{uuid = UUID, record = #file{extensions = Exts, parent = Parent}}, UUIDs) ->
     case lists:keyfind(?file_space_info_extestion, 1, Exts) of
         {?file_space_info_extestion, #space_info{} = SpaceInfo} ->
             {ok, {UUIDs, SpaceInfo}};
@@ -38,7 +38,7 @@ get_space_ctx(#db_document{uuid = UUID, record = #file{extensions = Exts, parent
     end;
 get_space_ctx(#db_document{uuid = UUID, record = #file_meta{}}, UUIDs) ->
     {ok, #db_document{} = FileDoc} = dao_lib:apply(dao_vfs, file_by_meta_id, [UUID], 1),
-    get_space_ctx(FileDoc, UUIDs);
-get_space_ctx(#db_document{record = #remote_location{file_id = FileId}}, UUIDs) ->
+    get_space_ctx(FileDoc, [UUID | UUIDs]);
+get_space_ctx(#db_document{uuid = UUID, record = #remote_location{file_id = FileId}}, UUIDs) ->
     {ok, #db_document{} = FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, FileId}], 1),
-    get_space_ctx(FileDoc, UUIDs).
+    get_space_ctx(FileDoc, [UUID | UUIDs]).

@@ -282,8 +282,7 @@ decode_rtrequest_pb(MsgBytes) ->
                                                  {list_to_existing_atom(Message_decoder_name ++ "_pb"), list_to_existing_atom("decode_" ++ Message_type), list_to_existing_atom(ModuleName)}
                                              catch
                                                  _:_ ->
-                                                        ?error("err1"),
-%%                                                      ?info("OMG: ~p ~p ~p", [Message_decoder_name, Message_type, ModuleName]), %todo repair
+                                                     ?info("OMG: ~p ~p ~p", [Message_decoder_name, Message_type, ModuleName]),
                                                      throw({message_not_supported, MsgId})
                                              end,
 
