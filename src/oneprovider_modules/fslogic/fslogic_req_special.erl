@@ -53,7 +53,7 @@ create_dir(FullFileName, Mode) ->
     {Status, TmpAns} = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, File], fslogic_context:get_protocol_version()),
     case {Status, TmpAns} of
         {ok, _} ->
-            %% @todo: ???
+            %% @todo: hack party! dbsync requires file to exist before syncing file_meta
             fslogic_meta:update_meta_attr(File, times, {CTime, CTime, CTime}),
 
             fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullFileName), CTime),
@@ -151,7 +151,7 @@ create_link(FullFileName, LinkValue) ->
 
     case dao_lib:apply(dao_vfs, save_new_file, [FullFileName, LinkDoc], fslogic_context:get_protocol_version()) of
         {ok, _} ->
-            %% @todo: ???
+            %% @todo: hack party! dbsync requires file to exist before syncing file_meta
             fslogic_meta:update_meta_attr(LinkDoc, times, {CTime, CTime, CTime}),
 
             fslogic_meta:update_parent_ctime(UserFilePath, CTime),

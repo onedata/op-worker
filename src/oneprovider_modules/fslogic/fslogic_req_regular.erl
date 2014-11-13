@@ -152,7 +152,7 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
             #storage_helper_info{name = ExistingWFileStorageSHName, init_args = ExistingWFileStorageSHArgs} = SH,
             #filelocation{storage_id = ExistingWFileStorage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs, available = Available};
         {ok, FileUUID} ->
-            %% @todo: ???
+            %% @todo: hack party! dbsync requires file to exist before syncing file_meta
             fslogic_meta:update_meta_attr(FileRecord, times, {CTime, CTime, CTime}),
 
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),

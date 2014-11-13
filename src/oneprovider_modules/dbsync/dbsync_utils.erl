@@ -66,12 +66,30 @@ seq_info_to_url({SeqNum, SeqHash}) ->
     end.
 
 
+%% encode_term/1
+%% ====================================================================
+%% @doc Encodes given erlang term to binary
+-spec encode_term(term()) -> binary().
+%% ====================================================================
 encode_term(Doc) ->
     term_to_binary(Doc).
+
+
+%% encode_term/1
+%% ====================================================================
+%% @doc Decodes given binary to erlang term (reverses encode_term/1)
+-spec decode_term(binary()) -> term().
+%% ====================================================================
 decode_term(Doc) ->
     binary_to_term(Doc).
 
 
+%% changes_json_to_docs/1
+%% ====================================================================
+%% @doc Decodes given as JSON changes stream to #db_document list with latest seq number
+-spec changes_json_to_docs(iolist()) ->
+    {[#db_document{}], {SeqNum :: integer(), SeqHash :: binary()}}.
+%% ====================================================================
 changes_json_to_docs(Data) ->
     {Decoded} = dbsync_utils:json_decode(Data),
     {_, Results} = lists:keyfind(<<"results">>, 1, Decoded),
@@ -98,5 +116,10 @@ changes_json_to_docs(Data) ->
     {ChangedDocs, SeqInfo}.
 
 
+%% gen_request_id/0
+%% ====================================================================
+%% @doc Generates UUID for inter-provider dbsync's requests
+-spec gen_request_id() -> binary().
+%% ====================================================================
 gen_request_id() ->
     utils:ensure_binary(dao_helper:gen_uuid()).
