@@ -66,12 +66,12 @@ init(_Args) ->
 
     % Create remote location dao proxy
     RemoteLocationProxyProcFun = fun
-        (ProtocolVersion, {save_remote_location_doc, _, Doc}, _CacheName) ->
+        (ProtocolVersion, {save_remote_location_doc, Doc}, _CacheName) ->
             {ok, _} = dao_lib:apply(dao_vfs, save_remote_location, [Doc], ProtocolVersion)
     end,
     RemoteLocationProxyMapFun = fun
-        ({save_remote_location_doc, FullFileName, _}) ->
-            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FullFileName)
+        ({save_remote_location_doc, #db_document{uuid = Uuid}}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, Uuid)
     end,
 
     % generate process lists
@@ -85,12 +85,12 @@ init(_Args) ->
         ({grant_permission, _, _, _}) -> pemission_cache;
         ({has_permission, _, _, _}) -> pemission_cache;
         ({invalidate_cache, _}) -> pemission_cache;
-        ({save_remote_location_doc, _, _}) -> remote_location_dao_proxy;
+        ({save_remote_location_doc, _}) -> remote_location_dao_proxy;
         (_) -> non
     end,
     DispMapFun = fun
-        ({save_remote_location_doc, FullFileName, _}) ->
-            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FullFileName);
+        ({save_remote_location_doc, #db_document{uuid = Uuid}}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, Uuid);
         ({invalidate_cache, StorageFileName}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, StorageFileName);
         ({_, StorageFileName, _, _}) ->

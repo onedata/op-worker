@@ -21,7 +21,7 @@
 
 
 % API
--export([mark_as_modified/2, mark_as_available/2, check_if_synchronized/3, truncate/2]).
+-export([mark_as_modified/2, mark_as_available/2, check_if_synchronized/3, truncate/2, mark_other_provider_changes/2]).
 
 % Test API
 -ifdef(TEST).
@@ -104,6 +104,10 @@ check_if_synchronized(#block_range{from = From, to = To}, #db_document{record = 
         fun(#db_document{record = #remote_location{file_parts = Parts, provider_id = Id}}) ->
             {Id, ranges_struct:minimize(ranges_struct:subtract(PartsOutOfSync, ranges_struct:subtract(PartsOutOfSync, Parts)))}
         end, OtherDocs).
+
+mark_other_provider_changes(MyDoc = #db_document{record = #remote_location{file_parts = MyParts} = Location}, #db_document{record = #remote_location{file_parts = OtherParts}}) ->
+    NewParts = ranges_struct:minimize(ranges_struct:subtract_newer(MyParts, OtherParts)),
+    MyDoc#db_document{record = Location#remote_location{file_parts = NewParts}}.
 
 %% ====================================================================
 %% Internal functions

@@ -472,7 +472,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     NewDoc = fslogic_remote_location:mark_as_available(SyncedParts, MyRemoteLocationDoc),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
-        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, FullFileName, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
+        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
     end,
     #atom{value = ?VOK}.
 
@@ -491,7 +491,7 @@ file_block_modified(FullFileName, Offset, Size) ->
     NewDoc = fslogic_remote_location:mark_as_modified(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
-        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, FullFileName, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
+        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
     end,
     #atom{value = ?VOK}.
 
@@ -510,7 +510,7 @@ file_truncated(FullFileName, Size) ->
     NewDoc = fslogic_remote_location:truncate({bytes, Size}, MyRemoteLocationDoc),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
-        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, FullFileName, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
+        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
     end,
     #atom{value = ?VOK}.
 

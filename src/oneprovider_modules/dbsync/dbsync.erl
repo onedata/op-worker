@@ -62,6 +62,28 @@ init(_Args) ->
             spawn(fun() -> timer:sleep(timer:seconds(1)), ?dbsync_cast({changes_stream, DbName, eof}) end)
         end, ?dbs_to_sync),
 
+    % register hook for #remote_location docs
+    spawn(fun() ->
+        timer:sleep(5),
+        MyProviderId = cluster_manager_lib:get_provider_id(),
+        HookFun = fun
+            (?FILES_DB_NAME, _, _, #db_document{record = #remote_location{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
+                {ok, Docs} = dao_lib:apply(dao_vfs, remote_locations_by_file_id, [FileId], 1),
+                case [Doc || Doc = #db_document{record = #remote_location{provider_id = MyProviderId}} <- Docs] of
+                    [MyDoc] ->
+                        [ChangedDoc] = [Doc || Doc = #db_document{record = #remote_location{provider_id = Id}} <- Docs],
+                        NewDoc = fslogic_remote_location:mark_other_provider_changes(MyDoc, ChangedDoc),
+                        case NewDoc == MyDoc of
+                            true -> ok;
+                            _ -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
+                        end;
+                    _ -> ok
+                end;
+            (_, _, _, _) -> ok
+        end,
+        ?dbsync_cast({reqister_hook, HookFun})
+    end),
+
     [].
 
 
