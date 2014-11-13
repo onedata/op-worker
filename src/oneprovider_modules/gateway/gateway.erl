@@ -76,10 +76,11 @@ handle_node_lifecycle_notification(_Node, _Module, _Action, _Pid) ->
 %% node_lifecycle_get_notification/0
 %% ====================================================================
 %% @doc Handles test calls.
--spec node_lifecycle_get_notification(Node :: list(), Module :: atom(), Action :: atom(), Pid :: pid()) -> ok | term().
+-spec node_lifecycle_get_notification() -> ok | term().
 %% ====================================================================
 -ifdef(TEST).
-node_lifecycle_get_notification()->
+
+node_lifecycle_get_notification() ->
   Notification = ets:lookup(?NOTIFICATION_STATE, node_lifecycle_notification),
   {ok, {node_lifecycle, Notification}}.
 -else.
