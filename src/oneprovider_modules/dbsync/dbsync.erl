@@ -200,7 +200,8 @@ handle2(_ProtocolVersion, #requestseqdiff{space_id = SpaceId, dbname = DbName, s
                 _:{badmatch,{error,{not_found,missing}}} ->
                     Acc;
                 _:Reason ->
-                    ?error_stacktrace("OMG2 ==============================> ~p", [Reason]),
+                    ?error("err2"),
+%%                     ?error_stacktrace("OMG2 ==============================> ~p", [Reason]), %todo repair
                     Acc
             end
         end, #{}, ChangedDocs1),

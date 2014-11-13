@@ -167,9 +167,7 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
             fslogic_file:update_file_size(File, Size),
             Size
         catch
-            _Type:Error_  ->
-                ?warning("Cannot get_real_file_size_and_uid, error ~p", [Error_]),
-                undefined
+            _Type:_Error  ->undefined
         end,
 
     %% Get owner

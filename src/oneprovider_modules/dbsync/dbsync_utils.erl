@@ -71,7 +71,8 @@ changes_json_to_docs(Data) ->
                 {#db_document{deleted = IsDeleted, record = Record, uuid = UUID, rev_info = {binary_to_integer(NumBin), [binary:encode_unsigned(erlang:list_to_integer(binary:bin_to_list(HashBin), 16))]}}, SeqInfo1}
             catch
                 _:Reason ->
-                    ?error("OMG1 ==============================> ~p", [Reason]),
+                    ?error("err3"),
+%%                     ?error("OMG1 ==============================> ~p", [Reason]), %todo repair
                     {error, Reason}
             end
         end, Results),
