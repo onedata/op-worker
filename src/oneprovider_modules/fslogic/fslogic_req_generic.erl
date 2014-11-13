@@ -161,9 +161,16 @@ check_file_perms(FullFileName, Type) ->
 get_file_attr(FileDoc = #db_document{record = #file{}}) ->
     #db_document{record = #file{} = File, uuid = FileUUID} = FileDoc,
     Type = fslogic_file:normalize_file_type(protocol, File#file.type),
-    {Size, _SUID} = fslogic_file:get_real_file_size_and_uid(FileDoc),
-
-    fslogic_file:update_file_size(File, Size),
+    StorageFileSize = %todo we should not get this size from storage ever (especially when file is not complete)
+        try
+            {Size, _SUID} = fslogic_file:get_real_file_size_and_uid(FileDoc),
+            fslogic_file:update_file_size(File, Size),
+            Size
+        catch
+            _Type:Error  ->
+                ?warning("Cannot get_real_file_size_and_uid, error ~p", [Error]),
+                undefined
+        end,
 
     %% Get owner
     {UName, VCUID, _RSUID} = fslogic_file:get_file_owner(File),
@@ -174,7 +181,7 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
     {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
 
     %% Get attributes
-    {CTime, MTime, ATime, _SizeFromDB, HasAcl} =
+    {CTime, MTime, ATime, SizeFromDB, HasAcl} =
         case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
             {ok, #db_document{record = FMeta}} ->
                 {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size, FMeta#file_meta.acl =/= []};
@@ -195,8 +202,13 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
                 _ -> 1
             end,
 
+    FileSize =
+        case is_integer(StorageFileSize) of
+            true -> StorageFileSize;
+            _ -> SizeFromDB
+        end,
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
+        type = Type, size = FileSize, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
         gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links, has_acl = HasAcl};
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
