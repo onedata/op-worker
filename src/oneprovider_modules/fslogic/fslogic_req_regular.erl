@@ -20,7 +20,8 @@
 
 %% API
 -export([get_file_location/2, get_file_location/3, get_new_file_location/3,
-         register_file_block/3, create_file_ack/1, file_not_used/1, renew_file_location/1]).
+    register_file_block/3, update_file_block_map/2, update_file_block_map/3,
+    create_file_ack/1, file_not_used/1, renew_file_location/1]).
 
 %% ====================================================================
 %% API functions
@@ -69,18 +70,18 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
     fslogic_file:fix_storage_owner(FileDoc),
 
     {ok, UserDoc} = fslogic_objects:get_user(),
-    ok = fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,list_to_existing_atom(OpenMode)),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, list_to_existing_atom(OpenMode)),
 
     % cache all permissions
     case FileDoc#db_document.record#file.perms of
-        Mask when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0  ->
-            fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,rdwr),
-            fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,execute),
-            fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,delete);
+        Mask when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0 ->
+            fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, rdwr),
+            fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, execute),
+            fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, delete);
         _ -> ok
     end,
 
-    {ok,_} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#db_document.uuid, fslogic_context:get_fuse_id(), Validity),
+    {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#db_document.uuid, fslogic_context:get_fuse_id(), Validity),
 
     #db_document{record = FileLoc} = FileLocDoc = fslogic_file:get_file_local_location_doc(FileDoc),
 
@@ -179,9 +180,32 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
 %% to clients currently using the file. Returns the number of push messages sent.
 %% @end
 -spec register_file_block(FullFileName :: string(), Offset :: non_neg_integer(),
-                          Size :: non_neg_integer()) -> {ok, non_neg_integer()}.
+    Size :: non_neg_integer()) -> {ok, non_neg_integer()}.
 %% ====================================================================
 register_file_block(FullFileName, Offset, Size) ->
+    update_file_block_map(FullFileName, [{Offset, Size}]).
+
+
+%% update_file_block_map/3
+%% ====================================================================
+%% @equiv update_file_block_map(FileId, Blocks, false)
+%% @end
+-spec update_file_block_map(FileId :: string(), [Block]) -> ok when
+    Block :: {Offset :: non_neg_integer(), Size :: non_neg_integer()}.
+%% ====================================================================
+update_file_block_map(FileId, Blocks) ->
+    update_file_block_map(FileId, Blocks, false).
+
+
+%% update_file_block_map/3
+%% ====================================================================
+%% @doc distributes information about file blocks to clients currently using the file
+%% and possibly clears previous mapping. Returns the number of push messages sent.
+%% @end
+-spec update_file_block_map(FileId :: string(), [Block], ClearMap :: boolean()) -> ok when
+    Block :: {Offset :: non_neg_integer(), Size :: non_neg_integer()}.
+%% ====================================================================
+update_file_block_map(FullFileName, Blocks, ClearMap) ->
     {ok, #db_document{} = FileDoc} = fslogic_objects:get_file(FullFileName),
     Location = fslogic_file:get_file_local_location(FileDoc),
     #file_location{storage_uuid = StorageUUID} = Location,
@@ -189,16 +213,17 @@ register_file_block(FullFileName, Offset, Size) ->
     {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
     {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageUUID}),
 
-    BlockAvailability = #filelocation_blockavailability{offset = Offset, size = Size},
+    BlocksAvailability = utils:pmap(fun({Offset, Size}) ->
+        #filelocation_blockavailability{offset = Offset, size = Size}
+    end, Blocks),
 
     {ok, Descriptors} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file, FullFileName}, 10000000000, 0], fslogic_context:get_protocol_version()),
 
-    utils:pforeach(
-        fun(#db_document{record = #file_descriptor{fuse_id = FuseId}}) ->
-            {_, FileId} = fslogic_utils:get_sh_and_id(FuseId, Storage, SpaceId),
-            BlocksAvailable = #blocksavailable{storage_id = Storage#storage_info.id, file_id = FileId, blocks = [BlockAvailability]},
-            request_dispatcher:send_to_fuse(FuseId, BlocksAvailable, "fuse_messages")
-        end, Descriptors),
+    utils:pforeach(fun(#db_document{record = #file_descriptor{fuse_id = FuseId}}) ->
+        {_, FileId} = fslogic_utils:get_sh_and_id(FuseId, Storage, SpaceId),
+        BlocksAvailable = #blocksavailable{clear_map = ClearMap, storage_id = Storage#storage_info.id, file_id = FileId, blocks = BlocksAvailability},
+        request_dispatcher:send_to_fuse(FuseId, BlocksAvailable, "fuse_messages")
+    end, Descriptors),
 
     {ok, length(Descriptors)}.
 
