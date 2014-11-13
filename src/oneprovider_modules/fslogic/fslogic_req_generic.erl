@@ -175,7 +175,7 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
     %% Get owner
     {UName, VCUID, _RSUID} = fslogic_file:get_file_owner(File),
 
-    fslogic_file:fix_storage_owner(FileDoc),
+    catch fslogic_file:fix_storage_owner(FileDoc), %todo this file be remote, so we cant fix storage owner
 
     {ok, FilePath} = logical_files_manager:get_file_full_name_by_uuid(FileUUID),
     {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
