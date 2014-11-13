@@ -168,6 +168,7 @@ signing_in_test_() ->
                                 end;
                             (dao_users, save_user, [UserDoc], _) ->
                                 case UserDoc of
+                                    #db_document{record = NewUser} -> {ok, "uuid"};
                                     NewUser -> {ok, "uuid"};
                                     _ -> throw(error)
                                 end;
