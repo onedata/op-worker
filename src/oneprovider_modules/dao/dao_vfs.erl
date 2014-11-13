@@ -802,7 +802,7 @@ remove_remote_location({file_id, FileId}) ->
     {ok, RemoteLocations} = remote_locations_by_file_id(FileId),
     lists:foreach(fun remove_remote_location/1, RemoteLocations);
 remove_remote_location(RemoteLocationId) when is_list(RemoteLocationId) ->
-    dao_external:set_db(?REMOTE_LOCATIONS_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME), %%todo change db to REMOTE_LOCATION_DB_NAME
     dao_records:remove_record(RemoteLocationId).
 
 %% save_remote_location/1
@@ -816,7 +816,7 @@ remove_remote_location(RemoteLocationId) when is_list(RemoteLocationId) ->
 save_remote_location(#remote_location{} = RemoteLocation) ->
     save_remote_location(#db_document{record = RemoteLocation});
 save_remote_location(#db_document{record = #remote_location{}} = RemoteLocationDoc) ->
-    dao_external:set_db(?REMOTE_LOCATIONS_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME), %%todo change db to REMOTE_LOCATION_DB_NAME
     dao_records:save_record(RemoteLocationDoc).
 
 %% get_remote_location/1
@@ -827,7 +827,7 @@ save_remote_location(#db_document{record = #remote_location{}} = RemoteLocationD
 -spec get_remote_location(Uuid :: uuid()) -> {ok, remote_location_doc()} | {error, any()}.
 %% ====================================================================
 get_remote_location(Uuid) ->
-    dao_external:set_db(?REMOTE_LOCATIONS_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME), %%todo change db to REMOTE_LOCATION_DB_NAME
     dao_records:get_record(Uuid).
 
 %% remote_locations_by_file_id/1
@@ -838,7 +838,7 @@ get_remote_location(Uuid) ->
 -spec remote_locations_by_file_id(FileId :: uuid()) -> {ok, [remote_location_doc()]} | {error, any()}.
 %% ====================================================================
 remote_locations_by_file_id(FileId) ->
-    dao_external:set_db(?REMOTE_LOCATIONS_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME), %%todo change db to REMOTE_LOCATION_DB_NAME
     QueryArgs =
         #view_query_args{keys = [dao_helper:name(FileId)], include_docs = true},
 

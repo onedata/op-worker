@@ -50,7 +50,7 @@
 -define(FILES_BY_META_DOC, #view_info{name = "files_by_meta_doc", db_name = ?FILES_DB_NAME, version = 1}).
 -define(FILE_LOCATIONS_BY_FILE, #view_info{name = "file_locations_by_file", db_name = ?DESCRIPTORS_DB_NAME, version = 1}).
 -define(FILE_BLOCKS_BY_FILE_LOCATION, #view_info{name = "file_blocks_by_file_location", db_name = ?DESCRIPTORS_DB_NAME, version = 1}).
--define(REMOTE_LOCATIONS_BY_FILE_ID, #view_info{name = "remote_locations_by_file_id", db_name = ?REMOTE_LOCATIONS_DB_NAME, version = 1}).
+-define(REMOTE_LOCATIONS_BY_FILE_ID, #view_info{name = "remote_locations_by_file_id", db_name = ?FILES_DB_NAME, version = 1}). %todo change db to REMOTE_LOCATION_DB_NAME
 
 -define(USER_BY_GLOBAL_ID_VIEW, #view_info{name = "user_by_global_id", db_name = ?USERS_DB_NAME, version = 1}).
 -define(USER_BY_NAME_VIEW, #view_info{name = "user_by_name", db_name = ?USERS_DB_NAME, version = 1}).
