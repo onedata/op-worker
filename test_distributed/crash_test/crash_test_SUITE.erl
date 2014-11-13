@@ -90,14 +90,14 @@ main_test(Config) ->
   end,
 
   {Workers, InitialStateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
-  ?assertEqual({length(Workers), Workers, Jobs, NodesUp}, {length(Jobs) + length(PermamentNodes), 30}),
+  ?assertEqual(length(Workers),length(Jobs) + length(PermamentNodes)),
   PongsNum = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum, length(Jobs) * length(Ports)),
 
   test_node_starter:stop_test_nodes([CCM]),
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
   test_utils:wait_for_state_loading(),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(1),
   ?assertEqual(CCM2, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   {Workers2, StateNum2} = gen_server:call({global, ?CCM}, get_workers, 1000),
@@ -112,7 +112,7 @@ main_test(Config) ->
 
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
   test_utils:wait_for_state_loading(),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(1),
   ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   {Workers3, StateNum3} = gen_server:call({global, ?CCM}, get_workers, 1000),
@@ -136,7 +136,7 @@ main_test(Config) ->
   ?assertEqual(Worker1, NewNode2),
   test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, [Worker1], [WorkerArgs]),
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(1),
 
   {Workers5, StateNum5} = gen_server:call({global, ?CCM}, get_workers, 1000),
   ?assertEqual(InitialStateNum + 4, StateNum5),
