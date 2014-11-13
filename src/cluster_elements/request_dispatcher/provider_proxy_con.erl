@@ -220,7 +220,7 @@ main_loop(#ppcon_state{msg_id = CurrentMsgId, connections = Connections, inbox =
                 end;
             {Socket, {closed, Code}} ->
                 ValueMap = lists:map(fun({Key, Value}) -> {Value, Key} end, maps:to_list(Connections)),
-                HostName = maps:get(Socket, ValueMap, undefined),
+                HostName = proplists:get_value(Socket, ValueMap, undefined),
                 ?info("Connection to ~p closed due to ~p.", [HostName, Code]),
                 State#ppcon_state{connections = maps:remove(HostName, Connections), socket_endpoint = maps:remove(Socket, Connections)};
             {Socket, {recv, Data}} ->
