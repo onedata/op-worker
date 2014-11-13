@@ -59,9 +59,14 @@ handle(_ProtocolVersion, _Msg) ->
 %% handle_node_lifecycle_notification/4
 %% ====================================================================
 %% @doc Handles lifecycle calls
+-spec handle_node_lifecycle_notification(Node :: list(), Module :: atom(), Action :: atom(), Pid :: pid()) -> ok.
+%% ====================================================================
 -ifdef(TEST).
 handle_node_lifecycle_notification(Node, Module, Action, Pid) ->
-  ets:insert(?NOTIFICATION_STATE, {node_lifecycle_notification, {Node, Module, Action, Pid}}),
+  case ets:insert(?NOTIFICATION_STATE, node_lifecycle_notification) of
+    [{_, L}] -> ets:insert(?NOTIFICATION_STATE, {node_lifecycle_notification, [{Node, Module, Action, Pid}|L]});
+    _ -> ets:insert(?NOTIFICATION_STATE, {node_lifecycle_notification, [{Node, Module, Action, Pid}]})
+  end,
   ok.
 -else.
 handle_node_lifecycle_notification(_Node, _Module, _Action, _Pid) ->
@@ -71,6 +76,8 @@ handle_node_lifecycle_notification(_Node, _Module, _Action, _Pid) ->
 %% node_lifecycle_get_notification/0
 %% ====================================================================
 %% @doc Handles test calls.
+-spec node_lifecycle_get_notification(Node :: list(), Module :: atom(), Action :: atom(), Pid :: pid()) -> ok | term().
+%% ====================================================================
 -ifdef(TEST).
 node_lifecycle_get_notification()->
   Notification = ets:lookup(?NOTIFICATION_STATE, node_lifecycle_notification),

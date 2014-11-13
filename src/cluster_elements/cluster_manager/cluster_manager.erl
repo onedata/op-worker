@@ -339,7 +339,7 @@ handle_cast({node_is_up, Node}, State) ->
               case WorkersFound of
                 true -> gen_server:cast({global, ?CCM}, update_dispatchers_and_dns),
                         Pid = self(),
-                        erlang:send_after(1000, Pid, {timer, init_cluster});
+                        erlang:send_after(10, Pid, {timer, init_cluster});
                 false -> ok
               end,
               save_state(),
@@ -645,8 +645,6 @@ init_cluster(State) ->
       %% Every node is supposed to have a complete set of permament workes.
       {_PermamentWorkers, RequiredPermamentWorkers} = required_permanent_workers(PermanentModules, JobsAndArgs, State, Nodes),
 
-      ?info("Permament nodes to create ~p", [{PermanentModules, JobsAndArgs, State, Nodes}]),
-      ?info("Permament nodes to create ~p", [{_PermamentWorkers, RequiredPermamentWorkers}]),
       NewStatePermament2 = init_permament_nodes(RequiredPermamentWorkers, State),
 
       CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
@@ -696,18 +694,13 @@ init_cluster(State) ->
 %% ====================================================================
 %% @doc Creates a list of permanent workers, which are going to be initialized.
 required_permanent_workers(PermanentModules, JobsAndArgs, State, Nodes) ->
-    CreatePermamentWorkersList = fun({Worker, Module, _Child}, Workers) ->
-        case lists:member(Module, PermanentModules) of
-          true -> [{Worker, Module}| Workers];
-          _ -> Workers
-        end
-      end,
-    PermamentWorkers = lists:foldl(CreatePermamentWorkersList, [], State#cm_state.workers),
+  PermamentWorkers = [{Worker, Module} || {Worker, Module, _Child} <- State#cm_state.workers,
+                      lists:member(Module, PermanentModules)],
 
-    RequiredPermamentWorkers = [{Node, Module, Args} || Node <- Nodes, Module <- PermanentModules,
-    {Module2, Args} <- JobsAndArgs,
-    not lists:member({Node, Module}, PermamentWorkers),
-    Module =:= Module2],
+  RequiredPermamentWorkers = [{Node, Module, Args} || Node <- Nodes, Module <- PermanentModules,
+                              {Module2, Args} <- JobsAndArgs,
+                              not lists:member({Node, Module}, PermamentWorkers),
+                              Module =:= Module2],
 
    {PermamentWorkers, RequiredPermamentWorkers}.
 
@@ -1075,7 +1068,7 @@ node_down(Node, State) ->
                                   end,
 
   Pid = self(),
-  erlang:send_after(1000, Pid, {timer, init_cluster}),
+  erlang:send_after(10, Pid, {timer, init_cluster}),
   {State#cm_state{workers = NewWorkers, nodes = NewNodes, callbacks_num = CallbacksNum}, WorkersFound2}.
 
 %% start_central_logger/1

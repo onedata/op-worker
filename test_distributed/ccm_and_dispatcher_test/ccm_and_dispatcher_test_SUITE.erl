@@ -341,8 +341,9 @@ workers_list_singleton_and_permanent_test(Config) ->
 
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
   test_utils:wait_for_state_loading(),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(1),
   ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
+
 
 
   % Init cluster
@@ -354,7 +355,6 @@ workers_list_singleton_and_permanent_test(Config) ->
 
   Ok0 = gen_server:cast({global, ?CCM}, {register_module_listener, gateway, {module, gateway}}),
   ?assertEqual(ok, Ok0),
-  timer:sleep(3000),
 
   gen_server:call({global, ?CCM}, {lifecycle_notification, Worker1, gateway, stop_worker}),
 
@@ -655,14 +655,12 @@ init_per_testcase(workers_list_singleton_and_permanent_test, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  {NodesUp, Params} = test_node_starter:start_test_nodes_with_dist_app(4, 2),
-  [CCM | NodesUp2] = NodesUp,
-  [CCM2 | _] = NodesUp2,
+  {NodesUp, Params} = test_node_starter:test_node_starter:start_test_nodes(4),
+  [CCM | _] = NodesUp,
   DB_Node = ?DB_NODE,
-  Args = [[{node_type, ccm}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1308}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, ccm}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8445}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1309}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8446}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1310}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8447}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1311}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]],
+  Args = [[{node_type, ccm}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8446}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8447}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]],
   test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, Args),
 
   lists:append([{nodes, NodesUp}, {params, Params}, {args, Args}], Config);

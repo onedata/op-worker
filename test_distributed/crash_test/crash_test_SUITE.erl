@@ -54,7 +54,7 @@ main_test(Config) ->
   ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   Jobs = ?MODULES,
-  PermamentNodes = ?PERMANENT_MODULES,
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
   PeerCert = ?COMMON_FILE("peer.pem"),
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -85,12 +85,12 @@ main_test(Config) ->
     end,
 
     TmpPongsNum = lists:foldl(CheckModules, 0, Jobs),
-	wss:close(Socket),
+	  wss:close(Socket),
     S + TmpPongsNum
   end,
 
   {Workers, InitialStateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
-  ?assertEqual(length(Workers),length(Jobs) + length(PermamentNodes)),
+  ?assertEqual(length(Workers), length(Jobs) + DuplicatedPermanentNodes),
   PongsNum = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum, length(Jobs) * length(Ports)),
 
@@ -101,8 +101,8 @@ main_test(Config) ->
   ?assertEqual(CCM2, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   {Workers2, StateNum2} = gen_server:call({global, ?CCM}, get_workers, 1000),
-  ?assertEqual(InitialStateNum + 1, StateNum2),
-  ?assertEqual(length(Workers2), length(Jobs) + length(PermamentNodes)),
+  ?assertEqual(StateNum2, InitialStateNum + 1),
+  ?assertEqual(length(Workers2), length(Jobs) + DuplicatedPermanentNodes),
   PongsNum2 = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum2, length(Jobs) * length(Ports)),
 
@@ -117,18 +117,18 @@ main_test(Config) ->
 
   {Workers3, StateNum3} = gen_server:call({global, ?CCM}, get_workers, 1000),
   ?assertEqual(InitialStateNum + 2, StateNum3),
-  ?assertEqual(length(Workers3), length(Jobs) + length(PermamentNodes)),
+  ?assertEqual(length(Workers3), length(Jobs) + DuplicatedPermanentNodes),
   PongsNum3 = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum3, length(Jobs) * length(Ports)),
 
   test_node_starter:stop_test_nodes([Worker1]),
   test_utils:wait_for_nodes_registration(length(WorkerNodes) - 1),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(1),
 
   Ports2 = [8888],
   {Workers4, StateNum4} = gen_server:call({global, ?CCM}, get_workers, 1000),
   ?assertEqual(InitialStateNum + 4, StateNum4),
-  ?assertEqual(length(Workers4), length(Jobs)),
+  ?assertEqual(length(Workers4), length(Jobs) +DuplicatedPermanentNodes ),
   PongsNum4 = lists:foldl(CheckNodes, 0, Ports2),
   ?assertEqual(PongsNum4, length(Jobs) * length(Ports2)),
 
