@@ -527,8 +527,8 @@ cp(From, To) ->
     ErrorDetail :: term().
 %% ====================================================================
 read(File, Offset, Size) ->
-    {Response, Response2} = getfilelocation(File),
     synchronize(File, Offset, Size),
+    {Response, Response2} = getfilelocation(File),
     case Response of
         ok ->
             {Storage_helper_info, FileId} = Response2,
