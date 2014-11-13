@@ -20,12 +20,19 @@
 -export([register/1, unregister/1]).
 
 
+%% register/1
+%% ====================================================================
+%% @doc Registers given callback as document changes hook.
+%%      Note that the callback will be called for each document change that is not
+%%      guaranteed to be in order.
+%% @end
 -spec register(
     Fun :: fun((DbName :: string() | binary(),
                     SpaceId :: binary(),
                     DocUUID :: string() | binary(),
                     Document :: #db_document{}) -> any())) ->
     HookId :: binary().
+%% ====================================================================
 register(Fun) when is_function(Fun) ->
     HookId = gen_hook_id(),
     dbsync_state:call(fun(_State) ->
@@ -40,7 +47,12 @@ register(Fun) when is_function(Fun) ->
     HookId.
 
 
+%% unregister/1
+%% ====================================================================
+%% @doc Removes given by UUID hook that was registered earlier.
+%% @end
 -spec unregister(HookId :: binary()) -> ok.
+%% ====================================================================
 unregister(HookId) ->
     dbsync_state:call(fun(_State) ->
         Hooks =
@@ -55,5 +67,11 @@ unregister(HookId) ->
     ok.
 
 
+%% gen_hook_id/0
+%% ====================================================================
+%% @doc Returns new UUID.
+%% @end
+-spec gen_hook_id() -> UUID :: binary().
+%% ====================================================================
 gen_hook_id() ->
     utils:ensure_binary(dao_helper:gen_uuid()).
