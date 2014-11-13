@@ -25,6 +25,7 @@
 
 %% API
 -export([register_quota_exceeded_handler/0, register_rm_event_handler/0, register_for_write_events/1, register_for_truncate_events/0, register_read_for_stats_events/1, register_write_for_stats_events/1]).
+-export([register_for_write_events_block_updates/1]).
 
 -define(ProtocolVersion, 1).
 -define(VIEW_UPDATE_DELAY, 5000).
@@ -83,6 +84,24 @@ register_for_write_events(Bytes) ->
   EventHandlerMapFun = get_standard_map_fun(),
   EventHandlerDispMapFun = get_standard_disp_map_fun(),
   EventItem = #event_handler_item{processing_method = tree, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = #event_stream_config{config = #aggregator_config{field_name = "user_dn", fun_field_name = "bytes", threshold = Bytes}}},
+
+  %% client configuration
+  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
+  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
+  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
+  EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
+
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"write_event", EventItem, EventAggregatorConfig}}}).
+
+%% Registers handler which will be called every Bytes will be written.
+register_for_write_events_block_updates(Bytes) ->
+  EventHandler = fun(Event) ->
+    ?dump(Event),
+    _Blocks = proplists:get_value("blocks", Event)
+    %todo update blocks
+  end,
+
+  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
 
   %% client configuration
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
