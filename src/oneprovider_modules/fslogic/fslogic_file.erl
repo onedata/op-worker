@@ -69,6 +69,8 @@ get_file_owner(#file{} = File) ->
     case user_logic:get_user({uuid, File#file.uid}) of
         {ok, #db_document{record = #user{}} = UserDoc} ->
             {{_, Login}, SUID} = user_logic:get_login_with_uid(UserDoc),
+
+            %% Translate GRUID to integer that shall be be used as storage's UID
             <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, utils:ensure_binary(File#file.uid)),
             {ok, LowestGID} = oneprovider_node_app:get_env(lowest_generated_storage_gid),
             VCUID = LowestGID + GID0 rem 1000000,

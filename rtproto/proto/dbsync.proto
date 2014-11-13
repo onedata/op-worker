@@ -22,7 +22,7 @@ message DocUpdated {
 message ReportSpaceState {
     message CurrentSeqData {
         required bytes dbname = 1;
-        required bytes seq_num = 3;
+        required bytes seq_num = 2;
     }
 
     repeated CurrentSeqData current_seq = 1;

@@ -14,14 +14,13 @@
 
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("files_common.hrl").
--include("registered_names.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
 
 setup() ->
-    meck:new([user_logic]).
+    meck:new([user_logic, oneprovider_node_app]).
 
 teardown(_) ->
     meck:unload().
@@ -53,7 +52,6 @@ get_file_owner_test_() ->
     {foreach, fun setup/0, fun teardown/1, [fun get_file_owner/0]}.
 
 get_file_owner() ->
-    application:set_env(?APP_Name ,lowest_generated_storage_gid, 70000),
     meck:expect(user_logic, get_user, fun
         ({uuid, "123"}) ->
             {ok, #db_document{uuid = "123", record = #user{}}};
@@ -63,8 +61,9 @@ get_file_owner() ->
     meck:expect(user_logic, get_login_with_uid, fun(#db_document{uuid = "123", record = #user{}}) ->
         {{provider, "login"}, 123}
     end),
+    meck:expect(oneprovider_node_app, get_env, fun(lowest_generated_storage_gid) -> {ok, 70000} end),
 
-    %?assertMatch({"login", 123, 123}, fslogic_file:get_file_owner(#file{uid = "123"})), %todo repair
+    ?assertMatch({"login", _, 123}, fslogic_file:get_file_owner(#file{uid = "123"})),
     ?assertMatch({"", -1, -1}, fslogic_file:get_file_owner(#file{uid = "321"})),
 
     ?assert(meck:validate(user_logic)).

@@ -5,7 +5,9 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @todo: write me!
+%% @doc: This module acts as configuration for records supported by dbsync worker.
+%%       Each record that needs to be synchronized has to be supported by all
+%%       methods in this module.
 %% @end
 %% ===================================================================
 -module(dbsync_records).
@@ -19,6 +21,11 @@
 -export([doc_to_db/1, get_space_ctx/2]).
 
 
+%% doc_to_db/1
+%% ====================================================================
+%% @doc Shall return database name for given db_document.
+-spec doc_to_db(#db_document{}) -> string() | binary().
+%% ====================================================================
 doc_to_db(#db_document{record = #file{}}) ->
     ?FILES_DB_NAME;
 doc_to_db(#db_document{record = #file_meta{}}) ->
@@ -26,6 +33,14 @@ doc_to_db(#db_document{record = #file_meta{}}) ->
 doc_to_db(#db_document{record = #remote_location{}}) ->
     ?FILES_DB_NAME.
 
+%% get_space_ctx/2
+%% ====================================================================
+%% @doc Shall return list of UUIDs and associated #space_info{} record for given document.
+%%      This method should return as many UUID as possible in advance.
+%% @end
+-spec get_space_ctx(#db_document{}, Acc :: [binary()]) ->
+    {ok, {UUIDs :: [binary()], #space_info{}}} | {error, Reason :: any()}.
+%% ====================================================================
 get_space_ctx(#db_document{uuid = "", record = #file{}}, []) ->
     {error, no_space};
 get_space_ctx(#db_document{uuid = UUID, record = #file{extensions = Exts, parent = Parent}}, UUIDs) ->

@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @todo: write me!
+%% @doc: This module contains DBSync worker and its other active elements
 %% @end
 %% ===================================================================
 -module(dbsync).
@@ -91,9 +91,12 @@ handle(ProtocolVersion, Request) ->
     end.
 
 
-%% ===============================================
-%%
-%% ===============================================
+handle2(_ProtocolVersion, {register_hook, Fun}) ->
+    dbsync_hooks:register(Fun);
+
+handle2(_ProtocolVersion, {remove_hook, HookId}) ->
+    dbsync_hooks:unregister(HookId);
+
 handle2(_ProtocolVersion, {changes_stream, StreamId, eof}) ->
     [{_, SeqInfo}] = ets:lookup(?dbsync_state, {last_seq, StreamId}),
     SeqReq1 = dbsync_utils:seq_info_to_url(SeqInfo),
@@ -113,7 +116,7 @@ handle2(_ProtocolVersion, {changes_stream, StreamId, eof}) ->
 
 handle2(_ProtocolVersion, {changes_stream, StreamId, Data, SinceSeqInfo}) ->
     try
-        ?debug("Changes ========================> ~p", [Data]),
+        ?debug("Received DB changes ~p", [Data]),
         {ChangedDocs, {_SeqNum, _SeqHash}} = dbsync_utils:changes_json_to_docs(Data),
         ChangedDocs1 = [ChangedDoc || {#db_document{}, _} = ChangedDoc <- ChangedDocs],
 
@@ -178,7 +181,7 @@ handle2(ProtocolVersion, #treebroadcast{input = RequestData, message_type = Deco
         true -> ok
     end;
 
-handle2(_ProtocolVersion, #requestseqdiff{space_id = SpaceId, dbname = DbName, since_seq = SinceBin} = BaseRequest) ->
+handle2(_ProtocolVersion, #requestseqdiff{space_id = SpaceId, dbname = DbName, since_seq = SinceBin} = _BaseRequest) ->
     SinceSeqInfo = dbsync_utils:normalize_seq_info(dbsync_utils:decode_term(SinceBin)),
     SeqReq = dbsync_utils:seq_info_to_url(SinceSeqInfo),
 
@@ -189,8 +192,7 @@ handle2(_ProtocolVersion, #requestseqdiff{space_id = SpaceId, dbname = DbName, s
     SpacesMap = lists:foldl(
         fun({#db_document{uuid = UUID, rev_info = {RevNum, [RevHash | _]}} = Doc, CSeq}, Acc) ->
             try
-                {ok, #space_info{providers = SyncWith, space_id = SpaceId} = SpaceInfo} = get_space_ctx(DbName, Doc),
-                SyncWithSorted = lists:usort(SyncWith),
+                {ok, #space_info{providers = _SyncWith, space_id = SpaceId} = SpaceInfo} = get_space_ctx(DbName, Doc),
                 {ok, [{ok, #doc{revs = RevInfo}}]} = dao_lib:apply(dao_helper, open_revs, [DbName, UUID, [{RevNum, RevHash}], []], 1),
                 NewDoc = Doc#db_document{rev_info = RevInfo},
 
@@ -199,15 +201,15 @@ handle2(_ProtocolVersion, #requestseqdiff{space_id = SpaceId, dbname = DbName, s
             catch
                 _:{badmatch,{error,{not_found,missing}}} ->
                     Acc;
-                _:{badmatch,{ok, #space_info{}}} ->
+                _:{badmatch, {ok, #space_info{}}} ->
                     Acc;
                 _:Reason ->
-                    ?error_stacktrace("OMG2 ==============================> ~p", [Reason]),
+                    ?error_stacktrace("Unable to emit document ~p due to ~p", [Reason]),
                     Acc
             end
         end, #{}, ChangedDocs1),
 
-    {SpaceInfo, _, Docs} = maps:get(SpaceId, SpacesMap, {#space_info{}, 0, []}),
+    {_, _, Docs} = maps:get(SpaceId, SpacesMap, {#space_info{}, 0, []}),
     DocsEncoded = [dbsync_utils:encode_term(Doc) || Doc <- lists:reverse(Docs)],
     #docupdated{dbname = DbName, document =  DocsEncoded, prev_seq = SinceBin, curr_seq = dbsync_utils:encode_term(ReqSeqInfo)};
 
@@ -228,7 +230,7 @@ handle_broadcast(_ProtocolVersion, SpaceId, #docupdated{dbname = DbName, documen
     dbsync_state:call(fun(_State) ->
         case get_current_seq(ProviderId, SpaceId, DbName) of
             PrevSeqInfo ->
-                ?debug("State of space ~p updated to ~p!", [SpaceId, CurrSeqInfo]),
+                ?debug("State of space ~p updated to ~p", [SpaceId, CurrSeqInfo]),
                 ets:insert(?dbsync_state, {last_space_seq_key(ProviderId, SpaceId, DbName), CurrSeqInfo});
             UnknownSeq ->
                 ?debug("Cannot update database with received diff due to seq missmatch ~p vs local ~p", [PrevSeqInfo, UnknownSeq])
@@ -340,9 +342,6 @@ push_doc_changes(#space_info{} = SpaceInfo, Docs, SinceSeqInfo, LastSpaceSeq, Sy
     ok = dbsync_protocol:tree_broadcast(SpaceInfo, SyncWith, Request, 3).
 
 
-
-
-
 broadcast_space_state(SpaceId) ->
     {ok, #space_info{providers = SyncWith} = SpaceInfo} = fslogic_objects:get_space({uuid, SpaceId}),
     SeqData =
@@ -367,7 +366,6 @@ broadcast_space_state(SpaceId) ->
 %% Names, URLs, etc.
 %% ====================================================================
 
-
 select_db_url() ->
     HostNames1 =
         case dbsync_state:get(db_hosts) of
@@ -383,7 +381,6 @@ select_db_url() ->
                 HostNames0
         end,
     HostName = lists:nth(crypto:rand_uniform(0, length(HostNames1)) + 1, HostNames1),
-    ?info("DB HostName ~p", [HostName]),
     "http://" ++ HostName ++ ":5984".
 
 
@@ -424,7 +421,7 @@ changes_receiver_loop({StreamId, State}) ->
                    {ibrowse_async_headers, _RequestId, "200", _} ->
                        State;
                    Unk ->
-                       ?error("Unknown ============================> ~p", [Unk]),
+                       ?error("Unknown response from changes stream: ~p", [Unk]),
                        ?dbsync_cast({changes_stream, StreamId, eof}),
                        State
                after timer:seconds(10) ->
@@ -515,7 +512,7 @@ replicate_doc(SpaceId, #db_document{uuid = DocUUID} = Doc) ->
     case dao_lib:apply(dao_records, save_record, [DocDbName, Doc, [replicated_changes]], 1) of
         {ok, _} ->
             [catch Callback(DocDbName, SpaceId, DocUUID, Doc) || {_, Callback} <- Hooks],
-            ?debug("UPDATED ~p !", [DocUUID]),
+            ?debug("Document ~p replicated", [DocUUID]),
             ok;
         {error, Reason2} ->
             ?error("Cannot replicate changes due to: ~p", [Reason2]),

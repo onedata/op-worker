@@ -100,4 +100,5 @@ sequential_synch_call(Module,Function,Args) ->
 %% ====================================================================
 view_def_location() ->
     {ok, Location} = application:get_env(oneprovider_node, view_def_location),
+    %% @todo: check why Locations happens to be atom (sometimes?)
     utils:ensure_list(Location).

@@ -170,6 +170,7 @@ signing_in_test_() ->
                                 case UserDoc of
                                     #db_document{record = NewUser} -> {ok, "uuid"};
                                     NewUser -> {ok, "uuid"};
+                                    #db_document{record = NewUser} -> {ok, "uuid"};
                                     _ -> throw(error)
                                 end;
                             (dao_users, save_quota, _, _) -> {ok, "quota_uuid"};
@@ -189,7 +190,7 @@ signing_in_test_() ->
                     meck:expect(utils, time, fun() -> Time end),
                     meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {__Time2, __Time2, __Time2}) ->
                         File end),
-                    ?assertEqual({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist, AccessToken, RefreshToken, ExpirationTime)),
+                    ?assertMatch({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist, AccessToken, RefreshToken, ExpirationTime)),
                     ?assert(meck:validate(dao_lib)),
                     ets:delete(?STORAGE_USER_IDS_CACHE)
                 end},
