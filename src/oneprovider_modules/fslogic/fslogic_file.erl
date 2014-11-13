@@ -96,6 +96,7 @@ get_file_local_location(FileId) when is_list(FileId) ->
 get_file_local_location_doc(#db_document{uuid = FileId, record = #file{}}) ->
     get_file_local_location_doc(FileId);
 get_file_local_location_doc(FileId) when is_list(FileId) ->
+    ct:print("ID: ~p",[FileId]),
     {ok, [Location | _Locations]} = dao_lib:apply(dao_vfs, get_file_locations, [FileId], fslogic_context:get_protocol_version()),
     Location.
 

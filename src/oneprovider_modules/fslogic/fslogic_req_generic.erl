@@ -454,6 +454,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     OtherRemoteLocationDocs = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id =/= ProviderId end, RemoteLocationDocs),
     FileId = MyRemoteLocationDoc#db_document.record#remote_location.file_id,
 
+    ct:print("DOCS: ~p, ID: ~p",[dao_vfs:list_file_locations(FileId), FileId]),
     case dao_vfs:list_file_locations(FileId) of
         {ok, []} -> create_file_location_for_remote_file(FullFileName, FileId);
         _ -> ok
