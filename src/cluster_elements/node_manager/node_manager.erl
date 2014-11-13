@@ -262,9 +262,10 @@ handle_cast(init_listeners, State) ->
     try
         start_gui_listener(),
         start_rest_listener(),
-        start_redirector_listener()
+        start_redirector_listener(),
+        start_dns_listeners()
     catch T:M ->
-        ?error_stacktrace("Error while initializing cowboy listeners - ~p:~p", [T, M])
+        ?error_stacktrace("Error while initializing TCP and/or UDP listeners - ~p:~p", [T, M])
     end,
     {noreply, State};
 
@@ -1448,3 +1449,27 @@ static_dispatches(DocRoot, StaticPaths) ->
                 {handler_opts, {dir, DocRoot ++ Dir}}
             ]}
     end, StaticPaths).
+
+
+%% start_dns_listeners/0
+%% ====================================================================
+%% @doc Starts DNS UDP and TCP listeners.
+%% @end
+-spec start_dns_listeners() -> ok | no_return().
+%% ====================================================================
+start_dns_listeners() ->
+    {ok, DNSPort} = application:get_env(?APP_Name, dns_port),
+    {ok, EdnsMaxUdpSize} = application:get_env(?APP_Name, edns_max_udp_size),
+    {ok, TCPNumAcceptors} = application:get_env(?APP_Name, dns_tcp_acceptor_pool_size),
+    {ok, TCPTImeout} = application:get_env(?APP_Name, dns_tcp_timeout),
+    OnFailureFun = fun() ->
+        ?error("Could not start DNS server on node ~p.", [node()])
+    end,
+    ?info("Starting DNS server..."),
+    case dns_server:start(?Supervisor_Name, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun) of
+        ok ->
+            ok;
+        Error ->
+            ?error("Cannot start DNS server - ~p", Error),
+            OnFailureFun()
+    end.

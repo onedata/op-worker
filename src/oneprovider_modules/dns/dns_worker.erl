@@ -45,23 +45,6 @@
     Error :: term().
 %% ====================================================================
 init([]) ->
-    {ok, DNSPort} = application:get_env(?APP_Name, dns_port),
-    {ok, DNSResponseTTL} = application:get_env(?APP_Name, dns_response_ttl),
-    {ok, EdnsMaxUdpSize} = application:get_env(?APP_Name, edns_max_udp_size),
-    {ok, TCPNumAcceptors} = application:get_env(?APP_Name, dns_tcp_acceptor_pool_size),
-    {ok, TCPTImeout} = application:get_env(?APP_Name, dns_tcp_timeout),
-    OnFailureFun = fun() ->
-        gen_server:cast({global, ?CCM}, {stop_worker, node(), ?MODULE}),
-        ?error("~p is terminating", [?MODULE])
-    end,
-    ?info("Starting DNS server..."),
-    case dns_server:start(?Supervisor_Name, DNSPort, dns_worker, DNSResponseTTL, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun) of
-        ok ->
-            ok;
-        Error ->
-            ?error("Cannot start DNS server - ~p", Error),
-            OnFailureFun()
-    end,
     #dns_worker_state{};
 
 init(InitialState) when is_record(InitialState, dns_worker_state) ->
