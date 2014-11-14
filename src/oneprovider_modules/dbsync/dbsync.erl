@@ -91,12 +91,22 @@ handle(ProtocolVersion, Request) ->
     end.
 
 
+%% handle2/2
+%% ====================================================================
+%% @doc Main dbsync's handle method.
+%% @end
+-spec handle2(ProtocolVersion :: term(), Request :: term()) -> Result when
+    Result :: term().
+%% ====================================================================
+
+%% Hooks
 handle2(_ProtocolVersion, {register_hook, Fun}) ->
     dbsync_hooks:register(Fun);
 
 handle2(_ProtocolVersion, {remove_hook, HookId}) ->
     dbsync_hooks:unregister(HookId);
 
+%% Changes stream responses
 handle2(_ProtocolVersion, {changes_stream, StreamId, eof}) ->
     [{_, SeqInfo}] = ets:lookup(?dbsync_state, {last_seq, StreamId}),
     SeqReq1 = dbsync_utils:seq_info_to_url(SeqInfo),
@@ -127,7 +137,7 @@ handle2(_ProtocolVersion, {changes_stream, StreamId, Data, SinceSeqInfo}) ->
             {error, Reason}
     end;
 
-
+%% Events from changes stream
 handle2(_ProtocolVersion, {docs_updated, {DbName, DocsWithSeq, SinceSeqInfo}}) ->
     case lists:member(DbName, ?dbs_to_sync) of
         true ->
@@ -136,6 +146,7 @@ handle2(_ProtocolVersion, {docs_updated, {DbName, DocsWithSeq, SinceSeqInfo}}) -
             ok
     end;
 
+%% Reemitting tree broadcast messages
 handle2(_ProtocolVersion, {reemit, #treebroadcast{ledge = LEdge, redge = REdge, space_id = SpaceId,
                             input = RequestData, message_type = DecoderName} = BaseRequest}) ->
     {ok, #space_info{providers = Providers} = SpaceInfo} = fslogic_objects:get_space({uuid, SpaceId}),
@@ -147,6 +158,7 @@ handle2(_ProtocolVersion, {reemit, #treebroadcast{ledge = LEdge, redge = REdge, 
     Providers4 = lists:usort([REdge | Providers3]),
     ok = dbsync_protocol:tree_broadcast(SpaceInfo, Providers4, Request, BaseRequest, 3);
 
+%% Handle treebroadcast{} message
 handle2(ProtocolVersion, #treebroadcast{input = RequestData, message_type = DecoderName, space_id = SpaceId, request_id = ReqId} = BaseRequest) ->
 
     Ignore = dbsync_state:call(fun(_State) ->
@@ -181,6 +193,7 @@ handle2(ProtocolVersion, #treebroadcast{input = RequestData, message_type = Deco
         true -> ok
     end;
 
+%% Handle requestseqdiff{} message
 handle2(_ProtocolVersion, #requestseqdiff{space_id = SpaceId, dbname = DbName, since_seq = SinceBin} = _BaseRequest) ->
     SinceSeqInfo = dbsync_utils:normalize_seq_info(dbsync_utils:decode_term(SinceBin)),
     SeqReq = dbsync_utils:seq_info_to_url(SinceSeqInfo),
@@ -218,6 +231,14 @@ handle2(_ProtocolVersion, _Msg) ->
     unknown_request.
 
 
+%% handle_broadcast/2
+%% ====================================================================
+%% @doc General handler for treebroadcast{} inner-messages. Shall return whether
+%%      broadcast should be canceled (ok | {error, _}) or reemitted (reemit).
+%% @end
+-spec handle_broadcast(ProtocolVersion :: term(), SpaceId :: binary(), Request :: term(), BaseRequest :: term()) ->
+    ok | reemit | {error, Reason :: any()}.
+%% ====================================================================
 handle_broadcast(_ProtocolVersion, SpaceId, #docupdated{dbname = DbName, document = DocsData, prev_seq = PrevSeqInfoBin, curr_seq = CurrSeqInfoBin} = Request, BaseRequest) ->
     {provider_id, ProviderId} = get(peer_id),
     CurrSeqInfo = dbsync_utils:decode_term(CurrSeqInfoBin),
@@ -269,6 +290,16 @@ cleanup() ->
     ok.
 
 
+
+%% request_diff/5
+%% ====================================================================
+%% @doc Requests changes diff from given SinceSeqInfo.
+%%      This method receives response and replicates all documents.
+%% @end
+-spec request_diff(ProviderId :: binary(), SpaceId :: binary(), DbName :: string() | binary(),
+    SinceSeqInfo :: term(), Attempts :: non_neg_integer()) ->
+    ok | no_return().
+%% ====================================================================
 request_diff(ProviderId, SpaceId, DbName, SinceSeqInfo, Attempts) ->
     Request = #requestseqdiff{space_id = SpaceId, dbname = utils:ensure_binary(DbName), since_seq = dbsync_utils:encode_term(SinceSeqInfo)},
     #docupdated{document = DocsData, curr_seq = CurrSeqInfoBin, prev_seq = PrevSeqInfoBin} = dbsync_protocol:send_direct_message(ProviderId, Request, {dbsync, docupdated}, Attempts),
@@ -292,6 +323,13 @@ request_diff(ProviderId, SpaceId, DbName, SinceSeqInfo, Attempts) ->
     ok.
 
 
+%% emit_documents/3
+%% ====================================================================
+%% @doc Emits given changes to all providers that supports spaces associated with those documents.
+%% @end
+-spec emit_documents(DbName :: string() | binary(), DocsWithSeq :: [{#db_document{}, SeqInfo :: term()}], SinceSeqInfo :: term()) ->
+    ok | no_return().
+%% ====================================================================
 emit_documents(DbName, DocsWithSeq, SinceSeqInfo) ->
     SpacesMap = lists:foldl(
         fun({#db_document{uuid = UUID, rev_info = {RevNum, [RevHash | _]}} = Doc, CSeq}, Acc) ->
@@ -500,6 +538,13 @@ get_current_seq(ProviderId, SpaceId, DbName) ->
         CurrSeqInfo -> CurrSeqInfo
     end.
 
+
+%% replicate_doc/2
+%% ====================================================================
+%% @doc Replicates given document to DB.
+%% @end
+-spec replicate_doc(SpaceId :: binary(), #db_document{}) -> ok | {error, Reason :: any()}.
+%% ====================================================================
 replicate_doc(SpaceId, #db_document{uuid = DocUUID} = Doc) ->
     Hooks =
         case dbsync_state:get(hooks) of
