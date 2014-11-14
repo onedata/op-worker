@@ -106,6 +106,7 @@ check_if_synchronized(#block_range{from = From, to = To}, #db_document{record = 
         end, OtherDocs).
 
 mark_other_provider_changes(MyDoc = #db_document{record = #remote_location{file_parts = MyParts} = Location}, #db_document{record = #remote_location{file_parts = OtherParts}}) ->
+    ct:print("GGGG: ~p, ~p",[MyParts, OtherParts]),
     NewParts = ranges_struct:minimize(ranges_struct:subtract_newer(MyParts, OtherParts)),
     MyDoc#db_document{record = Location#remote_location{file_parts = NewParts}}.
 
