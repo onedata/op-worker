@@ -644,30 +644,21 @@ write(File, Offset, Buf, EventPolicy) ->
                 ok ->
                     {Storage_helper_info, FileId} = Response2,
                     Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
-%%                     case is_integer(Res) of %todo delete
-%%                         true ->
-%%                             % async infrom other providers about modification
-%%                             apply(fun() -> mark_as_modified(File, Offset, byte_size(Buf)) end,[]),
-%%
-%%                             case event_production_enabled("write_event") of
-%%                                 true ->
-%%                                     WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"count", binary:referenced_byte_size(Buf)}],
-%%                                     gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-%%                                     WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", binary:referenced_byte_size(Buf)}],
-%%                                     gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
-%%                                 false -> ok
-%%                             end;
-%%                         _ -> ok
+                    case is_integer(Res) of %todo delete
+                        true ->
+                            % async infrom other providers about modification
+                            apply(fun() -> mark_as_modified(File, Offset, byte_size(Buf)) end,[]),
 
-                    %% TODO - check if asynchronous processing needed
-                    case {is_integer(Res), event_production_enabled("write_event"), EventPolicy} of
-                        {true, true, generate_events} ->
-                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"count", binary:referenced_byte_size(Buf)}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", binary:referenced_byte_size(Buf)}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
-                        _ ->
-                            ok
+                            %% TODO - check if asynchronous processing needed
+                            case {event_production_enabled("write_event"), EventPolicy} of
+                                {true, generate_events} ->
+                                    WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"count", binary:referenced_byte_size(Buf)}],
+                                    gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+                                    WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", binary:referenced_byte_size(Buf)}],
+                                    gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
+                                _ -> ok
+                            end;
+                        _ -> ok
                     end,
                     Res;
                 _ -> {Response, Response2}

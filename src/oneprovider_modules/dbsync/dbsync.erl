@@ -82,7 +82,7 @@ init(_Args) ->
                     _ -> ok
                 end;
             (A, B, C, D) ->
-                ?info("GOT INFO ABOUT SOME DOC! (~p,~p,~p,~p)",[A,B,C,D]), % todo temove
+                ?info("GOT INFO ABOUT SOME DOC! (~p,~p,~p,~p)",[A,B,C,element(1,D#db_document.record)]), % todo temove
                 ok
         end,
         ?info("FUN REGISTERED"), % todo temove
