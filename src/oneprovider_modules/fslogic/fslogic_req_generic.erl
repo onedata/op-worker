@@ -468,7 +468,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
                 {ok, _} = gateway:do_stuff(Id, #fetchrequest{file_id = FileId, offset = From*?remote_block_size, size = (To-From+1)*?remote_block_size})
             end, Ranges)
         end, OutOfSyncList),
-    SyncedParts = OutOfSyncList, % assume that all parts has been synchronized
+    SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
     NewDoc = fslogic_remote_location:mark_as_available(SyncedParts, MyRemoteLocationDoc),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
