@@ -226,7 +226,7 @@ handle2(_ProtocolVersion, #requestseqdiff{space_id = SpaceId, dbname = DbName, s
                 _:{badmatch, {ok, #space_info{}}} ->
                     Acc;
                 _:Reason ->
-                    ?error_stacktrace("Unable to emit document ~p due to ~p", [Reason]),
+                    ?error_stacktrace("Unable to emit document ~p due to ~p", [Doc, Reason]),
                     Acc
             end
         end, #{}, ChangedDocs1),
