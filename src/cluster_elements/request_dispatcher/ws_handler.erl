@@ -74,7 +74,7 @@ websocket_init(TransportName, Req, _Opts) ->
     {SessionId, _} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
     ?debug("New connection with SessionId ~p, ClientSubjectDN: ~p", [SessionId, ClientSubjectDN]),
 
-    {ok, DispatcherTimeout} = application:get_env(oneprovider_node, dispatcher_timeout),
+    {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
     InitCtx = #handler_state{dispatcher_timeout = DispatcherTimeout},
 
     case gsi_handler:get_certs_from_req(?ONEPROXY_DISPATCHER, Req) of
