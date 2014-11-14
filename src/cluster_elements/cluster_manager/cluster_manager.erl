@@ -328,6 +328,9 @@ handle_cast({node_is_up, Node}, State) ->
           %% were running on node).
           case Ans of
             ok ->
+              Pid = self(),
+              erlang:send_after(5000, Pid, {timer, init_cluster}),
+
               case State#cm_state.state_monitoring of
                 on ->
                   erlang:monitor_node(Node, true);
@@ -337,9 +340,7 @@ handle_cast({node_is_up, Node}, State) ->
               NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
 
               case WorkersFound of
-                true -> gen_server:cast({global, ?CCM}, update_dispatchers_and_dns),
-                        Pid = self(),
-                        erlang:send_after(10, Pid, {timer, init_cluster});
+                true -> gen_server:cast({global, ?CCM}, update_dispatchers_and_dns);
                 false -> ok
               end,
               save_state(),
@@ -1068,7 +1069,7 @@ node_down(Node, State) ->
                                   end,
 
   Pid = self(),
-  erlang:send_after(10, Pid, {timer, init_cluster}),
+  erlang:send_after(5000, Pid, {timer, init_cluster}),
   {State#cm_state{workers = NewWorkers, nodes = NewNodes, callbacks_num = CallbacksNum}, WorkersFound2}.
 
 %% start_central_logger/1

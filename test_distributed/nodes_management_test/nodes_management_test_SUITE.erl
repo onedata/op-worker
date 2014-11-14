@@ -27,12 +27,12 @@
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([fuse_session_cleanup_test/1, main_test/1, callbacks_test/1, fuse_ack_routing_test/1]).
+-export([fuse_session_cleanup_test/1, main_test/1, callbacks_test/1, fuse_ack_routing_test/1, workers_list_singleton_and_permanent_test/1]).
 
 %% export nodes' codes
 -export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
-all() -> [fuse_session_cleanup_test, main_test, callbacks_test, fuse_ack_routing_test].
+all() -> [workers_list_singleton_and_permanent_test, fuse_session_cleanup_test, main_test, callbacks_test, fuse_ack_routing_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -669,6 +669,54 @@ callbacks_test(Config) ->
   lists:foldl(CheckCallbacks, DispatcherCorrectAns3, lists:zip(NodesUp, FuseInfo3)),
 
   rpc:call(Worker1, user_logic, remove_user, [{global_id, UserDoc#db_document{record = #user.global_id}}], 2000).
+
+%% This test checks if workers list inside dispatcher is refreshed correctly.
+workers_list_singleton_and_permanent_test(Config) ->
+  NodesUp = ?config(nodes, Config),
+
+  [CCM | WorkerNodes] = NodesUp,
+  [Worker1 | WorkerNodes2] = WorkerNodes,
+  [Worker2 | _] = WorkerNodes2,
+
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
+  test_utils:wait_for_cluster_cast(),
+  RunWorkerCode = fun(Node) ->
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
+  end,
+  lists:foreach(RunWorkerCode, WorkerNodes),
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
+  ?ENABLE_PROVIDER(Config),
+
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
+  ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
+
+  Ok0 = gen_server:cast({global, ?CCM}, {register_module_listener, gateway, {module, gateway}}),
+  ?assertEqual(ok, Ok0),
+
+  gen_server:call({global, ?CCM}, {lifecycle_notification, Worker1, gateway, stop_worker}),
+
+  Ok2 = gen_server:call({?Dispatcher_Name, Worker2}, {gateway, 1, self(),  node_lifecycle_get_notification}),
+  ?assertEqual(ok, Ok2),
+
+  Ans1 = receive
+           {ok, {node_lifecycle, X}} -> X
+         after 1000 ->
+           error
+         end,
+  ?assertEqual(1, length(Ans1)),
+
+  [{_, [{N, M, A, _}]}] = Ans1,
+  ?assertEqual({Worker1, gateway, stop_worker}, {N, M, A}),
+
+  NewNode2 = test_node_starter:start_test_node(?GET_NODE_NAME(Worker1), ?GET_HOST(Worker1), false, []),
+  ?assertEqual(Worker1, NewNode2),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, [Worker1], [[{node_type, worker}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8444}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes).
+
 
 %% ====================================================================
 %% SetUp and TearDown functions

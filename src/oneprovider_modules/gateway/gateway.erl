@@ -63,7 +63,7 @@ handle(_ProtocolVersion, _Msg) ->
 %% ====================================================================
 -ifdef(TEST).
 handle_node_lifecycle_notification(Node, Module, Action, Pid) ->
-  case ets:insert(?NOTIFICATION_STATE, node_lifecycle_notification) of
+  case ets:lookup(?NOTIFICATION_STATE, node_lifecycle_notification) of
     [{_, L}] -> ets:insert(?NOTIFICATION_STATE, {node_lifecycle_notification, [{Node, Module, Action, Pid}|L]});
     _ -> ets:insert(?NOTIFICATION_STATE, {node_lifecycle_notification, [{Node, Module, Action, Pid}]})
   end,

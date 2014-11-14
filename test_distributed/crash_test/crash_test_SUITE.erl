@@ -48,13 +48,15 @@ main_test(Config) ->
   [_ | Params3] = Params2,
   [WorkerParams | _] = Params3,
 
-  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
-  test_utils:wait_for_state_loading(),
-  test_utils:wait_for_cluster_init(1),
-  ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
-
   Jobs = ?MODULES,
   DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+
+  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
+  test_utils:wait_for_state_loading(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
+  ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
+
+
   PeerCert = ?COMMON_FILE("peer.pem"),
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -85,7 +87,7 @@ main_test(Config) ->
     end,
 
     TmpPongsNum = lists:foldl(CheckModules, 0, Jobs),
-	  wss:close(Socket),
+	wss:close(Socket),
     S + TmpPongsNum
   end,
 
@@ -97,11 +99,11 @@ main_test(Config) ->
   test_node_starter:stop_test_nodes([CCM]),
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
   test_utils:wait_for_state_loading(),
-  test_utils:wait_for_cluster_init(1),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
   ?assertEqual(CCM2, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   {Workers2, StateNum2} = gen_server:call({global, ?CCM}, get_workers, 1000),
-  ?assertEqual(StateNum2, InitialStateNum + 1),
+  ?assertEqual(InitialStateNum + 1, StateNum2),
   ?assertEqual(length(Workers2), length(Jobs) + DuplicatedPermanentNodes),
   PongsNum2 = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum2, length(Jobs) * length(Ports)),
@@ -112,7 +114,7 @@ main_test(Config) ->
 
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
   test_utils:wait_for_state_loading(),
-  test_utils:wait_for_cluster_init(1),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
   ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   {Workers3, StateNum3} = gen_server:call({global, ?CCM}, get_workers, 1000),
@@ -123,12 +125,12 @@ main_test(Config) ->
 
   test_node_starter:stop_test_nodes([Worker1]),
   test_utils:wait_for_nodes_registration(length(WorkerNodes) - 1),
-  test_utils:wait_for_cluster_init(1),
+  test_utils:wait_for_cluster_init(),
 
   Ports2 = [8888],
   {Workers4, StateNum4} = gen_server:call({global, ?CCM}, get_workers, 1000),
   ?assertEqual(InitialStateNum + 4, StateNum4),
-  ?assertEqual(length(Workers4), length(Jobs) +DuplicatedPermanentNodes ),
+  ?assertEqual(length(Workers4), length(Jobs)),
   PongsNum4 = lists:foldl(CheckNodes, 0, Ports2),
   ?assertEqual(PongsNum4, length(Jobs) * length(Ports2)),
 
@@ -136,11 +138,11 @@ main_test(Config) ->
   ?assertEqual(Worker1, NewNode2),
   test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, [Worker1], [WorkerArgs]),
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
-  test_utils:wait_for_cluster_init(1),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   {Workers5, StateNum5} = gen_server:call({global, ?CCM}, get_workers, 1000),
-  ?assertEqual(InitialStateNum + 4, StateNum5),
-  ?assertEqual(length(Workers5), length(Jobs)),
+  ?assertEqual(InitialStateNum + 4 + DuplicatedPermanentNodes, StateNum5),
+  ?assertEqual(length(Workers5), length(Jobs) + DuplicatedPermanentNodes),
   PongsNum5 = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum5, length(Jobs) * length(Ports)).
 
@@ -162,8 +164,10 @@ callbacks_test(Config) ->
   [_ | Params3] = Params2,
   [WorkerParams | _] = Params3,
 
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
   ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   ?ENABLE_PROVIDER(Config),
@@ -279,7 +283,7 @@ callbacks_test(Config) ->
   test_node_starter:stop_test_nodes([CCM]),
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
   test_utils:wait_for_state_loading(),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
   ?assertEqual(CCM2, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   DispatcherCorrectAns2 = {[{FuseId1, lists:reverse(WorkerNodes)}, {FuseId2, [Worker1]}], InitialCallbacksNum + 4},
@@ -293,7 +297,7 @@ callbacks_test(Config) ->
 
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
   test_utils:wait_for_state_loading(),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
   ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   DispatcherCorrectAns3 = {[{FuseId1, lists:reverse(WorkerNodes)}, {FuseId2, [Worker1]}], InitialCallbacksNum + 5},
@@ -319,7 +323,7 @@ callbacks_test(Config) ->
   ?assertEqual(Worker1, NewNode2),
   test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, [Worker1], [WorkerArgs]),
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   CCMTest5 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns4, CCMTest5),
@@ -337,7 +341,7 @@ callbacks_test(Config) ->
   ?assertEqual(Worker1, NewNode3),
   test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, [Worker1], [WorkerArgs]),
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   CCMTest7 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns4, CCMTest7),
