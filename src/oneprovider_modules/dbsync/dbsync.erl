@@ -456,11 +456,11 @@ changes_receiver_name(StreamId) ->
 
 
 
-%% last_space_seq_key/3
+%% last_space_seq_key/2
 %% ====================================================================
 %% @doc Generates state's key for setting/getting latest sequence number for given: SpaceId, DbName and local provider.
 %% @end
--spec last_space_seq_key(ProviderId :: binary(), SpaceId :: binary(), DbName :: binary() | string()) ->
+-spec last_space_seq_key(SpaceId :: binary(), DbName :: binary() | string()) ->
     term().
 %% ====================================================================
 last_space_seq_key(SpaceId, DbName) ->
