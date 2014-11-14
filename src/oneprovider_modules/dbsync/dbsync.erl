@@ -79,7 +79,7 @@ init(_Args) ->
                 case MyDocs of
                     [MyDoc] ->
                         ?info("MYDOC: ~p", [MyDoc]),
-                        [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> Uuid_ == Uuid end, Docs),
+                        [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_binary(Uuid_) == utils:ensure_binary(Uuid) end, Docs),
                         ?info("CHANGEDDOC: ~p", [ChangedDoc]),
                         NewDoc = fslogic_remote_location:mark_other_provider_changes(MyDoc, ChangedDoc),
                         ?info("NEWDOC: ~p ~p", [NewDoc, NewDoc == MyDoc]),
