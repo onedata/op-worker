@@ -74,16 +74,11 @@ init(_Args) ->
                 ?info("MY_ID: ~p", [MyProviderId]),
                 ?info("DOCS: ~p", [Docs]),
                 MyDocs = lists:filter(
-                    fun(#db_document{record = #remote_location{provider_id = MyProviderId}}) -> true;
-                        (_) -> false
-                    end, Docs),
+                    fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == MyProviderId end, Docs),
                 case MyDocs of
                     [MyDoc] ->
                         ?info("MYDOC: ~p", [MyDoc]),
-                        [ChangedDoc] = lists:filter(
-                            fun(#db_document{record = #remote_location{file_id = FileId}}) -> true;
-                                (_) -> false
-                            end, Docs),
+                        [ChangedDoc] = lists:filter(fun(#db_document{record = #remote_location{file_id = Id_}}) -> Id_ == FileId end, Docs),
                         ?info("CHANGEDDOC: ~p", [ChangedDoc]),
                         NewDoc = fslogic_remote_location:mark_other_provider_changes(MyDoc, ChangedDoc),
                         ?info("NEWDOC: ~p ~p", [NewDoc, NewDoc == MyDoc]),
