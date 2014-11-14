@@ -73,10 +73,17 @@ init(_Args) ->
                 {ok, Docs} = dao_lib:apply(dao_vfs, remote_locations_by_file_id, [FileId], 1),
                 ?info("MY_ID: ~p", [MyProviderId]),
                 ?info("DOCS: ~p", [Docs]),
-                case [Doc || Doc = #db_document{record = #remote_location{provider_id = MyProviderId}} <- Docs] of
+                MyDocs = lists:filter(
+                    fun(#db_document{record = #remote_location{provider_id = MyProviderId}}) -> true;
+                        (_) -> false
+                    end, Docs),
+                case MyDocs of
                     [MyDoc] ->
                         ?info("MYDOC: ~p", [MyDoc]),
-                        [ChangedDoc] = [Doc || Doc = #db_document{record = #remote_location{provider_id = Id}} <- Docs],
+                        [ChangedDoc] = lists:filter(
+                            fun(#db_document{record = #remote_location{file_id = FileId}}) -> true;
+                                (_) -> false
+                            end, Docs),
                         ?info("CHANGEDDOC: ~p", [ChangedDoc]),
                         NewDoc = fslogic_remote_location:mark_other_provider_changes(MyDoc, ChangedDoc),
                         ?info("NEWDOC: ~p ~p", [NewDoc, NewDoc == MyDoc]),
