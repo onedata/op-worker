@@ -45,161 +45,165 @@
 -endif.
 
 init(_Args) ->
-  ets:new(?EVENT_HANDLERS_CACHE, [named_table, public, set, {read_concurrency, true}]),
-  ets:new(?EVENT_TREES_MAPPING, [named_table, public, set, {read_concurrency, true}]),
+    ets:new(?EVENT_HANDLERS_CACHE, [named_table, public, set, {read_concurrency, true}]),
+    ets:new(?EVENT_TREES_MAPPING, [named_table, public, set, {read_concurrency, true}]),
 
-  %% no need to wait for rule_manager - if it starts after cluster_rengine it will notify about handlers
-  %% send_after just to do it in another process
-  Pid = self(),
-  erlang:send_after(10, Pid, {timer, {asynch, ?PROTOCOL_VERSION, configure_event_handlers}}),
-  ok.
+    %% no need to wait for rule_manager - if it starts after cluster_rengine it will notify about handlers
+    %% send_after just to do it in another process
+    Pid = self(),
+    erlang:send_after(10, Pid, {timer, {asynch, ?PROTOCOL_VERSION, configure_event_handlers}}),
+    ok.
 
 handle(_ProtocolVersion, ping) ->
-  pong;
+    pong;
 
 handle(ProtocolVersion, EventMessage) when is_record(EventMessage, eventmessage) ->
-  Properties = lists:zip(EventMessage#eventmessage.numeric_properties_keys, EventMessage#eventmessage.numeric_properties_values)
-           ++ lists:zip(EventMessage#eventmessage.string_properties_keys, EventMessage#eventmessage.string_properties_values),
+    Properties = lists:zip(EventMessage#eventmessage.numeric_properties_keys, EventMessage#eventmessage.numeric_properties_values)
+        ++ lists:zip(EventMessage#eventmessage.string_properties_keys, EventMessage#eventmessage.string_properties_values)
+        ++ [{"blocks", lists:map(fun({_, Offset, Size}) -> {Offset, Size} end, EventMessage#eventmessage.block)}],
 
-  AdditionalProperties = [{"user_dn", fslogic_context:get_user_dn()}, {"fuse_id", get(fuse_id)}],
-  Event = Properties ++ AdditionalProperties,
-  ?debug("Event from client arrived, type: ~p", [proplists:lookup("type", Event)]),
-  handle(ProtocolVersion, {event_arrived, Event ++ AdditionalProperties});
+    AdditionalProperties = [{"user_dn", fslogic_context:get_user_dn()}, {"fuse_id", get(fuse_id)}],
+    Event = Properties ++ AdditionalProperties,
+    ?debug("Event from client arrived, type: ~p", [proplists:lookup("type", Event)]),
+    handle(ProtocolVersion, {event_arrived, Event ++ AdditionalProperties});
 
 handle(_ProtocolVersion, healthcheck) ->
-  ok;
+    ok;
 
 handle(_ProtocolVersion, get_version) ->
-  node_manager:check_vsn();
+    node_manager:check_vsn();
 
 %% Get all EventHandlerItems registered in rule_manager and create process tree for each of them.
 handle(ProtocolVersion, configure_event_handlers) ->
-  gen_server:call(?Dispatcher_Name, {rule_manager, ProtocolVersion, self(), get_event_handlers}),
-  receive
-    {ok, EventHandlers} ->
-      ?debug("New event handlers: ~p", [EventHandlers]),
-      lists:foreach(fun({EventType, EventHandlerItems}) ->
-        lists:foreach(fun(EventHandlerItem) ->
-          update_event_handler(1, EventType, EventHandlerItem)
-        end, EventHandlerItems)
-      end, EventHandlers),
-      ok;
-    Other ->
-      ?warning("rule_manager get_event_handlers handler sent back unexpected structure ~p", [Other]),
-      error
-  after 1000 ->
-    ?info("rule_manager get_event_handlers handler did not replied"),
-    error
-  end;
+    gen_server:call(?Dispatcher_Name, {rule_manager, ProtocolVersion, self(), get_event_handlers}),
+    receive
+        {ok, EventHandlers} ->
+            ?debug("New event handlers: ~p", [EventHandlers]),
+            lists:foreach(fun({EventType, EventHandlerItems}) ->
+                lists:foreach(fun(EventHandlerItem) ->
+                    update_event_handler(1, EventType, EventHandlerItem)
+                end, EventHandlerItems)
+            end, EventHandlers),
+            ok;
+        Other ->
+            ?warning("rule_manager get_event_handlers handler sent back unexpected structure ~p", [Other]),
+            error
+    after 1000 ->
+        ?info("rule_manager get_event_handlers handler did not replied"),
+        error
+    end;
 
 handle(_ProtocolVersion, {final_stage_tree, _TreeId, _Event}) ->
-  ?warning("cluster_rengine final_stage_tree handler should be always called in subprocess tree process");
+    ?warning("cluster_rengine final_stage_tree handler should be always called in subprocess tree process");
 
 handle(ProtocolVersion, {update_cluster_rengine, EventType, EventHandlerItem}) ->
-  ?info("--- cluster_rengines update_cluster_rengine"),
-  update_event_handler(ProtocolVersion, EventType, EventHandlerItem);
+    ?info("--- cluster_rengines update_cluster_rengine"),
+    update_event_handler(ProtocolVersion, EventType, EventHandlerItem);
 
 handle(ProtocolVersion, {event_arrived, Event}) ->
-  EventType = proplists:get_value("type", Event),
-  case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
-    [] ->
-      ?warning("No handler for event of type: ~p", [EventType]),
-      ok;
-  % mapping for event found - forward event
-    [{_, EventToTreeMappings}] ->
-      ForwardEvent = fun(EventToTreeMapping) ->
-        case EventToTreeMapping of
-          {tree, TreeId} ->
-            % forward event to subprocess tree
-            gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, ProtocolVersion, {final_stage_tree, TreeId, Event}});
-          {standard, HandlerFun} ->
-            HandlerFun(Event)
-        end
-      end,
-      lists:foreach(ForwardEvent, EventToTreeMappings)
-  end;
+    EventType = proplists:get_value("type", Event),
+    case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
+        [] ->
+            ?warning("No handler for event of type: ~p", [EventType]),
+            ok;
+    % mapping for event found - forward event
+        [{_, EventToTreeMappings}] ->
+            ForwardEvent = fun(EventToTreeMapping) ->
+                case EventToTreeMapping of
+                    {tree, TreeId} ->
+                        % forward event to subprocess tree
+                        gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, ProtocolVersion, {final_stage_tree, TreeId, Event}});
+                    {standard, HandlerFun} ->
+                        HandlerFun(Event)
+                end
+            end,
+            lists:foreach(ForwardEvent, EventToTreeMappings)
+    end;
 
 %% Handle requests that have wrong structure.
 handle(_ProtocolVersion, _Msg) ->
-  ?warning("Wrong request: ~p", [_Msg]),
-  wrong_request.
+    ?warning("Wrong request: ~p", [_Msg]),
+    wrong_request.
 
 cleanup() ->
-  ok.
+    ok.
 
 % inner functions
 
 % returns if during update at least one process tree has been registered
 update_event_handler(ProtocolVersion, EventType, #event_handler_item{processing_method = ProcessingMethod, tree_id = TreeId} = EventHandlerItem) ->
-  case {ProcessingMethod, ets:lookup(?EVENT_HANDLERS_CACHE, TreeId)} of
-    {tree, []} -> create_process_tree_for_handler(ProtocolVersion, EventHandlerItem);
-    _ -> ok
-  end,
-  save_to_caches(EventType, EventHandlerItem).
+    case {ProcessingMethod, ets:lookup(?EVENT_HANDLERS_CACHE, TreeId)} of
+        {tree, []} -> create_process_tree_for_handler(ProtocolVersion, EventHandlerItem);
+        _ -> ok
+    end,
+    save_to_caches(EventType, EventHandlerItem).
 
 save_to_caches(EventType, #event_handler_item{processing_method = ProcessingMethod, tree_id = TreeId, handler_fun = HandlerFun} = EventHandlerItem) ->
-  EventHandlerEntry = case ProcessingMethod of
-                        tree -> {tree, TreeId};
-                        _ -> {standard, HandlerFun}
-                      end,
-  EventHandlerEntries = case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
-                          [{_Key, Value}] -> Value;
-                          _ -> []
+    EventHandlerEntry = case ProcessingMethod of
+                            tree -> {tree, TreeId};
+                            _ -> {standard, HandlerFun}
                         end,
-  ets:insert(?EVENT_TREES_MAPPING, {EventType, [EventHandlerEntry | EventHandlerEntries]}),
+    EventHandlerEntries = case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
+                              [{_Key, Value}] -> Value;
+                              _ -> []
+                          end,
+    ets:insert(?EVENT_TREES_MAPPING, {EventType, [EventHandlerEntry | EventHandlerEntries]}),
 
-  case ProcessingMethod of
-    tree -> case ets:lookup(?EVENT_HANDLERS_CACHE, TreeId) of
-              [] -> ets:insert(?EVENT_HANDLERS_CACHE, {TreeId, EventHandlerItem});
-              _ -> ok
-            end;
-    _ -> ok
-  end.
+    case ProcessingMethod of
+        tree -> case ets:lookup(?EVENT_HANDLERS_CACHE, TreeId) of
+                    [] -> ets:insert(?EVENT_HANDLERS_CACHE, {TreeId, EventHandlerItem});
+                    _ -> ok
+                end;
+        _ -> ok
+    end.
 
 create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun, config = #event_stream_config{config = ActualConfig} = Config}) ->
-  ?info("Creation of process tree: ~p with config ~p", [TreeId, Config]),
-  ProcFun = case ActualConfig of
-              undefined ->
-                fun(_ProtocolVersion, {final_stage_tree, _TreeId2, Event}) ->
-                  HandlerFun(Event)
-                end;
-              _ ->
-                FromConfigFun = fun_from_config(Config),
-                case element(1, ActualConfig) of
-                  aggregator_config ->
-                    fun(ProtocolVersion2, {final_stage_tree, TreeId2, Event}, EtsName) ->
-                      case FromConfigFun(ProtocolVersion2, {final_stage_tree, TreeId2, Event}, EtsName) of
-                        non -> ok;
-                        Ev -> HandlerFun(Ev)
-                      end
-                    end;
+    ?info("Creation of process tree: ~p with config ~p", [TreeId, Config]),
+    ProcFun = case ActualConfig of
+                  undefined ->
+                      fun(_ProtocolVersion, {final_stage_tree, _TreeId2, Event}) ->
+                          HandlerFun(Event)
+                      end;
                   _ ->
-                    fun(ProtocolVersion2, {final_stage_tree, TreeId2, Event}) ->
-                      case FromConfigFun(ProtocolVersion2, {final_stage_tree, TreeId2, Event}) of
-                        non -> ok;
-                        Ev -> HandlerFun(Ev)
+                      FromConfigFun = fun_from_config(Config),
+                      case element(1, ActualConfig) of
+                          aggregator_config ->
+                              fun(ProtocolVersion2, {final_stage_tree, TreeId2, Event}, EtsName) ->
+                                  case FromConfigFun(ProtocolVersion2, {final_stage_tree, TreeId2, Event}, EtsName) of
+                                      non -> ok;
+                                      Ev -> HandlerFun(Ev)
+                                  end
+                              end;
+                          _ ->
+                              fun(ProtocolVersion2, {final_stage_tree, TreeId2, Event}) ->
+                                  case FromConfigFun(ProtocolVersion2, {final_stage_tree, TreeId2, Event}) of
+                                      non -> ok;
+                                      Ev -> HandlerFun(Ev)
+                                  end
+                              end
                       end
-                    end
-                end
-            end,
+              end,
 
-  NewMapFun = fun({_, _TreeId, Event}) ->
-    MapFun(Event)
-  end,
+    NewMapFun = fun({_, _TreeId, Event}) ->
+        MapFun(Event)
+    end,
 
-  RM = get_request_map_fun(),
-  DM = get_disp_map_fun(ProtocolVersion),
+    RM = get_request_map_fun(),
+    DM = get_disp_map_fun(ProtocolVersion),
 
-  Node = erlang:node(self()),
+    Node = erlang:node(self()),
 
-  LocalCacheName = list_to_atom(atom_to_list(TreeId) ++ "_local_cache"),
-  case ActualConfig of
-    undefined -> gen_server:call({cluster_rengine, Node}, {register_or_update_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM});
-    _ -> case element(1, ActualConfig) of
-           aggregator_config -> gen_server:call({cluster_rengine, Node}, {register_or_update_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM, LocalCacheName});
-           _ -> gen_server:call({cluster_rengine, Node}, {register_or_update_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM})
-         end
-  end.
+    LocalCacheName = list_to_atom(atom_to_list(TreeId) ++ "_local_cache"),
+    case ActualConfig of
+        undefined ->
+            gen_server:call({cluster_rengine, Node}, {register_or_update_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM});
+        _ -> case element(1, ActualConfig) of
+                 aggregator_config ->
+                     gen_server:call({cluster_rengine, Node}, {register_or_update_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM, LocalCacheName});
+                 _ ->
+                     gen_server:call({cluster_rengine, Node}, {register_or_update_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM})
+             end
+    end.
 
 %% fun_from_config/1
 %% ====================================================================
@@ -213,97 +217,98 @@ create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = T
 -spec fun_from_config(#event_stream_config{}) -> fun().
 %% ====================================================================
 fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = WrappedConfig}) ->
-  WrappedFun = case WrappedConfig of
-                 undefined -> non;
-                 _ -> fun_from_config(WrappedConfig)
-               end,
+    WrappedFun = case WrappedConfig of
+                     undefined -> non;
+                     _ -> fun_from_config(WrappedConfig)
+                 end,
 
-  case element(1, ActualConfig) of
-    aggregator_config ->
-      fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
-        InitCounterIfNeeded = fun(Key) ->
-          case ets:lookup(EtsName, Key) of
-            [] -> ets:insert(EtsName, {Key, 0});
-            _ -> ok
-          end
-        end,
+    case element(1, ActualConfig) of
+        aggregator_config ->
+            fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
+                InitCounterIfNeeded = fun(Key) ->
+                    case ets:lookup(EtsName, Key) of
+                        [] -> ets:insert(EtsName, {Key, 0});
+                        _ -> ok
+                    end
+                end,
 
-        ActualEvent = case WrappedFun of
-                        non -> Event;
-                        _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
-                      end,
+                ActualEvent = case WrappedFun of
+                                  non -> Event;
+                                  _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
+                              end,
 
-        case ActualEvent of
-          non -> non;
-          _ ->
-            FieldName = ActualConfig#aggregator_config.field_name,
-            FieldValue = proplists:get_value(FieldName, ActualEvent, {}),
-            FunFieldName = ActualConfig#aggregator_config.fun_field_name,
-            Incr = proplists:get_value(FunFieldName, ActualEvent, 1),
+                case ActualEvent of
+                    non -> non;
+                    _ ->
+                        FieldName = ActualConfig#aggregator_config.field_name,
+                        FieldValue = proplists:get_value(FieldName, ActualEvent, {}),
+                        FunFieldName = ActualConfig#aggregator_config.fun_field_name,
+                        Incr = proplists:get_value(FunFieldName, ActualEvent, 1),
 
-            case FieldValue of
-              FieldValue2 when not is_tuple(FieldValue2) ->
-                Key = "sum_" ++ FieldValue,
-                InitCounterIfNeeded(Key),
-                [{_Key, Val}] = ets:lookup(EtsName, Key),
-                NewValue = Val + Incr,
-                case NewValue >= ActualConfig#aggregator_config.threshold of
-                  true ->
-                    ets:insert(EtsName, {Key, 0}),
-                    case proplists:get_value("ans_pid", ActualEvent) of
-                      undefined -> [{FieldName, FieldValue}, {FunFieldName, NewValue}];
-                      AnsPid -> [{FieldName, FieldValue}, {FunFieldName, NewValue}, {"ans_pid", AnsPid}]
-                    end;
-                  _ ->
-                    ets:insert(EtsName, {Key, NewValue}),
-                    non
-                end;
-              _ -> non
-            end
-        end
-      end;
-    filter_config ->
-      fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
-        ActualEvent = case WrappedFun of
-                        non -> Event;
-                        _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
-                      end,
+                        case FieldValue of
+                            FieldValue2 when not is_tuple(FieldValue2) ->
+                                Key = "sum_" ++ FieldValue,
+                                InitCounterIfNeeded(Key),
+                                [{_Key, Val}] = ets:lookup(EtsName, Key),
+                                NewValue = Val + Incr,
+                                case NewValue >= ActualConfig#aggregator_config.threshold of
+                                    true ->
+                                        ets:insert(EtsName, {Key, 0}),
+                                        case proplists:get_value("ans_pid", ActualEvent) of
+                                            undefined -> [{FieldName, FieldValue}, {FunFieldName, NewValue}];
+                                            AnsPid ->
+                                                [{FieldName, FieldValue}, {FunFieldName, NewValue}, {"ans_pid", AnsPid}]
+                                        end;
+                                    _ ->
+                                        ets:insert(EtsName, {Key, NewValue}),
+                                        non
+                                end;
+                            _ -> non
+                        end
+                end
+            end;
+        filter_config ->
+            fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
+                ActualEvent = case WrappedFun of
+                                  non -> Event;
+                                  _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
+                              end,
 
-        case ActualEvent of
-          non -> non;
-          _ ->
-            FieldName = ActualConfig#filter_config.field_name,
-            FieldValue = proplists:get_value(FieldName, ActualEvent, {}),
-            case FieldValue =:= ActualConfig#filter_config.desired_value of
-              true -> ActualEvent;
-              _ -> non
-            end
-        end
-      end;
-    _ ->
-      ?warning("Unknown type of stream event config: ~p", [element(1, ActualConfig)])
-  end.
+                case ActualEvent of
+                    non -> non;
+                    _ ->
+                        FieldName = ActualConfig#filter_config.field_name,
+                        FieldValue = proplists:get_value(FieldName, ActualEvent, {}),
+                        case FieldValue =:= ActualConfig#filter_config.desired_value of
+                            true -> ActualEvent;
+                            _ -> non
+                        end
+                end
+            end;
+        _ ->
+            ?warning("Unknown type of stream event config: ~p", [element(1, ActualConfig)])
+    end.
 
 get_request_map_fun() ->
-  fun
-    ({final_stage_tree, TreeId, _Event}) ->
-      TreeId;
-    (_) ->
-      non
-  end.
+    fun
+        ({final_stage_tree, TreeId, _Event}) ->
+            TreeId;
+        (_) ->
+            non
+    end.
 
 get_disp_map_fun(_ProtocolVersion) ->
-  fun({final_stage_tree, TreeId, Event}) ->
-    EventHandlerFromEts = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
-    case EventHandlerFromEts of
-      [] ->
-        non;
-      [{_Ev, #event_handler_item{disp_map_fun = FetchedDispMapFun}}] ->
-        FetchedDispMapFun(Event)
-    end;
-    (_) ->
-      non
-  end.
+    fun({final_stage_tree, TreeId, Event}) ->
+        EventHandlerFromEts = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
+        case EventHandlerFromEts of
+            [] ->
+                non;
+            [{_Ev, #event_handler_item{disp_map_fun = FetchedDispMapFun}}] ->
+                FetchedDispMapFun(Event)
+        end;
+        (_) ->
+            non
+    end.
 
 send_event(ProtocolVersion, Event) ->
-  gen_server:call(?Dispatcher_Name, {cluster_rengine, ProtocolVersion, {event_arrived, Event}}).
+    gen_server:call(?Dispatcher_Name, {cluster_rengine, ProtocolVersion, {event_arrived, Event}}).

@@ -436,8 +436,10 @@ rmdir_recursive(DirPath) ->
             case ls_chunked(DirPath) of
                 {ok, Childs} ->
                     lists:foreach(
-                        fun(#dir_entry{name = Name, type = ?REG_TYPE_PROT}) -> logical_files_manager:delete(filename:join(DirPath, Name));
-                            (#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) -> rmdir_recursive(filename:join(DirPath, Name))
+                        fun(#dir_entry{name = Name, type = ?REG_TYPE_PROT}) ->
+                            logical_files_manager:delete(filename:join(DirPath, Name));
+                            (#dir_entry{name = Name, type = ?DIR_TYPE_PROT}) ->
+                                rmdir_recursive(filename:join(DirPath, Name))
                         end,
                         Childs),
                     logical_files_manager:rmdir(DirPath);
@@ -460,11 +462,12 @@ cp(From, To) ->
         ?DIR_TYPE_PROT ->
             case mkdir(To) of
                 ok ->
-                    case {case HasAcl of true -> copy_file_acl(From, To); false -> ok end, copy_file_xattr(From,To)} of
+                    case {case HasAcl of true -> copy_file_acl(From, To); false -> ok end, copy_file_xattr(From, To)} of
                         {ok, ok} ->
                             case ls_chunked(From) of
                                 {ok, ChildList} ->
-                                    AnswerList = lists:map(fun(#dir_entry{name = Name}) -> cp(filename:join(From, Name), filename:join(To, Name)) end, ChildList),
+                                    AnswerList = lists:map(fun(#dir_entry{name = Name}) ->
+                                        cp(filename:join(From, Name), filename:join(To, Name)) end, ChildList),
                                     case lists:filter(fun(ok) -> false; (_) -> true end, AnswerList) of
                                         [] -> ok;
                                         [Error | _] ->
@@ -490,7 +493,8 @@ cp(From, To) ->
                 ok ->
                     case copy_file_content(From, To, 0, ?default_copy_buffer_size) of
                         ok ->
-                            Ans = {case HasAcl of true -> copy_file_acl(From, To); false -> ok end, copy_file_xattr(From, To)},
+                            Ans = {case HasAcl of true -> copy_file_acl(From, To); false ->
+                                ok end, copy_file_xattr(From, To)},
                             case Ans of
                                 {ok, ok} -> ok;
                                 {ok, Error} ->
@@ -534,7 +538,7 @@ read(File, Offset, Size) ->
 %% File can be string (path) or {uuid, UUID}.
 %% @end
 -spec read(File :: term(), Offset :: integer(), Size :: integer(),
-           EventPolicy :: generate_events | no_events) -> Result when
+    EventPolicy :: generate_events | no_events) -> Result when
     Result :: {ok, Bytes} | {ErrorGeneral, ErrorDetail},
     Bytes :: binary(),
     ErrorGeneral :: atom(),
@@ -547,11 +551,12 @@ read(File, Offset, Size, EventPolicy) ->
             {Storage_helper_info, FileId} = Response2,
             Res = storage_files_manager:read(Storage_helper_info, FileId, Offset, Size),
             case Res of
-                {ok, _} ->
+                {ok, Bytes} ->
                     case {event_production_enabled("read_event"), EventPolicy} of
                         {true, generate_events} ->
                             % TODO: add filePath
-                            ReadEvent = [{"type", "read_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", Size}],
+                            ReadEvent = [{"type", "read_event"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"bytes", Bytes}, {"blocks", [{Offset, Bytes}]}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEvent}});
                         _ ->
                             ok
@@ -586,9 +591,12 @@ write(File, Buf) ->
                     Res = storage_files_manager:write(Storage_helper_info, FileId, Buf),
                     case {is_integer(Res), event_production_enabled("write_event")} of
                         {true, true} ->
-                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", binary:referenced_byte_size(Buf)}],
+                            {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File),
+                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"bytes", Res}, {"blocks", [{FileSize, Res}]}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", binary:referenced_byte_size(Buf)}],
+                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"bytes", Res}, {"blocks", [{FileSize, Res}]}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
                         _ ->
                             ok
@@ -619,7 +627,7 @@ write(File, Offset, Buf) ->
 %% storage helper to write data to file.
 %% @end
 -spec write(File :: term(), Offset :: integer(), Buf :: binary(),
-            EventPolicy :: generate_events | no_events) -> Result when
+    EventPolicy :: generate_events | no_events) -> Result when
     Result :: BytesWritten | {ErrorGeneral, ErrorDetail},
     BytesWritten :: integer(),
     ErrorGeneral :: atom(),
@@ -637,9 +645,11 @@ write(File, Offset, Buf, EventPolicy) ->
                     %% TODO - check if asynchronous processing needed
                     case {is_integer(Res), event_production_enabled("write_event"), EventPolicy} of
                         {true, true, generate_events} ->
-                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"count", binary:referenced_byte_size(Buf)}],
+                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"count", Res}, {"blocks", [{Offset, Res}]}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", binary:referenced_byte_size(Buf)}],
+                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
                         _ ->
                             ok
@@ -675,9 +685,11 @@ write_from_stream(File, Buf) ->
                     Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
                     case {is_integer(Res), event_production_enabled("write_event")} of
                         {true, true} ->
-                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"count", binary:referenced_byte_size(Buf)}],
+                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"count", Res}, {"blocks", [{Offset, Res}]}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", binary:referenced_byte_size(Buf)}],
+                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
                         _ ->
                             ok
@@ -1479,7 +1491,7 @@ delete_special(Path) ->
 %% @doc List the given directory, calling itself recursively if there is more to fetch.
 %% The arguments are dir path, child offset, chunk size for db queries, number of childs to read and actual Reslt list
 %% @end
--spec ls_chunked(Path :: string(), Offset :: integer(), ChunkSize ::integer(), HowManyChilds :: all | integer(), Result :: list()) -> Result when
+-spec ls_chunked(Path :: string(), Offset :: integer(), ChunkSize :: integer(), HowManyChilds :: all | integer(), Result :: list()) -> Result when
     Result :: [#dir_entry{}] | {ErrorGeneral, ErrorDetail},
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
@@ -1499,7 +1511,8 @@ ls_chunked(Path, Offset, ChunkSize, HowManyChilds, Result) ->
     case logical_files_manager:ls(Path, min(HowManyChilds, ChunkSize), Offset) of
         {ok, FileList} ->
             case length(FileList) of
-                ChunkSize -> ls_chunked(Path, Offset + ChunkSize, ChunkSize * 10, HowManyChilds - ChunkSize, Result ++ FileList);
+                ChunkSize ->
+                    ls_chunked(Path, Offset + ChunkSize, ChunkSize * 10, HowManyChilds - ChunkSize, Result ++ FileList);
                 _ -> {ok, Result ++ FileList}
             end;
         Error -> Error
@@ -1509,14 +1522,14 @@ ls_chunked(Path, Offset, ChunkSize, HowManyChilds, Result) ->
 %% ====================================================================
 %% @doc Copies file content beginning at offset, with given buffer size
 %% @end
--spec copy_file_content(From :: string(), To :: string(), Offset ::integer(), BufferSize :: integer()) -> Result when
+-spec copy_file_content(From :: string(), To :: string(), Offset :: integer(), BufferSize :: integer()) -> Result when
     Result :: ok | {ErrorGeneral, ErrorDetail},
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
 copy_file_content(From, To, Offset, BufferSize) ->
     case read(From, Offset, BufferSize) of
-        {ok,Data} ->
+        {ok, Data} ->
             case byte_size(Data) < BufferSize of
                 true ->
                     case write(To, Data) of
@@ -1544,8 +1557,8 @@ copy_file_content(From, To, Offset, BufferSize) ->
 %% ====================================================================
 copy_file_acl(From, To) ->
     case get_acl(From) of
-        {ok,Acl} ->
-            set_acl(To,Acl);
+        {ok, Acl} ->
+            set_acl(To, Acl);
         Error -> Error
     end.
 
