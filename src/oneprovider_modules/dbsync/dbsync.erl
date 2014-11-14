@@ -81,8 +81,8 @@ init(_Args) ->
                         end;
                     _ -> ok
                 end;
-            (_, _, _, _) ->
-                ?info("GOT INFO ABOUT SOME DOC!"), % todo temove
+            (A, B, C, D) ->
+                ?info("GOT INFO ABOUT SOME DOC! (~p,~p,~p,~p)",[A,B,C,D]), % todo temove
                 ok
         end,
         ?info("FUN REGISTERED"), % todo temove
