@@ -839,10 +839,12 @@ plan_next_cluster_state_check() ->
 %% add_module_lifecycle_listener/3
 %% ====================================================================
 %% @doc Adds new lifcycle listener to the list of registered listeners
-%% Module : ModuleName1, ModuleName2
-%% Listener : {module, ModuleName}, {module, ModuleName, Node}, {all_modules}
 -spec add_module_lifecycle_listener(Module :: list(), Listener :: term(), State :: term()) -> Result when
-  Result :: term().
+  Result :: term(),
+  Module :: ModuleName,
+  Module :: {module, ModuleName} | {module, ModuleName, Node} | {all_modules},
+  ModuleName :: atom(),
+  Node :: list().
 %% ====================================================================
 add_module_lifecycle_listener(Module, Listener, State) ->
   Listeners = State#cm_state.worker_lifecycle_listeners,
@@ -878,6 +880,7 @@ lifecycle_notification(Node, Module, Action, Workers, State) ->
 %% ====================================================================
 %% @doc Sends notifications to modules that are registered for certain lifecycle acions
 -spec send_notifications(Node :: list(), Module :: atom(), Action :: atom(), Workers :: term(), Listeners ::list()) -> ok.
+%% ====================================================================
 send_notifications(Node, Module, Action, Workers,  Listeners) ->
   ?debug("Notification ~p ~p ~p ~p ~p", [Node, Module, Listeners, Action, Workers]),
   [{ gen_server:cast({Module2, Node2}, {asynch, 1, {node_lifecycle_notification, Node, Module, Action, Pid}})} || {Node2, Module2, Pid} <- Workers ,
