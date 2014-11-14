@@ -101,8 +101,8 @@ check_if_synchronized(#offset_range{} = OffsetRange, MyDoc, OtherDocs) ->
 check_if_synchronized(#block_range{from = From, to = To}, #db_document{record = #remote_location{file_parts = Parts}}, OtherDocs) ->
     PartsOutOfSync = ranges_struct:minimize(ranges_struct:subtract([#range{from = From, to = To}], Parts)),
     lists:map(
-        fun(#db_document{record = #remote_location{file_parts = Parts, provider_id = Id}}) ->
-            {Id, ranges_struct:minimize(ranges_struct:subtract(PartsOutOfSync, ranges_struct:subtract(PartsOutOfSync, Parts)))}
+        fun(#db_document{record = #remote_location{file_parts = Parts_, provider_id = Id}}) ->
+            {Id, ranges_struct:minimize(ranges_struct:subtract(PartsOutOfSync, ranges_struct:subtract(PartsOutOfSync, Parts_)))}
         end, OtherDocs).
 
 mark_other_provider_changes(MyDoc = #db_document{record = #remote_location{file_parts = MyParts} = Location}, #db_document{record = #remote_location{file_parts = OtherParts}}) ->

@@ -68,6 +68,7 @@ init(_Args) ->
         MyProviderId = cluster_manager_lib:get_provider_id(),
         HookFun = fun
             (?FILES_DB_NAME, _, _, #db_document{record = #remote_location{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
+                ?info("GOT INFO ABOUT SYNCED DOC!"), % todo temove
                 {ok, Docs} = dao_lib:apply(dao_vfs, remote_locations_by_file_id, [FileId], 1),
                 case [Doc || Doc = #db_document{record = #remote_location{provider_id = MyProviderId}} <- Docs] of
                     [MyDoc] ->
