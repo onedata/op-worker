@@ -709,13 +709,7 @@ workers_list_singleton_and_permanent_test(Config) ->
   ?assertEqual(1, length(Ans1)),
 
   [{_, [{N, M, A, _}]}] = Ans1,
-  ?assertEqual({Worker1, gateway, stop_worker}, {N, M, A}),
-
-  NewNode2 = test_node_starter:start_test_node(?GET_NODE_NAME(Worker1), ?GET_HOST(Worker1), false, []),
-  ?assertEqual(Worker1, NewNode2),
-  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, [Worker1], [[{node_type, worker}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8444}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
-  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
-  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes).
+  ?assertEqual({Worker1, gateway, stop_worker}, {N, M, A}).
 
 
 %% ====================================================================
