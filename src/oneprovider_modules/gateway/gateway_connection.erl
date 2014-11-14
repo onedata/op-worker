@@ -254,15 +254,11 @@ complete_request(TID, #fetchreply{content = Content, request_hash = RequestHash}
             case Content of
                 undefined -> notify(fetch_complete, 0, Action);
                 _ ->
-                    %% @todo Consider using logical_files_manager (current problem: LFM triggers events)
                     #fetchrequest{file_id = FileId, offset = Offset, size = RequestedSize} = Request,
                     Size = erlang:min(byte_size(Content), RequestedSize),
                     Data = binary_part(Content, 0, Size),
-                    #file_location{storage_uuid = StorageUUID, storage_file_id = StorageFileId} = fslogic_file:get_file_local_location(FileId),
-                    {ok, StorageDoc} = fslogic_objects:get_storage({uuid, StorageUUID}),
-                    #db_document{record = #storage_info{default_storage_helper = StorageHelper}} = StorageDoc,
 
-                    case storage_files_manager:write(StorageHelper, StorageFileId, Offset, Data) of
+                    case logical_files_manager:write({uuid, FileId}, Offset, Data, no_events) of
                         {Error, Reason} -> notify(Error, Reason, Action);
                         Val -> notify(fetch_complete, Val, Action)
                     end
