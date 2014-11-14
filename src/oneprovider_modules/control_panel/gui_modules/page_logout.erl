@@ -40,7 +40,7 @@ body_production() ->
         LogoutToken ->
             ?debug("User ~p logged out", [gui_ctx:get_user_id()]),
             gui_ctx:clear_session(),
-            gui_jq:redirect(list_to_binary(GlobalRegistryHostname));
+            gui_jq:redirect(<<"https://", (list_to_binary(GlobalRegistryHostname))/binary>>);
         _ ->
             gui_jq:redirect(<<"/">>)
     end,

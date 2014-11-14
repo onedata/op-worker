@@ -125,7 +125,7 @@ main_table() ->
                 body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"OAuth / OpenID">>}},
             #td{style = <<"padding: 15px; vertical-align: top;">>,
                 body = #link{style = <<"font-size: 18px;">>, body = <<"Authorization preferences">>,
-                    url = <<(list_to_binary(GlobalRegistryHostname))/binary, "/manage_account">>}}
+                    url = <<"https://", (list_to_binary(GlobalRegistryHostname))/binary, "/manage_account">>}}
         ]},
 
         #tr{cells = [
