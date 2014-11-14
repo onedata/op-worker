@@ -71,10 +71,16 @@ init(_Args) ->
             (?FILES_DB_NAME, _, _, #db_document{record = #remote_location{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
                 ?info("GOT INFO ABOUT SYNCED DOC!"), % todo temove
                 {ok, Docs} = dao_lib:apply(dao_vfs, remote_locations_by_file_id, [FileId], 1),
+                ?info("MY_ID: ~p", [MyProviderId]),
+                ?info("DOCS: ~p", [Docs]),
                 case [Doc || Doc = #db_document{record = #remote_location{provider_id = MyProviderId}} <- Docs] of
                     [MyDoc] ->
+                        ?info("MYDOC: ~p", [MyDoc]),
                         [ChangedDoc] = [Doc || Doc = #db_document{record = #remote_location{provider_id = Id}} <- Docs],
+                        ?info("CHANGEDDOC: ~p", [ChangedDoc]),
                         NewDoc = fslogic_remote_location:mark_other_provider_changes(MyDoc, ChangedDoc),
+                        ?info("NEWDOC: ~p ~p", [NewDoc, NewDoc == MyDoc]),
+
                         case NewDoc == MyDoc of
                             true -> ok;
                             _ -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
