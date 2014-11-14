@@ -290,7 +290,6 @@ cleanup() ->
     ok.
 
 
-
 %% request_diff/5
 %% ====================================================================
 %% @doc Requests changes diff from given SinceSeqInfo.
@@ -370,6 +369,15 @@ emit_documents(DbName, DocsWithSeq, SinceSeqInfo) ->
         end, maps:to_list(SpacesMap)).
 
 
+%% push_doc_changes/3
+%% ====================================================================
+%% @doc Emits given documents from specific space to all providers that support this space.
+%%      SinceSeqInfo is the lower bound of changes, while LastSpaceSeq is the upper bound.
+%%      SyncWith has to be sorted.
+%% @end
+-spec push_doc_changes(#space_info{}, Docs :: [#db_document{}], SinceSeqInfo :: term(), LastSpaceSeq :: term(), SyncWith :: [binary()]) ->
+    ok | no_return().
+%% ====================================================================
 push_doc_changes(#space_info{} = _SpaceInfo, _Docs, _, _, []) ->
     ok;
 push_doc_changes(#space_info{} = _SpaceInfo, [], _, _, _) ->
@@ -380,6 +388,13 @@ push_doc_changes(#space_info{} = SpaceInfo, Docs, SinceSeqInfo, LastSpaceSeq, Sy
     ok = dbsync_protocol:tree_broadcast(SpaceInfo, SyncWith, Request, 3).
 
 
+%% broadcast_space_state/1
+%% ====================================================================
+%% @doc Broadcasts current sequence numbers for given space to other providers.
+%% @end
+-spec broadcast_space_state(SpaceId :: binary()) ->
+    ok | no_return().
+%% ====================================================================
 broadcast_space_state(SpaceId) ->
     {ok, #space_info{providers = SyncWith} = SpaceInfo} = fslogic_objects:get_space({uuid, SpaceId}),
     SeqData =
@@ -404,6 +419,13 @@ broadcast_space_state(SpaceId) ->
 %% Names, URLs, etc.
 %% ====================================================================
 
+
+%% select_db_url/0
+%% ====================================================================
+%% @doc Gets DB's URL (currently chosen randomly from all available).
+%% @end
+-spec select_db_url() -> string().
+%% ====================================================================
 select_db_url() ->
     HostNames1 =
         case dbsync_state:get(db_hosts) of
@@ -422,13 +444,36 @@ select_db_url() ->
     "http://" ++ HostName ++ ":5984".
 
 
+%% changes_receiver_name/1
+%% ====================================================================
+%% @doc Generates receiver's process name for given stream.
+%% @end
+-spec changes_receiver_name(StreamId :: binary() | string()) ->
+    atom().
+%% ====================================================================
 changes_receiver_name(StreamId) ->
     list_to_atom("changes_receiver_" ++ utils:ensure_list(StreamId)).
 
 
+
+%% last_space_seq_key/3
+%% ====================================================================
+%% @doc Generates state's key for setting/getting latest sequence number for given: SpaceId, DbName and local provider.
+%% @end
+-spec last_space_seq_key(ProviderId :: binary(), SpaceId :: binary(), DbName :: binary() | string()) ->
+    term().
+%% ====================================================================
 last_space_seq_key(SpaceId, DbName) ->
     last_space_seq_key(cluster_manager_lib:get_provider_id(), SpaceId, DbName).
 
+
+%% last_space_seq_key/3
+%% ====================================================================
+%% @doc Generates state's key for setting/getting latest sequence number for given: ProviderId, SpaceId, DbName.
+%% @end
+-spec last_space_seq_key(ProviderId :: binary(), SpaceId :: binary(), DbName :: binary() | string()) ->
+    term().
+%% ====================================================================
 last_space_seq_key(ProviderId, SpaceId, DbName) ->
     {last_space_seq, ProviderId, utils:ensure_binary(SpaceId), utils:ensure_binary(DbName)}.
 
@@ -437,6 +482,13 @@ last_space_seq_key(ProviderId, SpaceId, DbName) ->
 %% Active elements
 %% ====================================================================
 
+%% changes_receiver_loop/1
+%% ====================================================================
+%% @doc Endless loop that receives data from DB REST API (_changes) and passes to dbsync worker.
+%%      There is one receiver per _changes stream (i.e. per database/bucket)
+%% @end
+-spec changes_receiver_loop({StreamId :: term(), State :: term()}) -> no_return().
+%% ====================================================================
 changes_receiver_loop({StreamId, State}) ->
     NewState = receive
                    {ibrowse_async_response, RequestId, Data} ->
@@ -469,6 +521,12 @@ changes_receiver_loop({StreamId, State}) ->
     changes_receiver_loop({StreamId, NewState}).
 
 
+%% ping_service_loop/0
+%% ====================================================================
+%% @doc Endless loop that broadcasts current sequence numbers to other providers.
+%% @end
+-spec ping_service_loop() -> no_return().
+%% ====================================================================
 ping_service_loop() ->
     timer:sleep(timer:seconds(5)),
     try
@@ -491,10 +549,11 @@ ping_service_loop() ->
     ping_service_loop([]).
 ping_service_loop(Spaces) ->
     NewSpaces =
+    %% Update supported spaces list if possible
         case gr_providers:get_spaces(provider) of
             {ok, SpaceIds} ->
                 SpaceIds;
-            {error, Reason} ->
+            {error, _Reason} ->
                 Spaces
         end,
     Res = [catch broadcast_space_state(SpaceId) || SpaceId <- NewSpaces],
@@ -510,6 +569,14 @@ ping_service_loop(Spaces) ->
 %% Misc
 %% ====================================================================
 
+%% get_space_ctx/2
+%% ====================================================================
+%% @doc For given docuemnt, returns associated #space_info{}. Uses internal cache
+%%      and dbsync_records:get_space_ctx/2 for getting new data.
+%% @end
+-spec get_space_ctx(DbName :: string() | binary(), #db_document{}) ->
+    {ok, #space_info{}} | {error, Reason :: any()}.
+%% ====================================================================
 get_space_ctx(_DbName, #db_document{uuid = UUID} = Doc) ->
     case dbsync_state:get({uuid_to_spaceid, UUID}) of
         undefined ->
@@ -531,6 +598,15 @@ get_space_ctx(DbName, UUID) ->
     get_space_ctx(DbName, Doc).
 
 
+%% get_current_seq/2
+%% ====================================================================
+%% @doc Gets current sequence number for given {ProviderId, SpaceId, DbName}.
+%%      For local provider it will be newest sequence number from database,
+%%      for others - newest synchronized sequence number.
+%% @end
+-spec get_current_seq(ProviderId :: binary(), SpaceId :: binary(), DbName :: binary() | string()) ->
+    {SeqNum :: non_neg_integer(), SeqHash :: binary()}.
+%% ====================================================================
 get_current_seq(ProviderId, SpaceId, DbName) ->
     case dbsync_state:get(last_space_seq_key(ProviderId, SpaceId, DbName)) of
         undefined ->
