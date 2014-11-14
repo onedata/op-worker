@@ -91,8 +91,7 @@ title() ->
     Result :: #panel{}.
 %% ====================================================================
 body(#space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
-    MessageStyle = <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>,
-    #panel{class= <<"page-container">>, body = [
+    #panel{class = <<"page-container">>, body = [
         #panel{
             id = <<"main_spinner">>,
             style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>,
@@ -100,23 +99,21 @@ body(#space_details{id = SpaceId, name = SpaceName} = SpaceDetails) ->
                 image = <<"/images/spinner.gif">>
             }
         },
-        opn_gui_utils:top_menu(spaces_tab, opn_gui_utils:breadcrumbs([{<<"Spaces">>, <<"/spaces">>},
-            {SpaceName, <<"/space?id=", SpaceId/binary>>}, {<<"Privileges">>, <<"/privileges/space?id=", SpaceId/binary>>}])),
+        opn_gui_utils:top_menu(spaces_tab, opn_gui_utils:breadcrumbs([
+            {<<"Spaces">>, <<"/spaces">>},
+            {SpaceName, <<"/space?id=", SpaceId/binary>>},
+            {<<"Privileges">>, <<"/privileges/space?id=", SpaceId/binary>>}
+        ])),
         #panel{
-            id = <<"ok_message">>,
-            style = MessageStyle,
-            class = <<"dialog dialog-success">>
-        },
-        #panel{
-            id = <<"error_message">>,
-            style = MessageStyle,
-            class = <<"dialog dialog-danger">>
-        },
-        #panel{
-            style = <<"margin-bottom: 100px;">>,
+            style = <<"margin-top: 103px; padding-top: 1px; margin-bottom: 30px;">>,
             body = [
+                #panel{
+                    id = <<"message">>,
+                    style = <<"width: 100%; padding: 0.5em 0; margin: 0 auto; border: 0; display: none;">>,
+                    class = <<"dialog">>
+                },
                 #h6{
-                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; text-align: center;">>,
+                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 30px; text-align: center;">>,
                     body = <<"Space privileges">>
                 },
                 space_details_table(SpaceDetails) |
@@ -314,12 +311,12 @@ comet_loop(#?STATE{space_id = SpaceId, new_users_privileges = NewUsersPrivileges
                                     ok = gr_spaces:set_user_privileges({user, AccessToken}, SpaceId, UserId, [{<<"privileges">>, NewUserPrivilegesSorted}])
                             end
                         end, NewUsersPrivileges),
-                        opn_gui_utils:message(<<"ok_message">>, <<"Users privileges saved successfully.">>),
+                        opn_gui_utils:message(success, <<"Users privileges saved successfully.">>),
                         State
                     catch
                         _:Reason ->
                             ?error("Cannot save users privileges: ~p", [Reason]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot save users privileges.<br>Please try again later.">>),
+                            opn_gui_utils:message(error, <<"Cannot save users privileges.<br>Please try again later.">>),
                             State
                     end;
 
@@ -335,18 +332,18 @@ comet_loop(#?STATE{space_id = SpaceId, new_users_privileges = NewUsersPrivileges
                                     ok = gr_spaces:set_group_privileges({group, AccessToken}, SpaceId, GroupId, [{<<"privileges">>, NewGroupPrivilegesSorted}])
                             end
                         end, NewGroupsPrivileges),
-                        opn_gui_utils:message(<<"ok_message">>, <<"Groups privileges saved successfully.">>),
+                        opn_gui_utils:message(success, <<"Groups privileges saved successfully.">>),
                         State
                     catch
                         _:Reason ->
                             ?error("Cannot save groups privileges: ~p", [Reason]),
-                            opn_gui_utils:message(<<"error_message">>, <<"Cannot save groups privileges.<br>Please try again later.">>),
+                            opn_gui_utils:message(error, <<"Cannot save groups privileges.<br>Please try again later.">>),
                             State
                     end
             end
         catch Type:Message ->
             ?error_stacktrace("Comet process exception: ~p:~p", [Type, Message]),
-            opn_gui_utils:message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+            opn_gui_utils:message(error, <<"There has been an error in comet process. Please refresh the page.">>),
             {error, Message}
         end,
     gui_jq:wire(<<"$('#main_spinner').delay(300).hide(0);">>, false),
@@ -388,7 +385,7 @@ event(init) ->
         _:Reason ->
             ?error("Cannot initialize page ~p: ~p", [?MODULE, Reason]),
             gui_jq:hide(<<"main_spinner">>),
-            opn_gui_utils:message(<<"error_message">>, <<"Cannot fetch Space privileges.<br>Please try again later.">>)
+            opn_gui_utils:message(error, <<"Cannot fetch Space privileges.<br>Please try again later.">>)
     end;
 
 event({message, Message}) ->

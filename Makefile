@@ -8,8 +8,8 @@ all: generate docs
 
 compile:
 	-@if [ -f ebin/.test ]; then rm -rf ebin; fi 
-	./gen_config
 	cp -R clproto/proto src
+	cp c_src/oneproxy/proto/* src
 	./rebar compile
 	rm -rf src/proto
 
@@ -21,6 +21,8 @@ deps:
 
 clean:
 	make -C docs clean
+	make -C oneclient clean
+	make -C helpers clean
 	./rebar clean
 
 distclean: clean
@@ -35,11 +37,10 @@ eunit: deps compile
 ct: deps compile
 	-@if [ ! -f ebin/.test ]; then rm -rf ebin; fi
 	-@mkdir -p ebin ; touch ebin/.test 
-	./gen_config
 	 cp -R clproto/proto src
 	./rebar -D TEST compile
 	rm -rf src/proto
-	./rebar ct skip_deps=true
+#	./rebar ct skip_deps=true
 	chmod +x test_distributed/start_distributed_test.sh
 	./test_distributed/start_distributed_test.sh ${SUITE} ${CASE}
 ## Remove *_per_suite result from CT test results

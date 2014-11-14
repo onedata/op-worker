@@ -12,7 +12,20 @@
 ## ===================================================================
 
 # RPM package version
-VERSION=`git describe --tags --always | tr - .`
+GIT_VERSION=`git describe --tags --always | tr - .`
+GIT_VERSION_NUMBER=${GIT_VERSION:1} #strip the leading 'v'
+IFS='.' read -ra tmp <<< $GIT_VERSION_NUMBER
+v=(`echo ${tmp[*]}`)
+VERSION=${v[0]}
+if [ -n "${v[1]}" ]; then
+  VERSION=$VERSION.${v[1]}
+fi
+if [ -n "${v[2]}" ]; then
+  VERSION=$VERSION.${v[2]}
+fi
+if [ -n "${v[3]}" ]; then
+  VERSION=$VERSION.${v[3]}
+fi
 
 # Path, where rpm building will take place
 RPM_BUILD_DIRECTORY=/tmp/oneprovider_rpmbuild

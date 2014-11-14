@@ -70,7 +70,7 @@ event(globalregistry_login) ->
     {ok, GlobalRegistryHostname} = application:get_env(?APP_Name, global_registry_hostname),
     ProviderID = try cluster_manager_lib:get_provider_id() catch _:_ -> <<"">> end,
     RedirectURL =
-        <<(atom_to_binary(GlobalRegistryHostname, latin1))/binary, ?gr_login_endpoint,
+        <<"https://", (list_to_binary(GlobalRegistryHostname))/binary, ?gr_login_endpoint,
         "?", ?referer_request_param, "=", ProviderID/binary>>,
     gui_jq:redirect(RedirectURL);
 

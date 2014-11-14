@@ -41,9 +41,6 @@
 %% Name of Round Robin Database that collects node load statistics
 -define(Node_Stats_RRD_Name, <<"node_stats.rrd">>).
 
-%% Local name of the process waiting for dns udp messages
--define(DNS_UDP, dns_udp).
-
 %% name of ETS which contains event types that should be produced by logical files manager
 -define(LFM_EVENT_PRODUCTION_ENABLED_ETS, lfm_event_production_enabled_ets).
 

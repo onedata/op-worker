@@ -14,6 +14,7 @@
 
 -include_lib("oneprovider_modules/dao/dao.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("registered_names.hrl").
 
 %% API
 -export([set_db/1, get_db/0, record_info/1, is_valid_record/1, sequential_synch_call/3, view_def_location/0]).
@@ -99,5 +100,5 @@ sequential_synch_call(Module,Function,Args) ->
 -spec view_def_location() -> Location :: string().
 %% ====================================================================
 view_def_location() ->
-    {ok, Location} = application:get_env(oneprovider_node, view_def_location),
-    atom_to_list(Location).
+    {ok, Location} = application:get_env(?APP_Name, view_def_location),
+    Location.
