@@ -64,7 +64,8 @@ init(_Args) ->
 
     % register hook for #remote_location docs
     spawn(fun() ->
-        timer:sleep(5),
+        ?info("FUN SPAWNED"), % todo temove
+        timer:sleep(timer:seconds(10)),
         MyProviderId = cluster_manager_lib:get_provider_id(),
         HookFun = fun
             (?FILES_DB_NAME, _, _, #db_document{record = #remote_location{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
@@ -84,6 +85,7 @@ init(_Args) ->
                 ?info("GOT INFO ABOUT SOME DOC!"), % todo temove
                 ok
         end,
+        ?info("FUN REGISTERED"), % todo temove
         ?dbsync_cast({register_hook, HookFun})
     end),
 
