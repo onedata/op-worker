@@ -1,36 +1,38 @@
 %% ===================================================================
-%% @author Bartosz Polnik
-%% @copyright (C): 2013 ACK CYFRONET AGH
+%% @author Lukasz Opiola
+%% @copyright (C): 2014 ACK CYFRONET AGH
 %% This software is released under the MIT license 
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module implements {@link worker_plugin_behaviour} to provide
-%% functionality of resolution ipv4 addresses for given worker name.
+%% @doc: This module implements {@link worker_plugin_behaviour} and
+%% manages a DNS server module.
+%% In addition, it implements {@link dns_query_handler_behaviour} -
+%% DNS query handling logic.
 %% @end
 %% ===================================================================
-
 -module(dns_worker).
 -behaviour(worker_plugin_behaviour).
+-behaviour(dns_query_handler_behaviour).
 
 -include("oneprovider_modules/dns/dns_worker.hrl").
 -include("registered_names.hrl").
 -include("supervision_macros.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/dns/dns.hrl").
+
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([init/1, handle/2, cleanup/0, env_dependencies/0, start_listening/0]).
+%% worker_plugin_behaviour API
+-export([init/1, handle/2, cleanup/0]).
 
-env_dependencies() ->
-	[{dns_port, integer}, {dns_response_ttl, integer}, {dispatcher_timeout, integer},
-		{dns_tcp_acceptor_pool_size, integer}, {dns_tcp_timeout, integer},
-		{dns_port, integer}
-	].
+%% dns_query_handler_behaviour API
+-export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1, handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
 
 %% ===================================================================
-%% Behaviour callback functions
+%% worker_plugin_behaviour API
 %% ===================================================================
 
 %% init/1
@@ -39,21 +41,20 @@ env_dependencies() ->
 %% @end
 %% ====================================================================
 -spec init(Args :: term()) -> Result when
-	Result :: #dns_worker_state{} | {error, Error},
-	Error :: term().
+    Result :: #dns_worker_state{} | {error, Error},
+    Error :: term().
 %% ====================================================================
 init([]) ->
-	{ok, _Pid} = proc_lib:start(?MODULE, start_listening, [], 500),
     #dns_worker_state{};
 
 init(InitialState) when is_record(InitialState, dns_worker_state) ->
-	InitialState;
+    InitialState;
 
 init(test) ->
-	#dns_worker_state{};
+    #dns_worker_state{};
 
 init(_) ->
-	throw(unknown_initial_state).
+    throw(unknown_initial_state).
 
 
 %% handle/2
@@ -62,143 +63,114 @@ init(_) ->
 %% Calling handle(_, ping) returns pong.
 %% Calling handle(_, get_version) returns current version of application.
 %% Calling handle(_. {update_state, _}) updates plugin state.
-%% Calling handle(_, {get_worker, Name}) returns list of ipv4 addresses of workers with specified name.
+%% Calling handle(_, {handle_a, Domain}) processes a DNS query of type A.
+%% Calling handle(_, {handle_ns, Domain}) processes a DNS query of type NS.
 %% @end
 %% ====================================================================
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
-	Request :: ping | healthcheck | get_version |
-	{update_state, list(), list()} |
-	{get_worker, atom()} |
-  get_nodes,
-	Result :: ok | {ok, Response} | {error, Error} | pong | Version,
-	Response :: [inet:ip4_address()],
-	Version :: term(),
-	Error :: term().
+    Request :: ping | healthcheck | get_version |
+    {update_state, list(), list()} |
+    {get_worker, atom()} |
+    get_nodes,
+    Result :: ok | {ok, Response} | {error, Error} | pong | Version,
+    Response :: [inet:ip4_address()],
+    Version :: term(),
+    Error :: term().
 %% ====================================================================
 handle(_ProtocolVersion, ping) ->
-	pong;
+    pong;
 
 handle(_ProtocolVersion, healthcheck) ->
-	ok;
+    ok;
 
 handle(_ProtocolVersion, get_version) ->
-	node_manager:check_vsn();
+    node_manager:check_vsn();
 
 handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
-  ?info("DNS state update: ~p", [{ModulesToNodes, NLoads, AvgLoad}]),
-  try
-    ModulesToNodes2 = lists:map(fun ({Module, Nodes}) ->
-      GetLoads = fun({Node, V}) ->
-        {Node, V, V}
-      end,
-      {Module, lists:map(GetLoads, Nodes)}
-    end, ModulesToNodes),
-    New_DNS_State = #dns_worker_state{workers_list = ModulesToNodes2, nodes_list = NLoads, avg_load = AvgLoad},
-    case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
-      ok ->
-        ok;
-      UpdateError ->
-        ?error("DNS update error: ~p", [UpdateError]),
-        udpate_error
-    end
-  catch
-    E1:E2 ->
-      ?error("DNS update error: ~p:~p", [E1, E2]),
-      udpate_error
-  end;
+    ?info("DNS state update: ~p", [{ModulesToNodes, NLoads, AvgLoad}]),
+    try
+        ModulesToNodes2 = lists:map(fun({Module, Nodes}) ->
+            GetLoads = fun({Node, V}) ->
+                {Node, V, V}
+            end,
+            {Module, lists:map(GetLoads, Nodes)}
+        end, ModulesToNodes),
+        New_DNS_State = #dns_worker_state{workers_list = ModulesToNodes2, nodes_list = NLoads, avg_load = AvgLoad},
+        case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
+            ok ->
+                ok;
+            UpdateError ->
+                ?error("DNS update error: ~p", [UpdateError]),
+                udpate_error
+        end
+    catch
+        E1:E2 ->
+            ?error("DNS update error: ~p:~p", [E1, E2]),
+            udpate_error
+    end;
 
-handle(_ProtocolVersion, {get_worker, Module}) ->
-  try
-    DNS_State = gen_server:call(?MODULE, getPlugInState),
-    WorkerList = DNS_State#dns_worker_state.workers_list,
-    NodesList = DNS_State#dns_worker_state.nodes_list,
-    Result = proplists:get_value(Module, WorkerList, []),
+handle(_ProtocolVersion, {handle_a, Domain}) ->
+    IPList = case parse_domain(Domain) of
+                 unknown_domain ->
+                     refused;
+                 {Prefix, _Suffix} ->
+                     % Accept all prefixes that consist of one part
+                     case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
+                         true ->
+                             case Prefix of
+                                 "cluster" ->
+                                     % Return all nodes when asked about cluster
+                                     get_nodes();
+                                 _ ->
+                                     % Check if query concers any specific module, if not assume it's a http request
+                                     Module = try list_to_existing_atom(Prefix) catch _:_ -> undefined end,
+                                     case lists:member(Module, ?EXTERNALLY_VISIBLE_MODULES) of
+                                         false ->
+                                             get_workers(control_panel);
+                                         true ->
+                                             get_workers(Module)
+                                     end
+                             end;
+                         false ->
+                             nx_domain
+                     end
+             end,
+    case IPList of
+        nx_domain ->
+            nx_domain;
+        serv_fail ->
+            serv_fail;
+        refused ->
+            refused;
+        _ ->
+            {ok, TTL} = application:get_env(?APP_Name, dns_a_response_ttl),
+            {ok,
+                    [dns_server:answer_record(Domain, TTL, ?S_A, IP) || IP <- IPList] ++
+                    [dns_server:authoritative_answer_flag(true)]
+            }
+    end;
 
-    PrepareResult = fun({Node, V, C}, {TmpAns, TmpWorkers}) ->
-      TmpAns2 = case C of
-        V -> [Node | TmpAns];
-        _ -> TmpAns
-      end,
-      C2 = case C of
-        1 -> V;
-        _ -> C - 1
-      end,
-      {TmpAns2, [{Node, V, C2} | TmpWorkers]}
-    end,
-    {Result2, ModuleWorkerList} = lists:foldl(PrepareResult, {[], []}, Result),
-
-    PrepareState = fun({M, Workers}, TmpWorkersList) ->
-      case M =:= Module of
-        true -> [{M, ModuleWorkerList} | TmpWorkersList];
-        false -> [{M, Workers} | TmpWorkersList]
-      end
-    end,
-    NewWorkersList = lists:foldl(PrepareState, [], WorkerList),
-
-    New_DNS_State = DNS_State#dns_worker_state{workers_list = NewWorkersList},
-
-    case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
-      ok ->
-        random:seed(now()),
-        Result3 = make_ans_random(Result2),
-        case Module of
-          control_panel ->
-            {ok, Result3};
-          _ ->
-            create_ans(Result3, NodesList)
-        end;
-      UpdateError ->
-        ?error("DNS get_worker error: ~p", [UpdateError]),
-        {error, dns_update_state_error}
-    end
-  catch
-    E1:E2 ->
-      ?error("DNS get_worker error: ~p:~p", [E1, E2]),
-      {error, dns_get_worker_error}
-  end;
-
-handle(_ProtocolVersion, get_nodes) ->
-  try
-    DNS_State = gen_server:call(?MODULE, getPlugInState),
-    NodesList = DNS_State#dns_worker_state.nodes_list,
-    AvgLoad = DNS_State#dns_worker_state.avg_load,
-
-    case AvgLoad of
-      0 ->
-        Res = make_ans_random(lists:map(
-          fun({Node, _}) ->
-            Node
-          end, NodesList)),
-        {ok, Res};
-      _ ->
-        random:seed(now()),
-        ChooseNodes = fun({Node, NodeLoad}, TmpAns) ->
-          case is_number(NodeLoad) and (NodeLoad > 0) of
-            true ->
-              Ratio = AvgLoad / NodeLoad,
-              case Ratio >= random:uniform() of
+handle(_ProtocolVersion, {handle_ns, Domain}) ->
+    case parse_domain(Domain) of
+        unknown_domain ->
+            refused;
+        {Prefix, _Suffix} ->
+            % Accept all prefixes that consist of one part
+            case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
                 true ->
-                  [Node | TmpAns];
+                    {ok, TTL} = application:get_env(?APP_Name, dns_ns_response_ttl),
+                    {ok,
+                            [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP <- get_nodes()] ++
+                            [dns_server:authoritative_answer_flag(true)]
+                    };
                 false ->
-                  TmpAns
-              end;
-            false ->
-              [Node | TmpAns]
-          end
-        end,
-        Result = lists:foldl(ChooseNodes, [], NodesList),
-        Result2 = make_ans_random(Result),
-        create_ans(Result2, NodesList)
-    end
-  catch
-    E1:E2 ->
-      ?error("DNS get_nodes error: ~p:~p", [E1, E2]),
-      {error, get_nodes}
-  end;
+                    nx_domain
+            end
+    end;
 
 handle(ProtocolVersion, Msg) ->
-  ?warning("Wrong request: ~p", [Msg]),
-	throw({unsupported_request, ProtocolVersion, Msg}).
+    ?warning("Wrong request: ~p", [Msg]),
+    throw({unsupported_request, ProtocolVersion, Msg}).
 
 %% cleanup/0
 %% ====================================================================
@@ -206,147 +178,345 @@ handle(ProtocolVersion, Msg) ->
 %% @end
 %% ====================================================================
 -spec cleanup() -> Result when
-	Result :: ok.
+    Result :: ok.
 %% ====================================================================
 cleanup() ->
-  spawn(fun() -> clear_children_and_listeners() end),
-	ok.
+    dns_server:stop(?Supervisor_Name).
 
 
-%% start_listening/0
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
+
+%% parse_domain/1
 %% ====================================================================
-%% @doc Starts dns listeners and terminates dns_worker process in case of error.
+%% @doc Split the domain name into prefix and suffix, where suffix matches the
+%% canonical globalregistry hostname (retrieved from env). The split is made on the dot between prefix and suffix.
+%% If that's not possible, returns unknown_domain.
 %% @end
 %% ====================================================================
--spec start_listening() -> ok.
+-spec parse_domain(Domain :: string()) -> {Prefix :: string(), Suffix :: string()} | unknown_domain.
 %% ====================================================================
-start_listening() ->
-	try
-		{ok, DNSPort} = application:get_env(?APP_Name, dns_port),
-		{ok, DNSResponseTTL} = application:get_env(?APP_Name, dns_response_ttl),
-		{ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
-		{ok, TcpAcceptorPool} = application:get_env(?APP_Name, dns_tcp_acceptor_pool_size),
-		{ok, TcpTimeout} = application:get_env(?APP_Name, dns_tcp_timeout),
-		{ok, DNSPort} = application:get_env(?APP_Name, dns_port),
-		UDP_Child = ?Sup_Child(?DNS_UDP, dns_udp_handler, permanent, [DNSPort, DNSResponseTTL, DispatcherTimeout]),
-		DNS_TCP_Transport_Options =  [{packet, 2}, {dispatcher_timeout, DispatcherTimeout}, {dns_response_ttl, DNSResponseTTL},
-			{dns_tcp_timeout, TcpTimeout}, {keepalive, true}],
-
-		proc_lib:init_ack({ok, self()}),
-
-    try
-      supervisor:delete_child(?Supervisor_Name, ?DNS_UDP),
-      ?debug("DNS UDP child has existed")
-    catch
-      _:_ -> ok
-    end,
-
-    try
-      ranch:stop_listener(dns_tcp_listener),
-      ?debug("dns_tcp_listener has existed")
-    catch
-      _:_ -> ok
-    end,
-
-		{ok, Pid} = supervisor:start_child(?Supervisor_Name, UDP_Child),
-		start_tcp_listener(TcpAcceptorPool, DNSPort, DNS_TCP_Transport_Options, Pid)
-	catch
-		_:Reason -> ?error("DNS Error during starting listeners, ~p", [Reason]),
-			gen_server:cast({global, ?CCM}, {stop_worker, node(), ?MODULE}),
-			?info("Terminating ~p", [?MODULE])
-	end,
-	ok.
+parse_domain(DomainArg) ->
+    % If requested domain starts with 'www.', ignore it
+    Domain = case DomainArg of
+                 [$w, $w, $w, $. | Rest] -> Rest;
+                 Other -> Other
+             end,
+    {ok, ProviderHostnameWithoutDot} = application:get_env(?APP_Name, global_registry_hostname),
+    case ProviderHostnameWithoutDot =:= Domain of
+        true ->
+            {"", ProviderHostnameWithoutDot};
+        false ->
+            ProviderHostname = "." ++ ProviderHostnameWithoutDot,
+            HostNamePos = string:rstr(Domain, ProviderHostname),
+            % If hostname is at this position, it's a suffix (the string ends with it)
+            ValidHostNamePos = length(Domain) - length(ProviderHostname) + 1,
+            case HostNamePos =:= ValidHostNamePos of
+                false ->
+                    unknown_domain;
+                true ->
+                    {string:sub_string(Domain, 1, HostNamePos - 1), ProviderHostnameWithoutDot}
+            end
+    end.
 
 
-%% start_tcp_listener/4
+%% get_workers/1
 %% ====================================================================
-%% @doc Starts tcp listener and handles case when udp listener has already started, but
-%% tcp listener is unable to do so.
+%% @doc Selects couple of nodes hosting given worker and returns their IPs.
 %% @end
 %% ====================================================================
--spec start_tcp_listener(AcceptorPool, Port, TransportOpts, Pid) -> ok when
-	AcceptorPool :: pos_integer(),
-	Port :: pos_integer(),
-	TransportOpts :: list(),
-	Pid :: pid().
+-spec get_workers(Module :: atom()) -> list() | serv_fail.
 %% ====================================================================
-start_tcp_listener(AcceptorPool, Port, TransportOpts, Pid) ->
-	try
-		{ok, _} = ranch:start_listener(dns_tcp_listener, AcceptorPool, ranch_tcp, [{port, Port}],
-			dns_ranch_tcp_handler, TransportOpts)
-	catch
-		_:RanchError -> ok = supervisor:terminate_child(?Supervisor_Name, Pid),
-			supervisor:delete_child(?Supervisor_Name, Pid),
-			?error("Start DNS TCP listener error, ~p", [RanchError]),
-			throw(RanchError)
-	end,
-	ok.
+get_workers(Module) ->
+    try
+        DNSState = gen_server:call(?MODULE, getPlugInState),
+        WorkerList = DNSState#dns_worker_state.workers_list,
+        NodesList = DNSState#dns_worker_state.nodes_list,
+        Result = proplists:get_value(Module, WorkerList, []),
 
-%% clear_children_and_listeners/0
+        PrepareResult = fun({Node, V, C}, {TmpAns, TmpWorkers}) ->
+            TmpAns2 = case C of
+                          V -> [Node | TmpAns];
+                          _ -> TmpAns
+                      end,
+            C2 = case C of
+                     1 -> V;
+                     _ -> C - 1
+                 end,
+            {TmpAns2, [{Node, V, C2} | TmpWorkers]}
+        end,
+        {Result2, ModuleWorkerList} = lists:foldl(PrepareResult, {[], []}, Result),
+
+        PrepareState = fun({M, Workers}, TmpWorkersList) ->
+            case M =:= Module of
+                true -> [{M, ModuleWorkerList} | TmpWorkersList];
+                false -> [{M, Workers} | TmpWorkersList]
+            end
+        end,
+        NewWorkersList = lists:foldl(PrepareState, [], WorkerList),
+
+        New_DNS_State = DNSState#dns_worker_state{workers_list = NewWorkersList},
+
+        case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
+            ok ->
+                random:seed(now()),
+                Result3 = make_ans_random(Result2),
+                case Module of
+                    control_panel ->
+                        Result3;
+                    _ ->
+                        create_ans(Result3, NodesList)
+                end;
+            UpdateError ->
+                ?error("DNS get_worker error: ~p", [UpdateError]),
+                {error, dns_update_state_error}
+        end
+    catch
+        E1:E2 ->
+            ?error("DNS get_worker error: ~p:~p", [E1, E2]),
+            {error, dns_get_worker_error}
+    end.
+
+
+%% get_nodes/0
 %% ====================================================================
-%% @doc Clears listeners and created children
+%% @doc Selects couple of nodes from the cluster and returns their IPs.
 %% @end
 %% ====================================================================
--spec clear_children_and_listeners() -> ok.
+-spec get_nodes() -> list() | serv_fail.
 %% ====================================================================
-clear_children_and_listeners() ->
-  SafelyExecute = fun (Invoke, Log) ->
+get_nodes() ->
     try
-      Invoke()
+        DNSState = gen_server:call(?MODULE, getPlugInState),
+        NodesList = DNSState#dns_worker_state.nodes_list,
+        AvgLoad = DNSState#dns_worker_state.avg_load,
+
+        case AvgLoad of
+            0 ->
+                Res = make_ans_random(lists:map(
+                    fun({Node, _}) ->
+                        Node
+                    end, NodesList)),
+                Res;
+            _ ->
+                random:seed(now()),
+                ChooseNodes = fun({Node, NodeLoad}, TmpAns) ->
+                    case is_number(NodeLoad) and (NodeLoad > 0) of
+                        true ->
+                            Ratio = AvgLoad / NodeLoad,
+                            case Ratio >= random:uniform() of
+                                true ->
+                                    [Node | TmpAns];
+                                false ->
+                                    TmpAns
+                            end;
+                        false ->
+                            [Node | TmpAns]
+                    end
+                end,
+                Result = lists:foldl(ChooseNodes, [], NodesList),
+                Result2 = make_ans_random(Result),
+                create_ans(Result2, NodesList)
+        end
     catch
-      _:Error -> ?error(Log, [Error])
-    end
-  end,
+        E1:E2 ->
+            ?error("DNS get_nodes error: ~p:~p", [E1, E2]),
+            {error, get_nodes}
+    end.
 
-  SafelyExecute(fun () -> ok = supervisor:terminate_child(?Supervisor_Name, ?DNS_UDP),
-    supervisor:delete_child(?Supervisor_Name, ?DNS_UDP)
-  end,
-    "Error stopping dns udp listener, status ~p"),
-
-  SafelyExecute(fun () -> ok = ranch:stop_listener(dns_tcp_listener)
-  end,
-    "Error stopping dns tcp listener, status ~p"),
-  ok.
 
 %% create_ans/2
 %% ====================================================================
 %% @doc Creates answer from results list (adds additional node if needed).
 %% @end
 %% ====================================================================
--spec create_ans(Result :: list(), NodesList :: list()) -> Ans when
-  Ans :: {ok, IPs},
-  IPs :: list().
+-spec create_ans(Result :: list(), NodesList :: list()) -> IPs :: [term()].
 %% ====================================================================
 create_ans(Result, NodesList) ->
-  case (length(Result) > 1) or (length(NodesList) =< 1)  of
-    true -> {ok, Result};
-    false ->
-      NodeNum = random:uniform(length(NodesList)),
-      {NewNode, _} = lists:nth(NodeNum, NodesList),
-      case Result =:= [NewNode] of
-        true ->
-          {NewNode2, _} = lists:nth((NodeNum rem length(NodesList) + 1) , NodesList),
-          {ok, Result ++ [NewNode2]};
+    case (length(Result) > 1) or (length(NodesList) =< 1) of
+        true -> Result;
         false ->
-          {ok, Result ++ [NewNode]}
-      end
-  end.
+            NodeNum = random:uniform(length(NodesList)),
+            {NewNode, _} = lists:nth(NodeNum, NodesList),
+            case Result =:= [NewNode] of
+                true ->
+                    {NewNode2, _} = lists:nth((NodeNum rem length(NodesList) + 1), NodesList),
+                    Result ++ [NewNode2];
+                false ->
+                    Result ++ [NewNode]
+            end
+    end.
+
 
 %% make_ans_random/1
 %% ====================================================================
 %% @doc Makes order of nodes in answer random.
 %% @end
 %% ====================================================================
--spec make_ans_random(Result :: list()) -> IPs when
-  IPs :: list().
+-spec make_ans_random(Result :: list()) -> IPs :: [term()].
 %% ====================================================================
 make_ans_random(Result) ->
-  Len = length(Result),
-  case Len of
-    0 -> [];
-    1 -> Result;
-    _ ->
-      NodeNum = random:uniform(Len),
-      NewRes = lists:sublist(Result, 1, NodeNum - 1) ++ lists:sublist(Result, NodeNum + 1, Len),
-      [lists:nth(NodeNum, Result) | make_ans_random(NewRes)]
-  end.
+    Len = length(Result),
+    case Len of
+        0 -> [];
+        1 -> Result;
+        _ ->
+            NodeNum = random:uniform(Len),
+            NewRes = lists:sublist(Result, 1, NodeNum - 1) ++ lists:sublist(Result, NodeNum + 1, Len),
+            [lists:nth(NodeNum, Result) | make_ans_random(NewRes)]
+    end.
+
+
+%% ===================================================================
+%% dns_query_handler_behaviour API
+%% ===================================================================
+
+%% handle_a/1
+%% ====================================================================
+%% @doc Handles DNS queries of type A.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_a(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+%% ====================================================================
+handle_a(Domain) ->
+    call_dns_worker({handle_a, Domain}).
+
+
+%% handle_ns/1
+%% ====================================================================
+%% @doc Handles DNS queries of type NS.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_ns(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+%% ====================================================================
+handle_ns(Domain) ->
+    call_dns_worker({handle_ns, Domain}).
+
+
+%% handle_cname/1
+%% ====================================================================
+%% @doc Handles DNS queries of type CNAME.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_cname(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+%% ====================================================================
+handle_cname(_Domain) -> not_impl.
+
+
+%% handle_mx/1
+%% ====================================================================
+%% @doc Handles DNS queries of type MX.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_mx(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+%% ====================================================================
+handle_mx(_Domain) -> not_impl.
+
+
+%% handle_soa/1
+%% ====================================================================
+%% @doc Handles DNS queries of type SOA.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_soa(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+%% ====================================================================
+handle_soa(_Domain) -> not_impl.
+
+
+%% handle_wks/1
+%% ====================================================================
+%% @doc Handles DNS queries of type WKS.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_wks(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+%% ====================================================================
+handle_wks(_Domain) -> not_impl.
+
+
+%% handle_ptr1
+%% ====================================================================
+%% @doc Handles DNS queries of type PTR.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_ptr(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+%% ====================================================================
+handle_ptr(_Domain) -> not_impl.
+
+
+%% handle_hinfo/1
+%% ====================================================================
+%% @doc Handles DNS queries of type HINFO.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_hinfo(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+%% ====================================================================
+handle_hinfo(_Domain) -> not_impl.
+
+
+%% handle_minfo/1
+%% ====================================================================
+%% @doc Handles DNS queries of type MINFO.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_minfo(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+%% ====================================================================
+handle_minfo(_Domain) -> not_impl.
+
+
+%% handle_txt/1
+%% ====================================================================
+%% @doc Handles DNS queries of type TXT.
+%% See {@link dns_query_handler_behaviour} for reference.
+%% @end
+%% ====================================================================
+-spec handle_txt(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+%% ====================================================================
+handle_txt(_Domain) -> not_impl.
+
+
+%% call_dns_worker/1
+%% ====================================================================
+%% @doc Calls dns_worker module gen_server with given request. Used to delegate
+%% DNS query processing to dns_worker.
+%% @end
+%% ====================================================================
+-spec call_dns_worker(Request :: term()) -> term() | serv_fail.
+%% ====================================================================
+call_dns_worker(Request) ->
+    try
+        {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
+        DispatcherAns = gen_server:call(?Dispatcher_Name, {dns_worker, 1, self(), Request}),
+        case DispatcherAns of
+            ok ->
+                receive
+                    {error, Error} ->
+                        ?error("Unexpected dispatcher error ~p", [Error]),
+                        serv_fail;
+                    Answer ->
+                        Answer
+                after
+                    DispatcherTimeout ->
+                        ?error("Unexpected dispatcher timeout"),
+                        serv_fail
+                end;
+            worker_not_found ->
+                ?error("Dispatcher error - worker not found"),
+                serv_fail
+        end
+    catch
+        _:Error2 ->
+            ?error("Dispatcher not responding ~p", [Error2]),
+            serv_fail
+    end.
+
+

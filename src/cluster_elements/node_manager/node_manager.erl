@@ -1,11 +1,11 @@
 %% ===================================================================
 %% @author Michal Wrzeszcz
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module is a gen_server that coordinates the 
+%% @doc: This module is a gen_server that coordinates the
 %% life cycle of node. It starts/stops appropriate services (according
 %% to node type) and communicates with ccm (if node works as worker).
 %%
@@ -262,9 +262,10 @@ handle_cast(init_listeners, State) ->
     try
         start_gui_listener(),
         start_rest_listener(),
-        start_redirector_listener()
+        start_redirector_listener(),
+        start_dns_listeners()
     catch T:M ->
-        ?error_stacktrace("Error while initializing cowboy listeners - ~p:~p", [T, M])
+        ?error_stacktrace("Error while initializing TCP and/or UDP listeners - ~p:~p", [T, M])
     end,
     {noreply, State};
 
@@ -364,7 +365,7 @@ handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
 handle_cast({node_for_ack, MsgID, Node}, State) ->
     ?debug("Node for ack chosen: ~p", [{MsgID, Node}]),
     ets:insert(?ACK_HANDLERS, {{chosen_node, MsgID}, Node}),
-    {ok, Interval} = application:get_env(oneprovider_node, callback_ack_time),
+    {ok, Interval} = application:get_env(?APP_Name, callback_ack_time),
     Pid = self(),
     erlang:send_after(Interval * 1000, Pid, {delete_node_for_ack, MsgID}),
     {noreply, State};
@@ -495,7 +496,7 @@ code_change(_OldVsn, State, _Extra) ->
 heart_beat(Conn_status, State) ->
     New_conn_status = case Conn_status of
                           not_connected ->
-                              {ok, CCM_Nodes} = application:get_env(oneprovider_node, ccm_nodes),
+                              {ok, CCM_Nodes} = application:get_env(?APP_Name, ccm_nodes),
                               Ans = init_net_connection(CCM_Nodes),
                               case Ans of
                                   ok -> connected;
@@ -504,7 +505,7 @@ heart_beat(Conn_status, State) ->
                           Other -> Other
                       end,
 
-    {ok, Interval} = application:get_env(oneprovider_node, heart_beat),
+    {ok, Interval} = application:get_env(?APP_Name, heart_beat),
     case New_conn_status of
         connected ->
             gen_server:cast({global, ?CCM}, {node_is_up, node()}),
@@ -1241,7 +1242,7 @@ start_dispatcher_listener() ->
     {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
 
     LocalPort = oneproxy:get_local_port(Port),
-    Pid = spawn_link(fun() -> oneproxy:start(Port, LocalPort, CertFile, verify_peer) end),
+    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_peer) end),
     register(?ONEPROXY_DISPATCHER, Pid),
 
     Dispatch = cowboy_router:compile([{'_', [{?ONECLIENT_URI_PATH, ws_handler, []}]}]),
@@ -1265,17 +1266,17 @@ start_dispatcher_listener() ->
 %% ====================================================================
 start_gui_listener() ->
     % Get params from env for gui
-    {ok, DocRoot} = application:get_env(oneprovider_node, control_panel_static_files_root),
+    {ok, DocRoot} = application:get_env(?APP_Name, control_panel_static_files_root),
 
-    {ok, Cert} = application:get_env(oneprovider_node, web_ssl_cert_path),
+    {ok, Cert} = application:get_env(?APP_Name, web_ssl_cert_path),
 
-    {ok, GuiPort} = application:get_env(oneprovider_node, control_panel_port),
-    {ok, GuiNbAcceptors} = application:get_env(oneprovider_node, control_panel_number_of_acceptors),
-    {ok, MaxKeepAlive} = application:get_env(oneprovider_node, control_panel_max_keepalive),
-    {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
+    {ok, GuiPort} = application:get_env(?APP_Name, control_panel_port),
+    {ok, GuiNbAcceptors} = application:get_env(?APP_Name, control_panel_number_of_acceptors),
+    {ok, MaxKeepAlive} = application:get_env(?APP_Name, control_panel_max_keepalive),
+    {ok, Timeout} = application:get_env(?APP_Name, control_panel_socket_timeout),
 
     LocalPort = oneproxy:get_local_port(GuiPort),
-    spawn_link(fun() -> oneproxy:start(GuiPort, LocalPort, Cert, verify_none) end),
+    spawn_link(fun() -> oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none) end),
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
@@ -1356,9 +1357,9 @@ start_gui_listener() ->
 -spec start_redirector_listener() -> ok | no_return().
 %% ====================================================================
 start_redirector_listener() ->
-    {ok, RedirectPort} = application:get_env(oneprovider_node, control_panel_redirect_port),
-    {ok, RedirectNbAcceptors} = application:get_env(oneprovider_node, control_panel_number_of_http_acceptors),
-    {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
+    {ok, RedirectPort} = application:get_env(?APP_Name, control_panel_redirect_port),
+    {ok, RedirectNbAcceptors} = application:get_env(?APP_Name, control_panel_number_of_http_acceptors),
+    {ok, Timeout} = application:get_env(?APP_Name, control_panel_socket_timeout),
 
     RedirectDispatch = [
         {'_', [
@@ -1389,16 +1390,16 @@ start_redirector_listener() ->
 -spec start_rest_listener() -> ok | no_return().
 %% ====================================================================
 start_rest_listener() ->
-    {ok, NbAcceptors} = application:get_env(oneprovider_node, control_panel_number_of_acceptors),
-    {ok, Timeout} = application:get_env(oneprovider_node, control_panel_socket_timeout),
+    {ok, NbAcceptors} = application:get_env(?APP_Name, control_panel_number_of_acceptors),
+    {ok, Timeout} = application:get_env(?APP_Name, control_panel_socket_timeout),
 
-    {ok, Cert} = application:get_env(oneprovider_node, web_ssl_cert_path),
+    {ok, Cert} = application:get_env(?APP_Name, web_ssl_cert_path),
 
     % Get REST port from env and setup dispatch opts for cowboy
-    {ok, RestPort} = application:get_env(oneprovider_node, rest_port),
+    {ok, RestPort} = application:get_env(?APP_Name, rest_port),
 
     LocalPort = oneproxy:get_local_port(RestPort),
-    Pid = spawn_link(fun() -> oneproxy:start(RestPort, LocalPort, Cert, verify_peer) end),
+    Pid = spawn_link(fun() -> oneproxy:start_rproxy(RestPort, LocalPort, Cert, verify_peer) end),
     register(oneproxy_rest, Pid),
 
     RestDispatch = [
@@ -1448,3 +1449,27 @@ static_dispatches(DocRoot, StaticPaths) ->
                 {handler_opts, {dir, DocRoot ++ Dir}}
             ]}
     end, StaticPaths).
+
+
+%% start_dns_listeners/0
+%% ====================================================================
+%% @doc Starts DNS UDP and TCP listeners.
+%% @end
+-spec start_dns_listeners() -> ok | no_return().
+%% ====================================================================
+start_dns_listeners() ->
+    {ok, DNSPort} = application:get_env(?APP_Name, dns_port),
+    {ok, EdnsMaxUdpSize} = application:get_env(?APP_Name, edns_max_udp_size),
+    {ok, TCPNumAcceptors} = application:get_env(?APP_Name, dns_tcp_acceptor_pool_size),
+    {ok, TCPTImeout} = application:get_env(?APP_Name, dns_tcp_timeout),
+    OnFailureFun = fun() ->
+        ?error("Could not start DNS server on node ~p.", [node()])
+    end,
+    ?info("Starting DNS server..."),
+    case dns_server:start(?Supervisor_Name, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun) of
+        ok ->
+            ok;
+        Error ->
+            ?error("Cannot start DNS server - ~p", Error),
+            OnFailureFun()
+    end.

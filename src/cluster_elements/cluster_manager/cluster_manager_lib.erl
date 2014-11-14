@@ -13,6 +13,7 @@
 
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("registered_names.hrl").
 
 %% API
 -export([get_provider_id/0]).
@@ -26,7 +27,7 @@
 %% ====================================================================
 get_provider_id() ->
     % Cache the provider ID so that we don't decode the cert every time
-    case application:get_env(oneprovider_node, provider_id) of
+    case application:get_env(?APP_Name, provider_id) of
         {ok, ProviderId} ->
             ProviderId;
         _ ->
@@ -34,7 +35,7 @@ get_provider_id() ->
             [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
             PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
             ProviderId = auth_handler:get_provider_id(PeerCert),
-            application:set_env(oneprovider_node, provider_id, ProviderId),
+            application:set_env(?APP_Name, provider_id, ProviderId),
             ProviderId
     end.
 

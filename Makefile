@@ -9,6 +9,7 @@ all: generate docs
 compile:
 	-@if [ -f ebin/.test ]; then rm -rf ebin; fi 
 	cp -R clproto/proto src
+	cp c_src/oneproxy/proto/* src
 	./rebar compile
 	rm -rf src/proto
 
@@ -20,6 +21,8 @@ deps:
 
 clean:
 	make -C docs clean
+	make -C oneclient clean
+	make -C helpers clean
 	./rebar clean
 
 distclean: clean

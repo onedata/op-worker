@@ -1157,7 +1157,7 @@ register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Clearing
       LoopTime = case CacheLoop of
                    non -> non;
                    Atom when is_atom(Atom) ->
-                     case application:get_env(oneprovider_node, CacheLoop) of
+                     case application:get_env(?APP_Name, CacheLoop) of
                        {ok, Interval1} -> Interval1;
                        _               -> loop_time_load_error
                      end;

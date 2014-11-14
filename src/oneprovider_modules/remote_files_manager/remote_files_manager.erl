@@ -15,6 +15,7 @@
 
 -include("remote_file_management_pb.hrl").
 -include("communication_protocol_pb.hrl").
+-include("registered_names.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -43,7 +44,7 @@
 %% ====================================================================
 init(_Args) ->
   Pid = self(),
-  {ok, Interval} = application:get_env(oneprovider_node, fslogic_cleaning_period),
+  {ok, Interval} = application:get_env(?APP_Name, fslogic_cleaning_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
   [].
 
