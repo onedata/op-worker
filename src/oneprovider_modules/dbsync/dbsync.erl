@@ -80,9 +80,11 @@ init(_Args) ->
                         end;
                     _ -> ok
                 end;
-            (_, _, _, _) -> ok
+            (_, _, _, _) ->
+                ?info("GOT INFO ABOUT SOME DOC!"), % todo temove
+                ok
         end,
-        ?dbsync_cast({reqister_hook, HookFun})
+        ?dbsync_cast({register_hook, HookFun})
     end),
 
     [].
