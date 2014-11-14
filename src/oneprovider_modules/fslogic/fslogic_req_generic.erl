@@ -468,7 +468,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
             end, Ranges)
         end, OutOfSyncList),
     SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
-    NewDoc = fslogic_remote_location:mark_as_available(SyncedParts, MyRemoteLocationDoc),
+    NewDoc = lists:foldl(fun(Ranges, Acc) -> fslogic_remote_location:mark_as_available(Ranges, Acc) end, MyRemoteLocationDoc, SyncedParts),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
         false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
