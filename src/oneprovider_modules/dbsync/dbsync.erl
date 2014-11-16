@@ -64,25 +64,17 @@ init(_Args) ->
 
     % register hook for #remote_location docs
     spawn(fun() ->
-        ?info("FUN SPAWNED"), % todo temove
         timer:sleep(timer:seconds(10)),
         MyProviderId = cluster_manager_lib:get_provider_id(),
         HookFun = fun
             (?FILES_DB_NAME, _, Uuid, #db_document{record = #remote_location{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
-                ?info("GOT INFO ABOUT SYNCED DOC!"), % todo temove
                 {ok, Docs} = dao_lib:apply(dao_vfs, remote_locations_by_file_id, [FileId], 1),
-                ?info("MY_ID: ~p", [MyProviderId]),
-                ?info("UUID: ~p", [Uuid]),
-                ?info("DOCS: ~p", [Docs]),
                 MyDocs = lists:filter(
                     fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == MyProviderId end, Docs),
                 case MyDocs of
                     [MyDoc] ->
-                        ?info("MYDOC: ~p", [MyDoc]),
                         [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_binary(Uuid_) == utils:ensure_binary(Uuid) end, Docs),
-                        ?info("CHANGEDDOC: ~p", [ChangedDoc]),
                         NewDoc = fslogic_remote_location:mark_other_provider_changes(MyDoc, ChangedDoc),
-                        ?info("NEWDOC: ~p ~p", [NewDoc, NewDoc == MyDoc]),
 
                         case NewDoc == MyDoc of
                             true -> ok;
@@ -90,11 +82,8 @@ init(_Args) ->
                         end;
                     _ -> ok
                 end;
-            (A, B, C, D) ->
-                ?info("GOT INFO ABOUT SOME DOC! (~p,~p,~p,~p)",[A,B,C,element(1,D#db_document.record)]), % todo temove
-                ok
+            (_, _, _, _) -> ok
         end,
-        ?info("FUN REGISTERED"), % todo temove
         ?dbsync_cast({register_hook, HookFun})
     end),
 
