@@ -12,7 +12,7 @@
 -include("oneprovider_modules/fslogic/ranges_struct.hrl").
 
 %% API
--export([merge/2, truncate/2, minimize/1, subtract_newer/2, subtract/2]).
+-export([merge/2, truncate/2, minimize/1, subtract_newer/2, subtract/2, intersection/2]).
 
 %% merge/3
 %% ====================================================================
@@ -135,3 +135,37 @@ subtract_newer([Range1 = #range{to = To1, timestamp = Time1} | Rest1], [Range2 =
 subtract_newer([Range1 = #range{to = To1, timestamp = Time1} | Rest1], [Range2 = #range{to = To2, timestamp = Time2} | Rest2])
     when To1 =< To2 andalso Time1 < Time2 ->
     subtract_newer([Range1#range{from = To1+1} | Rest1], [Range2#range{from = To1+1} | Rest2]).
+
+%% intersection/1
+%% ====================================================================
+%% @doc returns intersection of two ranges_structs, highest timestamp wins
+%% @end
+-spec intersection(Ranges1 :: ranges_struct(), Ranges2 :: ranges_struct()) -> ranges_struct().
+intersection([], _) ->
+    [];
+intersection(_, []) ->
+    [];
+intersection([#range{from = From1, to = To1} | Rest1], Ranges2) % ranges non empty
+    when From1 > To1 ->
+    intersection(Rest1, Ranges2);
+intersection(Ranges1, [#range{from = From2, to = To2} | Rest2])
+    when From2 > To2 ->
+    intersection(Ranges1, Rest2);
+intersection([#range{from = From1} | _] = Ranges1, [#range{from = From2} | _] = Ranges2) % first range in both lists is valid
+    when From1 > From2 ->
+    intersection(Ranges2, Ranges1);
+intersection([#range{to = To1} | Rest1], [#range{from = From2} | _] = Ranges2) % From1 < From2
+    when To1 < From2 ->
+    intersection(Rest1, Ranges2);
+intersection([Range1 = #range{from = From1} | Rest1], [#range{from = From2} | _] = Ranges2) % From2 <- [From1, To1]
+    when From1 =/= From2 ->
+    intersection([Range1#range{from = From2} | Rest1], Ranges2);
+intersection([#range{to = To1} | _] = Ranges1, [#range{to = To2} | _] = Ranges2) % From1 == From2
+    when To1 > To2 ->
+    intersection(Ranges2, Ranges1);
+intersection([#range{to = To1, timestamp = Time1} = Range1 | Rest1], [#range{timestamp = Time2} = Range2 | Rest2]) % From1 == From2 && To1 < To2
+    when Time1 > Time2 ->
+    [Range1#range{to = To1} | intersection(Rest1, [Range2#range{from = To1+1} | Rest2])];
+intersection([#range{to = To1, timestamp = Time1} | Rest1], [#range{timestamp = Time2} = Range2 | Rest2])
+    when Time1 =< Time2 ->
+    [Range2#range{to = To1} | intersection(Rest1, [Range2#range{from = To1+1} | Rest2])].

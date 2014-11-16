@@ -13,7 +13,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 %% API
--export([merge_test/0, truncate_test/0, subtract_newer_test/0]).
+-export([merge_test/0, truncate_test/0, subtract_newer_test/0, intersection_test/0]).
 
 merge_test() ->
     R1 = #range{from=5, to=7, timestamp = 1},
@@ -114,3 +114,18 @@ subtract_newer_test() ->
         #range{from = 25, to = 30}
     ],
     ?assertEqual(SubtractResult4, ranges_struct:minimize(ranges_struct:subtract_newer(List4, NewList4))).
+
+intersection_test() ->
+    List11 = [
+        #range{from = 0, to = 5, timestamp = 1},
+        #range{from = 6, to = 6, timestamp = 2},
+        #range{from = 7, to = 14, timestamp = 3}
+    ],
+    List12 = [
+        #range{from = 3, to = 7, timestamp = 2}
+    ],
+    Result1 = ranges_struct:minimize(ranges_struct:intersection(List11, List12)),
+    ?assertEqual([
+        #range{from = 3, to = 6, timestamp = 2},
+        #range{from = 7, to = 7, timestamp = 3}
+    ], Result1).

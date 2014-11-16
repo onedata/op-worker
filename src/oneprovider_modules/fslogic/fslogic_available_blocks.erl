@@ -101,7 +101,7 @@ check_if_synchronized(#block_range{from = From, to = To}, #db_document{record = 
     PartsOutOfSync = ranges_struct:minimize(ranges_struct:subtract([#range{from = From, to = To}], Parts)),
     lists:map(
         fun(#db_document{record = #available_blocks{file_parts = Parts_, provider_id = Id}}) ->
-            {Id, ranges_struct:minimize(ranges_struct:subtract(PartsOutOfSync, ranges_struct:subtract(PartsOutOfSync, Parts_)))}
+            {Id, ranges_struct:minimize(ranges_struct:intersection(PartsOutOfSync, Parts_))}
         end, OtherDocs).
 
 %% mark_other_provider_changes/2
