@@ -14,6 +14,11 @@
 %% API
 -export([merge/2, truncate/2, minimize/1, subtract_newer/2, subtract/2]).
 
+%% merge/3
+%% ====================================================================
+%% @doc merge two ranges_struct's, in case of conflicting ranges - highest timestamp wins
+%% @end
+-spec merge(Ranges1 :: ranges_struct(), Ranges2 :: ranges_struct()) -> ranges_struct().
 merge([], Ranges2) ->
     Ranges2;
 merge(Ranges1, []) ->
@@ -43,16 +48,21 @@ merge([#range{to = To1, timestamp = Time1} | Rest1], [#range{timestamp = Time2} 
     when Time1 =< Time2 ->
     [Range2#range{to = To1} | merge(Rest1, [Range2#range{from = To1+1} | Rest2])].
 
-truncate(RemoteParts, #range{to = Size} = Range) ->
-    ReversedRemoteParts = lists:reverse(RemoteParts),
-    TruncatedReversedRemoteParts = lists:dropwhile(
+%% truncate/3
+%% ====================================================================
+%% @doc truncates ranges_struct up to given range (delete all ranges that are higher)
+%% @end
+-spec truncate(Ranges :: ranges_struct(), Range :: #range{}) -> ranges_struct().
+truncate(Ranges, #range{to = Size} = Range) ->
+    ReversedRanges = lists:reverse(Ranges),
+    TruncatedReversedRanges = lists:dropwhile(
         fun(#range{from = From}) ->
             From > Size
-        end, ReversedRemoteParts),
-    case TruncatedReversedRemoteParts == [] of
+        end, ReversedRanges),
+    case TruncatedReversedRanges == [] of
         true -> [Range#range{from = 0}];
         _ ->
-            [Last | Rest] = TruncatedReversedRemoteParts,
+            [Last | Rest] = TruncatedReversedRanges,
             LastTo = Last#range.to,
             LastFrom = Last#range.from,
             case LastTo > Size of
@@ -61,6 +71,11 @@ truncate(RemoteParts, #range{to = Size} = Range) ->
             end
     end.
 
+%% minimize/1
+%% ====================================================================
+%% @doc minimize ranges struct representation
+%% @end
+-spec minimize(Ranges :: ranges_struct()) -> ranges_struct().
 minimize([]) ->
     [];
 minimize([#range{from = From1, to = To1} | Rest1]) when From1 > To1 ->
@@ -73,9 +88,19 @@ minimize([#range{to = To1, timestamp = Time1} = El1, #range{from = From2, to = T
         false -> [El1 | minimize([El2 | Rest])]
     end.
 
+%% subtract/1
+%% ====================================================================
+%% @doc subtract second ranges_struct from first one
+%% @end
+-spec subtract(Ranges1 :: ranges_struct(), Ranges2 :: ranges_struct()) -> ranges_struct().
 subtract(Ranges1, Ranges2) ->
     subtract_newer(Ranges1, [Range#range{timestamp = ?infinity} || Range <- Ranges2]).
 
+%% subtract_newer/1
+%% ====================================================================
+%% @doc subtract second ranges_struct from first one (only ranges with higher timestamp)
+%% @end
+-spec subtract_newer(Ranges1 :: ranges_struct(), Ranges2 :: ranges_struct()) -> ranges_struct().
 subtract_newer([], _) ->
     [];
 subtract_newer(Ranges1, []) ->

@@ -11,4 +11,6 @@
 
 -define(infinity, 9999999999999999). %year 2286
 
+-type ranges_struct() :: [#range{}].
+
 -record(range, {from = 0, to = -1, timestamp = 0}).

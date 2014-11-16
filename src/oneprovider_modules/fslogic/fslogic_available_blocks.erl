@@ -19,7 +19,6 @@
 -include("oneprovider_modules/dao/dao.hrl").
 -include("oneprovider_modules/dao/dao_types.hrl").
 
-
 % API
 -export([mark_as_modified/2, mark_as_available/2, check_if_synchronized/3, truncate/2, mark_other_provider_changes/2]).
 
