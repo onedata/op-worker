@@ -32,6 +32,10 @@
 -define(Dispatcher_Name, request_dispatcher).
 
 %% Local name (name and node is used to identify it) of gen_server that
+%% coordinates communication with Global Registry.
+-define(GrChannel_Name, gr_channel).
+
+%% Local name (name and node is used to identify it) of gen_server that
 %% coordinates access to Round Robin Database.
 -define(RrdErlang_Name, rrderlang).
 

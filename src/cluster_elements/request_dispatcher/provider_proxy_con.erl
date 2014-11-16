@@ -255,18 +255,16 @@ connect(Host, Port, Opts) ->
     Opts1 = Opts -- [auto_handshake],
     Monitored =
         case websocket_client:start_link("wss://" ++ utils:ensure_list(Host) ++ ":" ++ integer_to_list(Port) ++ "/oneclient" , ?MODULE, [self()], Opts1 ++ [{reuse_sessions, false}]) of
-            {ok, Proc}      -> erlang:monitor(process, Proc), Proc;
-            {error, Error}  -> self() ! {error, Error}, undefined;
-            Error1          -> self() ! {error, Error1}, undefined
+            {ok, Proc}     -> erlang:monitor(process, Proc), Proc;
+            {error, Error} -> self() ! {error, Error}, undefined;
+            Error1         -> self() ! {error, Error1}, undefined
         end,
     Return =
         receive
-            {connected, Monitored}              ->
-
-                {ok, Monitored};
-            {error, Other1}                     -> {error, Other1};
-            {'DOWN', _, _, Monitored, Info}     -> {error, Info};
-            {'EXIT', Monitored, Reason}         -> {error, Reason}
+            {connected, Monitored}          -> {ok, Monitored};
+            {error, Other1}                 -> {error, Other1};
+            {'DOWN', _, _, Monitored, Info} -> {error, Info};
+            {'EXIT', Monitored, Reason}     -> {error, Reason}
         after 3000 ->
             {error, timeout}
         end,

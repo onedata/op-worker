@@ -9,7 +9,7 @@ all: generate docs
 compile:
 	-@if [ -f ebin/.test ]; then rm -rf ebin; fi 
 	cp -R clproto/proto src
-	cp c_src/oneproxy/proto/* src
+	cp c_src/oneproxy/proto/* src/proto
 	./rebar compile
 	rm -rf src/proto
 
