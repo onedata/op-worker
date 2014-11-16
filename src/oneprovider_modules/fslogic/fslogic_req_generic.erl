@@ -17,7 +17,7 @@
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("registered_names.hrl").
--include("oneprovider_modules/fslogic/fslogic_remote_location.hrl").
+-include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
 -include("oneprovider_modules/fslogic/ranges_struct.hrl").
 -include("oneprovider_modules/gateway/gateway.hrl").
 
@@ -448,18 +448,18 @@ rename_file(FullFileName, FullTargetFileName) ->
     #atom{} | no_return().
 %% ====================================================================
 synchronize_file_block(FullFileName, Offset, Size) ->
-    {ok, RemoteLocationDocs} = fslogic_objects:get_remote_location(FullFileName),
+    {ok, RemoteLocationDocs} = fslogic_objects:get_available_blocks(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
-    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
-    OtherRemoteLocationDocs = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id =/= ProviderId end, RemoteLocationDocs),
-    FileId = MyRemoteLocationDoc#db_document.record#remote_location.file_id,
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    OtherRemoteLocationDocs = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id =/= ProviderId end, RemoteLocationDocs),
+    FileId = MyRemoteLocationDoc#db_document.record#available_blocks.file_id,
 
     case dao_vfs:list_file_locations(FileId) of
         {ok, []} -> create_file_location_for_remote_file(FullFileName, FileId);
         _ -> ok
     end,
 
-    OutOfSyncList = fslogic_remote_location:check_if_synchronized(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, OtherRemoteLocationDocs),
+    OutOfSyncList = fslogic_available_blocks:check_if_synchronized(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, OtherRemoteLocationDocs),
     lists:foreach(
         fun({Id, Ranges}) ->
             lists:foreach(fun(Range = #range{from = From, to = To}) ->
@@ -468,10 +468,10 @@ synchronize_file_block(FullFileName, Offset, Size) ->
             end, Ranges)
         end, OutOfSyncList),
     SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
-    NewDoc = lists:foldl(fun(Ranges, Acc) -> fslogic_remote_location:mark_as_available(Ranges, Acc) end, MyRemoteLocationDoc, SyncedParts),
+    NewDoc = lists:foldl(fun(Ranges, Acc) -> fslogic_available_blocks:mark_as_available(Ranges, Acc) end, MyRemoteLocationDoc, SyncedParts),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
-        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
+        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_available_blocks_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
     end,
     #atom{value = ?VOK}.
 
@@ -484,13 +484,13 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     #atom{} | no_return().
 %% ====================================================================
 file_block_modified(FullFileName, Offset, Size) ->
-    {ok, RemoteLocationDocs} = fslogic_objects:get_remote_location(FullFileName),
+    {ok, RemoteLocationDocs} = fslogic_objects:get_available_blocks(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
-    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
-    NewDoc = fslogic_remote_location:mark_as_modified(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    NewDoc = fslogic_available_blocks:mark_as_modified(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
-        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
+        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_available_blocks_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
     end,
     #atom{value = ?VOK}.
 
@@ -503,13 +503,13 @@ file_block_modified(FullFileName, Offset, Size) ->
     #atom{} | no_return().
 %% ====================================================================
 file_truncated(FullFileName, Size) ->
-    {ok, RemoteLocationDocs} = fslogic_objects:get_remote_location(FullFileName),
+    {ok, RemoteLocationDocs} = fslogic_objects:get_available_blocks(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
-    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
-    NewDoc = fslogic_remote_location:truncate({bytes, Size}, MyRemoteLocationDoc),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    NewDoc = fslogic_available_blocks:truncate({bytes, Size}, MyRemoteLocationDoc),
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
-        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
+        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_available_blocks_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
     end,
     #atom{value = ?VOK}.
 

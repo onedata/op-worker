@@ -154,7 +154,7 @@ remove_file() ->
                                                #view_row{id = "share2", doc = #db_document{uuid = "share2", record = #share_desc{file = "uuid"}}}
                                            ]}};
                                        (?FILE_LOCATIONS_BY_FILE, _) -> {ok, #view_result{rows = []}};
-                                       (?REMOTE_LOCATIONS_BY_FILE_ID, _) -> {ok, #view_result{rows = []}}
+                                       (?AVAILABLE_BLOCKS_BY_FILE_ID, _) -> {ok, #view_result{rows = []}}
                                    end),
 
 

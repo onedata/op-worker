@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc Provides definitions for remote location module, which helps
+%% @doc Provides definitions for available blocks module, which helps
 %% providers to check if their files are in sync
 %% @end
 %% ===================================================================

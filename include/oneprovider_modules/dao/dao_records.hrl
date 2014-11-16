@@ -34,7 +34,7 @@
         file_descriptor     -> ?record_info_gen(file_descriptor);
         file_meta           -> ?record_info_gen(file_meta);
         file_lock           -> ?record_info_gen(file_lock);
-        remote_location     -> ?record_info_gen(remote_location);
+        available_blocks    -> ?record_info_gen(available_blocks);
         storage_info        -> ?record_info_gen(storage_info);
         user                -> ?record_info_gen(user);
         share_desc          -> ?record_info_gen(share_desc);

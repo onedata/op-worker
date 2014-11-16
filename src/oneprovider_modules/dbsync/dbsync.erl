@@ -62,23 +62,23 @@ init(_Args) ->
             spawn(fun() -> timer:sleep(timer:seconds(1)), ?dbsync_cast({changes_stream, DbName, eof}) end)
         end, ?dbs_to_sync),
 
-    % register hook for #remote_location docs
+    % register hook for #available_blocks docs
     spawn(fun() ->
         timer:sleep(timer:seconds(10)),
         MyProviderId = cluster_manager_lib:get_provider_id(),
         HookFun = fun
-            (?FILES_DB_NAME, _, Uuid, #db_document{record = #remote_location{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
-                {ok, Docs} = dao_lib:apply(dao_vfs, remote_locations_by_file_id, [FileId], 1),
+            (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
+                {ok, Docs} = dao_lib:apply(dao_vfs, available_blockss_by_file_id, [FileId], 1),
                 MyDocs = lists:filter(
-                    fun(#db_document{record = #remote_location{provider_id = Id}}) -> Id == MyProviderId end, Docs),
+                    fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == MyProviderId end, Docs),
                 case MyDocs of
                     [MyDoc] ->
                         [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_binary(Uuid_) == utils:ensure_binary(Uuid) end, Docs),
-                        NewDoc = fslogic_remote_location:mark_other_provider_changes(MyDoc, ChangedDoc),
+                        NewDoc = fslogic_available_blocks:mark_other_provider_changes(MyDoc, ChangedDoc),
 
                         case NewDoc == MyDoc of
                             true -> ok;
-                            _ -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_remote_location_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
+                            _ -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_available_blocks_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
                         end;
                     _ -> ok
                 end;

@@ -30,7 +30,7 @@ doc_to_db(#db_document{record = #file{}}) ->
     ?FILES_DB_NAME;
 doc_to_db(#db_document{record = #file_meta{}}) ->
     ?FILES_DB_NAME;
-doc_to_db(#db_document{record = #remote_location{}}) ->
+doc_to_db(#db_document{record = #available_blocks{}}) ->
     ?FILES_DB_NAME.
 
 %% get_space_ctx/2
@@ -54,6 +54,6 @@ get_space_ctx(#db_document{uuid = UUID, record = #file{extensions = Exts, parent
 get_space_ctx(#db_document{uuid = UUID, record = #file_meta{}}, UUIDs) ->
     {ok, #db_document{} = FileDoc} = dao_lib:apply(dao_vfs, file_by_meta_id, [UUID], 1),
     get_space_ctx(FileDoc, [UUID | UUIDs]);
-get_space_ctx(#db_document{uuid = UUID, record = #remote_location{file_id = FileId}}, UUIDs) ->
+get_space_ctx(#db_document{uuid = UUID, record = #available_blocks{file_id = FileId}}, UUIDs) ->
     {ok, #db_document{} = FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, FileId}], 1),
     get_space_ctx(FileDoc, [UUID | UUIDs]).
