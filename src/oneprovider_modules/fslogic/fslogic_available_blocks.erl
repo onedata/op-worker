@@ -105,6 +105,12 @@ check_if_synchronized(#block_range{from = From, to = To}, #db_document{record = 
             {Id, ranges_struct:minimize(ranges_struct:subtract(PartsOutOfSync, ranges_struct:subtract(PartsOutOfSync, Parts_)))}
         end, OtherDocs).
 
+%% mark_other_provider_changes/2
+%% ====================================================================
+%% @doc Deletes blocks changed by other provider, from local available_blocks map
+%% @end
+-spec mark_other_provider_changes(MyDoc :: available_blocks_doc(), OtherDoc :: available_blocks_doc()) -> available_blocks_doc().
+%% ====================================================================
 mark_other_provider_changes(MyDoc = #db_document{record = #available_blocks{file_parts = MyParts} = Location}, #db_document{record = #available_blocks{file_parts = OtherParts}}) ->
     NewParts = ranges_struct:minimize(ranges_struct:subtract_newer(MyParts, OtherParts)),
     MyDoc#db_document{record = Location#available_blocks{file_parts = NewParts}}.
