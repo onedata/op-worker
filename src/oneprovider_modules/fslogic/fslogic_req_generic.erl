@@ -194,7 +194,7 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
                     case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
                         {ok, Sum} -> Sum + 2;
                         _Other ->
-                            ?error("Error: can not get number of links for file: ~s", [File]),
+                            ?error("Error: can not get number of links for file: ~p", [File]),
                             0
                     end;
                 _ -> 1
