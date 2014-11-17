@@ -36,7 +36,7 @@
 -spec connect() -> ok.
 %% ====================================================================
 connect() ->
-    gen_server:call(?Dispatcher_Name, {gr_channel, ?PROTOCOL_VERSION, connect}).
+    gen_server:call(?Dispatcher_Name, {?GR_CHANNEL_WORKER, ?PROTOCOL_VERSION, connect}).
 
 
 %% disconnect/0
@@ -47,7 +47,7 @@ connect() ->
 -spec disconnect() -> ok.
 %% ====================================================================
 disconnect() ->
-    gen_server:call(?Dispatcher_Name, {gr_channel, ?PROTOCOL_VERSION, disconnect}).
+    gen_server:call(?Dispatcher_Name, {?GR_CHANNEL_WORKER, ?PROTOCOL_VERSION, disconnect}).
 
 
 %% push/1
@@ -58,7 +58,7 @@ disconnect() ->
 -spec push(Msg :: term()) -> ok.
 %% ====================================================================
 push(Msg) ->
-    gen_server:call(?Dispatcher_Name, {gr_channel, ?PROTOCOL_VERSION, {push, Msg}}).
+    gen_server:call(?Dispatcher_Name, {?GR_CHANNEL_WORKER, ?PROTOCOL_VERSION, {push, Msg}}).
 
 
 %% ===================================================================
@@ -70,10 +70,12 @@ push(Msg) ->
 %% @doc {@link worker_plugin_behaviour} callback init/1.
 %% @end
 %% ====================================================================
--spec init(Args :: term()) -> ok | {error, Error :: any()}.
+-spec init(Args :: term()) -> #?GR_CHANNEL_STATE{} | {error, Error :: any()}.
 %% ====================================================================
 init(_) ->
-    #?GR_CHANNEL_STATE{status = not_connected}.
+    {ok, Delay} = application:get_env(?APP_Name, gr_channel_next_connection_attempt_delay),
+    timer:send_after(timer:seconds(Delay), ?GR_CHANNEL_WORKER, {timer, {asynch, ?PROTOCOL_VERSION, check_registration}}),
+    #?GR_CHANNEL_STATE{status = disconnected}.
 
 
 %% handle/2
@@ -149,6 +151,14 @@ handle(_ProtocolVersion, {push, Msg}) ->
         _ -> ok
     end,
     ok;
+
+handle(_ProtocolVersion, check_registration) ->
+    case gen_server:call({global, ?CCM}, get_provider_id) of
+        {ok, ProviderId} when is_binary(ProviderId) ->
+            gen_server:cast(?GR_CHANNEL_WORKER, {asynch, ?PROTOCOL_VERSION, connect});
+        _ ->
+            ok
+    end;
 
 handle(_ProtocolVersion, {'EXIT', Pid, Reason}) ->
     case get_state() of
