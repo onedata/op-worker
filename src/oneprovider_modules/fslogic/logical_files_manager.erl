@@ -1299,7 +1299,7 @@ getfilelocation(File) ->
                 Time = 1000000 * Megaseconds + Seconds,
                 case Time < ValidTo of
                     true -> Location;
-                    false -> undefined
+                    false -> []
                 end;
             _ -> undefined
         end,
@@ -1332,11 +1332,19 @@ getfilelocation(File) ->
 %% ====================================================================
 %% @doc Synchronize given byte range with other providers
 %% @end
--spec synchronize(FullFileName :: string(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+-spec synchronize(File :: file(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
     ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
-synchronize(FullFileName, Offset, Size) ->
-    {Status, TmpAns} = contact_fslogic(#synchronizefileblock{logical_name = FullFileName, offset = Offset, size = Size}),
+synchronize(File, Offset, Size) ->
+    {Status, TmpAns} =
+        case File of
+            {uuid, Uuid} ->
+                case logical_files_manager:get_file_full_name_by_uuid(Uuid) of %todo cache this value somehow
+                    {ok, Name} -> contact_fslogic(#synchronizefileblock{logical_name = Name, offset = Offset, size = Size});
+                    Error -> Error
+                end;
+            _ -> contact_fslogic(#synchronizefileblock{logical_name = File, offset = Offset, size = Size})
+        end,
     case Status of
         ok ->
             case TmpAns#atom.value of
@@ -1353,8 +1361,8 @@ synchronize(FullFileName, Offset, Size) ->
 -spec mark_as_modified(FullFileName :: string(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
     ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
-mark_as_modified(File, Offset, Size) ->
-    {Status, TmpAns} = contact_fslogic(#fileblockmodified{logical_name = File, offset = Offset, size = Size}),
+mark_as_modified(FullFileName, Offset, Size) ->
+    {Status, TmpAns} = contact_fslogic(#fileblockmodified{logical_name = FullFileName, offset = Offset, size = Size}),
     case Status of
         ok ->
             case TmpAns#atom.value of
@@ -1371,8 +1379,8 @@ mark_as_modified(File, Offset, Size) ->
 -spec mark_as_truncated(FullFileName :: string(), Size :: non_neg_integer()) ->
     ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
-mark_as_truncated(File, Size) ->
-    {Status, TmpAns} = contact_fslogic(#filetruncated{logical_name = File, size = Size}),
+mark_as_truncated(FullFileName, Size) ->
+    {Status, TmpAns} = contact_fslogic(#filetruncated{logical_name = FullFileName, size = Size}),
     case Status of
         ok ->
             case TmpAns#atom.value of
