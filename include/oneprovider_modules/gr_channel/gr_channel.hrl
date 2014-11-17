@@ -13,13 +13,9 @@
 -ifndef(GR_CHANNEL_HRL).
 -define(GR_CHANNEL_HRL, 1).
 
--define(GR_CHANNEL_TABLE, gr_channel_table).
+-define(GR_CHANNEL_WORKER, gr_channel).
 -define(GR_CHANNEL_STATE, gr_channel_state).
 
--record(?GR_CHANNEL_STATE, {
-    status :: connected | not_connected,
-    url :: string(),
-    pid :: pid()
-}).
+-record(?GR_CHANNEL_STATE, {status, pid}).
 
 -endif.

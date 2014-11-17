@@ -13,7 +13,7 @@
 -behaviour(websocket_client_handler).
 -author("Krzysztof Trzepla").
 
--include("registered_names.hrl").
+-include("oneprovider_modules/gr_channel/gr_channel.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% WebSocket client handler callbacks
@@ -35,7 +35,7 @@
     KeepAlive :: integer().
 %% ====================================================================
 init(_Args, _Req) ->
-    gen_server:call(?Dispatcher_Name, {gr_channel, ?PROTOCOL_VERSION, connected}),
+    gen_server:call(?GR_CHANNEL_WORKER, {asynch, ?PROTOCOL_VERSION, {connected, self()}}),
     {ok, state}.
 
 
@@ -71,11 +71,11 @@ websocket_handle(_InFrame, _Req, State) ->
     Payload :: binary(),
     OutFrame :: cowboy_websocket:frame().
 %% ====================================================================
-websocket_info(terminate, _Req, State) ->
-    {close, <<>>, State};
-
 websocket_info({push, Msg}, _Req, State) ->
     {reply, {binary, Msg}, State};
+
+websocket_info(disconnect, _Req, State) ->
+    {close, <<>>, State};
 
 websocket_info(_Info, _Req, State) ->
     {ok, State}.
@@ -93,6 +93,6 @@ websocket_info(_Info, _Req, State) ->
     Req :: websocket_req:req(),
     State :: any().
 %% ====================================================================
-websocket_terminate(Reason, _Req, _State) ->
-    gen_server:call(?Dispatcher_Name, {gr_channel, ?PROTOCOL_VERSION, {connection_lost, Reason}}),
+websocket_terminate(_Reason, _Req, _State) ->
+%%     gen_server:call(?Dispatcher_Name, {gr_channel, ?PROTOCOL_VERSION, {connection_lost, Reason}}),
     ok.

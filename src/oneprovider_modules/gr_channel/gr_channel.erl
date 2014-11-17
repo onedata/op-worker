@@ -73,9 +73,7 @@ push(Msg) ->
 -spec init(Args :: term()) -> ok | {error, Error :: any()}.
 %% ====================================================================
 init(_) ->
-    {ok, URL} = application:get_env(?APP_Name, global_registry_channel_url),
-    ets:new(?GR_CHANNEL_TABLE, [set, named_table, public]),
-    ets:insert(?GR_CHANNEL_TABLE, #?GR_CHANNEL_STATE{status = not_connected, url = URL}).
+    #?GR_CHANNEL_STATE{status = not_connected}.
 
 
 %% handle/2
@@ -85,7 +83,7 @@ init(_) ->
 %% ====================================================================
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
     Request :: ping | healthcheck | get_version |
-    {update_state, list(), list()} |
+    {set_state, list(), list()} |
     {get_worker, atom()} |
     get_nodes,
     Result :: ok | {error, Error} | pong | Version,
@@ -102,54 +100,67 @@ handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
 
 handle(_ProtocolVersion, connect) ->
-    [State] = ets:lookup(?GR_CHANNEL_TABLE, ?GR_CHANNEL_STATE),
-    case State of
-        #?GR_CHANNEL_STATE{status = not_connected, url = URL} ->
+    case get_state() of
+        #?GR_CHANNEL_STATE{status = connected} ->
+            ok;
+        _ ->
+            {ok, URL} = application:get_env(?APP_Name, global_registry_channel_url),
             {ok, Delay} = application:get_env(?APP_Name, gr_channel_next_connection_attempt_delay),
             Opts = [{keyfile, gr_plugin:get_key_path()}, {certfile, gr_plugin:get_cert_path()}],
-            case websocket_client:start_link(URL, gr_channel_handler, [self()], Opts) of
+            case websocket_client:start_link(URL, gr_channel_handler, [], Opts) of
                 {ok, Pid} ->
-                    ets:insert(?GR_CHANNEL_TABLE, State#?GR_CHANNEL_STATE{pid = Pid});
+                    set_state(#?GR_CHANNEL_STATE{status = connecting, pid = Pid}),
+                    gen_server:cast(?GR_CHANNEL_WORKER, {link_process, Pid});
                 Other ->
                     ?error("Cannot establish connection to Global Registry due to: ~p."
                     " Reconnecting in ~p seconds...", [Other, Delay]),
-                    timer:apply_after(timer:seconds(Delay), gen_server, call, [?Dispatcher_Name, {gr_channel, ?PROTOCOL_VERSION, connect}])
-            end;
-        _ -> ok
+                    timer:send_after(timer:seconds(Delay), ?GR_CHANNEL_WORKER, {timer, {asynch, ?PROTOCOL_VERSION, connect}})
+            end
     end,
     ok;
 
 handle(_ProtocolVersion, disconnect) ->
-    [State] = ets:lookup(?GR_CHANNEL_TABLE, ?GR_CHANNEL_STATE),
+    State = get_state(),
     case State of
-        #?GR_CHANNEL_STATE{status = connected, pid = Pid} -> Pid ! terminate;
-        _ -> ok
+        #?GR_CHANNEL_STATE{status = connected, pid = Pid} ->
+            set_state(State#?GR_CHANNEL_STATE{status = disconnecting}),
+            Pid ! disconnect;
+        #?GR_CHANNEL_STATE{status = connecting, pid = Pid} ->
+            set_state(State#?GR_CHANNEL_STATE{status = disconnecting}),
+            Pid ! disconnect;
+        _ ->
+            ok
     end;
 
-handle(_ProtocolVersion, connected) ->
+handle(_ProtocolVersion, {connected, Pid}) ->
     ?info("Connection to Global Registry established successfully."),
-    [State] = ets:lookup(?GR_CHANNEL_TABLE, ?GR_CHANNEL_STATE),
-    ets:insert(?GR_CHANNEL_TABLE, State#?GR_CHANNEL_STATE{status = connected}),
-    ok;
-
-handle(_ProtocolVersion, {connection_lost, {normal, _}}) ->
-    ?error("Connection to Global Registry closed."),
-    [State] = ets:lookup(?GR_CHANNEL_TABLE, ?GR_CHANNEL_STATE),
-    ets:insert(?GR_CHANNEL_TABLE, State#?GR_CHANNEL_STATE{status = not_connected, pid = undefined}),
-    ok;
-
-handle(_ProtocolVersion, {connection_lost, Reason}) ->
-    ?error("Connection to Global Registry lost due to: ~p. Reconnecting...", [Reason]),
-    [State] = ets:lookup(?GR_CHANNEL_TABLE, ?GR_CHANNEL_STATE),
-    ets:insert(?GR_CHANNEL_TABLE, State#?GR_CHANNEL_STATE{status = not_connected, pid = undefined}),
-    gen_server:call(?Dispatcher_Name, {gr_channel, ?PROTOCOL_VERSION, connect}),
+    State = get_state(),
+    case State of
+        #?GR_CHANNEL_STATE{status = connecting, pid = Pid} ->
+            set_state(State#?GR_CHANNEL_STATE{status = connected});
+        _ ->
+            ok
+    end,
     ok;
 
 handle(_ProtocolVersion, {push, Msg}) ->
-    [State] = ets:lookup(?GR_CHANNEL_TABLE, ?GR_CHANNEL_STATE),
-    case State of
+    case get_state() of
         #?GR_CHANNEL_STATE{status = connected, pid = Pid} -> Pid ! {push, Msg};
         _ -> ok
+    end,
+    ok;
+
+handle(_ProtocolVersion, {'EXIT', Pid, Reason}) ->
+    case get_state() of
+        #?GR_CHANNEL_STATE{status = disconnecting, pid = Pid} ->
+            ?info("Connection to Global Registry closed."),
+            set_state(#?GR_CHANNEL_STATE{status = disconnected, pid = undefined});
+        #?GR_CHANNEL_STATE{pid = Pid} ->
+            ?error("Connection to Global Registry lost due to: ~p. Reconnecting...", [Reason]),
+            set_state(#?GR_CHANNEL_STATE{status = disconnected, pid = undefined}),
+            gen_server:cast(?GR_CHANNEL_WORKER, {asynch, ?PROTOCOL_VERSION, connect});
+        _ ->
+            ok
     end,
     ok.
 
@@ -163,15 +174,30 @@ handle(_ProtocolVersion, {push, Msg}) ->
     Result :: ok.
 %% ====================================================================
 cleanup() ->
-    [State] = ets:lookup(?GR_CHANNEL_TABLE, ?GR_CHANNEL_STATE),
-    case State of
-        #?GR_CHANNEL_STATE{status = connected, pid = Pid} -> Pid ! terminate;
-        _ -> ok
-    end,
-    ets:delete(?GR_CHANNEL_TABLE),
     ok.
 
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+%% set_state/1
+%% ====================================================================
+%% @doc Sets gr_channel worker state.
+%% @end
+%% ====================================================================
+-spec set_state(State :: #?GR_CHANNEL_STATE{}) -> ok.
+%% ====================================================================
+set_state(State) ->
+    gen_server:call(?GR_CHANNEL_WORKER, {updatePlugInState, State}).
+
+
+%% get_state/0
+%% ====================================================================
+%% @doc Gets gr_channel worker state.
+%% @end
+%% ====================================================================
+-spec get_state() -> State :: #?GR_CHANNEL_STATE{}.
+%% ====================================================================
+get_state() ->
+    gen_server:call(?GR_CHANNEL_WORKER, getPlugInState).
