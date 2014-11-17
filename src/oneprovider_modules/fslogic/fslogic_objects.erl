@@ -323,7 +323,7 @@ delete_old_descriptors(ProtocolVersion, Time) ->
 %% ====================================================================
 get_available_blocks(FullFileName) ->
     {ok, #db_document{uuid = FileId}} = get_file(FullFileName),
-    {ok, RemoteLocationList} = dao_lib:apply(dao_vfs, available_blockss_by_file_id, [FileId], fslogic_context:get_protocol_version()),
+    {ok, RemoteLocationList} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], fslogic_context:get_protocol_version()),
     ProviderId = cluster_manager_lib:get_provider_id(),
     CreatedDocs = case lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationList) of
         [] ->

@@ -527,7 +527,7 @@ register_available_blocks_hook() ->
     MyProviderId = cluster_manager_lib:get_provider_id(),
     HookFun = fun
         (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
-            {ok, Docs} = dao_lib:apply(dao_vfs, available_blockss_by_file_id, [FileId], 1),
+            {ok, Docs} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], 1),
             MyDocs = lists:filter(
                 fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == MyProviderId end, Docs),
             case MyDocs of
