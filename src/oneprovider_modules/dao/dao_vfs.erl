@@ -472,7 +472,7 @@ remove_file(File) ->
             ?warning("Cannot remove file_locations ~p due to error: ~p", [{file_id, FData#db_document.uuid}, Reason4])
     end,
 
-    %% Remove remote locations
+    %% Remove available_blocks
     case remove_available_blocks({file_id, FData#db_document.uuid}) of
         ok -> ok;
         {error, Reason5} ->

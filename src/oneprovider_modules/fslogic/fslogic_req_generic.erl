@@ -463,7 +463,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     lists:foreach(
         fun({Id, Ranges}) ->
             lists:foreach(fun(Range = #range{from = From, to = To}) ->
-                ?info("Synchronizing blocks: ~p of file ~p", [Range, FullFileName]),
+                ?info("Synchronizing blocks: ~p of file ~s", [Range, FullFileName]),
                 {ok, _} = gateway:do_stuff(Id, #fetchrequest{file_id = FileId, offset = From*?remote_block_size, size = (To-From+1)*?remote_block_size})
             end, Ranges)
         end, OutOfSyncList),
