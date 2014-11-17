@@ -94,6 +94,7 @@ handle(ProtocolVersion, Request) ->
 
 
 handle2(_ProtocolVersion, {register_hook, Fun}) ->
+    ct:print("REG2"),
     dbsync_hooks:register(Fun);
 
 handle2(_ProtocolVersion, {remove_hook, HookId}) ->
@@ -524,9 +525,11 @@ replicate_doc(SpaceId, #db_document{uuid = DocUUID} = Doc) ->
 
 register_available_blocks_hook() ->
     % register hook for #available_blocks docs
+    ct:print("REG1"),
     MyProviderId = cluster_manager_lib:get_provider_id(),
     HookFun = fun
         (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
+            ct:print("FOUND1"),
             {ok, Docs} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], 1),
             MyDocs = lists:filter(
                 fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == MyProviderId end, Docs),
@@ -541,7 +544,9 @@ register_available_blocks_hook() ->
                     end;
                 _ -> ok
             end;
-        (_, _, _, _) -> ok
+        (_, _, _, _) ->
+            ct:print("FOUND2"),
+            ok
     end,
 
     {ok, Delay} = application:get_env(?APP_Name, dbsync_hook_registering_delay),
