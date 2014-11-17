@@ -62,30 +62,7 @@ init(_Args) ->
             spawn(fun() -> timer:sleep(timer:seconds(1)), ?dbsync_cast({changes_stream, DbName, eof}) end)
         end, ?dbs_to_sync),
 
-    % register hook for #available_blocks docs
-    spawn(fun() ->
-        timer:sleep(timer:seconds(10)),
-        MyProviderId = cluster_manager_lib:get_provider_id(),
-        HookFun = fun
-            (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
-                {ok, Docs} = dao_lib:apply(dao_vfs, available_blockss_by_file_id, [FileId], 1),
-                MyDocs = lists:filter(
-                    fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == MyProviderId end, Docs),
-                case MyDocs of
-                    [MyDoc] ->
-                        [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_binary(Uuid_) == utils:ensure_binary(Uuid) end, Docs),
-                        NewDoc = fslogic_available_blocks:mark_other_provider_changes(MyDoc, ChangedDoc),
-
-                        case NewDoc == MyDoc of
-                            true -> ok;
-                            _ -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_available_blocks_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
-                        end;
-                    _ -> ok
-                end;
-            (_, _, _, _) -> ok
-        end,
-        ?dbsync_cast({register_hook, HookFun})
-    end),
+    register_available_blocks_hook(),
 
     [].
 
@@ -544,3 +521,28 @@ replicate_doc(SpaceId, #db_document{uuid = DocUUID} = Doc) ->
             {error, Reason2}
 
     end.
+
+register_available_blocks_hook() ->
+    % register hook for #available_blocks docs
+    MyProviderId = cluster_manager_lib:get_provider_id(),
+    HookFun = fun
+        (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
+            {ok, Docs} = dao_lib:apply(dao_vfs, available_blockss_by_file_id, [FileId], 1),
+            MyDocs = lists:filter(
+                fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == MyProviderId end, Docs),
+            case MyDocs of
+                [MyDoc] ->
+                    [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_binary(Uuid_) == utils:ensure_binary(Uuid) end, Docs),
+                    NewDoc = fslogic_available_blocks:mark_other_provider_changes(MyDoc, ChangedDoc),
+
+                    case NewDoc == MyDoc of
+                        true -> ok;
+                        _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, {save_available_blocks_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
+                    end;
+                _ -> ok
+            end;
+        (_, _, _, _) -> ok
+    end,
+
+    {ok, Delay} = application:get_env(?APP_Name, dbsync_hook_registering_delay),
+    erlang:send_after(Delay, self(), {timer, {asynch, 1, {register_hook, HookFun}}}).
