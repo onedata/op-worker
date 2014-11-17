@@ -14,6 +14,7 @@
 
 -include("oneprovider_modules/dao/dao.hrl").
 -include("oneprovider_modules/dao/dao_types.hrl").
+-include("registered_names.hrl").
 -include_lib("dao/include/couch_db.hrl").
 -include_lib("dao/include/common.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -137,7 +138,7 @@ save_fuse_session(#fuse_session{} = Env) ->
     save_fuse_session(#db_document{record = Env});
 save_fuse_session(#db_document{record = #fuse_session{valid_to = OldTime}} = Doc) ->
     SessionExpireTime =
-        case application:get_env(oneprovider_node, fuse_session_expire_time) of
+        case application:get_env(?APP_Name, fuse_session_expire_time) of
             {ok, ETime} -> ETime;
             _           -> 60*60*3 %% Hardcoded 3h, just in case (e.g. eunit tests dont use env variables)
         end,
@@ -389,7 +390,7 @@ clear_sessions(Sessions) ->
             receive
                 {Pid, ok} -> %% Sessions seems to be active, extend it's expire time
                     {ok, Doc} = get_fuse_session(SessID, {stale, update_before}), %% Get fresh session document
-                    {ok, SessionExpireTime} = application:get_env(oneprovider_node, fuse_session_expire_time),
+                    {ok, SessionExpireTime} = application:get_env(?APP_Name, fuse_session_expire_time),
                     NewTime = utils:time() + SessionExpireTime,
                     NewDoc = Doc#db_document{record = Doc#db_document.record#fuse_session{valid_to = NewTime}}, %% Update expire time
                     save_fuse_session(NewDoc), %% Save updated document
