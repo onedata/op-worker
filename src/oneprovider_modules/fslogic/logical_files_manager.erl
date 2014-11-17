@@ -592,13 +592,17 @@ write(File, Buf) ->
                     Res = storage_files_manager:write(Storage_helper_info, FileId, Buf),
                     case {is_integer(Res), event_production_enabled("write_event")} of
                         {true, true} ->
-                            {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File),
-                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"bytes", Res}, {"blocks", [{FileSize, Res}]}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"bytes", Res}, {"blocks", [{FileSize, Res}]}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
+                            % async get attrs and send wite event
+                            apply(fun() ->
+                                {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File),
+                                mark_as_truncated(File, FileSize), %todo get this info from event handler
+                                WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
+                                    {"bytes", Res}, {"blocks", [{FileSize, Res}]}],
+                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+                                WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
+                                    {"bytes", Res}, {"blocks", [{FileSize, Res}]}],
+                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}})
+                            end,[]);
                         _ ->
                             ok
                     end,
@@ -646,6 +650,9 @@ write(File, Offset, Buf, EventPolicy) ->
                     %% TODO - check if asynchronous processing needed
                     case {is_integer(Res), event_production_enabled("write_event"), EventPolicy} of
                         {true, true, generate_events} ->
+                            % async infrom other providers about modification
+                            apply(fun() -> mark_as_modified(File, Offset, byte_size(Buf)) end,[]), %todo get this info from events
+
                             WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
                                 {"count", Res}, {"blocks", [{Offset, Res}]}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
@@ -686,6 +693,9 @@ write_from_stream(File, Buf) ->
                     Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
                     case {is_integer(Res), event_production_enabled("write_event")} of
                         {true, true} ->
+                            % async infrom other providers about modification
+                            apply(fun() -> mark_as_modified(File, Offset, byte_size(Buf)) end,[]), %todo get this info from events
+
                             WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
                                 {"count", Res}, {"blocks", [{Offset, Res}]}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
@@ -772,7 +782,9 @@ truncate(File, Size) ->
             Res = storage_files_manager:truncate(Storage_helper_info, FileId, Size),
             case {Res, event_production_enabled("truncate_event")} of
                 {ok, true} ->
-                    %todo catch truncate events and modify available blocks
+                    % async infrom other providers about modification
+                    apply(fun() -> mark_as_truncated(File, Size) end,[]),  %todo get this info from events
+
                     TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File}],
                     gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}});
                 _ ->
