@@ -1341,7 +1341,7 @@ synchronize(File, Offset, Size) ->
             {uuid, Uuid} ->
                 case logical_files_manager:get_file_full_name_by_uuid(Uuid) of %todo cache this value somehow
                     {ok, Name} -> contact_fslogic(#synchronizefileblock{logical_name = Name, offset = Offset, size = Size});
-                    Error -> Error
+                    Error_ -> Error_
                 end;
             _ -> contact_fslogic(#synchronizefileblock{logical_name = File, offset = Offset, size = Size})
         end,
