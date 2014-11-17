@@ -599,10 +599,10 @@ write(File, Buf) ->
                                 {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File),
                                 mark_as_truncated(File, FileSize), %todo get this info from event handler
                                 WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{FileSize, Res}]}],
+                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}],
                                 gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
                                 WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{FileSize, Res}]}],
+                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}],
                                 gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}})
                             end);
                         _ ->
