@@ -557,7 +557,7 @@ read(File, Offset, Size, EventPolicy) ->
                         {true, generate_events} ->
                             % TODO: add filePath
                             ReadEvent = [{"type", "read_event"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"bytes", Bytes}, {"blocks", [{Offset, Bytes}]}],
+                                {"bytes", byte_size(Bytes)}, {"blocks", [{Offset, byte_size(Bytes)}]}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEvent}});
                         _ ->
                             ok
