@@ -593,9 +593,9 @@ write(File, Buf) ->
                     case {is_integer(Res), event_production_enabled("write_event")} of
                         {true, true} ->
                             % async get attrs and send wite event
-                            ct:print("DBG1 ~p",[logical_files_manager:getfileattr(File)]),
+                            Ctx = fslogic_context:get_user_context(),
                             spawn(fun() ->
-                                ct:print("DBG2 ~p",[logical_files_manager:getfileattr(File)]),
+                                fslogic_context:set_user_context(Ctx),
                                 {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File),
                                 mark_as_truncated(File, FileSize), %todo get this info from event handler
                                 WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
