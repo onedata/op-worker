@@ -12,6 +12,7 @@
 #include "nifpp.h"
 #include "rt_block.h"
 #include "rt_interval.h"
+#include "rt_container.h"
 
 #include <map>
 #include <set>
@@ -24,36 +25,26 @@ namespace provider {
 
 /**
  * The rt_heap class.
- * rt_heap object represents RTransfer heap that allows to push and fetch
+ * rt_heap object represents RTransfer heap that allows to push and pop
  * rt_blocks
  */
-class rt_heap {
+class rt_heap : public rt_container {
 public:
     /**
-     * rt_heap constructor.
-     * Constructs RTransfer heap.
-     * @param block_size maximal size of block stored on the rt_heap
+     * @copydoc rt_container::rt_container
      */
-    rt_heap(ErlNifUInt64 block_size) : block_size_(block_size) {}
-
-    /// Getter for maximal block size
-    ErlNifUInt64 block_size() const { return block_size_; }
+    rt_heap(ErlNifUInt64 block_size) : rt_container(block_size) {}
+    /**
+     * @copydoc rt_container::push
+     */
+    virtual void push(const rt_block &block) override;
 
     /**
-     * Pushes block on the rt_heap. If block size is bigger than maximal
-     * RTransfer block size it is split.
-     * @param block to be pushed
+     * @copydoc rt_container::pop
      */
-    void push(const rt_block &block);
-
-    /**
-     * Fetches block from the rt_heap
-     * @return fetched block
-     */
-    rt_block fetch();
+    virtual rt_block pop() override;
 
 private:
-    ErlNifUInt64 block_size_;
     std::map<std::string, std::map<rt_interval, std::set<rt_block>::iterator>>
         files_blocks_;
     std::set<rt_block> blocks_;

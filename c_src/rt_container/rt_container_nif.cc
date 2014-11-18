@@ -8,17 +8,19 @@
 
 #include "nifpp.h"
 #include "rt_heap.h"
+#include "rt_container.h"
 
 #include <functional>
 #include <string>
 #include <vector>
 #include <set>
+#include <memory>
 
 using namespace one::provider;
 
 static int load(ErlNifEnv *env, void **priv, ERL_NIF_TERM load_info)
 {
-    nifpp::register_resource<rt_heap>(env, nullptr, "rt_heap");
+    nifpp::register_resource< std::shared_ptr<rt_container> >(env, nullptr, "rt_container");
     return 0;
 }
 
@@ -28,10 +30,10 @@ static ERL_NIF_TERM init_nif(ErlNifEnv *env, int argc,
     try {
         ErlNifUInt64 block_size;
         nifpp::get_throws(env, argv[0], block_size);
-        auto heap = nifpp::construct_resource<rt_heap>(block_size);
+        auto heap = nifpp::construct_resource< std::shared_ptr<rt_container> >(new rt_heap(block_size));
         return nifpp::make(env,
                            std::make_tuple(nifpp::str_atom("ok"),
-                                           nifpp::make(env, std::move(heap))));
+                                           nifpp::make(env, heap)));
     }
     catch (...) {
         return enif_make_badarg(env);
@@ -42,7 +44,7 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
                              const ERL_NIF_TERM argv[])
 {
     try {
-        nifpp::resource_ptr<rt_heap> heap;
+        nifpp::resource_ptr< std::shared_ptr<rt_container> > heap;
         nifpp::str_atom record_name;
         std::string file_id;
         ErlNifUInt64 offset, size;
@@ -56,7 +58,7 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
         nifpp::get_throws(env, argv[1], record);
 
         rt_block block(file_id, offset, size, priority, pids);
-        heap->push(block);
+        (*heap)->push(block);
 
         return nifpp::make(env, nifpp::str_atom("ok"));
     }
@@ -70,14 +72,14 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ERL_NIF_TERM fetch_nif(ErlNifEnv *env, int argc,
+static ERL_NIF_TERM pop_nif(ErlNifEnv *env, int argc,
                               const ERL_NIF_TERM argv[])
 {
     try {
-        nifpp::resource_ptr<rt_heap> heap;
+        nifpp::resource_ptr< std::shared_ptr<rt_container> > heap;
         nifpp::get_throws(env, argv[0], heap);
 
-        rt_block block = heap->fetch();
+        rt_block block = (*heap)->pop();
         auto record = std::make_tuple(
             nifpp::str_atom("rt_block"), block.file_id(), block.offset(),
             block.size(), block.priority(), block.pids());
@@ -96,6 +98,6 @@ static ERL_NIF_TERM fetch_nif(ErlNifEnv *env, int argc,
 
 static ErlNifFunc nif_funcs[] = {{"init_nif", 1, init_nif},
                                  {"push_nif", 2, push_nif},
-                                 {"fetch_nif", 1, fetch_nif}};
+                                 {"pop_nif", 1, pop_nif}};
 
-ERL_NIF_INIT(rt_heap, nif_funcs, load, NULL, NULL, NULL)
+ERL_NIF_INIT(rt_container, nif_funcs, load, NULL, NULL, NULL)

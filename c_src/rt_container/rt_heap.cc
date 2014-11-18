@@ -26,7 +26,7 @@ void rt_heap::push(const rt_block &block)
             last_block_size, block.priority(), block.pids(), block.counter()));
 }
 
-rt_block rt_heap::fetch()
+rt_block rt_heap::pop()
 {
     if (blocks_.empty())
         throw std::runtime_error("Empty heap");

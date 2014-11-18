@@ -5,16 +5,16 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc This module allows for management of RTransfer heap.
+%% @doc This module allows for management of RTransfer container.
 %% @end
 %% ===================================================================
--module(rt_heap).
+-module(rt_container).
 
 -include("registered_names.hrl").
--include("oneprovider_modules/rtransfer/rt_heap.hrl").
+-include("oneprovider_modules/rtransfer/rt_container.hrl").
 
 %% API
--export([new/0, new/1, new/2, new/3, delete/1, push/2, fetch/1, fetch/2]).
+-export([new/0, new/1, new/2, new/3, delete/1, push/2, pop/1, pop/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -30,8 +30,8 @@
 
 %% new/0
 %% ====================================================================
-%% @doc Creates RTransfer heap with default prefix and maximal RTransfer
-%% block size.
+%% @doc Creates RTransfer container with default prefix and maximal
+%% RTransfer block size.
 %% @end
 -spec new() -> {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
@@ -42,23 +42,23 @@ new() ->
 
 %% new/1
 %% ====================================================================
-%% @doc Same as new/0, but allows to register heap under given name.
+%% @doc Same as new/0, but allows to register container under given name.
 %% @end
--spec new(HeapName) -> {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
-    HeapName :: {local, Name} | {global, GlobalName} | {via, Module, ViaName},
+-spec new(ContainerName) -> {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
+    ContainerName :: {local, Name} | {global, GlobalName} | {via, Module, ViaName},
     Name :: atom(),
     Module :: module(),
     GlobalName :: term(),
     ViaName :: term().
 %% ====================================================================
-new(HeapName) ->
+new(ContainerName) ->
     {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
-    new(HeapName, ".", BlockSize).
+    new(ContainerName, ".", BlockSize).
 
 
 %% new/2
 %% ====================================================================
-%% @doc Creates RTransfer heap.
+%% @doc Creates RTransfer container.
 %% @end
 -spec new(Prefix :: string(), BlockSize :: integer()) ->
     {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
@@ -69,26 +69,26 @@ new(Prefix, BlockSize) ->
 
 %% new/3
 %% ====================================================================
-%% @doc Creates RTransfer heap and registeres it under given name.
+%% @doc Creates RTransfer container and registeres it under given name.
 %% @end
--spec new(HeapName, Prefix :: string(), BlockSize :: integer()) ->
+-spec new(ContainerName, Prefix :: string(), BlockSize :: integer()) ->
     {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
-    HeapName :: {local, Name} | {global, GlobalName} | {via, Module, ViaName},
+    ContainerName :: {local, Name} | {global, GlobalName} | {via, Module, ViaName},
     Name :: atom(),
     Module :: module(),
     GlobalName :: term(),
     ViaName :: term().
 %% ====================================================================
-new(HeapName, Prefix, BlockSize) ->
-    gen_server:start_link(HeapName, ?MODULE, [Prefix, BlockSize], []).
+new(ContainerName, Prefix, BlockSize) ->
+    gen_server:start_link(ContainerName, ?MODULE, [Prefix, BlockSize], []).
 
 
 %% push/2
 %% ====================================================================
-%% @doc Pushes block on RTransfer heap.
+%% @doc Pushes block on RTransfer container.
 %% @end
--spec push(HeapRef, Block :: #rt_block{}) -> ok when
-    HeapRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
+-spec push(ContainerRef, Block :: #rt_block{}) -> ok when
+    ContainerRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
     Pid :: pid(),
     Name :: atom(),
     Node :: node(),
@@ -96,16 +96,16 @@ new(HeapName, Prefix, BlockSize) ->
     GlobalName :: term(),
     ViaName :: term().
 %% ====================================================================
-push(HeapRef, Block) ->
-    gen_server:cast(HeapRef, {push, Block}).
+push(ContainerRef, Block) ->
+    gen_server:cast(ContainerRef, {push, Block}).
 
 
-%% fetch/1
+%% pop/1
 %% ====================================================================
-%% @doc Fetches block from RTransfer heap.
+%% @doc Popes block from RTransfer container.
 %% @end
--spec fetch(HeapRef) -> {ok, #rt_block{}} | {error, Error :: string()} when
-    HeapRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
+-spec pop(ContainerRef) -> {ok, #rt_block{}} | {error, Error :: string()} when
+    ContainerRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
     Pid :: pid(),
     Name :: atom(),
     Node :: node(),
@@ -113,16 +113,16 @@ push(HeapRef, Block) ->
     GlobalName :: term(),
     ViaName :: term().
 %% ====================================================================
-fetch(HeapRef) ->
-    fetch(HeapRef, fun erlang:is_process_alive/1).
+pop(ContainerRef) ->
+    pop(ContainerRef, fun erlang:is_process_alive/1).
 
 
-%% fetch/2
+%% pop/2
 %% ====================================================================
-%% @doc Fetches block from RTransfer heap and allows to fillter pids
+%% @doc Popes block from RTransfer container and allows to fillter pids
 %% @end
--spec fetch(HeapRef, PidsFilterFunction) -> {ok, #rt_block{}} | {error, Error :: string()} when
-    HeapRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
+-spec pop(ContainerRef, PidsFilterFunction) -> {ok, #rt_block{}} | {error, Error :: string()} when
+    ContainerRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
     PidsFilterFunction :: function(), %% fun(Pid) -> true | false;
     Pid :: pid(),
     Name :: atom(),
@@ -131,8 +131,8 @@ fetch(HeapRef) ->
     GlobalName :: term(),
     ViaName :: term().
 %% ====================================================================
-fetch(HeapRef, PidsFilterFunction) ->
-    case gen_server:call(HeapRef, fetch) of
+pop(ContainerRef, PidsFilterFunction) ->
+    case gen_server:call(ContainerRef, pop) of
         {ok, #rt_block{pids = Pids} = Block} ->
             {ok, Block#rt_block{pids = lists:filter(fun(Pid) ->
                 PidsFilterFunction(Pid)
@@ -144,10 +144,10 @@ fetch(HeapRef, PidsFilterFunction) ->
 
 %% delete/1
 %% ====================================================================
-%% @doc Deletes RTransfer heap.
+%% @doc Deletes RTransfer container.
 %% @end
--spec delete(HeapRef) -> ok when
-    HeapRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
+-spec delete(ContainerRef) -> ok | {error, Reason :: term()} when
+    ContainerRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
     Pid :: pid(),
     Name :: atom(),
     Node :: node(),
@@ -155,8 +155,8 @@ fetch(HeapRef, PidsFilterFunction) ->
     GlobalName :: term(),
     ViaName :: term().
 %% ====================================================================
-delete(HeapRef) ->
-    gen_server:call(HeapRef, delete).
+delete(ContainerRef) ->
+    gen_server:call(ContainerRef, delete).
 
 
 %%%===================================================================
@@ -178,9 +178,9 @@ delete(HeapRef) ->
 %% ====================================================================
 init([Prefix, BlockSize]) ->
     try
-        erlang:load_nif(filename:join(Prefix, "c_lib/rt_heap_drv"), 0),
-        {ok, Heap} = init_nif(BlockSize),
-        {ok, #state{heap = Heap}}
+        erlang:load_nif(filename:join(Prefix, "c_lib/rt_container_drv"), 0),
+        {ok, Container} = init_nif(BlockSize),
+        {ok, #state{container = Container}}
     catch
         _:Reason -> {stop, Reason}
     end.
@@ -204,8 +204,8 @@ init([Prefix, BlockSize]) ->
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
 %% ====================================================================
-handle_call(fetch, _From, #state{heap = Heap} = State) ->
-    {reply, fetch_nif(Heap), State};
+handle_call(pop, _From, #state{container = Container} = State) ->
+    {reply, pop_nif(Container), State};
 
 handle_call(delete, _From, State) ->
     {stop, normal, ok, State};
@@ -226,8 +226,8 @@ handle_call(_Request, _From, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({push, Block}, #state{heap = Heap} = State) ->
-    push_nif(Heap, Block),
+handle_cast({push, Block}, #state{container = Container} = State) ->
+    push_nif(Container, Block),
     {noreply, State};
 
 handle_cast(_Request, State) ->
@@ -282,9 +282,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% init_nif/0
 %% ====================================================================
-%% @doc Initializes RTransfer heap using NIF library.
+%% @doc Initializes RTransfer container using NIF library.
 %% @end
--spec init_nif(BlockSize :: integer()) -> {ok, Heap :: term()} | no_return().
+-spec init_nif(BlockSize :: integer()) -> {ok, Container :: term()} | no_return().
 %% ====================================================================
 init_nif(_BlockSize) ->
     throw("NIF library not loaded.").
@@ -292,19 +292,19 @@ init_nif(_BlockSize) ->
 
 %% push_nif/2
 %% ====================================================================
-%% @doc Pushes block on RTransfer heap using NIF library.
+%% @doc Pushes block on RTransfer container using NIF library.
 %% @end
--spec push_nif(Heap :: term(), Block :: #rt_block{}) -> ok | no_return().
+-spec push_nif(Container :: term(), Block :: #rt_block{}) -> ok | no_return().
 %% ====================================================================
-push_nif(_Heap, _Block) ->
+push_nif(_Container, _Block) ->
     throw("NIF library not loaded.").
 
 
-%% fetch_nif/1
+%% pop_nif/1
 %% ====================================================================
-%% @doc Fetches block from RTransfer heap using NIF library.
+%% @doc Popes block from RTransfer container using NIF library.
 %% @end
--spec fetch_nif(Heap :: term()) -> {ok, #rt_block{}} | {error, Error :: string()} | no_return().
+-spec pop_nif(Container :: term()) -> {ok, #rt_block{}} | {error, Error :: string()} | no_return().
 %% ====================================================================
-fetch_nif(_Heap) ->
+pop_nif(_Container) ->
     throw("NIF library not loaded.").
