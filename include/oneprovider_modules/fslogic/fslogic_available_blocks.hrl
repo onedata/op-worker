@@ -12,6 +12,9 @@
 
 -include("oneprovider_modules/dao/dao_vfs.hrl").
 
+-ifndef(FSLOGIC_AVAILABLE_BLOCKS_HRL).
+-define(FSLOGIC_AVAILABLE_BLOCKS_HRL, 1).
+
 % 'remote_block_size' defines the size of minimal file unit in synchronization process.
 % The data that needs to be transfered during file synchronization must be multiple
 % of this value in order to be sure that everything is up to date
@@ -25,3 +28,5 @@
 
 % Range of file value given in remote_blocks ('from' and 'to' are inslusive)
 -record(block_range, {from = 0, to = 0}).
+
+-endif.
