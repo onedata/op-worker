@@ -15,6 +15,7 @@
 
 #include <map>
 #include <set>
+#include <list>
 #include <string>
 #include <stdexcept>
 

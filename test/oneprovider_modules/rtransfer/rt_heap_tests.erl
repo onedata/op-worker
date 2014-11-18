@@ -40,7 +40,8 @@ rt_heap_test_() ->
             {"should change priority 2", fun should_change_priority_2/0},
             {"should change priority 3", fun should_change_priority_3/0},
             {"should change priority 4", fun should_change_priority_4/0},
-            {"should change priority 5", fun should_change_priority_5/0}
+            {"should change priority 5", fun should_change_priority_5/0},
+            {"should concatenate block pids", fun should_concatenate_block_pids/0}
         ]
     }.
 
@@ -206,5 +207,20 @@ should_change_priority_5() ->
     ?assertEqual(ok, rt_heap:push(?TEST_HEAP, Block2#rt_block{priority = 1})),
     ?assertEqual({ok, Block1#rt_block{size = 8, priority = 2}}, rt_heap:fetch(?TEST_HEAP)),
     ?assertEqual({error, "Empty heap"}, rt_heap:fetch(?TEST_HEAP)).
+
+should_concatenate_block_pids() ->
+    Pid1 = list_to_pid("<0.1.0>"),
+    Pid2 = list_to_pid("<0.2.0>"),
+    PidsFilterFunction = fun(_) -> true end,
+
+    Block1 = #rt_block{file_id = "test_file", offset = 0, size = 10, priority = 1, pids = [Pid1]},
+    Block2 = #rt_block{file_id = "test_file", offset = 3, size = 3, priority = 2, pids = [Pid2]},
+
+    ?assertEqual(ok, rt_heap:push(?TEST_HEAP, Block1)),
+    ?assertEqual(ok, rt_heap:push(?TEST_HEAP, Block2)),
+
+    ?assertEqual({ok, Block2#rt_block{pids = [Pid1, Pid2]}}, rt_heap:fetch(?TEST_HEAP, PidsFilterFunction)),
+    ?assertEqual({ok, Block1#rt_block{size = 3}}, rt_heap:fetch(?TEST_HEAP, PidsFilterFunction)),
+    ?assertEqual({ok, Block1#rt_block{offset = 6, size = 4}}, rt_heap:fetch(?TEST_HEAP, PidsFilterFunction)).
 
 -endif.

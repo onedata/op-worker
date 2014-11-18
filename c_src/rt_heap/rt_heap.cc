@@ -15,14 +15,15 @@ void rt_heap::push(const rt_block &block)
 {
     for (ErlNifUInt64 i = 0; i < block.size() / block_size_; ++i)
         do_push(rt_block(block.file_id(), block.offset() + i * block_size_,
-                         block_size_, block.priority(), block.counter()));
+                         block_size_, block.priority(), block.pids(),
+                         block.counter()));
 
     ErlNifUInt64 full_block_amount = block.size() / block_size_;
     ErlNifUInt64 last_block_size = block.size() % block_size_;
     if (last_block_size > 0)
-        do_push(rt_block(block.file_id(),
-                         block.offset() + full_block_amount * block_size_,
-                         last_block_size, block.priority(), block.counter()));
+        do_push(rt_block(
+            block.file_id(), block.offset() + full_block_amount * block_size_,
+            last_block_size, block.priority(), block.pids(), block.counter()));
 }
 
 rt_block rt_heap::fetch()
@@ -68,7 +69,8 @@ void rt_heap::do_push(const rt_block &block)
             insert(file_blocks,
                    rt_block(block.file_id(), it->second->offset(),
                             offset - it->second->offset(),
-                            it->second->priority(), it->second->counter()));
+                            it->second->priority(), it->second->pids(),
+                            it->second->counter()));
         }
 
         while (it != file_blocks.end() && it->second->offset() <= block.end()) {
@@ -76,16 +78,19 @@ void rt_heap::do_push(const rt_block &block)
                 insert(file_blocks,
                        rt_block(block.file_id(), offset,
                                 it->second->offset() - offset, block.priority(),
-                                block.counter()));
+                                block.pids(), block.counter()));
                 offset = it->second->offset();
             } else {
                 if (block.end() < it->second->end()) {
                     rt_block b1(block.file_id(), offset,
                                 block.end() - offset + 1, block.priority(),
+                                it->second->pids(),
                                 it->second->counter() + block.counter());
+                    b1.appendPids(block.pids());
                     rt_block b2(block.file_id(), block.end() + 1,
                                 it->second->end() - block.end(),
-                                it->second->priority(), it->second->counter());
+                                it->second->priority(), it->second->pids(),
+                                it->second->counter());
                     offset = it->second->end() + 1;
                     it = erase(file_blocks, it);
                     insert(file_blocks, b1);
@@ -93,7 +98,9 @@ void rt_heap::do_push(const rt_block &block)
                 } else {
                     rt_block b(block.file_id(), offset,
                                it->second->end() - offset + 1, block.priority(),
+                               it->second->pids(),
                                it->second->counter() + block.counter());
+                    b.appendPids(block.pids());
                     offset = it->second->end() + 1;
                     it = erase(file_blocks, it);
                     insert(file_blocks, b);
@@ -104,7 +111,7 @@ void rt_heap::do_push(const rt_block &block)
         if (offset <= block.end()) {
             insert(file_blocks,
                    rt_block(block.file_id(), offset, block.end() - offset + 1,
-                            block.priority(), block.counter()));
+                            block.priority(), block.pids(), block.counter()));
         }
     }
 }

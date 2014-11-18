@@ -12,6 +12,7 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include <set>
 
 using namespace one::provider;
 
@@ -46,14 +47,15 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
         std::string file_id;
         ErlNifUInt64 offset, size;
         int priority;
+        std::list<ErlNifPid> pids;
         auto record = std::make_tuple(std::ref(record_name), std::ref(file_id),
                                       std::ref(offset), std::ref(size),
-                                      std::ref(priority));
+                                      std::ref(priority), std::ref(pids));
 
         nifpp::get_throws(env, argv[0], heap);
         nifpp::get_throws(env, argv[1], record);
 
-        rt_block block(file_id, offset, size, priority);
+        rt_block block(file_id, offset, size, priority, pids);
         heap->push(block);
 
         return nifpp::make(env, nifpp::str_atom("ok"));
@@ -76,9 +78,9 @@ static ERL_NIF_TERM fetch_nif(ErlNifEnv *env, int argc,
         nifpp::get_throws(env, argv[0], heap);
 
         rt_block block = heap->fetch();
-        auto record
-            = std::make_tuple(nifpp::str_atom("rt_block"), block.file_id(),
-                              block.offset(), block.size(), block.priority());
+        auto record = std::make_tuple(
+            nifpp::str_atom("rt_block"), block.file_id(), block.offset(),
+            block.size(), block.priority(), block.pids());
 
         return nifpp::make(env, std::make_tuple(nifpp::str_atom("ok"), record));
     }

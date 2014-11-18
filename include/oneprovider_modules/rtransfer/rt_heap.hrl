@@ -15,4 +15,4 @@
 -record(state, {heap}).
 
 %% RTransfer heap element
--record(rt_block, {file_id = "", offset = 0, size = 0, priority = 0}).
+-record(rt_block, {file_id = "", offset = 0, size = 0, priority = 0, pids = []}).

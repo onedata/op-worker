@@ -8,12 +8,16 @@
 
 #include "rt_block.h"
 
+#include <algorithm>
+
 namespace one {
 namespace provider {
 
 const rt_block &rt_block::merge(const rt_block &block)
 {
     size_ += block.size_;
+    for (const auto &pid : block.pids_)
+        pids_.push_back(pid);
     return *this;
 }
 
@@ -21,6 +25,11 @@ bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
 {
     return file_id_ == block.file_id_ && offset_ + size_ == block.offset_
            && size_ + block.size_ <= block_size;
+}
+
+void rt_block::appendPids(const std::list<ErlNifPid> &pids)
+{
+    pids_.insert(pids_.begin(), pids.begin(), pids.end());
 }
 
 bool rt_block::operator<(const rt_block &block) const

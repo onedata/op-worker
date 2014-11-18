@@ -11,6 +11,7 @@
 
 #include "nifpp.h"
 
+#include <list>
 #include <string>
 
 namespace one {
@@ -26,7 +27,7 @@ public:
      * rt_block constructor.
      * Constructs empty RTransfer block.
      */
-    rt_block() : rt_block("", 0, 0, 0) {}
+    rt_block() : rt_block("", 0, 0, 0, std::list<ErlNifPid>()) {}
 
     /**
      * rt_block constructor.
@@ -38,12 +39,13 @@ public:
      * @param counter defines how many times block was pushed on the rt_heap
      */
     rt_block(std::string file_id, ErlNifUInt64 offset, ErlNifUInt64 size,
-             int priority, int counter = 1)
-        : file_id_(std::move(file_id))
-        , offset_(offset)
-        , size_(size)
-        , priority_(priority)
-        , counter_(counter)
+             int priority, std::list<ErlNifPid> pids, int counter = 1)
+        : file_id_{std::move(file_id)}
+        , offset_{offset}
+        , size_{size}
+        , priority_{priority}
+        , pids_{std::move(pids)}
+        , counter_{counter}
     {
     }
 
@@ -62,8 +64,17 @@ public:
     /// Getter for block's priority
     int priority() const { return priority_; }
 
+    /// Getter for block's pids
+    const std::list<ErlNifPid> &pids() const { return pids_; }
+
     /// Getter for block's addition counter
     int counter() const { return counter_; }
+
+    /**
+     * Appends list of pids to block
+     * @param list of pids to be appended to the list of block's pids
+     */
+    void appendPids(const std::list<ErlNifPid> &pids);
 
     /**
      * Modifies this block by merging other block
@@ -98,6 +109,7 @@ private:
     ErlNifUInt64 offset_;
     ErlNifUInt64 size_;
     int priority_;
+    std::list<ErlNifPid> pids_;
     int counter_;
 };
 

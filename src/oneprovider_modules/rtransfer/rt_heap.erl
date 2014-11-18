@@ -14,7 +14,7 @@
 -include("oneprovider_modules/rtransfer/rt_heap.hrl").
 
 %% API
--export([new/0, new/1, new/2, new/3, delete/1, push/2, fetch/1]).
+-export([new/0, new/1, new/2, new/3, delete/1, push/2, fetch/1, fetch/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -114,7 +114,32 @@ push(HeapRef, Block) ->
     ViaName :: term().
 %% ====================================================================
 fetch(HeapRef) ->
-    gen_server:call(HeapRef, fetch).
+    fetch(HeapRef, fun erlang:is_process_alive/1).
+
+
+%% fetch/2
+%% ====================================================================
+%% @doc Fetches block from RTransfer heap and allows to fillter pids
+%% @end
+-spec fetch(HeapRef, PidsFilterFunction) -> {ok, #rt_block{}} | {error, Error :: string()} when
+    HeapRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
+    PidsFilterFunction :: function(), %% fun(Pid) -> true | false;
+    Pid :: pid(),
+    Name :: atom(),
+    Node :: node(),
+    Module :: module(),
+    GlobalName :: term(),
+    ViaName :: term().
+%% ====================================================================
+fetch(HeapRef, PidsFilterFunction) ->
+    case gen_server:call(HeapRef, fetch) of
+        {ok, #rt_block{pids = Pids} = Block} ->
+            {ok, Block#rt_block{pids = lists:filter(fun(Pid) ->
+                PidsFilterFunction(Pid)
+            end, lists:usort(Pids))}};
+        Other ->
+            Other
+    end.
 
 
 %% delete/1
@@ -181,8 +206,10 @@ init([Prefix, BlockSize]) ->
 %% ====================================================================
 handle_call(fetch, _From, #state{heap = Heap} = State) ->
     {reply, fetch_nif(Heap), State};
+
 handle_call(delete, _From, State) ->
     {stop, normal, ok, State};
+
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -202,6 +229,7 @@ handle_call(_Request, _From, State) ->
 handle_cast({push, Block}, #state{heap = Heap} = State) ->
     push_nif(Heap, Block),
     {noreply, State};
+
 handle_cast(_Request, State) ->
     {noreply, State}.
 
