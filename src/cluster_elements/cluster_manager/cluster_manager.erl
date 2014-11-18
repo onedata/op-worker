@@ -42,7 +42,7 @@
 
 %% ====================================================================
 %% Test API
-%% ========================== ==========================================
+%% ====================================================================
 -ifdef(TEST).
 -export([update_dns_state/3, update_dispatcher_state/6, calculate_load/2, calculate_worker_load/1, calculate_node_load/2,
   merge_nodes_stats/1, map_node_stats_to_load/1, required_permanent_workers/4]).
@@ -328,8 +328,12 @@ handle_cast({node_is_up, Node}, State) ->
           %% were running on node).
           case Ans of
             ok ->
-              Pid = self(),
-              erlang:send_after(5000, Pid, {timer, init_cluster}),
+              case State#cm_state.state_loaded of
+                true ->
+                  Pid = self(),
+                  erlang:send_after(50, Pid, {timer, init_cluster});
+                _ -> ok
+              end,
 
               case State#cm_state.state_monitoring of
                 on ->
@@ -703,7 +707,7 @@ required_permanent_workers(PermanentModules, JobsAndArgs, State, Nodes) ->
                               not lists:member({Node, Module}, PermamentWorkers),
                               Module =:= Module2],
 
-   {PermamentWorkers, RequiredPermamentWorkers}.
+  {PermamentWorkers, RequiredPermamentWorkers}.
 
 
 
@@ -1071,8 +1075,12 @@ node_down(Node, State) ->
                                     false -> {State#cm_state.callbacks_num, WorkersFound}
                                   end,
 
-  Pid = self(),
-  erlang:send_after(5000, Pid, {timer, init_cluster}),
+  case State#cm_state.state_loaded of
+    true ->
+      Pid = self(),
+      erlang:send_after(50, Pid, {timer, init_cluster});
+    _ -> ok
+  end,
   {State#cm_state{workers = NewWorkers, nodes = NewNodes, callbacks_num = CallbacksNum}, WorkersFound2}.
 
 %% start_central_logger/1

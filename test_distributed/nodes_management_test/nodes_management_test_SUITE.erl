@@ -61,6 +61,8 @@ fuse_ack_routing_test(Config) ->
 
   [CCM | WorkerNodes] = NodesUp,
 
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
   test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
@@ -69,7 +71,7 @@ fuse_ack_routing_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -280,6 +282,8 @@ fuse_session_cleanup_test(Config) ->
     DBNode = ?config(dbnode, Config),
     [CCM | WorkerNodes] = NodesUp,
 
+    DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+
     ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
     test_utils:wait_for_cluster_cast(),
     RunWorkerCode = fun(Node) ->
@@ -288,7 +292,7 @@ fuse_session_cleanup_test(Config) ->
     end,
     lists:foreach(RunWorkerCode, WorkerNodes),
     ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-    test_utils:wait_for_cluster_init(),
+    test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
     ?ENABLE_PROVIDER(Config),
 
@@ -402,6 +406,8 @@ main_test(Config) ->
 
   [CCM | WorkerNodes] = NodesUp,
 
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
   test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
@@ -410,7 +416,7 @@ main_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   NotExistingNodes = ['n1@localhost', 'n2@localhost', 'n3@localhost'],
   lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NotExistingNodes),
@@ -473,6 +479,7 @@ callbacks_test(Config) ->
 
   [CCM | WorkerNodes] = NodesUp,
 
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [], 2000)),
   test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
@@ -481,7 +488,7 @@ callbacks_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [], 2000)),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   ?ENABLE_PROVIDER(Config),
 

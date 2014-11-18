@@ -78,7 +78,9 @@ error_permanent_nodes_cache_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   CacheCheckFun = fun() ->
     Node = node(),
@@ -124,7 +126,7 @@ error_permanent_nodes_cache_test(Config) ->
 
   ?assertEqual(ok, rpc:call(W1, ?MODULE, worker_code, [])),
   test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   CheckCaches2 = fun(Node) ->
     ?assertEqual(3, rpc:call(Node, ets, info, [test_cache, size])),
@@ -152,7 +154,9 @@ permanent_node_cache_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   CreateCaches = fun(Node, Ans) ->
     Pid = spawn_link(Node, fun() ->
@@ -194,7 +198,7 @@ permanent_node_cache_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1 + DuplicatedPermanentNodes),
   lists:foreach(CheckCaches, WorkerNodes),
 
   lists:foreach(fun(Pid) -> Pid ! stop_cache end, CachesPids).
@@ -213,7 +217,9 @@ sub_procs_error_cache_clearing_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -225,7 +231,7 @@ sub_procs_error_cache_clearing_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1 + DuplicatedPermanentNodes),
 
   ProcFun = fun
     (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
@@ -329,7 +335,7 @@ sub_procs_error_cache_clearing_test(Config) ->
 
   ?assertEqual(ok, rpc:call(W1, ?MODULE, worker_code, [])),
   test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   VerNums = [11,12,13,21,22,23,31,32,33,41,42,43],
   VerifyAllCaches = fun(Key) ->
@@ -359,7 +365,9 @@ error_nodes_cache_clearing_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   CreateCaches = fun(Node, Ans) ->
     Pid = spawn_link(Node, fun() ->
@@ -397,7 +405,7 @@ error_nodes_cache_clearing_test(Config) ->
 
   ?assertEqual(ok, rpc:call(W1, ?MODULE, worker_code, [])),
   test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   CheckCaches2 = fun(Node) ->
     ?assertEqual(0, rpc:call(Node, ets, info, [test_cache, size]))
@@ -420,7 +428,9 @@ sub_procs_automatic_cache_clearing_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -432,7 +442,7 @@ sub_procs_automatic_cache_clearing_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1 + DuplicatedPermanentNodes),
 
   ProcFun = fun
     (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
@@ -555,7 +565,9 @@ automatic_nodes_cache_clearing_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   ClearFun = fun() -> ets:delete_all_objects(test_cache) end,
   CreateCaches = fun(Node, Ans) ->
@@ -610,7 +622,9 @@ sub_proc_cache_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -622,7 +636,7 @@ sub_proc_cache_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1 + DuplicatedPermanentNodes),
 
   ProcFun = fun
     (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
@@ -761,7 +775,9 @@ node_cache_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   CreateCaches = fun(Node, Ans) ->
     Pid = spawn_link(Node, fun() ->
@@ -828,7 +844,9 @@ sub_proc_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+
+  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -840,7 +858,7 @@ sub_proc_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1 + DuplicatedPermanentNodes),
 
   ProcFun = fun(_ProtocolVersion, {sub_proc_test, _, AnsPid}) ->
     Pid = self(),

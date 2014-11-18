@@ -12,6 +12,7 @@
 -module(central_logger_test_SUITE).
 -include("test_utils.hrl").
 -include("registered_names.hrl").
+-include("modules_and_args.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
 
@@ -95,15 +96,17 @@ init_and_cleanup_test(Config) ->
     NodesUp = ?config(nodes, Config),
     [CCM, W] = NodesUp,
 
+    Workers = [W],
     % Get standard trace configuration from worker node
     StandardTraces = rpc:call(W, ?MODULE, get_lager_traces, []),
 
+    DuplicatedPermanentNodes = (length(Workers) - 1) * length(?PERMANENT_MODULES),
     % Init cluster
     gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
     gen_server:cast({global, ?CCM}, {set_monitoring, on}),
     test_utils:wait_for_cluster_cast(),
     gen_server:cast({global, ?CCM}, init_cluster),
-    test_utils:wait_for_cluster_init(),
+    test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
     % Test logger's console loglevel switching functionalities
     ?assertEqual(ok, rpc:call(W, ?MODULE, check_console_loglevel_functionalities, [])),
@@ -146,6 +149,7 @@ init_and_cleanup_test(Config) ->
 logging_test(Config) ->
     NodesUp = ?config(nodes, Config),
     [CCM, W1, W2, W3, W4] = NodesUp,
+    WorkerNodes = [W1, W2, W3, W4],
 
     % Init cluster
     gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
@@ -153,7 +157,9 @@ logging_test(Config) ->
     test_utils:wait_for_cluster_cast(),
     test_utils:wait_for_nodes_registration(length(NodesUp) - 1),
     gen_server:cast({global, ?CCM}, init_cluster),
-    test_utils:wait_for_cluster_init(),
+
+    DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+    test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
     % Subscribe for log stream
     Pid = self(),

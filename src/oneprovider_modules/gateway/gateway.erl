@@ -81,6 +81,9 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
 
+handle(_ProtocolVersion, #fetch{} = Request) ->
+    gen_server:cast(?GATEWAY_DISPATCHER, Request),
+    ok;
 
 handle(_ProtocolVersion, {node_lifecycle_notification, Node, Module, Action, Pid}) ->
   handle_node_lifecycle_notification(Node, Module, Action, Pid),
@@ -93,6 +96,34 @@ handle(_ProtocolVersion, node_lifecycle_get_notification) ->
 handle(_ProtocolVersion, _Msg) ->
     ?log_call(_Msg),
     ok.
+
+
+%% cleanup/0
+%% ====================================================================
+%% @doc Cleanup any state associated with the module.
+%% @see worker_plugin_behaviour
+-spec cleanup() -> ok | {error, Error :: any()}.
+%% ====================================================================
+cleanup() ->
+    ranch:stop_listener(?GATEWAY_LISTENER),
+    exit(gw_oneproxy_outgoing, shutdown),
+    exit(gw_oneproxy_incoming, shutdown),
+    exit(?GATEWAY_DISPATCHER_SUPERVISOR, shutdown).
+
+
+%% compute_request_hash/1
+%% ====================================================================
+%% @doc Computes a sha256 hash of an encoded protobuf #filerequest
+-spec compute_request_hash(RequestBytes :: iodata()) -> Hash :: binary().
+%% ====================================================================
+compute_request_hash(RequestBytes) ->
+    crypto:hash(sha256, RequestBytes).
+
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
 
 
 %% handle_node_lifecycle_notification/4
@@ -126,29 +157,3 @@ node_lifecycle_get_notification() ->
   ok.
 -endif.
 
-
-%% cleanup/0
-%% ====================================================================
-%% @doc Cleanup any state associated with the module.
-%% @see worker_plugin_behaviour
--spec cleanup() -> ok | {error, Error :: any()}.
-%% ====================================================================
-cleanup() ->
-    ranch:stop_listener(?GATEWAY_LISTENER),
-    exit(gw_oneproxy_outgoing, shutdown),
-    exit(gw_oneproxy_incoming, shutdown),
-    exit(?GATEWAY_DISPATCHER_SUPERVISOR, shutdown).
-
-
-%% compute_request_hash/1
-%% ====================================================================
-%% @doc Computes a sha256 hash of an encoded protobuf #filerequest
--spec compute_request_hash(RequestBytes :: iodata()) -> Hash :: binary().
-%% ====================================================================
-compute_request_hash(RequestBytes) ->
-    crypto:hash(sha256, RequestBytes).
-
-
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
