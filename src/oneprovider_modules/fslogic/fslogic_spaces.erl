@@ -62,7 +62,7 @@ initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
             try user_logic:create_dirs_at_storage([SpaceInfo]) of
                 ok -> {ok, SpaceInfo};
                 {error, Reason} ->
-                    ?error("Filed to create space's (~p) dir on storage due to ~p", [SpaceInfo, Reason]),
+                    ?error("Failed to create space's (~p) dir on storage due to ~p", [SpaceInfo, Reason]),
                     dao_lib:apply(dao_vfs, remove_file, [{uuid, SpaceUUID}], fslogic_context:get_protocol_version()),
                     {error, Reason}
             catch
@@ -72,7 +72,7 @@ initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
                     {error, {Type, Error}}
             end;
         {error, dir_exists} ->
-            {ok, #db_document{record = #file{extensions = Ext} = File} = FileDoc} = dao_lib:apply(dao_vfs, get_space_file, [{uuid, SpaceId}], 1),
+            {ok, #db_document{record = #file{extensions = Ext} = File} = FileDoc} = dao_lib:apply(dao_vfs, get_space_file, [{uuid, SpaceId}, false], 1),
             NewExt = lists:keyreplace(?file_space_info_extestion, 1, Ext, {?file_space_info_extestion, SpaceInfo}),
             NewFile = File#file{extensions = NewExt, name = unicode:characters_to_list(SpaceName)},
             {ok, _} = dao_lib:apply(vfs, save_file, [FileDoc#db_document{record = NewFile}], 1),
@@ -80,7 +80,7 @@ initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
 
             {ok, SpaceInfo};
         {error, Reason} ->
-            ?error("Filed to initialize space (~p) due to ~p", [SpaceInfo, Reason]),
+            ?error("Failed to initialize space (~p) due to ~p", [SpaceInfo, Reason]),
             {error, Reason}
     end;
 initialize(SpaceId) ->

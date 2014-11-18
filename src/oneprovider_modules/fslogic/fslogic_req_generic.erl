@@ -17,11 +17,14 @@
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("registered_names.hrl").
+-include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
+-include("oneprovider_modules/fslogic/ranges_struct.hrl").
+-include("oneprovider_modules/gateway/gateway.hrl").
 
 
 %% API
 -export([update_times/4, change_file_owner/2, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
-    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0]).
+    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0, synchronize_file_block/3, file_block_modified/3, file_truncated/2]).
 
 %% ====================================================================
 %% API functions
@@ -158,20 +161,25 @@ check_file_perms(FullFileName, Type) ->
 get_file_attr(FileDoc = #db_document{record = #file{}}) ->
     #db_document{record = #file{} = File, uuid = FileUUID} = FileDoc,
     Type = fslogic_file:normalize_file_type(protocol, File#file.type),
-    {Size, _SUID} = fslogic_file:get_real_file_size_and_uid(FileDoc),
-
-    fslogic_file:update_file_size(File, Size),
+    StorageFileSize = %todo we should not get this size from storage ever (especially when file is not complete)
+        try
+            {Size, _SUID} = fslogic_file:get_real_file_size_and_uid(FileDoc),
+            fslogic_file:update_file_size(File, Size),
+            Size
+        catch
+            _Type:_Error  ->undefined
+        end,
 
     %% Get owner
     {UName, VCUID, _RSUID} = fslogic_file:get_file_owner(File),
 
-    fslogic_file:fix_storage_owner(FileDoc),
+    catch fslogic_file:fix_storage_owner(FileDoc), %todo this file be remote, so we cant fix storage owner
 
     {ok, FilePath} = logical_files_manager:get_file_full_name_by_uuid(FileUUID),
     {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
 
     %% Get attributes
-    {CTime, MTime, ATime, _SizeFromDB, HasAcl} =
+    {CTime, MTime, ATime, SizeFromDB, HasAcl} =
         case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
             {ok, #db_document{record = FMeta}} ->
                 {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size, FMeta#file_meta.acl =/= []};
@@ -186,14 +194,19 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
                     case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
                         {ok, Sum} -> Sum + 2;
                         _Other ->
-                            ?error("Error: can not get number of links for file: ~s", [File]),
+                            ?error("Error: can not get number of links for file: ~p", [File]),
                             0
                     end;
                 _ -> 1
             end,
 
+    FileSize =
+        case is_integer(StorageFileSize) of
+            true -> StorageFileSize;
+            _ -> SizeFromDB
+        end,
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
+        type = Type, size = FileSize, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
         gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links, has_acl = HasAcl};
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
@@ -426,7 +439,106 @@ rename_file(FullFileName, FullTargetFileName) ->
 
     #atom{value = ?VOK}.
 
+%% synchronize_file_block/3
+%% ====================================================================
+%% @doc Checks if given byte range of file's value is in sync with other providers. If not, the data is fetched from them, and stored
+%% on local storage
+%% @end
+-spec synchronize_file_block(FullFileName :: string(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+    #atom{} | no_return().
+%% ====================================================================
+synchronize_file_block(FullFileName, Offset, Size) ->
+    {ok, RemoteLocationDocs} = fslogic_objects:get_available_blocks(FullFileName),
+    ProviderId = cluster_manager_lib:get_provider_id(),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    OtherRemoteLocationDocs = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id =/= ProviderId end, RemoteLocationDocs),
+    FileId = MyRemoteLocationDoc#db_document.record#available_blocks.file_id,
+
+    case dao_vfs:list_file_locations(FileId) of
+        {ok, []} -> create_file_location_for_remote_file(FullFileName, FileId);
+        _ -> ok
+    end,
+
+    OutOfSyncList = fslogic_available_blocks:check_if_synchronized(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, OtherRemoteLocationDocs),
+    lists:foreach(
+        fun({Id, Ranges}) ->
+            lists:foreach(fun(Range = #range{from = From, to = To}) ->
+                ?info("Synchronizing blocks: ~p of file ~s", [Range, FullFileName]),
+                {ok, _} = gateway:do_stuff(Id, #fetchrequest{file_id = FileId, offset = From*?remote_block_size, size = (To-From+1)*?remote_block_size})
+            end, Ranges)
+        end, OutOfSyncList),
+    SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
+    NewDoc = lists:foldl(fun(Ranges, Acc) -> fslogic_available_blocks:mark_as_available(Ranges, Acc) end, MyRemoteLocationDoc, SyncedParts),
+    case MyRemoteLocationDoc == NewDoc of
+        true -> ok;
+        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_available_blocks_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
+    end,
+    #atom{value = ?VOK}.
+
+%% file_block_modified/3
+%% ====================================================================
+%% @doc Marks given file block as modified, so other provider would know
+%% that they need to synchronize their data
+%% @end
+-spec file_block_modified(FullFileName :: string(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+    #atom{} | no_return().
+%% ====================================================================
+file_block_modified(FullFileName, Offset, Size) ->
+    {ok, RemoteLocationDocs} = fslogic_objects:get_available_blocks(FullFileName),
+    ProviderId = cluster_manager_lib:get_provider_id(),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    NewDoc = fslogic_available_blocks:mark_as_modified(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc),
+    case MyRemoteLocationDoc == NewDoc of
+        true -> ok;
+        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_available_blocks_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
+    end,
+    #atom{value = ?VOK}.
+
+%% file_truncated/2
+%% ====================================================================
+%% @doc Deletes synchronization info of truncated blocks, so other provider would know
+%% that those blocks has been deleted
+%% @end
+-spec file_truncated(FullFileName :: string(), Size :: non_neg_integer()) ->
+    #atom{} | no_return().
+%% ====================================================================
+file_truncated(FullFileName, Size) ->
+    {ok, RemoteLocationDocs} = fslogic_objects:get_available_blocks(FullFileName),
+    ProviderId = cluster_manager_lib:get_provider_id(),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    NewDoc = fslogic_available_blocks:truncate({bytes, Size}, MyRemoteLocationDoc),
+    case MyRemoteLocationDoc == NewDoc of
+        true -> ok;
+        false -> gen_server:call(?Dispatcher_Name, {fslogic, fslogic_context:get_protocol_version(), {save_available_blocks_doc, NewDoc}}, ?CACHE_REQUEST_TIMEOUT)
+    end,
+    #atom{value = ?VOK}.
+
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+create_file_location_for_remote_file(FullFileName, FileUuid) ->
+    {ok, #space_info{space_id = SpaceId} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FullFileName),
+
+    {ok, UserDoc} = fslogic_objects:get_user(),
+    FileBaseName = fslogic_path:get_user_file_name(FullFileName, UserDoc),
+
+    {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], fslogic_context:get_protocol_version()),
+    #db_document{uuid = UUID, record = #storage_info{} = Storage} = fslogic_storage:select_storage(fslogic_context:get_fuse_id(), StorageList),
+    SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+    FileId = fslogic_storage:get_new_file_id(SpaceInfo, FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
+
+    FileLocation = #file_location{file_id = FileUuid, storage_uuid = UUID, storage_file_id = FileId},
+    {ok, _LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
+
+    {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUuid, fslogic_context:get_fuse_id(), ?LOCATION_VALIDITY),
+%%     _FuseFileBlocks = [#filelocation_blockavailability{offset = 0, size = ?FILE_BLOCK_SIZE_INF}],
+%%     FileBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
+%%     {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
+
+    {SH, FileId} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileId, SpaceId, false),
+    #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
+
+    Storage_helper_info = #storage_helper_info{name = SHName, init_args = SHArgs},
+    ok = storage_files_manager:create(Storage_helper_info, FileId).

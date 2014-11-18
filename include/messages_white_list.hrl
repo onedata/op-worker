@@ -22,7 +22,8 @@
   createstoragetestfilerequest, createstoragetestfileresponse, storagetestfilemodifiedrequest, storagetestfilemodifiedresponse,
   clientstorageinfo, clientstorageinfo_storageinfo, getstatfs, statfsinfo, eventfilterconfig, eventaggregatorconfig, eventtransformerconfig,
   eventstreamconfig, eventproducerconfig, eventmessage, changeremoteloglevel, logmessage, remotefilemangement, createfile,
-  deletefileatstorage, truncatefile, readfile, filedata, writefile, writeinfo, changepermsatstorage
+  deletefileatstorage, truncatefile, readfile, filedata, writefile, writeinfo, changepermsatstorage,
+  rtrequest, rtresponse, docupdated
 ]).
 
 %% white lists of atoms that located inside mssags
@@ -33,12 +34,12 @@
 %% list of modules that can process messages
 -define(VisibleModules, [
   central_logger, cluster_rengine, control_panel, dao, fslogic, gateway,
-  rtransfer, rule_manager, dns_worker, remote_files_manager
+  rtransfer, rule_manager, dns_worker, remote_files_manager, dbsync
 ]).
 
 %% list of messages decoders that can be used
 -define(DecodersList, [
-  communication_protocol, fuse_messages, logging, remote_file_management
+  communication_protocol, fuse_messages, logging, remote_file_management, rtcore, dbsync
 ]).
 
 %% List of messages that needs FuseId to be present in connection state prior to process them.

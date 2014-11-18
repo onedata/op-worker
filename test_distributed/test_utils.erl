@@ -18,6 +18,9 @@
 -include("test_utils.hrl").
 -include("modules_and_args.hrl").
 
+
+-define(ignored_modules, [dbsync]).
+
 -define(VIEW_REBUILDING_TIME, 2000).
 -define(FUSE_SESSION_EXP_TIME, 8000).
 -define(REQUEST_HANDLING_TIME, 1000).
@@ -185,7 +188,8 @@ check_nodes() ->
 %% ====================================================================
 check_init(ModulesNum) ->
   try
-    {WList, StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
+    {WList0, StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
+    WList = lists:filter(fun({_, ModuleName}) -> not lists:member(ModuleName, ?ignored_modules) end, WList0),
     case length(WList) >= ModulesNum of
       true ->
         timer:sleep(500),
@@ -230,7 +234,8 @@ wait_for_cluster_init() ->
   E2 :: term().
 %% ====================================================================
 wait_for_cluster_init(ModulesNum) ->
-  wait_for_cluster_init(ModulesNum + length(?MODULES_WITH_ARGS), 20).
+  Modules = lists:filter(fun({ModuleName, _}) -> not lists:member(ModuleName, ?ignored_modules) end, ?Modules_With_Args),
+  wait_for_cluster_init(ModulesNum + length(Modules), 20).
 
 %% wait_for_cluster_init/2
 %% ====================================================================

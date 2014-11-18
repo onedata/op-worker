@@ -19,4 +19,6 @@
 %% This record represents single FUSE connection and its location.
 -record(connection_info, {session_id, controlling_node, controlling_pid}).
 
+-record(dbsync_state, {ets_list = []}).
+
 -endif.
