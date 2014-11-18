@@ -67,7 +67,12 @@ init(_Args) ->
     % Create remote location dao proxy
     RemoteLocationProxyProcFun = fun
         (ProtocolVersion, {save_available_blocks_doc, Doc}, _CacheName) ->
-            {ok, _} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion)
+            {ok, _} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion);
+        (_ProtocolVersion, {get_file_size, Uuid}, _CacheName) ->
+            case logical_files_manager:getfileattr({uuid, Uuid}) of
+                {ok, #fileattributes{size = Size}} -> {ok, Size};
+                Error -> Error
+            end
     end,
     RemoteLocationProxyMapFun = fun
         ({save_available_blocks_doc, #db_document{uuid = Uuid}}) ->
