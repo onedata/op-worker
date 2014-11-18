@@ -215,6 +215,7 @@ register_default_rules(WriteBytesThreshold, IOBytesThreshold) ->
   rule_definitions:register_quota_exceeded_handler(),
   rule_definitions:register_rm_event_handler(),
   rule_definitions:register_for_write_events(WriteBytesThreshold),
+  rule_definitions:register_for_write_events_block_updates(WriteBytesThreshold),
   rule_definitions:register_for_truncate_events(),
   rule_definitions:register_read_for_stats_events(IOBytesThreshold),
   rule_definitions:register_write_for_stats_events(IOBytesThreshold),

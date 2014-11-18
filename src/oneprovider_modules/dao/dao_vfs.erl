@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license
+%% This software is released under the MIT license 
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -24,9 +24,10 @@
 -export([save_new_file/2, save_new_file/3, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
--export([get_space_file/1, get_space_files/1]).
+-export([get_space_file/2, get_space_file/1, get_space_files/1, file_by_meta_id/1]).
 -export([list_file_locations/1, get_file_locations/1, save_file_location/1, remove_file_location/1]).
 -export([list_file_blocks/1, get_file_blocks/1, save_file_block/1, remove_file_block/1]).
+-export([save_available_blocks/1, get_available_blocks/1, remove_available_blocks/1, available_blocks_by_file_id/1]).
 
 
 -ifdef(TEST).
@@ -51,14 +52,24 @@
 %% @todo: cache
 -spec get_space_file(Space :: file()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
 %% ====================================================================
-get_space_file({uuid, UUID}) ->
-    get_space_file1({uuid, UUID});
-get_space_file(SpacePath) ->
-    get_space_file1(fslogic_path:absolute_join(filename:split(SpacePath))).
+get_space_file(Request) ->
+    get_space_file(Request, true).
 
--spec get_space_file1(Space :: file()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
-get_space_file1(InitArg) ->
-    case ets:lookup(spaces_cache, InitArg) of
+
+get_space_file({uuid, UUID}, UseCache) ->
+    get_space_file1({uuid, UUID}, UseCache);
+get_space_file(SpacePath, UseCache) ->
+    get_space_file1(fslogic_path:absolute_join(filename:split(SpacePath)), UseCache).
+
+-spec get_space_file1(Space :: file(), UseCache :: boolean()) -> {ok, file_doc()} | {error, invalid_space_file | any()} | no_return().
+get_space_file1(InitArg, UseCache) ->
+    CacheRes =
+        case UseCache of
+            false -> [];
+            true  -> ets:lookup(spaces_cache, InitArg)
+        end,
+
+    case CacheRes of
         [{_, Value}] -> {ok, Value};
         _ ->
             case get_file(InitArg) of
@@ -461,6 +472,13 @@ remove_file(File) ->
             ?warning("Cannot remove file_locations ~p due to error: ~p", [{file_id, FData#db_document.uuid}, Reason4])
     end,
 
+    %% Remove available_blocks
+    case remove_available_blocks({file_id, FData#db_document.uuid}) of
+        ok -> ok;
+        {error, Reason5} ->
+            ?warning("Cannot remove available_blocks ~p due to error: ~p", [{file_id, FData#db_document.uuid}, Reason5])
+    end,
+
     dao_external:set_db(?FILES_DB_NAME),
     dao_records:remove_record(FData#db_document.uuid).
 
@@ -771,6 +789,62 @@ remove_file_block(BlockId) when is_list(BlockId) ->
     dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:remove_record(BlockId).
 
+%% remove_available_blocks/1
+%% ====================================================================
+%% @doc Removes available blocks from the database.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec remove_available_blocks(available_blocks_doc() | uuid() | {file_id, uuid()}) -> ok | {error, any()} | no_return().
+%% ====================================================================
+remove_available_blocks(#db_document{uuid = Id, record = #available_blocks{}}) ->
+    remove_available_blocks(Id);
+remove_available_blocks({file_id, FileId}) ->
+    {ok, RemoteLocations} = available_blocks_by_file_id(FileId),
+    lists:foreach(fun remove_available_blocks/1, RemoteLocations);
+remove_available_blocks(RemoteLocationId) when is_list(RemoteLocationId) ->
+    dao_external:set_db(?FILES_DB_NAME), %%todo change db to AVAILABLE_BLOCKS_DB_NAME
+    dao_records:remove_record(RemoteLocationId).
+
+%% save_available_blocks/1
+%% ====================================================================
+%% @doc Saves available blocks as a new document in the database, or as a new version
+%% of an existing document.
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec save_available_blocks(available_blocks_doc() | available_blocks_info()) -> {ok, uuid()} | {error, any()}.
+%% ====================================================================
+save_available_blocks(#available_blocks{} = RemoteLocation) ->
+    save_available_blocks(#db_document{record = RemoteLocation});
+save_available_blocks(#db_document{record = #available_blocks{}} = RemoteLocationDoc) ->
+    dao_external:set_db(?FILES_DB_NAME), %%todo change db to AVAILABLE_BLOCKS_DB_NAME
+    dao_records:save_record(RemoteLocationDoc).
+
+%% get_available_blocks/1
+%% ====================================================================
+%% @doc Gets available blocks document from the database
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec get_available_blocks(Uuid :: uuid()) -> {ok, available_blocks_doc()} | {error, any()}.
+%% ====================================================================
+get_available_blocks(Uuid) ->
+    dao_external:set_db(?FILES_DB_NAME), %%todo change db to AVAILABLE_BLOCKS_DB_NAME
+    dao_records:get_record(Uuid).
+
+%% available_blocks_by_file_id/1
+%% ====================================================================
+%% @doc Gets available blocks documents with given file_id from the database
+%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% @end
+-spec available_blocks_by_file_id(FileId :: uuid()) -> {ok, [available_blocks_doc()]} | {error, any()}.
+%% ====================================================================
+available_blocks_by_file_id(FileId) ->
+    dao_external:set_db(?FILES_DB_NAME), %%todo change db to AVAILABLE_BLOCKS_DB_NAME
+    QueryArgs =
+        #view_query_args{keys = [dao_helper:name(FileId)], include_docs = true},
+
+    Rows = fetch_rows(?AVAILABLE_BLOCKS_BY_FILE_ID, QueryArgs),
+    RemoteLocationDocs = [Row#view_row.doc || Row <- Rows, is_list(Row#view_row.id)],
+    {ok, RemoteLocationDocs}.
 
 %% list_dir/3
 %% ====================================================================
@@ -1258,6 +1332,20 @@ find_by_times(FileCriteria) ->
         lists:member(FileDoc#db_document.record#file.type, DesiredTypes) end, Rows),
     {ok, lists:map(fun(#view_row{id = Id}) -> Id end, Result)}.
 
+
+file_by_meta_id(MetaUUID) ->
+    Rows = fetch_rows(?FILES_BY_META_DOC, #view_query_args{keys = [
+        [dao_helper:name(MetaUUID), 0],
+        [dao_helper:name(MetaUUID), 1],
+        [dao_helper:name(MetaUUID), 2]
+    ], include_docs = true}),
+    Files = lists:map(fun(#view_row{doc = FileDoc}) -> FileDoc end, Rows),
+    case Files of
+        [] -> {error, {not_found, missing}};
+        [#db_document{} = FileDoc] ->
+            {ok, FileDoc}
+    end.
+
 %% get_file_meta_ids/1
 %% ====================================================================
 %% @doc Get file_meta ids using file_meta_by_times view
@@ -1315,7 +1403,7 @@ file_path_analyze(Path) ->
 
 %% uca_increment/1
 %% ====================================================================
-%% @doc Returns "incremented string" based on Unicode Collation Algorithm.
+%% @doc Returns "incremented string" based on Unicode Collation Algorithm. 
 %%      This method works only for alpha-numeric strings.
 %% @end
 -spec uca_increment(Id :: string()) -> string().
