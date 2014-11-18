@@ -25,7 +25,7 @@
 
 %% API
 -export([register_quota_exceeded_handler/0, register_rm_event_handler/0, register_for_write_events/1, register_for_truncate_events/0, register_read_for_stats_events/1, register_write_for_stats_events/1]).
--export([register_for_write_events_block_updates/1]).
+-export([register_write_for_available_blocks_events/1, register_truncate_for_avaialable_blocks_events/0]).
 
 -define(ProtocolVersion, 1).
 -define(VIEW_UPDATE_DELAY, 5000).
@@ -64,6 +64,19 @@ register_for_truncate_events() ->
 
     gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"truncate_event", EventItem, EventFilterConfig}}}).
 
+register_truncate_for_avaialable_blocks_events() ->
+    EventHandler = get_truncate_for_avaialbale_blocks_handler(),
+    EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
+
+    %% client configuration
+    EventFilter = #eventfilterconfig{field_name = "type", desired_value = "truncate_event"},
+    EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
+
+    EventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["truncate_event"], new_values = ["truncate_for_available_blocks"]},
+    EventTransformerConfig = #eventstreamconfig{transformer_config = EventTransformer, wrapped_config = EventFilterConfig},
+
+    gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"truncate_for_available_blocks", EventItem, EventTransformerConfig}}}).
+
 %% Registers handler which will be called every Bytes will be written.
 register_for_write_events(Bytes) ->
     EventHandler = fun(Event) ->
@@ -94,23 +107,19 @@ register_for_write_events(Bytes) ->
     gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"write_event", EventItem, EventAggregatorConfig}}}).
 
 %% Registers handler which will be called every Bytes will be written.
-register_for_write_events_block_updates(Bytes) ->
-    EventHandler = fun(Event) ->
-        ?info("FFFF"),
-        ?dump(Event),
-        _Blocks = proplists:get_value("blocks", Event)
-    %todo update blocks
-    end,
+register_write_for_available_blocks_events(BytesThreshold) ->
+    EventHandler = get_write_for_available_blocks_handler(),
 
     EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
 
-    %% client configuration
     EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
     EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-    EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
+    EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = BytesThreshold, sum_field_name = "bytes"},
     EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
 
-    gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"write_event", EventItem, EventAggregatorConfig}}}).
+    EventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["write_event"], new_values = ["write_for_available_blocks"]},
+    EventTransformerConfig = #eventstreamconfig{transformer_config = EventTransformer, wrapped_config = EventAggregatorConfig},
+    gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"write_for_available_blocks", EventItem, EventTransformerConfig}}}).
 
 register_write_for_stats_events(BytesThreshold) ->
     EventHandler = fun(Event) ->
@@ -233,4 +242,20 @@ get_rm_event_handler() ->
             _ ->
                 ok
         end
+    end.
+
+get_write_for_available_blocks_handler() ->
+    fun(Event) ->
+        ?info("WRITE"),
+        ?dump(Event),
+        _Blocks = proplists:get_value("blocks", Event)
+    %todo update blocks
+    end.
+
+get_truncate_for_avaialbale_blocks_handler() ->
+    fun(Event) ->
+        ?info("TRUNCATE"),
+        ?dump(Event),
+        _Blocks = proplists:get_value("blocks", Event)
+    %todo update blocks
     end.
