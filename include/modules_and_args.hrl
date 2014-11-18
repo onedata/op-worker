@@ -13,8 +13,8 @@
 -ifndef(MODULES_AND_ARGS_HRL).
 -define(MODULES_AND_ARGS_HRL, 1).
 
--define(MODULES, [central_logger, cluster_rengine, control_panel, dao_worker, fslogic, gateway, rtransfer, rule_manager, dns_worker, remote_files_manager], dbsync).
--define(MODULES_WITH_ARGS, [{central_logger, []}, {cluster_rengine, []}, {control_panel, []}, {dao_worker, []}, {fslogic, []}, {gateway, []}, {rtransfer, []}, {rule_manager, []}, {dns_worker, []}, {remote_files_manager, []}, {dbsync, []}].
+-define(MODULES, [central_logger, cluster_rengine, control_panel, dao_worker, fslogic, gateway, rtransfer, rule_manager, dns_worker, remote_files_manager, dbsync]).
+-define(MODULES_WITH_ARGS, [{central_logger, []}, {cluster_rengine, []}, {control_panel, []}, {dao_worker, []}, {fslogic, []}, {gateway, []}, {rtransfer, []}, {rule_manager, []}, {dns_worker, []}, {remote_files_manager, []}, {dbsync, []}]).
 
 %% Modules that are present on all workers.
 -define(PERMANENT_MODULES, [gateway]).
