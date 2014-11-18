@@ -35,6 +35,9 @@
 -export([change_file_perm/3, check_file_perm/2]).
 -export([get_file_children_count/1]).
 
+%% Block synchronization
+-export([synchronize/3, mark_as_modified/3, mark_as_truncated/2]).
+
 %% File sharing
 -export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
 -export([create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
@@ -582,6 +585,11 @@ read(File, Offset, Size, EventPolicy) ->
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
+write({uuid, Uuid}, Buf) -> % todo alow only FullFilePath for better performance
+    case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
+        {ok, FullFilePath} -> write(FullFilePath, Buf);
+        Error -> Error
+    end;
 write(File, Buf) ->
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
@@ -604,7 +612,7 @@ write(File, Buf) ->
                                     {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}],
                                 gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
                                 WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}],
+                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}, {"filePath", File}],
                                 gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}})
                             end);
                         _ ->
@@ -642,6 +650,11 @@ write(File, Offset, Buf) ->
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
+write({uuid, Uuid}, Offset, Buf, EventPolicy) -> % todo alow only FullFilePath for better performance
+    case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
+        {ok, FullFilePath} -> write(FullFilePath, Offset, Buf, EventPolicy);
+        Error -> Error
+    end;
 write(File, Offset, Buf, EventPolicy) ->
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
@@ -661,7 +674,7 @@ write(File, Offset, Buf, EventPolicy) ->
                                 {"bytes", Res}, {"blocks", [{Offset, Res}]}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
                             WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"bytes", Res}, {"blocks", [{Offset, Res}]}],
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", File}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}});
                         _ ->
                             ok
@@ -686,6 +699,11 @@ write(File, Offset, Buf, EventPolicy) ->
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
+write_from_stream({uuid, Uuid}, Buf) -> % todo alow only FullFilePath for better performance
+    case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
+        {ok, FullFilePath} -> write_from_stream(FullFilePath, Buf);
+        Error -> Error
+    end;
 write_from_stream(File, Buf) ->
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
@@ -704,7 +722,7 @@ write_from_stream(File, Buf) ->
                                 {"bytes", Res}, {"blocks", [{Offset, Res}]}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
                             WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"bytes", Res}, {"blocks", [{Offset, Res}]}],
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", File}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}});
                         _ ->
                             ok
@@ -778,6 +796,11 @@ create(File) ->
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
+truncate({uuid, Uuid}, Size) -> % todo alow only FullFilePath for performance reasons
+    case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
+        {ok, FullFilePath} -> truncate(FullFilePath, Size);
+        Error -> Error
+    end;
 truncate(File, Size) ->
     {Response, Response2} = getfilelocation(File),
     case Response of
@@ -788,7 +811,8 @@ truncate(File, Size) ->
                 {ok, true} ->
                     TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File}],
                     gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}}),
-                    TruncateEventAvailableBlocks = [{"type", "truncate_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File}, {"blocks", [{0, Size}]}],
+                    TruncateEventAvailableBlocks = [{"type", "truncate_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File},
+                        {"blocks", [{0, Size}]}, {"filePath", File}],
                     gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEventAvailableBlocks}});
                 _ ->
                     ok
