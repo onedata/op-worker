@@ -25,6 +25,15 @@
 -export([tree_broadcast/4, tree_broadcast/5]).
 -export([decoder_method/1, send_direct_message/4]).
 
+
+%% send_direct_message/4
+%% ====================================================================
+%% @doc Sends direct message to given provider and block until response arrives.
+%% @end
+-spec send_direct_message(ProviderId :: binary(), Request :: term(),
+    {AnswerDecoderName :: atom(), AnswerType :: atom()}, Attempts :: non_neg_integer()) ->
+    Reposne :: term() | {error, Reason :: any()}.
+%% ====================================================================
 send_direct_message(ProviderId, Request, {AnswerDecoderName, AnswerType} = AnswerConf, Attempts) when Attempts > 0 ->
     PushTo = ProviderId,
     ReqEncoder = encoder_method(get_message_type(Request)),
@@ -57,6 +66,14 @@ send_direct_message(_ProviderId, _Request, {_AnswerDecoderName, _AnswerType} = _
     {error, unable_to_connect}.
 
 
+%% tree_broadcast/4
+%% ====================================================================
+%% @doc Sends broadcast message to all providers from SyncWith list.
+%%      SyncWith has to be sorted.
+%% @end
+-spec tree_broadcast(#space_info{}, SyncWith :: [ProviderId :: binary()], Request :: term(), Attempts :: non_neg_integer()) ->
+    ok | no_return().
+%% ====================================================================
 tree_broadcast(SpaceInfo, SyncWith, Request, Attempts) ->
     ReqEncoder = encoder_method(get_message_type(Request)),
     BaseRequest = #treebroadcast{request_id = dbsync_utils:gen_request_id(), input = <<"">>, message_type = a2l(ReqEncoder), excluded_providers = [], ledge = <<"">>, redge = <<"">>, depth = 0, space_id = <<"">>},
@@ -73,6 +90,16 @@ tree_broadcast(SpaceInfo, SyncWith, Request, BaseRequest, Attempts) ->
             do_emit_tree_broadcast(SpaceInfo, RSync, Request, NewBaseRequest, Attempts)
     end.
 
+
+%% do_emit_tree_broadcast/4
+%% ====================================================================
+%% @doc Internal helper function for tree_broadcast/4. This function broadcasts message blindly
+%%      to one of given providers (while passing to him responsibility to reemit the message)
+%%      without any additional logic.
+%% @end
+-spec do_emit_tree_broadcast(#space_info{}, SyncWith :: [ProviderId :: binary()], Request :: term(), #treebroadcast{}, Attempts :: non_neg_integer()) ->
+    Reponse :: term() | {error, Reson :: any()}.
+%% ====================================================================
 do_emit_tree_broadcast(_SpaceInfo, [], _Request, _NewBaseRequest, _Attempts) ->
     ok;
 do_emit_tree_broadcast(#space_info{space_id = SpaceId} = SpaceInfo, SyncWith, Request, #treebroadcast{depth = Depth} = BaseRequest, Attempts) when Attempts > 0 ->
