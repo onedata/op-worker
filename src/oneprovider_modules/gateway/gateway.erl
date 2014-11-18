@@ -19,7 +19,7 @@
 -include("registered_names.hrl").
 
 -export([init/1, handle/2, cleanup/0]).
--export([compute_request_hash/1]).
+-export([notify/3, compute_request_hash/1]).
 
 
 %% ====================================================================
@@ -71,7 +71,7 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
 
-handle(_ProtocolVersion, #fetch{} = Request) ->
+handle(_ProtocolVersion, #gw_fetch{} = Request) ->
     gen_server:cast(?GATEWAY_DISPATCHER, Request),
     ok;
 
@@ -100,6 +100,18 @@ cleanup() ->
 %% ====================================================================
 compute_request_hash(RequestBytes) ->
     crypto:hash(sha256, RequestBytes).
+
+
+%% notify/3
+%% ====================================================================
+%% @doc Notifies a process about something related to the action it required.
+%% Now including a reason!
+%% @end
+-spec notify(What :: atom(), Reason :: term(), Action :: #gw_fetch{}) -> ok.
+%% ====================================================================
+notify(What, Details, #gw_fetch{notify = Notify} = Action) when is_atom(What) ->
+    lists:foreach(fun(Pid) -> Pid ! {What, Details, Action} end, Notify),
+    ok.
 
 
 %% ====================================================================

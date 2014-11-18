@@ -66,8 +66,8 @@ send_request_test(Config) ->
 
 
 on_node_send_request(FetchRequest) ->
-  gen_server:call(gateway, {test_call, 1, #fetch{remote = {{127,0,0,1}, 9999},
-    notify = self(), request = FetchRequest}}).
+  gen_server:call(gateway, {test_call, 1, #gw_fetch{remote = {{127,0,0,1}, 9999},
+    notify = [self()], request = FetchRequest}}).
 
 
 %% ====================================================================
