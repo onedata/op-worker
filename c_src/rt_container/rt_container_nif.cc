@@ -20,7 +20,8 @@ using namespace one::provider;
 
 static int load(ErlNifEnv *env, void **priv, ERL_NIF_TERM load_info)
 {
-    nifpp::register_resource< std::shared_ptr<rt_container> >(env, nullptr, "rt_container");
+    nifpp::register_resource<std::shared_ptr<rt_container>>(env, nullptr,
+                                                            "rt_container");
     return 0;
 }
 
@@ -30,10 +31,10 @@ static ERL_NIF_TERM init_nif(ErlNifEnv *env, int argc,
     try {
         ErlNifUInt64 block_size;
         nifpp::get_throws(env, argv[0], block_size);
-        auto heap = nifpp::construct_resource< std::shared_ptr<rt_container> >(new rt_heap(block_size));
-        return nifpp::make(env,
-                           std::make_tuple(nifpp::str_atom("ok"),
-                                           nifpp::make(env, heap)));
+        auto heap = nifpp::construct_resource<std::shared_ptr<rt_container>>(
+            new rt_heap(block_size));
+        return nifpp::make(env, std::make_tuple(nifpp::str_atom("ok"),
+                                                nifpp::make(env, heap)));
     }
     catch (...) {
         return enif_make_badarg(env);
@@ -44,20 +45,22 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
                              const ERL_NIF_TERM argv[])
 {
     try {
-        nifpp::resource_ptr< std::shared_ptr<rt_container> > heap;
+        nifpp::resource_ptr<std::shared_ptr<rt_container>> heap;
         nifpp::str_atom record_name;
         std::string file_id;
+        std::string provider_id;
         ErlNifUInt64 offset, size;
         int priority;
         std::list<ErlNifPid> pids;
         auto record = std::make_tuple(std::ref(record_name), std::ref(file_id),
-                                      std::ref(offset), std::ref(size),
-                                      std::ref(priority), std::ref(pids));
+                                      std::ref(provider_id), std::ref(offset),
+                                      std::ref(size), std::ref(priority),
+                                      std::ref(pids));
 
         nifpp::get_throws(env, argv[0], heap);
         nifpp::get_throws(env, argv[1], record);
 
-        rt_block block(file_id, offset, size, priority, pids);
+        rt_block block(file_id, provider_id, offset, size, priority, pids);
         (*heap)->push(block);
 
         return nifpp::make(env, nifpp::str_atom("ok"));
@@ -72,17 +75,16 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ERL_NIF_TERM pop_nif(ErlNifEnv *env, int argc,
-                              const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM pop_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     try {
-        nifpp::resource_ptr< std::shared_ptr<rt_container> > heap;
+        nifpp::resource_ptr<std::shared_ptr<rt_container>> heap;
         nifpp::get_throws(env, argv[0], heap);
 
         rt_block block = (*heap)->pop();
         auto record = std::make_tuple(
-            nifpp::str_atom("rt_block"), block.file_id(), block.offset(),
-            block.size(), block.priority(), block.pids());
+            nifpp::str_atom("rt_block"), block.file_id(), block.provider_id(),
+            block.offset(), block.size(), block.priority(), block.pids());
 
         return nifpp::make(env, std::make_tuple(nifpp::str_atom("ok"), record));
     }

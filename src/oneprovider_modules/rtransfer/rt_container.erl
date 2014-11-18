@@ -96,7 +96,10 @@ new(ContainerName, Prefix, BlockSize) ->
     GlobalName :: term(),
     ViaName :: term().
 %% ====================================================================
-push(ContainerRef, Block) ->
+push(ContainerRef, #rt_block{provider_id = ProviderId} = Block) when is_binary(ProviderId) ->
+    push(ContainerRef, Block#rt_block{provider_id = binary_to_list(ProviderId)});
+
+push(ContainerRef, #rt_block{provider_id = ProviderId} = Block) when is_list(ProviderId) ->
     gen_server:cast(ContainerRef, {push, Block}).
 
 
@@ -133,10 +136,13 @@ pop(ContainerRef) ->
 %% ====================================================================
 pop(ContainerRef, PidsFilterFunction) ->
     case gen_server:call(ContainerRef, pop) of
-        {ok, #rt_block{pids = Pids} = Block} ->
-            {ok, Block#rt_block{pids = lists:filter(fun(Pid) ->
-                PidsFilterFunction(Pid)
-            end, lists:usort(Pids))}};
+        {ok, #rt_block{pids = Pids, provider_id = ProviderId} = Block} ->
+            {ok, Block#rt_block{
+                pids = lists:filter(fun(Pid) ->
+                    PidsFilterFunction(Pid)
+                end, lists:usort(Pids)),
+                provider_id = list_to_binary(ProviderId)
+            }};
         Other ->
             Other
     end.

@@ -14,7 +14,8 @@ namespace provider {
 
 /**
  * The rt_container class.
- * rt_container object represents RTransfer container that allows to push and pop
+ * rt_container object represents RTransfer container that allows to push and
+ * pop
  * rt_blocks
  */
 class rt_container {
@@ -24,7 +25,7 @@ public:
      * Constructs RTransfer container.
      * @param block_size maximal size of block stored in the rt_container
      */
-    rt_container(ErlNifUInt64 block_size) : block_size_(block_size) {}
+    rt_container(ErlNifUInt64 block_size) : block_size_{block_size} {}
 
     virtual ~rt_container() = default;
 

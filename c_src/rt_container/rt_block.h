@@ -25,22 +25,20 @@ class rt_block {
 public:
     /**
      * rt_block constructor.
-     * Constructs empty RTransfer block.
-     */
-    rt_block() : rt_block("", 0, 0, 0, std::list<ErlNifPid>()) {}
-
-    /**
-     * rt_block constructor.
      * Constructs RTransfer block.
      * @param file_id ID of file this block is a part of
      * @param offset block offset
      * @param size block size
      * @param priority block priority
+     * @param pids list of processes that push block
+     * @param provider_id ID of provider that poses block
      * @param counter defines how many times block was pushed on the rt_heap
      */
-    rt_block(std::string file_id, ErlNifUInt64 offset, ErlNifUInt64 size,
-             int priority, std::list<ErlNifPid> pids, int counter = 1)
+    rt_block(std::string file_id, std::string provider_id, ErlNifUInt64 offset,
+             ErlNifUInt64 size, int priority, std::list<ErlNifPid> pids,
+             int counter = 1)
         : file_id_{std::move(file_id)}
+        , provider_id_{std::move(provider_id)}
         , offset_{offset}
         , size_{size}
         , priority_{priority}
@@ -51,6 +49,9 @@ public:
 
     /// Getter for block's file ID
     const std::string &file_id() const { return file_id_; }
+
+    /// Getter for provider ID
+    const std::string &provider_id() const { return provider_id_; }
 
     /// Getter for block's offset
     ErlNifUInt64 offset() const { return offset_; }
@@ -106,6 +107,7 @@ public:
 
 private:
     std::string file_id_;
+    std::string provider_id_;
     ErlNifUInt64 offset_;
     ErlNifUInt64 size_;
     int priority_;

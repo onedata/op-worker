@@ -33,7 +33,7 @@ public:
     /**
      * @copydoc rt_container::rt_container
      */
-    rt_heap(ErlNifUInt64 block_size) : rt_container(block_size) {}
+    rt_heap(ErlNifUInt64 block_size) : rt_container{block_size} {}
     /**
      * @copydoc rt_container::push
      */
