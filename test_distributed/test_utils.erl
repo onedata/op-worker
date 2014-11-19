@@ -27,7 +27,7 @@
 
 %% Functions to use instead of timer
 -export([ct_mock/4, wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0,
-         wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
+  wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
 
 -export([add_user/4, add_user/7]).
 
@@ -40,10 +40,10 @@
 %%      Returns #db_document with #user record that was just created or fails with exception.
 %% @end
 -spec add_user(Config :: list(), Login :: string(), Cert :: string(), Spaces :: [string() | binary()]) ->
-    #db_document{} | no_return().
+  #db_document{} | no_return().
 %% ====================================================================
 add_user(Config, Login, Cert, Spaces) ->
-    add_user(Config, Login, Cert, Spaces, <<"access_token">>, <<>>, 0).
+  add_user(Config, Login, Cert, Spaces, <<"access_token">>, <<>>, 0).
 
 
 %% add_user/5
@@ -52,44 +52,44 @@ add_user(Config, Login, Cert, Spaces) ->
 %% @end
 -spec add_user(Config :: list(), Login :: string(), Cert :: string(), Spaces :: [string() | binary()],
     AccessToken :: binary(), RefreshToken :: binary(), AccessExpirationTime :: integer()) ->
-    #db_document{} | no_return().
+  #db_document{} | no_return().
 %% ====================================================================
 add_user(Config, Login, Cert, Spaces, AccessToken, RefreshToken, AccessExpirationTime) ->
 
-    [CCM | _] = ?config(nodes, Config),
+  [CCM | _] = ?config(nodes, Config),
 
-    SpacesBinary = [utils:ensure_binary(Space) || Space <- Spaces],
-    SpacesList = [utils:ensure_list(Space) || Space <- Spaces],
+  SpacesBinary = [utils:ensure_binary(Space) || Space <- Spaces],
+  SpacesList = [utils:ensure_list(Space) || Space <- Spaces],
 
-    {ReadFileAns, PemBin} = file:read_file(Cert),
-    ?assertMatch({ok, _}, {ReadFileAns, PemBin}),
-    {ExtractAns, RDNSequence} = rpc:call(CCM, user_logic, extract_dn_from_cert, [PemBin]),
-    ?assertMatch({rdnSequence, _}, {ExtractAns, RDNSequence}),
-    {ConvertAns, DN} = rpc:call(CCM, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-    ?assertMatch({ok, _}, {ConvertAns, DN}),
+  {ReadFileAns, PemBin} = file:read_file(Cert),
+  ?assertMatch({ok, _}, {ReadFileAns, PemBin}),
+  {ExtractAns, RDNSequence} = rpc:call(CCM, user_logic, extract_dn_from_cert, [PemBin]),
+  ?assertMatch({rdnSequence, _}, {ExtractAns, RDNSequence}),
+  {ConvertAns, DN} = rpc:call(CCM, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+  ?assertMatch({ok, _}, {ConvertAns, DN}),
 
-    DnList = [DN],
-    Name = Login ++ " " ++ Login,
-    Teams = SpacesList,
-    Email = [Login ++ "@email.net"],
-    Logins = [#id_token_login{provider_id = plgrid, login = utils:ensure_binary(Login)}],
+  DnList = [DN],
+  Name = Login ++ " " ++ Login,
+  Teams = SpacesList,
+  Email = [Login ++ "@email.net"],
+  Logins = [#id_token_login{provider_id = plgrid, login = utils:ensure_binary(Login)}],
 
-    rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
+  rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
 
-    AllSpaces = case get(ct_spaces) of
-        undefined -> put(ct_spaces, SpacesBinary);
-        Ctx -> put(ct_spaces, lists:usort(SpacesBinary ++ Ctx))
-    end,
+  AllSpaces = case get(ct_spaces) of
+                undefined -> put(ct_spaces, SpacesBinary);
+                Ctx -> put(ct_spaces, lists:usort(SpacesBinary ++ Ctx))
+              end,
 
-    {CreateUserAns, NewUserDoc} = rpc:call(CCM, user_logic, create_user,
-        ["global_id_for_" ++ Login, Logins, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime]),
-    ?assertMatch({ok, _}, {CreateUserAns, NewUserDoc}),
+  {CreateUserAns, NewUserDoc} = rpc:call(CCM, user_logic, create_user,
+    ["global_id_for_" ++ Login, Logins, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime]),
+  ?assertMatch({ok, _}, {CreateUserAns, NewUserDoc}),
 
-    test_utils:ct_mock(Config, gr_users, get_spaces, fun(_) -> {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
-    test_utils:ct_mock(Config, gr_adapter, get_space_info, fun(SpaceId, _) -> {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [?LOCAL_PROVIDER_ID]}} end),
-    test_utils:ct_mock(Config, gr_providers, get_spaces, fun(provider) -> {ok, AllSpaces} end),
+  test_utils:ct_mock(Config, gr_users, get_spaces, fun(_) -> {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
+  test_utils:ct_mock(Config, gr_adapter, get_space_info, fun(SpaceId, _) -> {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [?LOCAL_PROVIDER_ID]}} end),
+  test_utils:ct_mock(Config, gr_providers, get_spaces, fun(provider) -> {ok, AllSpaces} end),
 
-    _UserDoc = rpc:call(CCM, user_logic, synchronize_spaces_info, [NewUserDoc, AccessToken]).
+  _UserDoc = rpc:call(CCM, user_logic, synchronize_spaces_info, [NewUserDoc, AccessToken]).
 
 
 %% ct_mock/4
@@ -100,12 +100,12 @@ add_user(Config, Login, Cert, Spaces, AccessToken, RefreshToken, AccessExpiratio
 %%      Config shall be a proplist with at least {nodes, Nodes :: list()} entry.
 %% @end
 -spec ct_mock(Config :: list(), Module :: atom(), Method :: atom(), Fun :: [term()]) ->
-    {[term()], [term()]}.
+  {[term()], [term()]}.
 %% ====================================================================
 ct_mock(Config, Module, Method, Fun) ->
-    NodesUp = ?config(nodes, Config),
-    {_, []} = rpc:multicall(NodesUp, meck, new, [Module, [passthrough, non_strict, unstick, no_link]]),
-    {_, []} = rpc:multicall(NodesUp, meck, expect, [Module, Method, Fun]).
+  NodesUp = ?config(nodes, Config),
+  {_, []} = rpc:multicall(NodesUp, meck, new, [Module, [passthrough, non_strict, unstick, no_link]]),
+  {_, []} = rpc:multicall(NodesUp, meck, expect, [Module, Method, Fun]).
 
 
 %% wait_for_cluster_cast/0
@@ -127,10 +127,10 @@ wait_for_cluster_cast(GenServ) ->
   timer:sleep(100),
   Ans = try
     gen_server:call(GenServ, check, 10000)
-  catch
-    E1:E2 ->
-      {exception, E1, E2}
-  end,
+        catch
+          E1:E2 ->
+            {exception, E1, E2}
+        end,
   ?assertEqual(ok, Ans).
 
 %% wait_for_nodes_registration/1
@@ -192,7 +192,6 @@ check_init(ModulesNum) ->
     WList = lists:filter(fun({_, ModuleName}) -> not lists:member(ModuleName, ?ignored_modules) end, WList0),
     case length(WList) >= ModulesNum of
       true ->
-        timer:sleep(500),
         Nodes = gen_server:call({global, ?CCM}, get_nodes, 1000),
         {_, CStateNum} = gen_server:call({global, ?CCM}, get_callbacks, 1000),
         CheckNode = fun(Node, TmpAns) ->
@@ -200,12 +199,12 @@ check_init(ModulesNum) ->
           {_, CStateNum2} = gen_server:call({?Dispatcher_Name, Node}, get_callbacks, 1000),
           case (StateNum == StateNum2) and (CStateNum == CStateNum2) of
             true -> TmpAns;
-            false -> false
+            false -> {wrong_state_nums, Node, StateNum, StateNum2, CStateNum, CStateNum2}
           end
         end,
         lists:foldl(CheckNode, true, Nodes);
       false ->
-        false
+        {to_few_modules, WList}
     end
   catch
     E1:E2 ->
@@ -235,26 +234,28 @@ wait_for_cluster_init() ->
 %% ====================================================================
 wait_for_cluster_init(ModulesNum) ->
   Modules = lists:filter(fun({ModuleName, _}) -> not lists:member(ModuleName, ?ignored_modules) end, ?Modules_With_Args),
-  wait_for_cluster_init(ModulesNum + length(Modules), 20).
+  wait_for_cluster_init(ModulesNum + length(Modules), 30, []).
 
-%% wait_for_cluster_init/2
+%% wait_for_cluster_init/3
 %% ====================================================================
 %% @doc Wait until cluster is initialized properly.
 %% @end
--spec wait_for_cluster_init(ModulesNum :: integer(), TriesNum :: integer()) -> Ans when
-  Ans :: boolean() | {exception, E1, E2},
-  E1 :: term(),
-  E2 :: term().
+-spec wait_for_cluster_init(ModulesNum :: integer(), TriesNum :: integer(), Errors :: list()) -> Ans when
+  Ans :: true | ErrorsList,
+  ErrorsList :: list().
 %% ====================================================================
-wait_for_cluster_init(ModulesNum, 0) ->
-  ?assert(check_init(ModulesNum));
-
-wait_for_cluster_init(ModulesNum, TriesNum) ->
+wait_for_cluster_init(ModulesNum, 0, Errors) ->
   case check_init(ModulesNum) of
     true -> true;
-    _ ->
-      timer:sleep(500),
-      wait_for_cluster_init(ModulesNum, TriesNum - 1)
+    E -> ?assert([E | Errors])
+  end;
+
+wait_for_cluster_init(ModulesNum, TriesNum, Errors) ->
+  case check_init(ModulesNum) of
+    true -> true;
+    E ->
+      timer:sleep(1000),
+      wait_for_cluster_init(ModulesNum, TriesNum - 1, [E | Errors])
   end.
 
 %% wait_for_db_reaction/0
