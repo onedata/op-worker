@@ -96,7 +96,7 @@ modules_start_and_ping_test(Config) ->
   State2 = gen_server:call({global, ?CCM}, get_state, 500),
   Workers2 = State2#cm_state.workers,
   Jobs = ?MODULES -- [dbsync],  
-  ?assert(leugth(Workers2) >= length(Jobs)),
+  ?assert(length(Workers2) >= length(Jobs)),
   ?assertEqual(5, gen_server:call({global, ?CCM}, get_state_num, 1000)),
 
   CheckModules = fun(M, Sum) ->
