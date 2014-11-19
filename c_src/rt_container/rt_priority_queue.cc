@@ -57,8 +57,9 @@ rt_block rt_priority_queue::fetch()
     return block;
 }
 
-void rt_priority_queue::change_counter(ErlNifUInt64 offset, ErlNifUInt64 size,
-                                       ErlNifUInt64 change = 1)
+void rt_priority_queue::change_counter(std::string file_id, ErlNifUInt64 offset,
+                                       ErlNifUInt64 size,
+                                       ErlNifSInt64 change = 1)
 {
 }
 

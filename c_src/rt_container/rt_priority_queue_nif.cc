@@ -102,8 +102,39 @@ static ERL_NIF_TERM fetch_nif(ErlNifEnv *env, int argc,
     }
 }
 
+static ERL_NIF_TERM change_counter_nif(ErlNifEnv *env, int argc,
+                                       const ERL_NIF_TERM argv[])
+{
+    try {
+        nifpp::resource_ptr<rt_priority_queue> queue;
+        std::string file_id;
+        ErlNifUInt64 offset, size;
+        ErlNifSInt64 change;
+        nifpp::get_throws(env, argv[0], queue);
+        nifpp::get_throws(env, argv[1], file_id);
+        nifpp::get_throws(env, argv[2], offset);
+        nifpp::get_throws(env, argv[3], size);
+        nifpp::get_throws(env, argv[4], change);
+
+        queue->change_counter(file_id, offset, size, change);
+        ErlNifUInt64 queue_size = queue->size();
+
+        return nifpp::make(env,
+                           std::make_tuple(nifpp::str_atom("ok"), queue_size));
+    }
+    catch (const rt_exception &ex) {
+        std::string message = ex.what();
+        return nifpp::make(env, std::make_tuple(nifpp::str_atom("error"),
+                                                nifpp::str_atom(message)));
+    }
+    catch (...) {
+        return enif_make_badarg(env);
+    }
+}
+
 static ErlNifFunc nif_funcs[] = {{"init_nif", 1, init_nif},
                                  {"push_nif", 2, push_nif},
-                                 {"fetch_nif", 1, fetch_nif}};
+                                 {"fetch_nif", 1, fetch_nif},
+                                 {"change_counter_nif", 5, change_counter_nif}};
 
 ERL_NIF_INIT(rt_priority_queue, nif_funcs, load, NULL, NULL, NULL)

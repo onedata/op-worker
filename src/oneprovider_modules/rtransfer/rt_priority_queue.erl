@@ -16,7 +16,7 @@
 
 %% API
 -export([new/0, new/1, new/2, new/3, delete/1]).
--export([push/2, fetch/1, fetch/2, change_counter/4, size/1]).
+-export([push/2, fetch/1, fetch/2, change_counter/4, change_counter/5, size/1]).
 -export([subscribe/3, unsubscribe/2]).
 
 %% gen_server callbacks
@@ -96,10 +96,10 @@ delete(ContainerRef) ->
 -spec push(ContainerRef, Block :: #rt_block{}) -> ok when
     ContainerRef :: container_ref().
 %% ====================================================================
-push(ContainerRef, #rt_block{provider_id = ProviderId} = Block) when is_binary(ProviderId) ->
-    push(ContainerRef, Block#rt_block{provider_id = binary_to_list(ProviderId)});
+push(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_binary(ProviderId) ->
+    push(ContainerRef, Block#rt_block{provider_ref = binary_to_list(ProviderId)});
 
-push(ContainerRef, #rt_block{provider_id = ProviderId} = Block) when is_list(ProviderId) ->
+push(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_list(ProviderId) ->
     gen_server:cast(ContainerRef, {push, Block}).
 
 
@@ -125,12 +125,12 @@ fetch(ContainerRef) ->
 %% ====================================================================
 fetch(ContainerRef, TermsFilterFunction) ->
     case gen_server:call(ContainerRef, fetch) of
-        {ok, #rt_block{terms = Terms, provider_id = ProviderId} = Block} ->
+        {ok, #rt_block{terms = Terms, provider_ref = ProviderId} = Block} ->
             {ok, Block#rt_block{
                 terms = lists:filter(fun(Term) ->
                     TermsFilterFunction(Term)
                 end, lists:usort(Terms)),
-                provider_id = list_to_binary(ProviderId)
+                provider_ref = list_to_binary(ProviderId)
             }};
         Other ->
             Other
@@ -139,17 +139,32 @@ fetch(ContainerRef, TermsFilterFunction) ->
 
 %% change_counter/4
 %% ====================================================================
+%% @equiv change_counter(ContainerRef, Offset, Size, 1)
+%% @end
+-spec change_counter(ContainerRef, FileId, Offset, Size) -> ok when
+    ContainerRef :: container_ref(),
+    FileId :: string(),
+    Offset :: non_neg_integer(),
+    Size :: non_neg_integer().
+%% ====================================================================
+change_counter(ContainerRef, FileId, Offset, Size) ->
+    change_counter(ContainerRef, FileId, Offset, Size, 1).
+
+
+%% change_counter/4
+%% ====================================================================
 %% @doc Changes counter for block in range [Offset, Offset + Size) by
 %% add Change value to current blocks' counter value.
 %% @end
--spec change_counter(ContainerRef, Offset, Size, Change) -> ok when
+-spec change_counter(ContainerRef, FileId, Offset, Size, Change) -> ok when
     ContainerRef :: container_ref(),
+    FileId :: string(),
     Offset :: non_neg_integer(),
     Size :: non_neg_integer(),
     Change :: integer().
 %% ====================================================================
-change_counter(ContainerRef, Offset, Size, Change) ->
-    gen_server:cast(ContainerRef, {change_counter, Offset, Size, Change}).
+change_counter(ContainerRef, FileId, Offset, Size, Change) ->
+    gen_server:cast(ContainerRef, {change_counter, FileId, Offset, Size, Change}).
 
 
 %% size/1
@@ -275,8 +290,8 @@ handle_cast({push, Block}, #state{container_ptr = ContainerPtr, subscribers = Su
             Other
     end;
 
-handle_cast({change_counter, Offset, Size, Change}, #state{container_ptr = ContainerPtr} = State) ->
-    nif_change_counter(ContainerPtr, Offset, Size, Change),
+handle_cast({change_counter, FileId, Offset, Size, Change}, #state{container_ptr = ContainerPtr} = State) ->
+    change_counter_nif(ContainerPtr, FileId, Offset, Size, Change),
     {noreply, State};
 
 handle_cast({subscribe, Pid, Id}, #state{subscribers = Subscribers} = State) ->
@@ -370,16 +385,18 @@ fetch_nif(_ContainerPtr) ->
     throw("NIF library not loaded.").
 
 
-%% nif_change_counter/4
+%% change_counter_nif/5
 %% ====================================================================
 %% @doc Changes counter for block in range [Offset, Offset + Size) by
 %% add Change value to current blocks' counter value.
 %% @end
--spec nif_change_counter(ContainerPtr, Offset, Size, Change) -> ok | no_return() when
+-spec change_counter_nif(ContainerPtr, FileId, Offset, Size, Change) ->
+    {ok, Size} | no_return() when
     ContainerPtr :: container_ptr(),
+    FileId :: string(),
     Offset :: non_neg_integer(),
     Size :: non_neg_integer(),
     Change :: integer().
 %% ====================================================================
-nif_change_counter(_ContainerPtr, _Offset, _Size, _Change) ->
+change_counter_nif(_ContainerPtr, _FileId, _Offset, _Size, _Change) ->
     throw("NIF library not loaded.").

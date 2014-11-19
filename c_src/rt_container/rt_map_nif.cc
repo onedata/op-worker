@@ -79,16 +79,18 @@ static ERL_NIF_TERM fetch_nif(ErlNifEnv *env, int argc,
 {
     try {
         nifpp::resource_ptr<rt_map> map;
+        std::string file_id;
         ErlNifUInt64 offset, size;
         nifpp::get_throws(env, argv[0], map);
-        nifpp::get_throws(env, argv[1], offset);
-        nifpp::get_throws(env, argv[2], size);
+        nifpp::get_throws(env, argv[1], file_id);
+        nifpp::get_throws(env, argv[2], offset);
+        nifpp::get_throws(env, argv[3], size);
 
         std::list<std::tuple<nifpp::str_atom, std::string, nifpp::TERM,
                              ErlNifUInt64, ErlNifUInt64, ErlNifUInt64,
                              std::list<nifpp::TERM>>> records;
 
-        for (const auto &block : map->fetch(offset, size))
+        for (const auto &block : map->fetch(file_id, offset, size))
             records.push_back(
                 std::make_tuple(nifpp::str_atom("rt_block"), block.file_id(),
                                 block.provider_ref(), block.offset(),
@@ -107,8 +109,35 @@ static ERL_NIF_TERM fetch_nif(ErlNifEnv *env, int argc,
     }
 }
 
+static ERL_NIF_TERM remove_nif(ErlNifEnv *env, int argc,
+                               const ERL_NIF_TERM argv[])
+{
+    try {
+        nifpp::resource_ptr<rt_map> map;
+        std::string file_id;
+        ErlNifUInt64 offset, size;
+        nifpp::get_throws(env, argv[0], map);
+        nifpp::get_throws(env, argv[1], file_id);
+        nifpp::get_throws(env, argv[2], offset);
+        nifpp::get_throws(env, argv[3], size);
+
+        map->remove(file_id, offset, size);
+
+        return nifpp::make(env, nifpp::str_atom("ok"));
+    }
+    catch (const rt_exception &ex) {
+        std::string message = ex.what();
+        return nifpp::make(env, std::make_tuple(nifpp::str_atom("error"),
+                                                nifpp::str_atom(message)));
+    }
+    catch (...) {
+        return enif_make_badarg(env);
+    }
+}
+
 static ErlNifFunc nif_funcs[] = {{"init_nif", 1, init_nif},
                                  {"push_nif", 2, push_nif},
-                                 {"fetch_nif", 3, fetch_nif}};
+                                 {"fetch_nif", 4, fetch_nif},
+                                 {"remove_nif", 4, remove_nif}};
 
 ERL_NIF_INIT(rt_map, nif_funcs, load, NULL, NULL, NULL)

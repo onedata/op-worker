@@ -13,7 +13,7 @@
 #include "rt_block.h"
 #include "rt_interval.h"
 
-#include <set>
+#include <list>
 
 namespace one {
 namespace provider {
@@ -34,9 +34,10 @@ public:
 
     void push(const rt_block &block);
 
-    const std::set<rt_block> &fetch(ErlNifUInt64 offset, ErlNifUInt64 size);
+    const std::list<rt_block> &fetch(std::string file_id, ErlNifUInt64 offset,
+                                     ErlNifUInt64 size);
 
-    void remove(ErlNifUInt64 offset, ErlNifUInt64 size);
+    void remove(std::string file_id, ErlNifUInt64 offset, ErlNifUInt64 size);
 
 private:
     ErlNifUInt64 block_size_;
