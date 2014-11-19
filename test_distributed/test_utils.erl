@@ -199,7 +199,7 @@ check_init(ModulesNum) ->
           {_, CStateNum2} = gen_server:call({?Dispatcher_Name, Node}, get_callbacks, 1000),
           case (StateNum == StateNum2) and (CStateNum == CStateNum2) of
             true -> TmpAns;
-            false -> {wrong_state_nums, Node, StateNum, StateNum2, CStateNum, CStateNum2}
+            false -> [{wrong_state_nums, Node, StateNum, StateNum2, CStateNum, CStateNum2} | TmpAns]
           end
         end,
         lists:foldl(CheckNode, true, Nodes);
@@ -216,9 +216,7 @@ check_init(ModulesNum) ->
 %% @doc Wait until cluster is initialized properly.
 %% @end
 -spec wait_for_cluster_init() -> Ans when
-  Ans :: boolean() | {exception, E1, E2},
-  E1 :: term(),
-  E2 :: term().
+  Ans :: true | no_return().
 %% ====================================================================
 wait_for_cluster_init() ->
   wait_for_cluster_init(0).
@@ -228,9 +226,7 @@ wait_for_cluster_init() ->
 %% @doc Wait until cluster is initialized properly.
 %% @end
 -spec wait_for_cluster_init(ModulesNum :: integer()) -> Ans when
-  Ans :: boolean() | {exception, E1, E2},
-  E1 :: term(),
-  E2 :: term().
+  Ans :: true | no_return().
 %% ====================================================================
 wait_for_cluster_init(ModulesNum) ->
   Modules = lists:filter(fun({ModuleName, _}) -> not lists:member(ModuleName, ?ignored_modules) end, ?Modules_With_Args),
@@ -241,8 +237,7 @@ wait_for_cluster_init(ModulesNum) ->
 %% @doc Wait until cluster is initialized properly.
 %% @end
 -spec wait_for_cluster_init(ModulesNum :: integer(), TriesNum :: integer(), Errors :: list()) -> Ans when
-  Ans :: true | ErrorsList,
-  ErrorsList :: list().
+  Ans :: true | no_return().
 %% ====================================================================
 wait_for_cluster_init(ModulesNum, 0, Errors) ->
   case check_init(ModulesNum) of
