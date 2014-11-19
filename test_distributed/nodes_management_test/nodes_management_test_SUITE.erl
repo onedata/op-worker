@@ -704,20 +704,17 @@ workers_list_singleton_and_permanent_test(Config) ->
   Ok0 = gen_server:cast({global, ?CCM}, {register_module_listener, gateway, {module, gateway}}),
   ?assertEqual(ok, Ok0),
 
+  Self = self(),
+  test_utils:ct_mock(Config, gateway, handle_node_lifecycle_notification, fun(Node, Module, Action, Pid) ->  Self ! {ok, Node, Module, Action, Pid} end),
+
   gen_server:call({global, ?CCM}, {lifecycle_notification, Worker1, gateway, stop_worker}),
 
-  Ok2 = gen_server:call({?Dispatcher_Name, Worker2}, {gateway, 1, self(),  node_lifecycle_get_notification}),
-  ?assertEqual(ok, Ok2),
-
-  Ans1 = receive
-           {ok, {node_lifecycle, X}} -> X
-         after 1000 ->
-           error
-         end,
-  ?assertEqual(1, length(Ans1)),
-
-  [{_, [{N, M, A, _}]}] = Ans1,
-  ?assertEqual({Worker1, gateway, stop_worker}, {N, M, A}).
+  receive
+    {ok, Node, Module, Action, _Pid} ->
+      ?assertEqual({Worker1, gateway, stop_worker}, {Node, Module, Action})
+    after 1000 ->
+      ?assert(false)
+  end.
 
 
 %% ====================================================================

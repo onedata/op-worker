@@ -25,10 +25,6 @@
 -export([compute_request_hash/1]).
 
 
--ifdef(TEST).
--define(NOTIFICATION_STATE, notification_state).
--endif.
-
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -58,11 +54,6 @@ do_stuff(ProviderId, #fetchrequest{} = Request) ->
 %% @see worker_plugin_behaviour
 -spec init(Args :: term()) -> ok | {error, Error :: any()}.
 %% ====================================================================
--ifdef(TEST).
-init(_Args) ->
-  ets:new(?NOTIFICATION_STATE, [named_table, public, set]),
-  [].
--else.
 init(_Args) ->
     {ok, GwPort} = application:get_env(?APP_Name, gateway_listener_port),
     {ok, GwProxyPort} = application:get_env(?APP_Name, gateway_proxy_port),
@@ -83,7 +74,6 @@ init(_Args) ->
     %% @TODO: On supervisor's exit we should be able to reinitialize the module.
 	{ok, _} = gateway_dispatcher_supervisor:start_link(NICs),
     ok.
--endif.
 
 
 %% handle/2
@@ -109,9 +99,6 @@ handle(_ProtocolVersion, #fetch{} = Request) ->
 handle(_ProtocolVersion, {node_lifecycle_notification, Node, Module, Action, Pid}) ->
   handle_node_lifecycle_notification(Node, Module, Action, Pid),
   ok;
-
-handle(_ProtocolVersion, node_lifecycle_get_notification) ->
-  node_lifecycle_get_notification();
 
 
 handle(_ProtocolVersion, _Msg) ->
@@ -152,29 +139,6 @@ compute_request_hash(RequestBytes) ->
 %% @doc Handles lifecycle calls
 -spec handle_node_lifecycle_notification(Node :: list(), Module :: atom(), Action :: atom(), Pid :: pid()) -> ok.
 %% ====================================================================
--ifdef(TEST).
-handle_node_lifecycle_notification(Node, Module, Action, Pid) ->
-  case ets:lookup(?NOTIFICATION_STATE, node_lifecycle_notification) of
-    [{_, L}] -> ets:insert(?NOTIFICATION_STATE, {node_lifecycle_notification, [{Node, Module, Action, Pid}|L]});
-    _ -> ets:insert(?NOTIFICATION_STATE, {node_lifecycle_notification, [{Node, Module, Action, Pid}]})
-  end,
-  ok.
--else.
 handle_node_lifecycle_notification(_Node, _Module, _Action, _Pid) ->
   ok.
--endif.
-
-%% node_lifecycle_get_notification/0
-%% ====================================================================
-%% @doc Handles test calls.
--spec node_lifecycle_get_notification() -> ok | term().
-%% ====================================================================
--ifdef(TEST).
-node_lifecycle_get_notification() ->
-  Notification = ets:lookup(?NOTIFICATION_STATE, node_lifecycle_notification),
-  {ok, {node_lifecycle, Notification}}.
--else.
-node_lifecycle_get_notification() ->
-  ok.
--endif.
 
