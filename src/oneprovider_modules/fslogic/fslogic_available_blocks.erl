@@ -50,7 +50,10 @@ registered_requests() ->
     end.
 
 save_available_blocks(ProtocolVersion, _CacheName, Doc) ->
-    {ok, _} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion).
+    Pid = self(),
+    ct:print("save begin ~p", [Pid]),
+    {ok, _} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion),
+    ct:print("save end ~p", [Pid]).
 
 get_available_blocks(ProtocolVersion, _CacheName, FileId) ->
     {ok, AllDocs} = list_all_available_blocks(ProtocolVersion, _CacheName, FileId),
