@@ -604,9 +604,9 @@ write(File, Buf) ->
                         {true, true} ->
                             % async get attrs and send wite event
                             Ctx = fslogic_context:get_user_context(),
-                            {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File), %todo IMPORTANT: this needs optimization!!!,  but cannot be done asynchronously
                             spawn(fun() ->
                                 fslogic_context:set_user_context(Ctx),
+                                {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File), %todo IMPORTANT: this needs optimization!!!,  but cannot be done asynchronously
                                 {ok, FullFileName} = fslogic_path:get_full_file_name(File), %todo cache somehow
                                 WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
                                     {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}, {"filePath", FullFileName}],
@@ -614,7 +614,7 @@ write(File, Buf) ->
                                 WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
                                     {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}, {"filePath", FullFileName}],
                                 gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
-                                WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
+                                WriteEventAvailableBlocks = [{"type", "truncate_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
                                     {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}, {"filePath", FullFileName}],
                                 gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}})
                             end);
