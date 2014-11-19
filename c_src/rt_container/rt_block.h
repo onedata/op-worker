@@ -30,20 +30,20 @@ public:
      * @param offset block offset
      * @param size block size
      * @param priority block priority
-     * @param pids list of processes that push block
+     * @param terms list of Erlang terms associated with block
      * @param provider_id ID of provider that poses block
      * @param counter defines how many times block was pushed on the
      * rt_container
      */
     rt_block(std::string file_id, std::string provider_id, ErlNifUInt64 offset,
-             ErlNifUInt64 size, int priority, std::list<ErlNifPid> pids,
+             ErlNifUInt64 size, int priority, std::list<nifpp::TERM> terms,
              int counter = 1)
         : file_id_{std::move(file_id)}
         , provider_id_{std::move(provider_id)}
         , offset_{offset}
         , size_{size}
         , priority_{priority}
-        , pids_{std::move(pids)}
+        , terms_{std::move(terms)}
         , counter_{counter}
     {
     }
@@ -66,17 +66,17 @@ public:
     /// Getter for block's priority
     int priority() const { return priority_; }
 
-    /// Getter for block's pids
-    const std::list<ErlNifPid> &pids() const { return pids_; }
+    /// Getter for block's terms
+    const std::list<nifpp::TERM> &terms() const { return terms_; }
 
     /// Getter for block's addition counter
     int counter() const { return counter_; }
 
     /**
-     * Appends list of pids to block
-     * @param list of pids to be appended to the list of block's pids
+     * Appends list of terms to block
+     * @param list of terms to be appended to the list of block's terms
      */
-    void appendPids(const std::list<ErlNifPid> &pids);
+    void appendTerms(const std::list<nifpp::TERM> &terms);
 
     /**
      * Modifies this block by merging other block
@@ -112,7 +112,7 @@ private:
     ErlNifUInt64 offset_;
     ErlNifUInt64 size_;
     int priority_;
-    std::list<ErlNifPid> pids_;
+    std::list<nifpp::TERM> terms_;
     int counter_;
 };
 

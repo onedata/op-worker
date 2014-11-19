@@ -117,19 +117,19 @@ fetch(ContainerRef) ->
 
 %% fetch/2
 %% ====================================================================
-%% @doc Fetches block from RTransfer container and allows to fillter pids
+%% @doc Fetches block from RTransfer container and allows to fillter terms
 %% @end
--spec fetch(ContainerRef, PidsFilterFunction) -> {ok, #rt_block{}} | {error, Error :: string()} when
+-spec fetch(ContainerRef, TermsFilterFunction) -> {ok, #rt_block{}} | {error, Error :: string()} when
     ContainerRef :: container_ref(),
-    PidsFilterFunction :: function(). %% fun(Pid) -> true | false;
+    TermsFilterFunction :: function(). %% fun(Term) -> true | false
 %% ====================================================================
-fetch(ContainerRef, PidsFilterFunction) ->
+fetch(ContainerRef, TermsFilterFunction) ->
     case gen_server:call(ContainerRef, fetch) of
-        {ok, #rt_block{pids = Pids, provider_id = ProviderId} = Block} ->
+        {ok, #rt_block{terms = Terms, provider_id = ProviderId} = Block} ->
             {ok, Block#rt_block{
-                pids = lists:filter(fun(Pid) ->
-                    PidsFilterFunction(Pid)
-                end, lists:usort(Pids)),
+                terms = lists:filter(fun(Term) ->
+                    TermsFilterFunction(Term)
+                end, lists:usort(Terms)),
                 provider_id = list_to_binary(ProviderId)
             }};
         Other ->
@@ -139,7 +139,7 @@ fetch(ContainerRef, PidsFilterFunction) ->
 
 %% fetch/3
 %% ====================================================================
-%% @doc Fetches blocks from RTransfer container that matches segment
+%% @doc Fetches blocks from RTransfer container that matches range
 %% given as offset and size using NIF library.
 %% @end
 -spec fetch(ContainerRef, Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
@@ -350,7 +350,7 @@ fetch_nif(_ContainerPtr) ->
 
 %% fetch_nif/3
 %% ====================================================================
-%% @doc Fetches blocks from RTransfer container that matches segment
+%% @doc Fetches blocks from RTransfer container that matches range
 %% given as offset and size using NIF library.
 %% @end
 -spec fetch_nif(ContainerPtr :: container_ptr(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->

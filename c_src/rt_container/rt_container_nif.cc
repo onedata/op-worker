@@ -66,16 +66,16 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
         std::string provider_id;
         ErlNifUInt64 offset, size;
         int priority;
-        std::list<ErlNifPid> pids;
+        std::list<nifpp::TERM> terms;
         auto record = std::make_tuple(std::ref(record_name), std::ref(file_id),
                                       std::ref(provider_id), std::ref(offset),
                                       std::ref(size), std::ref(priority),
-                                      std::ref(pids));
+                                      std::ref(terms));
 
         nifpp::get_throws(env, argv[0], container);
         nifpp::get_throws(env, argv[1], record);
 
-        rt_block block(file_id, provider_id, offset, size, priority, pids);
+        rt_block block(file_id, provider_id, offset, size, priority, terms);
         (*container)->push(block);
         ErlNifUInt64 container_size = (*container)->size();
 
@@ -103,7 +103,7 @@ static ERL_NIF_TERM fetch_nif_1(ErlNifEnv *env, int argc,
         ErlNifUInt64 container_size = (*container)->size();
         auto record = std::make_tuple(
             nifpp::str_atom("rt_block"), block.file_id(), block.provider_id(),
-            block.offset(), block.size(), block.priority(), block.pids());
+            block.offset(), block.size(), block.priority(), block.terms());
 
         return nifpp::make(env, std::make_tuple(nifpp::str_atom("ok"),
                                                 container_size, record));
@@ -130,13 +130,13 @@ static ERL_NIF_TERM fetch_nif_3(ErlNifEnv *env, int argc,
 
         std::list<std::tuple<nifpp::str_atom, std::string, std::string,
                              ErlNifUInt64, ErlNifUInt64, int,
-                             std::list<ErlNifPid>>> records;
+                             std::list<nifpp::TERM>>> records;
 
         for (const auto &block : (*container)->fetch(offset, size))
             records.push_back(
                 std::make_tuple(nifpp::str_atom("rt_block"), block.file_id(),
                                 block.provider_id(), block.offset(),
-                                block.size(), block.priority(), block.pids()));
+                                block.size(), block.priority(), block.terms()));
         ErlNifUInt64 container_size = (*container)->size();
 
         return nifpp::make(env, std::make_tuple(nifpp::str_atom("ok"),

@@ -22,9 +22,8 @@ namespace provider {
 
 /**
  * The rt_priority_queue class.
- * rt_priority_queue object represents RTransfer priority queue that allows to
- * push and fetch
- * rt_blocks
+ * rt_map object represents RTransfer map that allows to
+ * push and fetch rt_blocks for given range
  */
 class rt_map : public rt_container {
 public:

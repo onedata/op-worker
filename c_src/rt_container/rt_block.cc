@@ -16,8 +16,8 @@ namespace provider {
 const rt_block &rt_block::merge(const rt_block &block)
 {
     size_ += block.size_;
-    for (const auto &pid : block.pids_)
-        pids_.push_back(pid);
+    for (const auto &term : block.terms_)
+        terms_.push_back(term);
     return *this;
 }
 
@@ -28,9 +28,9 @@ bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
            && size_ + block.size_ <= block_size;
 }
 
-void rt_block::appendPids(const std::list<ErlNifPid> &pids)
+void rt_block::appendTerms(const std::list<nifpp::TERM> &terms)
 {
-    pids_.insert(pids_.begin(), pids.begin(), pids.end());
+    terms_.insert(terms_.begin(), terms.begin(), terms.end());
 }
 
 bool rt_block::operator<(const rt_block &block) const

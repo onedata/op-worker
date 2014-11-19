@@ -33,6 +33,6 @@
 -record(state, {container, type, size = 0}).
 
 %% RTransfer container element
--record(rt_block, {file_id = "", provider_id = <<>>, offset = 0, size = 0, priority = 0, pids = []}).
+-record(rt_block, {file_id = "", provider_id = <<>>, offset = 0, size = 0, priority = 0, terms = []}).
 
 -endif.

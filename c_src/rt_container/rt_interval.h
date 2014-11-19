@@ -18,7 +18,7 @@ namespace provider {
 
 /**
  * The rt_interval class.
- * rt_interval object represents bytes segment of rt_block
+ * rt_interval object represents bytes range of rt_block
  * - [offset, offset + size)
  */
 class rt_interval {

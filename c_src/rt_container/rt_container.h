@@ -50,9 +50,9 @@ public:
     virtual rt_block fetch() = 0;
 
     /**
-     * Fetches blocks that matches consistent segment
-     * @param offset beginning of segment
-     * @param size length of segment
+     * Fetches blocks that matches consistent range
+     * @param offset beginning of range
+     * @param size length of range
      * @return fetched blocks
      */
     virtual const std::set<rt_block> &fetch(ErlNifUInt64 offset,

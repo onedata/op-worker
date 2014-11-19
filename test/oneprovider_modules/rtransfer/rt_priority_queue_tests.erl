@@ -30,6 +30,7 @@ rt_priority_queue_test_() ->
         fun teardown/1,
         [
             {"should create empty priority queue", fun should_create_empty_priority_queue/0},
+            {"should increase container size", fun should_increase_container_size/0},
             {"should push single block", fun should_push_single_block/0},
             {"should push block with large offset", fun should_push_block_with_large_offset/0},
             {"should push blocks from different files", fun should_push_blocks_from_different_files/0},
@@ -62,6 +63,24 @@ teardown(_) ->
 %% ===================================================================
 
 should_create_empty_priority_queue() ->
+    ?assertEqual({ok, 0}, rt_container:size(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, "Empty container"}, rt_container:fetch(?TEST_PRIORITY_QUEUE)).
+
+should_increase_container_size() ->
+    Block1 = #rt_block{file_id = "test_file", offset = 0, size = 10, priority = 2},
+    Block2 = #rt_block{file_id = "test_file", offset = 3, size = 3, priority = 3},
+
+    ?assertEqual({ok, 0}, rt_container:size(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block1)),
+    ?assertEqual({ok, 1}, rt_container:size(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block2)),
+    ?assertEqual({ok, 3}, rt_container:size(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block2}, rt_container:fetch(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, 2}, rt_container:size(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1#rt_block{size = 3}}, rt_container:fetch(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, 1}, rt_container:size(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1#rt_block{offset = 6, size = 4}}, rt_container:fetch(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, 0}, rt_container:size(?TEST_PRIORITY_QUEUE)),
     ?assertEqual({error, "Empty container"}, rt_container:fetch(?TEST_PRIORITY_QUEUE)).
 
 should_push_single_block() ->
@@ -215,13 +234,13 @@ should_concatenate_block_pids() ->
     Pid2 = list_to_pid("<0.2.0>"),
     PidsFilterFunction = fun(_) -> true end,
 
-    Block1 = #rt_block{file_id = "test_file", offset = 0, size = 10, priority = 1, pids = [Pid1]},
-    Block2 = #rt_block{file_id = "test_file", offset = 3, size = 3, priority = 2, pids = [Pid2]},
+    Block1 = #rt_block{file_id = "test_file", offset = 0, size = 10, priority = 1, terms = [Pid1]},
+    Block2 = #rt_block{file_id = "test_file", offset = 3, size = 3, priority = 2, terms = [Pid2]},
 
     ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block1)),
     ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block2)),
 
-    ?assertEqual({ok, Block2#rt_block{pids = [Pid1, Pid2]}}, rt_container:fetch(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
+    ?assertEqual({ok, Block2#rt_block{terms = [Pid1, Pid2]}}, rt_container:fetch(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
     ?assertEqual({ok, Block1#rt_block{size = 3}}, rt_container:fetch(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
     ?assertEqual({ok, Block1#rt_block{offset = 6, size = 4}}, rt_container:fetch(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
     ?assertEqual({error, "Empty container"}, rt_container:fetch(?TEST_PRIORITY_QUEUE)).
@@ -234,13 +253,13 @@ should_remove_repeated_pids() ->
 
     Block = #rt_block{file_id = "test_file", offset = 0, size = 10, priority = 1},
 
-    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block#rt_block{pids = [Pid1]})),
-    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block#rt_block{pids = [Pid2]})),
-    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block#rt_block{pids = [Pid3]})),
-    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block#rt_block{pids = [Pid2]})),
-    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block#rt_block{pids = [Pid1]})),
+    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block#rt_block{terms = [Pid1]})),
+    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block#rt_block{terms = [Pid2]})),
+    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block#rt_block{terms = [Pid3]})),
+    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block#rt_block{terms = [Pid2]})),
+    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block#rt_block{terms = [Pid1]})),
 
-    ?assertEqual({ok, Block#rt_block{pids = [Pid1, Pid2, Pid3]}}, rt_container:fetch(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
+    ?assertEqual({ok, Block#rt_block{terms = [Pid1, Pid2, Pid3]}}, rt_container:fetch(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
     ?assertEqual({error, "Empty container"}, rt_container:fetch(?TEST_PRIORITY_QUEUE)).
 
 -endif.
