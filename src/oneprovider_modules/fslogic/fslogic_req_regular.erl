@@ -304,9 +304,9 @@ renew_file_location(FullFileName) ->
 %% ====================================================================
 get_blockavailability(#db_document{uuid = FileId, record = #file{}}) ->
     {ok, #db_document{record = #available_blocks{file_parts = AvailableParts}}} = fslogic_available_blocks:call({get_available_blocks, FileId}),
-    {ok, Size} = fslogic_available_blocks:call({get_file_size, FileId}),
+    {ok, FileSize} = fslogic_available_blocks:call({get_file_size, FileId}),
     lists:map(
         fun(Range) ->
-            #offset_range{offset = Offset, size = Size} = fslogic_available_blocks:byte_to_offset_range(fslogic_available_blocks:block_to_byte_range(Range, Size)),
+            #offset_range{offset = Offset, size = Size} = fslogic_available_blocks:byte_to_offset_range(fslogic_available_blocks:block_to_byte_range(Range, FileSize)),
             #filelocation_blockavailability{offset = Offset, size = Size}
         end, AvailableParts).
