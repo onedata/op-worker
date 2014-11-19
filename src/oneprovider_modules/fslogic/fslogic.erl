@@ -421,7 +421,7 @@ handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mo
 
 handle_fuse_message(Req = #synchronizefileblock{logical_name = FName, offset = Offset, size = Size}) ->
     Ref=make_ref(),
-    ct:print("~p ~p",[Ref, Req]),
+    ct:print("~p:req ~p",[Ref, Req]),
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     Res = fslogic_req_generic:synchronize_file_block(FullFileName, Offset, Size),
     ct:print("~p:res ~p", [Ref,Res]),
@@ -429,14 +429,14 @@ handle_fuse_message(Req = #synchronizefileblock{logical_name = FName, offset = O
 
 handle_fuse_message(Req = #fileblockmodified{logical_name = FName, offset = Offset, size = Size}) ->
     Ref=make_ref(),
-    ct:print("~p ~p",[Ref, Req]),    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    ct:print("~p:req ~p",[Ref, Req]),    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     Res = fslogic_req_generic:file_block_modified(FullFileName, Offset, Size),
     ct:print("~p:res ~p", [Ref,Res]),
     Res;
 
 handle_fuse_message(Req = #filetruncated{logical_name = FName, size = Size}) ->
     Ref=make_ref(),
-    ct:print("~p ~p",[Ref, Req]),    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    ct:print("~p:req ~p",[Ref, Req]),    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     Res = fslogic_req_generic:file_truncated(FullFileName, Size),
     ct:print("~p:res ~p", [Ref,Res]),
     Res;
