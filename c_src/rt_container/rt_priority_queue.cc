@@ -1,17 +1,17 @@
 /**
- * @file rt_heap.cc
+ * @file rt_priority_queue.cc
  * @author Krzysztof Trzepla
  * @copyright (C): 2014 ACK CYFRONET AGH
  * This software is released under the MIT license
  * cited in 'LICENSE.txt'.
  */
 
-#include "rt_heap.h"
+#include "rt_priority_queue.h"
 
 namespace one {
 namespace provider {
 
-void rt_heap::push(const rt_block &block)
+void rt_priority_queue::push(const rt_block &block)
 {
     for (ErlNifUInt64 i = 0; i < block.size() / block_size_; ++i)
         do_push(rt_block(block.file_id(), block.provider_id(),
@@ -27,10 +27,10 @@ void rt_heap::push(const rt_block &block)
                          block.counter()));
 }
 
-rt_block rt_heap::pop()
+rt_block rt_priority_queue::fetch()
 {
     if (blocks_.empty())
-        throw std::runtime_error("Empty heap");
+        throw std::runtime_error("Empty container");
 
     rt_block block = std::move(*(blocks_.begin()));
 
@@ -56,7 +56,15 @@ rt_block rt_heap::pop()
     return block;
 }
 
-void rt_heap::do_push(const rt_block &block)
+const std::set<rt_block> &rt_priority_queue::fetch(ErlNifUInt64 offset,
+                                                   ErlNifUInt64 size)
+{
+    throw std::runtime_error("Unsupported operation");
+}
+
+ErlNifUInt64 rt_priority_queue::size() const { return blocks_.size(); }
+
+void rt_priority_queue::do_push(const rt_block &block)
 {
     auto &file_blocks = files_blocks_[block.file_id()];
     auto it = file_blocks.lower_bound(rt_interval(block.offset(), 1));
@@ -119,7 +127,7 @@ void rt_heap::do_push(const rt_block &block)
     }
 }
 
-void rt_heap::insert(
+void rt_priority_queue::insert(
     std::map<rt_interval, std::set<rt_block>::iterator> &file_blocks,
     const rt_block &block)
 {
@@ -127,7 +135,8 @@ void rt_heap::insert(
     file_blocks[rt_interval(block.offset(), block.size())] = result.first;
 }
 
-std::map<rt_interval, std::set<rt_block>::iterator>::iterator rt_heap::erase(
+std::map<rt_interval, std::set<rt_block>::iterator>::iterator
+rt_priority_queue::erase(
     std::map<rt_interval, std::set<rt_block>::iterator> &file_blocks,
     const std::map<rt_interval, std::set<rt_block>::iterator>::iterator &it)
 {

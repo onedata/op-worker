@@ -9,14 +9,18 @@
 #ifndef RT_CONTAINER_H
 #define RT_CONTAINER_H
 
+#include "nifpp.h"
+#include "rt_block.h"
+
+#include <set>
+
 namespace one {
 namespace provider {
 
 /**
  * The rt_container class.
  * rt_container object represents RTransfer container that allows to push and
- * pop
- * rt_blocks
+ * fetch rt_blocks
  */
 class rt_container {
 public:
@@ -40,10 +44,25 @@ public:
     virtual void push(const rt_block &block) = 0;
 
     /**
-     * Popes block from the rt_container
-     * @return poped block
+     * Fetches block from the top of rt_container
+     * @return fetched block
      */
-    virtual rt_block pop() = 0;
+    virtual rt_block fetch() = 0;
+
+    /**
+     * Fetches blocks that matches consistent segment
+     * @param offset beginning of segment
+     * @param size length of segment
+     * @return fetched blocks
+     */
+    virtual const std::set<rt_block> &fetch(ErlNifUInt64 offset,
+                                            ErlNifUInt64 size) = 0;
+
+    /**
+     * Returns container size
+     * @return container size
+     */
+    virtual ErlNifUInt64 size() const = 0;
 
 protected:
     ErlNifUInt64 block_size_;

@@ -19,7 +19,7 @@ namespace provider {
 
 /**
  * The rt_block class.
- * rt_block object represents single block pushed on RTransfer heap
+ * rt_block object represents single block pushed on RTransfer container
  */
 class rt_block {
 public:
@@ -32,7 +32,8 @@ public:
      * @param priority block priority
      * @param pids list of processes that push block
      * @param provider_id ID of provider that poses block
-     * @param counter defines how many times block was pushed on the rt_heap
+     * @param counter defines how many times block was pushed on the
+     * rt_container
      */
     rt_block(std::string file_id, std::string provider_id, ErlNifUInt64 offset,
              ErlNifUInt64 size, int priority, std::list<ErlNifPid> pids,
