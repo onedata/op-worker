@@ -186,7 +186,7 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
                 {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size, FMeta#file_meta.acl =/= []};
             {error, Error} ->
                 ?warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
-                {0, 0, 0, 0}
+                {0, 0, 0, 0, 0}
         end,
 
     %% Get file links
