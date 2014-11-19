@@ -28,7 +28,7 @@ void rt_priority_queue::push(const rt_block &block)
                          block.counter()));
 }
 
-rt_block rt_priority_queue::fetch()
+rt_block rt_priority_queue::pop()
 {
     if (blocks_.empty())
         throw rt_exception("empty");

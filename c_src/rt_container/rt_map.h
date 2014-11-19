@@ -21,7 +21,7 @@ namespace provider {
 /**
  * The rt_map class.
  * rt_map object represents RTransfer map that allows to
- * push and fetch rt_blocks for given range
+ * put and get rt_blocks for given range
  */
 class rt_map {
 public:
@@ -32,9 +32,9 @@ public:
      */
     rt_map(ErlNifUInt64 block_size) : block_size_{block_size} {}
 
-    void push(const rt_block &block);
+    void put(const rt_block &block);
 
-    const std::list<rt_block> &fetch(std::string file_id, ErlNifUInt64 offset,
+    const std::list<rt_block> &get(std::string file_id, ErlNifUInt64 offset,
                                      ErlNifUInt64 size);
 
     void remove(std::string file_id, ErlNifUInt64 offset, ErlNifUInt64 size);

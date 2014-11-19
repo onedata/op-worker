@@ -16,7 +16,7 @@
 
 %% API
 -export([new/0, new/1, new/2, new/3, delete/1]).
--export([push/2, fetch/1, fetch/2, change_counter/4, change_counter/5, size/1]).
+-export([push/2, pop/1, pop/2, change_counter/4, change_counter/5, size/1]).
 -export([subscribe/3, unsubscribe/2]).
 
 %% gen_server callbacks
@@ -103,28 +103,28 @@ push(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_list(Pr
     gen_server:cast(ContainerRef, {push, Block}).
 
 
-%% fetch/1
+%% pop/1
 %% ====================================================================
-%% @doc Fetches block from RTransfer priority queue.
+%% @doc Pops block from RTransfer priority queue.
 %% @end
--spec fetch(ContainerRef) -> {ok, #rt_block{}} | {error, Error :: term()} when
+-spec pop(ContainerRef) -> {ok, #rt_block{}} | {error, Error :: term()} when
     ContainerRef :: container_ref().
 %% ====================================================================
-fetch(ContainerRef) ->
-    fetch(ContainerRef, fun erlang:is_process_alive/1).
+pop(ContainerRef) ->
+    pop(ContainerRef, fun erlang:is_process_alive/1).
 
 
-%% fetch/2
+%% pop/2
 %% ====================================================================
-%% @doc Fetches block from RTransfer priority queue and allows to
+%% @doc Pops block from RTransfer priority queue and allows to
 %% filter terms.
 %% @end
--spec fetch(ContainerRef, TermsFilterFunction) -> {ok, #rt_block{}} | {error, Error :: term()} when
+-spec pop(ContainerRef, TermsFilterFunction) -> {ok, #rt_block{}} | {error, Error :: term()} when
     ContainerRef :: container_ref(),
     TermsFilterFunction :: function(). %% fun(Term) -> true | false
 %% ====================================================================
-fetch(ContainerRef, TermsFilterFunction) ->
-    case gen_server:call(ContainerRef, fetch) of
+pop(ContainerRef, TermsFilterFunction) ->
+    case gen_server:call(ContainerRef, pop) of
         {ok, #rt_block{terms = Terms, provider_ref = ProviderId} = Block} ->
             {ok, Block#rt_block{
                 terms = lists:filter(fun(Term) ->
@@ -246,11 +246,11 @@ init([Prefix, BlockSize]) ->
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
 %% ====================================================================
-handle_call(fetch, _From, #state{size = 0} = State) ->
+handle_call(pop, _From, #state{size = 0} = State) ->
     {reply, {error, empty}, State};
 
-handle_call(fetch, _From, #state{container_ptr = ContainerPtr} = State) ->
-    case fetch_nif(ContainerPtr) of
+handle_call(pop, _From, #state{container_ptr = ContainerPtr} = State) ->
+    case pop_nif(ContainerPtr) of
         {ok, Size, Block} -> {reply, {ok, Block}, State#state{size = Size}};
         Other -> Other
     end;
@@ -373,15 +373,15 @@ push_nif(_ContainerPtr, _Block) ->
     throw("NIF library not loaded.").
 
 
-%% fetch_nif/1
+%% pop_nif/1
 %% ====================================================================
-%% @doc Fetches block from RTransfer map using NIF library.
+%% @doc Pops block from RTransfer map using NIF library.
 %% @end
--spec fetch_nif(ContainerPtr :: container_ptr()) ->
+-spec pop_nif(ContainerPtr :: container_ptr()) ->
     {ok, Size :: non_neg_integer(), Block :: #rt_block{}} |
     {error, Error :: term()} | no_return().
 %% ====================================================================
-fetch_nif(_ContainerPtr) ->
+pop_nif(_ContainerPtr) ->
     throw("NIF library not loaded.").
 
 

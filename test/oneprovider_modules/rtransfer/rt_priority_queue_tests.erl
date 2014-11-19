@@ -65,7 +65,7 @@ teardown(_) ->
 
 should_create_empty_priority_queue() ->
     ?assertEqual({ok, 0}, rt_priority_queue:size(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_increase_container_size() ->
     Block1 = #rt_block{file_id = "test_file", offset = 0, size = 10, priority = 2},
@@ -76,27 +76,27 @@ should_increase_container_size() ->
     ?assertEqual({ok, 1}, rt_priority_queue:size(?TEST_PRIORITY_QUEUE)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block2)),
     ?assertEqual({ok, 3}, rt_priority_queue:size(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block2}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block2}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
     ?assertEqual({ok, 2}, rt_priority_queue:size(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block1#rt_block{size = 3}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1#rt_block{size = 3}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
     ?assertEqual({ok, 1}, rt_priority_queue:size(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block1#rt_block{offset = 6, size = 4}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1#rt_block{offset = 6, size = 4}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
     ?assertEqual({ok, 0}, rt_priority_queue:size(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_push_single_block() ->
     Block = #rt_block{file_id = "test_file", offset = 0, size = 5, priority = 2},
 
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block)),
-    ?assertEqual({ok, Block}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_push_block_with_large_offset() ->
     Block = #rt_block{file_id = "test_file", offset = 9223372036854775807, size = 5, priority = 2},
 
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block)),
-    ?assertEqual({ok, Block}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_push_blocks_from_different_files() ->
     Block1 = #rt_block{file_id = "test_file_1", offset = 0, size = 5, priority = 2},
@@ -104,9 +104,9 @@ should_push_blocks_from_different_files() ->
 
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block1)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block2)),
-    ?assertEqual({ok, Block1}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block2}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block1}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block2}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_push_many_blocks() ->
     BlocksAmount = 10000,
@@ -116,9 +116,9 @@ should_push_many_blocks() ->
         ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block#rt_block{offset = N * ?TEST_RT_BLOCK_SIZE}))
     end, lists:seq(0, BlocksAmount)),
     lists:foreach(fun(N) ->
-        ?assertEqual({ok, Block#rt_block{offset = N * ?TEST_RT_BLOCK_SIZE}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE))
+        ?assertEqual({ok, Block#rt_block{offset = N * ?TEST_RT_BLOCK_SIZE}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE))
     end, lists:seq(0, BlocksAmount)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_merge_small_blocks() ->
     Block = #rt_block{file_id = "test_file", size = 1, priority = 2},
@@ -126,8 +126,8 @@ should_merge_small_blocks() ->
     lists:foreach(fun(N) ->
         ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block#rt_block{offset = N}))
     end, lists:seq(0, ?TEST_RT_BLOCK_SIZE - 1)),
-    ?assertEqual({ok, Block#rt_block{offset = 0, size = ?TEST_RT_BLOCK_SIZE}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block#rt_block{offset = 0, size = ?TEST_RT_BLOCK_SIZE}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_split_large_block() ->
     FullBlocksAmount = 10,
@@ -136,10 +136,10 @@ should_split_large_block() ->
 
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block)),
     lists:foreach(fun(N) ->
-        ?assertEqual({ok, Block#rt_block{offset = N * ?TEST_RT_BLOCK_SIZE, size = ?TEST_RT_BLOCK_SIZE}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE))
+        ?assertEqual({ok, Block#rt_block{offset = N * ?TEST_RT_BLOCK_SIZE, size = ?TEST_RT_BLOCK_SIZE}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE))
     end, lists:seq(0, FullBlocksAmount - 1)),
-    ?assertEqual({ok, Block#rt_block{offset = FullBlocksAmount * ?TEST_RT_BLOCK_SIZE, size = LastBlockSize}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block#rt_block{offset = FullBlocksAmount * ?TEST_RT_BLOCK_SIZE, size = LastBlockSize}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_increase_counter_on_blocks_overlap() ->
     Block1 = #rt_block{file_id = "test_file", offset = 0, size = 5, priority = 2},
@@ -148,9 +148,9 @@ should_increase_counter_on_blocks_overlap() ->
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block1)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block2)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block2)),
-    ?assertEqual({ok, Block2}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block1}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block2}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_change_priority_1() ->
     Block1 = #rt_block{file_id = "test_file", offset = 0, size = 10, priority = 2},
@@ -158,17 +158,17 @@ should_change_priority_1() ->
 
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block1)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block2)),
-    ?assertEqual({ok, Block2}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block1#rt_block{size = 3}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block1#rt_block{offset = 6, size = 4}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block2}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1#rt_block{size = 3}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1#rt_block{offset = 6, size = 4}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
 
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block2)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block1)),
-    ?assertEqual({ok, Block2#rt_block{priority = 2}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block1#rt_block{size = 3}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block1#rt_block{offset = 6, size = 4}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block2#rt_block{priority = 2}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1#rt_block{size = 3}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1#rt_block{offset = 6, size = 4}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_change_priority_2() ->
     Block1 = #rt_block{file_id = "test_file", offset = 0, size = 3, priority = 2},
@@ -178,9 +178,9 @@ should_change_priority_2() ->
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block1)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block2)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block3)),
-    ?assertEqual({ok, Block2#rt_block{size = 5}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block1#rt_block{size = 2}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block2#rt_block{size = 5}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1#rt_block{size = 2}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_change_priority_3() ->
     Block1 = #rt_block{file_id = "test_file", offset = 0, size = 10, priority = 1},
@@ -194,16 +194,16 @@ should_change_priority_3() ->
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block3)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block4)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block5)),
-    ?assertEqual({ok, Block5}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block4#rt_block{size = 1}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block4#rt_block{offset = 6, size = 1}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block3#rt_block{size = 1}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block3#rt_block{offset = 7, size = 1}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block2#rt_block{size = 1}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block2#rt_block{offset = 8, size = 1}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block1#rt_block{size = 1}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block1#rt_block{offset = 9, size = 1}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block5}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block4#rt_block{size = 1}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block4#rt_block{offset = 6, size = 1}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block3#rt_block{size = 1}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block3#rt_block{offset = 7, size = 1}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block2#rt_block{size = 1}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block2#rt_block{offset = 8, size = 1}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1#rt_block{size = 1}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1#rt_block{offset = 9, size = 1}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_change_priority_4() ->
     Block = #rt_block{file_id = "test_file", size = 1, priority = 2},
@@ -212,8 +212,8 @@ should_change_priority_4() ->
         ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block#rt_block{offset = N}))
     end, lists:seq(0, ?TEST_RT_BLOCK_SIZE - 1)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block#rt_block{offset = 0, size = ?TEST_RT_BLOCK_SIZE})),
-    ?assertEqual({ok, Block#rt_block{offset = 0, size = ?TEST_RT_BLOCK_SIZE}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block#rt_block{offset = 0, size = ?TEST_RT_BLOCK_SIZE}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_change_priority_5() ->
     Block1 = #rt_block{file_id = "test_file", offset = 0, size = 6, priority = 1},
@@ -221,14 +221,14 @@ should_change_priority_5() ->
 
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block1)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block2)),
-    ?assertEqual({ok, Block2}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({ok, Block1#rt_block{size = 2}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block2}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1#rt_block{size = 2}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
 
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block1#rt_block{priority = 2})),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block2#rt_block{priority = 1})),
-    ?assertEqual({ok, Block1#rt_block{size = 8, priority = 2}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block1#rt_block{size = 8, priority = 2}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_concatenate_block_pids() ->
     Pid1 = list_to_pid("<0.1.0>"),
@@ -241,10 +241,10 @@ should_concatenate_block_pids() ->
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block1)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block2)),
 
-    ?assertEqual({ok, Block2#rt_block{terms = [Pid1, Pid2]}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
-    ?assertEqual({ok, Block1#rt_block{size = 3}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
-    ?assertEqual({ok, Block1#rt_block{offset = 6, size = 4}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block2#rt_block{terms = [Pid1, Pid2]}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
+    ?assertEqual({ok, Block1#rt_block{size = 3}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
+    ?assertEqual({ok, Block1#rt_block{offset = 6, size = 4}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_remove_repeated_pids() ->
     Pid1 = list_to_pid("<0.1.0>"),
@@ -260,8 +260,8 @@ should_remove_repeated_pids() ->
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block#rt_block{terms = [Pid2]})),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block#rt_block{terms = [Pid1]})),
 
-    ?assertEqual({ok, Block#rt_block{terms = [Pid1, Pid2, Pid3]}}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)).
+    ?assertEqual({ok, Block#rt_block{terms = [Pid1, Pid2, Pid3]}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_subscribe_and_unsubscribe_process() ->
     Reference = make_ref(),
@@ -275,9 +275,9 @@ should_subscribe_and_unsubscribe_process() ->
                            end,
     ?assert(NotificationReceived),
 
-    ?assertEqual({ok, Block}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
     ?assertEqual({ok, 0}, rt_priority_queue:size(?TEST_PRIORITY_QUEUE)),
-    ?assertEqual({error, empty}, rt_priority_queue:fetch(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
 
     ?assertEqual(ok, rt_priority_queue:unsubscribe(?TEST_PRIORITY_QUEUE, Reference)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, #rt_block{})),

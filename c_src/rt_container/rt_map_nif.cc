@@ -41,7 +41,7 @@ static ERL_NIF_TERM init_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
+static ERL_NIF_TERM put_nif(ErlNifEnv *env, int argc,
                              const ERL_NIF_TERM argv[])
 {
     try {
@@ -60,7 +60,7 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
         nifpp::get_throws(env, argv[1], record);
 
         rt_block block(file_id, provider_ref, offset, size, priority, terms);
-        map->push(block);
+        map->put(block);
 
         return nifpp::make(env, nifpp::str_atom("ok"));
     }
@@ -74,7 +74,7 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ERL_NIF_TERM fetch_nif(ErlNifEnv *env, int argc,
+static ERL_NIF_TERM get_nif(ErlNifEnv *env, int argc,
                               const ERL_NIF_TERM argv[])
 {
     try {
@@ -90,8 +90,8 @@ static ERL_NIF_TERM fetch_nif(ErlNifEnv *env, int argc,
                              ErlNifUInt64, ErlNifUInt64, ErlNifUInt64,
                              std::list<nifpp::TERM>>> records;
 
-        for (const auto &block : map->fetch(file_id, offset, size))
-            records.push_back(
+        for (const auto &block : map->get(file_id, offset, size))
+            records.put_back(
                 std::make_tuple(nifpp::str_atom("rt_block"), block.file_id(),
                                 block.provider_ref(), block.offset(),
                                 block.size(), block.priority(), block.terms()));
@@ -136,8 +136,8 @@ static ERL_NIF_TERM remove_nif(ErlNifEnv *env, int argc,
 }
 
 static ErlNifFunc nif_funcs[] = {{"init_nif", 1, init_nif},
-                                 {"push_nif", 2, push_nif},
-                                 {"fetch_nif", 4, fetch_nif},
+                                 {"put_nif", 2, put_nif},
+                                 {"get_nif", 4, get_nif},
                                  {"remove_nif", 4, remove_nif}};
 
 ERL_NIF_INIT(rt_map, nif_funcs, load, NULL, NULL, NULL)

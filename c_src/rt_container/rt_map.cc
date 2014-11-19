@@ -12,12 +12,12 @@
 namespace one {
 namespace provider {
 
-void rt_map::push(const rt_block &block)
+void rt_map::put(const rt_block &block)
 {
     throw rt_exception("unsupported_operation");
 }
 
-const std::list<rt_block> &rt_map::fetch(std::string file_id,
+const std::list<rt_block> &rt_map::get(std::string file_id,
                                          ErlNifUInt64 offset, ErlNifUInt64 size)
 {
     throw rt_exception("unsupported_operation");

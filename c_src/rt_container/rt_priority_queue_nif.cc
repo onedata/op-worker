@@ -76,14 +76,14 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ERL_NIF_TERM fetch_nif(ErlNifEnv *env, int argc,
+static ERL_NIF_TERM pop_nif(ErlNifEnv *env, int argc,
                               const ERL_NIF_TERM argv[])
 {
     try {
         nifpp::resource_ptr<rt_priority_queue> queue;
         nifpp::get_throws(env, argv[0], queue);
 
-        rt_block block = queue->fetch();
+        rt_block block = queue->pop();
         ErlNifUInt64 queue_size = queue->size();
         auto record = std::make_tuple(
             nifpp::str_atom("rt_block"), block.file_id(), block.provider_ref(),
@@ -134,7 +134,7 @@ static ERL_NIF_TERM change_counter_nif(ErlNifEnv *env, int argc,
 
 static ErlNifFunc nif_funcs[] = {{"init_nif", 1, init_nif},
                                  {"push_nif", 2, push_nif},
-                                 {"fetch_nif", 1, fetch_nif},
+                                 {"pop_nif", 1, pop_nif},
                                  {"change_counter_nif", 5, change_counter_nif}};
 
 ERL_NIF_INIT(rt_priority_queue, nif_funcs, load, NULL, NULL, NULL)

@@ -16,7 +16,7 @@
 
 %% API
 -export([new/0, new/1, new/2, new/3, delete/1]).
--export([push/2, fetch/4, remove/4]).
+-export([put/2, get/4, remove/4]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -88,33 +88,33 @@ delete(ContainerRef) ->
     gen_server:call(ContainerRef, delete).
 
 
-%% push/2
+%% put/2
 %% ====================================================================
-%% @doc Pushes block on RTransfer map.
+%% @doc Puts block on RTransfer map.
 %% @end
--spec push(ContainerRef, Block :: #rt_block{}) -> ok when
+-spec put(ContainerRef, Block :: #rt_block{}) -> ok when
     ContainerRef :: container_ref().
 %% ====================================================================
-push(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_binary(ProviderId) ->
-    push(ContainerRef, Block#rt_block{provider_ref = binary_to_list(ProviderId)});
+put(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_binary(ProviderId) ->
+    ?MODULE:put(ContainerRef, Block#rt_block{provider_ref = binary_to_list(ProviderId)});
 
-push(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_list(ProviderId) ->
-    gen_server:cast(ContainerRef, {push, Block}).
+put(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_list(ProviderId) ->
+    gen_server:cast(ContainerRef, {put, Block}).
 
 
-%% fetch/4
+%% get/4
 %% ====================================================================
-%% @doc Fetches blocks from RTransfer map that matches range
+%% @doc Gets blocks from RTransfer map that matches range
 %% given as offset and size using NIF library.
 %% @end
--spec fetch(ContainerRef, FileId, Offset, Size) -> {ok, [#rt_block{}]} | {error, Error :: term()} when
+-spec get(ContainerRef, FileId, Offset, Size) -> {ok, [#rt_block{}]} | {error, Error :: term()} when
     ContainerRef :: container_ref(),
     FileId :: string(),
     Offset :: non_neg_integer(),
     Size :: non_neg_integer().
 %% ====================================================================
-fetch(ContainerRef, FileId, Offset, Size) ->
-    case gen_server:call(ContainerRef, {fetch, FileId, Offset, Size}) of
+get(ContainerRef, FileId, Offset, Size) ->
+    case gen_server:call(ContainerRef, {get, FileId, Offset, Size}) of
         {ok, Blocks} ->
             {ok, lists:map(fun(#rt_block{provider_ref = ProviderId} = Block) ->
                 Block#rt_block{provider_ref = list_to_binary(ProviderId)}
@@ -184,8 +184,8 @@ init([Prefix, BlockSize]) ->
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
 %% ====================================================================
-handle_call({fetch, FileId, Offset, Size}, _From, #state{container_ptr = ContainerPtr} = State) ->
-    {reply, fetch_nif(ContainerPtr, FileId, Offset, Size), State};
+handle_call({get, FileId, Offset, Size}, _From, #state{container_ptr = ContainerPtr} = State) ->
+    {reply, get_nif(ContainerPtr, FileId, Offset, Size), State};
 
 handle_call(delete, _From, State) ->
     {stop, normal, ok, State};
@@ -206,8 +206,8 @@ handle_call(_Request, _From, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({push, Block}, #state{container_ptr = ContainerPtr} = State) ->
-    push_nif(ContainerPtr, Block),
+handle_cast({put, Block}, #state{container_ptr = ContainerPtr} = State) ->
+    put_nif(ContainerPtr, Block),
     {noreply, State};
 
 handle_cast({remove, FileId, Offset, Size}, #state{container_ptr = ContainerPtr} = State) ->
@@ -276,29 +276,29 @@ init_nif(_BlockSize) ->
     throw("NIF library not loaded.").
 
 
-%% push_nif/2
+%% put_nif/2
 %% ====================================================================
-%% @doc Pushes block on RTransfer map using NIF library.
+%% @doc Puts block on RTransfer map using NIF library.
 %% @end
--spec push_nif(ContainerPtr :: container_ptr(), Block :: #rt_block{}) ->
+-spec put_nif(ContainerPtr :: container_ptr(), Block :: #rt_block{}) ->
     ok | no_return().
 %% ====================================================================
-push_nif(_ContainerPtr, _Block) ->
+put_nif(_ContainerPtr, _Block) ->
     throw("NIF library not loaded.").
 
 
-%% fetch_nif/4
+%% get_nif/4
 %% ====================================================================
-%% @doc Fetches blocks from RTransfer map that matches range
+%% @doc Gets blocks from RTransfer map that matches range
 %% given as offset and size using NIF library.
 %% @end
--spec fetch_nif(ContainerPtr :: container_ptr(), FileId, Offset, Size) ->
+-spec get_nif(ContainerPtr :: container_ptr(), FileId, Offset, Size) ->
     {ok, [#rt_block{}]} | {error, Error :: term()} | no_return() when
     FileId :: string(),
     Offset :: non_neg_integer(),
     Size :: non_neg_integer().
 %% ====================================================================
-fetch_nif(_ContainerPtr, _FileId, _Offset, _Size) ->
+get_nif(_ContainerPtr, _FileId, _Offset, _Size) ->
     throw("NIF library not loaded.").
 
 

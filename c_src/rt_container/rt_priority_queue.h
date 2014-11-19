@@ -24,7 +24,7 @@ namespace provider {
 /**
  * The rt_priority_queue class.
  * rt_priority_queue object represents RTransfer priority queue that allows to
- * push and fetch rt_blocks
+ * push and pop rt_blocks
  */
 class rt_priority_queue {
 public:
@@ -44,10 +44,10 @@ public:
     void push(const rt_block &block);
 
     /**
-     * Fetches block from the top of rt_priority_queue
-     * @return fetched block
+     * Pops block from the top of rt_priority_queue
+     * @return poped block
      */
-    rt_block fetch();
+    rt_block pop();
 
     /**
      * For blocks from range [offset, offset + size) updates theirs counters by
@@ -56,8 +56,8 @@ public:
      * @param size length of range
      * @param change value to be added to current blocks' counter value
      */
-    void change_counter(std::string file_id, ErlNifUInt64 offset,
-                        ErlNifUInt64 size, ErlNifSInt64 change);
+    void change_counter(std::string file_id, ErlNifUInt64 offset, ErlNifUInt64 size,
+                        ErlNifSInt64 change);
 
     /**
      * Returns container size
