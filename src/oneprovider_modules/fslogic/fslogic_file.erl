@@ -21,6 +21,7 @@
 %% API
 -export([normalize_file_type/2, get_file_local_location_doc/1]).
 -export([update_file_size/1, update_file_size/2, get_real_file_size_and_uid/1, get_file_owner/1, get_file_local_location/1, fix_storage_owner/1]).
+-export([ensure_file_location_exists/2]).
 
 %% ====================================================================
 %% API functions
@@ -193,6 +194,38 @@ normalize_file_type(internal, Type) ->
     ?error("Unknown file type: ~p", [Type]),
     throw({unknown_file_type, Type}).
 
+ensure_file_location_exists(FullFileName, FileDoc) ->
+    FileId = FileDoc#db_document.uuid,
+    case dao_vfs:list_file_locations(FileId) of
+        {ok, []} -> create_file_location_for_remote_file(FullFileName, FileId);
+        _ -> ok
+    end.
+
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+create_file_location_for_remote_file(FullFileName, FileUuid) ->
+    {ok, #space_info{space_id = SpaceId} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FullFileName),
+
+    {ok, UserDoc} = fslogic_objects:get_user(),
+    FileBaseName = fslogic_path:get_user_file_name(FullFileName, UserDoc),
+
+    {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], fslogic_context:get_protocol_version()),
+    #db_document{uuid = UUID, record = #storage_info{} = Storage} = fslogic_storage:select_storage(fslogic_context:get_fuse_id(), StorageList),
+    SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+    FileId = fslogic_storage:get_new_file_id(SpaceInfo, FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
+
+    FileLocation = #file_location{file_id = FileUuid, storage_uuid = UUID, storage_file_id = FileId},
+    {ok, _LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
+
+    {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUuid, fslogic_context:get_fuse_id(), ?LOCATION_VALIDITY),
+%%     _FuseFileBlocks = [#filelocation_blockavailability{offset = 0, size = ?FILE_BLOCK_SIZE_INF}],
+%%     FileBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
+%%     {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
+
+    {SH, FileId} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileId, SpaceId, false),
+    #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
+
+    Storage_helper_info = #storage_helper_info{name = SHName, init_args = SHArgs},
+    ok = storage_files_manager:create(Storage_helper_info, FileId).
