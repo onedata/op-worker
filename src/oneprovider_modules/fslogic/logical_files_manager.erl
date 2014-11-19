@@ -592,6 +592,7 @@ write({uuid, Uuid}, Buf) -> % todo alow only FullFilePath for better performance
         Error -> Error
     end;
 write(File, Buf) ->
+    {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File), %todo IMPORTANT: this needs optimization!!!
     ct:print("write/2 ~p",[File]),
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
@@ -606,7 +607,6 @@ write(File, Buf) ->
                             Ctx = fslogic_context:get_user_context(),
                             spawn(fun() ->
                                 fslogic_context:set_user_context(Ctx),
-                                {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File),
                                 {ok, FullFileName} = fslogic_path:get_full_file_name(File), %todo cache somehow
                                 WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
                                     {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}, {"filePath", FullFileName}],

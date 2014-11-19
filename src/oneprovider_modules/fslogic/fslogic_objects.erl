@@ -323,9 +323,6 @@ delete_old_descriptors(ProtocolVersion, Time) ->
 -spec list_all_available_blocks(FullFileName :: string()) -> {ok, [available_blocks_doc()]} | no_return().
 %% ====================================================================
 list_all_available_blocks(FullFileName) ->
-    ct:print("DBG1 ~p",[get_file(FullFileName)]),
-    ct:print("DBG2 ~p",[logical_files_manager:get_file_uuid(FullFileName)]),
-    ct:print("DBG3 ~p",[FullFileName]),
     {ok, #db_document{uuid = FileId}} = get_file(FullFileName), %todo cache this somehow
     fslogic_available_blocks:call({list_all_available_blocks, FileId}).
 
