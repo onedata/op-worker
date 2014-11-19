@@ -302,8 +302,8 @@ renew_file_location(FullFileName) ->
 %% @end
 -spec get_blockavailability(file_doc() | file_location_doc()) -> [#filelocation_blockavailability{}].
 %% ====================================================================
-get_blockavailability(#db_document{uuid = FileId, record = #file{}} = FileDoc) ->
-    {ok, #available_blocks{file_parts = AvailableParts}} = fslogic_available_blocks:call({get_available_blocks, FileId}),
+get_blockavailability(#db_document{uuid = FileId, record = #file{}}) ->
+    {ok, #db_document{record = #available_blocks{file_parts = AvailableParts}}} = fslogic_available_blocks:call({get_available_blocks, FileId}),
     {ok, Size} = fslogic_available_blocks:call({get_file_size, FileId}),
     lists:map(
         fun(Range) ->
