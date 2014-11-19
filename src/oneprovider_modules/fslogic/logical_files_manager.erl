@@ -593,6 +593,7 @@ write({uuid, Uuid}, Buf) -> % todo alow only FullFilePath for better performance
     end;
 write(File, Buf) ->
     ct:print("write/2 ~p",[File]),
+    ct:print("write/2 ~p",[]),
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
             {Response, Response2} = getfilelocation(File),
@@ -607,14 +608,15 @@ write(File, Buf) ->
                             spawn(fun() ->
                                 fslogic_context:set_user_context(Ctx),
                                 {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File),
+                                {ok, FullFileName} = fslogic_path:get_full_file_name(File), %todo cache somehow
                                 WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}],
+                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}, {"filePath", FullFileName}],
                                 gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
                                 WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}],
+                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}, {"filePath", FullFileName}],
                                 gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
                                 WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}, {"filePath", File}],
+                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}, {"filePath", FullFileName}],
                                 gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}})
                             end);
                         _ ->
@@ -671,15 +673,21 @@ write(File, Offset, Buf, EventPolicy) ->
                     %% TODO - check if asynchronous processing needed
                     case {is_integer(Res), event_production_enabled("write_event"), EventPolicy} of
                         {true, true, generate_events} ->
-                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"count", Res}, {"blocks", [{Offset, Res}]}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"bytes", Res}, {"blocks", [{Offset, Res}]}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
-                            WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", File}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}});
+
+                            Ctx = fslogic_context:get_user_context(),
+                            spawn(fun() ->
+                                fslogic_context:set_user_context(Ctx),
+                                {ok, FullFileName} = fslogic_path:get_full_file_name(File), %todo cache somehow
+                                WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
+                                    {"count", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+                                WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
+                                    {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
+                                WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
+                                    {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}})
+                            end);
                         _ ->
                             ok
                     end,
@@ -721,15 +729,20 @@ write_from_stream(File, Buf) ->
                     Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
                     case {is_integer(Res), event_production_enabled("write_event")} of
                         {true, true} ->
-                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"count", Res}, {"blocks", [{Offset, Res}]}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"bytes", Res}, {"blocks", [{Offset, Res}]}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
-                            WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", File}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}});
+                            Ctx = fslogic_context:get_user_context(),
+                            spawn(fun() ->
+                                fslogic_context:set_user_context(Ctx),
+                                {ok, FullFileName} = fslogic_path:get_full_file_name(File), %todo cache somehow
+                                WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
+                                    {"count", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+                                WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
+                                    {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
+                                WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
+                                    {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}})
+                            end);
                         _ ->
                             ok
                     end,
@@ -816,11 +829,16 @@ truncate(File, Size) ->
             Res = storage_files_manager:truncate(Storage_helper_info, FileId, Size),
             case {Res, event_production_enabled("truncate_event")} of
                 {ok, true} ->
-                    TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File}],
-                    gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}}),
-                    TruncateEventAvailableBlocks = [{"type", "truncate_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File},
-                        {"blocks", [{0, Size}]}, {"filePath", File}],
-                    gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEventAvailableBlocks}});
+                    Ctx = fslogic_context:get_user_context(),
+                    spawn(fun() ->
+                        fslogic_context:set_user_context(Ctx),
+                        {ok, FullFileName} = fslogic_path:get_full_file_name(File), %todo cache somehow
+                        TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File}, {"filePath", FullFileName}],
+                        gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}}),
+                        TruncateEventAvailableBlocks = [{"type", "truncate_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File},
+                            {"blocks", [{0, Size}]}, {"filePath", FullFileName}],
+                        gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEventAvailableBlocks}})
+                    end);
                 _ ->
                     ok
             end,
