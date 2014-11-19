@@ -109,7 +109,7 @@ push(ContainerRef, #rt_block{provider_id = ProviderId} = Block) when is_list(Pro
 %% ====================================================================
 %% @doc Fetches block from RTransfer container.
 %% @end
--spec fetch(ContainerRef) -> {ok, #rt_block{}} | {error, Error :: string()} when
+-spec fetch(ContainerRef) -> {ok, #rt_block{}} | {error, Error :: term()} when
     ContainerRef :: container_ref().
 %% ====================================================================
 fetch(ContainerRef) ->
@@ -120,7 +120,7 @@ fetch(ContainerRef) ->
 %% ====================================================================
 %% @doc Fetches block from RTransfer container and allows to fillter terms
 %% @end
--spec fetch(ContainerRef, TermsFilterFunction) -> {ok, #rt_block{}} | {error, Error :: string()} when
+-spec fetch(ContainerRef, TermsFilterFunction) -> {ok, #rt_block{}} | {error, Error :: term()} when
     ContainerRef :: container_ref(),
     TermsFilterFunction :: function(). %% fun(Term) -> true | false
 %% ====================================================================
@@ -144,7 +144,7 @@ fetch(ContainerRef, TermsFilterFunction) ->
 %% given as offset and size using NIF library.
 %% @end
 -spec fetch(ContainerRef, Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    {ok, [#rt_block{}]} | {error, Error :: string()} | no_return() when
+    {ok, [#rt_block{}]} | {error, Error :: term()} | no_return() when
     ContainerRef :: container_ref().
 %% ====================================================================
 fetch(ContainerRef, Offset, Size) ->
@@ -156,7 +156,7 @@ fetch(ContainerRef, Offset, Size) ->
 %% @doc Returns size of container.
 %% @end
 -spec size(ContainerRef) ->
-    {ok, [#rt_block{}]} | {error, Error :: string()} | no_return() when
+    {ok, [#rt_block{}]} | {error, Error :: term()} | no_return() when
     ContainerRef :: container_ref().
 %% ====================================================================
 size(ContainerRef) ->
@@ -243,7 +243,7 @@ init([Type, Prefix, BlockSize]) ->
     Reason :: term().
 %% ====================================================================
 handle_call(fetch, _From, #state{size = 0} = State) ->
-    {reply, {error, "Empty container"}, State};
+    {reply, {error, empty}, State};
 
 handle_call(fetch, _From, #state{container = Container} = State) ->
     case fetch_nif(Container) of
@@ -252,7 +252,7 @@ handle_call(fetch, _From, #state{container = Container} = State) ->
     end;
 
 handle_call({fetch, _Offset, _Size}, _From, #state{size = 0} = State) ->
-    {reply, {error, "Empty container"}, State};
+    {reply, {error, empty}, State};
 
 handle_call({fetch, Offset, Size}, _From, #state{container = Container} = State) ->
     case fetch_nif(Container, Offset, Size) of
@@ -379,7 +379,7 @@ push_nif(_ContainerPtr, _Block) ->
 %% @doc Fetches block from RTransfer container using NIF library.
 %% @end
 -spec fetch_nif(ContainerPtr :: container_ptr()) ->
-    {ok, #rt_block{}} | {error, Error :: string()} | no_return().
+    {ok, #rt_block{}} | {error, Error :: term()} | no_return().
 %% ====================================================================
 fetch_nif(_ContainerPtr) ->
     throw("NIF library not loaded.").
@@ -391,7 +391,7 @@ fetch_nif(_ContainerPtr) ->
 %% given as offset and size using NIF library.
 %% @end
 -spec fetch_nif(ContainerPtr :: container_ptr(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    {ok, [#rt_block{}]} | {error, Error :: string()} | no_return().
+    {ok, [#rt_block{}]} | {error, Error :: term()} | no_return().
 %% ====================================================================
 fetch_nif(_ContainerPtr, _Offset, _Size) ->
     throw("NIF library not loaded.").

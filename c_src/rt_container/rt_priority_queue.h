@@ -18,7 +18,6 @@
 #include <set>
 #include <list>
 #include <string>
-#include <stdexcept>
 
 namespace one {
 namespace provider {

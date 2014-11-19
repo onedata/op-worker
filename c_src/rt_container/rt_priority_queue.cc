@@ -6,6 +6,7 @@
  * cited in 'LICENSE.txt'.
  */
 
+#include "rt_exception.h"
 #include "rt_priority_queue.h"
 
 namespace one {
@@ -30,7 +31,7 @@ void rt_priority_queue::push(const rt_block &block)
 rt_block rt_priority_queue::fetch()
 {
     if (blocks_.empty())
-        throw std::runtime_error("Empty container");
+        throw rt_exception("empty");
 
     rt_block block = std::move(*(blocks_.begin()));
 
@@ -59,7 +60,7 @@ rt_block rt_priority_queue::fetch()
 const std::set<rt_block> &rt_priority_queue::fetch(ErlNifUInt64 offset,
                                                    ErlNifUInt64 size)
 {
-    throw std::runtime_error("Unsupported operation");
+    throw rt_exception("unsupported_operation");
 }
 
 ErlNifUInt64 rt_priority_queue::size() const { return blocks_.size(); }

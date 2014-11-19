@@ -15,13 +15,12 @@
 #include "rt_container.h"
 
 #include <set>
-#include <stdexcept>
 
 namespace one {
 namespace provider {
 
 /**
- * The rt_priority_queue class.
+ * The rt_map class.
  * rt_map object represents RTransfer map that allows to
  * push and fetch rt_blocks for given range
  */

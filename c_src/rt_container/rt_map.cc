@@ -7,25 +7,26 @@
  */
 
 #include "rt_map.h"
+#include "rt_exception.h"
 
 namespace one {
 namespace provider {
 
 void rt_map::push(const rt_block &block)
 {
-    throw std::runtime_error("Unsupported operation");
+    throw rt_exception("unsupported_operation");
 }
 
-rt_block rt_map::fetch() { throw std::runtime_error("Unsupported operation"); }
+rt_block rt_map::fetch() { throw std::runtime_error("unsupported_operation"); }
 
 const std::set<rt_block> &rt_map::fetch(ErlNifUInt64 offset, ErlNifUInt64 size)
 {
-    throw std::runtime_error("Unsupported operation");
+    throw rt_exception("unsupported_operation");
 }
 
 ErlNifUInt64 rt_map::size() const
 {
-    throw std::runtime_error("Unsupported operation");
+    throw rt_exception("unsupported_operation");
 }
 
 } // namespace provider

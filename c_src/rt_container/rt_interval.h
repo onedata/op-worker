@@ -11,8 +11,6 @@
 
 #include "nifpp.h"
 
-#include <stdexcept>
-
 namespace one {
 namespace provider {
 

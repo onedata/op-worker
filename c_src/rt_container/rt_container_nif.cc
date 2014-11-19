@@ -8,6 +8,7 @@
 
 #include "nifpp.h"
 #include "rt_map.h"
+#include "rt_exception.h"
 #include "rt_container.h"
 #include "rt_priority_queue.h"
 
@@ -44,9 +45,10 @@ static ERL_NIF_TERM init_nif(ErlNifEnv *env, int argc,
                 = nifpp::construct_resource<std::shared_ptr<rt_container>>(
                     new rt_map(block_size));
         else
-            return nifpp::make(env,
-                               std::make_tuple(nifpp::str_atom("error"),
-                                               "Unsupported container type"));
+            return nifpp::make(
+                env,
+                std::make_tuple(nifpp::str_atom("error"),
+                                nifpp::str_atom("unsupported_container_type")));
 
         return nifpp::make(env, std::make_tuple(nifpp::str_atom("ok"),
                                                 nifpp::make(env, container)));
@@ -82,10 +84,10 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
         return nifpp::make(
             env, std::make_tuple(nifpp::str_atom("ok"), container_size));
     }
-    catch (const std::runtime_error &error) {
-        std::string message = error.what();
-        return nifpp::make(env,
-                           std::make_tuple(nifpp::str_atom("error"), message));
+    catch (const rt_exception &ex) {
+        std::string message = ex.what();
+        return nifpp::make(env, std::make_tuple(nifpp::str_atom("error"),
+                                                nifpp::str_atom(message)));
     }
     catch (...) {
         return enif_make_badarg(env);
@@ -108,10 +110,10 @@ static ERL_NIF_TERM fetch_nif_1(ErlNifEnv *env, int argc,
         return nifpp::make(env, std::make_tuple(nifpp::str_atom("ok"),
                                                 container_size, record));
     }
-    catch (const std::runtime_error &error) {
-        std::string message = error.what();
-        return nifpp::make(env,
-                           std::make_tuple(nifpp::str_atom("error"), message));
+    catch (const rt_exception &ex) {
+        std::string message = ex.what();
+        return nifpp::make(env, std::make_tuple(nifpp::str_atom("error"),
+                                                nifpp::str_atom(message)));
     }
     catch (...) {
         return enif_make_badarg(env);
@@ -142,10 +144,10 @@ static ERL_NIF_TERM fetch_nif_3(ErlNifEnv *env, int argc,
         return nifpp::make(env, std::make_tuple(nifpp::str_atom("ok"),
                                                 container_size, records));
     }
-    catch (const std::runtime_error &error) {
-        std::string message = error.what();
-        return nifpp::make(env,
-                           std::make_tuple(nifpp::str_atom("error"), message));
+    catch (const rt_exception &ex) {
+        std::string message = ex.what();
+        return nifpp::make(env, std::make_tuple(nifpp::str_atom("error"),
+                                                nifpp::str_atom(message)));
     }
     catch (...) {
         return enif_make_badarg(env);
