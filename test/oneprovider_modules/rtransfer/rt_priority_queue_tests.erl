@@ -44,7 +44,8 @@ rt_priority_queue_test_() ->
             {"should change priority 4", fun should_change_priority_4/0},
             {"should change priority 5", fun should_change_priority_5/0},
             {"should concatenate block pids", fun should_concatenate_block_pids/0},
-            {"should remove repeated pids", fun should_remove_repeated_pids/0}
+            {"should remove repeated pids", fun should_remove_repeated_pids/0},
+            {"should subscribe and unsubscribe process", fun should_subscribe_and_unsubscribe_process/0}
         ]
     }.
 
@@ -261,5 +262,30 @@ should_remove_repeated_pids() ->
 
     ?assertEqual({ok, Block#rt_block{terms = [Pid1, Pid2, Pid3]}}, rt_container:fetch(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
     ?assertEqual({error, "Empty container"}, rt_container:fetch(?TEST_PRIORITY_QUEUE)).
+
+should_subscribe_and_unsubscribe_process() ->
+    Reference = make_ref(),
+    Block = #rt_block{file_id = "test_file", offset = 0, size = 10, priority = 1},
+    ?assertEqual(ok, rt_container:subscribe(?TEST_PRIORITY_QUEUE, self(), Reference)),
+    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, Block)),
+    NotificationReceived = receive
+                               {not_empty, Reference} -> true
+                           after
+                               1000 -> false
+                           end,
+    ?assert(NotificationReceived),
+
+    ?assertEqual({ok, Block}, rt_container:fetch(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, 0}, rt_container:size(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, "Empty container"}, rt_container:fetch(?TEST_PRIORITY_QUEUE)),
+
+    ?assertEqual(ok, rt_container:unsubscribe(?TEST_PRIORITY_QUEUE, Reference)),
+    ?assertEqual(ok, rt_container:push(?TEST_PRIORITY_QUEUE, #rt_block{})),
+    NotificationNotReceived = receive
+                                  {not_empty, Reference} -> false
+                              after
+                                  1000 -> true
+                              end,
+    ?assert(NotificationNotReceived).
 
 -endif.

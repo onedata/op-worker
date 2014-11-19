@@ -31,15 +31,15 @@ public:
      * @param size block size
      * @param priority block priority
      * @param terms list of Erlang terms associated with block
-     * @param provider_id ID of provider that poses block
+     * @param provider_ref reference to provider that poses block
      * @param counter defines how many times block was pushed on the
      * rt_container
      */
-    rt_block(std::string file_id, std::string provider_id, ErlNifUInt64 offset,
+    rt_block(std::string file_id, nifpp::TERM provider_ref, ErlNifUInt64 offset,
              ErlNifUInt64 size, int priority, std::list<nifpp::TERM> terms,
              int counter = 1)
         : file_id_{std::move(file_id)}
-        , provider_id_{std::move(provider_id)}
+        , provider_ref_{provider_ref}
         , offset_{offset}
         , size_{size}
         , priority_{priority}
@@ -52,7 +52,7 @@ public:
     const std::string &file_id() const { return file_id_; }
 
     /// Getter for provider ID
-    const std::string &provider_id() const { return provider_id_; }
+    const nifpp::TERM &provider_ref() const { return provider_ref_; }
 
     /// Getter for block's offset
     ErlNifUInt64 offset() const { return offset_; }
@@ -108,7 +108,7 @@ public:
 
 private:
     std::string file_id_;
-    std::string provider_id_;
+    nifpp::TERM provider_ref_;
     ErlNifUInt64 offset_;
     ErlNifUInt64 size_;
     int priority_;

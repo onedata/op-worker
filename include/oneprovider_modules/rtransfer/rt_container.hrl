@@ -30,7 +30,8 @@
 %% * container - pointer to container resource created as a call to rt_container:init_nif() function
 %% * type - type of container (priority_queue | map)
 %% * size - amount of elements stored in the container
--record(state, {container, type, size = 0}).
+%% * subscribers - list of pairs {reference(), pid()} used to notify processes about container state
+-record(state, {container, type, size = 0, subscribers = []}).
 
 %% RTransfer container element
 -record(rt_block, {file_id = "", provider_id = <<>>, offset = 0, size = 0, priority = 0, terms = []}).

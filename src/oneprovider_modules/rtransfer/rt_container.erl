@@ -16,6 +16,7 @@
 %% API
 -export([new/0, new/1, new/2, new/3, new/4, delete/1]).
 -export([push/2, fetch/1, fetch/2, fetch/3, size/1]).
+-export([subscribe/3, unsubscribe/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -173,6 +174,29 @@ delete(ContainerRef) ->
     gen_server:call(ContainerRef, delete).
 
 
+%% subscribe/3
+%% ====================================================================
+%% @doc Subscribes process to receive notifications when container changes
+%% state for empty to nonempty.
+%% @end
+-spec subscribe(ContainerRef, Pid :: pid(), Id :: reference()) -> ok when
+    ContainerRef :: container_ref().
+%% ====================================================================
+subscribe(ContainerRef, Pid, Id) ->
+    gen_server:cast(ContainerRef, {subscribe, Pid, Id}).
+
+
+%% unsubscribe/2
+%% ====================================================================
+%% @doc Unsubscribes process from receiving notifications when container
+%% changes state for empty to nonempty.
+%% @end
+-spec unsubscribe(ContainerRef :: container_ref(), Id :: reference()) -> ok.
+%% ====================================================================
+unsubscribe(ContainerRef, Id) ->
+    gen_server:cast(ContainerRef, {unsubscribe, Id}).
+
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -258,11 +282,24 @@ handle_call(_Request, _From, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({push, Block}, #state{container = Container} = State) ->
+handle_cast({push, Block}, #state{container = Container, subscribers = Subscribers} = State) ->
     case push_nif(Container, Block) of
-        {ok, Size} -> {noreply, State#state{size = Size}};
-        Other -> Other
+        {ok, 1} ->
+            lists:foreach(fun({Id, Pid}) ->
+                Pid ! {not_empty, Id}
+            end, Subscribers),
+            {noreply, State#state{size = 1}};
+        {ok, Size} ->
+            {noreply, State#state{size = Size}};
+        Other ->
+            Other
     end;
+
+handle_cast({subscribe, Pid, Id}, #state{subscribers = Subscribers} = State) ->
+    {noreply, State#state{subscribers = [{Id, Pid} | Subscribers]}};
+
+handle_cast({unsubscribe, Id}, #state{subscribers = Subscribers} = State) ->
+    {noreply, State#state{subscribers = proplists:delete(Id, Subscribers)}};
 
 handle_cast(_Request, State) ->
     {noreply, State}.

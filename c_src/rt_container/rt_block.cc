@@ -24,7 +24,7 @@ const rt_block &rt_block::merge(const rt_block &block)
 bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
 {
     return file_id_ == block.file_id_ && offset_ + size_ == block.offset_
-           && provider_id_ == block.provider_id_
+           && provider_ref_ == block.provider_ref_
            && size_ + block.size_ <= block_size;
 }
 

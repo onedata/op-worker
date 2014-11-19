@@ -14,14 +14,14 @@ namespace provider {
 void rt_priority_queue::push(const rt_block &block)
 {
     for (ErlNifUInt64 i = 0; i < block.size() / block_size_; ++i)
-        do_push(rt_block(block.file_id(), block.provider_id(),
+        do_push(rt_block(block.file_id(), block.provider_ref(),
                          block.offset() + i * block_size_, block_size_,
                          block.priority(), block.terms(), block.counter()));
 
     ErlNifUInt64 full_block_amount = block.size() / block_size_;
     ErlNifUInt64 last_block_size = block.size() % block_size_;
     if (last_block_size > 0)
-        do_push(rt_block(block.file_id(), block.provider_id(),
+        do_push(rt_block(block.file_id(), block.provider_ref(),
                          block.offset() + full_block_amount * block_size_,
                          last_block_size, block.priority(), block.terms(),
                          block.counter()));
@@ -76,7 +76,7 @@ void rt_priority_queue::do_push(const rt_block &block)
 
         if (it->second->offset() < offset) {
             insert(file_blocks,
-                   rt_block(it->second->file_id(), it->second->provider_id(),
+                   rt_block(it->second->file_id(), it->second->provider_ref(),
                             it->second->offset(), offset - it->second->offset(),
                             it->second->priority(), it->second->terms(),
                             it->second->counter()));
@@ -85,19 +85,19 @@ void rt_priority_queue::do_push(const rt_block &block)
         while (it != file_blocks.end() && it->second->offset() <= block.end()) {
             if (offset < it->second->offset()) {
                 insert(file_blocks,
-                       rt_block(block.file_id(), block.provider_id(), offset,
+                       rt_block(block.file_id(), block.provider_ref(), offset,
                                 it->second->offset() - offset, block.priority(),
                                 block.terms(), block.counter()));
                 offset = it->second->offset();
             } else {
                 if (block.end() < it->second->end()) {
-                    rt_block b1(block.file_id(), block.provider_id(), offset,
+                    rt_block b1(block.file_id(), block.provider_ref(), offset,
                                 block.end() - offset + 1, block.priority(),
                                 it->second->terms(),
                                 it->second->counter() + block.counter());
                     b1.appendTerms(block.terms());
                     rt_block b2(it->second->file_id(),
-                                it->second->provider_id(), block.end() + 1,
+                                it->second->provider_ref(), block.end() + 1,
                                 it->second->end() - block.end(),
                                 it->second->priority(), it->second->terms(),
                                 it->second->counter());
@@ -106,7 +106,7 @@ void rt_priority_queue::do_push(const rt_block &block)
                     insert(file_blocks, b1);
                     insert(file_blocks, b2);
                 } else {
-                    rt_block b(block.file_id(), block.provider_id(), offset,
+                    rt_block b(block.file_id(), block.provider_ref(), offset,
                                it->second->end() - offset + 1, block.priority(),
                                it->second->terms(),
                                it->second->counter() + block.counter());
@@ -120,7 +120,7 @@ void rt_priority_queue::do_push(const rt_block &block)
 
         if (offset <= block.end()) {
             insert(file_blocks,
-                   rt_block(block.file_id(), block.provider_id(), offset,
+                   rt_block(block.file_id(), block.provider_ref(), offset,
                             block.end() - offset + 1, block.priority(),
                             block.terms(), block.counter()));
         }
