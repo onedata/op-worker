@@ -143,7 +143,7 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
     {ok, LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
 
     RemoteLocation = #available_blocks{file_id = FileUUID, provider_id = cluster_manager_lib:get_provider_id()},
-    {ok, RemoteLocationId} = dao_lib:apply(dao_vfs, save_available_blocks, [RemoteLocation], fslogic_context:get_protocol_version()),
+    fslogic_available_blocks:call({save_available_blocks, RemoteLocation}),
 
     Validity = ?LOCATION_VALIDITY,
     FCreateStatus = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, FileRecord, FileUUID], fslogic_context:get_protocol_version()),

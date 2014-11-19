@@ -68,8 +68,13 @@ init(_Args) ->
     RemoteLocationProxyProcFun = fslogic_available_blocks:registered_requests(),
     RemoteLocationProxyMapFun = fun
         ({save_available_blocks, #db_document{record = #available_blocks{file_id = FileId}}}) ->
+            ct:print("UID1: ~p", [FileId]),
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
+        ({save_available_blocks, #available_blocks{file_id = FileId}}) ->
+            ct:print("UID2: ~p", [FileId]),
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
         ({_, FileId}) ->
+            ct:print("UID3: ~p", [FileId]),
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId)
     end,
 
@@ -92,6 +97,8 @@ init(_Args) ->
     end,
     DispMapFun = fun
         ({save_available_blocks, #db_document{record = #available_blocks{file_id = FileId}}}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
+        ({save_available_blocks, #available_blocks{file_id = FileId}}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
         ({get_available_blocks, FileId}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
