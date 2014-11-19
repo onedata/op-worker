@@ -16,7 +16,7 @@
 
 %% API
 -export([new/0, new/1, new/2, new/3, delete/1]).
--export([push/2, fetch/1, fetch/2, size/1]).
+-export([push/2, fetch/1, fetch/2, change_counter/4, size/1]).
 -export([subscribe/3, unsubscribe/2]).
 
 %% gen_server callbacks
@@ -78,9 +78,20 @@ new(ContainerName, Prefix, BlockSize) ->
     gen_server:start_link(ContainerName, ?MODULE, [Prefix, BlockSize], []).
 
 
+%% delete/1
+%% ====================================================================
+%% @doc Deletes RTransfer priority queue.
+%% @end
+-spec delete(ContainerRef) -> ok | {error, Reason :: term()} when
+    ContainerRef :: container_ref().
+%% ====================================================================
+delete(ContainerRef) ->
+    gen_server:call(ContainerRef, delete).
+
+
 %% push/2
 %% ====================================================================
-%% @doc Pushes block on RTransfer container.
+%% @doc Pushes block on RTransfer priority queue.
 %% @end
 -spec push(ContainerRef, Block :: #rt_block{}) -> ok when
     ContainerRef :: container_ref().
@@ -94,7 +105,7 @@ push(ContainerRef, #rt_block{provider_id = ProviderId} = Block) when is_list(Pro
 
 %% fetch/1
 %% ====================================================================
-%% @doc Fetches block from RTransfer container.
+%% @doc Fetches block from RTransfer priority queue.
 %% @end
 -spec fetch(ContainerRef) -> {ok, #rt_block{}} | {error, Error :: term()} when
     ContainerRef :: container_ref().
@@ -105,7 +116,8 @@ fetch(ContainerRef) ->
 
 %% fetch/2
 %% ====================================================================
-%% @doc Fetches block from RTransfer container and allows to fillter terms
+%% @doc Fetches block from RTransfer priority queue and allows to
+%% filter terms.
 %% @end
 -spec fetch(ContainerRef, TermsFilterFunction) -> {ok, #rt_block{}} | {error, Error :: term()} when
     ContainerRef :: container_ref(),
@@ -125,33 +137,36 @@ fetch(ContainerRef, TermsFilterFunction) ->
     end.
 
 
+%% change_counter/4
+%% ====================================================================
+%% @doc Changes counter for block in range [Offset, Offset + Size) by
+%% add Change value to current blocks' counter value.
+%% @end
+-spec change_counter(ContainerRef, Offset, Size, Change) -> ok when
+    ContainerRef :: container_ref(),
+    Offset :: non_neg_integer(),
+    Size :: non_neg_integer(),
+    Change :: integer().
+%% ====================================================================
+change_counter(ContainerRef, Offset, Size, Change) ->
+    gen_server:cast(ContainerRef, {change_counter, Offset, Size, Change}).
+
+
 %% size/1
 %% ====================================================================
-%% @doc Returns size of container.
+%% @doc Returns size of priority queue.
 %% @end
--spec size(ContainerRef) ->
-    {ok, [#rt_block{}]} | {error, Error :: term()} | no_return() when
+-spec size(ContainerRef) -> {ok, Size :: non_neg_integer()} | {error, Error :: term()} when
     ContainerRef :: container_ref().
 %% ====================================================================
 size(ContainerRef) ->
     gen_server:call(ContainerRef, size).
 
 
-%% delete/1
-%% ====================================================================
-%% @doc Deletes RTransfer container.
-%% @end
--spec delete(ContainerRef) -> ok | {error, Reason :: term()} when
-    ContainerRef :: container_ref().
-%% ====================================================================
-delete(ContainerRef) ->
-    gen_server:call(ContainerRef, delete).
-
-
 %% subscribe/3
 %% ====================================================================
-%% @doc Subscribes process to receive notifications when container changes
-%% state for empty to nonempty.
+%% @doc Subscribes process to receive notifications when priority queue
+%% changes state for empty to nonempty.
 %% @end
 -spec subscribe(ContainerRef, Pid :: pid(), Id :: reference()) -> ok when
     ContainerRef :: container_ref().
@@ -162,8 +177,8 @@ subscribe(ContainerRef, Pid, Id) ->
 
 %% unsubscribe/2
 %% ====================================================================
-%% @doc Unsubscribes process from receiving notifications when container
-%% changes state for empty to nonempty.
+%% @doc Unsubscribes process from receiving notifications when priority
+%% queue changes state for empty to nonempty.
 %% @end
 -spec unsubscribe(ContainerRef :: container_ref(), Id :: reference()) -> ok.
 %% ====================================================================
@@ -191,8 +206,8 @@ unsubscribe(ContainerRef, Id) ->
 init([Prefix, BlockSize]) ->
     try
         erlang:load_nif(filename:join(Prefix, "c_lib/rt_priority_queue_drv"), 0),
-        {ok, Container} = init_nif(BlockSize),
-        {ok, #state{container = Container}}
+        {ok, ContainerPtr} = init_nif(BlockSize),
+        {ok, #state{container_ptr = ContainerPtr}}
     catch
         _:Reason -> {stop, Reason}
     end.
@@ -219,8 +234,8 @@ init([Prefix, BlockSize]) ->
 handle_call(fetch, _From, #state{size = 0} = State) ->
     {reply, {error, empty}, State};
 
-handle_call(fetch, _From, #state{container = Container} = State) ->
-    case fetch_nif(Container) of
+handle_call(fetch, _From, #state{container_ptr = ContainerPtr} = State) ->
+    case fetch_nif(ContainerPtr) of
         {ok, Size, Block} -> {reply, {ok, Block}, State#state{size = Size}};
         Other -> Other
     end;
@@ -247,8 +262,8 @@ handle_call(_Request, _From, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({push, Block}, #state{container = Container, subscribers = Subscribers} = State) ->
-    case push_nif(Container, Block) of
+handle_cast({push, Block}, #state{container_ptr = ContainerPtr, subscribers = Subscribers} = State) ->
+    case push_nif(ContainerPtr, Block) of
         {ok, 1} ->
             lists:foreach(fun({Id, Pid}) ->
                 Pid ! {not_empty, Id}
@@ -259,6 +274,10 @@ handle_cast({push, Block}, #state{container = Container, subscribers = Subscribe
         Other ->
             Other
     end;
+
+handle_cast({change_counter, Offset, Size, Change}, #state{container_ptr = ContainerPtr} = State) ->
+    nif_change_counter(ContainerPtr, Offset, Size, Change),
+    {noreply, State};
 
 handle_cast({subscribe, Pid, Id}, #state{subscribers = Subscribers} = State) ->
     {noreply, State#state{subscribers = [{Id, Pid} | Subscribers]}};
@@ -333,7 +352,7 @@ init_nif(_BlockSize) ->
 %% @doc Pushes block on RTransfer map using NIF library.
 %% @end
 -spec push_nif(ContainerPtr :: container_ptr(), Block :: #rt_block{}) ->
-    ok | no_return().
+    {ok, Size :: non_neg_integer()} | no_return().
 %% ====================================================================
 push_nif(_ContainerPtr, _Block) ->
     throw("NIF library not loaded.").
@@ -344,7 +363,23 @@ push_nif(_ContainerPtr, _Block) ->
 %% @doc Fetches block from RTransfer map using NIF library.
 %% @end
 -spec fetch_nif(ContainerPtr :: container_ptr()) ->
-    {ok, #rt_block{}} | {error, Error :: term()} | no_return().
+    {ok, Size :: non_neg_integer(), Block :: #rt_block{}} |
+    {error, Error :: term()} | no_return().
 %% ====================================================================
 fetch_nif(_ContainerPtr) ->
+    throw("NIF library not loaded.").
+
+
+%% nif_change_counter/4
+%% ====================================================================
+%% @doc Changes counter for block in range [Offset, Offset + Size) by
+%% add Change value to current blocks' counter value.
+%% @end
+-spec nif_change_counter(ContainerPtr, Offset, Size, Change) -> ok | no_return() when
+    ContainerPtr :: container_ptr(),
+    Offset :: non_neg_integer(),
+    Size :: non_neg_integer(),
+    Change :: integer().
+%% ====================================================================
+nif_change_counter(_ContainerPtr, _Offset, _Size, _Change) ->
     throw("NIF library not loaded.").

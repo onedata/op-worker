@@ -77,6 +77,17 @@ new(ContainerName, Prefix, BlockSize) ->
     gen_server:start_link(ContainerName, ?MODULE, [Prefix, BlockSize], []).
 
 
+%% delete/1
+%% ====================================================================
+%% @doc Deletes RTransfer map.
+%% @end
+-spec delete(ContainerRef) -> ok | {error, Reason :: term()} when
+    ContainerRef :: container_ref().
+%% ====================================================================
+delete(ContainerRef) ->
+    gen_server:call(ContainerRef, delete).
+
+
 %% push/2
 %% ====================================================================
 %% @doc Pushes block on RTransfer map.
@@ -96,14 +107,17 @@ push(ContainerRef, #rt_block{provider_id = ProviderId} = Block) when is_list(Pro
 %% @doc Fetches blocks from RTransfer map that matches range
 %% given as offset and size using NIF library.
 %% @end
--spec fetch(ContainerRef, Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    {ok, [#rt_block{}]} | {error, Error :: term()} | no_return() when
-    ContainerRef :: container_ref().
+-spec fetch(ContainerRef, Offset, Size) -> {ok, [#rt_block{}]} | {error, Error :: term()} when
+    ContainerRef :: container_ref(),
+    Offset :: non_neg_integer(),
+    Size :: non_neg_integer().
 %% ====================================================================
 fetch(ContainerRef, Offset, Size) ->
     case gen_server:call(ContainerRef, {fetch, Offset, Size}) of
-        {ok, #rt_block{provider_id = ProviderId} = Block} ->
-            {ok, Block#rt_block{provider_id = list_to_binary(ProviderId)}};
+        {ok, Blocks} ->
+            {ok, lists:map(fun(#rt_block{provider_id = ProviderId} = Block) ->
+                Block#rt_block{provider_id = list_to_binary(ProviderId)}
+            end, Blocks)};
         Other ->
             Other
     end.
@@ -114,23 +128,13 @@ fetch(ContainerRef, Offset, Size) ->
 %% @doc Removes blocks from RTransfer map that matches range
 %% given as offset and size using NIF library.
 %% @end
--spec remove(ContainerRef, Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    {ok, [#rt_block{}]} | {error, Error :: term()} | no_return() when
-    ContainerRef :: container_ref().
+-spec remove(ContainerRef, Offset, Size) -> ok when
+    ContainerRef :: container_ref(),
+    Offset :: non_neg_integer(),
+    Size :: non_neg_integer().
 %% ====================================================================
 remove(ContainerRef, Offset, Size) ->
     gen_server:call(ContainerRef, {remove, Offset, Size}).
-
-
-%% delete/1
-%% ====================================================================
-%% @doc Deletes RTransfer map.
-%% @end
--spec delete(ContainerRef) -> ok | {error, Reason :: term()} when
-    ContainerRef :: container_ref().
-%% ====================================================================
-delete(ContainerRef) ->
-    gen_server:call(ContainerRef, delete).
 
 
 %%%===================================================================
@@ -153,8 +157,8 @@ delete(ContainerRef) ->
 init([Prefix, BlockSize]) ->
     try
         erlang:load_nif(filename:join(Prefix, "c_lib/rt_map_drv"), 0),
-        {ok, Container} = init_nif(BlockSize),
-        {ok, #state{container = Container}}
+        {ok, ContainerPtr} = init_nif(BlockSize),
+        {ok, #state{container_ptr = ContainerPtr}}
     catch
         _:Reason -> {stop, Reason}
     end.
@@ -178,8 +182,8 @@ init([Prefix, BlockSize]) ->
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
 %% ====================================================================
-handle_call({fetch, Offset, Size}, _From, #state{container = Container} = State) ->
-    {reply, {ok, fetch_nif(Container, Offset, Size)}, State};
+handle_call({fetch, Offset, Size}, _From, #state{container_ptr = ContainerPtr} = State) ->
+    {reply, fetch_nif(ContainerPtr, Offset, Size), State};
 
 handle_call(delete, _From, State) ->
     {stop, normal, ok, State};
@@ -200,12 +204,12 @@ handle_call(_Request, _From, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({push, Block}, #state{container = Container} = State) ->
-    push_nif(Container, Block),
+handle_cast({push, Block}, #state{container_ptr = ContainerPtr} = State) ->
+    push_nif(ContainerPtr, Block),
     {noreply, State};
 
-handle_cast({remove, Offset, Size}, #state{container = Container} = State) ->
-    remove_nif(Container, Offset, Size),
+handle_cast({remove, Offset, Size}, #state{container_ptr = ContainerPtr} = State) ->
+    remove_nif(ContainerPtr, Offset, Size),
     {noreply, State};
 
 handle_cast(_Request, State) ->
@@ -299,7 +303,7 @@ fetch_nif(_ContainerPtr, _Offset, _Size) ->
 %% given as offset and size using NIF library.
 %% @end
 -spec remove_nif(ContainerPtr :: container_ptr(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    {ok, [#rt_block{}]} | {error, Error :: term()} | no_return().
+    ok | {error, Error :: term()} | no_return().
 %% ====================================================================
 remove_nif(_ContainerPtr, _Offset, _Size) ->
     throw("NIF library not loaded.").

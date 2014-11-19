@@ -17,6 +17,6 @@
 %% * container - pointer to container resource created as a call to rt_container:init_nif() function
 %% * size - amount of elements stored in the container
 %% * subscribers - list of pairs {reference(), pid()} used to notify processes about container state
--record(state, {container, size = 0, subscribers = []}).
+-record(state, {container_ptr, size = 0, subscribers = []}).
 
 -endif.

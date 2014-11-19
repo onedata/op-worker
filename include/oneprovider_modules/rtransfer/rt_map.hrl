@@ -15,6 +15,6 @@
 
 %% gen_server state
 %% * container - pointer to container resource created as a call to rt_container:init_nif() function
--record(state, {container}).
+-record(state, {container_ptr}).
 
 -endif.
