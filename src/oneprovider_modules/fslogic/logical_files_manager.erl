@@ -615,7 +615,7 @@ write(File, Buf) ->
                                     {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}, {"filePath", FullFileName}],
                                 gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
                                 WriteEventAvailableBlocks = [{"type", "truncate_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}, {"filePath", FullFileName}],
+                                    {"bytes", Res}, {"blocks", [{0, FileSize}]}, {"filePath", FullFileName}],
                                 gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}})
                             end);
                         _ ->
