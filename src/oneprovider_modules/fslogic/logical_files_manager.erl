@@ -548,8 +548,8 @@ read(File, Offset, Size) ->
     ErrorDetail :: term().
 %% ====================================================================
 read(File, Offset, Size, EventPolicy) ->
-    synchronize(File, Offset, Size),
     {Response, Response2} = getfilelocation(File),
+    synchronize(File, Offset, Size),
     case Response of
         ok ->
             {Storage_helper_info, FileId} = Response2,
