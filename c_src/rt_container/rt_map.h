@@ -35,7 +35,7 @@ public:
     void put(const rt_block &block);
 
     const std::list<rt_block> &get(std::string file_id, ErlNifUInt64 offset,
-                                     ErlNifUInt64 size);
+                                   ErlNifUInt64 size);
 
     void remove(std::string file_id, ErlNifUInt64 offset, ErlNifUInt64 size);
 

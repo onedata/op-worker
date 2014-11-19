@@ -17,8 +17,8 @@ void rt_map::put(const rt_block &block)
     throw rt_exception("unsupported_operation");
 }
 
-const std::list<rt_block> &rt_map::get(std::string file_id,
-                                         ErlNifUInt64 offset, ErlNifUInt64 size)
+const std::list<rt_block> &rt_map::get(std::string file_id, ErlNifUInt64 offset,
+                                       ErlNifUInt64 size)
 {
     throw rt_exception("unsupported_operation");
 }

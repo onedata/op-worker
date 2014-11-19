@@ -252,7 +252,7 @@ handle_call(pop, _From, #state{size = 0} = State) ->
 handle_call(pop, _From, #state{container_ptr = ContainerPtr} = State) ->
     case pop_nif(ContainerPtr) of
         {ok, Size, Block} -> {reply, {ok, Block}, State#state{size = Size}};
-        Other -> Other
+        Other -> {reply, Other, State}
     end;
 
 handle_call(size, _From, #state{size = Size} = State) ->
@@ -286,13 +286,15 @@ handle_cast({push, Block}, #state{container_ptr = ContainerPtr, subscribers = Su
             {noreply, State#state{size = 1}};
         {ok, Size} ->
             {noreply, State#state{size = Size}};
-        Other ->
-            Other
+        _ ->
+            {noreply, State}
     end;
 
 handle_cast({change_counter, FileId, Offset, Size, Change}, #state{container_ptr = ContainerPtr} = State) ->
-    change_counter_nif(ContainerPtr, FileId, Offset, Size, Change),
-    {noreply, State};
+    case change_counter_nif(ContainerPtr, FileId, Offset, Size, Change) of
+        {ok, Size} -> {noreply, State#state{size = Size}};
+        _ -> {noreply, State}
+    end;
 
 handle_cast({subscribe, Pid, Id}, #state{subscribers = Subscribers} = State) ->
     {noreply, State#state{subscribers = [{Id, Pid} | Subscribers]}};

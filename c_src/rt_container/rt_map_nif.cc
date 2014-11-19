@@ -41,8 +41,7 @@ static ERL_NIF_TERM init_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ERL_NIF_TERM put_nif(ErlNifEnv *env, int argc,
-                             const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM put_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     try {
         nifpp::resource_ptr<rt_map> map;
@@ -74,8 +73,7 @@ static ERL_NIF_TERM put_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ERL_NIF_TERM get_nif(ErlNifEnv *env, int argc,
-                              const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM get_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     try {
         nifpp::resource_ptr<rt_map> map;

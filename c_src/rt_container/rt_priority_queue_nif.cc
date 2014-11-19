@@ -76,8 +76,7 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ERL_NIF_TERM pop_nif(ErlNifEnv *env, int argc,
-                              const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM pop_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     try {
         nifpp::resource_ptr<rt_priority_queue> queue;

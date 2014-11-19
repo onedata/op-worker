@@ -56,8 +56,8 @@ public:
      * @param size length of range
      * @param change value to be added to current blocks' counter value
      */
-    void change_counter(std::string file_id, ErlNifUInt64 offset, ErlNifUInt64 size,
-                        ErlNifSInt64 change);
+    void change_counter(std::string file_id, ErlNifUInt64 offset,
+                        ErlNifUInt64 size, ErlNifSInt64 change);
 
     /**
      * Returns container size

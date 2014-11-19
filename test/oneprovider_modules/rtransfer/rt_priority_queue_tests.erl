@@ -45,7 +45,10 @@ rt_priority_queue_test_() ->
             {"should change priority 5", fun should_change_priority_5/0},
             {"should concatenate block pids", fun should_concatenate_block_pids/0},
             {"should remove repeated pids", fun should_remove_repeated_pids/0},
-            {"should subscribe and unsubscribe process", fun should_subscribe_and_unsubscribe_process/0}
+            {"should subscribe and unsubscribe process", fun should_subscribe_and_unsubscribe_process/0},
+            {"should change counter 1", fun should_change_counter_1/0},
+            {"should change counter 2", fun should_change_counter_2/0},
+            {"should change counter 2", fun should_change_counter_3/0}
         ]
     }.
 
@@ -287,5 +290,37 @@ should_subscribe_and_unsubscribe_process() ->
                                   1000 -> true
                               end,
     ?assert(NotificationNotReceived).
+
+should_change_counter_1() ->
+    FileId = "test_file",
+    Block = #rt_block{file_id = FileId, offset = 0, size = 10, priority = 1},
+    ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block)),
+    ?assertEqual(ok, rt_priority_queue:change_counter(?TEST_PRIORITY_QUEUE, FileId, 3, 3, 2)),
+    ?assertEqual({ok, 3}, rt_priority_queue:size(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block#rt_block{offset = 3, size = 3}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block#rt_block{size = 3}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block#rt_block{offset = 6, size = 4}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
+
+should_change_counter_2() ->
+    FileId = "test_file",
+    Block = #rt_block{file_id = FileId, offset = 3, size = 3, priority = 1},
+    ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block)),
+    ?assertEqual(ok, rt_priority_queue:change_counter(?TEST_PRIORITY_QUEUE, FileId, 0, 10, 2)),
+    ?assertEqual({ok, 1}, rt_priority_queue:size(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
+
+should_change_counter_3() ->
+    FileId = "test_file",
+    Block1 = #rt_block{file_id = FileId, offset = 0, size = 3, priority = 1},
+    Block2 = #rt_block{file_id = FileId, offset = 5, size = 3, priority = 1},
+    ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block1)),
+    ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block2)),
+    ?assertEqual(ok, rt_priority_queue:change_counter(?TEST_PRIORITY_QUEUE, FileId, 4, 6)),
+    ?assertEqual({ok, 2}, rt_priority_queue:size(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block2}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({ok, Block1}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
+    ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 -endif.

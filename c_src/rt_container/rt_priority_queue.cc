@@ -9,6 +9,8 @@
 #include "rt_exception.h"
 #include "rt_priority_queue.h"
 
+#include <algorithm>
+
 namespace one {
 namespace provider {
 
@@ -61,6 +63,48 @@ void rt_priority_queue::change_counter(std::string file_id, ErlNifUInt64 offset,
                                        ErlNifUInt64 size,
                                        ErlNifSInt64 change = 1)
 {
+    auto &file_blocks = files_blocks_[file_id];
+    auto it = file_blocks.lower_bound(rt_interval(offset, 1));
+
+    if (it == file_blocks.end())
+        return;
+
+    ErlNifUInt64 end = offset + size - 1;
+
+    if (it->second->offset() < offset)
+        insert(file_blocks,
+               rt_block(it->second->file_id(), it->second->provider_ref(),
+                        it->second->offset(), offset - it->second->offset(),
+                        it->second->priority(), it->second->terms(),
+                        it->second->counter()));
+    else
+        offset = it->second->offset();
+
+    while (it != file_blocks.end() && it->second->offset() <= end) {
+        if (end < it->second->end()) {
+            rt_block b1(
+                it->second->file_id(), it->second->provider_ref(), offset,
+                end + 1 - offset, it->second->priority(), it->second->terms(),
+                std::max<ErlNifUInt64>(0, it->second->counter() + change));
+            rt_block b2(it->second->file_id(), it->second->provider_ref(),
+                        end + 1, it->second->end() - end,
+                        it->second->priority(), it->second->terms(),
+                        it->second->counter());
+            it = erase(file_blocks, it);
+            insert(file_blocks, b1);
+            insert(file_blocks, b2);
+        } else {
+            rt_block b(
+                it->second->file_id(), it->second->provider_ref(), offset,
+                it->second->end() + 1 - offset, it->second->priority(),
+                it->second->terms(),
+                std::max<ErlNifUInt64>(0, it->second->counter() + change));
+            it = erase(file_blocks, it);
+            if (it != file_blocks.end())
+                offset = it->second->offset();
+            insert(file_blocks, b);
+        }
+    }
 }
 
 ErlNifUInt64 rt_priority_queue::size() const { return blocks_.size(); }
