@@ -186,9 +186,9 @@ db_sync_hook() ->
                         true -> ok;
                         _ ->
                             {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
-                            fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true),
+                            {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true),
 
-                            fslogic_available_blocks:call({save_available_blocks, NewDoc})
+                            fslogic_available_blocks:cast({save_available_blocks, NewDoc})
                     end;
                 _ -> ok
             end;
@@ -214,12 +214,17 @@ call(Req) ->
 
 ranges_to_offset_tuples([]) -> [];
 ranges_to_offset_tuples([#range{} = H | T]) ->
-    #offset_range{offset = Offset, size = Size} = byte_to_offset_range(H),
+    #offset_range{offset = Offset, size = Size} = byte_to_offset_range(block_to_byte_range(H)),
     [{Offset, Size} | ranges_to_offset_tuples(T)].
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+block_to_byte_range(#range{from = From, to = To}) ->
+    block_to_byte_range(#block_range{from = From, to = To});
+block_to_byte_range(#block_range{from = From, to = To}) ->
+    #byte_range{from = From * ?remote_block_size, to = (To+1) * ?remote_block_size}.
 
 %% block_to_byte_range/2
 %% ====================================================================
