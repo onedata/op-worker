@@ -48,7 +48,7 @@ main_test(Config) ->
   [_ | Params3] = Params2,
   [WorkerParams | _] = Params3,
 
-  Jobs = ?MODULES,
+  Jobs = ?MODULES -- [dbsync],
   DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
 
   test_utils:wait_for_nodes_registration(length(WorkerNodes)),

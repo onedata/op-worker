@@ -234,7 +234,7 @@ wait_for_cluster_init() ->
   E2 :: term().
 %% ====================================================================
 wait_for_cluster_init(ModulesNum) ->
-  Modules = lists:filter(fun({ModuleName, _}) -> not lists:member(ModuleName, ?ignored_modules) end, ?Modules_With_Args),
+  Modules = lists:filter(fun({ModuleName, _}) -> not lists:member(ModuleName, ?ignored_modules) end, ?MODULES_WITH_ARGS),
   wait_for_cluster_init(ModulesNum + length(Modules), 20).
 
 %% wait_for_cluster_init/2
