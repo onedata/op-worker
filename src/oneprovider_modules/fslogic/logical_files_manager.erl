@@ -593,7 +593,6 @@ write({uuid, Uuid}, Buf) -> % todo alow only FullFilePath for better performance
     end;
 write(File, Buf) ->
     ct:print("write/2 ~p",[File]),
-    ct:print("write/2 ~p",[]),
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
             {Response, Response2} = getfilelocation(File),
