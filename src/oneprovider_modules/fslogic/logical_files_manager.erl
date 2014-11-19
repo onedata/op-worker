@@ -586,11 +586,13 @@ read(File, Offset, Size, EventPolicy) ->
     ErrorDetail :: term().
 %% ====================================================================
 write({uuid, Uuid}, Buf) -> % todo alow only FullFilePath for better performance
+    ct:print("write/2 ~p",[{uuid, Uuid}]),
     case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
         {ok, FullFilePath} -> write(FullFilePath, Buf);
         Error -> Error
     end;
 write(File, Buf) ->
+    ct:print("write/2 ~p",[File]),
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
             {Response, Response2} = getfilelocation(File),
@@ -651,11 +653,13 @@ write(File, Offset, Buf) ->
     ErrorDetail :: term().
 %% ====================================================================
 write({uuid, Uuid}, Offset, Buf, EventPolicy) -> % todo alow only FullFilePath for better performance
+    ct:print("write/4 ~p",[{uuid, Uuid}]),
     case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
         {ok, FullFilePath} -> write(FullFilePath, Offset, Buf, EventPolicy);
         Error -> Error
     end;
 write(File, Offset, Buf, EventPolicy) ->
+    ct:print("write/4 ~p",[File]),
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
             {Response, Response2} = getfilelocation(File),
@@ -700,11 +704,13 @@ write(File, Offset, Buf, EventPolicy) ->
     ErrorDetail :: term().
 %% ====================================================================
 write_from_stream({uuid, Uuid}, Buf) -> % todo alow only FullFilePath for better performance
+    ct:print("write_from_stream ~p",[{uuid, Uuid}]),
     case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
         {ok, FullFilePath} -> write_from_stream(FullFilePath, Buf);
         Error -> Error
     end;
 write_from_stream(File, Buf) ->
+    ct:print("write_from_stream ~p",[File]),
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
             {Response, Response2} = getfilelocation(File),
@@ -746,6 +752,7 @@ write_from_stream(File, Buf) ->
     ErrorDetail :: term().
 %% ====================================================================
 create(File) ->
+    ct:print("create ~p", [File]),
     {ModeStatus, NewFileLogicMode} = get_mode(File),
     case ModeStatus of
         ok ->
