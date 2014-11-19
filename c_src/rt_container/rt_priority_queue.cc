@@ -57,10 +57,9 @@ rt_block rt_priority_queue::fetch()
     return block;
 }
 
-const std::set<rt_block> &rt_priority_queue::fetch(ErlNifUInt64 offset,
-                                                   ErlNifUInt64 size)
+void rt_priority_queue::change_counter(ErlNifUInt64 offset, ErlNifUInt64 size,
+                                       ErlNifUInt64 change = 1)
 {
-    throw rt_exception("unsupported_operation");
 }
 
 ErlNifUInt64 rt_priority_queue::size() const { return blocks_.size(); }

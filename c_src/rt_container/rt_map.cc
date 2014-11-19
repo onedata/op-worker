@@ -17,14 +17,12 @@ void rt_map::push(const rt_block &block)
     throw rt_exception("unsupported_operation");
 }
 
-rt_block rt_map::fetch() { throw std::runtime_error("unsupported_operation"); }
-
 const std::set<rt_block> &rt_map::fetch(ErlNifUInt64 offset, ErlNifUInt64 size)
 {
     throw rt_exception("unsupported_operation");
 }
 
-ErlNifUInt64 rt_map::size() const
+void &rt_map::remove(ErlNifUInt64 offset, ErlNifUInt64 size)
 {
     throw rt_exception("unsupported_operation");
 }

@@ -12,7 +12,6 @@
 #include "nifpp.h"
 #include "rt_block.h"
 #include "rt_interval.h"
-#include "rt_container.h"
 
 #include <set>
 
@@ -24,23 +23,23 @@ namespace provider {
  * rt_map object represents RTransfer map that allows to
  * push and fetch rt_blocks for given range
  */
-class rt_map : public rt_container {
+class rt_map {
 public:
     /**
-     * @copydoc rt_container::rt_container
+     * rt_map constructor.
+     * Constructs RTransfer map.
+     * @param block_size maximal size of block stored in the rt_map
      */
-    rt_map(ErlNifUInt64 block_size) : rt_container{block_size} {}
+    rt_map(ErlNifUInt64 block_size) : block_size_{block_size} {}
 
-    virtual void push(const rt_block &block) override;
+    void push(const rt_block &block);
 
-    virtual rt_block fetch() override;
+    const std::set<rt_block> &fetch(ErlNifUInt64 offset, ErlNifUInt64 size);
 
-    virtual const std::set<rt_block> &fetch(ErlNifUInt64 offset,
-                                            ErlNifUInt64 size) override;
-
-    virtual ErlNifUInt64 size() const override;
+    void remove(ErlNifUInt64 offset, ErlNifUInt64 size);
 
 private:
+    ErlNifUInt64 block_size_;
 };
 
 } // namespace provider

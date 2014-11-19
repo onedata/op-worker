@@ -12,7 +12,6 @@
 #include "nifpp.h"
 #include "rt_block.h"
 #include "rt_interval.h"
-#include "rt_container.h"
 
 #include <map>
 #include <set>
@@ -25,26 +24,49 @@ namespace provider {
 /**
  * The rt_priority_queue class.
  * rt_priority_queue object represents RTransfer priority queue that allows to
- * push and fetch
- * rt_blocks
+ * push and fetch rt_blocks
  */
-class rt_priority_queue : public rt_container {
+class rt_priority_queue {
 public:
     /**
-     * @copydoc rt_container::rt_container
+     * rt_priority_queue constructor.
+     * Constructs RTransfer priority queue.
+     * @param block_size maximal size of block stored in the rt_priority_queue
      */
-    rt_priority_queue(ErlNifUInt64 block_size) : rt_container{block_size} {}
+    rt_priority_queue(ErlNifUInt64 block_size) : block_size_{block_size} {}
 
-    virtual void push(const rt_block &block) override;
+    /**
+     * Pushes block on the rt_priority_queue. If block size is bigger than
+     * maximal
+     * RTransfer block size it is split.
+     * @param block to be pushed
+     */
+    void push(const rt_block &block);
 
-    virtual rt_block fetch() override;
+    /**
+     * Fetches block from the top of rt_priority_queue
+     * @return fetched block
+     */
+    rt_block fetch();
 
-    virtual const std::set<rt_block> &fetch(ErlNifUInt64 offset,
-                                            ErlNifUInt64 size) override;
+    /**
+     * For blocks from range [offset, offset + size) updates theirs counters by
+     * 'change'
+     * @param offset beginning of range
+     * @param size length of range
+     * @param change value to be added to current blocks' counter value
+     */
+    void change_counter(ErlNifUInt64 offset, ErlNifUInt64 size,
+                        ErlNifUInt64 change);
 
-    virtual ErlNifUInt64 size() const override;
+    /**
+     * Returns container size
+     * @return container size
+     */
+    ErlNifUInt64 size() const;
 
 private:
+    ErlNifUInt64 block_size_;
     std::map<std::string, std::map<rt_interval, std::set<rt_block>::iterator>>
         files_blocks_;
     std::set<rt_block> blocks_;

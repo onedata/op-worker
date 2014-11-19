@@ -8,14 +8,15 @@
 %% @doc This module allows for management of RTransfer container.
 %% @end
 %% ===================================================================
--module(rt_container).
+-module(rt_priority_queue).
 
 -include("registered_names.hrl").
 -include("oneprovider_modules/rtransfer/rt_container.hrl").
+-include("oneprovider_modules/rtransfer/rt_priority_queue.hrl").
 
 %% API
--export([new/0, new/1, new/2, new/3, new/4, delete/1]).
--export([push/2, fetch/1, fetch/2, fetch/3, size/1]).
+-export([new/0, new/1, new/2, new/3, delete/1]).
+-export([push/2, fetch/1, fetch/2, size/1]).
 -export([subscribe/3, unsubscribe/2]).
 
 %% gen_server callbacks
@@ -32,63 +33,49 @@
 
 %% new/0
 %% ====================================================================
-%% @doc Creates RTransfer container with default prefix and maximal
-%% RTransfer block size and of type priority queue.
+%% @doc Creates RTransfer priority queue with default prefix and maximal
+%% RTransfer block size.
 %% @end
 -spec new() -> {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
 new() ->
-    new(priority_queue).
+    {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
+    new(".", BlockSize).
 
 
 %% new/1
 %% ====================================================================
-%% @doc Creates RTransfer container with default prefix and maximal
-%% RTransfer block size.
+%% @doc Same as new/0, but allows to register queue under given name.
 %% @end
--spec new(Type :: priority_queue | map) ->
-    {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
+-spec new(ContainerName) -> {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
+    ContainerName :: container_name().
 %% ====================================================================
-new(Type) ->
+new(ContainerName) ->
     {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
-    new(Type, ".", BlockSize).
+    new(ContainerName, ".", BlockSize).
 
 
 %% new/2
 %% ====================================================================
-%% @doc Same as new/0, but allows to register container under given name.
+%% @doc Creates RTransfer priority queue.
 %% @end
--spec new(Type, ContainerName) -> {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
-    Type :: priority_queue | map,
-    ContainerName :: container_name().
+-spec new(Prefix :: string(), BlockSize :: integer()) ->
+    {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
-new(Type, ContainerName) ->
-    {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
-    new(Type, ContainerName, ".", BlockSize).
+new(Prefix, BlockSize) ->
+    gen_server:start_link(?MODULE, [Prefix, BlockSize], []).
 
 
 %% new/3
 %% ====================================================================
-%% @doc Creates RTransfer container.
+%% @doc Creates RTransfer priority queue and registeres it under given name.
 %% @end
--spec new(Type :: priority_queue | map, Prefix :: string(), BlockSize :: integer()) ->
-    {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
-%% ====================================================================
-new(Type, Prefix, BlockSize) ->
-    gen_server:start_link(?MODULE, [Type, Prefix, BlockSize], []).
-
-
-%% new/4
-%% ====================================================================
-%% @doc Creates RTransfer container and registeres it under given name.
-%% @end
--spec new(Type, ContainerName, Prefix :: string(), BlockSize :: integer()) ->
+-spec new(ContainerName, Prefix :: string(), BlockSize :: integer()) ->
     {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
-    Type :: priority_queue | map,
     ContainerName :: container_name().
 %% ====================================================================
-new(Type, ContainerName, Prefix, BlockSize) ->
-    gen_server:start_link(ContainerName, ?MODULE, [Type, Prefix, BlockSize], []).
+new(ContainerName, Prefix, BlockSize) ->
+    gen_server:start_link(ContainerName, ?MODULE, [Prefix, BlockSize], []).
 
 
 %% push/2
@@ -136,19 +123,6 @@ fetch(ContainerRef, TermsFilterFunction) ->
         Other ->
             Other
     end.
-
-
-%% fetch/3
-%% ====================================================================
-%% @doc Fetches blocks from RTransfer container that matches range
-%% given as offset and size using NIF library.
-%% @end
--spec fetch(ContainerRef, Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    {ok, [#rt_block{}]} | {error, Error :: term()} | no_return() when
-    ContainerRef :: container_ref().
-%% ====================================================================
-fetch(ContainerRef, Offset, Size) ->
-    gen_server:call(ContainerRef, {fetch, Offset, Size}).
 
 
 %% size/1
@@ -214,11 +188,11 @@ unsubscribe(ContainerRef, Id) ->
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-init([Type, Prefix, BlockSize]) ->
+init([Prefix, BlockSize]) ->
     try
-        erlang:load_nif(filename:join(Prefix, "c_lib/rt_container_drv"), 0),
-        {ok, Container} = init_nif(Type, BlockSize),
-        {ok, #state{container = Container, type = Type}}
+        erlang:load_nif(filename:join(Prefix, "c_lib/rt_priority_queue_drv"), 0),
+        {ok, Container} = init_nif(BlockSize),
+        {ok, #state{container = Container}}
     catch
         _:Reason -> {stop, Reason}
     end.
@@ -248,15 +222,6 @@ handle_call(fetch, _From, #state{size = 0} = State) ->
 handle_call(fetch, _From, #state{container = Container} = State) ->
     case fetch_nif(Container) of
         {ok, Size, Block} -> {reply, {ok, Block}, State#state{size = Size}};
-        Other -> Other
-    end;
-
-handle_call({fetch, _Offset, _Size}, _From, #state{size = 0} = State) ->
-    {reply, {error, empty}, State};
-
-handle_call({fetch, Offset, Size}, _From, #state{container = Container} = State) ->
-    case fetch_nif(Container, Offset, Size) of
-        {ok, Size, Blocks} -> {reply, {ok, Blocks}, State#state{size = Size}};
         Other -> Other
     end;
 
@@ -354,18 +319,18 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% init_nif/1
 %% ====================================================================
-%% @doc Initializes RTransfer container using NIF library.
+%% @doc Initializes RTransfer map using NIF library.
 %% @end
--spec init_nif(Type :: priority_queue | map, BlockSize :: integer()) ->
+-spec init_nif(BlockSize :: integer()) ->
     {ok, ContainerPtr :: container_ptr()} | no_return().
 %% ====================================================================
-init_nif(_Type, _BlockSize) ->
+init_nif(_BlockSize) ->
     throw("NIF library not loaded.").
 
 
 %% push_nif/2
 %% ====================================================================
-%% @doc Pushes block on RTransfer container using NIF library.
+%% @doc Pushes block on RTransfer map using NIF library.
 %% @end
 -spec push_nif(ContainerPtr :: container_ptr(), Block :: #rt_block{}) ->
     ok | no_return().
@@ -376,22 +341,10 @@ push_nif(_ContainerPtr, _Block) ->
 
 %% fetch_nif/1
 %% ====================================================================
-%% @doc Fetches block from RTransfer container using NIF library.
+%% @doc Fetches block from RTransfer map using NIF library.
 %% @end
 -spec fetch_nif(ContainerPtr :: container_ptr()) ->
     {ok, #rt_block{}} | {error, Error :: term()} | no_return().
 %% ====================================================================
 fetch_nif(_ContainerPtr) ->
-    throw("NIF library not loaded.").
-
-
-%% fetch_nif/3
-%% ====================================================================
-%% @doc Fetches blocks from RTransfer container that matches range
-%% given as offset and size using NIF library.
-%% @end
--spec fetch_nif(ContainerPtr :: container_ptr(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    {ok, [#rt_block{}]} | {error, Error :: term()} | no_return().
-%% ====================================================================
-fetch_nif(_ContainerPtr, _Offset, _Size) ->
     throw("NIF library not loaded.").

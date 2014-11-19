@@ -36,8 +36,8 @@ public:
      * rt_container
      */
     rt_block(std::string file_id, nifpp::TERM provider_ref, ErlNifUInt64 offset,
-             ErlNifUInt64 size, int priority, std::list<nifpp::TERM> terms,
-             int counter = 1)
+             ErlNifUInt64 size, ErlNifUInt64 priority,
+             std::list<nifpp::TERM> terms, ErlNifUInt64 counter = 1)
         : file_id_{std::move(file_id)}
         , provider_ref_{provider_ref}
         , offset_{offset}
@@ -64,13 +64,13 @@ public:
     ErlNifUInt64 end() const { return offset_ + size_ - 1; }
 
     /// Getter for block's priority
-    int priority() const { return priority_; }
+    ErlNifUInt64 priority() const { return priority_; }
 
     /// Getter for block's terms
     const std::list<nifpp::TERM> &terms() const { return terms_; }
 
     /// Getter for block's addition counter
-    int counter() const { return counter_; }
+    ErlNifUInt64 counter() const { return counter_; }
 
     /**
      * Appends list of terms to block
@@ -111,9 +111,9 @@ private:
     nifpp::TERM provider_ref_;
     ErlNifUInt64 offset_;
     ErlNifUInt64 size_;
-    int priority_;
+    ErlNifUInt64 priority_;
     std::list<nifpp::TERM> terms_;
-    int counter_;
+    ErlNifUInt64 counter_;
 };
 
 } // namespace provider
