@@ -221,7 +221,7 @@ save_available_blocks(ProtocolVersion, CacheName, Doc) ->
     ct:print("save begin ~p", [Pid]),
 
     % save block to db
-    {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc#db_document{force_update = true}], ProtocolVersion),
+    {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion), % [Doc#db_document{force_update = true}]
     {ok, NewDoc = #db_document{record = #available_blocks{file_id = FileId, file_size = DocSize = {Stamp, _Value}}}} =
         dao_lib:apply(dao_vfs, get_available_blocks, [Doc#db_document{force_update = true}], ProtocolVersion),
 
