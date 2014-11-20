@@ -419,7 +419,7 @@ block_to_byte_range(#block_range{from = From, to = To}) ->
 %% ====================================================================
 block_to_byte_range(#range{from = From, to = To}, FileByteSize) ->
     block_to_byte_range(#block_range{from = From, to = To}, FileByteSize);
-block_to_byte_range(#block_range{from = From, to = To}, FileByteSize) ->
+block_to_byte_range(#block_range{from = From, to = To}, FileByteSize) when is_integer(FileByteSize) ->
     #byte_range{from = From * ?remote_block_size, to = min((To+1) * ?remote_block_size, FileByteSize-1)}.
 
 %% byte_to_block_range/1
