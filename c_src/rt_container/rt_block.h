@@ -81,13 +81,6 @@ public:
     void appendTerms(const std::list<nifpp::TERM> &terms);
 
     /**
-     * Modifies this block by merging other block
-     * @param block to be merged
-     * @return merged block
-     */
-    const rt_block &merge(const rt_block &block);
-
-    /**
      * Checks whether this block can be merge with other block. That is
      * both belong to the same file, are successive and summary size is
      * less than maximal RTransfer block size.
@@ -109,9 +102,9 @@ public:
     bool operator<(const rt_block &block) const;
 
     /**
-     * Modifies this block by adding other block
-     * @param block to be added
-     * @return summed blocks
+     * Modifies this block by merging other block
+     * @param block to be merged
+     * @return merged block
      */
     rt_block &operator+=(const rt_block &block);
 

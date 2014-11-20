@@ -273,15 +273,16 @@ handle_call(_Request, _From, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({push, Block}, #state{container_ptr = ContainerPtr, subscribers = Subscribers} = State) ->
+handle_cast({push, Block}, #state{size = Size, container_ptr = ContainerPtr, subscribers = Subscribers} = State) ->
     case push_nif(ContainerPtr, Block) of
-        {ok, 1} ->
-            lists:foreach(fun({Id, Pid}) ->
-                Pid ! {not_empty, Id}
-            end, Subscribers),
-            {noreply, State#state{size = 1}};
-        {ok, Size} ->
-            {noreply, State#state{size = Size}};
+        {ok, NewSize} ->
+            case Size of
+                0 -> lists:foreach(fun({Id, Pid}) ->
+                    Pid ! {not_empty, Id}
+                end, Subscribers);
+                _ -> ok
+            end,
+            {noreply, State#state{size = NewSize}};
         _ ->
             {noreply, State}
     end;

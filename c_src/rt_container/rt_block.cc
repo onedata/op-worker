@@ -13,14 +13,6 @@
 namespace one {
 namespace provider {
 
-const rt_block &rt_block::merge(const rt_block &block)
-{
-    size_ += block.size_;
-    for (const auto &term : block.terms_)
-        terms_.push_back(term);
-    return *this;
-}
-
 bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
 {
     return file_id_ == block.file_id_ && offset_ + size_ == block.offset_
@@ -30,7 +22,8 @@ bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
 
 void rt_block::appendTerms(const std::list<nifpp::TERM> &terms)
 {
-    terms_.insert(terms_.begin(), terms.begin(), terms.end());
+    for (const auto &term : terms)
+        terms_.push_back(term);
 }
 
 bool rt_block::operator<(const rt_block &block) const
@@ -57,13 +50,9 @@ bool rt_block::operator<(const rt_block &block) const
 rt_block &rt_block::operator+=(const rt_block &block)
 {
     provider_ref_ = block.provider_ref_;
-    priority_ = std::max<ErlNifUInt64>(priority_, block.priority_);
-    offset_ = std::max<ErlNifUInt64>(offset_, block.offset_);
-    size_ = std::min<ErlNifUInt64>(offset_ + size_, block.offset_ + block.size_)
-            - offset_;
+    size_ += block.size_;
     for (const auto &term : block.terms_)
         terms_.push_back(term);
-    counter_ = std::max<ErlNifUInt64>(counter_, block.counter_);
 
     return *this;
 }

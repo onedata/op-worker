@@ -44,7 +44,7 @@ rt_block rt_priority_queue::pop()
     while (!file_blocks.empty()) {
         rt_block next_block = *(blocks_.begin());
         if (block.is_mergeable(next_block, block_size_)) {
-            block.merge(next_block);
+            block += next_block;
             blocks_.erase(blocks_.begin());
             file_blocks.erase(
                 rt_interval(next_block.offset(), next_block.size()));
