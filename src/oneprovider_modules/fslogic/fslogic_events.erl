@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 
 -include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/dao/dao_types.hrl").
 -include("fuse_messages_pb.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -25,23 +26,46 @@
 %% Triggers
 %% ===================================================================
 
+%% on_file_size_update/3
+%% ====================================================================
+%% @doc Shall be called whenever size of the file has changed.
+-spec on_file_size_update(FileUUID :: uuid(), OldFileSize :: non_neg_integer(), NewFileSize :: non_neg_integer()) -> ok.
+%% ====================================================================
 on_file_size_update(FileUUID, OldFileSize, NewFileSize) ->
     gen_server:call(request_dispatcher, {fslogic, 1, {internal_event, on_file_size_update, {FileUUID, OldFileSize, NewFileSize}}}).
 
+
+%% on_file_meta_update/2
+%% ====================================================================
+%% @doc Shall be called whenever file_meta document of the file has changed.
+-spec on_file_meta_update(FileUUID :: uuid(), Doc :: db_doc()) -> ok.
+%% ====================================================================
 on_file_meta_update(FileUUID, Doc) ->
     gen_server:call(request_dispatcher, {fslogic, 1, {internal_event, on_file_meta_update, {FileUUID, Doc}}}).
 
 %% ===================================================================
 %% Handlers
 %% ===================================================================
+
+%% handle_event/2
+%% ====================================================================
+%% @doc Handles events in fslogic worker context
+-spec handle_event(EventType :: atom(), Args :: term()) -> ok.
+%% ====================================================================
 handle_event(on_file_size_update, {FileUUID, _OldFileSize, _NewFileSize}) ->
     delayed_push_attrs(FileUUID);
 handle_event(on_file_meta_update, {FileUUID, _Doc}) ->
     delayed_push_attrs(FileUUID);
 handle_event(EventType, _Args) ->
-    ?warning("Unknown event with type: ~p", [EventType]).
+    ?warning("Unknown event with type: ~p", [EventType]),
+    ok.
 
 
+%% delayed_push_attrs/1
+%% ====================================================================
+%% @doc Mark the file's attributes to be updated in fuse clients within next second.
+-spec delayed_push_attrs(FileUUID :: uuid()) -> ok.
+%% ====================================================================
 delayed_push_attrs(FileUUID) ->
     case ets:lookup(?fslogic_attr_events_state, utils:ensure_binary(FileUUID)) of
         [{_, _TRef}] -> ok;
@@ -52,6 +76,11 @@ delayed_push_attrs(FileUUID) ->
     end.
 
 
+%% push_new_attrs/1
+%% ====================================================================
+%% @doc Pushes current file's attributes to all fuses that are currently using this file
+-spec push_new_attrs(FileUUID :: uuid()) -> [Result :: ok | {error, Reason :: any()}].
+%% ====================================================================
 push_new_attrs(FileUUID) ->
     ets:delete(?fslogic_attr_events_state, utils:ensure_binary(FileUUID)),
     {ok, FDs} = dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {FileUUID, ""}}, 100000, 0], 1),
@@ -63,14 +92,15 @@ push_new_attrs(FileUUID) ->
     ?info("Pushing new attributes for file ~p to fuses ~p", [FileUUID, Fuses1]),
 
     case Fuses1 of
-        [] -> ok;
+        [] -> [];
         FuseIDs ->
             {ok, #db_document{} = FileDoc} = fslogic_objects:get_file({uuid, FileUUID}),
             Attrs = #fileattr{} = fslogic_req_generic:get_file_attr(FileDoc),
 
-            lists:foreach(
+            lists:map(
                 fun(FuseID) ->
                     Res = request_dispatcher:send_to_fuse(FuseID, Attrs, "fuse_messages"),
-                    ?info("Sending msg to fuse ~p: ~p", [FuseID, Res])
+                    ?debug("Sending msg to fuse ~p: ~p", [FuseID, Res]),
+                    Res
                 end, FuseIDs)
     end.
