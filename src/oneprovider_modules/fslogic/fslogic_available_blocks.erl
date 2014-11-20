@@ -15,70 +15,290 @@
 -module(fslogic_available_blocks).
 
 -include_lib("ctool/include/logging.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("registered_names.hrl").
+-include("communication_protocol_pb.hrl").
 -include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
 -include("oneprovider_modules/fslogic/ranges_struct.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
 -include("oneprovider_modules/dao/dao_types.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("fuse_messages_pb.hrl").
+-include("oneprovider_modules/gateway/gateway.hrl").
 
-% API
--export([registered_requests/0, save_available_blocks/3, get_available_blocks/3, list_all_available_blocks/3, get_file_size/3]).
--export([mark_as_modified/2, mark_as_available/2, check_if_synchronized/3, truncate/2, mark_other_provider_changes/2]).
--export([db_sync_hook/0]).
+% High level fslogic api
+-export([synchronize_file_block/3, file_block_modified/3, file_truncated/2, db_sync_hook/0]).
+% cache/dao_proxy api
 -export([cast/1, call/1]).
+-export([registered_requests/0, save_available_blocks/3, get_available_blocks/3, list_all_available_blocks/3, get_file_size/3, invalidate_blocks_cache/3]).
+% Low level document modification api
+-export([mark_as_modified/2, mark_as_available/2, check_if_synchronized/3, truncate/2, mark_other_provider_changes/2]).
+% Utility functtions
+-export([block_to_byte_range/2, byte_to_offset_range/1, ranges_to_offset_tuples/1, get_timestamp/0]).
 
--export([block_to_byte_range/2, byte_to_offset_range/1, ranges_to_offset_tuples/1]).
 % Test API
 -ifdef(TEST).
 -export([byte_to_block_range/1]).
 -endif.
 
 %% ====================================================================
+%% High level functions for handling available_blocks document changes
+%% ====================================================================
+%% Every change should pass throught one of this functions
+
+%% synchronize_file_block/3
+%% ====================================================================
+%% @doc Checks if given byte range of file's value is in sync with other providers. If not, the data is fetched from them, and stored
+%% on local storage
+%% @end
+-spec synchronize_file_block(FullFileName :: string(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+    #atom{} | no_return().
+%% ====================================================================
+synchronize_file_block(FullFileName, Offset, Size) ->
+    %prepare data
+    {ok, RemoteLocationDocs} = fslogic_objects:list_all_available_blocks(FullFileName),
+    ProviderId = cluster_manager_lib:get_provider_id(),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    OtherRemoteLocationDocs = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id =/= ProviderId end, RemoteLocationDocs),
+    FileId = MyRemoteLocationDoc#db_document.record#available_blocks.file_id,
+
+    % synchronize file
+    OutOfSyncList = fslogic_available_blocks:check_if_synchronized(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, OtherRemoteLocationDocs),
+    lists:foreach(
+        fun({Id, Ranges}) ->
+            lists:foreach(fun(Range = #range{from = From, to = To}) ->
+                ?info("Synchronizing blocks: ~p of file ~p", [Range, FullFileName]),
+                {ok, _} = gateway:do_stuff(Id, #fetchrequest{file_id = FileId, offset = From*?remote_block_size, size = (To-From+1)*?remote_block_size})
+            end, Ranges)
+        end, OutOfSyncList),
+    SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
+
+    %modify document
+    NewDoc = lists:foldl(fun(Ranges, Acc) ->
+        {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false),
+        fslogic_available_blocks:mark_as_available(Ranges, Acc)
+    end, MyRemoteLocationDoc, SyncedParts),
+
+    % notify cache, db and fuses
+    case MyRemoteLocationDoc == NewDoc of
+        true -> ok;
+        false ->
+            {ok, FileSize} = fslogic_available_blocks:call({get_file_size, FileId}),
+            AvailableBlocks = NewDoc#db_document.record,
+            fslogic_objects:save_available_blocks(NewDoc#db_document{record = AvailableBlocks#available_blocks{file_size = FileSize}}),
+            lists:foreach(fun(Ranges) ->
+                {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false)
+            end, SyncedParts)
+    end,
+    #atom{value = ?VOK}.
+
+%% file_block_modified/3
+%% ====================================================================
+%% @doc Marks given file block as modified, so other provider would know
+%% that they need to synchronize their data
+%% @end
+-spec file_block_modified(FullFileName :: string(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+    #atom{} | no_return().
+%% ====================================================================
+file_block_modified(FullFileName, Offset, Size) ->
+    % prepare data
+    {ok, RemoteLocationDocs} = fslogic_objects:list_all_available_blocks(FullFileName),
+    ProviderId = cluster_manager_lib:get_provider_id(),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    FileId = MyRemoteLocationDoc#db_document.record#available_blocks.file_id,
+
+    % modify document
+    NewDoc = fslogic_available_blocks:mark_as_modified(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc),
+
+    % notify cache, db and fuses
+    case MyRemoteLocationDoc == NewDoc of
+        true -> ok;
+        false ->
+            AvailableBlocks = NewDoc#db_document.record,
+            {ok, {Stamp, FileSize}} = fslogic_available_blocks:call({get_file_size, FileId}),
+            NewFileSize = case FileSize < Offset + Size of
+                              true ->{fslogic_available_blocks:get_timestamp(), Offset + Size};
+                              false -> {Stamp, FileSize}
+                          end,
+            fslogic_objects:save_available_blocks(NewDoc#db_document{record = AvailableBlocks#available_blocks{file_size = NewFileSize}}),
+            fslogic_req_regular:update_file_block_map(FullFileName, [{Offset, Size}], false)
+    end,
+    #atom{value = ?VOK}.
+
+%% file_truncated/2
+%% ====================================================================
+%% @doc Deletes synchronization info of truncated blocks, so other provider would know
+%% that those blocks has been deleted
+%% @end
+-spec file_truncated(FullFileName :: string(), Size :: non_neg_integer()) ->
+    #atom{} | no_return().
+%% ====================================================================
+file_truncated(FullFileName, Size) ->
+    % prepare data
+    {ok, RemoteLocationDocs} = fslogic_objects:list_all_available_blocks(FullFileName),
+    ProviderId = cluster_manager_lib:get_provider_id(),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+
+    % modify document
+    #db_document{record = #available_blocks{file_parts = Ranges}} = NewDoc = fslogic_available_blocks:truncate({bytes, Size}, MyRemoteLocationDoc),
+
+    % notify cache, db and fuses
+    case MyRemoteLocationDoc == NewDoc of
+        true -> ok;
+        false ->
+            AvailableBlocks = NewDoc#db_document.record,
+            NewFileSize = {fslogic_available_blocks:get_timestamp(), Size},
+            fslogic_objects:save_available_blocks(NewDoc#db_document{record = AvailableBlocks#available_blocks{file_size = NewFileSize}}),
+            fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true)
+    end,
+    #atom{value = ?VOK}.
+
+db_sync_hook() ->
+    MyProviderId = cluster_manager_lib:get_provider_id(),
+    fun
+        (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
+            % prepare data
+            {ok, Docs} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], 1),
+            MyDocs = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id_}}) -> Id_ == MyProviderId end, Docs),
+
+            % if my doc exists...
+            case MyDocs of
+                [MyDoc] ->
+                    % find changed doc
+                    [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_binary(Uuid_) == utils:ensure_binary(Uuid) end, Docs),
+
+                    % modify my doc according to changed doc
+                    #db_document{record = #available_blocks{file_parts = Ranges}} = NewDoc = fslogic_available_blocks:mark_other_provider_changes(MyDoc, ChangedDoc),
+
+                    % notify cache, db and fuses
+                    fslogic_available_blocks:call({invalidate_blocks_cache, FileId}),
+                    case NewDoc == MyDoc of
+                        true -> ok;
+                        _ ->
+                            fslogic_available_blocks:call({save_available_blocks, NewDoc}),
+                            {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
+                            {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true)
+                    end;
+                _ -> ok
+            end;
+        (_, _, _, _) -> ok
+    end.
+
+%% ====================================================================
 %% Available blocks cache functions
 %% ====================================================================
 %% Cache is registered in fslogic init function, request concerning the same document
 %% Are always handled by one process. This functions should not be used directly, send
-%% request to fslogic_worker instead
+%% request to fslogic_worker instead (using ?MODULE:cast/1, ?MODULE:call/1)
 
 registered_requests() ->
     fun
         (ProtocolVersion, {save_available_blocks, Doc}, CacheName) -> fslogic_available_blocks:save_available_blocks(ProtocolVersion, CacheName, Doc);
         (ProtocolVersion, {get_available_blocks, FileId}, CacheName) -> fslogic_available_blocks:get_available_blocks(ProtocolVersion, CacheName, FileId);
         (ProtocolVersion, {list_all_available_blocks, FileId}, CacheName) -> fslogic_available_blocks:list_all_available_blocks(ProtocolVersion, CacheName, FileId);
-        (ProtocolVersion, {get_file_size, FileId}, CacheName) -> fslogic_available_blocks:get_file_size(ProtocolVersion, CacheName, FileId)
+        (ProtocolVersion, {get_file_size, FileId}, CacheName) -> fslogic_available_blocks:get_file_size(ProtocolVersion, CacheName, FileId);
+        (ProtocolVersion, {invalidate_blocks_cache, FileId}, CacheName) -> fslogic_available_blocks:invalidate_blocks_cache(ProtocolVersion, CacheName, FileId)
     end.
 
-save_available_blocks(ProtocolVersion, _CacheName, Doc) ->
+cast(Req) ->
+    gen_server:call(?Dispatcher_Name, {fslogic, 1, Req}, ?CACHE_REQUEST_TIMEOUT).
+
+call(Req) ->
+    MsgId = make_ref(),
+    gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, Req}, ?CACHE_REQUEST_TIMEOUT),
+    receive
+        {worker_answer, MsgId, Resp} -> Resp
+    after ?CACHE_REQUEST_TIMEOUT ->
+        ?error("Timeout in call to available_blocks process tree, req: ~p",[Req]),
+        {error, timeout}
+    end.
+
+save_available_blocks(ProtocolVersion, CacheName, Doc) ->
     Pid = self(),
     ct:print("save begin ~p", [Pid]),
+
+    % save block to db
     {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion),
+
+    % clear cache
+    FileId = Doc#db_document.record#available_blocks.file_id,
+    OldDocs = ets:lookup(CacheName, {FileId, all_docs}),
+    OldSize = ets:lookup(CacheName, {FileId, file_size}),
+    ets:delete_object(CacheName, {FileId, all_docs}),
+    ets:delete_object(CacheName, {FileId, file_size}),
+
+    % create cache again
+    case {OldDocs, OldSize} of
+        {[{_,Docs}],[{_,Size}]} ->
+            case Doc of
+                #db_document{record = #available_blocks{file_size = DocSize = {Stamp, _Value}}} ->
+                    OtherDocs = [Document || Document = #db_document{uuid = DocId} <- Docs, DocId =/= Uuid],
+                    NewDocs = [Doc | OtherDocs],
+                    NewSize =
+                        case Size of
+                            {S, V} when S > Stamp -> {S, V};
+                            _ -> DocSize
+                        end,
+                    ets:insert(CacheName, {{FileId, all_docs}, NewDocs}),
+                    ets:insert(CacheName, {{FileId, file_size}, NewSize});
+                _ -> ok
+            end;
+        _ -> ok
+    end,
     ct:print("save end ~p", [Pid]),
     {ok, Uuid}.
 
 get_available_blocks(ProtocolVersion, _CacheName, FileId) ->
+    % list all docs (uses cache)
     {ok, AllDocs} = list_all_available_blocks(ProtocolVersion, _CacheName, FileId),
+
+    % fetch my document
     ProviderId = cluster_manager_lib:get_provider_id(),
     [MyDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, AllDocs),
     {ok,MyDoc}.
 
-list_all_available_blocks(ProtocolVersion, _CacheName, FileId) ->
-    {ok, AllDocs} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], ProtocolVersion),
-    ProviderId = cluster_manager_lib:get_provider_id(),
-    CreatedDocs = case lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, AllDocs) of
-                      [] ->
-                          {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [#available_blocks{file_id = FileId, provider_id = ProviderId}], ProtocolVersion),
-                          {ok, Doc} = dao_lib:apply(dao_vfs, get_available_blocks, [Uuid], ProtocolVersion),
-                          [Doc];
-                      _ -> []
-                  end,
-    {ok, CreatedDocs ++ AllDocs}.
+list_all_available_blocks(ProtocolVersion, CacheName, FileId) ->
+    % try fetch from cache
+    case ets:lookup(CacheName, {FileId, all_docs}) of
+        [{_, Docs}] -> {ok, Docs};
+        _ ->
+            % no cache - fetch all docs from db
+            {ok, AllDocs} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], ProtocolVersion),
 
-get_file_size(_ProtocolVersion, _CacheName, FileId) ->
-    case logical_files_manager:getfileattr({uuid, FileId}) of
-        {ok, #fileattributes{size = Size}} -> {ok, Size};
-        Error -> Error
+            % create doc for me, if it's not present
+            ProviderId = cluster_manager_lib:get_provider_id(),
+            CreatedDocs = case lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, AllDocs) of
+                              [] ->
+                                  {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [#available_blocks{file_id = FileId, provider_id = ProviderId}], ProtocolVersion),
+                                  {ok, Doc} = dao_lib:apply(dao_vfs, get_available_blocks, [Uuid], ProtocolVersion),
+                                  [Doc];
+                              _ -> []
+                          end,
+
+            %add created doc to result
+            NewDocs = CreatedDocs ++ AllDocs,
+
+            % find newest size
+            Size = lists:foldl(fun({S, V}, {BestS, BestV}) -> case S > BestS of true -> {S, V}; _ -> {BestS, BestV} end end, {0,0}, NewDocs),
+
+            % inset results to cache
+            ets:insert(CacheName, {{FileId, all_docs}, NewDocs}),
+            ets:insert(CacheName, {{FileId, file_size}, Size}),
+            {ok, NewDocs}
     end.
+
+get_file_size(ProtocolVersion, CacheName, FileId) ->
+    case ets:lookup(CacheName, {FileId, file_size}) of
+        [{_, {Stamp_, Size_}}] -> {Stamp_, Size_};
+        _ ->
+            {ok, _} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
+            [{_, {_, {_Stamp, Size}}}] = ets:lookup(CacheName, {FileId, file_size}),
+            {ok,Size}
+    end.
+
+invalidate_blocks_cache(_ProtocolVersion, CacheName, FileId) ->
+    ets:delete_object(CacheName, {FileId, all_docs}),
+    ets:delete_object(CacheName, {FileId, file_size}).
 
 %% ====================================================================
 %% functions for available_blocks documents modification
@@ -172,49 +392,8 @@ mark_other_provider_changes(MyDoc = #db_document{record = #available_blocks{file
     MyDoc#db_document{record = Location#available_blocks{file_parts = NewParts}}.
 
 %% ====================================================================
-%% Db sync hook, for tracking changes
-%% ====================================================================
-
-db_sync_hook() ->
-    MyProviderId = cluster_manager_lib:get_provider_id(),
-    fun
-        (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
-            {ok, Docs} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], 1),
-            MyDocs = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == MyProviderId end, Docs),
-            case MyDocs of
-                [MyDoc] ->
-                    [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_binary(Uuid_) == utils:ensure_binary(Uuid) end, Docs),
-                    #db_document{record = #available_blocks{file_parts = Ranges}} = NewDoc = fslogic_available_blocks:mark_other_provider_changes(MyDoc, ChangedDoc),
-
-                    case NewDoc == MyDoc of
-                        true -> ok;
-                        _ ->
-                            {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
-                            {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true),
-
-                            fslogic_available_blocks:cast({save_available_blocks, NewDoc})
-                    end;
-                _ -> ok
-            end;
-        (_, _, _, _) -> ok
-    end.
-
-%% ====================================================================
 %% Utility functions
 %% ====================================================================
-
-cast(Req) ->
-    gen_server:call(?Dispatcher_Name, {fslogic, 1, Req}, ?CACHE_REQUEST_TIMEOUT).
-
-call(Req) ->
-    MsgId = make_ref(),
-    gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, Req}, ?CACHE_REQUEST_TIMEOUT),
-    receive
-        {worker_answer, MsgId, Resp} -> Resp
-    after ?CACHE_REQUEST_TIMEOUT ->
-        ?error("Timeout in call to available_blocks process tree, req: ~p",[Req]),
-        {error, timeout}
-    end.
 
 ranges_to_offset_tuples([]) -> [];
 ranges_to_offset_tuples([#range{} = H | T]) ->

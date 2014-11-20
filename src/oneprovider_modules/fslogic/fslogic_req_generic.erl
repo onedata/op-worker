@@ -25,7 +25,7 @@
 
 %% API
 -export([update_times/4, change_file_owner/2, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
-    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0, synchronize_file_block/3, file_block_modified/3, file_truncated/2]).
+    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0]).
 
 %% ====================================================================
 %% API functions
@@ -439,82 +439,6 @@ rename_file(FullFileName, FullTargetFileName) ->
     end,
 
     #atom{value = ?VOK}.
-
-%% synchronize_file_block/3
-%% ====================================================================
-%% @doc Checks if given byte range of file's value is in sync with other providers. If not, the data is fetched from them, and stored
-%% on local storage
-%% @end
--spec synchronize_file_block(FullFileName :: string(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    #atom{} | no_return().
-%% ====================================================================
-synchronize_file_block(FullFileName, Offset, Size) ->
-    {ok, RemoteLocationDocs} = fslogic_objects:list_all_available_blocks(FullFileName),
-    ProviderId = cluster_manager_lib:get_provider_id(),
-    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
-    OtherRemoteLocationDocs = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id =/= ProviderId end, RemoteLocationDocs),
-    FileId = MyRemoteLocationDoc#db_document.record#available_blocks.file_id,
-
-    OutOfSyncList = fslogic_available_blocks:check_if_synchronized(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, OtherRemoteLocationDocs),
-    lists:foreach(
-        fun({Id, Ranges}) ->
-            lists:foreach(fun(Range = #range{from = From, to = To}) ->
-                ?info("Synchronizing blocks: ~p of file ~p", [Range, FullFileName]),
-                {ok, _} = gateway:do_stuff(Id, #fetchrequest{file_id = FileId, offset = From*?remote_block_size, size = (To-From+1)*?remote_block_size})
-            end, Ranges)
-        end, OutOfSyncList),
-    SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
-    NewDoc = lists:foldl(fun(Ranges, Acc) ->
-        {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false),
-        fslogic_available_blocks:mark_as_available(Ranges, Acc)
-    end, MyRemoteLocationDoc, SyncedParts),
-    case MyRemoteLocationDoc == NewDoc of
-        true -> ok;
-        false -> fslogic_objects:save_available_blocks(NewDoc)
-    end,
-    #atom{value = ?VOK}.
-
-%% file_block_modified/3
-%% ====================================================================
-%% @doc Marks given file block as modified, so other provider would know
-%% that they need to synchronize their data
-%% @end
--spec file_block_modified(FullFileName :: string(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    #atom{} | no_return().
-%% ====================================================================
-file_block_modified(FullFileName, Offset, Size) ->
-    {ok, RemoteLocationDocs} = fslogic_objects:list_all_available_blocks(FullFileName),
-    ProviderId = cluster_manager_lib:get_provider_id(),
-    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
-    NewDoc = fslogic_available_blocks:mark_as_modified(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc),
-    fslogic_req_regular:update_file_block_map(FullFileName, [{Offset, Size}], false),
-    case MyRemoteLocationDoc == NewDoc of
-        true -> ok;
-        false -> fslogic_objects:save_available_blocks(NewDoc)
-    end,
-    #atom{value = ?VOK}.
-
-%% file_truncated/2
-%% ====================================================================
-%% @doc Deletes synchronization info of truncated blocks, so other provider would know
-%% that those blocks has been deleted
-%% @end
--spec file_truncated(FullFileName :: string(), Size :: non_neg_integer()) ->
-    #atom{} | no_return().
-%% ====================================================================
-file_truncated(FullFileName, Size) ->
-    {ok, RemoteLocationDocs} = fslogic_objects:list_all_available_blocks(FullFileName),
-    ProviderId = cluster_manager_lib:get_provider_id(),
-    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
-    #db_document{record = #available_blocks{file_parts = Ranges}} = NewDoc = fslogic_available_blocks:truncate({bytes, Size}, MyRemoteLocationDoc),
-    case MyRemoteLocationDoc == NewDoc of
-        true -> ok;
-        false ->
-            fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true),
-            fslogic_objects:save_available_blocks(NewDoc)
-    end,
-    #atom{value = ?VOK}.
-
 
 %% ====================================================================
 %% Internal functions
