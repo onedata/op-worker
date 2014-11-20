@@ -87,10 +87,7 @@ delete(ContainerRef) ->
 -spec put(ContainerRef, Block :: #rt_block{}) -> ok when
     ContainerRef :: container_ref().
 %% ====================================================================
-put(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_binary(ProviderId) ->
-    ?MODULE:put(ContainerRef, Block#rt_block{provider_ref = binary_to_list(ProviderId)});
-
-put(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_list(ProviderId) ->
+put(ContainerRef, Block) ->
     gen_server:cast(ContainerRef, {put, Block}).
 
 
@@ -106,14 +103,7 @@ put(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_list(Pro
     Size :: non_neg_integer().
 %% ====================================================================
 get(ContainerRef, FileId, Offset, Size) ->
-    case gen_server:call(ContainerRef, {get, FileId, Offset, Size}) of
-        {ok, Blocks} ->
-            {ok, lists:map(fun(#rt_block{provider_ref = ProviderId} = Block) ->
-                Block#rt_block{provider_ref = list_to_binary(ProviderId)}
-            end, Blocks)};
-        Other ->
-            Other
-    end.
+    gen_server:call(ContainerRef, {get, FileId, Offset, Size}).
 
 
 %% remove/4

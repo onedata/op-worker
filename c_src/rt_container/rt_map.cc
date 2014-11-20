@@ -27,8 +27,16 @@ std::list<rt_block> rt_map::get(std::string file_id, ErlNifUInt64 offset,
     std::list<rt_block> blocks;
     auto result = files_[file_id].equal_range(
         boost::icl::discrete_interval<ErlNifUInt64>(offset, offset + size));
-    for (auto it = result.first; it != result.second; ++it)
-        blocks.push_back(it->second);
+    for (auto it = result.first; it != result.second; ++it) {
+        const auto &interval = it->first;
+        const auto &block = it->second;
+        ErlNifUInt64 begin = std::max<ErlNifUInt64>(interval.lower(), offset);
+        ErlNifUInt64 end
+            = std::min<ErlNifUInt64>(interval.upper(), offset + size);
+        blocks.push_back(rt_block(file_id, block.provider_ref(), begin,
+                                  end - begin, block.priority(), block.terms(),
+                                  block.counter()));
+    }
 
     return blocks;
 }

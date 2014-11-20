@@ -96,10 +96,7 @@ delete(ContainerRef) ->
 -spec push(ContainerRef, Block :: #rt_block{}) -> ok when
     ContainerRef :: container_ref().
 %% ====================================================================
-push(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_binary(ProviderId) ->
-    push(ContainerRef, Block#rt_block{provider_ref = binary_to_list(ProviderId)});
-
-push(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_list(ProviderId) ->
+push(ContainerRef, Block) ->
     gen_server:cast(ContainerRef, {push, Block}).
 
 
@@ -111,7 +108,7 @@ push(ContainerRef, #rt_block{provider_ref = ProviderId} = Block) when is_list(Pr
     ContainerRef :: container_ref().
 %% ====================================================================
 pop(ContainerRef) ->
-    pop(ContainerRef, fun erlang:is_process_alive/1).
+    gen_server:call(ContainerRef, pop).
 
 
 %% pop/2
@@ -125,12 +122,11 @@ pop(ContainerRef) ->
 %% ====================================================================
 pop(ContainerRef, TermsFilterFunction) ->
     case gen_server:call(ContainerRef, pop) of
-        {ok, #rt_block{terms = Terms, provider_ref = ProviderId} = Block} ->
+        {ok, #rt_block{terms = Terms} = Block} ->
             {ok, Block#rt_block{
                 terms = lists:filter(fun(Term) ->
                     TermsFilterFunction(Term)
-                end, lists:usort(Terms)),
-                provider_ref = list_to_binary(ProviderId)
+                end, lists:usort(Terms))
             }};
         Other ->
             Other
