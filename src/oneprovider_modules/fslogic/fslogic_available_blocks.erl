@@ -45,6 +45,7 @@
 %% High level functions for handling available_blocks document changes
 %% ====================================================================
 %% Every change should pass throught one of this functions
+%todo move this functions to cache process
 
 %% synchronize_file_block/3
 %% ====================================================================
@@ -220,10 +221,11 @@ save_available_blocks(ProtocolVersion, CacheName, Doc) ->
     ct:print("save begin ~p", [Pid]),
 
     % save block to db
-    {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion),
+    {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc#db_document{force_update = true}], ProtocolVersion),
+    {ok, NewDoc = #db_document{record = #available_blocks{file_id = FileId, file_size = DocSize = {Stamp, _Value}}}} =
+        dao_lib:apply(dao_vfs, get_available_blocks, [Doc#db_document{force_update = true}], ProtocolVersion),
 
     % clear cache
-    FileId = case is_record(Doc, db_document) of true -> Doc#db_document.record#available_blocks.file_id; _ -> Doc#available_blocks.file_id end,
     OldDocs = ets:lookup(CacheName, {FileId, all_docs}),
     OldSize = ets:lookup(CacheName, {FileId, file_size}),
     ets:delete_object(CacheName, {FileId, all_docs}),
@@ -232,19 +234,15 @@ save_available_blocks(ProtocolVersion, CacheName, Doc) ->
     % create cache again
     case {OldDocs, OldSize} of
         {[{_,Docs}],[{_,Size}]} ->
-            case Doc of
-                #db_document{record = #available_blocks{file_size = DocSize = {Stamp, _Value}}} ->
-                    OtherDocs = [Document || Document = #db_document{uuid = DocId} <- Docs, DocId =/= Uuid],
-                    NewDocs = [Doc | OtherDocs],
-                    NewSize =
-                        case Size of
-                            {S, V} when S > Stamp -> {S, V};
-                            _ -> DocSize
-                        end,
-                    ets:insert(CacheName, {{FileId, all_docs}, NewDocs}),
-                    ets:insert(CacheName, {{FileId, file_size}, NewSize});
-                _ -> ok
-            end;
+            OtherDocs = [Document || Document = #db_document{uuid = DocId} <- Docs, DocId =/= Uuid],
+            NewDocs = [NewDoc | OtherDocs],
+            NewSize =
+                case Size of
+                    {S, V} when S > Stamp -> {S, V};
+                    _ -> DocSize
+                end,
+            ets:insert(CacheName, {{FileId, all_docs}, NewDocs}),
+            ets:insert(CacheName, {{FileId, file_size}, NewSize});
         _ -> ok
     end,
     ct:print("save end ~p", [Pid]),
