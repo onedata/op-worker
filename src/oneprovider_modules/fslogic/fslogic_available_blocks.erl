@@ -221,7 +221,7 @@ save_available_blocks(ProtocolVersion, CacheName, Doc) ->
     {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion),
 
     % clear cache
-    FileId = Doc#db_document.record#available_blocks.file_id,
+    FileId = case is_record(Doc, db_document) of true -> Doc#db_document.record#available_blocks.file_id; _ -> Doc#available_blocks.file_id end,
     OldDocs = ets:lookup(CacheName, {FileId, all_docs}),
     OldSize = ets:lookup(CacheName, {FileId, file_size}),
     ets:delete_object(CacheName, {FileId, all_docs}),
