@@ -279,7 +279,9 @@ list_all_available_blocks(ProtocolVersion, CacheName, FileId) ->
             NewDocs = CreatedDocs ++ AllDocs,
 
             % find newest size
-            Size = lists:foldl(fun({S, V}, {BestS, BestV}) -> case S > BestS of true -> {S, V}; _ -> {BestS, BestV} end end, {0,0}, NewDocs),
+            Size = lists:foldl(fun(#db_document{record = #available_blocks{file_size = {S, V}}}, {BestS, BestV}) ->
+                case S > BestS of true -> {S, V}; _ -> {BestS, BestV} end
+            end, {0,0}, NewDocs),
 
             % inset results to cache
             ets:insert(CacheName, {{FileId, all_docs}, NewDocs}),
