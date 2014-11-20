@@ -291,7 +291,7 @@ list_all_available_blocks(ProtocolVersion, CacheName, FileId) ->
 
 get_file_size(ProtocolVersion, CacheName, FileId) ->
     case ets:lookup(CacheName, {FileId, file_size}) of
-        [{_, {Stamp_, Size_}}] -> {Stamp_, Size_};
+        [{_, {Stamp_, Size_}}] -> {ok, {Stamp_, Size_}};
         _ ->
             {ok, _} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
             [{_, {_, {_Stamp, Size}}}] = ets:lookup(CacheName, {FileId, file_size}),
