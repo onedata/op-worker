@@ -171,7 +171,7 @@ wait_for_nodes_registration(NodesNum, TriesNum) ->
 %% ====================================================================
 check_nodes() ->
   try
-    length(gen_server:call({global, ?CCM}, get_nodes, 1000))
+    length(gen_server:call({global, ?CCM}, get_nodes, 10000))
   catch
     E1:E2 ->
       {exception, E1, E2}
