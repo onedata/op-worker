@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: @todo: write me
+%% @doc: fslogic events handlers and callbacks
 %% @end
 %% ===================================================================
 -module(fslogic_events).
@@ -42,7 +42,7 @@ push_new_attrs(FileUUID) ->
 
             lists:foreach(
                 fun(FuseID) ->
-                    Res = request_dispatcher:send_to_fuse(FuseID, Attrs, "fusemessages"),
+                    Res = request_dispatcher:send_to_fuse(FuseID, Attrs, "fuse_messages"),
                     ?info("Sending msg to fuse ~p: ~p", [FuseID, Res])
                 end, FuseIDs)
     end.
