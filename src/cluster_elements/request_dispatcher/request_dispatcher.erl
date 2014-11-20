@@ -370,8 +370,9 @@ handle_test_call(_Request, _From, State) ->
   NewState :: term(),
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
+%% TODO: check dispatchers map
 handle_cast({update_state, NewStateNum, NewCallbacksNum}, State) ->
-  case {State#dispatcher_state.state_num == NewStateNum, State#dispatcher_state.callbacks_num == NewCallbacksNum} of
+  case {State#dispatcher_state.state_num >= NewStateNum, State#dispatcher_state.callbacks_num >= NewCallbacksNum} of
     {true, true} ->
       gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum, NewCallbacksNum});
     {false, true} ->
@@ -405,7 +406,7 @@ handle_cast({update_pulled_state, WorkersList, StateNum, CallbacksList, Callback
                  ?error("Dispatcher had old state number but could not update data"),
                  State;
                _ ->
-                 TmpState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
+                 TmpState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.callbacks_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
                  ?info("Dispatcher state updated, state num: ~p", [StateNum]),
                  TmpState#dispatcher_state{state_num = StateNum}
              end,
@@ -421,20 +422,20 @@ handle_cast({update_pulled_state, WorkersList, StateNum, CallbacksList, Callback
                     ets:insert(?CALLBACKS_TABLE, {Fuse, NodesList})
                   end,
                   lists:foreach(UpdateCallbacks, CallbacksList),
-                  ?info("Dispatcher callbacks updated"),
+                  ?info("Dispatcher callbacks updated, new num: ~p", [CallbacksNum]),
                   NewState#dispatcher_state{callbacks_num = CallbacksNum}
               end,
 
   gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState2#dispatcher_state.state_num, NewState2#dispatcher_state.callbacks_num}),
   {noreply, NewState2};
 
-handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad}, _State) ->
-  NewState = update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, ?Modules),
+handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad}, State) ->
+  NewState = update_workers(WorkersList, NewStateNum, State#dispatcher_state.callbacks_num, CurLoad, AvgLoad, ?Modules),
   ?info("Dispatcher state updated, state num: ~p", [NewStateNum]),
   {noreply, NewState#dispatcher_state{request_map = RequestMap}};
 
-handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad, Modules}, _State) ->
-  NewState = update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, Modules),
+handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad, Modules}, State) ->
+  NewState = update_workers(WorkersList, NewStateNum, State#dispatcher_state.callbacks_num, CurLoad, AvgLoad, Modules),
   ?info("Dispatcher state updated, state num: ~p", [NewStateNum]),
   {noreply, NewState#dispatcher_state{request_map = RequestMap}};
 
@@ -470,7 +471,7 @@ handle_cast(_Msg, State) ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_info(_Info, State) ->
-  ?warning("Wrong info: ~p", [_Info]),
+  ?warning("Dispatcher wrong info: ~p", [_Info]),
   {noreply, State}.
 
 
@@ -638,13 +639,13 @@ add_worker(Module, Node, State) ->
     Other -> Other
   end.
 
-%% update_workers/5
+%% update_workers/6
 %% ====================================================================
 %% @doc Updates dispatcher state when new workers list appears.
--spec update_workers(WorkersList :: term(), SNum :: integer(), CLoad :: number(), ALoad :: number(), Modules :: list()) -> Result when
+-spec update_workers(WorkersList :: term(), SNum :: integer(), CNum :: integer(), CLoad :: number(), ALoad :: number(), Modules :: list()) -> Result when
   Result :: term().
 %% ====================================================================
-update_workers(WorkersList, SNum, CLoad, ALoad, Modules) ->
+update_workers(WorkersList, SNum, CNum, CLoad, ALoad, Modules) ->
   Update = fun({Node, Module}, TmpState) ->
     Ans = add_worker(Module, Node, TmpState),
     case Ans of
@@ -652,7 +653,7 @@ update_workers(WorkersList, SNum, CLoad, ALoad, Modules) ->
       _Other -> TmpState
     end
   end,
-  NewState = lists:foldl(Update, initState(SNum, CLoad, ALoad, Modules), WorkersList),
+  NewState = lists:foldl(Update, initState(SNum, CNum, CLoad, ALoad, Modules), WorkersList),
   ModulesConstList = lists:map(fun({M, {L1, L2}}) ->
     {M, lists:append(L1, L2)}
   end, NewState#dispatcher_state.modules),
@@ -702,15 +703,15 @@ initState(Modules) ->
   NewModules = lists:foldl(CreateModules, [], Modules),
   #dispatcher_state{modules = NewModules}.
 
-%% initState/4
+%% initState/5
 %% ====================================================================
 %% @doc Initializes new record #dispatcher_state
--spec initState(SNum :: integer(), CLoad :: number(), ALoad :: number(), Modules :: list()) -> Result when
+-spec initState(SNum :: integer(), CNum :: integer(), CLoad :: number(), ALoad :: number(), Modules :: list()) -> Result when
   Result :: record().
 %% ====================================================================
-initState(SNum, CLoad, ALoad, Modules) ->
+initState(SNum, CNum, CLoad, ALoad, Modules) ->
   NewState = initState(Modules),
-  NewState#dispatcher_state{state_num = SNum, current_load = CLoad, avg_load = ALoad}.
+  NewState#dispatcher_state{state_num = SNum, callbacks_num = CNum, current_load = CLoad, avg_load = ALoad}.
 
 %% add_callback/2
 %% ====================================================================
