@@ -223,16 +223,16 @@ save_available_blocks(ProtocolVersion, CacheName, Doc) ->
     % save block to db
     {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion), % [Doc#db_document{force_update = true}]
     {ok, NewDoc = #db_document{record = #available_blocks{file_id = FileId, file_size = DocSize = {Stamp, _Value}}}} =
-        dao_lib:apply(dao_vfs, get_available_blocks, [Doc#db_document{force_update = true}], ProtocolVersion),
+        dao_lib:apply(dao_vfs, get_available_blocks, [Uuid], ProtocolVersion),
 
     % clear cache
-    OldDocs = ets:lookup(CacheName, {FileId, all_docs}),
-    OldSize = ets:lookup(CacheName, {FileId, file_size}),
+    OldDocsQueryResult = ets:lookup(CacheName, {FileId, all_docs}),
+    OldSizeQueryResult = ets:lookup(CacheName, {FileId, file_size}),
     ets:delete_object(CacheName, {FileId, all_docs}),
     ets:delete_object(CacheName, {FileId, file_size}),
 
     % create cache again
-    case {OldDocs, OldSize} of
+    case {OldDocsQueryResult, OldSizeQueryResult} of
         {[{_,Docs}],[{_,Size}]} ->
             OtherDocs = [Document || Document = #db_document{uuid = DocId} <- Docs, DocId =/= Uuid],
             NewDocs = [NewDoc | OtherDocs],
