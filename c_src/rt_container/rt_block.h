@@ -35,9 +35,11 @@ public:
      * @param counter defines how many times block was pushed on the
      * rt_container
      */
-    rt_block(std::string file_id, nifpp::TERM provider_ref, ErlNifUInt64 offset,
-             ErlNifUInt64 size, ErlNifUInt64 priority,
-             std::list<nifpp::TERM> terms, ErlNifUInt64 counter = 1)
+    rt_block(std::string file_id = "", nifpp::TERM provider_ref = nifpp::TERM(),
+             ErlNifUInt64 offset = 0, ErlNifUInt64 size = 0,
+             ErlNifUInt64 priority = 0,
+             std::list<nifpp::TERM> terms = std::list<nifpp::TERM>(),
+             ErlNifUInt64 counter = 1)
         : file_id_{std::move(file_id)}
         , provider_ref_{provider_ref}
         , offset_{offset}
@@ -106,6 +108,13 @@ public:
      */
     bool operator<(const rt_block &block) const;
 
+    /**
+     * Modifies this block by adding other block
+     * @param block to be added
+     * @return summed blocks
+     */
+    rt_block &operator+=(const rt_block &block);
+
 private:
     std::string file_id_;
     nifpp::TERM provider_ref_;
@@ -115,6 +124,15 @@ private:
     std::list<nifpp::TERM> terms_;
     ErlNifUInt64 counter_;
 };
+
+/**
+ * Compares two RTransfer blocks.
+ * Blocks are equal if corresponding block fields are equal.
+ * @param block to be compared
+ * @param block to be compared
+ * @return true if blocks are equal
+ */
+bool operator==(const rt_block &lhs, const rt_block &rhs);
 
 } // namespace provider
 } // namespace one

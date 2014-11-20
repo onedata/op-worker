@@ -15,7 +15,7 @@
 -include("oneprovider_modules/rtransfer/rt_container.hrl").
 
 %% API
--export([new/0, new/1, new/2, new/3, delete/1]).
+-export([new/0, new/1, new/2, delete/1]).
 -export([put/2, get/4, remove/4]).
 
 %% gen_server callbacks
@@ -38,43 +38,35 @@
 -spec new() -> {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
 new() ->
-    {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
-    new(".", BlockSize).
+    new(".").
 
 
 %% new/1
 %% ====================================================================
-%% @doc Same as new/0, but allows to register queue under given name.
+%% @doc Creates RTransfer map with custom prefix or with default prefix
+%% but registered under given name.
 %% @end
--spec new(ContainerName) -> {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
+-spec new({prefix, Prefix} | ContainerName) -> {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
+    Prefix :: string(),
     ContainerName :: container_name().
 %% ====================================================================
+new({prefix, Prefix}) ->
+    gen_server:start_link(?MODULE, [Prefix], []);
+
 new(ContainerName) ->
-    {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
-    new(ContainerName, ".", BlockSize).
-
-
-%% new/2
-%% ====================================================================
-%% @doc Creates RTransfer map.
-%% @end
--spec new(Prefix :: string(), BlockSize :: integer()) ->
-    {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
-%% ====================================================================
-new(Prefix, BlockSize) ->
-    gen_server:start_link(?MODULE, [Prefix, BlockSize], []).
+    new(ContainerName, ".").
 
 
 %% new/3
 %% ====================================================================
 %% @doc Creates RTransfer map and registeres it under given name.
 %% @end
--spec new(ContainerName, Prefix :: string(), BlockSize :: integer()) ->
+-spec new(ContainerName, Prefix :: string()) ->
     {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
     ContainerName :: container_name().
 %% ====================================================================
-new(ContainerName, Prefix, BlockSize) ->
-    gen_server:start_link(ContainerName, ?MODULE, [Prefix, BlockSize], []).
+new(ContainerName, Prefix) ->
+    gen_server:start_link(ContainerName, ?MODULE, [Prefix], []).
 
 
 %% delete/1
@@ -156,10 +148,10 @@ remove(ContainerRef, FileId, Offset, Size) ->
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-init([Prefix, BlockSize]) ->
+init([Prefix]) ->
     try
         erlang:load_nif(filename:join(Prefix, "c_lib/rt_map_drv"), 0),
-        {ok, ContainerPtr} = init_nif(BlockSize),
+        {ok, ContainerPtr} = init_nif(),
         {ok, #state{container_ptr = ContainerPtr}}
     catch
         _:Reason -> {stop, Reason}
@@ -269,10 +261,10 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 %% @doc Initializes RTransfer map using NIF library.
 %% @end
--spec init_nif(BlockSize :: integer()) ->
+-spec init_nif() ->
     {ok, ContainerPtr :: container_ptr()} | no_return().
 %% ====================================================================
-init_nif(_BlockSize) ->
+init_nif() ->
     throw("NIF library not loaded.").
 
 

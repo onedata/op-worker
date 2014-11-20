@@ -54,5 +54,28 @@ bool rt_block::operator<(const rt_block &block) const
     return size_ < block.size_;
 }
 
+rt_block &rt_block::operator+=(const rt_block &block)
+{
+    provider_ref_ = block.provider_ref_;
+    priority_ = std::max<ErlNifUInt64>(priority_, block.priority_);
+    offset_ = std::max<ErlNifUInt64>(offset_, block.offset_);
+    size_ = std::min<ErlNifUInt64>(offset_ + size_, block.offset_ + block.size_)
+            - offset_;
+    for (const auto &term : block.terms_)
+        terms_.push_back(term);
+    counter_ = std::max<ErlNifUInt64>(counter_, block.counter_);
+
+    return *this;
+}
+
+bool operator==(const rt_block &lhs, const rt_block &rhs)
+{
+    return lhs.file_id() == rhs.file_id()
+           && lhs.provider_ref() == rhs.provider_ref()
+           && lhs.offset() == rhs.offset() && lhs.size() == rhs.size()
+           && lhs.priority() == rhs.priority() && lhs.counter() == rhs.counter()
+           && lhs.terms() == rhs.terms();
+}
+
 } // namespace provider
 } // namespace one

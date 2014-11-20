@@ -29,9 +29,7 @@ static ERL_NIF_TERM init_nif(ErlNifEnv *env, int argc,
                              const ERL_NIF_TERM argv[])
 {
     try {
-        ErlNifUInt64 block_size;
-        nifpp::get_throws(env, argv[0], block_size);
-        auto map = nifpp::construct_resource<rt_map>(block_size);
+        auto map = nifpp::construct_resource<rt_map>();
 
         return nifpp::make(
             env, std::make_tuple(nifpp::str_atom("ok"), nifpp::make(env, map)));
@@ -89,7 +87,7 @@ static ERL_NIF_TERM get_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
                              std::list<nifpp::TERM>>> records;
 
         for (const auto &block : map->get(file_id, offset, size))
-            records.put_back(
+            records.push_back(
                 std::make_tuple(nifpp::str_atom("rt_block"), block.file_id(),
                                 block.provider_ref(), block.offset(),
                                 block.size(), block.priority(), block.terms()));
@@ -133,7 +131,7 @@ static ERL_NIF_TERM remove_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ErlNifFunc nif_funcs[] = {{"init_nif", 1, init_nif},
+static ErlNifFunc nif_funcs[] = {{"init_nif", 0, init_nif},
                                  {"put_nif", 2, put_nif},
                                  {"get_nif", 4, get_nif},
                                  {"remove_nif", 4, remove_nif}};

@@ -11,9 +11,11 @@
 
 #include "nifpp.h"
 #include "rt_block.h"
-#include "rt_interval.h"
 
+#include <map>
 #include <list>
+
+#include <boost/icl/interval_map.hpp>
 
 namespace one {
 namespace provider {
@@ -28,19 +30,37 @@ public:
     /**
      * rt_map constructor.
      * Constructs RTransfer map.
-     * @param block_size maximal size of block stored in the rt_map
      */
-    rt_map(ErlNifUInt64 block_size) : block_size_{block_size} {}
+    rt_map() {}
 
+    /**
+     * Extends the map by inserting new RTransfer block.
+     * @param block to be put.
+     */
     void put(const rt_block &block);
 
-    const std::list<rt_block> &get(std::string file_id, ErlNifUInt64 offset,
-                                   ErlNifUInt64 size);
+    /**
+     * Returns list of RTransfer blocks for range given as [offset, offset +
+     * size)
+     * @param file_id ID of file blocks are a part of
+     * @param offset range offset
+     * @param size range size
+     * @return list of blocks that belongs to the range
+     */
+    std::list<rt_block> get(std::string file_id, ErlNifUInt64 offset,
+                            ErlNifUInt64 size);
 
+    /**
+     * Removes all RTransfer blocks for range given as [offset, offset + size)
+     * @param file_id ID of file blocks are a part of
+     * @param offset range offset
+     * @param size range size
+     */
     void remove(std::string file_id, ErlNifUInt64 offset, ErlNifUInt64 size);
 
 private:
-    ErlNifUInt64 block_size_;
+    std::map<std::string, boost::icl::interval_map<ErlNifUInt64, rt_block>>
+        files_;
 };
 
 } // namespace provider

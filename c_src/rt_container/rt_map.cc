@@ -1,5 +1,5 @@
 /**
- * @file rt_priority_queue.cc
+ * @file rt_map.cc
  * @author Krzysztof Trzepla
  * @copyright (C): 2014 ACK CYFRONET AGH
  * This software is released under the MIT license
@@ -7,6 +7,7 @@
  */
 
 #include "rt_map.h"
+#include "rt_block.h"
 #include "rt_exception.h"
 
 namespace one {
@@ -14,19 +15,28 @@ namespace provider {
 
 void rt_map::put(const rt_block &block)
 {
-    throw rt_exception("unsupported_operation");
+    files_[block.file_id()]
+        += std::make_pair(boost::icl::discrete_interval<ErlNifUInt64>(
+                              block.offset(), block.offset() + block.size()),
+                          block);
 }
 
-const std::list<rt_block> &rt_map::get(std::string file_id, ErlNifUInt64 offset,
-                                       ErlNifUInt64 size)
+std::list<rt_block> rt_map::get(std::string file_id, ErlNifUInt64 offset,
+                                ErlNifUInt64 size)
 {
-    throw rt_exception("unsupported_operation");
+    std::list<rt_block> blocks;
+    auto result = files_[file_id].equal_range(
+        boost::icl::discrete_interval<ErlNifUInt64>(offset, offset + size));
+    for (auto it = result.first; it != result.second; ++it)
+        blocks.push_back(it->second);
+
+    return blocks;
 }
 
-void &rt_map::remove(std::string file_id, ErlNifUInt64 offset,
-                     ErlNifUInt64 size)
+void rt_map::remove(std::string file_id, ErlNifUInt64 offset, ErlNifUInt64 size)
 {
-    throw rt_exception("unsupported_operation");
+    files_[file_id].erase(
+        boost::icl::discrete_interval<ErlNifUInt64>(offset, offset + size));
 }
 
 } // namespace provider
