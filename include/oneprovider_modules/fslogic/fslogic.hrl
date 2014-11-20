@@ -109,4 +109,6 @@
 %% default buffer size for copy operation
 -define(default_copy_buffer_size, 1048576).
 
+-define(fslogic_attr_events_state, fslogic_attr_events_state).
+
 -endif.
