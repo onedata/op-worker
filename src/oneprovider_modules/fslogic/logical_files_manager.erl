@@ -585,20 +585,18 @@ read(File, Offset, Size, EventPolicy) ->
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
-write({uuid, Uuid}, Buf) -> % todo alow only FullFilePath for better performance
+write({uuid, Uuid}, Buf) ->
     ct:print("write/2 ~p",[{uuid, Uuid}]),
-    case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
+    case get_file_path_from_cache({uuid, Uuid}) of
         {ok, FullFilePath} -> write(FullFilePath, Buf);
         Error -> Error
     end;
-write(File, Buf) ->
-    ct:print("write/2 ~p",[File]),
+write(FilePath, Buf) ->
+    ct:print("write/2 ~p",[FilePath]),
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
-            {Response, Response2} = getfilelocation(File),
-            case Response of
-                ok ->
-                    {Storage_helper_info, FileId} = Response2,
+            case getfilelocation(FilePath) of
+                {ok, {Storage_helper_info, FileId}} ->
                     Res = storage_files_manager:write(Storage_helper_info, FileId, Buf),
                     case {is_integer(Res), event_production_enabled("write_event")} of
                         {true, true} ->
@@ -606,8 +604,8 @@ write(File, Buf) ->
                             Ctx = fslogic_context:get_user_context(),
                             spawn(fun() ->
                                 fslogic_context:set_user_context(Ctx),
-                                {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File), %todo IMPORTANT: this needs optimization!!!,  but cannot be done asynchronously
-                                {ok, FullFileName} = fslogic_path:get_full_file_name(File), %todo cache somehow
+                                {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(FilePath), %todo IMPORTANT: this needs optimization!!!,  but cannot be done asynchronously
+                                {ok, FullFileName} = get_file_path_from_cache(FilePath),
                                 WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
                                     {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}, {"filePath", FullFileName}],
                                 gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
@@ -622,7 +620,7 @@ write(File, Buf) ->
                             ok
                     end,
                     Res;
-                _ -> {Response, Response2}
+                Err -> Err
             end;
         _ ->
             {error, quota_exceeded}
@@ -653,45 +651,37 @@ write(File, Offset, Buf) ->
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
-write({uuid, Uuid}, Offset, Buf, EventPolicy) -> % todo alow only FullFilePath for better performance
+write({uuid, Uuid}, Offset, Buf, EventPolicy) ->
     ct:print("write/4 ~p",[{uuid, Uuid}]),
-    case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
+    case get_file_path_from_cache({uuid, Uuid}) of
         {ok, FullFilePath} -> write(FullFilePath, Offset, Buf, EventPolicy);
         Error -> Error
     end;
-write(File, Offset, Buf, EventPolicy) ->
-    ct:print("write/4 ~p",[File]),
+write(FilePath, Offset, Buf, EventPolicy) ->
+    ct:print("write/4 ~p",[FilePath]),
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
-            {Response, Response2} = getfilelocation(File),
-            case Response of
-                ok ->
-                    {Storage_helper_info, FileId} = Response2,
+            case getfilelocation(FilePath) of
+                {ok, {Storage_helper_info, FileId}} ->
                     Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
 
-                    %% TODO - check if asynchronous processing needed
                     case {is_integer(Res), event_production_enabled("write_event"), EventPolicy} of
                         {true, true, generate_events} ->
-
-                            Ctx = fslogic_context:get_user_context(),
-                            spawn(fun() ->
-                                fslogic_context:set_user_context(Ctx),
-                                {ok, FullFileName} = fslogic_path:get_full_file_name(File), %todo cache somehow
-                                WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"count", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
-                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-                                WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
-                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
-                                WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
-                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}})
-                            end);
+                            {ok, FullFileName} = get_file_path_from_cache(FilePath),
+                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"count", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
+                            WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}});
                         _ ->
                             ok
                     end,
                     Res;
-                _ -> {Response, Response2}
+                Err -> Err
             end;
         _ ->
             {error, quota_exceeded}
@@ -710,43 +700,37 @@ write(File, Offset, Buf, EventPolicy) ->
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
-write_from_stream({uuid, Uuid}, Buf) -> % todo alow only FullFilePath for better performance
+write_from_stream({uuid, Uuid}, Buf) ->
     ct:print("write_from_stream ~p",[{uuid, Uuid}]),
-    case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
+    case get_file_path_from_cache({uuid, Uuid}) of
         {ok, FullFilePath} -> write_from_stream(FullFilePath, Buf);
         Error -> Error
     end;
-write_from_stream(File, Buf) ->
-    ct:print("write_from_stream ~p",[File]),
+write_from_stream(FilePath, Buf) ->
+    ct:print("write_from_stream ~p",[FilePath]),
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
-            {Response, Response2} = getfilelocation(File),
-            case Response of
-                ok ->
-                    {Storage_helper_info, FileId} = Response2,
-                    Offset = cache_size(File, byte_size(Buf)),
+            case getfilelocation(FilePath) of
+                {ok, {Storage_helper_info, FileId}} ->
+                    Offset = cache_size(FilePath, byte_size(Buf)),
                     Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
                     case {is_integer(Res), event_production_enabled("write_event")} of
                         {true, true} ->
-                            Ctx = fslogic_context:get_user_context(),
-                            spawn(fun() ->
-                                fslogic_context:set_user_context(Ctx),
-                                {ok, FullFileName} = fslogic_path:get_full_file_name(File), %todo cache somehow
-                                WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"count", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
-                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-                                WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
-                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
-                                WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
-                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}})
-                            end);
+                            {ok, FullFileName} = get_file_path_from_cache(FilePath),
+                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"count", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
+                            WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}});
                         _ ->
                             ok
                     end,
                     Res;
-                _ -> {Response, Response2}
+                Err -> Err
             end;
         _ ->
             {error, quota_exceeded}
@@ -815,34 +799,28 @@ create(File) ->
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
-truncate({uuid, Uuid}, Size) -> % todo alow only FullFilePath for performance reasons
-    case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
+truncate({uuid, Uuid}, Size) ->
+    case get_file_path_from_cache({uuid, Uuid}) of
         {ok, FullFilePath} -> truncate(FullFilePath, Size);
         Error -> Error
     end;
-truncate(File, Size) ->
-    {Response, Response2} = getfilelocation(File),
-    case Response of
-        ok ->
-            {Storage_helper_info, FileId} = Response2,
+truncate(FilePath, Size) ->
+    case getfilelocation(FilePath) of
+        {ok, {Storage_helper_info, FileId}} ->
             Res = storage_files_manager:truncate(Storage_helper_info, FileId, Size),
             case {Res, event_production_enabled("truncate_event")} of
                 {ok, true} ->
-                    Ctx = fslogic_context:get_user_context(),
-                    spawn(fun() ->
-                        fslogic_context:set_user_context(Ctx),
-                        {ok, FullFileName} = fslogic_path:get_full_file_name(File), %todo cache somehow
-                        TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File}, {"filePath", FullFileName}],
-                        gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}}),
-                        TruncateEventAvailableBlocks = [{"type", "truncate_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File},
-                            {"blocks", [{0, Size}]}, {"filePath", FullFileName}],
-                        gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEventAvailableBlocks}})
-                    end);
+                    {ok, FullFileName} = get_file_path_from_cache(FilePath),
+                    TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", FullFileName}],
+                    gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}}),
+                    TruncateEventAvailableBlocks = [{"type", "truncate_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", FullFileName},
+                        {"blocks", [{0, Size}]}],
+                    gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEventAvailableBlocks}});
                 _ ->
                     ok
             end,
             Res;
-        _ -> {Response, Response2}
+        Err -> Err
     end.
 
 %% delete/1
@@ -1704,4 +1682,31 @@ copy_file_xattr(From, To) ->
             lists:foreach(fun({Key, Value}) -> set_xattr(To, Key, Value) end, XattrList),
             ok;
         Error -> Error
+    end.
+
+get_file_path_from_cache({uuid, Uuid}) ->
+    case get({path_of, Uuid}) of
+        undefined ->
+            case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
+                {ok, FullFilePath} ->
+                    put({path_of, Uuid}, FullFilePath),
+                    {ok, FullFilePath};
+                Error -> Error
+            end;
+        FullFilePath -> {ok, FullFilePath}
+    end;
+get_file_path_from_cache(FileShortName) ->
+    case string:tokens(FileShortName,"/") of
+        [?SPACES_BASE_DIR_NAME | _] -> {ok, FileShortName};
+        _ ->
+            case get({path_of, FileShortName}) of
+                undefined ->
+                    case fslogic_path:get_full_file_name(FileShortName) of
+                        {ok, FullFileName} ->
+                            put({path_of, FileShortName}, FullFileName),
+                            {ok, FullFileName};
+                        Error -> Error
+                    end;
+                FullFileName -> {ok, FullFileName}
+            end
     end.
