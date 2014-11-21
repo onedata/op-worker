@@ -141,7 +141,7 @@ main_test(Config) ->
   test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   {Workers5, StateNum5} = gen_server:call({global, ?CCM}, get_workers, 1000),
-  ?assertEqual(InitialStateNum + 4 + DuplicatedPermanentNodes, StateNum5),
+  ?assertEqual(InitialStateNum + 4 + 1, StateNum5), %% create new worker
   ?assertEqual(length(Workers5), length(Jobs) + DuplicatedPermanentNodes),
   PongsNum5 = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum5, length(Jobs) * length(Ports)).
@@ -367,8 +367,8 @@ init_per_testcase(_, Config) ->
   DB_Node = ?DB_NODE,
   Args = [[{node_type, ccm}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1308}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1}],
     [{node_type, ccm}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8445}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1309}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8446}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1310}, {db_nodes, [DB_Node]}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8447}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1311}, {db_nodes, [DB_Node]}, {heart_beat, 1}]],
+    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {gateway_listener_port, 3217}, {gateway_proxy_port, 3218}, {rest_port, 8446}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1310}, {db_nodes, [DB_Node]}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {gateway_listener_port, 3219}, {gateway_proxy_port, 3220}, {rest_port, 8447}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1311}, {db_nodes, [DB_Node]}, {heart_beat, 1}]],
   test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, Args),
 
   lists:append([{nodes, NodesUp}, {params, Params}, {args, Args}], Config).
