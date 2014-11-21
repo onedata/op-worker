@@ -75,12 +75,10 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
 
     %modify document
-    ct:print("old doc : ~p",[MyRemoteLocationDoc]),
     NewDoc = lists:foldl(fun(Ranges, Acc) ->
         {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false),
         fslogic_available_blocks:mark_as_available(Ranges, Acc)
     end, MyRemoteLocationDoc, SyncedParts),
-    ct:print("new doc : ~p",[NewDoc]),
 
     % notify cache, db and fuses
     case MyRemoteLocationDoc == NewDoc of
@@ -184,6 +182,10 @@ db_sync_hook() ->
                     end;
                 _ -> ok
             end;
+        (?FILES_DB_NAME, _, _, FileDoc = #db_document{uuid = FileId, record = #file{}, deleted = false}) ->
+            {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
+            fslogic_file:ensure_file_location_exists(FullFileName, FileDoc);
+        %todo handle file delete
         (_, _, _, _) -> ok
     end.
 
