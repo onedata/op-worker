@@ -32,7 +32,7 @@
 -spec on_file_size_update(FileUUID :: uuid(), OldFileSize :: non_neg_integer(), NewFileSize :: non_neg_integer()) -> ok.
 %% ====================================================================
 on_file_size_update(FileUUID, OldFileSize, NewFileSize) ->
-    gen_server:call(request_dispatcher, {fslogic, 1, {internal_event, on_file_size_update, {FileUUID, OldFileSize, NewFileSize}}}).
+    gen_server:call(request_dispatcher, {fslogic, 1, {internal_event, on_file_size_update, {FileUUID, OldFileSize, NewFileSize}}}, timer:seconds(5)).
 
 
 %% on_file_meta_update/2
@@ -41,7 +41,7 @@ on_file_size_update(FileUUID, OldFileSize, NewFileSize) ->
 -spec on_file_meta_update(FileUUID :: uuid(), Doc :: db_doc()) -> ok.
 %% ====================================================================
 on_file_meta_update(FileUUID, Doc) ->
-    gen_server:call(request_dispatcher, {fslogic, 1, {internal_event, on_file_meta_update, {FileUUID, Doc}}}).
+    gen_server:call(request_dispatcher, {fslogic, 1, {internal_event, on_file_meta_update, {FileUUID, Doc}}}, timer:seconds(5)).
 
 %% ===================================================================
 %% Handlers
@@ -82,8 +82,10 @@ delayed_push_attrs(FileUUID) ->
 -spec push_new_attrs(FileUUID :: uuid()) -> [Result :: ok | {error, Reason :: any()}].
 %% ====================================================================
 push_new_attrs(FileUUID) ->
+   lists:flatten(push_new_attrs3(FileUUID, 0, 100)).
+push_new_attrs3(FileUUID, Offset, Count) ->
     ets:delete(?fslogic_attr_events_state, utils:ensure_binary(FileUUID)),
-    {ok, FDs} = dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {FileUUID, ""}}, 100000, 0], 1),
+    {ok, FDs} = dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {FileUUID, ""}}, Count, Offset], 1),
     Fuses0 = lists:map(
         fun(#db_document{record = #file_descriptor{fuse_id = FuseID}}) ->
             FuseID
@@ -97,10 +99,11 @@ push_new_attrs(FileUUID) ->
             {ok, #db_document{} = FileDoc} = fslogic_objects:get_file({uuid, FileUUID}),
             Attrs = #fileattr{} = fslogic_req_generic:get_file_attr(FileDoc),
 
-            lists:map(
+            Results = lists:map(
                 fun(FuseID) ->
                     Res = request_dispatcher:send_to_fuse(FuseID, Attrs, "fuse_messages"),
                     ?debug("Sending msg to fuse ~p: ~p", [FuseID, Res]),
                     Res
-                end, FuseIDs)
+                end, FuseIDs),
+            [push_new_attrs3(FileUUID, Offset + Count, 100) | Results]
     end.
