@@ -94,5 +94,4 @@ websocket_info(_Info, _Req, State) ->
     State :: any().
 %% ====================================================================
 websocket_terminate(_Reason, _Req, _State) ->
-%%     gen_server:call(?Dispatcher_Name, {gr_channel, ?PROTOCOL_VERSION, {connection_lost, Reason}}),
     ok.
