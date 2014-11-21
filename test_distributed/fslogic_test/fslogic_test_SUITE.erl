@@ -2007,7 +2007,7 @@ files_manager_tmp_files_test(Config) ->
   AnsCreate2 = rpc:call(Node1, storage_files_manager, create, [SHInfo, File]),
   ?assertEqual({error, file_exists}, AnsCreate2),
 
-  AnsWrite1 = rpc:call(Node1, storage_files_manager, write, [SHInfo, File, list_to_binary("abcdefgh")]),
+  AnsWrite1 = rpc:call(Node1, storage_files_manager, write, [SHInfo, File, 0, list_to_binary("abcdefgh")]),
   ?assertEqual(8, AnsWrite1),
   ?assertEqual({ok, "abcdefgh"}, files_tester:read_file_storage(?TEST_ROOT ++ "/" ++ File, 100)),
 
@@ -2027,7 +2027,7 @@ files_manager_tmp_files_test(Config) ->
   ?assertEqual(ok, StatusRead3),
   ?assertEqual("c123g", binary_to_list(AnsRead3)),
 
-  AnsWrite3 = rpc:call(Node1, storage_files_manager, write, [SHInfo, File, list_to_binary("XYZ")]),
+  AnsWrite3 = rpc:call(Node1, storage_files_manager, write, [SHInfo, File, 8, list_to_binary("XYZ")]),
   ?assertEqual(3, AnsWrite3),
   ?assertEqual({ok, "abc123ghXYZ"}, files_tester:read_file_storage(?TEST_ROOT ++ "/" ++ File, 100)),
 
