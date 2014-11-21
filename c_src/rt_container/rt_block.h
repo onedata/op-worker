@@ -10,6 +10,7 @@
 #define RT_BLOCK_H
 
 #include "nifpp.h"
+#include "rt_term.h"
 
 #include <list>
 #include <string>
@@ -35,13 +36,13 @@ public:
      * @param counter defines how many times block was pushed on the
      * rt_container
      */
-    rt_block(std::string file_id = "", nifpp::TERM provider_ref = nifpp::TERM(),
+    rt_block(std::string file_id = "", rt_term provider_ref = rt_term(),
              ErlNifUInt64 offset = 0, ErlNifUInt64 size = 0,
              ErlNifUInt64 priority = 0,
-             std::list<nifpp::TERM> terms = std::list<nifpp::TERM>(),
+             std::list<rt_term> terms = std::list<rt_term>(),
              ErlNifUInt64 counter = 1)
         : file_id_{std::move(file_id)}
-        , provider_ref_{provider_ref}
+        , provider_ref_{std::move(provider_ref)}
         , offset_{offset}
         , size_{size}
         , priority_{priority}
@@ -54,7 +55,7 @@ public:
     const std::string &file_id() const { return file_id_; }
 
     /// Getter for provider ID
-    const nifpp::TERM &provider_ref() const { return provider_ref_; }
+    const rt_term &provider_ref() const { return provider_ref_; }
 
     /// Getter for block's offset
     ErlNifUInt64 offset() const { return offset_; }
@@ -69,7 +70,7 @@ public:
     ErlNifUInt64 priority() const { return priority_; }
 
     /// Getter for block's terms
-    const std::list<nifpp::TERM> &terms() const { return terms_; }
+    const std::list<rt_term> &terms() const { return terms_; }
 
     /// Getter for block's addition counter
     ErlNifUInt64 counter() const { return counter_; }
@@ -78,7 +79,7 @@ public:
      * Appends list of terms to block
      * @param list of terms to be appended to the list of block's terms
      */
-    void appendTerms(const std::list<nifpp::TERM> &terms);
+    void appendTerms(const std::list<rt_term> &terms);
 
     /**
      * Checks whether this block can be merge with other block. That is
@@ -110,11 +111,11 @@ public:
 
 private:
     std::string file_id_;
-    nifpp::TERM provider_ref_;
+    rt_term provider_ref_;
     ErlNifUInt64 offset_;
     ErlNifUInt64 size_;
     ErlNifUInt64 priority_;
-    std::list<nifpp::TERM> terms_;
+    std::list<rt_term> terms_;
     ErlNifUInt64 counter_;
 };
 

@@ -7,14 +7,13 @@
  */
 
 #include "nifpp.h"
-#include "rt_map.h"
+#include "rt_term.h"
 #include "rt_exception.h"
 #include "rt_priority_queue.h"
 
-#include <functional>
-#include <string>
-#include <vector>
 #include <set>
+#include <string>
+#include <functional>
 
 using namespace one::provider;
 
@@ -59,7 +58,12 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
         nifpp::get_throws(env, argv[0], queue);
         nifpp::get_throws(env, argv[1], record);
 
-        rt_block block(file_id, provider_ref, offset, size, priority, terms);
+        std::list<rt_term> rt_terms;
+        for (const auto &term : terms)
+            rt_terms.push_back(rt_term(term));
+
+        rt_block block(file_id, rt_term(provider_ref), offset, size, priority,
+                       rt_terms);
         queue->push(block);
         ErlNifUInt64 queue_size = queue->size();
 
@@ -84,9 +88,15 @@ static ERL_NIF_TERM pop_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
         rt_block block = queue->pop();
         ErlNifUInt64 queue_size = queue->size();
-        auto record = std::make_tuple(
-            nifpp::str_atom("rt_block"), block.file_id(), block.provider_ref(),
-            block.offset(), block.size(), block.priority(), block.terms());
+
+        std::list<nifpp::TERM> terms;
+        for (const auto &term : block.terms())
+            terms.push_back(term.get(env));
+
+        auto record
+            = std::make_tuple(nifpp::str_atom("rt_block"), block.file_id(),
+                              block.provider_ref().get(env), block.offset(),
+                              block.size(), block.priority(), terms);
 
         return nifpp::make(
             env, std::make_tuple(nifpp::str_atom("ok"), queue_size, record));

@@ -35,8 +35,7 @@ rt_priority_queue_test_() ->
             {"should push block with large offset", fun should_push_block_with_large_offset/0},
             {"should push blocks from different files", fun should_push_blocks_from_different_files/0},
             {"should push many blocks", fun should_push_many_blocks/0},
-            {"should split large block 1", fun should_split_large_block_1/0},
-            {"should split large block 2", fun should_split_large_block_2/0},
+            {"should split large block 1", fun should_split_large_block/0},
             {"should merge small blocks", fun should_merge_small_blocks/0},
             {"should increase counter on blocks overlap", fun should_increase_counter_on_blocks_overlap/0},
             {"should change priority 1", fun should_change_priority_1/0},
@@ -133,7 +132,7 @@ should_merge_small_blocks() ->
     ?assertEqual({ok, Block#rt_block{offset = 0, size = ?TEST_RT_BLOCK_SIZE}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
     ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
-should_split_large_block_1() ->
+should_split_large_block() ->
     FullBlocksAmount = 10000,
     LastBlockSize = random:uniform(?TEST_RT_BLOCK_SIZE),
     Block = #rt_block{file_id = "test_file", offset = 0, size = FullBlocksAmount * ?TEST_RT_BLOCK_SIZE + LastBlockSize, priority = 2},
@@ -144,18 +143,6 @@ should_split_large_block_1() ->
     end, lists:seq(0, FullBlocksAmount - 1)),
     ?assertEqual({ok, Block#rt_block{offset = FullBlocksAmount * ?TEST_RT_BLOCK_SIZE, size = LastBlockSize}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)),
     ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
-
-should_split_large_block_2() ->
-    Block = #rt_block{
-        file_id = "05073bf6703dee28bdb5016b3b53bf70",
-        provider_ref = {{192, 168, 122, 236}, 8877},
-        offset = 0,
-        size = 104857600,
-        priority = 0,
-        terms = [list_to_pid("<0.3468.0>"), {rtransfer, 'ccm1_worker@oneprovider-1.icsr.agh.edu.pl'}]
-    },
-    ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block)),
-    ?assertEqual({ok, Block#rt_block{size = ?TEST_RT_BLOCK_SIZE}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_increase_counter_on_blocks_overlap() ->
     Block1 = #rt_block{file_id = "test_file", offset = 0, size = 5, priority = 2},

@@ -20,7 +20,7 @@ bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
            && size_ + block.size_ <= block_size;
 }
 
-void rt_block::appendTerms(const std::list<nifpp::TERM> &terms)
+void rt_block::appendTerms(const std::list<rt_term> &terms)
 {
     for (const auto &term : terms)
         terms_.push_back(term);
