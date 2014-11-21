@@ -159,28 +159,22 @@ check_file_perms(FullFileName, Type) ->
 -spec get_file_attr(FullFileName :: string()) ->
     #fileattr{} | no_return().
 %% ====================================================================
-get_file_attr(FileDoc = #db_document{record = #file{}}) ->
+get_file_attr(FileDoc = #db_document{uuid = FileId, record = #file{}}) ->
     #db_document{record = #file{} = File, uuid = FileUUID} = FileDoc,
     Type = fslogic_file:normalize_file_type(protocol, File#file.type),
-    StorageFileSize = %todo we should not get this size from storage ever (especially when file is not complete)
-        try
-            {Size, _SUID} = fslogic_file:get_real_file_size_and_uid(FileDoc),
-            fslogic_file:update_file_size(File, Size),
-            Size
-        catch
-            _Type:_Error  ->undefined
-        end,
+    {ok, {_Stamp, Size}} = fslogic_available_blocks:call({get_file_size, FileId}),
+    fslogic_file:update_file_size(File, Size),
 
     %% Get owner
     {UName, VCUID, _RSUID} = fslogic_file:get_file_owner(File),
 
-    %catch fslogic_file:fix_storage_owner(FileDoc), %todo this file can be remote, so we cant fix storage owner
+%%     catch fslogic_file:fix_storage_owner(FileDoc), %todo this file can be remote, so we cant fix storage owner
 
     {ok, FilePath} = logical_files_manager:get_file_full_name_by_uuid(FileUUID),
     {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
 
     %% Get attributes
-    {CTime, MTime, ATime, SizeFromDB, HasAcl} =
+    {CTime, MTime, ATime, _, HasAcl} =
         case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
             {ok, #db_document{record = FMeta}} ->
                 {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size, FMeta#file_meta.acl =/= []};
@@ -201,13 +195,8 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
                 _ -> 1
             end,
 
-    FileSize =
-        case is_integer(StorageFileSize) of
-            true -> StorageFileSize;
-            _ -> SizeFromDB
-        end,
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-        type = Type, size = FileSize, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
+        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
         gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links, has_acl = HasAcl};
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
