@@ -86,14 +86,14 @@ postrouting(_SpaceInfo, {ok, #filechildren{answer = ?VOK, entry = Entries} = Res
     Entries1 = [#filechildren_direntry{name = ?SPACES_BASE_DIR_NAME, type = ?DIR_TYPE_PROT} | Entries],
     Entries2 = lists:sublist(Entries1, Count),
     Response#filechildren{entry = Entries2};
-postrouting(#space_info{name = SpaceName} = SpaceInfo, {error, _FailureReason}, #getfileattr{file_logic_name = "/"}) ->
+postrouting(#space_info{name = SpaceName, space_id = SpaceId} = SpaceInfo, {error, _FailureReason}, #getfileattr{file_logic_name = "/"}) ->
     #fileattr{answer = ?VOK, atime = utils:time(), mtime = utils:time(), ctime = utils:time(),
                 links = 2, size = 0, type = ?DIR_TYPE, gname = unicode:characters_to_list(SpaceName), gid = fslogic_spaces:map_to_grp_owner(SpaceInfo),
-                mode = ?SpaceDirPerm, uid = 0};
+                mode = ?SpaceDirPerm, uid = 0, uuid = utils:ensure_list(SpaceId)};
 postrouting(#space_info{name = SpaceName} = SpaceInfo, {error, _FailureReason}, #getfileattr{file_logic_name = "/" ++ ?SPACES_BASE_DIR_NAME}) ->
     #fileattr{answer = ?VOK, atime = utils:time(), mtime = utils:time(), ctime = utils:time(),
         links = 2, size = 0, type = ?DIR_TYPE, gname = unicode:characters_to_list(SpaceName), gid = fslogic_spaces:map_to_grp_owner(SpaceInfo),
-        mode = ?SpaceDirPerm, uid = 0};
+        mode = ?SpaceDirPerm, uid = 0, uuid = "root"};
 postrouting(#space_info{}, {ok, #atom{value = ?VECOMM}}, #renamefile{} = RequestBody) ->
     fslogic:handle_fuse_message(RequestBody);
 postrouting(#space_info{}, {ok, #atom{value = ?VEACCES}}, #renamefile{} = RequestBody) ->

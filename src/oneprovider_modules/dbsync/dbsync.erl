@@ -63,6 +63,7 @@ init(_Args) ->
         end, ?dbs_to_sync),
 
     register_available_blocks_hook(),
+    register_file_meta_hook(),
 
     [].
 
@@ -332,6 +333,12 @@ request_diff(ProviderId, SpaceId, DbName, SinceSeqInfo, Attempts) ->
     ok | no_return().
 %% ====================================================================
 emit_documents(DbName, DocsWithSeq, SinceSeqInfo) ->
+    Hooks =
+        case dbsync_state:get(hooks) of
+            undefined -> [];
+            Hooks0 -> Hooks0
+        end,
+
     SpacesMap = lists:foldl(
         fun({#db_document{uuid = UUID, rev_info = {RevNum, [RevHash | _]}} = Doc, CSeq}, Acc) ->
             try
@@ -339,6 +346,8 @@ emit_documents(DbName, DocsWithSeq, SinceSeqInfo) ->
                 SyncWithSorted = lists:usort(SyncWith),
                 {ok, [{ok, #doc{revs = RevInfo}}]} = dao_lib:apply(dao_helper, open_revs, [DbName, UUID, [{RevNum, RevHash}], []], 1),
                 NewDoc = Doc#db_document{rev_info = RevInfo},
+
+                [spawn(fun() -> catch Callback(DbName, SpaceId, UUID, NewDoc) end) || {_, Callback} <- Hooks],
 
                 {_, LastSSeq, SpaceDocs} = maps:get(SpaceId, Acc, {SpaceInfo, 0, []}),
                 maps:put(SpaceId, {SpaceInfo, max(LastSSeq, CSeq), [NewDoc | SpaceDocs]}, Acc)
@@ -634,7 +643,7 @@ replicate_doc(SpaceId, #db_document{uuid = DocUUID} = Doc) ->
     {ok, #space_info{space_id = SpaceId} = _SpaceInfo} = get_space_ctx(DocDbName, Doc),
     case dao_lib:apply(dao_records, save_record, [DocDbName, Doc, [replicated_changes]], 1) of
         {ok, _} ->
-            [catch Callback(DocDbName, SpaceId, DocUUID, Doc) || {_, Callback} <- Hooks],
+            [spawn(fun() -> catch Callback(DocDbName, SpaceId, DocUUID, Doc) end) || {_, Callback} <- Hooks],
             ?debug("Document ~p replicated", [DocUUID]),
             ok;
         {error, Reason2} ->
@@ -642,6 +651,17 @@ replicate_doc(SpaceId, #db_document{uuid = DocUUID} = Doc) ->
             {error, Reason2}
 
     end.
+
+
+register_file_meta_hook() ->
+    HookFun = fun
+        (?FILES_DB_NAME, _, FileUUID, #db_document{record = #file_meta{}} = Doc)->
+            fslogic_events:on_file_meta_update(FileUUID, Doc);
+        (_, _, _, _) -> ok
+    end,
+
+    {ok, Delay} = application:get_env(?APP_Name, dbsync_hook_registering_delay),
+    erlang:send_after(Delay, self(), {timer, {asynch, 1, {register_hook, HookFun}}}).
 
 register_available_blocks_hook() ->
     % register hook for #available_blocks docs
