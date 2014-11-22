@@ -296,8 +296,8 @@ get_file_size(ProtocolVersion, CacheName, FileId) ->
         [{_, {Stamp_, Size_}}] -> {ok, {Stamp_, Size_}};
         _ ->
             {ok, _} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
-            [{_, {_Stamp, Size}}] = ets:lookup(CacheName, {FileId, file_size}),
-            {ok,Size}
+            [{_, {Stamp, Size}}] = ets:lookup(CacheName, {FileId, file_size}),
+            {ok, {Stamp, Size}}
     end.
 
 invalidate_blocks_cache(_ProtocolVersion, CacheName, FileId) ->
