@@ -162,22 +162,27 @@ check_file_perms(FullFileName, Type) ->
 get_file_attr(FileDoc = #db_document{uuid = FileId, record = #file{}}) ->
     #db_document{record = #file{} = File, uuid = FileUUID} = FileDoc,
     Type = fslogic_file:normalize_file_type(protocol, File#file.type),
-    {ok, {_Stamp, Size}} = fslogic_available_blocks:call({get_file_size, FileId}),
-    fslogic_file:update_file_size(File, Size),
 
     %% Get owner
     {UName, VCUID, _RSUID} = fslogic_file:get_file_owner(File),
 
-%%     catch fslogic_file:fix_storage_owner(FileDoc), %todo this file can be remote, so we cant fix storage owner
+%%     catch fslogic_file:fix_storage_owner(FileDoc), %todo we often check attrs of non existing files, operation on storage can be time consuming
 
     {ok, FilePath} = logical_files_manager:get_file_full_name_by_uuid(FileUUID),
     {ok, #space_info{name = SpaceName} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FilePath),
 
     %% Get attributes
-    {CTime, MTime, ATime, _, HasAcl} =
+    {CTime, MTime, ATime, Size, HasAcl} =
         case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
             {ok, #db_document{record = FMeta}} ->
-                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size, FMeta#file_meta.acl =/= []};
+                SizeFromMap = case Type of
+                           ?DIR_TYPE_PROT -> 0;
+                           _ ->
+                               {ok, {_Stamp, FileSize}} = fslogic_available_blocks:call({get_file_size, FileId}),
+                               fslogic_file:update_file_size(File, FileSize),
+                               FileSize
+                       end,
+                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, SizeFromMap, FMeta#file_meta.acl =/= []};
             {error, Error} ->
                 ?warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
                 {0, 0, 0, 0, 0}
@@ -185,7 +190,7 @@ get_file_attr(FileDoc = #db_document{uuid = FileId, record = #file{}}) ->
 
     %% Get file links
     Links = case Type of
-                "DIR" ->
+                ?DIR_TYPE_PROT ->
                     case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
                         {ok, Sum} -> Sum + 2;
                         _Other ->
