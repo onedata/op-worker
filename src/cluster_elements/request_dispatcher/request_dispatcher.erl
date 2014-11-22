@@ -469,6 +469,9 @@ handle_cast(_Msg, State) ->
   NewState :: term(),
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
+handle_info({timer, Msg}, State) ->
+    spawn(fun() -> gen_server:call(?Dispatcher_Name, Msg) end),
+    {noreply, State};
 handle_info(_Info, State) ->
   ?warning("Wrong info: ~p", [_Info]),
   {noreply, State}.
