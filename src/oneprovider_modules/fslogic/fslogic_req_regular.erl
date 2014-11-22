@@ -209,7 +209,7 @@ update_file_block_map(FileId, Blocks) ->
     Block :: {Offset :: non_neg_integer(), Size :: non_neg_integer()}.
 %% ====================================================================
 update_file_block_map(FullFileName, Blocks, ClearMap) ->
-    ct:print("update_file_block_map ~s, ~p, ~p", [FullFileName, Blocks, ClearMap]),
+    ct:print("update_file_block_map ~p, ~p, ~p", [FullFileName, Blocks, ClearMap]),
     {ok, #db_document{} = FileDoc} = fslogic_objects:get_file(FullFileName),
     Location = fslogic_file:get_file_local_location(FileDoc),
     #file_location{storage_uuid = StorageUUID} = Location,
