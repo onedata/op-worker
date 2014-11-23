@@ -263,6 +263,7 @@ save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
                                 Other -> Other
                             end;
                         _Many ->
+                            ct:print("ANS: ~p", [TmpAns]),
                             ?error("Error: to many file descriptors for file uuid: ~p", [Uuid]),
                             {error, "Error: too many file descriptors"}
                     end;
