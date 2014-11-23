@@ -219,7 +219,6 @@ create_file_location_for_remote_file(FullFileName, FileUuid) ->
     FileLocation = #file_location{file_id = FileUuid, storage_uuid = UUID, storage_file_id = FileId},
     {ok, _LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
 
-    {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUuid, fslogic_context:get_fuse_id(), ?LOCATION_VALIDITY),
 %%     _FuseFileBlocks = [#filelocation_blockavailability{offset = 0, size = ?FILE_BLOCK_SIZE_INF}],
 %%     FileBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
 %%     {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
