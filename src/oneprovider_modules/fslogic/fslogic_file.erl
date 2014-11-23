@@ -206,6 +206,7 @@ ensure_file_location_exists(FullFileName, FileDoc) ->
 %% ====================================================================
 
 create_file_location_for_remote_file(FullFileName, FileUuid) ->
+    ct:print("create_file_location_for_remote_file(~p, ~p)", [FullFileName, FileUuid]),
     {ok, #space_info{space_id = SpaceId} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FullFileName),
 
     {ok, UserDoc} = fslogic_objects:get_user(),
