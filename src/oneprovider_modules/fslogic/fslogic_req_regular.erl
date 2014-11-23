@@ -205,9 +205,10 @@ update_file_block_map(FileId, Blocks) ->
 %% @doc distributes information about file blocks to clients currently using the file
 %% and possibly clears previous mapping. Returns the number of push messages sent.
 %% @end
--spec update_file_block_map(FileId :: string(), [Block], ClearMap :: boolean()) -> ok when
+-spec update_file_block_map(FileId :: string(), [Block], ClearMap :: boolean()) -> {ok, integer()} when
     Block :: {Offset :: non_neg_integer(), Size :: non_neg_integer()}.
 %% ====================================================================
+update_file_block_map(_, [], false) -> {ok, 0};
 update_file_block_map(FullFileName, Blocks, ClearMap) ->
     ct:print("update_file_block_map ~p, ~p, ~p", [FullFileName, Blocks, ClearMap]),
     {ok, #db_document{} = FileDoc} = fslogic_objects:get_file(FullFileName),
@@ -223,8 +224,13 @@ update_file_block_map(FullFileName, Blocks, ClearMap) ->
 
     {ok, Descriptors} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file, FullFileName}, 10000000000, 0], fslogic_context:get_protocol_version()),
 
-    utils:pforeach(fun(#db_document{record = #file_descriptor{fuse_id = FuseId}}) ->
-        {_, FileId} = fslogic_utils:get_sh_and_id(FuseId, Storage, SpaceId),
+    utils:pforeach(fun(#db_document{record = #file_descriptor{fuse_id = FuseId, file = FileUuid}}) ->
+        % get storage file_id, todo check if works for both proxy and directio
+        #db_document{record = FileLoc} = fslogic_file:get_file_local_location_doc(FileDoc),
+        {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
+        {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_uuid}),
+        {_, FileId} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.storage_file_id, SpaceId),
+
         BlocksAvailable = #blocksavailable{clear_map = ClearMap, storage_id = Storage#storage_info.id, file_id = FileId, blocks = BlocksAvailability},
         request_dispatcher:send_to_fuse(FuseId, BlocksAvailable, "fuse_messages")
     end, Descriptors),
