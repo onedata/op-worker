@@ -122,6 +122,9 @@ handle(_ProtocolVersion, get_version) ->
 handle(_ProtocolVersion, {internal_event, EventType, EventArgs}) ->
     fslogic_events:handle_event(EventType, EventArgs);
 
+handle(_ProtocolVersion, {internal_event_handle, Method, Args}) ->
+    erlang:apply(fslogic_events, Method, Args);
+
 %% this handler is intended to be called by newly connected clients
 %% TODO: create generic mechanism for getting configuration on client startup
 handle(ProtocolVersion, is_write_enabled) ->

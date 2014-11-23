@@ -282,9 +282,7 @@ connect(Host, Endpoint, Port, Opts) ->
         end,
     Return =
         receive
-            {connected, Monitored}              ->
-
-                {ok, Monitored};
+            {connected, Monitored}              -> {ok, Monitored};
             {error, Other1}                     -> {error, Other1};
             {'DOWN', _, _, Monitored, Info}     -> {error, Info};
             {'EXIT', Monitored, Reason}         -> {error, Reason}

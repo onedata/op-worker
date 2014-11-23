@@ -14,6 +14,7 @@
 -include("oneprovider_modules/dao/dao.hrl").
 -include("oneprovider_modules/dao/dao_types.hrl").
 -include("fuse_messages_pb.hrl").
+-include("registered_names.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -32,7 +33,7 @@
 -spec on_file_size_update(FileUUID :: uuid(), OldFileSize :: non_neg_integer(), NewFileSize :: non_neg_integer()) -> ok.
 %% ====================================================================
 on_file_size_update(FileUUID, OldFileSize, NewFileSize) ->
-    gen_server:call(request_dispatcher, {fslogic, 1, {internal_event, on_file_size_update, {FileUUID, OldFileSize, NewFileSize}}}, timer:seconds(5)).
+    gen_server:call(?Dispatcher_Name, {fslogic, 1, {internal_event, on_file_size_update, {FileUUID, OldFileSize, NewFileSize}}}, timer:seconds(5)).
 
 
 %% on_file_meta_update/2
@@ -41,7 +42,7 @@ on_file_size_update(FileUUID, OldFileSize, NewFileSize) ->
 -spec on_file_meta_update(FileUUID :: uuid(), Doc :: db_doc()) -> ok.
 %% ====================================================================
 on_file_meta_update(FileUUID, Doc) ->
-    gen_server:call(request_dispatcher, {fslogic, 1, {internal_event, on_file_meta_update, {FileUUID, Doc}}}, timer:seconds(5)).
+    gen_server:call(?Dispatcher_Name, {fslogic, 1, {internal_event, on_file_meta_update, {FileUUID, Doc}}}, timer:seconds(5)).
 
 %% ===================================================================
 %% Handlers
@@ -70,7 +71,7 @@ delayed_push_attrs(FileUUID) ->
     case ets:lookup(?fslogic_attr_events_state, utils:ensure_binary(FileUUID)) of
         [{_, _TRef}] -> ok;
         [] ->
-            {ok, TRef} = timer:apply_after(timer:seconds(1), fslogic_events, push_new_attrs, [FileUUID]),
+            TRef = erlang:send_after(timer:seconds(1) / 2, ?Dispatcher_Name, {timer, {fslogic, 1, {internal_event_handle, push_new_attrs, [FileUUID]}}}),
             ets:insert(?fslogic_attr_events_state, {utils:ensure_binary(FileUUID), TRef}),
             ok
     end.
@@ -91,7 +92,7 @@ push_new_attrs3(FileUUID, Offset, Count) ->
             FuseID
         end, FDs),
     Fuses1 = lists:usort(Fuses0),
-    ?info("Pushing new attributes for file ~p to fuses ~p", [FileUUID, Fuses1]),
+    ?debug("Pushing new attributes for file ~p to fuses ~p", [FileUUID, Fuses1]),
 
     case Fuses1 of
         [] -> [];
@@ -101,9 +102,7 @@ push_new_attrs3(FileUUID, Offset, Count) ->
 
             Results = lists:map(
                 fun(FuseID) ->
-                    Res = request_dispatcher:send_to_fuse(FuseID, Attrs, "fuse_messages"),
-                    ?debug("Sending msg to fuse ~p: ~p", [FuseID, Res]),
-                    Res
+                    request_dispatcher:send_to_fuse(FuseID, Attrs, "fuse_messages")
                 end, FuseIDs),
             [push_new_attrs3(FileUUID, Offset + Count, 100) | Results]
     end.
