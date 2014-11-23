@@ -56,6 +56,7 @@
     #atom{} | no_return().
 %% ====================================================================
 synchronize_file_block(FullFileName, Offset, Size) ->
+    ct:print("synchronize_file_block(~p,~p,~p)",[FullFileName, Offset, Size]),
     %prepare data
     {ok, RemoteLocationDocs} = fslogic_objects:list_all_available_blocks(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
@@ -84,8 +85,11 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
         false ->
+            %update size to newest
             {ok, FileSize} = fslogic_available_blocks:call({get_file_size, FileId}),
             AvailableBlocks = NewDoc#db_document.record,
+
+            %save available_blocks and notify fuses
             fslogic_objects:save_available_blocks(NewDoc#db_document{record = AvailableBlocks#available_blocks{file_size = FileSize}}),
             lists:foreach(fun(Ranges) ->
                 {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false)
@@ -102,6 +106,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     #atom{} | no_return().
 %% ====================================================================
 file_block_modified(FullFileName, Offset, Size) ->
+    ct:print("file_block_modified(~p,~p,~p)",[FullFileName, Offset, Size]),
     % prepare data
     {ok, RemoteLocationDocs} = fslogic_objects:list_all_available_blocks(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
@@ -115,12 +120,15 @@ file_block_modified(FullFileName, Offset, Size) ->
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
         false ->
+            %update size if this write extends file
             AvailableBlocks = NewDoc#db_document.record,
             {ok, {Stamp, FileSize}} = fslogic_available_blocks:call({get_file_size, FileId}),
             NewFileSize = case FileSize < Offset + Size of
                               true ->{fslogic_available_blocks:get_timestamp(), Offset + Size};
                               false -> {Stamp, FileSize}
                           end,
+
+            %save available_blocks and notify fuses
             fslogic_objects:save_available_blocks(NewDoc#db_document{record = AvailableBlocks#available_blocks{file_size = NewFileSize}}),
             fslogic_req_regular:update_file_block_map(FullFileName, [{Offset, Size}], false)
     end,
@@ -135,6 +143,7 @@ file_block_modified(FullFileName, Offset, Size) ->
     #atom{} | no_return().
 %% ====================================================================
 file_truncated(FullFileName, Size) ->
+    ct:print("file_truncated(~p,~p)",[FullFileName, Size]),
     % prepare data
     {ok, RemoteLocationDocs} = fslogic_objects:list_all_available_blocks(FullFileName),
     ProviderId = cluster_manager_lib:get_provider_id(),
@@ -157,7 +166,9 @@ file_truncated(FullFileName, Size) ->
 db_sync_hook() ->
     MyProviderId = cluster_manager_lib:get_provider_id(),
     fun
-        (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}}) when Id =/= MyProviderId ->
+        (?FILES_DB_NAME, _, _, #db_document{record = #available_blocks{file_id = FileId}, deleted = true}) ->
+            fslogic_available_blocks:call({invalidate_blocks_cache, FileId});
+        (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}, deleted = false}) when Id =/= MyProviderId ->
             % prepare data
             {ok, Docs} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], 1),
             MyDocs = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id_}}) -> Id_ == MyProviderId end, Docs),
@@ -168,8 +179,13 @@ db_sync_hook() ->
                     % find changed doc
                     [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_binary(Uuid_) == utils:ensure_binary(Uuid) end, Docs),
 
-                    % modify my doc according to changed doc
-                    #db_document{record = #available_blocks{file_parts = Ranges}} = NewDoc = fslogic_available_blocks:mark_other_provider_changes(MyDoc, ChangedDoc),
+                    % modify my doc (with size) according to changed doc
+                    NewSize = case {MyDoc#db_document.record#available_blocks.file_size, ChangedDoc#db_document.record#available_blocks.file_size} of
+                                  {{Stamp1, Size1}, {Stamp2, _Size2}} when Stamp1 > Stamp2 -> {Stamp1, Size1};
+                                  {_, {Stamp2, Size2}} -> {Stamp2, Size2}
+                              end,
+                    #db_document{record = Blocks = #available_blocks{file_parts = Ranges}} = NewDoc_ = fslogic_available_blocks:mark_other_provider_changes(MyDoc, ChangedDoc),
+                    NewDoc = NewDoc_#db_document{record = Blocks#available_blocks{file_size = NewSize}},
 
                     % notify cache, db and fuses
                     fslogic_available_blocks:call({invalidate_blocks_cache, FileId}),
@@ -219,9 +235,6 @@ call(Req) ->
     end.
 
 save_available_blocks(ProtocolVersion, CacheName, Doc) ->
-    Pid = self(),
-    ct:print("save begin ~p", [Pid]),
-
     % save block to db
     {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion), % [Doc#db_document{force_update = true}]
     {ok, NewDoc = #db_document{record = #available_blocks{file_id = FileId, file_size = DocSize = {Stamp, _Value}}}} =
@@ -235,7 +248,7 @@ save_available_blocks(ProtocolVersion, CacheName, Doc) ->
 
     % create cache again
     case {OldDocsQueryResult, OldSizeQueryResult} of
-        {[{_,Docs}],[{_,Size}]} ->
+        {[{_,Docs}], [{_,Size}]} ->
             OtherDocs = [Document || Document = #db_document{uuid = DocId} <- Docs, DocId =/= Uuid],
             NewDocs = [NewDoc | OtherDocs],
             NewSize =
@@ -247,7 +260,6 @@ save_available_blocks(ProtocolVersion, CacheName, Doc) ->
             ets:insert(CacheName, {{FileId, file_size}, NewSize});
         _ -> ok
     end,
-    ct:print("save end ~p", [Pid]),
     {ok, Uuid}.
 
 get_available_blocks(ProtocolVersion, _CacheName, FileId) ->
