@@ -196,7 +196,7 @@ normalize_file_type(internal, Type) ->
 
 ensure_file_location_exists(FullFileName, FileDoc) ->
     FileId = FileDoc#db_document.uuid,
-    case dao_vfs:list_file_locations(FileId) of
+    case dao_lib:apply(dao_vfs, get_file_locations, [FileId], fslogic_context:get_protocol_version()) of
         {ok, []} -> create_file_location_for_remote_file(FullFileName, FileId);
         _ -> ok
     end.
