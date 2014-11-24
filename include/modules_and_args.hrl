@@ -14,9 +14,9 @@
 -define(MODULES_AND_ARGS_HRL, 1).
 
 -define(Modules, [central_logger, cluster_rengine, control_panel, dao_worker, fslogic, gateway, rtransfer,
-    rule_manager, dns_worker, remote_files_manager, gr_channel]).
+    rule_manager, dns_worker, remote_files_manager, dbsync, gr_channel]).
 -define(Modules_With_Args, [{central_logger, []}, {cluster_rengine, []}, {control_panel, []}, {dao_worker, []},
     {fslogic, []}, {gateway, []}, {rtransfer, []}, {rule_manager, []}, {dns_worker, []}, {remote_files_manager, []},
-    {gr_channel, []}]).
+    {dbsync, []}, {gr_channel, []}]).
 
 -endif.

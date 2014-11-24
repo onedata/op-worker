@@ -69,7 +69,7 @@ gen_error_code(UnknownReason) ->
 -spec gen_error_message(RecordName :: atom(), Error :: string()) -> tuple() | no_return().
 %% ====================================================================
 gen_error_message(getfileattr, Error) ->
-    #fileattr{answer = Error, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""};
+    #fileattr{answer = Error, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = "", uuid = ""};
 gen_error_message(getxattr, Error) ->
     #xattr{answer = Error, name = "", value = ""};
 gen_error_message(setxattr, Error) ->
@@ -125,6 +125,12 @@ gen_error_message(createstoragetestfilerequest, _) ->
 gen_error_message(storagetestfilemodifiedrequest, _) ->
     #storagetestfilemodifiedresponse{answer = false};
 gen_error_message(clientstorageinfo, Error) ->
+    #atom{value = Error};
+gen_error_message(synchronizefileblock, Error) ->
+    #atom{value = Error};
+gen_error_message(fileblockmodified, Error) ->
+    #atom{value = Error};
+gen_error_message(filetruncated, Error) ->
     #atom{value = Error};
 gen_error_message(RecordName, _Error) ->
     ?error("Unsupported record: ~p", [RecordName]),

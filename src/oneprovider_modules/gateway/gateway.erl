@@ -18,6 +18,9 @@
 -include("oneprovider_modules/gateway/registered_names.hrl").
 -include("registered_names.hrl").
 
+-include("oneprovider_modules/dao/dao_spaces.hrl").
+-include_lib("ctool/include/global_registry/gr_providers.hrl").
+
 -export([init/1, handle/2, cleanup/0]).
 -export([compute_request_hash/1]).
 
@@ -25,6 +28,24 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+-export([do_stuff/2]).
+do_stuff(ProviderId, #fetchrequest{} = Request) ->
+    {ok, GwPort} = application:get_env(?APP_Name, gateway_listener_port),
+
+    {ok, ProviderDetails} = gr_providers:get_details(provider, ProviderId),
+    [RemoteBin | _] = ProviderDetails#provider_details.urls,
+    {ok, Remote} = inet:parse_address(binary_to_list(RemoteBin)),
+
+    Action = #fetch{notify = self(), remote = {Remote, GwPort}, request = Request},
+    ok = gen_server:cast(gateway, {asynch, 1, Action}),
+
+    receive
+        {fetch_timeout, Request} -> {error, timeout};
+        {fetch_complete, Num, Request} -> {ok, Num};
+        {fetch_send_error, Reason, Request} -> {error, Reason};
+        {fetch_connect_error, Reason} -> {error, Reason}
+    end.
 
 
 %% init/1
