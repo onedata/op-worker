@@ -16,6 +16,10 @@
 namespace one {
 namespace provider {
 
+/**
+ * The rt_term class.
+ * rt_term object wraps Erlang term by coping it to new environment
+ */
 class rt_term {
     struct shared_data {
         shared_data(nifpp::TERM src_term)
@@ -32,21 +36,38 @@ class rt_term {
 public:
     rt_term() {}
 
+    /**
+     * rt_term constructor.
+     * Constructs Erlang term wrapper.
+     * @param src_term term to be wrapped
+     */
     rt_term(nifpp::TERM src_term)
         : shared_data_{std::make_shared<shared_data>(src_term)}
     {
     }
 
+    /// Getter for wrapped Erlang term
     nifpp::TERM get(ErlNifEnv *dst_env) const
     {
         return nifpp::TERM{enif_make_copy(dst_env, shared_data_->term_)};
     }
 
+    /**
+     * Compares this rt_term with other rt_term.
+     * @param term to be compared with
+     * @return true if wrapped Erlang term is equal to other wrapped Erlang term
+     */
     bool operator==(const rt_term &rhs) const
     {
         return shared_data_->term_ == rhs.shared_data_->term_;
     }
 
+    /**
+     * Compares this rt_term with other rt_term.
+     * @param term to be compared with
+     * @return true if wrapped Erlang term is less than other wrapped Erlang
+     * term
+     */
     bool operator<(const rt_term &rhs) const
     {
         return shared_data_->term_ < rhs.shared_data_->term_;

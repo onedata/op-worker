@@ -14,6 +14,8 @@
 -include("oneprovider_modules/rtransfer/rt_map.hrl").
 -include("oneprovider_modules/rtransfer/rt_container.hrl").
 
+-on_load(load_nif/0).
+
 %% API
 -export([new/0, new/1, new/2, delete/1]).
 -export([put/2, get/4, remove/4]).
@@ -38,35 +40,31 @@
 -spec new() -> {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
 new() ->
-    new(".").
+    {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
+    gen_server:start_link(?MODULE, [BlockSize], []).
 
 
 %% new/1
 %% ====================================================================
-%% @doc Creates RTransfer map with custom prefix or with default prefix
-%% but registered under given name.
+%% @doc Same as new/0, but allows to register queue under given name.
 %% @end
--spec new({prefix, Prefix} | ContainerName) -> {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
-    Prefix :: string(),
-    ContainerName :: container_name().
+-spec new(ContainerName :: container_name()) ->
+    {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
-new({prefix, Prefix}) ->
-    gen_server:start_link(?MODULE, [Prefix], []);
-
 new(ContainerName) ->
-    new(ContainerName, ".").
+    {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
+    new(ContainerName, BlockSize).
 
 
-%% new/3
+%% new/2
 %% ====================================================================
 %% @doc Creates RTransfer map and registeres it under given name.
 %% @end
--spec new(ContainerName, Prefix :: string()) ->
-    {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
-    ContainerName :: container_name().
+-spec new(ContainerName :: container_name(), BlockSize :: integer()) ->
+    {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
-new(ContainerName, Prefix) ->
-    gen_server:start_link(ContainerName, ?MODULE, [Prefix], []).
+new(ContainerName, BlockSize) ->
+    gen_server:start_link(ContainerName, ?MODULE, [BlockSize], []).
 
 
 %% delete/1
@@ -138,9 +136,8 @@ remove(ContainerRef, FileId, Offset, Size) ->
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-init([Prefix]) ->
+init([]) ->
     try
-        erlang:load_nif(filename:join(Prefix, "c_lib/rt_map_drv"), 0),
         {ok, ContainerPtr} = init_nif(),
         {ok, #state{container_ptr = ContainerPtr}}
     catch
@@ -247,6 +244,22 @@ code_change(_OldVsn, State, _Extra) ->
 %% NIF functions
 %% ====================================================================
 
+%% load_nif/0
+%% ====================================================================
+%% @doc Loads RTransfer map NIF library.
+%% @end
+-spec load_nif() -> ok | no_return().
+%% ====================================================================
+load_nif() ->
+    Prefix = application:get_env(?APP_Name, rt_nif_prefix, "c_lib"),
+    case erlang:load_nif(filename:join(Prefix, "rt_map_drv"), 0) of
+        ok -> ok;
+        {error, {reload, _}} -> ok;
+        {error, {upgrade, _}} -> ok;
+        Other -> throw(Other)
+    end.
+
+
 %% init_nif/1
 %% ====================================================================
 %% @doc Initializes RTransfer map using NIF library.
@@ -255,7 +268,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, ContainerPtr :: container_ptr()} | no_return().
 %% ====================================================================
 init_nif() ->
-    throw("NIF library not loaded.").
+    throw(nif_library_not_loaded).
 
 
 %% put_nif/2
@@ -266,7 +279,7 @@ init_nif() ->
     ok | no_return().
 %% ====================================================================
 put_nif(_ContainerPtr, _Block) ->
-    throw("NIF library not loaded.").
+    throw(nif_library_not_loaded).
 
 
 %% get_nif/4
@@ -281,7 +294,7 @@ put_nif(_ContainerPtr, _Block) ->
     Size :: non_neg_integer().
 %% ====================================================================
 get_nif(_ContainerPtr, _FileId, _Offset, _Size) ->
-    throw("NIF library not loaded.").
+    throw(nif_library_not_loaded).
 
 
 %% remove_nif/4
@@ -296,4 +309,4 @@ get_nif(_ContainerPtr, _FileId, _Offset, _Size) ->
     Size :: non_neg_integer().
 %% ====================================================================
 remove_nif(_ContainerPtr, _FileId, _Offset, _Size) ->
-    throw("NIF library not loaded.").
+    throw(nif_library_not_loaded).

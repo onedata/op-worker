@@ -13,10 +13,12 @@
 
 -ifdef(TEST).
 
+-include("registered_names.hrl").
 -include("oneprovider_modules/rtransfer/rt_container.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -define(TEST_MAP, test_map).
+-define(TEST_RT_BLOCK_SIZE, 1024).
 
 %% ===================================================================
 %% Tests description
@@ -35,10 +37,12 @@ rt_priority_queue_test_() ->
 %% ===================================================================
 
 setup() ->
-    {ok, _} = rt_map:new({local, ?TEST_MAP}, "../").
+    application:set_env(?APP_Name, rt_nif_prefix, "../c_lib"),
+    {ok, _} = rt_priority_queue:new({local, ?TEST_MAP}, ?TEST_RT_BLOCK_SIZE).
 
 teardown(_) ->
-    ok = rt_priority_queue:delete(?TEST_MAP).
+    ok = rt_priority_queue:delete(?TEST_MAP),
+    application:set_env(?APP_Name, rt_nif_prefix, "c_lib").
 
 %% ===================================================================
 %% Tests functions

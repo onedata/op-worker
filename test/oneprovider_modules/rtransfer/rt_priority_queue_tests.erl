@@ -13,11 +13,11 @@
 
 -ifdef(TEST).
 
+-include("registered_names.hrl").
 -include("oneprovider_modules/rtransfer/rt_container.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--define(TEST_RT_BLOCK_SIZE, 102400).
--define(TEST_RT_CONTAINER_TYPE, priority_queue).
+-define(TEST_RT_BLOCK_SIZE, 1024).
 -define(TEST_PRIORITY_QUEUE, test_priority_queue).
 
 %% ===================================================================
@@ -57,10 +57,12 @@ rt_priority_queue_test_() ->
 %% ===================================================================
 
 setup() ->
-    {ok, _} = rt_priority_queue:new({local, ?TEST_PRIORITY_QUEUE}, "../", ?TEST_RT_BLOCK_SIZE).
+    application:set_env(?APP_Name, rt_nif_prefix, "../c_lib"),
+    {ok, _} = rt_priority_queue:new({local, ?TEST_PRIORITY_QUEUE}, ?TEST_RT_BLOCK_SIZE).
 
 teardown(_) ->
-    ok = rt_priority_queue:delete(?TEST_PRIORITY_QUEUE).
+    ok = rt_priority_queue:delete(?TEST_PRIORITY_QUEUE),
+    application:set_env(?APP_Name, rt_nif_prefix, "c_lib").
 
 %% ===================================================================
 %% Tests functions

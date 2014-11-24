@@ -14,8 +14,10 @@
 -include("oneprovider_modules/rtransfer/rt_container.hrl").
 -include("oneprovider_modules/rtransfer/rt_priority_queue.hrl").
 
+-on_load(load_nif/0).
+
 %% API
--export([new/0, new/1, new/2, new/3, delete/1]).
+-export([new/0, new/1, new/2, delete/1]).
 -export([push/2, pop/1, pop/2, change_counter/4, change_counter/5, size/1]).
 -export([subscribe/3, unsubscribe/2]).
 
@@ -33,49 +35,38 @@
 
 %% new/0
 %% ====================================================================
-%% @doc Creates RTransfer priority queue with default prefix and maximal
-%% RTransfer block size.
+%% @doc Creates RTransfer priority queue with default maximal RTransfer
+%% block size.
 %% @end
 -spec new() -> {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
 new() ->
     {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
-    new(".", BlockSize).
+    gen_server:start_link(?MODULE, [BlockSize], []).
 
 
 %% new/1
 %% ====================================================================
 %% @doc Same as new/0, but allows to register queue under given name.
 %% @end
--spec new(ContainerName) -> {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
-    ContainerName :: container_name().
+-spec new(ContainerName :: container_name()) ->
+    {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
 new(ContainerName) ->
     {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
-    new(ContainerName, ".", BlockSize).
+    new(ContainerName, BlockSize).
 
 
 %% new/2
 %% ====================================================================
-%% @doc Creates RTransfer priority queue.
+%% @doc Creates RTransfer priority queue and registeres it under given
+%% name.
 %% @end
--spec new(Prefix :: string(), BlockSize :: integer()) ->
+-spec new(ContainerName :: container_name(), BlockSize :: integer()) ->
     {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
-new(Prefix, BlockSize) ->
-    gen_server:start_link(?MODULE, [Prefix, BlockSize], []).
-
-
-%% new/3
-%% ====================================================================
-%% @doc Creates RTransfer priority queue and registeres it under given name.
-%% @end
--spec new(ContainerName, Prefix :: string(), BlockSize :: integer()) ->
-    {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
-    ContainerName :: container_name().
-%% ====================================================================
-new(ContainerName, Prefix, BlockSize) ->
-    gen_server:start_link(ContainerName, ?MODULE, [Prefix, BlockSize], []).
+new(ContainerName, BlockSize) ->
+    gen_server:start_link(ContainerName, ?MODULE, [BlockSize], []).
 
 
 %% delete/1
@@ -147,7 +138,7 @@ change_counter(ContainerRef, FileId, Offset, Size) ->
     change_counter(ContainerRef, FileId, Offset, Size, 1).
 
 
-%% change_counter/4
+%% change_counter/5
 %% ====================================================================
 %% @doc Changes counter for block in range [Offset, Offset + Size) by
 %% add Change value to current blocks' counter value.
@@ -214,9 +205,8 @@ unsubscribe(ContainerRef, Id) ->
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-init([Prefix, BlockSize]) ->
+init([BlockSize]) ->
     try
-        erlang:load_nif(filename:join(Prefix, "c_lib/rt_priority_queue_drv"), 0),
         {ok, ContainerPtr} = init_nif(BlockSize),
         {ok, #state{container_ptr = ContainerPtr}}
     catch
@@ -350,6 +340,22 @@ code_change(_OldVsn, State, _Extra) ->
 %% NIF functions
 %% ====================================================================
 
+%% load_nif/0
+%% ====================================================================
+%% @doc Loads RTransfer priority queue NIF library.
+%% @end
+-spec load_nif() -> ok | no_return().
+%% ====================================================================
+load_nif() ->
+    Prefix = application:get_env(?APP_Name, rt_nif_prefix, "c_lib"),
+    case erlang:load_nif(filename:join(Prefix, "rt_priority_queue_drv"), 0) of
+        ok -> ok;
+        {error, {reload, _}} -> ok;
+        {error, {upgrade, _}} -> ok;
+        Other -> throw(Other)
+    end.
+
+
 %% init_nif/1
 %% ====================================================================
 %% @doc Initializes RTransfer map using NIF library.
@@ -358,7 +364,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, ContainerPtr :: container_ptr()} | no_return().
 %% ====================================================================
 init_nif(_BlockSize) ->
-    throw("NIF library not loaded.").
+    throw(nif_library_not_loaded).
 
 
 %% push_nif/2
@@ -369,7 +375,7 @@ init_nif(_BlockSize) ->
     {ok, Size :: non_neg_integer()} | no_return().
 %% ====================================================================
 push_nif(_ContainerPtr, _Block) ->
-    throw("NIF library not loaded.").
+    throw(nif_library_not_loaded).
 
 
 %% pop_nif/1
@@ -381,7 +387,7 @@ push_nif(_ContainerPtr, _Block) ->
     {error, Error :: term()} | no_return().
 %% ====================================================================
 pop_nif(_ContainerPtr) ->
-    throw("NIF library not loaded.").
+    throw(nif_library_not_loaded).
 
 
 %% change_counter_nif/5
@@ -398,4 +404,4 @@ pop_nif(_ContainerPtr) ->
     Change :: integer().
 %% ====================================================================
 change_counter_nif(_ContainerPtr, _FileId, _Offset, _Size, _Change) ->
-    throw("NIF library not loaded.").
+    throw(nif_library_not_loaded).
