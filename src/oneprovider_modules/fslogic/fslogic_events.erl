@@ -86,7 +86,12 @@ push_new_attrs(FileUUID) ->
    lists:flatten(push_new_attrs3(FileUUID, 0, 100)).
 push_new_attrs3(FileUUID, Offset, Count) ->
     ets:delete(?fslogic_attr_events_state, utils:ensure_binary(FileUUID)),
-    {ok, FDs} = dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {FileUUID, ""}}, Count, Offset], 1),
+    {ok, FDs} = try
+        dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {FileUUID, ""}}, Count, Offset], 1)
+    catch
+        _:Error  ->
+            ?error_stacktrace("ERR: ~p", [Error])
+    end,
     Fuses0 = lists:map(
         fun(#db_document{record = #file_descriptor{fuse_id = FuseID}}) ->
             FuseID
