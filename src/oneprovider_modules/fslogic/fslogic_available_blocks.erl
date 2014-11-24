@@ -495,15 +495,15 @@ get_docs_from_cache(CacheName, FileId) ->
 update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple) ->
     case ets:lookup(CacheName, {FileId, old_file_size}) of
         [] ->
-            ets:delete_object(CacheName, {FileId, old_file_size}),
+            ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(FileId, 0, NewSize);
         [{_, {_, OldSize}}] when OldSize =/= NewSize ->
-            ets:delete_object(CacheName, {FileId, old_file_size}),
+            ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(FileId, OldSize, NewSize);
         [_] ->
-            ets:delete_object(CacheName, {FileId, old_file_size}),
+            ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple})
     end.
 
@@ -514,20 +514,20 @@ clear_size_cache(CacheName, FileId) ->
     case ets:lookup(CacheName, {FileId, file_size}) of
         [{_, OldSize = {_,_}}] ->
             ets:insert(CacheName, {{FileId, old_file_size}, OldSize}),
-            ets:delete_object(CacheName, {FileId, file_size}),
+            ets:delete(CacheName, {FileId, file_size}),
             OldSize;
         [] ->
-            ets:delete_object(CacheName, {FileId, old_file_size}),
-            ets:delete_object(CacheName, {FileId, file_size}),
+            ets:delete(CacheName, {FileId, old_file_size}),
+            ets:delete(CacheName, {FileId, file_size}),
             undefined
     end.
 
 clear_docs_cache(CacheName, FileId) ->
     case ets:lookup(CacheName, {FileId, all_docs}) of
         [{_, OldDocs}] when is_list(OldDocs) ->
-            ets:delete_object(CacheName, {FileId, all_docs}),
+            ets:delete(CacheName, {FileId, all_docs}),
             OldDocs;
         [] ->
-            ets:delete_object(CacheName, {FileId, all_docs}),
+            ets:delete(CacheName, {FileId, all_docs}),
             undefined
     end.
