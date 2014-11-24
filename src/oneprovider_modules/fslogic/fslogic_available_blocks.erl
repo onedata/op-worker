@@ -482,13 +482,13 @@ get_timestamp() ->
 
 get_size_from_cache(CacheName, FileId) ->
     case ets:lookup(CacheName, {FileId, file_size}) of
-        [{_,{_, Size}}] -> Size;
+        [{_, Size = {_,_}}] -> Size;
         [] -> undefined
     end.
 
 get_docs_from_cache(CacheName, FileId) ->
     case ets:lookup(CacheName, {FileId, all_docs}) of
-        [{_,{_, Docs}}] -> Docs;
+        [{_, Docs}] when is_list(Docs) -> Docs;
         [] -> undefined
     end.
 
@@ -498,7 +498,7 @@ update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple) ->
             ets:delete_object(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(FileId, 0, NewSize);
-        [{_,{_, OldSize}}] when OldSize =/= NewSize ->
+        [{_, {_, OldSize}}] when OldSize =/= NewSize ->
             ets:delete_object(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(FileId, OldSize, NewSize);
@@ -508,16 +508,16 @@ update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple) ->
     end,
     ets:insert(CacheName, {{FileId, file_size}, NewSize}).
 
-update_docs_cache(CacheName, FileId, Docs) ->
+update_docs_cache(CacheName, FileId, Docs) when is_list(Docs) ->
     ets:insert(CacheName, {{FileId, all_docs}, Docs}).
 
 clear_size_cache(CacheName, FileId) ->
     case ets:lookup(CacheName, {FileId, file_size}) of
-        [{_, OldSize}] ->
+        [{_, OldSize = {_,_}}] ->
             ets:insert(CacheName, {{FileId, old_file_size}, OldSize}),
             ets:delete_object(CacheName, {FileId, file_size}),
             OldSize;
-        _ ->
+        [] ->
             ets:delete_object(CacheName, {FileId, old_file_size}),
             ets:delete_object(CacheName, {FileId, file_size}),
             undefined
@@ -525,10 +525,10 @@ clear_size_cache(CacheName, FileId) ->
 
 clear_docs_cache(CacheName, FileId) ->
     case ets:lookup(CacheName, {FileId, all_docs}) of
-        [{_, OldDocs}] ->
+        [{_, OldDocs}] when is_list(OldDocs) ->
             ets:delete_object(CacheName, {FileId, all_docs}),
             OldDocs;
-        _ ->
+        [] ->
             ets:delete_object(CacheName, {FileId, all_docs}),
             undefined
     end.
