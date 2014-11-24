@@ -179,7 +179,7 @@ get_file_attr(FileDoc = #db_document{uuid = FileId, record = #file{}}) ->
                            ?DIR_TYPE_PROT -> 0;
                            _ ->
                                {ok, {_Stamp, FileSize}} = fslogic_available_blocks:call({get_file_size, FileId}),
-                               fslogic_file:update_file_size(File, FileSize),
+%%                                fslogic_file:update_file_size(File, FileSize),
                                FileSize
                        end,
                 {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, SizeFromMap, FMeta#file_meta.acl =/= []};
@@ -199,6 +199,10 @@ get_file_attr(FileDoc = #db_document{uuid = FileId, record = #file{}}) ->
                     end;
                 _ -> 1
             end,
+
+    ct:print("fileattr: ~p", [#fileattr{uuid = utils:ensure_list(FileUUID), answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
+        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
+        gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links, has_acl = HasAcl}]),
 
     #fileattr{uuid = utils:ensure_list(FileUUID), answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
         type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
