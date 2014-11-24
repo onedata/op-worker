@@ -179,6 +179,7 @@ get_file_attr(FileDoc = #db_document{uuid = FileId, record = #file{}}) ->
                            ?DIR_TYPE_PROT -> 0;
                            _ ->
                                {ok, {_Stamp, FileSize}} = fslogic_available_blocks:call({get_file_size, FileId}),
+                               ct:print("ANS1 ~p",[{ok, {_Stamp, FileSize}}]),
 %%                                fslogic_file:update_file_size(File, FileSize),
                                FileSize
                        end,
