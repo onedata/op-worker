@@ -232,7 +232,7 @@ call(Req) ->
 save_available_blocks(ProtocolVersion, CacheName, Doc) ->
     % save block to db
     {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion), % [Doc#db_document{force_update = true}]
-    {ok, NewDoc = #db_document{record = #available_blocks{file_id = FileId, file_size = NewDocSize = {Stamp, Value}}}} =
+    {ok, NewDoc = #db_document{record = #available_blocks{file_id = FileId, file_size = NewDocSize}}} =
         dao_lib:apply(dao_vfs, get_available_blocks, [Uuid], ProtocolVersion),
 
     % clear cache
@@ -246,13 +246,13 @@ save_available_blocks(ProtocolVersion, CacheName, Doc) ->
             NewDocs = [NewDoc | OtherDocs],
             NewSize =
                 case OldSize of
-                    {TS, Val} when TS > Stamp -> {{TS, Val}, false};
+                    {TS, Val} when TS > element(1, NewDocSize) -> {{TS, Val}, false};
                     _ -> {NewDocSize, true}
                 end,
             update_docs_cache(CacheName, FileId, NewDocs),
             update_size_cache(CacheName, FileId, NewSize);
         _ ->
-            {ok, _} = list_all_available_blocks(ProtocolVersion, _CacheName, FileId)
+            {ok, _} = list_all_available_blocks(ProtocolVersion, CacheName, FileId)
     end,
     {ok, Uuid}.
 
