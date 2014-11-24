@@ -63,6 +63,7 @@ init(_Args) ->
         end, ?dbs_to_sync),
 
     register_available_blocks_hook(),
+    register_file_meta_hook(),
 
     [].
 
@@ -93,12 +94,22 @@ handle(ProtocolVersion, Request) ->
     end.
 
 
+%% handle2/2
+%% ====================================================================
+%% @doc Main dbsync's handle method.
+%% @end
+-spec handle2(ProtocolVersion :: term(), Request :: term()) -> Result when
+    Result :: term().
+%% ====================================================================
+
+%% Hooks
 handle2(_ProtocolVersion, {register_hook, Fun}) ->
     dbsync_hooks:register(Fun);
 
 handle2(_ProtocolVersion, {remove_hook, HookId}) ->
     dbsync_hooks:unregister(HookId);
 
+%% Changes stream responses
 handle2(_ProtocolVersion, {changes_stream, StreamId, eof}) ->
     [{_, SeqInfo}] = ets:lookup(?dbsync_state, {last_seq, StreamId}),
     SeqReq1 = dbsync_utils:seq_info_to_url(SeqInfo),
@@ -129,7 +140,7 @@ handle2(_ProtocolVersion, {changes_stream, StreamId, Data, SinceSeqInfo}) ->
             {error, Reason}
     end;
 
-
+%% Events from changes stream
 handle2(_ProtocolVersion, {docs_updated, {DbName, DocsWithSeq, SinceSeqInfo}}) ->
     case lists:member(DbName, ?dbs_to_sync) of
         true ->
@@ -138,6 +149,7 @@ handle2(_ProtocolVersion, {docs_updated, {DbName, DocsWithSeq, SinceSeqInfo}}) -
             ok
     end;
 
+%% Reemitting tree broadcast messages
 handle2(_ProtocolVersion, {reemit, #treebroadcast{ledge = LEdge, redge = REdge, space_id = SpaceId,
                             input = RequestData, message_type = DecoderName} = BaseRequest}) ->
     {ok, #space_info{providers = Providers} = SpaceInfo} = fslogic_objects:get_space({uuid, SpaceId}),
@@ -149,6 +161,7 @@ handle2(_ProtocolVersion, {reemit, #treebroadcast{ledge = LEdge, redge = REdge, 
     Providers4 = lists:usort([REdge | Providers3]),
     ok = dbsync_protocol:tree_broadcast(SpaceInfo, Providers4, Request, BaseRequest, 3);
 
+%% Handle treebroadcast{} message
 handle2(ProtocolVersion, #treebroadcast{input = RequestData, message_type = DecoderName, space_id = SpaceId, request_id = ReqId} = BaseRequest) ->
 
     Ignore = dbsync_state:call(fun(_State) ->
@@ -183,6 +196,7 @@ handle2(ProtocolVersion, #treebroadcast{input = RequestData, message_type = Deco
         true -> ok
     end;
 
+%% Handle requestseqdiff{} message
 handle2(_ProtocolVersion, #requestseqdiff{space_id = SpaceId, dbname = DbName, since_seq = SinceBin} = _BaseRequest) ->
     SinceSeqInfo = dbsync_utils:normalize_seq_info(dbsync_utils:decode_term(SinceBin)),
     SeqReq = dbsync_utils:seq_info_to_url(SinceSeqInfo),
@@ -220,6 +234,14 @@ handle2(_ProtocolVersion, _Msg) ->
     unknown_request.
 
 
+%% handle_broadcast/2
+%% ====================================================================
+%% @doc General handler for treebroadcast{} inner-messages. Shall return whether
+%%      broadcast should be canceled (ok | {error, _}) or reemitted (reemit).
+%% @end
+-spec handle_broadcast(ProtocolVersion :: term(), SpaceId :: binary(), Request :: term(), BaseRequest :: term()) ->
+    ok | reemit | {error, Reason :: any()}.
+%% ====================================================================
 handle_broadcast(_ProtocolVersion, SpaceId, #docupdated{dbname = DbName, document = DocsData, prev_seq = PrevSeqInfoBin, curr_seq = CurrSeqInfoBin} = Request, BaseRequest) ->
     {provider_id, ProviderId} = get(peer_id),
     CurrSeqInfo = dbsync_utils:decode_term(CurrSeqInfoBin),
@@ -271,6 +293,15 @@ cleanup() ->
     ok.
 
 
+%% request_diff/5
+%% ====================================================================
+%% @doc Requests changes diff from given SinceSeqInfo.
+%%      This method receives response and replicates all documents.
+%% @end
+-spec request_diff(ProviderId :: binary(), SpaceId :: binary(), DbName :: string() | binary(),
+    SinceSeqInfo :: term(), Attempts :: non_neg_integer()) ->
+    ok | no_return().
+%% ====================================================================
 request_diff(ProviderId, SpaceId, DbName, SinceSeqInfo, Attempts) ->
     Request = #requestseqdiff{space_id = SpaceId, dbname = utils:ensure_binary(DbName), since_seq = dbsync_utils:encode_term(SinceSeqInfo)},
     #docupdated{document = DocsData, curr_seq = CurrSeqInfoBin, prev_seq = PrevSeqInfoBin} = dbsync_protocol:send_direct_message(ProviderId, Request, {dbsync, docupdated}, Attempts),
@@ -294,7 +325,20 @@ request_diff(ProviderId, SpaceId, DbName, SinceSeqInfo, Attempts) ->
     ok.
 
 
+%% emit_documents/3
+%% ====================================================================
+%% @doc Emits given changes to all providers that supports spaces associated with those documents.
+%% @end
+-spec emit_documents(DbName :: string() | binary(), DocsWithSeq :: [{#db_document{}, SeqInfo :: term()}], SinceSeqInfo :: term()) ->
+    ok | no_return().
+%% ====================================================================
 emit_documents(DbName, DocsWithSeq, SinceSeqInfo) ->
+    Hooks =
+        case dbsync_state:get(hooks) of
+            undefined -> [];
+            Hooks0 -> Hooks0
+        end,
+
     SpacesMap = lists:foldl(
         fun({#db_document{uuid = UUID, rev_info = {RevNum, [RevHash | _]}} = Doc, CSeq}, Acc) ->
             try
@@ -302,6 +346,8 @@ emit_documents(DbName, DocsWithSeq, SinceSeqInfo) ->
                 SyncWithSorted = lists:usort(SyncWith),
                 {ok, [{ok, #doc{revs = RevInfo}}]} = dao_lib:apply(dao_helper, open_revs, [DbName, UUID, [{RevNum, RevHash}], []], 1),
                 NewDoc = Doc#db_document{rev_info = RevInfo},
+
+                [spawn(fun() -> catch Callback(DbName, SpaceId, UUID, NewDoc) end) || {_, Callback} <- Hooks],
 
                 {_, LastSSeq, SpaceDocs} = maps:get(SpaceId, Acc, {SpaceInfo, 0, []}),
                 maps:put(SpaceId, {SpaceInfo, max(LastSSeq, CSeq), [NewDoc | SpaceDocs]}, Acc)
@@ -334,6 +380,15 @@ emit_documents(DbName, DocsWithSeq, SinceSeqInfo) ->
         end, maps:to_list(SpacesMap)).
 
 
+%% push_doc_changes/3
+%% ====================================================================
+%% @doc Emits given documents from specific space to all providers that support this space.
+%%      SinceSeqInfo is the lower bound of changes, while LastSpaceSeq is the upper bound.
+%%      SyncWith has to be sorted.
+%% @end
+-spec push_doc_changes(#space_info{}, Docs :: [#db_document{}], SinceSeqInfo :: term(), LastSpaceSeq :: term(), SyncWith :: [binary()]) ->
+    ok | no_return().
+%% ====================================================================
 push_doc_changes(#space_info{} = _SpaceInfo, _Docs, _, _, []) ->
     ok;
 push_doc_changes(#space_info{} = _SpaceInfo, [], _, _, _) ->
@@ -344,6 +399,13 @@ push_doc_changes(#space_info{} = SpaceInfo, Docs, SinceSeqInfo, LastSpaceSeq, Sy
     ok = dbsync_protocol:tree_broadcast(SpaceInfo, SyncWith, Request, 3).
 
 
+%% broadcast_space_state/1
+%% ====================================================================
+%% @doc Broadcasts current sequence numbers for given space to other providers.
+%% @end
+-spec broadcast_space_state(SpaceId :: binary()) ->
+    ok | no_return().
+%% ====================================================================
 broadcast_space_state(SpaceId) ->
     {ok, #space_info{providers = SyncWith} = SpaceInfo} = fslogic_objects:get_space({uuid, SpaceId}),
     SeqData =
@@ -368,6 +430,13 @@ broadcast_space_state(SpaceId) ->
 %% Names, URLs, etc.
 %% ====================================================================
 
+
+%% select_db_url/0
+%% ====================================================================
+%% @doc Gets DB's URL (currently chosen randomly from all available).
+%% @end
+-spec select_db_url() -> string().
+%% ====================================================================
 select_db_url() ->
     HostNames1 =
         case dbsync_state:get(db_hosts) of
@@ -386,13 +455,36 @@ select_db_url() ->
     "http://" ++ HostName ++ ":5984".
 
 
+%% changes_receiver_name/1
+%% ====================================================================
+%% @doc Generates receiver's process name for given stream.
+%% @end
+-spec changes_receiver_name(StreamId :: binary() | string()) ->
+    atom().
+%% ====================================================================
 changes_receiver_name(StreamId) ->
     list_to_atom("changes_receiver_" ++ utils:ensure_list(StreamId)).
 
 
+
+%% last_space_seq_key/2
+%% ====================================================================
+%% @doc Generates state's key for setting/getting latest sequence number for given: SpaceId, DbName and local provider.
+%% @end
+-spec last_space_seq_key(SpaceId :: binary(), DbName :: binary() | string()) ->
+    term().
+%% ====================================================================
 last_space_seq_key(SpaceId, DbName) ->
     last_space_seq_key(cluster_manager_lib:get_provider_id(), SpaceId, DbName).
 
+
+%% last_space_seq_key/3
+%% ====================================================================
+%% @doc Generates state's key for setting/getting latest sequence number for given: ProviderId, SpaceId, DbName.
+%% @end
+-spec last_space_seq_key(ProviderId :: binary(), SpaceId :: binary(), DbName :: binary() | string()) ->
+    term().
+%% ====================================================================
 last_space_seq_key(ProviderId, SpaceId, DbName) ->
     {last_space_seq, ProviderId, utils:ensure_binary(SpaceId), utils:ensure_binary(DbName)}.
 
@@ -401,6 +493,13 @@ last_space_seq_key(ProviderId, SpaceId, DbName) ->
 %% Active elements
 %% ====================================================================
 
+%% changes_receiver_loop/1
+%% ====================================================================
+%% @doc Endless loop that receives data from DB REST API (_changes) and passes to dbsync worker.
+%%      There is one receiver per _changes stream (i.e. per database/bucket)
+%% @end
+-spec changes_receiver_loop({StreamId :: term(), State :: term()}) -> no_return().
+%% ====================================================================
 changes_receiver_loop({StreamId, State}) ->
     NewState = receive
                    {ibrowse_async_response, RequestId, Data} ->
@@ -433,6 +532,12 @@ changes_receiver_loop({StreamId, State}) ->
     changes_receiver_loop({StreamId, NewState}).
 
 
+%% ping_service_loop/0
+%% ====================================================================
+%% @doc Endless loop that broadcasts current sequence numbers to other providers.
+%% @end
+-spec ping_service_loop() -> no_return().
+%% ====================================================================
 ping_service_loop() ->
     timer:sleep(timer:seconds(5)),
     try
@@ -455,10 +560,11 @@ ping_service_loop() ->
     ping_service_loop([]).
 ping_service_loop(Spaces) ->
     NewSpaces =
+    %% Update supported spaces list if possible
         case gr_providers:get_spaces(provider) of
             {ok, SpaceIds} ->
                 SpaceIds;
-            {error, Reason} ->
+            {error, _Reason} ->
                 Spaces
         end,
     Res = [catch broadcast_space_state(SpaceId) || SpaceId <- NewSpaces],
@@ -474,6 +580,14 @@ ping_service_loop(Spaces) ->
 %% Misc
 %% ====================================================================
 
+%% get_space_ctx/2
+%% ====================================================================
+%% @doc For given docuemnt, returns associated #space_info{}. Uses internal cache
+%%      and dbsync_records:get_space_ctx/2 for getting new data.
+%% @end
+-spec get_space_ctx(DbName :: string() | binary(), #db_document{}) ->
+    {ok, #space_info{}} | {error, Reason :: any()}.
+%% ====================================================================
 get_space_ctx(_DbName, #db_document{uuid = UUID} = Doc) ->
     case dbsync_state:get({uuid_to_spaceid, UUID}) of
         undefined ->
@@ -495,6 +609,15 @@ get_space_ctx(DbName, UUID) ->
     get_space_ctx(DbName, Doc).
 
 
+%% get_current_seq/2
+%% ====================================================================
+%% @doc Gets current sequence number for given {ProviderId, SpaceId, DbName}.
+%%      For local provider it will be newest sequence number from database,
+%%      for others - newest synchronized sequence number.
+%% @end
+-spec get_current_seq(ProviderId :: binary(), SpaceId :: binary(), DbName :: binary() | string()) ->
+    {SeqNum :: non_neg_integer(), SeqHash :: binary()}.
+%% ====================================================================
 get_current_seq(ProviderId, SpaceId, DbName) ->
     case dbsync_state:get(last_space_seq_key(ProviderId, SpaceId, DbName)) of
         undefined ->
@@ -502,6 +625,13 @@ get_current_seq(ProviderId, SpaceId, DbName) ->
         CurrSeqInfo -> CurrSeqInfo
     end.
 
+
+%% replicate_doc/2
+%% ====================================================================
+%% @doc Replicates given document to DB.
+%% @end
+-spec replicate_doc(SpaceId :: binary(), #db_document{}) -> ok | {error, Reason :: any()}.
+%% ====================================================================
 replicate_doc(SpaceId, #db_document{uuid = DocUUID} = Doc) ->
     Hooks =
         case dbsync_state:get(hooks) of
@@ -513,7 +643,7 @@ replicate_doc(SpaceId, #db_document{uuid = DocUUID} = Doc) ->
     {ok, #space_info{space_id = SpaceId} = _SpaceInfo} = get_space_ctx(DocDbName, Doc),
     case dao_lib:apply(dao_records, save_record, [DocDbName, Doc, [replicated_changes]], 1) of
         {ok, _} ->
-            [catch Callback(DocDbName, SpaceId, DocUUID, Doc) || {_, Callback} <- Hooks],
+            [spawn(fun() -> catch Callback(DocDbName, SpaceId, DocUUID, Doc) end) || {_, Callback} <- Hooks],
             ?debug("Document ~p replicated", [DocUUID]),
             ok;
         {error, Reason2} ->
@@ -521,6 +651,17 @@ replicate_doc(SpaceId, #db_document{uuid = DocUUID} = Doc) ->
             {error, Reason2}
 
     end.
+
+
+register_file_meta_hook() ->
+    HookFun = fun
+        (?FILES_DB_NAME, _, FileUUID, #db_document{record = #file_meta{}} = Doc)->
+            fslogic_events:on_file_meta_update(FileUUID, Doc);
+        (_, _, _, _) -> ok
+    end,
+
+    {ok, Delay} = application:get_env(?APP_Name, dbsync_hook_registering_delay),
+    erlang:send_after(Delay, self(), {timer, {asynch, 1, {register_hook, HookFun}}}).
 
 register_available_blocks_hook() ->
     % register hook for #available_blocks docs

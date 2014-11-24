@@ -145,7 +145,7 @@ spaces_permissions_test(Config) ->
   {GetFileMetaAns1, FileMetaDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file_meta, [FileDoc1#db_document.record#file.meta_doc]),
   ?assertEqual(ok, GetFileMetaAns1),
   FileMetaUID1 = FileMetaDoc1#db_document.record#file_meta.uid,
-  ?assertEqual(UserDoc2#db_document.uuid, FileMetaUID1),
+  ?assertEqual(UserDoc1#db_document.uuid, FileMetaUID1),
 
   ?assertNotEqual(FileMetaUID, FileMetaUID1),
 
@@ -1866,9 +1866,6 @@ users_separation_test(Config) ->
   ?assertEqual(Login1, Attr1#fileattr.uname),
   ?assertEqual(Login2, Attr2#fileattr.uname),
 
-  %% Check UIDs
-  ?assertEqual(UserID1, Attr1#fileattr.uid),
-  ?assertEqual(UserID2, Attr2#fileattr.uid),
 
   test_utils:wait_for_db_reaction(),
 
@@ -1921,9 +1918,9 @@ users_separation_test(Config) ->
 %%   ?assertEqual(Attr4#fileattr.atime, FM_Attrs#fileattributes.atime),
 
 %%   ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login1 ++ "/" ++ TestFile, UID1])),
-%%   {Status6, Answer6} = delete_file(Socket, TestFile),
-%%   ?assertEqual("ok", Status6),
-%%   ?assertEqual(list_to_atom(?VOK), Answer6),
+  {Status6, Answer6} = delete_file(Socket, TestFile),
+  ?assertEqual("ok", Status6),
+  ?assertEqual(list_to_atom(?VOK), Answer6),
 
   {Status7, _Helper7, _Id7, _Validity7, AnswerOpt7} = get_file_location(Socket, TestFile),
   ?assertEqual("ok", Status7),
@@ -1936,9 +1933,9 @@ users_separation_test(Config) ->
   ?assertEqual(Id4, Id8),
 
 %%   ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login2 ++ "/" ++ TestFile, UID2])),
-%%   {Status9, Answer9} = delete_file(Socket2, TestFile),
-%%   ?assertEqual("ok", Status9),
-%%   ?assertEqual(list_to_atom(?VOK), Answer9),
+  {Status9, Answer9} = delete_file(Socket2, TestFile),
+  ?assertEqual("ok", Status9),
+  ?assertEqual(list_to_atom(?VOK), Answer9),
 
   {Status10, _Helper10, _Id10, _Validity10, AnswerOpt10} = get_file_location(Socket2, TestFile),
   ?assertEqual("ok", Status10),

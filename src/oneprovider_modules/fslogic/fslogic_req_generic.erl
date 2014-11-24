@@ -200,8 +200,8 @@ get_file_attr(FileDoc = #db_document{uuid = FileId, record = #file{}}) ->
                 _ -> 1
             end,
 
-    #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
-        type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
+    #fileattr{uuid = utils:ensure_list(FileUUID), answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
+        type = Type, size = FileSize, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
         gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links, has_acl = HasAcl};
 get_file_attr(FullFileName) ->
     ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
