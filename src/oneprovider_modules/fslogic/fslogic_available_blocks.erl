@@ -176,7 +176,7 @@ db_sync_hook() ->
             case MyDocs of
                 [MyDoc] ->
                     % find changed doc
-                    [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_binary(Uuid_) == utils:ensure_binary(Uuid) end, Docs),
+                    [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_list(Uuid_) == utils:ensure_list(Uuid) end, Docs),
 
                     % modify my doc (with size) according to changed doc
                     NewDoc_ = fslogic_available_blocks:mark_other_provider_changes(MyDoc, ChangedDoc),
@@ -497,11 +497,11 @@ update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple) ->
         [] ->
             ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
-            fslogic_events:on_file_size_update(FileId, 0, NewSize);
+            fslogic_events:on_file_size_update(utils:ensure_list(FileId), 0, NewSize);
         [{_, {_, OldSize}}] when OldSize =/= NewSize ->
             ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
-            fslogic_events:on_file_size_update(FileId, OldSize, NewSize);
+            fslogic_events:on_file_size_update(utils:ensure_list(FileId), OldSize, NewSize);
         [_] ->
             ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple})
