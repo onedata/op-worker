@@ -198,17 +198,23 @@ list_descriptors({by_file_n_owner, {File, Owner}}, N, Offset) when N > 0, Offset
     {ok, #db_document{uuid = FileId}} = get_file(File),
     list_descriptors({by_uuid_n_owner, {FileId, Owner}}, N, Offset);
 list_descriptors({by_uuid_n_owner, {FileId, Owner}}, N, Offset) when N > 0, Offset >= 0 ->
-    StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
-    EndKey = case Owner of "" -> [dao_helper:name(uca_increment(FileId)), dao_helper:name("")]; _ ->
-        [dao_helper:name((FileId)), dao_helper:name(uca_increment(Owner))] end,
-    QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
-    case dao_records:list_records(?FD_BY_FILE_VIEW, QueryArgs) of
-        {ok, #view_result{rows = Rows}} ->
-            {ok, [FdDoc || #view_row{doc = #db_document{record = #file_descriptor{file = FileId1, fuse_id = OwnerId}} = FdDoc} <- Rows,
-                FileId1 == FileId, OwnerId == Owner orelse Owner == ""]};
-        Data ->
-            ?error("Invalid file descriptor view response: ~p", [Data]),
-            throw({inavlid_data, Data})
+    try
+
+        StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
+        EndKey = case Owner of "" -> [dao_helper:name(uca_increment(FileId)), dao_helper:name("")]; _ ->
+            [dao_helper:name((FileId)), dao_helper:name(uca_increment(Owner))] end,
+        QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
+        case dao_records:list_records(?FD_BY_FILE_VIEW, QueryArgs) of
+            {ok, #view_result{rows = Rows}} ->
+                {ok, [FdDoc || #view_row{doc = #db_document{record = #file_descriptor{file = FileId1, fuse_id = OwnerId}} = FdDoc} <- Rows,
+                    FileId1 == FileId, OwnerId == Owner orelse Owner == ""]};
+            Data ->
+                ?error("Invalid file descriptor view response: ~p", [Data]),
+                throw({inavlid_data, Data})
+        end
+    catch
+        _:E  ->
+            ?error_stacktrace("ERR2 ~p", [E])
     end;
 list_descriptors({by_expired_before, Time}, N, Offset) when N > 0, Offset >= 0 ->
     StartKey = 0,
