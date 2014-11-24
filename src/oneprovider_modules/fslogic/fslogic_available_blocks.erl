@@ -302,10 +302,8 @@ get_file_size(ProtocolVersion, CacheName, FileId) ->
         undefined ->
             {ok, _} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
             Size_ = get_size_from_cache(CacheName, FileId),
-            ct:print("getting from cache1: ~p",[Size_]),
             {ok, Size_};
         Size ->
-            ct:print("getting from cache2: ~p",[Size]),
             {ok, Size}
     end.
 
