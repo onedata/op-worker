@@ -87,10 +87,10 @@ synchronize_file_block(FullFileName, Offset, Size) ->
         false ->
             %update size to newest
             {ok, FileSize} = fslogic_available_blocks:call({get_file_size, FileId}),
-            AvailableBlocks = NewDoc#db_document.record,
+            FinalNewDoc = update_size(NewDoc, FileSize),
 
             %save available_blocks and notify fuses
-            fslogic_objects:save_available_blocks(NewDoc#db_document{record = AvailableBlocks#available_blocks{file_size = FileSize}}),
+            fslogic_objects:save_available_blocks(FinalNewDoc),
             lists:foreach(fun(Ranges) ->
                 {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false)
             end, SyncedParts)
@@ -121,15 +121,15 @@ file_block_modified(FullFileName, Offset, Size) ->
         true -> ok;
         false ->
             %update size if this write extends file
-            AvailableBlocks = NewDoc#db_document.record,
             {ok, {Stamp, FileSize}} = fslogic_available_blocks:call({get_file_size, FileId}),
-            NewFileSize = case FileSize < Offset + Size of
+            NewFileSizeTuple = case FileSize < Offset + Size of
                               true ->{fslogic_available_blocks:get_timestamp(), Offset + Size};
                               false -> {Stamp, FileSize}
                           end,
+            FinalNewDoc = update_size(NewDoc, NewFileSizeTuple),
 
             %save available_blocks and notify fuses
-            fslogic_objects:save_available_blocks(NewDoc#db_document{record = AvailableBlocks#available_blocks{file_size = NewFileSize}}),
+            fslogic_objects:save_available_blocks(FinalNewDoc),
             fslogic_req_regular:update_file_block_map(FullFileName, [{Offset, Size}], false)
     end,
     #atom{value = ?VOK}.
@@ -149,16 +149,15 @@ file_truncated(FullFileName, Size) ->
     ProviderId = cluster_manager_lib:get_provider_id(),
     [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
 
-    % modify document
-    #db_document{record = #available_blocks{file_parts = Ranges}} = NewDoc = fslogic_available_blocks:truncate({bytes, Size}, MyRemoteLocationDoc),
+    % modify document(with size)
+    NewDoc_ = fslogic_available_blocks:truncate({bytes, Size}, MyRemoteLocationDoc),
+    NewDoc = #db_document{record = #available_blocks{file_parts = Ranges}} = update_size(NewDoc_, {fslogic_available_blocks:get_timestamp(), Size}),
 
     % notify cache, db and fuses
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
         false ->
-            AvailableBlocks = NewDoc#db_document.record,
-            NewFileSize = {fslogic_available_blocks:get_timestamp(), Size},
-            fslogic_objects:save_available_blocks(NewDoc#db_document{record = AvailableBlocks#available_blocks{file_size = NewFileSize}}),
+            fslogic_objects:save_available_blocks(NewDoc),
             fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true)
     end,
     #atom{value = ?VOK}.
@@ -180,12 +179,8 @@ db_sync_hook() ->
                     [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_binary(Uuid_) == utils:ensure_binary(Uuid) end, Docs),
 
                     % modify my doc (with size) according to changed doc
-                    NewSize = case {MyDoc#db_document.record#available_blocks.file_size, ChangedDoc#db_document.record#available_blocks.file_size} of
-                                  {{Stamp1, Size1}, {Stamp2, _Size2}} when Stamp1 > Stamp2 -> {Stamp1, Size1};
-                                  {_, {Stamp2, Size2}} -> {Stamp2, Size2}
-                              end,
-                    #db_document{record = Blocks = #available_blocks{file_parts = Ranges}} = NewDoc_ = fslogic_available_blocks:mark_other_provider_changes(MyDoc, ChangedDoc),
-                    NewDoc = NewDoc_#db_document{record = Blocks#available_blocks{file_size = NewSize}},
+                    NewDoc_ = fslogic_available_blocks:mark_other_provider_changes(MyDoc, ChangedDoc),
+                    NewDoc = #db_document{record = #available_blocks{file_parts = Ranges}} = update_size(NewDoc_, ChangedDoc#db_document.record#available_blocks.file_size), %todo probably don't need to update size every time
 
                     % notify cache, db and fuses
                     fslogic_available_blocks:call({invalidate_blocks_cache, FileId}),
@@ -237,28 +232,27 @@ call(Req) ->
 save_available_blocks(ProtocolVersion, CacheName, Doc) ->
     % save block to db
     {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion), % [Doc#db_document{force_update = true}]
-    {ok, NewDoc = #db_document{record = #available_blocks{file_id = FileId, file_size = DocSize = {Stamp, _Value}}}} =
+    {ok, NewDoc = #db_document{record = #available_blocks{file_id = FileId, file_size = NewDocSize = {Stamp, Value}}}} =
         dao_lib:apply(dao_vfs, get_available_blocks, [Uuid], ProtocolVersion),
 
     % clear cache
-    OldDocsQueryResult = ets:lookup(CacheName, {FileId, all_docs}),
-    OldSizeQueryResult = ets:lookup(CacheName, {FileId, file_size}),
-    ets:delete_object(CacheName, {FileId, all_docs}),
-    ets:delete_object(CacheName, {FileId, file_size}),
+    OldSizeQueryResult = clear_size_cache(CacheName, FileId),
+    OldDocsQueryResult = clear_docs_cache(CacheName, FileId),
 
     % create cache again
     case {OldDocsQueryResult, OldSizeQueryResult} of
-        {[{_,Docs}], [{_,Size}]} ->
-            OtherDocs = [Document || Document = #db_document{uuid = DocId} <- Docs, DocId =/= Uuid],
+        {OldDocs, OldSize} when OldDocs =/= undefined andalso OldSize =/= undefined->
+            OtherDocs = [Document || Document = #db_document{uuid = DocId} <- OldDocs, DocId =/= Uuid],
             NewDocs = [NewDoc | OtherDocs],
             NewSize =
-                case Size of
-                    {S, V} when S > Stamp -> {S, V};
-                    _ -> DocSize
+                case OldSize of
+                    {TS, Val} when TS > Stamp -> {{TS, Val}, false};
+                    _ -> {NewDocSize, true}
                 end,
-            ets:insert(CacheName, {{FileId, all_docs}, NewDocs}),
-            ets:insert(CacheName, {{FileId, file_size}, NewSize});
-        _ -> ok
+            update_docs_cache(CacheName, FileId, NewDocs),
+            update_size_cache(CacheName, FileId, NewSize);
+        _ ->
+            {ok, _} = list_all_available_blocks(ProtocolVersion, _CacheName, FileId)
     end,
     {ok, Uuid}.
 
@@ -273,9 +267,9 @@ get_available_blocks(ProtocolVersion, _CacheName, FileId) ->
 
 list_all_available_blocks(ProtocolVersion, CacheName, FileId) ->
     % try fetch from cache
-    case ets:lookup(CacheName, {FileId, all_docs}) of
-        [{_, Docs}] -> {ok, Docs};
-        _ ->
+    case get_docs_from_cache(CacheName, FileId) of
+        Docs when is_list(Docs)-> {ok, Docs};
+        undefined ->
             % no cache - fetch all docs from db
             {ok, AllDocs} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], ProtocolVersion),
 
@@ -298,23 +292,24 @@ list_all_available_blocks(ProtocolVersion, CacheName, FileId) ->
             end, {0,0}, NewDocs),
 
             % inset results to cache
-            ets:insert(CacheName, {{FileId, all_docs}, NewDocs}),
-            ets:insert(CacheName, {{FileId, file_size}, Size}),
+            update_docs_cache(CacheName, FileId, NewDocs),
+            update_size_cache(CacheName, FileId, Size),
             {ok, NewDocs}
     end.
 
 get_file_size(ProtocolVersion, CacheName, FileId) ->
-    case ets:lookup(CacheName, {FileId, file_size}) of
-        [{_, {Stamp_, Size_}}] -> {ok, {Stamp_, Size_}};
-        _ ->
+    case get_size_from_cache(CacheName, FileId) of
+        undefined ->
             {ok, _} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
-            [{_, {Stamp, Size}}] = ets:lookup(CacheName, {FileId, file_size}),
-            {ok, {Stamp, Size}}
+            Size_ = get_size_from_cache(CacheName, FileId),
+            {ok, Size_};
+        Size ->
+            {ok, Size}
     end.
 
 invalidate_blocks_cache(_ProtocolVersion, CacheName, FileId) ->
-    ets:delete_object(CacheName, {FileId, all_docs}),
-    ets:delete_object(CacheName, {FileId, file_size}).
+    clear_docs_cache(CacheName, FileId),
+    clear_size_cache(CacheName, FileId).
 
 %% ====================================================================
 %% functions for available_blocks documents modification
@@ -407,6 +402,13 @@ mark_other_provider_changes(MyDoc = #db_document{record = #available_blocks{file
     NewParts = ranges_struct:minimize(ranges_struct:subtract_newer(MyParts, OtherParts)),
     MyDoc#db_document{record = Location#available_blocks{file_parts = NewParts}}.
 
+update_size(MyDoc = #db_document{record = #available_blocks{file_size = {_, MySizeValue}}}, {_, OtherSizeValue}) when MySizeValue == OtherSizeValue ->
+    MyDoc;
+update_size(MyDoc = #db_document{record = #available_blocks{file_size = {MyStamp, _}}}, {OtherStamp, _}) when MyStamp >= OtherStamp ->
+    MyDoc;
+update_size(MyDoc = #db_document{record = AvailableBlocks}, OtherSize) ->
+    MyDoc#db_document{record = AvailableBlocks#available_blocks{file_size = OtherSize}}.
+
 %% ====================================================================
 %% Utility functions
 %% ====================================================================
@@ -475,3 +477,58 @@ byte_to_block(Byte) ->
 get_timestamp() ->
     {Mega,Sec,Micro} = erlang:now(),
     (Mega*1000000+Sec)*1000000+Micro.
+
+%Internal ets cache wrapping functions
+
+get_size_from_cache(CacheName, FileId) ->
+    case ets:lookup(CacheName, {FileId, file_size}) of
+        [{_,{_, Size}}] -> Size;
+        [] -> undefined
+    end.
+
+get_docs_from_cache(CacheName, FileId) ->
+    case ets:lookup(CacheName, {FileId, all_docs}) of
+        [{_,{_, Docs}}] -> Docs;
+        [] -> undefined
+    end.
+
+update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple) ->
+    case ets:lookup(CacheName, {FileId, old_file_size}) of
+        [] ->
+            ets:delete_object(CacheName, {FileId, old_file_size}),
+            ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
+            fslogic_events:on_file_size_update(FileId, 0, NewSize);
+        [{_,{_, OldSize}}] when OldSize =/= NewSize ->
+            ets:delete_object(CacheName, {FileId, old_file_size}),
+            ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
+            fslogic_events:on_file_size_update(FileId, OldSize, NewSize);
+        [_] ->
+            ets:delete_object(CacheName, {FileId, old_file_size}),
+            ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple})
+    end,
+    ets:insert(CacheName, {{FileId, file_size}, NewSize}).
+
+update_docs_cache(CacheName, FileId, Docs) ->
+    ets:insert(CacheName, {{FileId, all_docs}, Docs}).
+
+clear_size_cache(CacheName, FileId) ->
+    case ets:lookup(CacheName, {FileId, file_size}) of
+        [{_, OldSize}] ->
+            ets:insert(CacheName, {{FileId, old_file_size}, OldSize}),
+            ets:delete_object(CacheName, {FileId, file_size}),
+            OldSize;
+        _ ->
+            ets:delete_object(CacheName, {FileId, old_file_size}),
+            ets:delete_object(CacheName, {FileId, file_size}),
+            undefined
+    end.
+
+clear_docs_cache(CacheName, FileId) ->
+    case ets:lookup(CacheName, {FileId, all_docs}) of
+        [{_, OldDocs}] ->
+            ets:delete_object(CacheName, {FileId, all_docs}),
+            OldDocs;
+        _ ->
+            ets:delete_object(CacheName, {FileId, all_docs}),
+            undefined
+    end.
