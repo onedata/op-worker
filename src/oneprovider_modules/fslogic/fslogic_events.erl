@@ -88,7 +88,7 @@ push_new_attrs3(FileUUID, Offset, Count) ->
     ets:delete(?fslogic_attr_events_state, utils:ensure_binary(FileUUID)),
     {ok, FDs} = try
         ct:print("ARGS: ~p", [[{by_uuid_n_owner, {FileUUID, ""}}, Count, Offset]]),
-        dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {FileUUID, ""}}, Count, Offset], 1)
+        dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {utils:ensure_list(FileUUID), ""}}, Count, Offset], 1)
     catch
         _:Error  ->
             ?error_stacktrace("ERR: ~p", [Error])
