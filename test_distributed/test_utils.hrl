@@ -21,15 +21,16 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 %% Macro for cleaning test dirs before tests
 -define(CLEAN_TEST_DIRS,begin
-                            os:cmd("rm -rf /tmp/onedata/*"),
-                            os:cmd("rm -rf /tmp/onedata2/*"),
-                            os:cmd("rm -rf /tmp/onedata3/*"),
-                            os:cmd("./clear_test_db.sh")
+                          os:cmd("rm -rf /tmp/onedata/*"),
+                          os:cmd("rm -rf /tmp/onedata2/*"),
+                          os:cmd("rm -rf /tmp/onedata3/*"),
+                          os:cmd("./clear_test_db.sh")
                         end).
 
 %% oneprovider dependencies
@@ -63,9 +64,9 @@
 -define(LOCAL_PROVIDER_ID, <<"providerId">>).
 -define(ENABLE_PROVIDER(__CONFIG), ?ENABLE_PROVIDER(__CONFIG, ?LOCAL_PROVIDER_ID)).
 -define(ENABLE_PROVIDER(__CONFIG, __PROVIDER_ID),
-    begin
-        test_utils:ct_mock(__CONFIG, cluster_manager_lib, get_provider_id, fun() -> __PROVIDER_ID end),
-        __CONFIG
-    end).
+  begin
+    test_utils:ct_mock(__CONFIG, cluster_manager_lib, get_provider_id, fun() -> __PROVIDER_ID end),
+    __CONFIG
+  end).
 
 -endif.

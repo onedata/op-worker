@@ -25,6 +25,7 @@
 -export([get_user/0, get_user/1]).
 -export([save_file/1, get_storage/1]).
 -export([get_space/1]).
+-export([get_available_blocks/1]).
 
 %% ====================================================================
 %% API functions
@@ -313,6 +314,26 @@ delete_old_descriptors(ProtocolVersion, Time) ->
             ?error("Error during clearing old descriptors: ~p", [Other]),
             Other
     end.
+
+%% get_available_blocks/2
+%% ====================================================================
+%% @doc Gets available_blocks document of file, creates it if location for actual provider does not exist
+%% @end
+-spec get_available_blocks(FullFileName :: string()) -> {ok, [available_blocks_doc()]} | no_return().
+%% ====================================================================
+get_available_blocks(FullFileName) ->
+    {ok, #db_document{uuid = FileId}} = get_file(FullFileName),
+    {ok, RemoteLocationList} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], fslogic_context:get_protocol_version()),
+    ProviderId = cluster_manager_lib:get_provider_id(),
+    CreatedDocs = case lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationList) of
+        [] ->
+            {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [#available_blocks{file_id = FileId, provider_id = ProviderId}], fslogic_context:get_protocol_version()),
+            {ok, Doc} = dao_lib:apply(dao_vfs, get_available_blocks, [Uuid], fslogic_context:get_protocol_version()),
+            [Doc];
+        _ -> []
+    end,
+    {ok, CreatedDocs ++ RemoteLocationList}.
+
 
 %% ====================================================================
 %% Internal functions

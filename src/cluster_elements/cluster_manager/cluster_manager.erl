@@ -382,7 +382,7 @@ handle_cast(get_state_from_db, State) ->
     true ->
       {noreply, State};
     false ->
-      NewState2 = case (State#cm_state.nodes =:= []) or State#cm_state.state_loaded of
+      NewState2 = case State#cm_state.nodes =:= [] of
                     true ->
                       State;
                     false ->
@@ -581,7 +581,7 @@ handle_info({nodedown, Node}, State) ->
   {noreply, State};
 
 handle_info(_Info, State) ->
-  ?warning("Wrong info: ~p", [_Info]),
+  ?warning("CCM wrong info: ~p", [_Info]),
   {noreply, State}.
 
 

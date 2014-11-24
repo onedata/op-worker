@@ -197,6 +197,8 @@ exist_user_in_db({Key, Value}) ->
 %% @end
 -spec get_user_from_db(Key :: user_key()) -> {ok, user_doc() | [user_doc()]} | {error, any()} | no_return().
 %% ====================================================================
+get_user_from_db({uuid, "cluster_uid"}) ->
+    get_user_from_db({uuid, "0"});
 get_user_from_db({uuid, "0"}) ->
     {ok, #db_document{uuid = "0", record = #user{logins = [#id_token_login{provider_id = internal, login = "root"}], name = "root"}}}; %% Return virtual "root" user
 get_user_from_db({uuid, UUID}) ->

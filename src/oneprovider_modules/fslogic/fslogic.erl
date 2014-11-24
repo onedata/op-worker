@@ -45,7 +45,7 @@ init(_Args) ->
     erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
 
     % Create acl permission cache
-    ProcFun = fun
+    PermissionCacheProcFun = fun
         (_ProtocolVersion, {grant_permission, StorageFileName, GRUID, Permission}, CacheName) ->
             ets:insert(CacheName, {{fslogic_path:ensure_path_begins_with_slash(StorageFileName), GRUID, Permission}, true}),
             ok;
@@ -57,23 +57,48 @@ init(_Args) ->
         (_ProtocolVersion, {invalidate_cache, StorageFileName}, CacheName) ->
             ets:match_delete(CacheName,{{fslogic_path:ensure_path_begins_with_slash(StorageFileName), '_', '_'}, '_'})
     end,
-    MapFun = fun({_, StorageFileName, _, _}) ->
-        lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, StorageFileName)
+    PermissionCacheMapFun = fun
+        ({_, StorageFileName, _, _}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, StorageFileName);
+        ({_, StorageFileName}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, StorageFileName)
     end,
-    SubProcList = worker_host:generate_sub_proc_list(pemission_cache, ?CACHE_TREE_MAX_DEPTH, ?CACHE_TREE_MAX_WIDTH, ProcFun, MapFun, simple),
+
+    % Create remote location dao proxy
+    RemoteLocationProxyProcFun = fun
+        (ProtocolVersion, {save_available_blocks_doc, Doc}, _CacheName) ->
+            {ok, _} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion)
+    end,
+    RemoteLocationProxyMapFun = fun
+        ({save_available_blocks_doc, #db_document{uuid = Uuid}}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, Uuid)
+    end,
+
+    % generate process lists
+    SubProcList = worker_host:generate_sub_proc_list([
+        {pemission_cache, ?CACHE_TREE_MAX_DEPTH, ?CACHE_TREE_MAX_WIDTH, PermissionCacheProcFun, PermissionCacheMapFun, simple},
+        {available_blocks_dao_proxy, ?CACHE_TREE_MAX_DEPTH, ?CACHE_TREE_MAX_WIDTH, RemoteLocationProxyProcFun, RemoteLocationProxyMapFun, simple}
+    ]),
+
+    % register map functions for process trees
     RequestMap = fun
         ({grant_permission, _, _, _}) -> pemission_cache;
         ({has_permission, _, _, _}) -> pemission_cache;
         ({invalidate_cache, _}) -> pemission_cache;
+        ({save_available_blocks_doc, _}) -> available_blocks_dao_proxy;
         (_) -> non
     end,
     DispMapFun = fun
+        ({save_available_blocks_doc, #db_document{uuid = Uuid}}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, Uuid);
         ({invalidate_cache, StorageFileName}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, StorageFileName);
         ({_, StorageFileName, _, _}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, StorageFileName);
         (_) -> non
     end,
+
+    ets:new(?fslogic_attr_events_state, [public, named_table, set]),
 
     #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispMapFun, sub_procs = SubProcList, plug_in_state = ok}.
 
@@ -93,6 +118,12 @@ handle(_ProtocolVersion, healthcheck) ->
 
 handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
+
+handle(_ProtocolVersion, {internal_event, EventType, EventArgs}) ->
+    fslogic_events:handle_event(EventType, EventArgs);
+
+handle(_ProtocolVersion, {internal_event_handle, Method, Args}) ->
+    erlang:apply(fslogic_events, Method, Args);
 
 %% this handler is intended to be called by newly connected clients
 %% TODO: create generic mechanism for getting configuration on client startup
@@ -381,6 +412,18 @@ handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mo
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_req_regular:get_new_file_location(FullFileName, Mode, ForceClusterProxy);
 
+handle_fuse_message(Req = #synchronizefileblock{logical_name = FName, offset = Offset, size = Size}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    fslogic_req_generic:synchronize_file_block(FullFileName, Offset, Size);
+
+handle_fuse_message(Req = #fileblockmodified{logical_name = FName, offset = Offset, size = Size}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    fslogic_req_generic:file_block_modified(FullFileName, Offset, Size);
+
+handle_fuse_message(Req = #filetruncated{logical_name = FName, size = Size}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    fslogic_req_generic:file_truncated(FullFileName, Size);
+
 handle_fuse_message(Req = #requestfileblock{logical_name = FName, offset = _Offset, size = _Size}) ->
     {ok, _FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     #atom{value = ?VOK}; %% @TODO: To be implemented along with rtransfer logic
@@ -488,6 +531,12 @@ extract_logical_path(#renamefile{from_file_logic_name = Path}) ->
 extract_logical_path(#getnewfilelocation{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#requestfileblock{logical_name = Path}) ->
+    Path;
+extract_logical_path(#synchronizefileblock{logical_name = Path}) ->
+    Path;
+extract_logical_path(#fileblockmodified{logical_name = Path}) ->
+    Path;
+extract_logical_path(#filetruncated{logical_name = Path}) ->
     Path;
 extract_logical_path(#filenotused{file_logic_name = Path}) ->
     Path;
