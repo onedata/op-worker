@@ -246,8 +246,8 @@ save_available_blocks(ProtocolVersion, CacheName, Doc) ->
             NewDocs = [NewDoc | OtherDocs],
             NewSize =
                 case OldSize of
-                    {TS, Val} when TS > element(1, NewDocSize) -> {{TS, Val}, false};
-                    _ -> {NewDocSize, true}
+                    {TS, Val} when TS > element(1, NewDocSize) -> {TS, Val};
+                    _ -> NewDocSize
                 end,
             update_docs_cache(CacheName, FileId, NewDocs),
             update_size_cache(CacheName, FileId, NewSize);

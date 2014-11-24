@@ -32,6 +32,7 @@
 -export([file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, user_file_size_test/1, dirs_creating_test/1, spaces_test/1]).
 -export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2, get_acl/2, make_dir/2, xattrs_test/1, acl_test/1]).
 -export([get_file_local_location_test/1, block_creation_test/1, block_registration_test/1, available_blocks_cache_test/1]).
+-export([get_file_uuid/2]).
 
 all() ->
  [spaces_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
@@ -2535,18 +2536,19 @@ available_blocks_cache_test(Config) ->
 
     ?assertMatch({ok, _}, rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT])),
 
-    test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+    UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+    [DN | _] = user_logic:get_dn_list(UserDoc),
     {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
 
     ?assertMatch({?VOK, _, _, _, ?VOK}, create_file(Socket, FileName)),
     ?assertEqual({?VOK, ok}, send_creation_ack(Socket, FileName)),
-    {ok, Uuid} = rpc:call(Node1, logical_files_manager, get_file_uuid, [FileName]),
+    {ok, Uuid} = rpc:call(Node1, fslogic_test_SUITE, get_file_uuid, [FileName, DN]),
 
     Size = {100, 10},
     Blocks = #available_blocks{file_id = Uuid, file_parts = [], file_size = Size},
     rpc:call(Node1, fslogic_available_blocks, call, [{save_available_blocks, Blocks}]),
     ?assertMatch({ok, Size}, rpc:call(Node1, fslogic_available_blocks, call, [{get_file_size, Uuid}])),
-    ?assertMatch({ok, [#db_document{record = Blocks}]}, rpc:call(Node1, fslogic_available_blocks, call, [{list_all_available_blocks, Uuid}])),
+    ?assertMatch({ok, [#db_document{record = Blocks}, _]}, rpc:call(Node1, fslogic_available_blocks, call, [{list_all_available_blocks, Uuid}])),
     ?assertMatch({ok, Size}, rpc:call(Node1, fslogic_available_blocks, call, [{get_file_size, Uuid}])).
 
 
@@ -2570,7 +2572,7 @@ init_per_testcase(_, Config) ->
   ?INIT_CODE_PATH, ?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1,true),
   [FSLogicNode | _] = NodesUp,
 
   DB_Node = ?DB_NODE,
@@ -2955,3 +2957,7 @@ get_acl(FilePath, DN) ->
 make_dir(FilePath, DN) ->
   fslogic_context:set_user_dn(DN),
   logical_files_manager:mkdir(FilePath).
+
+get_file_uuid(FilePath, DN) ->
+  fslogic_context:set_user_dn(DN),
+  logical_files_manager:get_file_uuid(FilePath).
