@@ -505,8 +505,7 @@ update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple) ->
         [_] ->
             ets:delete_object(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple})
-    end,
-    ets:insert(CacheName, {{FileId, file_size}, NewSize}).
+    end.
 
 update_docs_cache(CacheName, FileId, Docs) when is_list(Docs) ->
     ets:insert(CacheName, {{FileId, all_docs}, Docs}).
