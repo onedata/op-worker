@@ -29,7 +29,7 @@ rt_map_test_() ->
         fun teardown/1,
         [
             {"should push single block", fun should_push_single_block/0},
-            {"should push single block", fun should_push_many_blocks/0},
+            {"should push many block", fun should_push_many_blocks/0},
             {"should merge block", fun should_merge_blocks/0},
             {"should remove blocks", fun should_remove_blocks/0}
         ]

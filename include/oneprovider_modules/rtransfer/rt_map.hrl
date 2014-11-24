@@ -6,12 +6,12 @@
 %% @end
 %% ===================================================================
 %% @doc This file contains common macros and records for RTransfer
-%% priority queue.
+%% map.
 %% @end
 %% ===================================================================
 
--ifndef(RT_PRIORITY_QUEUE_HRL).
--define(RT_PRIORITY_QUEUE_HRL, 1).
+-ifndef(RT_MAP_HRL).
+-define(RT_MAP_HRL, 1).
 
 %% gen_server state
 %% * container - pointer to container resource created as a call to rt_container:init_nif() function

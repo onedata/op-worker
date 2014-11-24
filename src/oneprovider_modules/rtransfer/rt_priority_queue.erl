@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc This module allows for management of RTransfer container.
+%% @doc This module allows for management of RTransfer priority queue.
 %% @end
 %% ===================================================================
 -module(rt_priority_queue).
