@@ -83,10 +83,19 @@ public:
 
     /**
      * Checks whether this block can be merge with other block. That is
+     * both belong to the same file and are successive.
+     * @param block to be merged
+     * @return true if blocks can be merged
+     */
+    bool is_mergeable(const rt_block &block);
+
+    /**
+     * Checks whether this block can be merge with other block. That is
      * both belong to the same file, are successive and summary size is
      * less than maximal RTransfer block size.
      * @param block to be merged
-     * @return merged block
+     * @param block_size maximal RTransfer block size
+     * @return true if blocks can be merged
      */
     bool is_mergeable(const rt_block &block, ErlNifUInt64 block_size);
 

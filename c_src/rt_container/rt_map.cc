@@ -38,6 +38,21 @@ std::list<rt_block> rt_map::get(std::string file_id, ErlNifUInt64 offset,
                                   block.counter()));
     }
 
+    if (!blocks.empty()) {
+        std::list<rt_block> merged_blocks;
+        rt_block front_block = blocks.front();
+        blocks.pop_front();
+        for (const auto &block : blocks)
+            if (front_block.is_mergeable(block)) {
+                front_block += block;
+            } else {
+                merged_blocks.push_back(front_block);
+                front_block = block;
+            }
+        merged_blocks.push_back(front_block);
+        return merged_blocks;
+    }
+
     return blocks;
 }
 

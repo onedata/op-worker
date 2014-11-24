@@ -17,7 +17,7 @@
 -on_load(load_nif/0).
 
 %% API
--export([new/0, new/1, new/2, delete/1]).
+-export([new/0, new/1, delete/1]).
 -export([put/2, get/4, remove/4]).
 
 %% gen_server callbacks
@@ -40,31 +40,18 @@
 -spec new() -> {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
 new() ->
-    {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
-    gen_server:start_link(?MODULE, [BlockSize], []).
+    gen_server:start_link(?MODULE, [], []).
 
 
 %% new/1
 %% ====================================================================
-%% @doc Same as new/0, but allows to register queue under given name.
+%% @doc Creates RTransfer map and registeres it under given name.
 %% @end
 -spec new(ContainerName :: container_name()) ->
     {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
 new(ContainerName) ->
-    {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
-    new(ContainerName, BlockSize).
-
-
-%% new/2
-%% ====================================================================
-%% @doc Creates RTransfer map and registeres it under given name.
-%% @end
--spec new(ContainerName :: container_name(), BlockSize :: integer()) ->
-    {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
-%% ====================================================================
-new(ContainerName, BlockSize) ->
-    gen_server:start_link(ContainerName, ?MODULE, [BlockSize], []).
+    gen_server:start_link(ContainerName, ?MODULE, [], []).
 
 
 %% delete/1

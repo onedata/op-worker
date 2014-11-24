@@ -13,11 +13,15 @@
 namespace one {
 namespace provider {
 
-bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
+bool rt_block::is_mergeable(const rt_block &block)
 {
     return file_id_ == block.file_id_ && offset_ + size_ == block.offset_
-           && provider_ref_ == block.provider_ref_
-           && size_ + block.size_ <= block_size;
+           && provider_ref_ == block.provider_ref_;
+}
+
+bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
+{
+    return is_mergeable(block) && size_ + block.size_ <= block_size;
 }
 
 void rt_block::appendTerms(const std::list<rt_term> &terms)
