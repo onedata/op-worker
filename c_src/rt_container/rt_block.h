@@ -12,7 +12,7 @@
 #include "nifpp.h"
 #include "rt_local_term.h"
 
-#include <list>
+#include <set>
 #include <string>
 
 namespace one {
@@ -37,15 +37,14 @@ public:
      * @param offset block offset
      * @param size block size
      * @param priority block priority
-     * @param terms list of Erlang terms associated with block
+     * @param terms set of Erlang terms associated with block
      * @param provider_ref reference to provider that poses block
      * @param counter defines how many times block was pushed on the
      * rt_container
      */
     rt_block(std::string file_id, rt_local_term provider_ref,
              ErlNifUInt64 offset, ErlNifUInt64 size, ErlNifUInt64 priority,
-             int retry, std::list<rt_local_term> terms,
-             ErlNifUInt64 counter = 1)
+             int retry, std::set<rt_local_term> terms, ErlNifUInt64 counter = 1)
         : file_id_{std::move(file_id)}
         , provider_ref_{std::make_shared<rt_local_term>(provider_ref)}
         , offset_{offset}
@@ -79,16 +78,16 @@ public:
     int retry() const { return retry_; }
 
     /// Getter for block's terms
-    const std::list<rt_local_term> &terms() const { return terms_; }
+    const std::set<rt_local_term> &terms() const { return terms_; }
 
     /// Getter for block's addition counter
     ErlNifUInt64 counter() const { return counter_; }
 
     /**
-     * Appends list of terms to block
-     * @param list of terms to be appended to the list of block's terms
+     * Appends set of terms to block
+     * @param set of terms to be appended to the set of block's terms
      */
-    void appendTerms(const std::list<rt_local_term> &terms);
+    void appendTerms(const std::set<rt_local_term> &terms);
 
     /**
      * Checks whether this block can be merge with other block. That is
@@ -134,7 +133,7 @@ private:
     ErlNifUInt64 size_;
     ErlNifUInt64 priority_;
     int retry_;
-    std::list<rt_local_term> terms_;
+    std::set<rt_local_term> terms_;
     ErlNifUInt64 counter_;
 };
 

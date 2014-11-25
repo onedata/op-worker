@@ -62,6 +62,17 @@ public:
                enif_compare(shared_data_->term_, rhs.shared_data_->term_) == 0;
     }
 
+    /**
+     * Compares this rt_local_term with other rt_local_term.
+     * @param term to be compared with
+     * @return true if wrapped Erlang term is less than other wrapped Erlang
+     * term
+     */
+    bool operator<(const rt_local_term &rhs) const
+    {
+        return enif_compare(shared_data_->term_, rhs.shared_data_->term_) < 0;
+    }
+
 private:
     std::shared_ptr<const shared_data> shared_data_;
 };

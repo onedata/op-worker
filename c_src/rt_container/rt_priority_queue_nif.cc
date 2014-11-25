@@ -59,9 +59,9 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
         nifpp::get_throws(env, argv[0], queue);
         nifpp::get_throws(env, argv[1], record);
 
-        std::list<rt_local_term> rt_local_terms;
+        std::set<rt_local_term> rt_local_terms;
         for (const auto &term : terms)
-            rt_local_terms.push_back(rt_local_term(term));
+            rt_local_terms.insert(rt_local_term(term));
 
         rt_block block(file_id, rt_local_term(provider_ref), offset, size,
                        priority, retry, rt_local_terms);

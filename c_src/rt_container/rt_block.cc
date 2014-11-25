@@ -24,10 +24,10 @@ bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
     return is_mergeable(block) && size_ + block.size_ <= block_size;
 }
 
-void rt_block::appendTerms(const std::list<rt_local_term> &terms)
+void rt_block::appendTerms(const std::set<rt_local_term> &terms)
 {
     for (const auto &term : terms)
-        terms_.push_back(term);
+        terms_.insert(term);
 }
 
 bool rt_block::operator<(const rt_block &block) const
@@ -57,7 +57,7 @@ rt_block &rt_block::operator+=(const rt_block &block)
     size_ += block.size_;
     retry_ = std::max<int>(retry_, block.retry_);
     for (const auto &term : block.terms_)
-        terms_.push_back(term);
+        terms_.insert(term);
 
     return *this;
 }
@@ -67,8 +67,8 @@ bool operator==(const rt_block &lhs, const rt_block &rhs)
     return lhs.file_id() == rhs.file_id() &&
            lhs.provider_ref() == rhs.provider_ref() &&
            lhs.offset() == rhs.offset() && lhs.size() == rhs.size() &&
-           lhs.priority() == rhs.priority() && lhs.terms() == rhs.terms() &&
-           lhs.retry() == rhs.retry() && lhs.counter() == rhs.counter();
+           lhs.priority() == rhs.priority() && lhs.retry() == rhs.retry() &&
+           lhs.terms() == rhs.terms() && lhs.counter() == rhs.counter();
 }
 
 } // namespace provider

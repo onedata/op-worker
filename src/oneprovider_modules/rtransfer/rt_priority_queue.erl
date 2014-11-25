@@ -117,7 +117,7 @@ pop(ContainerRef, TermsFilterFunction) ->
             {ok, Block#rt_block{
                 terms = lists:filter(fun(Term) ->
                     TermsFilterFunction(Term)
-                end, lists:usort(Terms))
+                end, Terms)
             }};
         Other ->
             Other
