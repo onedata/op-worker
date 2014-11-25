@@ -22,7 +22,7 @@
 -include_lib("ctool/include/global_registry/gr_providers.hrl").
 
 -export([init/1, handle/2, cleanup/0]).
--export([compute_request_hash/1]).
+-export([compute_request_hash/1, handle_node_lifecycle_notification/4]).
 
 
 %% ====================================================================
@@ -139,6 +139,7 @@ compute_request_hash(RequestBytes) ->
 %% @doc Handles lifecycle calls
 -spec handle_node_lifecycle_notification(Node :: list(), Module :: atom(), Action :: atom(), Pid :: pid()) -> ok.
 %% ====================================================================
-handle_node_lifecycle_notification(_Node, _Module, _Action, _Pid) ->
+handle_node_lifecycle_notification(Node, Module, Action, Pid) ->
+  ?debug("Lifecycle notification ~p",[{Node, Module, Action, Pid}]),
   ok.
 

@@ -90,7 +90,7 @@ multi_node_test(Config) ->
 
   [CCM | WorkerNodes] = NodesUp,
 
-  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  DuplicatedPermanentNodes = (length(NodesUp) - 1) * length(?PERMANENT_MODULES),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
   test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
@@ -169,7 +169,7 @@ sub_proc_load_test(Config) ->
 
   [CCM | WorkerNodes] = NodesUp,
 
-  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  DuplicatedPermanentNodes = (length(NodesUp) - 1) * length(?PERMANENT_MODULES),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
   test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->

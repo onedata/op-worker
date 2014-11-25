@@ -32,7 +32,7 @@
 %% export nodes' codes
 -export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
-all() -> [workers_list_singleton_and_permanent_test, fuse_session_cleanup_test, main_test, callbacks_test, fuse_ack_routing_test].
+all() -> [fuse_session_cleanup_test, main_test, callbacks_test, fuse_ack_routing_test, workers_list_singleton_and_permanent_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -61,7 +61,7 @@ fuse_ack_routing_test(Config) ->
 
   [CCM | WorkerNodes] = NodesUp,
 
-  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  DuplicatedPermanentNodes = (length(NodesUp) - 1) * length(?PERMANENT_MODULES),
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
   test_utils:wait_for_cluster_cast(),
@@ -282,7 +282,7 @@ fuse_session_cleanup_test(Config) ->
     DBNode = ?config(dbnode, Config),
     [CCM | WorkerNodes] = NodesUp,
 
-    DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+    DuplicatedPermanentNodes = (length(NodesUp) - 1) * length(?PERMANENT_MODULES),
 
     ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
     test_utils:wait_for_cluster_cast(),
@@ -406,7 +406,7 @@ main_test(Config) ->
 
   [CCM | WorkerNodes] = NodesUp,
 
-  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  DuplicatedPermanentNodes = (length(NodesUp) - 1) * length(?PERMANENT_MODULES),
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
   test_utils:wait_for_cluster_cast(),
@@ -480,7 +480,7 @@ callbacks_test(Config) ->
 
   [CCM | WorkerNodes] = NodesUp,
 
-  DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+  DuplicatedPermanentNodes = (length(NodesUp) - 1) * length(?PERMANENT_MODULES),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [], 2000)),
   test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
@@ -681,10 +681,11 @@ callbacks_test(Config) ->
 %% This test checks if workers list inside dispatcher is refreshed correctly.
 workers_list_singleton_and_permanent_test(Config) ->
   NodesUp = ?config(nodes, Config),
-
   [CCM | WorkerNodes] = NodesUp,
-  [Worker1 | WorkerNodes2] = WorkerNodes,
-  [Worker2 | _] = WorkerNodes2,
+  [Worker1 | _] = WorkerNodes,
+  Args = ?config(args, Config),
+  [_CCMArgs | WorkersArgs] = Args,
+  [Worker1Args | _] = WorkersArgs,
 
   DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
 
@@ -694,7 +695,7 @@ workers_list_singleton_and_permanent_test(Config) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
     test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
-  lists:foreach(RunWorkerCode, WorkerNodes),
+  lists:foreach(RunWorkerCode, NodesUp),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
   ?ENABLE_PROVIDER(Config),
 
@@ -704,22 +705,56 @@ workers_list_singleton_and_permanent_test(Config) ->
   Ok0 = gen_server:cast({global, ?CCM}, {register_module_listener, gateway, {module, gateway}}),
   ?assertEqual(ok, Ok0),
 
-  Self = self(),
-  test_utils:ct_mock(Config, gateway, handle_node_lifecycle_notification, fun(Node, Module, Action, Pid) ->  Self ! {ok, Node, Module, Action, Pid} end),
 
-  gen_server:call({global, ?CCM}, {lifecycle_notification, Worker1, gateway, stop_worker}),
+  Self = self(),
+  test_utils:ct_mock(Config, gateway, handle, fun(_ProtocolVersion, {node_lifecycle_notification, Node, Module, Action, Pid}) ->
+    Self ! {ok, Node, Module, Action, Pid} end),
+
+  test_node_starter:stop_test_nodes([Worker1]),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes) - 1),
+  test_utils:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_init((length(WorkerNodes) - 2) * length(?PERMANENT_MODULES)),
 
   receive
-    {ok, Node, Module, Action, _Pid} ->
-      ?assertEqual({Worker1, gateway, stop_worker}, {Node, Module, Action})
+    {ok, Node1, Module1, Action1, _Pid1} ->
+      ?assertEqual({Worker1, gateway, stop_worker}, {Node1, Module1, Action1})
     after 1000 ->
       ?assert(false)
-  end.
+  end,
 
+
+  NewNode2 = test_node_starter:start_test_node(?GET_NODE_NAME(Worker1),?GET_HOST(Worker1),false, []),
+  ?assertEqual(Worker1, NewNode2),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, [Worker1], [Worker1Args]),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
+
+  receive
+    {ok, Node2, Module2, Action2, _Pid2} ->
+      ?assertEqual({Worker1, gateway, start_worker}, {Node2, Module2, Action2})
+  after 1000 ->
+    ?assert(false)
+  end.
 
 %% ====================================================================
 %% SetUp and TearDown functions
 %% ====================================================================
+
+init_per_testcase(workers_list_singleton_and_permanent_test, Config) ->
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+  test_node_starter:start_deps_for_tester_node(),
+
+  NodesUp = test_node_starter:start_test_nodes(3),
+  [CCM | _] = NodesUp,
+  DBNode = ?DB_NODE,
+  Args = [
+    [{node_type, ccm}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {gateway_listener_port, 3217}, {gateway_proxy_port, 3218}, {rest_port, 8443}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {gateway_listener_port, 3219}, {gateway_proxy_port, 3220}, {rest_port, 8444}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {gateway_listener_port, 3221}, {gateway_proxy_port, 3222}, {rest_port, 8445}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}]
+  ],
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, Args),
+
+  lists:append([{nodes, NodesUp}, {dbnode, DBNode}, {args, Args}], Config);
 
 init_per_testcase(_, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
