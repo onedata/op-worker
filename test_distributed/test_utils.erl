@@ -24,6 +24,7 @@
 -define(VIEW_REBUILDING_TIME, 2000).
 -define(FUSE_SESSION_EXP_TIME, 8000).
 -define(REQUEST_HANDLING_TIME, 1000).
+-define(GEN_SERV_CALL_TIMEOUT, 100000).
 
 %% Functions to use instead of timer
 -export([ct_mock/4, wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0,
@@ -126,7 +127,7 @@ wait_for_cluster_cast() ->
 wait_for_cluster_cast(GenServ) ->
   timer:sleep(100),
   Ans = try
-    gen_server:call(GenServ, check, 10000)
+    gen_server:call(GenServ, check, ?GEN_SERV_CALL_TIMEOUT)
         catch
           E1:E2 ->
             {exception, E1, E2}
@@ -171,7 +172,7 @@ wait_for_nodes_registration(NodesNum, TriesNum) ->
 %% ====================================================================
 check_nodes() ->
   try
-    length(gen_server:call({global, ?CCM}, get_nodes, 1000))
+    length(gen_server:call({global, ?CCM}, get_nodes, ?GEN_SERV_CALL_TIMEOUT))
   catch
     E1:E2 ->
       {exception, E1, E2}
@@ -188,7 +189,7 @@ check_nodes() ->
 %% ====================================================================
 check_init(ModulesNum) ->
   try
-    {WList0, StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
+    {WList0, StateNum} = gen_server:call({global, ?CCM}, get_workers, 2000),
     WList = lists:filter(fun({_, ModuleName}) -> not lists:member(ModuleName, ?ignored_modules) end, WList0),
     case length(WList) >= ModulesNum of
       true ->
@@ -199,7 +200,7 @@ check_init(ModulesNum) ->
           {_, CStateNum2} = gen_server:call({?Dispatcher_Name, Node}, get_callbacks, 1000),
           case (StateNum == StateNum2) and (CStateNum == CStateNum2) of
             true -> TmpAns;
-            false -> {wrong_state_nums, Node, StateNum, StateNum2, CStateNum, CStateNum2}
+            false -> [{wrong_state_nums, Node, StateNum, StateNum2, CStateNum, CStateNum2} | TmpAns]
           end
         end,
         lists:foldl(CheckNode, true, Nodes);
@@ -216,9 +217,7 @@ check_init(ModulesNum) ->
 %% @doc Wait until cluster is initialized properly.
 %% @end
 -spec wait_for_cluster_init() -> Ans when
-  Ans :: boolean() | {exception, E1, E2},
-  E1 :: term(),
-  E2 :: term().
+  Ans :: true | no_return().
 %% ====================================================================
 wait_for_cluster_init() ->
   wait_for_cluster_init(0).
@@ -228,21 +227,18 @@ wait_for_cluster_init() ->
 %% @doc Wait until cluster is initialized properly.
 %% @end
 -spec wait_for_cluster_init(ModulesNum :: integer()) -> Ans when
-  Ans :: boolean() | {exception, E1, E2},
-  E1 :: term(),
-  E2 :: term().
+  Ans :: true | no_return().
 %% ====================================================================
 wait_for_cluster_init(ModulesNum) ->
-  Modules = lists:filter(fun({ModuleName, _}) -> not lists:member(ModuleName, ?ignored_modules) end, ?MODULES_WITH_ARGS),
-  wait_for_cluster_init(ModulesNum + length(Modules), 30, []).
+  Modules = lists:filter(fun({ModuleName, _}) -> not lists:member(ModuleName, ?ignored_modules) end, ?Modules_With_Args),
+  wait_for_cluster_init(ModulesNum + length(Modules), 50, []).
 
 %% wait_for_cluster_init/3
 %% ====================================================================
 %% @doc Wait until cluster is initialized properly.
 %% @end
 -spec wait_for_cluster_init(ModulesNum :: integer(), TriesNum :: integer(), Errors :: list()) -> Ans when
-  Ans :: true | ErrorsList,
-  ErrorsList :: list().
+  Ans :: true | no_return().
 %% ====================================================================
 wait_for_cluster_init(ModulesNum, 0, Errors) ->
   case check_init(ModulesNum) of
@@ -296,7 +292,7 @@ wait_for_request_handling() ->
 %% ====================================================================
 check_state_loading() ->
   try
-    gen_server:call({global, ?CCM}, check_state_loaded, 1000)
+    gen_server:call({global, ?CCM}, check_state_loaded, ?GEN_SERV_CALL_TIMEOUT)
   catch
     E1:E2 ->
       {exception, E1, E2}

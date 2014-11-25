@@ -98,6 +98,8 @@ init(_Args) ->
         (_) -> non
     end,
 
+    ets:new(?fslogic_attr_events_state, [public, named_table, set]),
+
     #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispMapFun, sub_procs = SubProcList, plug_in_state = ok}.
 
 %% handle/2
@@ -116,6 +118,12 @@ handle(_ProtocolVersion, healthcheck) ->
 
 handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
+
+handle(_ProtocolVersion, {internal_event, EventType, EventArgs}) ->
+    fslogic_events:handle_event(EventType, EventArgs);
+
+handle(_ProtocolVersion, {internal_event_handle, Method, Args}) ->
+    erlang:apply(fslogic_events, Method, Args);
 
 %% this handler is intended to be called by newly connected clients
 %% TODO: create generic mechanism for getting configuration on client startup
