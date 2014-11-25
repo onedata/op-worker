@@ -17,6 +17,7 @@
 -include_lib("dao/include/common.hrl").
 -include_lib("ctool/include/global_registry/gr_openid.hrl").
 -include_lib("ctool/include/global_registry/gr_groups.hrl").
+-include("oneprovider_modules/dao/dao_spaces.hrl").
 
 %% Every record that will be saved to DB have to be "registered" with this define.
 %% Each registered record should be listed in defined below 'case' block as fallow:
@@ -48,6 +49,7 @@
         id_token_login      -> ?record_info_gen(id_token_login);
         dbsync_state        -> ?record_info_gen(dbsync_state);
         group_details       -> ?record_info_gen(group_details);
+        space_info          -> ?record_info_gen(space_info);
     %next_record        -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).

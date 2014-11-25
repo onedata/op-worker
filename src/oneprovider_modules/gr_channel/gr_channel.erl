@@ -160,6 +160,9 @@ handle(_ProtocolVersion, check_registration) ->
             ok
     end;
 
+handle(ProtocolVersion, {gr_message, Request}) ->
+  updates_handler:update(ProtocolVersion, Request);
+
 handle(_ProtocolVersion, {'EXIT', Pid, Reason}) ->
     case get_state() of
         #?GR_CHANNEL_STATE{status = disconnecting, pid = Pid} ->
