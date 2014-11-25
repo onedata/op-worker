@@ -26,7 +26,6 @@
 -export([get_user/0, get_user/1]).
 -export([save_file/1, get_storage/1]).
 -export([get_space/1]).
--export([list_all_available_blocks/1, save_available_blocks/1]).
 
 %% ====================================================================
 %% API functions
@@ -316,19 +315,6 @@ delete_old_descriptors(ProtocolVersion, Time) ->
             ?error("Error during clearing old descriptors: ~p", [Other]),
             Other
     end.
-
-%% list_all_available_blocks/2
-%% ====================================================================
-%% @doc Gets all available_blocks documents of file, creates document for current provider if such document does not exist
-%% @end
--spec list_all_available_blocks(FullFileName :: string()) -> {ok, [available_blocks_doc()]} | no_return().
-%% ====================================================================
-list_all_available_blocks(FullFileName) ->
-    {ok, #db_document{uuid = FileId}} = get_file(FullFileName), %todo cache this somehow
-    fslogic_available_blocks:call({list_all_available_blocks, FileId}).
-
-save_available_blocks(Document) ->
-    fslogic_available_blocks:call({save_available_blocks, Document}).
 
 %% ====================================================================
 %% Internal functions

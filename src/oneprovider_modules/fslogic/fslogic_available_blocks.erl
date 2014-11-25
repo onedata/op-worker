@@ -45,7 +45,6 @@
 %% High level functions for handling available_blocks document changes
 %% ====================================================================
 %% Every change should pass throught one of this functions
-%todo move this functions to cache process
 
 %% synchronize_file_block/3
 %% ====================================================================
@@ -58,11 +57,11 @@
 synchronize_file_block(FullFileName, Offset, Size) ->
     ct:print("synchronize_file_block(~p,~p,~p)",[FullFileName, Offset, Size]),
     %prepare data
-    {ok, RemoteLocationDocs} = fslogic_objects:list_all_available_blocks(FullFileName),
+    {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
+    {ok, RemoteLocationDocs} = call({list_all_available_blocks, FileId}),
     ProviderId = cluster_manager_lib:get_provider_id(),
     [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
     OtherRemoteLocationDocs = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id =/= ProviderId end, RemoteLocationDocs),
-    FileId = MyRemoteLocationDoc#db_document.record#available_blocks.file_id,
 
     % synchronize file
     OutOfSyncList = fslogic_available_blocks:check_if_synchronized(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc, OtherRemoteLocationDocs),
@@ -75,27 +74,8 @@ synchronize_file_block(FullFileName, Offset, Size) ->
         end, OutOfSyncList),
     SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
 
-    %modify document
-    NewDoc = lists:foldl(fun(Ranges, Acc) ->
-        {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false),
-        fslogic_available_blocks:mark_as_available(Ranges, Acc)
-    end, MyRemoteLocationDoc, SyncedParts),
+    call({file_synchronized, FileId, SyncedParts, FullFileName}). % todo remove FullFileName arg
 
-    % notify cache, db and fuses
-    case MyRemoteLocationDoc == NewDoc of
-        true -> ok;
-        false ->
-            %update size to newest
-            {ok, FileSize} = fslogic_available_blocks:call({get_file_size, FileId}),
-            FinalNewDoc = update_size(NewDoc, FileSize),
-
-            %save available_blocks and notify fuses
-            fslogic_objects:save_available_blocks(FinalNewDoc),
-            lists:foreach(fun(Ranges) ->
-                {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false)
-            end, SyncedParts)
-    end,
-    #atom{value = ?VOK}.
 
 %% file_block_modified/3
 %% ====================================================================
@@ -107,32 +87,8 @@ synchronize_file_block(FullFileName, Offset, Size) ->
 %% ====================================================================
 file_block_modified(FullFileName, Offset, Size) ->
     ct:print("file_block_modified(~p,~p,~p)",[FullFileName, Offset, Size]),
-    % prepare data
-    {ok, RemoteLocationDocs} = fslogic_objects:list_all_available_blocks(FullFileName),
-    ProviderId = cluster_manager_lib:get_provider_id(),
-    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
-    FileId = MyRemoteLocationDoc#db_document.record#available_blocks.file_id,
-
-    % modify document
-    NewDoc = fslogic_available_blocks:mark_as_modified(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc),
-
-    % notify cache, db and fuses
-    case MyRemoteLocationDoc == NewDoc of
-        true -> ok;
-        false ->
-            %update size if this write extends file
-            {ok, {Stamp, FileSize}} = fslogic_available_blocks:call({get_file_size, FileId}),
-            NewFileSizeTuple = case FileSize < Offset + Size of
-                              true ->{fslogic_available_blocks:get_timestamp(), Offset + Size};
-                              false -> {Stamp, FileSize}
-                          end,
-            FinalNewDoc = update_size(NewDoc, NewFileSizeTuple),
-
-            %save available_blocks and notify fuses
-            fslogic_objects:save_available_blocks(FinalNewDoc),
-            fslogic_req_regular:update_file_block_map(FullFileName, [{Offset, Size}], false)
-    end,
-    #atom{value = ?VOK}.
+    {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
+    call({file_block_modified, FileId, Offset, Size, FullFileName}). % todo remove FullFileName arg
 
 %% file_truncated/2
 %% ====================================================================
@@ -144,23 +100,8 @@ file_block_modified(FullFileName, Offset, Size) ->
 %% ====================================================================
 file_truncated(FullFileName, Size) ->
     ct:print("file_truncated(~p,~p)",[FullFileName, Size]),
-    % prepare data
-    {ok, RemoteLocationDocs} = fslogic_objects:list_all_available_blocks(FullFileName),
-    ProviderId = cluster_manager_lib:get_provider_id(),
-    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
-
-    % modify document(with size)
-    NewDoc_ = fslogic_available_blocks:truncate({bytes, Size}, MyRemoteLocationDoc),
-    NewDoc = #db_document{record = #available_blocks{file_parts = Ranges}} = update_size(NewDoc_, {fslogic_available_blocks:get_timestamp(), Size}),
-
-    % notify cache, db and fuses
-    case MyRemoteLocationDoc == NewDoc of
-        true -> ok;
-        false ->
-            fslogic_objects:save_available_blocks(NewDoc),
-            fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true)
-    end,
-    #atom{value = ?VOK}.
+    {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
+    call({file_truncated, FileId, Size, FullFileName}). % todo remove FullFileName arg
 
 db_sync_hook() ->
     MyProviderId = cluster_manager_lib:get_provider_id(),
@@ -168,31 +109,7 @@ db_sync_hook() ->
         (?FILES_DB_NAME, _, _, #db_document{record = #available_blocks{file_id = FileId}, deleted = true}) ->
             fslogic_available_blocks:call({invalidate_blocks_cache, FileId});
         (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}, deleted = false}) when Id =/= MyProviderId ->
-            % prepare data
-            {ok, Docs} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], 1),
-            MyDocs = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id_}}) -> Id_ == MyProviderId end, Docs),
-
-            % if my doc exists...
-            case MyDocs of
-                [MyDoc] ->
-                    % find changed doc
-                    [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_list(Uuid_) == utils:ensure_list(Uuid) end, Docs),
-
-                    % modify my doc (with size) according to changed doc
-                    NewDoc_ = fslogic_available_blocks:mark_other_provider_changes(MyDoc, ChangedDoc),
-                    NewDoc = #db_document{record = #available_blocks{file_parts = Ranges}} = update_size(NewDoc_, ChangedDoc#db_document.record#available_blocks.file_size), %todo probably don't need to update size every time
-
-                    % notify cache, db and fuses
-                    fslogic_available_blocks:call({invalidate_blocks_cache, FileId}),
-                    case NewDoc == MyDoc of
-                        true -> ok;
-                        _ ->
-                            fslogic_available_blocks:call({save_available_blocks, NewDoc}),
-                            {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
-                            {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true)
-                    end;
-                _ -> ok
-            end;
+            fslogic_available_blocks:call({external_available_blocks_changed, utils:ensure_list(FileId), utils:ensure_list(Uuid)});
         (?FILES_DB_NAME, _, _, FileDoc = #db_document{uuid = FileId, record = #file{}, deleted = false}) ->
             {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
             fslogic_file:ensure_file_location_exists(FullFileName, FileDoc);
@@ -213,7 +130,11 @@ registered_requests() ->
         (ProtocolVersion, {get_available_blocks, FileId}, CacheName) -> fslogic_available_blocks:get_available_blocks(ProtocolVersion, CacheName, FileId);
         (ProtocolVersion, {list_all_available_blocks, FileId}, CacheName) -> fslogic_available_blocks:list_all_available_blocks(ProtocolVersion, CacheName, FileId);
         (ProtocolVersion, {get_file_size, FileId}, CacheName) -> fslogic_available_blocks:get_file_size(ProtocolVersion, CacheName, FileId);
-        (ProtocolVersion, {invalidate_blocks_cache, FileId}, CacheName) -> fslogic_available_blocks:invalidate_blocks_cache(ProtocolVersion, CacheName, FileId)
+        (ProtocolVersion, {invalidate_blocks_cache, FileId}, CacheName) -> fslogic_available_blocks:invalidate_blocks_cache(ProtocolVersion, CacheName, FileId);
+        (ProtocolVersion, {file_block_modified, FileId, Offset, Size, FullFileName}, CacheName) -> fslogic_available_blocks:file_block_modified(ProtocolVersion, CacheName, FileId, Offset, Size, FullFileName);
+        (ProtocolVersion, {file_truncated, FileId, Size, FullFileName}, CacheName) -> fslogic_available_blocks:file_truncated(ProtocolVersion, CacheName, FileId, Size, FullFileName);
+        (ProtocolVersion, {file_synchronized, FileId, Ranges, FullFileName}, CacheName) -> fslogic_available_blocks:file_synchronized(ProtocolVersion, CacheName, FileId, Ranges, FullFileName);
+        (ProtocolVersion, {external_available_blocks_changed, FileId, DocumentUuid}, CacheName) -> fslogic_available_blocks:external_available_blocks_changed(ProtocolVersion, CacheName, FileId, DocumentUuid)
     end.
 
 cast(Req) ->
@@ -227,6 +148,106 @@ call(Req) ->
     after ?CACHE_REQUEST_TIMEOUT ->
         ?error("Timeout in call to available_blocks process tree, req: ~p",[Req]),
         {error, timeout}
+    end.
+
+file_synchronized(ProtocolVersion, CacheName, FileId, SyncedParts, FullFileName) ->
+    {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
+    ProviderId = cluster_manager_lib:get_provider_id(),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+
+    %modify document
+    NewDoc = lists:foldl(fun(Ranges, Acc) -> fslogic_available_blocks:mark_as_available(Ranges, Acc) end, MyRemoteLocationDoc, SyncedParts),
+
+    % notify cache, db and fuses
+    case MyRemoteLocationDoc == NewDoc of
+        true -> ok;
+        false ->
+            %update size to newest
+            {ok, FileSize} = get_file_size(ProtocolVersion, CacheName, FileId),
+            FinalNewDoc = update_size(NewDoc, FileSize),
+
+            %save available_blocks and notify fuses
+            save_available_blocks(ProtocolVersion, CacheName, FinalNewDoc),
+            lists:foreach(fun(Ranges) ->
+                {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false)
+            end, SyncedParts)
+    end,
+    #atom{value = ?VOK}.
+
+file_block_modified(ProtocolVersion, CacheName, FileId, Offset, Size, FullFileName) ->
+    % prepare data
+    {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
+    ProviderId = cluster_manager_lib:get_provider_id(),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    FileId = MyRemoteLocationDoc#db_document.record#available_blocks.file_id,
+
+    % modify document
+    NewDoc = fslogic_available_blocks:mark_as_modified(#offset_range{offset = Offset, size = Size}, MyRemoteLocationDoc),
+
+    % notify cache, db and fuses
+    case MyRemoteLocationDoc == NewDoc of
+        true -> ok;
+        false ->
+            %update size if this write extends file
+            {ok, {Stamp, FileSize}} = get_file_size(ProtocolVersion, CacheName, FileId),
+            NewFileSizeTuple = case FileSize < Offset + Size of
+                                   true ->{fslogic_available_blocks:get_timestamp(), Offset + Size};
+                                   false -> {Stamp, FileSize}
+                               end,
+            FinalNewDoc = update_size(NewDoc, NewFileSizeTuple),
+
+            %save available_blocks and notify fuses
+            save_available_blocks(ProtocolVersion, CacheName, FinalNewDoc),
+
+            fslogic_req_regular:update_file_block_map(FullFileName, [{Offset, Size}], false)
+    end,
+    #atom{value = ?VOK}.
+
+file_truncated(ProtocolVersion, CacheName, FileId, Size, FullFileName) ->
+    % prepare data
+    {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
+    ProviderId = cluster_manager_lib:get_provider_id(),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+
+    % modify document(with size)
+    NewDoc_ = fslogic_available_blocks:truncate({bytes, Size}, MyRemoteLocationDoc),
+    NewDoc = #db_document{record = #available_blocks{file_parts = Ranges}} = update_size(NewDoc_, {fslogic_available_blocks:get_timestamp(), Size}),
+
+    % notify cache, db and fuses
+    case MyRemoteLocationDoc == NewDoc of
+        true -> ok;
+        false ->
+            save_available_blocks(ProtocolVersion, CacheName, NewDoc),
+            fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true)
+    end,
+    #atom{value = ?VOK}.
+
+external_available_blocks_changed(ProtocolVersion, CacheName, FileId, DocumentUuid) ->
+    % prepare data
+    MyProviderId = cluster_manager_lib:get_provider_id(),
+    {ok, Docs} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], 1),
+    MyDocs = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id_}}) -> Id_ == MyProviderId end, Docs),
+
+    % if my doc exists...
+    case MyDocs of
+        [MyDoc] ->
+            % find changed doc
+            [ChangedDoc] = lists:filter(fun(#db_document{uuid = Uuid_}) -> utils:ensure_list(Uuid_) == utils:ensure_list(DocumentUuid) end, Docs),
+
+            % modify my doc (with size) according to changed doc
+            NewDoc_ = fslogic_available_blocks:mark_other_provider_changes(MyDoc, ChangedDoc),
+            NewDoc = #db_document{record = #available_blocks{file_parts = Ranges}} = update_size(NewDoc_, ChangedDoc#db_document.record#available_blocks.file_size), %todo probably don't need to update size every time
+
+            % notify cache, db and fuses
+            invalidate_blocks_cache(ProtocolVersion, CacheName, FileId),
+            case NewDoc == MyDoc of
+                true -> ok;
+                _ ->
+                    save_available_blocks(ProtocolVersion, CacheName, NewDoc),
+                    {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
+                    {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true)
+            end;
+        _ -> ok
     end.
 
 save_available_blocks(ProtocolVersion, CacheName, Doc) ->
