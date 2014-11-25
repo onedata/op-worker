@@ -33,7 +33,10 @@ public:
      * Constructs RTransfer priority queue.
      * @param block_size maximal size of block stored in the rt_priority_queue
      */
-    rt_priority_queue(ErlNifUInt64 block_size) : block_size_{block_size} {}
+    rt_priority_queue(ErlNifUInt64 block_size)
+        : block_size_{block_size}
+    {
+    }
 
     /**
      * Pushes block on the rt_priority_queue. If block size is bigger than
@@ -74,14 +77,14 @@ private:
     /// Internal function used to push block on the queue after possible split
     void do_push(const rt_block &block);
 
-    void insert(
-        std::map<rt_interval, std::set<rt_block>::iterator> &file_blocks,
-        const rt_block &block);
+    void
+    insert(std::map<rt_interval, std::set<rt_block>::iterator> &file_blocks,
+           const rt_block &block);
 
-    std::map<rt_interval, std::set<rt_block>::iterator>::iterator erase(
-        std::map<rt_interval, std::set<rt_block>::iterator> &file_blocks,
-        const std::map<rt_interval, std::set<rt_block>::iterator>::iterator &
-            it);
+    std::map<rt_interval, std::set<rt_block>::iterator>::iterator
+    erase(std::map<rt_interval, std::set<rt_block>::iterator> &file_blocks,
+          const std::map<rt_interval, std::set<rt_block>::iterator>::iterator &
+              it);
 };
 
 } // namespace provider

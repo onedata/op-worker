@@ -1,5 +1,5 @@
 /**
- * @file rt_term.h
+ * @file rt_local_term.h
  * @author Konrad Zemek
  * @copyright (C): 2014 ACK CYFRONET AGH
  * This software is released under the MIT license
@@ -17,13 +17,14 @@ namespace one {
 namespace provider {
 
 /**
- * The rt_term class.
- * rt_term object wraps Erlang term by coping it to new environment
+ * The rt_local_term class.
+ * rt_local_term object wraps Erlang term by copying it to new environment
  */
-class rt_term {
+class rt_local_term {
     struct shared_data {
         shared_data(nifpp::TERM src_term)
-            : env_{enif_alloc_env()}, term_{enif_make_copy(env_, src_term)}
+            : env_{enif_alloc_env()}
+            , term_{enif_make_copy(env_, src_term)}
         {
         }
 
@@ -34,14 +35,12 @@ class rt_term {
     };
 
 public:
-    rt_term() {}
-
     /**
-     * rt_term constructor.
+     * rt_local_term constructor.
      * Constructs Erlang term wrapper.
      * @param src_term term to be wrapped
      */
-    rt_term(nifpp::TERM src_term)
+    rt_local_term(nifpp::TERM src_term)
         : shared_data_{std::make_shared<shared_data>(src_term)}
     {
     }
@@ -53,24 +52,14 @@ public:
     }
 
     /**
-     * Compares this rt_term with other rt_term.
+     * Compares this rt_local_term with other rt_local_term.
      * @param term to be compared with
      * @return true if wrapped Erlang term is equal to other wrapped Erlang term
      */
-    bool operator==(const rt_term &rhs) const
+    bool operator==(const rt_local_term &rhs) const
     {
-        return shared_data_->term_ == rhs.shared_data_->term_;
-    }
-
-    /**
-     * Compares this rt_term with other rt_term.
-     * @param term to be compared with
-     * @return true if wrapped Erlang term is less than other wrapped Erlang
-     * term
-     */
-    bool operator<(const rt_term &rhs) const
-    {
-        return shared_data_->term_ < rhs.shared_data_->term_;
+        return shared_data_ == rhs.shared_data_ ||
+               enif_compare(shared_data_->term_, rhs.shared_data_->term_) == 0;
     }
 
 private:

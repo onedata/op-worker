@@ -24,7 +24,8 @@ public:
     /**
      * @copydoc std::runtime_error
      */
-    rt_exception(const std::string &message) : std::runtime_error(message){};
+    rt_exception(const std::string &message)
+        : std::runtime_error(message){};
 };
 
 } // namespace provider

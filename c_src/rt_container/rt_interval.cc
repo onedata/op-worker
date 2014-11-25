@@ -13,7 +13,8 @@ namespace one {
 namespace provider {
 
 rt_interval::rt_interval(ErlNifUInt64 offset, ErlNifUInt64 size)
-    : begin_(offset), end_(offset + size - 1)
+    : begin_(offset)
+    , end_(offset + size - 1)
 {
     if (size == 0)
         throw rt_exception("invalid_interval");

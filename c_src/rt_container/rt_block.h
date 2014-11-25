@@ -10,7 +10,7 @@
 #define RT_BLOCK_H
 
 #include "nifpp.h"
-#include "rt_term.h"
+#include "rt_local_term.h"
 
 #include <list>
 #include <string>
@@ -26,6 +26,12 @@ class rt_block {
 public:
     /**
      * rt_block constructor.
+     * Constructs default  RTransfer block.
+     */
+    rt_block() {}
+
+    /**
+     * rt_block constructor.
      * Constructs RTransfer block.
      * @param file_id ID of file this block is a part of
      * @param offset block offset
@@ -36,16 +42,16 @@ public:
      * @param counter defines how many times block was pushed on the
      * rt_container
      */
-    rt_block(std::string file_id = "", rt_term provider_ref = rt_term(),
-             ErlNifUInt64 offset = 0, ErlNifUInt64 size = 0,
-             ErlNifUInt64 priority = 0,
-             std::list<rt_term> terms = std::list<rt_term>(),
+    rt_block(std::string file_id, rt_local_term provider_ref,
+             ErlNifUInt64 offset, ErlNifUInt64 size, ErlNifUInt64 priority,
+             int retry, std::list<rt_local_term> terms,
              ErlNifUInt64 counter = 1)
         : file_id_{std::move(file_id)}
-        , provider_ref_{std::move(provider_ref)}
+        , provider_ref_{std::make_shared<rt_local_term>(provider_ref)}
         , offset_{offset}
         , size_{size}
         , priority_{priority}
+        , retry_{retry}
         , terms_{std::move(terms)}
         , counter_{counter}
     {
@@ -55,7 +61,7 @@ public:
     const std::string &file_id() const { return file_id_; }
 
     /// Getter for provider ID
-    const rt_term &provider_ref() const { return provider_ref_; }
+    const rt_local_term &provider_ref() const { return *provider_ref_; }
 
     /// Getter for block's offset
     ErlNifUInt64 offset() const { return offset_; }
@@ -69,8 +75,11 @@ public:
     /// Getter for block's priority
     ErlNifUInt64 priority() const { return priority_; }
 
+    /// Getter for block's retry
+    int retry() const { return retry_; }
+
     /// Getter for block's terms
-    const std::list<rt_term> &terms() const { return terms_; }
+    const std::list<rt_local_term> &terms() const { return terms_; }
 
     /// Getter for block's addition counter
     ErlNifUInt64 counter() const { return counter_; }
@@ -79,7 +88,7 @@ public:
      * Appends list of terms to block
      * @param list of terms to be appended to the list of block's terms
      */
-    void appendTerms(const std::list<rt_term> &terms);
+    void appendTerms(const std::list<rt_local_term> &terms);
 
     /**
      * Checks whether this block can be merge with other block. That is
@@ -120,11 +129,12 @@ public:
 
 private:
     std::string file_id_;
-    rt_term provider_ref_;
+    std::shared_ptr<const rt_local_term> provider_ref_;
     ErlNifUInt64 offset_;
     ErlNifUInt64 size_;
     ErlNifUInt64 priority_;
-    std::list<rt_term> terms_;
+    int retry_;
+    std::list<rt_local_term> terms_;
     ErlNifUInt64 counter_;
 };
 

@@ -7,7 +7,7 @@
  */
 
 #include "nifpp.h"
-#include "rt_term.h"
+#include "rt_local_term.h"
 #include "rt_exception.h"
 #include "rt_priority_queue.h"
 
@@ -49,21 +49,22 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
         std::string file_id;
         nifpp::TERM provider_ref;
         ErlNifUInt64 offset, size, priority;
+        int retry;
         std::list<nifpp::TERM> terms;
         auto record = std::make_tuple(std::ref(record_name), std::ref(file_id),
                                       std::ref(provider_ref), std::ref(offset),
                                       std::ref(size), std::ref(priority),
-                                      std::ref(terms));
+                                      std::ref(retry), std::ref(terms));
 
         nifpp::get_throws(env, argv[0], queue);
         nifpp::get_throws(env, argv[1], record);
 
-        std::list<rt_term> rt_terms;
+        std::list<rt_local_term> rt_local_terms;
         for (const auto &term : terms)
-            rt_terms.push_back(rt_term(term));
+            rt_local_terms.push_back(rt_local_term(term));
 
-        rt_block block(file_id, rt_term(provider_ref), offset, size, priority,
-                       rt_terms);
+        rt_block block(file_id, rt_local_term(provider_ref), offset, size,
+                       priority, retry, rt_local_terms);
         queue->push(block);
         ErlNifUInt64 queue_size = queue->size();
 
@@ -93,10 +94,10 @@ static ERL_NIF_TERM pop_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
         for (const auto &term : block.terms())
             terms.push_back(term.get(env));
 
-        auto record
-            = std::make_tuple(nifpp::str_atom("rt_block"), block.file_id(),
-                              block.provider_ref().get(env), block.offset(),
-                              block.size(), block.priority(), terms);
+        auto record = std::make_tuple(
+            nifpp::str_atom("rt_block"), block.file_id(),
+            block.provider_ref().get(env), block.offset(), block.size(),
+            block.priority(), block.retry(), terms);
 
         return nifpp::make(
             env, std::make_tuple(nifpp::str_atom("ok"), queue_size, record));

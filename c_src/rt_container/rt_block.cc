@@ -15,8 +15,8 @@ namespace provider {
 
 bool rt_block::is_mergeable(const rt_block &block)
 {
-    return file_id_ == block.file_id_ && offset_ + size_ == block.offset_
-           && provider_ref_ == block.provider_ref_;
+    return file_id_ == block.file_id_ && offset_ + size_ == block.offset_ &&
+           *provider_ref_ == *block.provider_ref_;
 }
 
 bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
@@ -24,7 +24,7 @@ bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
     return is_mergeable(block) && size_ + block.size_ <= block_size;
 }
 
-void rt_block::appendTerms(const std::list<rt_term> &terms)
+void rt_block::appendTerms(const std::list<rt_local_term> &terms)
 {
     for (const auto &term : terms)
         terms_.push_back(term);
@@ -55,6 +55,7 @@ rt_block &rt_block::operator+=(const rt_block &block)
 {
     provider_ref_ = block.provider_ref_;
     size_ += block.size_;
+    retry_ = std::max<int>(retry_, block.retry_);
     for (const auto &term : block.terms_)
         terms_.push_back(term);
 
@@ -63,11 +64,11 @@ rt_block &rt_block::operator+=(const rt_block &block)
 
 bool operator==(const rt_block &lhs, const rt_block &rhs)
 {
-    return lhs.file_id() == rhs.file_id()
-           && lhs.provider_ref() == rhs.provider_ref()
-           && lhs.offset() == rhs.offset() && lhs.size() == rhs.size()
-           && lhs.priority() == rhs.priority() && lhs.counter() == rhs.counter()
-           && lhs.terms() == rhs.terms();
+    return lhs.file_id() == rhs.file_id() &&
+           lhs.provider_ref() == rhs.provider_ref() &&
+           lhs.offset() == rhs.offset() && lhs.size() == rhs.size() &&
+           lhs.priority() == rhs.priority() && lhs.terms() == rhs.terms() &&
+           lhs.retry() == rhs.retry() && lhs.counter() == rhs.counter();
 }
 
 } // namespace provider

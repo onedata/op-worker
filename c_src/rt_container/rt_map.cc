@@ -15,10 +15,10 @@ namespace provider {
 
 void rt_map::put(const rt_block &block)
 {
-    files_[block.file_id()]
-        += std::make_pair(boost::icl::discrete_interval<ErlNifUInt64>(
-                              block.offset(), block.offset() + block.size()),
-                          block);
+    files_[block.file_id()] +=
+        std::make_pair(boost::icl::discrete_interval<ErlNifUInt64>(
+                           block.offset(), block.offset() + block.size()),
+                       block);
 }
 
 std::list<rt_block> rt_map::get(std::string file_id, ErlNifUInt64 offset,
@@ -31,11 +31,11 @@ std::list<rt_block> rt_map::get(std::string file_id, ErlNifUInt64 offset,
         const auto &interval = it->first;
         const auto &block = it->second;
         ErlNifUInt64 begin = std::max<ErlNifUInt64>(interval.lower(), offset);
-        ErlNifUInt64 end
-            = std::min<ErlNifUInt64>(interval.upper(), offset + size);
+        ErlNifUInt64 end =
+            std::min<ErlNifUInt64>(interval.upper(), offset + size);
         blocks.push_back(rt_block(file_id, block.provider_ref(), begin,
-                                  end - begin, block.priority(), block.terms(),
-                                  block.counter()));
+                                  end - begin, block.priority(), block.retry(),
+                                  block.terms(), block.counter()));
     }
 
     if (!blocks.empty()) {

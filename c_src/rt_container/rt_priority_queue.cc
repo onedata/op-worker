@@ -19,15 +19,16 @@ void rt_priority_queue::push(const rt_block &block)
     for (ErlNifUInt64 i = 0; i < block.size() / block_size_; ++i)
         do_push(rt_block(block.file_id(), block.provider_ref(),
                          block.offset() + i * block_size_, block_size_,
-                         block.priority(), block.terms(), block.counter()));
+                         block.priority(), block.retry(), block.terms(),
+                         block.counter()));
 
     ErlNifUInt64 full_block_amount = block.size() / block_size_;
     ErlNifUInt64 last_block_size = block.size() % block_size_;
     if (last_block_size > 0)
         do_push(rt_block(block.file_id(), block.provider_ref(),
                          block.offset() + full_block_amount * block_size_,
-                         last_block_size, block.priority(), block.terms(),
-                         block.counter()));
+                         last_block_size, block.priority(), block.retry(),
+                         block.terms(), block.counter()));
 }
 
 rt_block rt_priority_queue::pop()
@@ -75,8 +76,8 @@ void rt_priority_queue::change_counter(std::string file_id, ErlNifUInt64 offset,
         insert(file_blocks,
                rt_block(it->second->file_id(), it->second->provider_ref(),
                         it->second->offset(), offset - it->second->offset(),
-                        it->second->priority(), it->second->terms(),
-                        it->second->counter()));
+                        it->second->priority(), it->second->retry(),
+                        it->second->terms(), it->second->counter()));
     else
         offset = it->second->offset();
 
@@ -84,12 +85,13 @@ void rt_priority_queue::change_counter(std::string file_id, ErlNifUInt64 offset,
         if (end < it->second->end()) {
             rt_block b1(
                 it->second->file_id(), it->second->provider_ref(), offset,
-                end + 1 - offset, it->second->priority(), it->second->terms(),
+                end + 1 - offset, it->second->priority(), it->second->retry(),
+                it->second->terms(),
                 std::max<ErlNifUInt64>(0, it->second->counter() + change));
             rt_block b2(it->second->file_id(), it->second->provider_ref(),
                         end + 1, it->second->end() - end,
-                        it->second->priority(), it->second->terms(),
-                        it->second->counter());
+                        it->second->priority(), it->second->retry(),
+                        it->second->terms(), it->second->counter());
             it = erase(file_blocks, it);
             insert(file_blocks, b1);
             insert(file_blocks, b2);
@@ -97,7 +99,7 @@ void rt_priority_queue::change_counter(std::string file_id, ErlNifUInt64 offset,
             rt_block b(
                 it->second->file_id(), it->second->provider_ref(), offset,
                 it->second->end() + 1 - offset, it->second->priority(),
-                it->second->terms(),
+                it->second->retry(), it->second->terms(),
                 std::max<ErlNifUInt64>(0, it->second->counter() + change));
             it = erase(file_blocks, it);
             if (it != file_blocks.end())
@@ -123,8 +125,8 @@ void rt_priority_queue::do_push(const rt_block &block)
             insert(file_blocks,
                    rt_block(it->second->file_id(), it->second->provider_ref(),
                             it->second->offset(), offset - it->second->offset(),
-                            it->second->priority(), it->second->terms(),
-                            it->second->counter()));
+                            it->second->priority(), it->second->retry(),
+                            it->second->terms(), it->second->counter()));
         }
 
         while (it != file_blocks.end() && it->second->offset() <= block.end()) {
@@ -132,29 +134,33 @@ void rt_priority_queue::do_push(const rt_block &block)
                 insert(file_blocks,
                        rt_block(block.file_id(), block.provider_ref(), offset,
                                 it->second->offset() - offset, block.priority(),
-                                block.terms(), block.counter()));
+                                block.retry(), block.terms(), block.counter()));
                 offset = it->second->offset();
             } else {
                 if (block.end() < it->second->end()) {
-                    rt_block b1(block.file_id(), block.provider_ref(), offset,
-                                block.end() - offset + 1, block.priority(),
-                                it->second->terms(),
-                                it->second->counter() + block.counter());
+                    rt_block b1(
+                        block.file_id(), block.provider_ref(), offset,
+                        block.end() - offset + 1, block.priority(),
+                        std::max<int>(it->second->retry(), block.retry()),
+                        it->second->terms(),
+                        it->second->counter() + block.counter());
                     b1.appendTerms(block.terms());
                     rt_block b2(it->second->file_id(),
                                 it->second->provider_ref(), block.end() + 1,
                                 it->second->end() - block.end(),
-                                it->second->priority(), it->second->terms(),
-                                it->second->counter());
+                                it->second->priority(), it->second->retry(),
+                                it->second->terms(), it->second->counter());
                     offset = it->second->end() + 1;
                     it = erase(file_blocks, it);
                     insert(file_blocks, b1);
                     insert(file_blocks, b2);
                 } else {
-                    rt_block b(block.file_id(), block.provider_ref(), offset,
-                               it->second->end() - offset + 1, block.priority(),
-                               it->second->terms(),
-                               it->second->counter() + block.counter());
+                    rt_block b(
+                        block.file_id(), block.provider_ref(), offset,
+                        it->second->end() - offset + 1, block.priority(),
+                        std::max<int>(it->second->retry(), block.retry()),
+                        it->second->terms(),
+                        it->second->counter() + block.counter());
                     b.appendTerms(block.terms());
                     offset = it->second->end() + 1;
                     it = erase(file_blocks, it);
@@ -167,7 +173,7 @@ void rt_priority_queue::do_push(const rt_block &block)
             insert(file_blocks,
                    rt_block(block.file_id(), block.provider_ref(), offset,
                             block.end() - offset + 1, block.priority(),
-                            block.terms(), block.counter()));
+                            block.retry(), block.terms(), block.counter()));
         }
     }
 }

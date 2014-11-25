@@ -8,7 +8,7 @@
 
 #include "nifpp.h"
 #include "rt_map.h"
-#include "rt_term.h"
+#include "rt_local_term.h"
 #include "rt_exception.h"
 
 #include <set>
@@ -45,21 +45,22 @@ static ERL_NIF_TERM put_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
         std::string file_id;
         nifpp::TERM provider_ref;
         ErlNifUInt64 offset, size, priority;
+        int retry;
         std::list<nifpp::TERM> terms;
         auto record = std::make_tuple(std::ref(record_name), std::ref(file_id),
                                       std::ref(provider_ref), std::ref(offset),
                                       std::ref(size), std::ref(priority),
-                                      std::ref(terms));
+                                      std::ref(retry), std::ref(terms));
 
         nifpp::get_throws(env, argv[0], map);
         nifpp::get_throws(env, argv[1], record);
 
-        std::list<rt_term> rt_terms;
+        std::list<rt_local_term> rt_local_terms;
         for (const auto &term : terms)
-            rt_terms.push_back(rt_term(term));
+            rt_local_terms.push_back(rt_local_term(term));
 
-        rt_block block(file_id, rt_term(provider_ref), offset, size, priority,
-                       rt_terms);
+        rt_block block(file_id, rt_local_term(provider_ref), offset, size,
+                       priority, retry, rt_local_terms);
         map->put(block);
 
         return nifpp::make(env, nifpp::str_atom("ok"));
@@ -86,17 +87,17 @@ static ERL_NIF_TERM get_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
         nifpp::get_throws(env, argv[3], size);
 
         std::list<std::tuple<nifpp::str_atom, std::string, nifpp::TERM,
-                             ErlNifUInt64, ErlNifUInt64, ErlNifUInt64,
+                             ErlNifUInt64, ErlNifUInt64, ErlNifUInt64, int,
                              std::list<nifpp::TERM>>> records;
 
         for (const auto &block : map->get(file_id, offset, size)) {
             std::list<nifpp::TERM> terms;
             for (const auto &term : block.terms())
                 terms.push_back(term.get(env));
-            records.push_back(
-                std::make_tuple(nifpp::str_atom("rt_block"), block.file_id(),
-                                block.provider_ref().get(env), block.offset(),
-                                block.size(), block.priority(), terms));
+            records.push_back(std::make_tuple(
+                nifpp::str_atom("rt_block"), block.file_id(),
+                block.provider_ref().get(env), block.offset(), block.size(),
+                block.priority(), block.retry(), terms));
         }
 
         return nifpp::make(env,
