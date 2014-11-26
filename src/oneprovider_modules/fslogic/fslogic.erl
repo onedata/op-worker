@@ -77,6 +77,8 @@ init(_Args) ->
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
         ({external_available_blocks_changed, FileId, _}) ->
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
+        ({file_block_modified, FileId, _, _, _}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
         ({_, FileId}) ->
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId)
     end,
@@ -100,6 +102,7 @@ init(_Args) ->
         ({file_truncated, _, _, _}) -> available_blocks_dao_proxy;
         ({file_synchronized, _, _, _}) -> available_blocks_dao_proxy;
         ({external_available_blocks_changed, _, _}) -> available_blocks_dao_proxy;
+        ({file_block_modified, _, _, _, _}) -> available_blocks_dao_proxy;
         (_) -> non
     end,
     DispMapFun = fun
@@ -118,6 +121,8 @@ init(_Args) ->
         ({file_synchronized, FileId, _, _}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
         ({external_available_blocks_changed, FileId, _}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
+        ({file_block_modified, FileId, _, _, _}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
         ({get_file_size, FileId}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
