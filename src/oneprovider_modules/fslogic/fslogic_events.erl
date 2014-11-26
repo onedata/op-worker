@@ -82,13 +82,17 @@ delayed_push_attrs(FileUUID) ->
 -spec push_new_attrs(FileUUID :: uuid()) -> [Result :: ok | {error, Reason :: any()}].
 %% ====================================================================
 push_new_attrs(FileUUID) ->
-   lists:flatten(push_new_attrs3(FileUUID, 0, 100)).
-push_new_attrs3(FileUUID, Offset, Count) ->
+    Res0 = push_new_attrs3(list_descriptors, fun(#file_descriptor{fuse_id = FID}) -> FID end,
+                            FileUUID, 0, 100),
+    Res1 = push_new_attrs3(list_attr_watchers, fun(#file_attr_watcher{fuse_id = FID}) -> FID end,
+                            FileUUID, 0, 100),
+    lists:flatten([Res0, Res1]).
+push_new_attrs3(ListMethod, RecToFuseId, FileUUID, Offset, Count) ->
     ets:delete(?fslogic_attr_events_state, utils:ensure_binary(FileUUID)),
-    {ok, FDs} = dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {FileUUID, ""}}, Count, Offset], 1),
+    {ok, FDs} = dao_lib:apply(dao_vfs, ListMethod, [{by_uuid_n_owner, {utils:ensure_list(FileUUID), ""}}, Count, Offset], 1),
     Fuses0 = lists:map(
-        fun(#db_document{record = #file_descriptor{fuse_id = FuseID}}) ->
-            FuseID
+        fun(#db_document{record = Record}) ->
+            RecToFuseId(Record)
         end, FDs),
     Fuses1 = lists:usort(Fuses0),
     ?info("Pushing new attributes for file ~p to fuses ~p", [FileUUID, Fuses1]),
@@ -105,5 +109,5 @@ push_new_attrs3(FileUUID, Offset, Count) ->
                     ?debug("Sending msg to fuse ~p: ~p", [FuseID, Res]),
                     Res
                 end, FuseIDs),
-            [push_new_attrs3(FileUUID, Offset + Count, 100) | Results]
+            [push_new_attrs3(ListMethod, RecToFuseId, FileUUID, Offset + Count, 100) | Results]
     end.

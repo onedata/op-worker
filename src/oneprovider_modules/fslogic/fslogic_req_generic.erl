@@ -205,6 +205,18 @@ get_file_attr(FileDoc = #db_document{record = #file{}}) ->
             true -> StorageFileSize;
             _ -> SizeFromDB
         end,
+
+    FuseId = fslogic_context:get_fuse_id(),
+
+    spawn(fun() ->
+        dao_lib:apply(dao_vfs, remove_attr_watcher, [FileUUID, FuseId], 1),
+        dao_lib:apply(dao_vfs, save_attr_watcher,
+            [#file_attr_watcher{
+                fuse_id = FuseId,
+                file = FileUUID, create_time = utils:mtime(),
+                validity_time = timer:minutes(5)}], 1)
+    end),
+
     #fileattr{uuid = utils:ensure_list(FileUUID), answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
         type = Type, size = FileSize, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
         gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links, has_acl = HasAcl};
