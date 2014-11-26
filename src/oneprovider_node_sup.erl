@@ -102,7 +102,6 @@ handle_test_init(NodeType) ->
     ?Sup_Child(request_dispatcher, request_dispatcher, permanent, []),
     ?Sup_Child(cluster_manager, cluster_manager, permanent, [test]),
     ?Sup_Child(node_manager, node_manager, permanent, [NodeType])
-        ?Sup_Child(gr_channel, gr_channel, permanent, [])
   ]}}.
 -else.
 handle_test_init(_NodeType) ->
