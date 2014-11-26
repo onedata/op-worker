@@ -114,6 +114,12 @@ websocket_terminate(_Reason, _Req, _State) ->
 %% Internal functions
 %% ====================================================================
 
+%% send_to_gr_channel/1
+%% ====================================================================
+%% @doc Decode message and send to gr_channel module.
+%% @end
+-spec send_to_gr_channel(Data :: binary()) -> ok.
+%% ====================================================================
 send_to_gr_channel(Data) ->
   try
     {ok, GRMessage} = pb:decode("gr_communication_protocol", "message", Data),
@@ -133,4 +139,5 @@ send_to_gr_channel(Data) ->
   catch
     E1:E2 ->
       ?error("Dispatcher connection error: ~p:~p for request ~p", [E1, E2, Data])
-  end.
+  end,
+  ok.

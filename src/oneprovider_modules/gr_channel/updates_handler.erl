@@ -22,6 +22,12 @@
 %% API
 %% ===================================================================
 
+%% update/1
+%% ====================================================================
+%% @doc Update DB (triggered by GR requests).
+%% @end
+-spec update(ProtocolVersion :: non_neg_integer(), Request :: term()) -> ok.
+%% ====================================================================
 update(_ProtocolVersion, Request) when is_record(Request, spacemodified) ->
   Id = binary_to_list(Request#spacemodified.id),
   Name = Request#spacemodified.name,
