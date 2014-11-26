@@ -41,6 +41,7 @@ ct: deps compile
 	-@mkdir -p ebin ; touch ebin/.test 
 	 cp -R clproto/proto src
 	 cp -R rtproto/proto src
+	 cp -R deps/prproto/proto src
 	./rebar -D TEST compile
 	rm -rf src/proto
 #	./rebar ct skip_deps=true
