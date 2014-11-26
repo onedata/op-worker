@@ -92,7 +92,6 @@ cleanup() ->
 -spec maybe_handle_message(RequestBody :: tuple(), SpaceId :: binary()) -> Result :: term().
 %% ====================================================================
 maybe_handle_message(RequestBody, SpaceId) ->
-    ct:print("maybe_handle_message REMOTE REQ: ~p",[RequestBody]),
     {ok, #space_info{providers = Providers}} = fslogic_objects:get_space({uuid, SpaceId}),
     Self = cluster_manager_lib:get_provider_id(),
     case lists:member(Self, Providers) of

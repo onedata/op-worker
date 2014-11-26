@@ -448,36 +448,20 @@ handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mo
     fslogic_req_regular:get_new_file_location(FullFileName, Mode, ForceClusterProxy);
 
 handle_fuse_message(Req = #synchronizefileblock{logical_name = FName, offset = Offset, size = Size}) ->
-    Ref=make_ref(),
-    ct:print("~p:req ~p",[Ref, Req]),
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    Res = fslogic_available_blocks:synchronize_file_block(FullFileName, Offset, Size),
-    ct:print("~p:res ~p", [Ref,Res]),
-    Res;
+    fslogic_available_blocks:synchronize_file_block(FullFileName, Offset, Size);
 
 handle_fuse_message(Req = #fileblockmodified{logical_name = FName, offset = Offset, size = Size}) ->
-    Ref=make_ref(),
-    ct:print("~p:req ~p",[Ref, Req]),
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    Res = fslogic_available_blocks:file_block_modified(FullFileName, Offset, Size),
-    ct:print("~p:res ~p", [Ref,Res]),
-    Res;
+    fslogic_available_blocks:file_block_modified(FullFileName, Offset, Size);
 
 handle_fuse_message(Req = #filetruncated{logical_name = FName, size = Size}) ->
-    Ref=make_ref(),
-    ct:print("~p:req ~p",[Ref, Req]),
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    Res = fslogic_available_blocks:file_truncated(FullFileName, Size),
-    ct:print("~p:res ~p", [Ref,Res]),
-    Res;
+    fslogic_available_blocks:file_truncated(FullFileName, Size);
 
 handle_fuse_message(Req = #requestfileblock{logical_name = FName, offset = Offset, size = Size}) ->
-    Ref=make_ref(),
-    ct:print("~p:req ~p",[Ref, Req]),
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    Res = fslogic_available_blocks:synchronize_file_block(FullFileName, Offset, Size),
-    ct:print("~p:res ~p", [Ref,Res]),
-    Res;
+    fslogic_available_blocks:synchronize_file_block(FullFileName, Offset, Size);
 
 handle_fuse_message(Req = #createfileack{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
