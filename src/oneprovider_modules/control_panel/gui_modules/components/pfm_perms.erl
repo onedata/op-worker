@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains code for file_manager permissions editor component.
+%% @doc: This file contains code for file_manager's permissions editor component.
 %% It consists of several functions that render n2o elements and implement logic.
 %% @end
 %% ===================================================================
@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init/0, perms_popup/1, event/1, api_event/3]).
+-export([init/0, perms_popup/1, file_manager_event/1, api_event/3]).
 -export([populate_acl_list/1, change_perms_type/1, submit_perms/2, show_permissions_info/0]).
 -export([edit_acl/1, move_acl/2, submit_acl/6, delete_acl/1]).
 -export([fs_has_perms/2, fs_chmod/3, fs_get_acl/1, fs_set_acl/3]).
@@ -330,11 +330,11 @@ show_permissions_info() ->
 %% ====================================================================
 api_event("submit_perms_event", Args, _Ctx) ->
     [Perms, Recursive] = mochijson2:decode(Args),
-    event({action, submit_perms, [Perms, Recursive]});
+    file_manager_event({action, submit_perms, [Perms, Recursive]});
 
 api_event("change_perms_type_event", Args, _Ctx) ->
     EnableACL = mochijson2:decode(Args),
-    event({action, change_perms_type, [EnableACL]});
+    file_manager_event({action, change_perms_type, [EnableACL]});
 
 api_event("delete_acl_event", Args, _) ->
     IndexRaw = mochijson2:decode(Args),
@@ -342,7 +342,7 @@ api_event("delete_acl_event", Args, _) ->
                 I when is_integer(I) -> I;
                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
             end,
-    event({action, delete_acl, [Index]});
+    file_manager_event({action, delete_acl, [Index]});
 
 api_event("edit_acl_event", Args, _) ->
     IndexRaw = mochijson2:decode(Args),
@@ -350,7 +350,7 @@ api_event("edit_acl_event", Args, _) ->
                 I when is_integer(I) -> I;
                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
             end,
-    event({action, edit_acl, [Index]});
+    file_manager_event({action, edit_acl, [Index]});
 
 api_event("move_acl_event", Args, _) ->
     [IndexRaw, MoveUp] = mochijson2:decode(Args),
@@ -358,7 +358,7 @@ api_event("move_acl_event", Args, _) ->
                 I when is_integer(I) -> I;
                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
             end,
-    event({action, move_acl, [Index, MoveUp]});
+    file_manager_event({action, move_acl, [Index, MoveUp]});
 
 api_event("submit_acl_event", Args, _) ->
     [IndexRaw, SelectedIdentifier, Type, Read, Write, Execute] = mochijson2:decode(Args),
@@ -366,20 +366,20 @@ api_event("submit_acl_event", Args, _) ->
                 I when is_integer(I) -> I;
                 Bin when is_binary(Bin) -> binary_to_integer(Bin)
             end,
-    event({action, submit_acl, [Index, SelectedIdentifier, Type, Read, Write, Execute]}).
+    file_manager_event({action, submit_acl, [Index, SelectedIdentifier, Type, Read, Write, Execute]}).
 
 
 %% event/1
 %% ====================================================================
 %% @doc n2o callback, called when a postback is generated.
 %% @end
--spec event(Tag :: term()) -> term().
+-spec file_manager_event(Tag :: term()) -> term().
 %% ====================================================================
-event({action, Fun}) ->
+file_manager_event({action, Fun}) ->
     page_file_manager:event({action, ?MODULE, Fun, []});
 
 
-event({action, Fun, Args}) ->
+file_manager_event({action, Fun, Args}) ->
     page_file_manager:event({action, ?MODULE, Fun, Args}).
 
 

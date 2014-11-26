@@ -12,6 +12,10 @@
     margin: 0 !important;
 }
 
+.no-border {
+    border-width: 0;
+}
+
 .login-page {
     width: 500px;
     max-width: 80%;

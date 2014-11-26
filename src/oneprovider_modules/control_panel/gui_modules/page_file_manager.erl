@@ -23,7 +23,8 @@
 -export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
 -export([toggle_view/1, select_item/1, select_all/0, deselect_all/0]).
 -export([clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0, confirm_paste/0]).
--export([rename_item/2, create_directory/1, remove_selected/0, search/1, toggle_column/2, show_popup/1, hide_popup/0, path_navigator_body/1]).
+-export([rename_item/2, create_directory/1, remove_selected/0, search/1, toggle_column/2]).
+-export([show_popup/1, hide_popup/0, path_navigator_body/1]).
 -export([item_is_dir/1, item_find/1, item_attr/2]).
 -export([fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
 -export([fs_list_dir/1, fs_list_dir_to_paths/1, fs_list_dir_to_items/1]).
@@ -34,8 +35,14 @@
 % Attributes displayed by default
 -define(DEFAULT_ATTRIBUTES, [size, atime, mtime]).
 
+% Column width of attributes columns
+-define(ATTRIBUTE_COLUMN_WIDTH, 150).
+
 % How often should comet process check for changes in current dir
 -define(AUTOREFRESH_PERIOD, 1000).
+
+% Reference to main comet pid
+-define(COMET_PID, comet_pid).
 
 
 % Item is either a file or a dir represented in manager
@@ -73,7 +80,8 @@ title() -> <<"File manager">>.
 %% This will be placed in the template instead of {{custom}} tag
 custom() ->
     <<"<script src=\"/js/oneprovider_upload.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
-    "<script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>">>.
+    "<script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
+    "<script src=\"/js/file_chunks_bar.js\" type=\"text/javascript\" charset=\"utf-8\"></script>">>.
 
 %% This will be placed in the template instead of {{css}} tag
 css() ->
@@ -86,7 +94,7 @@ body() ->
     gui_jq:wire(#api{name = "confirm_paste_event", tag = "confirm_paste_event"}, false),
     pfm_perms:init(),
     [
-        #panel{class= <<"page-container">>, body = [
+        #panel{class = <<"page-container">>, body = [
             #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
                 #image{image = <<"/images/spinner.gif">>}
             ]},
@@ -249,7 +257,9 @@ event(init) ->
             AccessToken = opn_gui_utils:get_access_token(),
             Hostname = gui_ctx:get_requested_hostname(),
             {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(GRUID, AccessToken, Hostname) end),
-            put(comet_pid, Pid)
+            put(?COMET_PID, Pid),
+            % Initialize comet process that handles data distribution view
+            pfm_data_dist:init(GRUID, UserAccessToken, Pid)
     end;
 
 
@@ -280,15 +290,16 @@ event({action, Module, Fun, Args}) ->
                     Other
             end
         end, Args),
-    opn_gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, Module, Fun, NewArgs}]).
+    opn_gui_utils:apply_or_redirect(erlang, send, [get(?COMET_PID), {action, Module, Fun, NewArgs}]).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Comet loop and functions evaluated by comet
 comet_loop_init(GRUID, UserAccessToken, RequestedHostname) ->
-    % Initialize page state
+    % Initialize context
     fslogic_context:set_gr_auth(GRUID, UserAccessToken),
 
+    % Initialize page state
     set_requested_hostname(RequestedHostname),
     set_working_directory(<<"/">>),
     set_selected_items([]),
@@ -328,6 +339,9 @@ comet_loop(IsUploadInProgress) ->
                     true;
                 upload_finished ->
                     false;
+                {put, Key, Value} ->
+                    put(Key, Value),
+                    IsUploadInProgress;
                 Other ->
                     ?debug("Unrecognized comet message in page_file_manager: ~p", [Other]),
                     IsUploadInProgress
@@ -990,7 +1004,7 @@ grid_view_body() ->
 % Render list view workspace
 list_view_body() ->
     NumAttr = erlang:max(1, length(get_displayed_file_attributes())),
-    CellWidth = <<"width: 150px;">>,
+    CellWidth = <<"width: ", (integer_to_binary(?ATTRIBUTE_COLUMN_WIDTH))/binary, "px;">>,
     HiddenAttrs = ?ALL_ATTRIBUTES -- get_displayed_file_attributes(),
     gui_jq:wire(<<"initialize_table_header_scrolling();">>),
     HeaderTable = [
@@ -1102,7 +1116,7 @@ list_view_body() ->
                                                 style = <<"font-size: 18px; position: absolute; top: 0px; left: 0; z-index: 1; color: rgb(82, 100, 118);">>};
                                             false -> <<"">>
                                         end,
-                            #td{body = #span{class = <<"table-cell">>, body = [
+                            #td{style = <<"position: relative;">>, class = <<"list-view-name-column">>, body = [
                                 #panel{style = <<"display: inline-block; vertical-align: middle; position: relative;">>, body = [
                                     #link{id = ImageID, target = <<"_blank">>,
                                         url = <<?user_content_download_path, "/", (gui_str:url_encode(FullPath))/binary>>, body = [
@@ -1113,8 +1127,8 @@ list_view_body() ->
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
                                     #link{id = LinkID, body = gui_str:html_encode(Basename), target = <<"_blank">>,
                                         url = <<?user_content_download_path, "/", (gui_str:url_encode(FullPath))/binary>>}
-                                ]}
-                            ]}}
+                                ]}] ++ pfm_data_dist:data_distribution_panel(FullPath, Counter)
+                            }
                     end
                 ] ++
                 lists:map(
@@ -1125,9 +1139,9 @@ list_view_body() ->
             {TableRow, Counter + 1}
         end, 1, get_item_list()),
     % Set filename containers width
-    ContentWithoutFilename = 100 + (51 + round(90 * (2 + NumAttr) / NumAttr)) * NumAttr, % 51 is padding + border
+    ContentWithoutFilename = 100 + (?ATTRIBUTE_COLUMN_WIDTH + 51) * NumAttr, % 51 is cell padding
     gui_jq:wire(<<"window.onresize = function(e) { $('.filename_row').css('max-width', ",
-    "'' +($(window).width() - ", (integer_to_binary(ContentWithoutFilename))/binary, ") + 'px'); }; $(window).resize();">>),
+    "'' +($('#header_table').width() - ", (integer_to_binary(ContentWithoutFilename))/binary, ") + 'px'); }; $(window).resize();">>),
     [
         HeaderTable,
         #table{id = <<"main_table">>, class = <<"table table-bordered">>,
