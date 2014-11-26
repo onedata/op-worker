@@ -75,8 +75,12 @@ synchronize_file_block(FullFileName, Offset, Size) ->
         end, OutOfSyncList),
     SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
 
-    cast({file_synchronized, FileId, SyncedParts, FullFileName}), % todo remove FullFileName arg
+    case SyncedParts of
+        [] -> ok;
+        _ -> cast({file_synchronized, FileId, SyncedParts, FullFileName}) % todo remove FullFileName arg
+    end,
     #atom{value = ?VOK}.
+
 
 %% file_block_modified/3
 %% ====================================================================
