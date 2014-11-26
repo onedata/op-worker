@@ -12,7 +12,6 @@
 
 -include("registered_names.hrl").
 -include("oneprovider_modules/rtransfer/rt_container.hrl").
--include("oneprovider_modules/rtransfer/rt_priority_queue.hrl").
 
 -on_load(load_nif/0).
 
@@ -28,6 +27,12 @@
     handle_info/2,
     terminate/2,
     code_change/3]).
+
+%% gen_server state
+%% * container - pointer to container resource created as a call to rt_container:init_nif() function
+%% * size - amount of elements stored in the container
+%% * subscribers - list of pairs {reference(), pid()} used to notify processes about container state
+-record(state, {container_ptr, size = 0, subscribers = []}).
 
 %% ====================================================================
 %% API functions

@@ -14,6 +14,11 @@
 namespace one {
 namespace provider {
 
+rt_priority_queue::rt_priority_queue(ErlNifUInt64 block_size)
+    : block_size_{block_size}
+{
+}
+
 void rt_priority_queue::push(const rt_block &block)
 {
     for (ErlNifUInt64 i = 0; i < block.size() / block_size_; ++i)
@@ -60,11 +65,15 @@ rt_block rt_priority_queue::pop()
     return block;
 }
 
-void rt_priority_queue::change_counter(std::string file_id, ErlNifUInt64 offset,
-                                       ErlNifUInt64 size,
+void rt_priority_queue::change_counter(const std::string &file_id,
+                                       ErlNifUInt64 offset, ErlNifUInt64 size,
                                        ErlNifSInt64 change = 1)
 {
-    auto &file_blocks = files_blocks_[file_id];
+    auto find_result = files_blocks_.find(file_id);
+    if (find_result == files_blocks_.end())
+        return;
+
+    auto &file_blocks = find_result->second;
     auto it = file_blocks.lower_bound(rt_interval(offset, 1));
 
     if (it == file_blocks.end())
@@ -111,13 +120,13 @@ void rt_priority_queue::change_counter(std::string file_id, ErlNifUInt64 offset,
 
 ErlNifUInt64 rt_priority_queue::size() const { return blocks_.size(); }
 
-void rt_priority_queue::do_push(const rt_block &block)
+void rt_priority_queue::do_push(rt_block block)
 {
     auto &file_blocks = files_blocks_[block.file_id()];
     auto it = file_blocks.lower_bound(rt_interval(block.offset(), 1));
 
     if (it == file_blocks.end()) {
-        insert(file_blocks, block);
+        insert(file_blocks, std::move(block));
     } else {
         ErlNifUInt64 offset = block.offset();
 
@@ -152,8 +161,8 @@ void rt_priority_queue::do_push(const rt_block &block)
                                 it->second->terms(), it->second->counter());
                     offset = it->second->end() + 1;
                     it = erase(file_blocks, it);
-                    insert(file_blocks, b1);
-                    insert(file_blocks, b2);
+                    insert(file_blocks, std::move(b1));
+                    insert(file_blocks, std::move(b2));
                 } else {
                     rt_block b(
                         block.file_id(), block.provider_ref(), offset,
@@ -164,7 +173,7 @@ void rt_priority_queue::do_push(const rt_block &block)
                     b.appendTerms(block.terms());
                     offset = it->second->end() + 1;
                     it = erase(file_blocks, it);
-                    insert(file_blocks, b);
+                    insert(file_blocks, std::move(b));
                 }
             }
         }
@@ -180,9 +189,9 @@ void rt_priority_queue::do_push(const rt_block &block)
 
 void rt_priority_queue::insert(
     std::map<rt_interval, std::set<rt_block>::iterator> &file_blocks,
-    const rt_block &block)
+    rt_block block)
 {
-    auto result = blocks_.insert(block);
+    auto result = blocks_.emplace(std::move(block));
     file_blocks[rt_interval(block.offset(), block.size())] = result.first;
 }
 

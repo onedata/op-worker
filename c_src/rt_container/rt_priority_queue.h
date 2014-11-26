@@ -13,10 +13,11 @@
 #include "rt_block.h"
 #include "rt_interval.h"
 
-#include <map>
 #include <set>
+#include <map>
 #include <list>
 #include <string>
+#include <unordered_map>
 
 namespace one {
 namespace provider {
@@ -33,10 +34,7 @@ public:
      * Constructs RTransfer priority queue.
      * @param block_size maximal size of block stored in the rt_priority_queue
      */
-    rt_priority_queue(ErlNifUInt64 block_size)
-        : block_size_{block_size}
-    {
-    }
+    rt_priority_queue(ErlNifUInt64 block_size);
 
     /**
      * Pushes block on the rt_priority_queue. If block size is bigger than
@@ -48,7 +46,7 @@ public:
 
     /**
      * Pops block from the top of rt_priority_queue
-     * @return poped block
+     * @return popped block
      */
     rt_block pop();
 
@@ -59,7 +57,7 @@ public:
      * @param size length of range
      * @param change value to be added to current blocks' counter value
      */
-    void change_counter(std::string file_id, ErlNifUInt64 offset,
+    void change_counter(const std::string &file_id, ErlNifUInt64 offset,
                         ErlNifUInt64 size, ErlNifSInt64 change);
 
     /**
@@ -70,16 +68,17 @@ public:
 
 private:
     ErlNifUInt64 block_size_;
-    std::map<std::string, std::map<rt_interval, std::set<rt_block>::iterator>>
+    std::unordered_map<std::string,
+                       std::map<rt_interval, std::set<rt_block>::iterator>>
         files_blocks_;
     std::set<rt_block> blocks_;
 
     /// Internal function used to push block on the queue after possible split
-    void do_push(const rt_block &block);
+    void do_push(rt_block block);
 
     void
     insert(std::map<rt_interval, std::set<rt_block>::iterator> &file_blocks,
-           const rt_block &block);
+           rt_block block);
 
     std::map<rt_interval, std::set<rt_block>::iterator>::iterator
     erase(std::map<rt_interval, std::set<rt_block>::iterator> &file_blocks,

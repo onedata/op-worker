@@ -11,20 +11,21 @@
 #include "rt_local_term.h"
 #include "rt_exception.h"
 
-#include <set>
 #include <string>
 #include <functional>
+#include <unordered_set>
 
 using namespace one::provider;
 
-static int load(ErlNifEnv *env, void **priv, ERL_NIF_TERM load_info)
+namespace {
+
+int load(ErlNifEnv *env, void **priv, ERL_NIF_TERM load_info)
 {
     nifpp::register_resource<rt_map>(env, nullptr, "rt_map");
     return 0;
 }
 
-static ERL_NIF_TERM init_nif(ErlNifEnv *env, int argc,
-                             const ERL_NIF_TERM argv[])
+ERL_NIF_TERM init_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     try {
         auto map = nifpp::construct_resource<rt_map>();
@@ -37,7 +38,7 @@ static ERL_NIF_TERM init_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ERL_NIF_TERM put_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM put_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     try {
         nifpp::resource_ptr<rt_map> map;
@@ -55,7 +56,7 @@ static ERL_NIF_TERM put_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
         nifpp::get_throws(env, argv[0], map);
         nifpp::get_throws(env, argv[1], record);
 
-        std::set<rt_local_term> rt_local_terms;
+        std::unordered_set<rt_local_term> rt_local_terms;
         for (const auto &term : terms)
             rt_local_terms.insert(rt_local_term(term));
 
@@ -75,7 +76,7 @@ static ERL_NIF_TERM put_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     }
 }
 
-static ERL_NIF_TERM get_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM get_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     try {
         nifpp::resource_ptr<rt_map> map;
@@ -113,8 +114,7 @@ static ERL_NIF_TERM get_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     }
 }
 
-static ERL_NIF_TERM remove_nif(ErlNifEnv *env, int argc,
-                               const ERL_NIF_TERM argv[])
+ERL_NIF_TERM remove_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     try {
         nifpp::resource_ptr<rt_map> map;
@@ -139,9 +139,10 @@ static ERL_NIF_TERM remove_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ErlNifFunc nif_funcs[] = {{"init_nif", 0, init_nif},
-                                 {"put_nif", 2, put_nif},
-                                 {"get_nif", 4, get_nif},
-                                 {"remove_nif", 4, remove_nif}};
+ErlNifFunc nif_funcs[] = {{"init_nif", 0, init_nif},
+                          {"put_nif", 2, put_nif},
+                          {"get_nif", 4, get_nif},
+                          {"remove_nif", 4, remove_nif}};
 
 ERL_NIF_INIT(rt_map, nif_funcs, load, NULL, NULL, NULL)
+}

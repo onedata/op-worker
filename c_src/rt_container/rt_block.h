@@ -12,8 +12,8 @@
 #include "nifpp.h"
 #include "rt_local_term.h"
 
-#include <set>
 #include <string>
+#include <unordered_set>
 
 namespace one {
 namespace provider {
@@ -26,9 +26,9 @@ class rt_block {
 public:
     /**
      * rt_block constructor.
-     * Constructs default  RTransfer block.
+     * Constructs default RTransfer block.
      */
-    rt_block() {}
+    rt_block() = default;
 
     /**
      * rt_block constructor.
@@ -44,23 +44,14 @@ public:
      */
     rt_block(std::string file_id, rt_local_term provider_ref,
              ErlNifUInt64 offset, ErlNifUInt64 size, ErlNifUInt64 priority,
-             int retry, std::set<rt_local_term> terms, ErlNifUInt64 counter = 1)
-        : file_id_{std::move(file_id)}
-        , provider_ref_{std::make_shared<rt_local_term>(provider_ref)}
-        , offset_{offset}
-        , size_{size}
-        , priority_{priority}
-        , retry_{retry}
-        , terms_{std::move(terms)}
-        , counter_{counter}
-    {
-    }
+             int retry, std::unordered_set<rt_local_term> terms,
+             ErlNifUInt64 counter = 1);
 
     /// Getter for block's file ID
     const std::string &file_id() const { return file_id_; }
 
     /// Getter for provider ID
-    const rt_local_term &provider_ref() const { return *provider_ref_; }
+    const rt_local_term &provider_ref() const { return provider_ref_; }
 
     /// Getter for block's offset
     ErlNifUInt64 offset() const { return offset_; }
@@ -78,7 +69,7 @@ public:
     int retry() const { return retry_; }
 
     /// Getter for block's terms
-    const std::set<rt_local_term> &terms() const { return terms_; }
+    const std::unordered_set<rt_local_term> &terms() const { return terms_; }
 
     /// Getter for block's addition counter
     ErlNifUInt64 counter() const { return counter_; }
@@ -87,7 +78,7 @@ public:
      * Appends set of terms to block
      * @param set of terms to be appended to the set of block's terms
      */
-    void appendTerms(const std::set<rt_local_term> &terms);
+    void appendTerms(const std::unordered_set<rt_local_term> &terms);
 
     /**
      * Checks whether this block can be merge with other block. That is
@@ -128,13 +119,13 @@ public:
 
 private:
     std::string file_id_;
-    std::shared_ptr<const rt_local_term> provider_ref_;
-    ErlNifUInt64 offset_;
-    ErlNifUInt64 size_;
-    ErlNifUInt64 priority_;
-    int retry_;
-    std::set<rt_local_term> terms_;
-    ErlNifUInt64 counter_;
+    rt_local_term provider_ref_;
+    ErlNifUInt64 offset_ = 0;
+    ErlNifUInt64 size_ = 0;
+    ErlNifUInt64 priority_ = 0;
+    int retry_ = 0;
+    std::unordered_set<rt_local_term> terms_;
+    ErlNifUInt64 counter_ = 1;
 };
 
 /**

@@ -13,10 +13,26 @@
 namespace one {
 namespace provider {
 
+rt_block::rt_block(std::string file_id, rt_local_term provider_ref,
+                   ErlNifUInt64 offset, ErlNifUInt64 size,
+                   ErlNifUInt64 priority, int retry,
+                   std::unordered_set<rt_local_term> terms,
+                   ErlNifUInt64 counter)
+    : file_id_{std::move(file_id)}
+    , provider_ref_{std::move(provider_ref)}
+    , offset_{offset}
+    , size_{size}
+    , priority_{priority}
+    , retry_{retry}
+    , terms_{std::move(terms)}
+    , counter_{counter}
+{
+}
+
 bool rt_block::is_mergeable(const rt_block &block)
 {
     return file_id_ == block.file_id_ && offset_ + size_ == block.offset_ &&
-           *provider_ref_ == *block.provider_ref_;
+           provider_ref_ == block.provider_ref_;
 }
 
 bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
@@ -24,10 +40,9 @@ bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
     return is_mergeable(block) && size_ + block.size_ <= block_size;
 }
 
-void rt_block::appendTerms(const std::set<rt_local_term> &terms)
+void rt_block::appendTerms(const std::unordered_set<rt_local_term> &terms)
 {
-    for (const auto &term : terms)
-        terms_.insert(term);
+    terms_.insert(terms.begin(), terms.end());
 }
 
 bool rt_block::operator<(const rt_block &block) const
@@ -56,8 +71,7 @@ rt_block &rt_block::operator+=(const rt_block &block)
     provider_ref_ = block.provider_ref_;
     size_ += block.size_;
     retry_ = std::max<int>(retry_, block.retry_);
-    for (const auto &term : block.terms_)
-        terms_.insert(term);
+    terms_.insert(block.terms_.begin(), block.terms_.end());
 
     return *this;
 }

@@ -246,7 +246,10 @@ should_concatenate_block_pids() ->
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block1)),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block2)),
 
-    ?assertEqual({ok, Block2#rt_block{terms = [Pid1, Pid2]}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
+    PopAns = rt_priority_queue:pop(?TEST_PRIORITY_QUEUE, PidsFilterFunction),
+    ?assertMatch({ok, _}, PopAns),
+    {ok, PoppedBlock} = PopAns,
+    ?assertEqual([Pid1, Pid2], lists:sort(PoppedBlock#rt_block.terms)),
     ?assertEqual({ok, Block1#rt_block{size = 3}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
     ?assertEqual({ok, Block1#rt_block{offset = 6, size = 4}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
     ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
@@ -265,7 +268,10 @@ should_remove_repeated_pids() ->
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block#rt_block{terms = [Pid2]})),
     ?assertEqual(ok, rt_priority_queue:push(?TEST_PRIORITY_QUEUE, Block#rt_block{terms = [Pid1]})),
 
-    ?assertEqual({ok, Block#rt_block{terms = [Pid1, Pid2, Pid3]}}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE, PidsFilterFunction)),
+    PopAns = rt_priority_queue:pop(?TEST_PRIORITY_QUEUE, PidsFilterFunction),
+    ?assertMatch({ok, _}, PopAns),
+    {ok, PoppedBlock} = PopAns,
+    ?assertEqual([Pid1, Pid2, Pid3], lists:sort(PoppedBlock#rt_block.terms)),
     ?assertEqual({error, empty}, rt_priority_queue:pop(?TEST_PRIORITY_QUEUE)).
 
 should_subscribe_and_unsubscribe_process() ->

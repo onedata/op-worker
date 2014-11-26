@@ -6,8 +6,8 @@
  * cited in 'LICENSE.txt'.
  */
 
-#ifndef RT_TERM_H
-#define RT_TERM_H
+#ifndef RT_LOCAL_TERM_H
+#define RT_LOCAL_TERM_H
 
 #include "nifpp.h"
 
@@ -22,6 +22,12 @@ namespace provider {
  */
 class rt_local_term {
     struct shared_data {
+        shared_data()
+            : env_{enif_alloc_env()}
+            , term_{enif_make_atom(env_, "undefined")}
+        {
+        }
+
         shared_data(nifpp::TERM src_term)
             : env_{enif_alloc_env()}
             , term_{enif_make_copy(env_, src_term)}
@@ -35,6 +41,15 @@ class rt_local_term {
     };
 
 public:
+    /**
+         * rt_local_term constructor.
+         * Constructs wrapper for Erlang atom 'undefined'.
+         */
+    rt_local_term()
+        : shared_data_{std::make_shared<shared_data>()}
+    {
+    }
+
     /**
      * rt_local_term constructor.
      * Constructs Erlang term wrapper.
@@ -70,14 +85,27 @@ public:
      */
     bool operator<(const rt_local_term &rhs) const
     {
-        return enif_compare(shared_data_->term_, rhs.shared_data_->term_) < 0;
+        return shared_data_ != rhs.shared_data_ &&
+               enif_compare(shared_data_->term_, rhs.shared_data_->term_) < 0;
     }
 
 private:
     std::shared_ptr<const shared_data> shared_data_;
+    friend struct std::hash<rt_local_term>;
 };
 
 } // namespace provider
 } // namespace one
 
-#endif // RT_TERM_H
+namespace std {
+
+template <> struct hash<one::provider::rt_local_term> {
+    std::size_t operator()(const one::provider::rt_local_term &term) const
+    {
+        return hash<long long>{}(term.shared_data_->term_);
+    }
+};
+
+} // namespace std
+
+#endif // RT_LOCAL_TERM_H

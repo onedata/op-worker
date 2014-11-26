@@ -11,21 +11,22 @@
 #include "rt_exception.h"
 #include "rt_priority_queue.h"
 
-#include <set>
 #include <string>
 #include <functional>
+#include <unordered_set>
 
 using namespace one::provider;
 
-static int load(ErlNifEnv *env, void **priv, ERL_NIF_TERM load_info)
+namespace {
+
+int load(ErlNifEnv *env, void **priv, ERL_NIF_TERM load_info)
 {
     nifpp::register_resource<rt_priority_queue>(env, nullptr,
                                                 "rt_priority_queue");
     return 0;
 }
 
-static ERL_NIF_TERM init_nif(ErlNifEnv *env, int argc,
-                             const ERL_NIF_TERM argv[])
+ERL_NIF_TERM init_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     try {
         ErlNifUInt64 block_size;
@@ -40,8 +41,7 @@ static ERL_NIF_TERM init_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
-                             const ERL_NIF_TERM argv[])
+ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     try {
         nifpp::resource_ptr<rt_priority_queue> queue;
@@ -59,7 +59,7 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
         nifpp::get_throws(env, argv[0], queue);
         nifpp::get_throws(env, argv[1], record);
 
-        std::set<rt_local_term> rt_local_terms;
+        std::unordered_set<rt_local_term> rt_local_terms;
         for (const auto &term : terms)
             rt_local_terms.insert(rt_local_term(term));
 
@@ -81,7 +81,7 @@ static ERL_NIF_TERM push_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ERL_NIF_TERM pop_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM pop_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     try {
         nifpp::resource_ptr<rt_priority_queue> queue;
@@ -112,8 +112,8 @@ static ERL_NIF_TERM pop_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     }
 }
 
-static ERL_NIF_TERM change_counter_nif(ErlNifEnv *env, int argc,
-                                       const ERL_NIF_TERM argv[])
+ERL_NIF_TERM change_counter_nif(ErlNifEnv *env, int argc,
+                                const ERL_NIF_TERM argv[])
 {
     try {
         nifpp::resource_ptr<rt_priority_queue> queue;
@@ -142,9 +142,10 @@ static ERL_NIF_TERM change_counter_nif(ErlNifEnv *env, int argc,
     }
 }
 
-static ErlNifFunc nif_funcs[] = {{"init_nif", 1, init_nif},
-                                 {"push_nif", 2, push_nif},
-                                 {"pop_nif", 1, pop_nif},
-                                 {"change_counter_nif", 5, change_counter_nif}};
+ErlNifFunc nif_funcs[] = {{"init_nif", 1, init_nif},
+                          {"push_nif", 2, push_nif},
+                          {"pop_nif", 1, pop_nif},
+                          {"change_counter_nif", 5, change_counter_nif}};
 
 ERL_NIF_INIT(rt_priority_queue, nif_funcs, load, NULL, NULL, NULL)
+}

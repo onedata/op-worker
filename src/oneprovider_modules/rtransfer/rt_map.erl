@@ -11,7 +11,6 @@
 -module(rt_map).
 
 -include("registered_names.hrl").
--include("oneprovider_modules/rtransfer/rt_map.hrl").
 -include("oneprovider_modules/rtransfer/rt_container.hrl").
 
 -on_load(load_nif/0).
@@ -27,6 +26,10 @@
     handle_info/2,
     terminate/2,
     code_change/3]).
+
+%% gen_server state
+%% * container - pointer to container resource created as a call to rt_container:init_nif() function
+-record(state, {container_ptr}).
 
 %% ====================================================================
 %% API functions

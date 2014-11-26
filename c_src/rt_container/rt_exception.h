@@ -21,11 +21,7 @@ namespace provider {
  */
 class rt_exception : public std::runtime_error {
 public:
-    /**
-     * @copydoc std::runtime_error
-     */
-    rt_exception(const std::string &message)
-        : std::runtime_error(message){};
+    using std::runtime_error::runtime_error;
 };
 
 } // namespace provider

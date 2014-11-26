@@ -27,6 +27,14 @@
 -type container_ptr() :: term().
 
 %% RTransfer container element
--record(rt_block, {file_id = "", provider_ref, offset = 0, size = 0, priority = 0, retry = 0, terms = []}).
+-record(rt_block, {
+    file_id = "" :: string(),
+    provider_ref :: term(),
+    offset = 0 :: non_neg_integer(),
+    size = 1 :: pos_integer(),
+    priority = 0 :: non_neg_integer(),
+    retry = 0 :: non_neg_integer(),
+    terms = [] :: [term()]
+}).
 
 -endif.
