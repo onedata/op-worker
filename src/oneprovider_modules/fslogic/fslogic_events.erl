@@ -43,7 +43,7 @@ on_file_size_update(FileUUID, OldFileSize, NewFileSize) ->
 -spec on_file_meta_update(FileUUID :: uuid(), Doc :: db_doc()) -> ok.
 %% ====================================================================
 on_file_meta_update(FileUUID, Doc) ->
-    ct:print("Filemeta update ~p", [Doc]),
+    ct:print("Filemeta update"),
     gen_server:call(?Dispatcher_Name, {fslogic, 1, {internal_event, on_file_meta_update, {FileUUID, Doc}}}, timer:seconds(5)).
 
 %% ===================================================================
