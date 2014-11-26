@@ -61,7 +61,7 @@ remove_attr_watcher(Fd) when is_list(Fd); is_binary(Fd) ->
     dao_records:remove_record(Fd).
 
 remove_attr_watcher3(ListSpec, BatchSize, Offset) ->
-    case list_descriptors(ListSpec, BatchSize, Offset) of
+    case list_attr_watchers(ListSpec, BatchSize, Offset) of
         {ok, []} -> ok;
         {ok, Docs} ->
             [remove_attr_watcher(Fd) || #db_document{uuid = Fd} <- Docs, is_list(Fd)],
@@ -92,10 +92,10 @@ exist_attr_watcher(FileId, FID) ->
 
 
 list_attr_watchers({by_file, File}, N, Offset) when N > 0, Offset >= 0 ->
-    list_descriptors({by_file_n_owner, {File, ""}}, N, Offset);
+    list_attr_watchers({by_file_n_owner, {File, ""}}, N, Offset);
 list_attr_watchers({by_file_n_owner, {File, Owner}}, N, Offset) when N > 0, Offset >= 0 ->
     {ok, #db_document{uuid = FileId}} = get_file(File),
-    list_descriptors({by_uuid_n_owner, {FileId, Owner}}, N, Offset);
+    list_attr_watchers({by_uuid_n_owner, {FileId, Owner}}, N, Offset);
 list_attr_watchers({by_uuid_n_owner, {FileId, Owner}}, N, Offset) when N > 0, Offset >= 0 ->
     StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
     EndKey = case Owner of "" -> [dao_helper:name(uca_increment(FileId)), dao_helper:name("")]; _ ->
