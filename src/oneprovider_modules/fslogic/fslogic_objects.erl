@@ -255,7 +255,20 @@ save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
                 {ok, TmpAns} ->
                     case length(TmpAns) of
                         0 ->
-                            save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity);
+                            {ok, Uuid} = save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity),
+                            % todo remove this case, client should not ask for file location simultaneously
+                            case dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {Uuid, FuseID}}, 10, 0], ProtocolVersion) of
+                                {ok, [_]} -> {ok, Uuid};
+                                {ok, List} when length(List) =/= 0 ->
+                                    dao_lib:apply(dao_vfs, remove_descriptor, [Uuid], ProtocolVersion),
+                                    case [ Id || #db_document{uuid = Id} <- List, Id =/= Uuid] of
+                                        [Element] -> {ok, Element};
+                                        _ ->
+                                            ?error("Error: to many file descriptors for file uuid: ~p", [Uuid]),
+                                            {error, "Error: too many file descriptors"}
+                                    end;
+                                Other -> Other
+                            end;
                         1 ->
                             [DbDoc | _] = TmpAns,
                             case save_file_descriptor(ProtocolVersion, DbDoc, Validity) of
