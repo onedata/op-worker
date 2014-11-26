@@ -104,7 +104,7 @@
 %% Persmission cache definitions
 -define(CACHE_TREE_MAX_DEPTH, 6).
 -define(CACHE_TREE_MAX_WIDTH, 10).
--define(CACHE_REQUEST_TIMEOUT,1000).
+-define(CACHE_REQUEST_TIMEOUT, 60000).
 
 %% default buffer size for copy operation
 -define(default_copy_buffer_size, 1048576).
