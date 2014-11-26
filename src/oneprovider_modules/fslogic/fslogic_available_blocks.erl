@@ -107,7 +107,8 @@ file_block_modified(FullFileName, Offset, Size) ->
 file_truncated(FullFileName, Size) ->
     ct:print("file_truncated(~p,~p)",[FullFileName, Size]),
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
-    call({file_truncated, FileId, Size, FullFileName}). % todo remove FullFileName arg
+    cast({file_truncated, FileId, Size, FullFileName}), % todo remove FullFileName arg
+    #atom{value = ?VOK}.
 
 db_sync_hook() ->
     MyProviderId = cluster_manager_lib:get_provider_id(),
