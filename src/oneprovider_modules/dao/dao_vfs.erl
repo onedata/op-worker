@@ -28,7 +28,7 @@
 -export([list_file_locations/1, get_file_locations/1, save_file_location/1, remove_file_location/1]).
 -export([list_file_blocks/1, get_file_blocks/1, save_file_block/1, remove_file_block/1]).
 -export([save_available_blocks/1, get_available_blocks/1, remove_available_blocks/1, available_blocks_by_file_id/1]).
--export([save_attr_watcher/1, remove_attr_watcher/2, exist_attr_watcher/2, list_attr_watchers/3]).
+-export([save_attr_watcher/1, remove_attr_watcher/2, remove_attr_watcher/1, exist_attr_watcher/2, list_attr_watchers/3]).
 
 
 -ifdef(TEST).
@@ -51,8 +51,24 @@ save_attr_watcher(#file_attr_watcher{file = FileId, fuse_id = FID} = Record) ->
 
 
 remove_attr_watcher(FileId, FID) ->
+    remove_attr_watcher(gen_attr_watcher_uuid(FileId, FID)).
+
+
+remove_attr_watcher(ListSpec) when is_tuple(ListSpec) ->
+    remove_attr_watcher3(ListSpec, 1000, 0);
+remove_attr_watcher(Fd) when is_list(Fd); is_binary(Fd) ->
     dao_external:set_db(?DESCRIPTORS_DB_NAME),
-    dao_records:remove_record(gen_attr_watcher_uuid(FileId, FID)).
+    dao_records:remove_record(Fd).
+
+remove_attr_watcher3(ListSpec, BatchSize, Offset) ->
+    case list_descriptors(ListSpec, BatchSize, Offset) of
+        {ok, []} -> ok;
+        {ok, Docs} ->
+            [remove_attr_watcher(Fd) || #db_document{uuid = Fd} <- Docs, is_list(Fd)],
+            remove_attr_watcher3(ListSpec, BatchSize, Offset + BatchSize);
+        Other -> Other
+    end.
+
 
 
 gen_attr_watcher_uuid(FileId, FID) ->
@@ -201,6 +217,7 @@ save_descriptor(#db_document{record = #file_descriptor{}} = FdDoc) ->
 remove_descriptor(ListSpec) when is_tuple(ListSpec) ->
     remove_descriptor3(ListSpec, 1000, 0);
 remove_descriptor(Fd) when is_list(Fd) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:remove_record(Fd).
 
 remove_descriptor3(ListSpec, BatchSize, Offset) ->
