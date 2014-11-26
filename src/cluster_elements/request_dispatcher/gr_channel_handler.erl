@@ -26,6 +26,17 @@
 
 -define(PROTOCOL_VERSION, 1).
 
+%% ====================================================================
+%% Test API
+%% ====================================================================
+-ifdef(TEST).
+-export([send_to_gr_channel/1]).
+-endif.
+
+%% ====================================================================
+%% API functions
+%% ====================================================================
+
 %% init/2
 %% ====================================================================
 %% @doc Initializes the state for a session.
@@ -54,25 +65,7 @@ init(_Args, _Req) ->
     OutFrame :: cowboy_websocket:frame().
 %% ====================================================================
 websocket_handle({binary, Data}, _Req, State) ->
-    try
-      {ok, GRMessage} = pb:decode("gr_communication_protocol", "message", Data),
-      ProtocolVersion = GRMessage#message.protocol_version,
-      Type = GRMessage#message.message_type,
-      Decoder = GRMessage#message.message_decoder_name,
-      Input = GRMessage#message.input,
-      {ok, Request} = pb:decode(Decoder, Type, Input),
-
-      Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {gr_channel, ProtocolVersion, {gr_message, Request}}}),
-      case Ans of
-        ok ->
-          ok;
-        Other ->
-          ?error("Dispatcher connection error: ~p for request ~p", [Other, Request])
-      end
-    catch
-      E1:E2 ->
-        ?error("Dispatcher connection error: ~p:~p for request ~p", [E1, E2, Data])
-    end,
+    send_to_gr_channel(Data),
     {ok, State};
 
 websocket_handle(_InFrame, _Req, State) ->
@@ -115,3 +108,28 @@ websocket_info(_Info, _Req, State) ->
 %% ====================================================================
 websocket_terminate(_Reason, _Req, _State) ->
     ok.
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
+send_to_gr_channel(Data) ->
+  try
+    {ok, GRMessage} = pb:decode("gr_communication_protocol", "message", Data),
+    ProtocolVersion = GRMessage#message.protocol_version,
+    Type = GRMessage#message.message_type,
+    Decoder = GRMessage#message.message_decoder_name,
+    Input = GRMessage#message.input,
+    {ok, Request} = pb:decode(Decoder, Type, Input),
+
+    Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {gr_channel, ProtocolVersion, {gr_message, Request}}}),
+    case Ans of
+      ok ->
+        ok;
+      Other ->
+        ?error("Dispatcher connection error: ~p for request ~p", [Other, Request])
+    end
+  catch
+    E1:E2 ->
+      ?error("Dispatcher connection error: ~p:~p for request ~p", [E1, E2, Data])
+  end.
