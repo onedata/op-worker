@@ -23,7 +23,7 @@
 %% ===================================================================
 
 update(_ProtocolVersion, Request) when is_record(Request, spacemodified) ->
-  Id = Request#spacemodified.id,
+  Id = binary_to_list(Request#spacemodified.id),
   Name = Request#spacemodified.name,
   SizeRecords = Request#spacemodified.size,
   Size = lists:map(fun(S) -> {S#spacemodified_size.provider, S#spacemodified_size.size} end, SizeRecords),
@@ -36,7 +36,7 @@ update(_ProtocolVersion, Request) when is_record(Request, spacemodified) ->
   ok;
 
 update(ProtocolVersion, Request) when is_record(Request, spaceremoved) ->
-  Id = Request#spaceremoved.id,
+  Id = binary_to_list(Request#spaceremoved.id),
   case dao_lib:apply(dao_vfs, remove_file, [{uuid, Id}], ProtocolVersion) of
     ok -> ok;
     Error ->
@@ -46,13 +46,13 @@ update(ProtocolVersion, Request) when is_record(Request, spaceremoved) ->
 
 update(ProtocolVersion, Request) when is_record(Request, usermodified) ->
   try
-    Id = Request#usermodified.id,
+    Id = binary_to_list(Request#usermodified.id),
     Spaces = Request#usermodified.spaces,
     Groups = Request#usermodified.groups,
 
     {ok, UserDoc} = dao_lib:apply(dao_users, get_user, [{uuid, Id}], ProtocolVersion),
     UserRec = UserDoc#db_document.record,
-    case dao_lib:apply(dao_users, save_user, [UserRec#user{spaces = Spaces, groups = Groups}], ProtocolVersion) of
+    case dao_lib:apply(dao_users, save_user, [UserDoc#db_document{record = UserRec#user{spaces = Spaces, groups = Groups}}], ProtocolVersion) of
       {ok, _} -> ok;
       Error ->
         ?error("User update error: ~p for request ~p", [Error, Request])
@@ -64,7 +64,7 @@ update(ProtocolVersion, Request) when is_record(Request, usermodified) ->
   ok;
 
 update(ProtocolVersion, Request) when is_record(Request, userremoved) ->
-  Id = Request#userremoved.id,
+  Id = binary_to_list(Request#userremoved.id),
   case dao_lib:apply(dao_users, remove_user, [{uuid, Id}], ProtocolVersion) of
     ok -> ok;
     Error ->
@@ -74,12 +74,12 @@ update(ProtocolVersion, Request) when is_record(Request, userremoved) ->
 
 update(ProtocolVersion, Request) when is_record(Request, groupmodified) ->
   try
-    Id = Request#groupmodified.id,
+    Id = binary_to_list(Request#groupmodified.id),
     Name = Request#groupmodified.name,
 
     {ok, GroupDoc} = dao_lib:apply(dao_groups, get_group, [Id], ProtocolVersion),
     GroupRec = GroupDoc#db_document.record,
-    case dao_lib:apply(dao_groups, save_group, [GroupRec#group_details{name = Name}], ProtocolVersion) of
+    case dao_lib:apply(dao_groups, save_group, [GroupDoc#db_document{record = GroupRec#group_details{name = Name}}], ProtocolVersion) of
       {ok, _} -> ok;
       Error ->
         ?error("Group update error: ~p for request ~p", [Error, Request])
@@ -91,7 +91,7 @@ update(ProtocolVersion, Request) when is_record(Request, groupmodified) ->
   ok;
 
 update(ProtocolVersion, Request) when is_record(Request, groupremoved) ->
-  Id = Request#groupremoved.id,
+  Id = binary_to_list(Request#groupremoved.id),
   case dao_lib:apply(dao_groups, remove_group, [Id], ProtocolVersion) of
     ok -> ok;
     Error ->

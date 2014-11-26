@@ -65,6 +65,7 @@ init(_Args, _Req) ->
     OutFrame :: cowboy_websocket:frame().
 %% ====================================================================
 websocket_handle({binary, Data}, _Req, State) ->
+    %% Warning - update is asynch! Handler ends before update is finished.
     send_to_gr_channel(Data),
     {ok, State};
 
