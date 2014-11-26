@@ -30,6 +30,7 @@
 -export([synchronize_file_block/3, file_block_modified/3, file_truncated/2, db_sync_hook/0]).
 % cache/dao_proxy api
 -export([cast/1, call/1]).
+-export([file_synchronized/5, file_block_modified/6, file_truncated/5, external_available_blocks_changed/4]).
 -export([registered_requests/0, save_available_blocks/3, get_available_blocks/3, list_all_available_blocks/3, get_file_size/3, invalidate_blocks_cache/3]).
 % Low level document modification api
 -export([mark_as_modified/2, mark_as_available/2, check_if_synchronized/3, truncate/2, mark_other_provider_changes/2]).
