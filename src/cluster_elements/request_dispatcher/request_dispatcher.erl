@@ -406,7 +406,7 @@ handle_cast({update_pulled_state, WorkersList, StateNum, CallbacksList, Callback
                  ?error("Dispatcher had old state number but could not update data"),
                  State;
                _ ->
-                 TmpState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?MODULES),
+                 TmpState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.callbacks_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?MODULES),
                  ?info("Dispatcher state updated, state num: ~p", [StateNum]),
                  TmpState#dispatcher_state{state_num = StateNum}
              end,
@@ -429,8 +429,8 @@ handle_cast({update_pulled_state, WorkersList, StateNum, CallbacksList, Callback
   gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState2#dispatcher_state.state_num, NewState2#dispatcher_state.callbacks_num}),
   {noreply, NewState2};
 
-handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad}, _State) ->
-  NewState = update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, ?MODULES),
+handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad}, State) ->
+  NewState = update_workers(WorkersList, NewStateNum, State#dispatcher_state.callbacks_num, CurLoad, AvgLoad, ?MODULES),
   ?info("Dispatcher state updated, state num: ~p", [NewStateNum]),
   {noreply, NewState#dispatcher_state{request_map = RequestMap}};
 
