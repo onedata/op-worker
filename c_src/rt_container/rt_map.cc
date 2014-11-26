@@ -52,7 +52,7 @@ std::list<rt_block> rt_map::get(const std::string &file_id, ErlNifUInt64 offset,
             blocks.pop();
             while (!blocks.empty())
                 if (front_block.is_mergeable(blocks.front())) {
-                    front_block += std::move(blocks.front());
+                    front_block += blocks.front();
                     blocks.pop();
                 } else {
                     merged_blocks.emplace_back(front_block);

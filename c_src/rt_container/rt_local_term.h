@@ -42,9 +42,9 @@ class rt_local_term {
 
 public:
     /**
-         * rt_local_term constructor.
-         * Constructs wrapper for Erlang atom 'undefined'.
-         */
+     * rt_local_term constructor.
+     * Constructs wrapper for Erlang atom 'undefined'.
+     */
     rt_local_term()
         : shared_data_{std::make_shared<shared_data>()}
     {
