@@ -644,7 +644,7 @@ init_cluster(State) ->
   Nodes = State#cm_state.nodes,
   case length(Nodes) > 0 of
     true ->
-      %% todo - fix dbsync
+      %% @todo: check why dbsync sometimes does not start
       JobsAndArgs = ?MODULES_WITH_ARGS -- [{dbsync, []}],
       PermanentModules = ?PERMANENT_MODULES,
 
@@ -1020,7 +1020,7 @@ add_children(_Node, [], Workers, _State) ->
   {ok, Workers};
 
 add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers, State) ->
-  %% todo fix dbsync
+  %% @todo: check why dbsync sometimes does not start
   Jobs = ?MODULES -- [dbsync],
   case lists:member(Id, Jobs) of
     false -> add_children(Node, Children, Workers, State);

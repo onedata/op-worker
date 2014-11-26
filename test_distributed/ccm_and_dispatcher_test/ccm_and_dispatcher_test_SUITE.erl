@@ -95,6 +95,8 @@ modules_start_and_ping_test(Config) ->
   test_utils:wait_for_cluster_init(),
   State2 = gen_server:call({global, ?CCM}, get_state, 500),
   Workers2 = State2#cm_state.workers,
+
+  %% @todo: check why dbsync sometimes does not start
   Jobs = ?MODULES -- [dbsync],  
   ?assert(length(Workers2) >= length(Jobs)),
   ?assertEqual(5, gen_server:call({global, ?CCM}, get_state_num, 1000)),
