@@ -55,11 +55,11 @@ std::list<rt_block> rt_map::get(const std::string &file_id, ErlNifUInt64 offset,
                     front_block += blocks.front();
                     blocks.pop();
                 } else {
-                    merged_blocks.emplace_back(front_block);
+                    merged_blocks.emplace_back(std::move(front_block));
                     front_block = std::move(blocks.front());
                     blocks.pop();
                 }
-            merged_blocks.emplace_back(front_block);
+            merged_blocks.emplace_back(std::move(front_block));
             return merged_blocks;
         }
     }
