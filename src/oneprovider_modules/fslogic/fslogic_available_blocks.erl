@@ -77,7 +77,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
 
     case SyncedParts of
         [] -> ok;
-        _ -> cast({file_synchronized, FileId, SyncedParts, FullFileName}) % todo remove FullFileName arg
+        _ -> #atom{value = ?VOK} = call({file_synchronized, FileId, SyncedParts, FullFileName}) % todo remove FullFileName arg
     end,
     #atom{value = ?VOK}.
 
@@ -93,7 +93,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
 file_block_modified(FullFileName, Offset, Size) ->
     ct:print("file_block_modified(~p,~p,~p)",[FullFileName, Offset, Size]),
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
-    cast({file_block_modified, FileId, Offset, Size, FullFileName}), % todo remove FullFileName arg
+    #atom{value = ?VOK} = call({file_block_modified, FileId, Offset, Size, FullFileName}), % todo remove FullFileName arg
     #atom{value = ?VOK}.
 
 %% file_truncated/2
@@ -107,17 +107,17 @@ file_block_modified(FullFileName, Offset, Size) ->
 file_truncated(FullFileName, Size) ->
     ct:print("file_truncated(~p,~p)",[FullFileName, Size]),
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
-    cast({file_truncated, FileId, Size, FullFileName}), % todo remove FullFileName arg
+    #atom{value = ?VOK} = call({file_truncated, FileId, Size, FullFileName}), % todo remove FullFileName arg
     #atom{value = ?VOK}.
 
 db_sync_hook() ->
     MyProviderId = cluster_manager_lib:get_provider_id(),
     fun
         (?FILES_DB_NAME, _, _, #db_document{record = #available_blocks{file_id = FileId}, deleted = true}) ->
-            fslogic_available_blocks:cast({invalidate_blocks_cache, FileId});
+            fslogic_available_blocks:call({invalidate_blocks_cache, FileId});
         (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}, deleted = false}) when Id =/= MyProviderId ->
             ct:print("db_sync block document",[]),
-            fslogic_available_blocks:cast({external_available_blocks_changed, utils:ensure_list(FileId), utils:ensure_list(Uuid)});
+            fslogic_available_blocks:call({external_available_blocks_changed, utils:ensure_list(FileId), utils:ensure_list(Uuid)});
         (?FILES_DB_NAME, _, _, FileDoc = #db_document{uuid = FileId, record = #file{}, deleted = false}) ->
             {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
             fslogic_file:ensure_file_location_exists(FullFileName, FileDoc);
