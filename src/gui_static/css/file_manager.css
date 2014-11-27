@@ -373,9 +373,12 @@
 }
 
 .ddist-panel {
-    display: none;
     margin-top: 12px;
     margin-left: 7px;
+}
+
+.ddist-panel-hidden {
+    display: none;
 }
 
 .ddist-show-button {
@@ -414,6 +417,7 @@
 
 .ddist-provider {
     font-weight: 700;
+    overflow: hidden;
 }
 
 .ddist-button {

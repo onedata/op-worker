@@ -14,9 +14,13 @@
 -include("oneprovider_modules/control_panel/common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+
+% TODO skonczyc refresh!
+
 %% API
--export([init/3, data_distribution_panel/2, comet_loop_init/2, on_resize_js/0]).
--export([toggle_ddist_view/3, sync_file/2, expel_file/2]).
+-export([init/0, data_distribution_panel/2, no_support_panel/1, on_resize_js/0, display_info_not_supported/0]).
+-export([hide_ddist_panel/1, hide_all_ddist_panels/0, refresh_ddist_panels/0]).
+-export([toggle_ddist_view/4, refresh_view/4, sync_file/2, expel_file/2]).
 
 % Macros used to generate IDs of certain elements
 -define(DIST_PANEL_ID(RowID), <<"dd_", (integer_to_binary(RowID))/binary>>).
@@ -29,21 +33,22 @@
 % Reference to comet pid that handles updates of data distribution view
 -define(DD_COMET_PID, dd_comet_pid).
 
+% How often should file's distribution status be refreshed
+-define(REFRESH_PERIOD, 1500).
+
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
-%% init/3
+%% init/0
 %% ====================================================================
-%% @doc Initializes comet process that handles async updates of file distribution status.
+%% @doc Initializes state in file_manager's comet process memory.
 %% @end
--spec init(GRUID :: binary(), AccessToken :: binary(), MainCometPid :: pid()) -> term().
+-spec init() -> term().
 %% ====================================================================
-init(GRUID, AccessToken, MainCometPid) ->
-    {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(GRUID, AccessToken) end),
-    % Store DDCometPid in file manager's main comet process's memory
-    MainCometPid ! {put, ?DD_COMET_PID, Pid}.
+init() ->
+    set_displayed_ddist_panels([]).
 
 
 %% data_distribution_panel/2
@@ -52,7 +57,10 @@ init(GRUID, AccessToken, MainCometPid) ->
 %% @end
 -spec data_distribution_panel(FullPath :: binary(), RowID :: integer()) -> [term()].
 %% ====================================================================
-data_distribution_panel(FullPath, RowID) ->
+data_distribution_panel(FilePath, RowID) ->
+    FullPath = fs_interface:get_full_file_path(FilePath),
+    FileID = fs_interface:get_file_uuid(FullPath),
+    {FileSize, FileBlocks} = fs_interface:get_all_available_blocks(FileID),
     ShowDDistID = ?SHOW_DIST_PANEL_ID(RowID),
     % Item won't hightlight if the link is clicked.
     gui_jq:bind_element_click(ShowDDistID, <<"function(e) { e.stopPropagation(); }">>),
@@ -60,33 +68,59 @@ data_distribution_panel(FullPath, RowID) ->
     % Item won't hightlight if the link is clicked.
     gui_jq:bind_element_click(HideDDistID, <<"function(e) { e.stopPropagation(); }">>),
     DDistPanelID = ?DIST_PANEL_ID(RowID),
+    {ShowLinkClass, HideLinkClass, DDistPanelClass, Body} = case lists:keyfind(FullPath, 1, get_displayed_ddist_panels()) of
+                                                                false ->
+                                                                    {
+                                                                        <<"glyph-link hidden show-on-parent-hover ddist-show-button">>,
+                                                                        <<"glyph-link hidden ddist-hide-button">>,
+                                                                        <<"ddist-panel display-none">>,
+                                                                        <<"">>
+                                                                    };
+                                                                _ ->
+                                                                    {
+                                                                        <<"glyph-link hidden ddist-show-button">>,
+                                                                        <<"glyph-link ddist-hide-button">>,
+                                                                        <<"ddist-panel">>,
+                                                                        render_table(FullPath, FileSize, FileBlocks, RowID)
+                                                                    }
+                                                            end,
     [
-        #link{id = ShowDDistID, postback = {action, ?MODULE, toggle_ddist_view, [FullPath, RowID, true]},
-            title = <<"Data distribution (advanced)">>, class = <<"glyph-link hidden show-on-parent-hover ddist-show-button">>,
+        #link{id = ShowDDistID, postback = {action, ?MODULE, toggle_ddist_view, [FullPath, FileID, RowID, true]},
+            title = <<"Data distribution (advanced)">>, class = ShowLinkClass,
             body = #span{class = <<"icomoon-earth">>}},
-        #link{id = HideDDistID, postback = {action, ?MODULE, toggle_ddist_view, [FullPath, RowID, false]},
-            title = <<"Hide data distribution view">>, class = <<"glyph-link hidden ddist-hide-button">>,
+        #link{id = HideDDistID, postback = {action, ?MODULE, toggle_ddist_view, [FullPath, FileID, RowID, false]},
+            title = <<"Hide data distribution view">>, class = HideLinkClass,
             body = #span{class = <<"icomoon-minus4">>}},
         #panel{class = <<"clearfix">>},
-        #panel{id = DDistPanelID, class = <<"ddist-panel">>, body = <<"">>}
+        #panel{id = DDistPanelID, class = DDistPanelClass, body = Body}
     ].
 
 
-%% toggle_ddist_view/3
+no_support_panel(RowID) ->
+    ShowDDistID = ?SHOW_DIST_PANEL_ID(RowID),
+    % Item won't hightlight if the link is clicked.
+    gui_jq:bind_element_click(ShowDDistID, <<"function(e) { e.stopPropagation(); }">>),
+    [
+        #link{id = ShowDDistID, postback = {action, ?MODULE, display_info_not_supported},
+            title = <<"Data distribution (advanced)">>, class = <<"glyph-link hidden show-on-parent-hover ddist-show-button">>,
+            body = #span{class = <<"icomoon-earth">>}}
+    ].
+
+
+%% toggle_ddist_view/4
 %% ====================================================================
 %% @doc Function evaluated in postback that shows or hides the data distribution panel.
 %% @end
--spec toggle_ddist_view(FullPath :: string(), RowID :: integer(), Flag :: boolean()) -> term().
+-spec toggle_ddist_view(FullPath :: string(), FileID :: string(), RowID :: integer(), Flag :: boolean()) -> term().
 %% ====================================================================
-toggle_ddist_view(FilePath, RowID, Flag) ->
-    FullPath = fs_interface:get_full_file_path(FilePath),
-    FileID = fs_interface:get_file_uuid(FullPath),
+toggle_ddist_view(FullPath, FileID, RowID, Flag) ->
+    {FileSize, FileBlocks} = fs_interface:get_all_available_blocks(FileID),
     ShowDDistID = ?SHOW_DIST_PANEL_ID(RowID),
     HideDDistID = ?HIDE_DIST_PANEL_ID(RowID),
     DDistPanelID = ?DIST_PANEL_ID(RowID),
     case Flag of
         true ->
-            gui_jq:update(DDistPanelID, render_table(FullPath, FileID, RowID)),
+            gui_jq:update(DDistPanelID, render_table(FullPath, FileSize, FileBlocks, RowID)),
             gui_jq:remove_class(HideDDistID, <<"hidden">>),
             gui_jq:remove_class(ShowDDistID, <<"show-on-parent-hover">>),
             gui_jq:slide_down(DDistPanelID, 400);
@@ -95,28 +129,31 @@ toggle_ddist_view(FilePath, RowID, Flag) ->
             gui_jq:add_class(HideDDistID, <<"hidden">>),
             gui_jq:slide_up(DDistPanelID, 200)
     end,
-    get(?DD_COMET_PID) ! {toggle_watching, FullPath, FileID, RowID, Flag}.
+    CurrentDisplayed = get_displayed_ddist_panels(),
+    NewDisplayed = case Flag of
+                       true -> [{FullPath, FileID, RowID, md5_hash(FileSize, FileBlocks)} | CurrentDisplayed];
+                       false -> lists:keydelete(FileID, 2, CurrentDisplayed)
+                   end,
+    set_displayed_ddist_panels(NewDisplayed).
 
 
-%% refresh_view/3
+%% refresh_view/4
 %% ====================================================================
 %% @doc Refreshes the distribution status of given file.
 %% @end
--spec refresh_view(FullPath :: string(), FileID :: string(), RowID :: integer()) -> term().
+-spec refresh_view(FullPath :: string(), FileSize :: integer(), FileBlocks :: [{ProviderID :: binary(), [integer()]}], RowID :: integer()) -> term().
 %% ====================================================================
-refresh_view(FullPath, FileID, RowID) ->
-    gui_jq:update(?DIST_PANEL_ID(RowID), render_table(FullPath, FileID, RowID)).
+refresh_view(FullPath, FileSize, FileBlocks, RowID) ->
+    gui_jq:update(?DIST_PANEL_ID(RowID), render_table(FullPath, FileSize, FileBlocks, RowID)).
 
 
-%% render_table/3
+%% render_table/4
 %% ====================================================================
 %% @doc Renders the table with distribution status for given file.
 %% @end
--spec render_table(FullPath :: string(), FileID :: string(), RowID :: integer()) -> term().
+-spec render_table(FullPath :: string(), FileSize :: integer(), FileBlocks :: [{ProviderID :: binary(), [integer()]}], RowID :: integer()) -> term().
 %% ====================================================================
-render_table(FilePath, FileID, RowID) ->
-
-    {FileSize, Blocks} = fs_interface:get_all_available_blocks(FileID),
+render_table(FilePath, FileSize, FileBlocks, RowID) ->
     gui_jq:wire("$(window).resize();"),
     [
         #p{body = <<"File distribution:">>, class = <<"ddist-header">>},
@@ -127,22 +164,29 @@ render_table(FilePath, FileID, RowID) ->
                         CanvasID = ?CANVAS_ID(RowID, ProviderID),
                         SyncButtonID = ?SYNC_BUTTON_ID(RowID, ProviderID),
                         ExpelButtonID = ?EXPEL_BUTTON_ID(RowID, ProviderID),
+                        % Item won't hightlight if the link is clicked.
+                        gui_jq:bind_element_click(SyncButtonID, <<"function(e) { e.stopPropagation(); }">>),
+                        gui_jq:bind_element_click(ExpelButtonID, <<"function(e) { e.stopPropagation(); }">>),
                         JSON = rest_utils:encode_to_json([{<<"file_size">>, FileSize}, {<<"chunks">>, BlockList}]),
                         gui_jq:wire(<<"new FileChunksBar(document.getElementById('", CanvasID/binary, "'), '", JSON/binary, "');">>),
                         Percentage = ProvBytes * 10000 div FileSize,
                         PercentageBin = gui_str:format_bin("~b.~b%", [Percentage div 100, Percentage rem 100]),
                         #tr{cells = [
-                            #td{body = ProviderID, class = <<"ddist-provider">>},
+                            #td{body = fs_interface:get_provider_name(ProviderID), class = <<"ddist-provider">>},
                             #td{body = PercentageBin, class = <<"ddist-percentage">>},
                             #td{body = #canvas{id = CanvasID, class = <<"ddist-canvas">>}},
                             #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FilePath, ProviderID]},
                                 title = <<"Issue full synchronization">>, class = <<"glyph-link ddist-button">>,
                                 body = #span{class = <<"icomoon-spinner6">>}}},
-                            #td{body = #link{id = ExpelButtonID, postback = {action, ?MODULE, expel_file, [FilePath, ProviderID]},
-                                title = <<"Expel all chunks from this provider">>, class = <<"glyph-link ddist-button">>,
+                            % TODO Not yet supported
+%%                             #td{body = #link{id = ExpelButtonID, postback = {action, ?MODULE, expel_file, [FilePath, ProviderID]},
+%%                                 title = <<"Expel all chunks from this provider">>, class = <<"glyph-link ddist-button">>,
+%%                                 body = #span{class = <<"icomoon-blocked">>}}},
+                            #td{body = #link{id = ExpelButtonID,
+                                title = <<"Expel all chunks from this provider">>, class = <<"glyph-link-gray ddist-button">>,
                                 body = #span{class = <<"icomoon-blocked">>}}}
                         ]}
-                    end, Blocks)
+                    end, FileBlocks)
             ]}
         }
     ].
@@ -165,7 +209,8 @@ sync_file(_FilePath, _ProviderID) ->
 -spec expel_file(FullPath :: binary(), ProviderID :: string()) -> term().
 %% ====================================================================
 expel_file(_FilePath, _ProviderID) ->
-    ?dump(expel_file).
+    % TODO Not yet supported
+    ok.
 
 
 %% on_resize_js/0
@@ -175,47 +220,85 @@ expel_file(_FilePath, _ProviderID) ->
 -spec on_resize_js() -> binary().
 %% ====================================================================
 on_resize_js() ->
-    <<"if ($($('.list-view-name-header')[0]).width() < 400) { ",
-    "$('.ddist-percentage').hide(); $('.ddist-canvas').css('width', '80px'); } else ",
-    "{ $('.ddist-percentage').show(); $('.ddist-canvas').css('width', '125px'); }">>.
+    <<"if ($($('.list-view-name-header')[0]).width() < 300) { ",
+    "$('.ddist-percentage').hide(); $('.ddist-canvas').css('width', '50px'); $('.ddist-provider').css('max-width', '70px'); } ",
+    "else if ($($('.list-view-name-header')[0]).width() < 400) {",
+    "$('.ddist-percentage').hide(); $('.ddist-canvas').css('width', '80px'); $('.ddist-provider').css('max-width', '150px'); } else ",
+    "{ $('.ddist-percentage').show(); $('.ddist-canvas').css('width', '125px'); $('.ddist-provider').css('max-width', '150px'); }">>.
 
 
-%% comet_loop_init/2
+%% display_info_not_supported/0
 %% ====================================================================
-%% @doc Function evaluated by comet process to initialize its state.
+%% @doc Displays info dialog that the space is not supported and data distribution panel cannt be displayed.
 %% @end
--spec comet_loop_init(GRUID :: binary(), UserAccessToken :: binary()) -> term().
+-spec display_info_not_supported() -> term().
 %% ====================================================================
-comet_loop_init(GRUID, UserAccessToken) ->
-    % Initialize context
-    fslogic_context:set_gr_auth(GRUID, UserAccessToken),
-    gui_comet:flush(),
-    comet_loop([]).
+display_info_not_supported() ->
+    gui_jq:info_popup(<<"Not available">>, <<"Data distribution status for this file is not available, ",
+    "because this provider does not support the space.">>, <<"">>).
 
 
-%% comet_loop/1
+%% refresh_ddist_panels/0
 %% ====================================================================
-%% @doc Main comet loop that handles async updates of files distribution status.
+%% @doc Refreshes data distribution panels (if they have changed).
 %% @end
--spec comet_loop(WatchedFiles :: [term()]) -> term().
+-spec refresh_ddist_panels() -> term().
 %% ====================================================================
-comet_loop(WatchedFiles) ->
-    NewWatchedFiles = receive
-                          {toggle_watching, FullPath, FileID, RowID, Flag} ->
-                              case Flag of
-                                  true ->
-                                      [{FullPath, RowID} | WatchedFiles];
-                                  false ->
-                                      WatchedFiles -- [{FullPath, FileID, RowID}]
-                              end
-                      after
-                          50000 ->
-                              % TODO mock
-                              lists:foreach(
-                                  fun({FullPath, FileID, RowID}) ->
-                                      refresh_view(FullPath, FileID, RowID)
-                                  end, WatchedFiles),
-                              gui_comet:flush(),
-                              WatchedFiles
-                      end,
-    comet_loop(NewWatchedFiles).
+refresh_ddist_panels() ->
+    lists:foreach(
+        fun({FullPath, FileID, RowID, MD5Hash}) ->
+            {FileSize, FileBlocks} = fs_interface:get_all_available_blocks(FileID),
+            case md5_hash(FileSize, FileBlocks) of
+                MD5Hash ->
+                    ok;
+                NewHash ->
+                    ?dump({update_blocks, FullPath}),
+                    refresh_view(FullPath, FileSize, FileBlocks, RowID),
+                    set_displayed_ddist_panels([{FullPath, FileID, RowID, NewHash}] ++ lists:keydelete(FullPath, 1, get_displayed_ddist_panels()))
+            end
+        end, get_displayed_ddist_panels()).
+
+
+hide_ddist_panel(FilePath) ->
+    FullPath = fs_interface:get_full_file_path(FilePath),
+    set_displayed_ddist_panels(lists:keydelete(FullPath, 1, get_displayed_ddist_panels())).
+
+
+%% hide_all_ddist_panels/0
+%% ====================================================================
+%% @doc Removes all data distribution panels from process memory (none will be displayed after page update).
+%% @end
+-spec hide_all_ddist_panels() -> term().
+%% ====================================================================
+hide_all_ddist_panels() ->
+    put(ddd_panels, []).
+
+
+%% set_displayed_ddist_panels/1
+%% ====================================================================
+%% @doc Remembers what file have distribution status displayed.
+%% @end
+-spec set_displayed_ddist_panels([{FullPath :: string(), FileID :: string(), RowID :: binary(), MD5 :: binary()}]) -> binary().
+%% ====================================================================
+set_displayed_ddist_panels(List) ->
+    put(ddd_panels, List).
+
+
+%% get_displayed_ddist_panels/0
+%% ====================================================================
+%% @doc Returns stored list of displayed data distribution panels.
+%% @end
+-spec get_displayed_ddist_panels() -> [{FullPath :: string(), FileID :: string()}].
+%% ====================================================================
+get_displayed_ddist_panels() ->
+    get(ddd_panels).
+
+
+%% md5_hash/2
+%% ====================================================================
+%% @doc Returns stored list of displayed data distribution panels.
+%% @end
+-spec md5_hash(FileSize :: integer(), FileBlocks :: [{ProviderID :: binary(), [integer()]}]) -> binary().
+%% ====================================================================
+md5_hash(FileSize, FileBlocks) ->
+    erlang:md5(term_to_binary({FileSize, FileBlocks})).

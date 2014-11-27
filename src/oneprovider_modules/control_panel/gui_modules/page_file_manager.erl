@@ -257,9 +257,7 @@ event(init) ->
             AccessToken = opn_gui_utils:get_access_token(),
             Hostname = gui_ctx:get_requested_hostname(),
             {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(GRUID, AccessToken, Hostname) end),
-            put(?COMET_PID, Pid),
-            % Initialize comet process that handles data distribution view
-            pfm_data_dist:init(GRUID, AccessToken, Pid)
+            put(?COMET_PID, Pid)
     end;
 
 
@@ -298,6 +296,9 @@ event({action, Module, Fun, Args}) ->
 comet_loop_init(GRUID, UserAccessToken, RequestedHostname) ->
     % Initialize context
     fslogic_context:set_gr_auth(GRUID, UserAccessToken),
+
+    % Initialize data distribution view state
+    pfm_data_dist:init(),
 
     % Initialize page state
     set_requested_hostname(RequestedHostname),
@@ -359,6 +360,7 @@ comet_loop(IsUploadInProgress) ->
                         refresh_workspace(),
                         gui_comet:flush()
                 end,
+                pfm_data_dist:refresh_ddist_panels(),
                 IsUploadInProgress
             end
 
@@ -512,6 +514,7 @@ navigate(Path) ->
     case pfm_perms:fs_has_perms(Path, read) of
         true ->
             set_working_directory(Path),
+            pfm_data_dist:hide_all_ddist_panels(),
             clear_manager();
         false ->
             gui_jq:info_popup(<<"Insufficient permissions">>,
@@ -637,6 +640,7 @@ rename_item(OldPath, NewName) ->
         OldName -> hide_popup();
         _ ->
             NewPath = filename:absname(NewName, get_working_directory()),
+            pfm_data_dist:hide_ddist_panel(OldPath),
             ErrorMessage = case fs_mv(OldPath, get_working_directory(), NewName) of
                                ok ->
                                    clear_clipboard(),
@@ -687,7 +691,8 @@ remove_selected() ->
     SelectedItems = get_selected_items(),
     lists:foreach(
         fun({Path, _}) ->
-            fs_remove(Path)
+            fs_remove(Path),
+            pfm_data_dist:hide_ddist_panel(Path)
         end, SelectedItems),
     clear_clipboard(),
     clear_manager().
@@ -1128,7 +1133,7 @@ list_view_body() ->
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
                                     #link{id = LinkID, body = gui_str:html_encode(Basename), target = <<"_blank">>,
                                         url = <<?user_content_download_path, "/", (gui_str:url_encode(FilePath))/binary>>}
-                                ]}] ++ pfm_data_dist:data_distribution_panel(FilePath, Counter)
+                                ]}] ++ pfm_data_dist:no_support_panel(Counter) %pfm_data_dist:data_distribution_panel(FilePath, Counter)
                             }
                     end
                 ] ++

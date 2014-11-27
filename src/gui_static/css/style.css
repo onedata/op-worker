@@ -80,6 +80,7 @@ a.glyph-link:hover {
 }
 
 a.glyph-link-gray {
+    cursor: default;
     color: rgb(189, 195, 199);
 }
 
@@ -88,10 +89,9 @@ a.glyph-link-gray:focus {
 }
 
 a.glyph-link-gray:hover {
-    color: rgb(26, 188, 156) !important;
+    color: rgb(189, 195, 199) !important;
     text-decoration: none;
     background-color: transparent !important;
-    z-index: 1;
 }
 
 a.glyph-link-active {
@@ -122,4 +122,8 @@ tr.log_row:hover {
 
 .clearfix {
     clear: both;
+}
+
+.display-none {
+    display: none;
 }

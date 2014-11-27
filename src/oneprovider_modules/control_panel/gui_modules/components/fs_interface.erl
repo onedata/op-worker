@@ -16,22 +16,19 @@
 -include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
 -include("oneprovider_modules/fslogic/ranges_struct.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_registry/gr_providers.hrl").
 
 %% API
--export([file_parts_mock/1, get_all_available_blocks/1, get_full_file_path/1, get_file_uuid/1]).
-
-file_parts_mock(_FilePath) ->
-    random:seed(now()),
-    Size = random:uniform(123213) + 500,
-
-    {Size, [
-        {<<"provider1">>, random:uniform(Size), lists:sort([random:uniform(Size) || _ <- lists:seq(1, 2 * random:uniform(4))])},
-        {<<"prdfsgsdfovider2">>, random:uniform(Size), lists:sort([random:uniform(Size) || _ <- lists:seq(1, 2 * random:uniform(4))])},
-        {<<"provr3">>, random:uniform(Size), lists:sort([random:uniform(Size) || _ <- lists:seq(1, 2 * random:uniform(4))])},
-        {<<"prosdfvider4">>, random:uniform(Size), lists:sort([random:uniform(Size) || _ <- lists:seq(1, 2 * random:uniform(4))])}
-    ]}.
+-export([get_all_available_blocks/1, get_full_file_path/1, get_file_uuid/1, get_provider_name/1]).
 
 
+%% get_all_available_blocks/1
+%% ====================================================================
+%% @doc Lists all available blocks for given file and returns them in simplified format.
+%% The first tuple element is file size, the seconds is list of {ProviderID, ProviderBlocks} tuples.
+%% @end
+-spec get_all_available_blocks(FileID :: string()) -> {integer(), [{ProviderID :: string(), [integer()]}]}.
+%% ====================================================================
 get_all_available_blocks(FileID) ->
     {ok, AvailableBlocks} = logical_files_manager:list_all_available_blocks(FileID),
     {_, FileSize} = lists:foldl(
@@ -52,7 +49,7 @@ get_all_available_blocks(FileID) ->
             {ProviderID, ProvBytes, BlockList}
         end, AvailableBlocks),
 
-    {FileSize, lists:flatten(lists:duplicate(3, Blocks))}.
+    {FileSize, Blocks}.
 
 
 %% get_full_file_path/1
@@ -68,10 +65,23 @@ get_full_file_path(FilePath) ->
 
 %% get_file_uuid/1
 %% ====================================================================
-%% @doc Retrieves file document's UUID for given filepath.
+%% @doc Retrieves file document's UUID for given filepath. the filepath must be
+%% a string representing the full file path.
 %% @end
 -spec get_file_uuid(FullFilePath :: string()) -> string().
 %% ====================================================================
 get_file_uuid(FullFilePath) ->
     {ok, #db_document{uuid = FileID}} = fslogic_objects:get_file(FullFilePath),
     FileID.
+
+
+%% get_provider_name/1
+%% ====================================================================
+%% @doc Returns provider's name based on its id.
+%% @end
+-spec get_provider_name(ProviderID :: binary()) -> binary().
+%% ====================================================================
+% TODO Highly inefficient!! Making a REST request for every provider for every data distribution panel update
+get_provider_name(ProviderID) ->
+    {ok, #provider_details{name = Name}} = gr_providers:get_details(provider, ProviderID),
+    Name.
