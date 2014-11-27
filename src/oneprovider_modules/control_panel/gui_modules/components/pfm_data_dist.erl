@@ -96,6 +96,13 @@ data_distribution_panel(FilePath, RowID) ->
     ].
 
 
+%% no_support_panel/1
+%% ====================================================================
+%% @doc Renders the button that would normally open data distribution panel, but
+%% here it only displays a message, that the space is not supported.
+%% @end
+-spec no_support_panel(RowID :: integer()) -> [term()].
+%% ====================================================================
 no_support_panel(RowID) ->
     ShowDDistID = ?SHOW_DIST_PANEL_ID(RowID),
     % Item won't hightlight if the link is clicked.
