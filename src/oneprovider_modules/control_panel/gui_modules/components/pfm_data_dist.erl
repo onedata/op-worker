@@ -34,11 +34,11 @@
 %% API functions
 %% ====================================================================
 
-%% init/0
+%% init/3
 %% ====================================================================
 %% @doc Initializes comet process that handles async updates of file distribution status.
 %% @end
--spec init() -> term().
+-spec init(GRUID :: binary(), AccessToken :: binary(), MainCometPid :: pid()) -> term().
 %% ====================================================================
 init(GRUID, AccessToken, MainCometPid) ->
     {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(GRUID, AccessToken) end),
@@ -76,68 +76,76 @@ data_distribution_panel(FullPath, RowID) ->
 %% ====================================================================
 %% @doc Function evaluated in postback that shows or hides the data distribution panel.
 %% @end
--spec toggle_ddist_view(FullPath :: binary(), RowID :: integer(), Flag :: boolean()) -> term().
+-spec toggle_ddist_view(FullPath :: string(), RowID :: integer(), Flag :: boolean()) -> term().
 %% ====================================================================
-toggle_ddist_view(FullPath, RowID, Flag) ->
+toggle_ddist_view(FilePath, RowID, Flag) ->
+    FullPath = fs_interface:get_full_file_path(FilePath),
+    FileID = fs_interface:get_file_uuid(FullPath),
     ShowDDistID = ?SHOW_DIST_PANEL_ID(RowID),
     HideDDistID = ?HIDE_DIST_PANEL_ID(RowID),
     DDistPanelID = ?DIST_PANEL_ID(RowID),
     case Flag of
         true ->
-            gui_jq:update(DDistPanelID, render_table(FullPath, RowID)),
-            gui_jq:add_class(HideDDistID, <<"show-on-parent-hover">>),
+            gui_jq:update(DDistPanelID, render_table(FullPath, FileID, RowID)),
+            gui_jq:remove_class(HideDDistID, <<"hidden">>),
             gui_jq:remove_class(ShowDDistID, <<"show-on-parent-hover">>),
             gui_jq:slide_down(DDistPanelID, 400);
         false ->
             gui_jq:add_class(ShowDDistID, <<"show-on-parent-hover">>),
-            gui_jq:remove_class(HideDDistID, <<"show-on-parent-hover">>),
+            gui_jq:add_class(HideDDistID, <<"hidden">>),
             gui_jq:slide_up(DDistPanelID, 200)
     end,
-    get(?DD_COMET_PID) ! {toggle_watching, FullPath, RowID, Flag}.
+    get(?DD_COMET_PID) ! {toggle_watching, FullPath, FileID, RowID, Flag}.
 
 
-%% refresh_view/2
+%% refresh_view/3
 %% ====================================================================
 %% @doc Refreshes the distribution status of given file.
 %% @end
--spec refresh_view(FullPath :: binary(), RowID :: integer()) -> term().
+-spec refresh_view(FullPath :: string(), FileID :: string(), RowID :: integer()) -> term().
 %% ====================================================================
-refresh_view(FullPath, RowID) ->
-    gui_jq:update(?DIST_PANEL_ID(RowID), render_table(FullPath, RowID)).
+refresh_view(FullPath, FileID, RowID) ->
+    gui_jq:update(?DIST_PANEL_ID(RowID), render_table(FullPath, FileID, RowID)).
 
 
-%% render_table/2
+%% render_table/3
 %% ====================================================================
 %% @doc Renders the table with distribution status for given file.
 %% @end
--spec render_table(FullPath :: binary(), RowID :: integer()) -> term().
+-spec render_table(FullPath :: string(), FileID :: string(), RowID :: integer()) -> term().
 %% ====================================================================
-render_table(FilePath, RowID) ->
-    {FileSize, Blocks} = fs_interface:file_parts_mock(FilePath),
+render_table(FilePath, FileID, RowID) ->
+
+    {FileSize, Blocks} = fs_interface:get_all_available_blocks(FileID),
     gui_jq:wire("$(window).resize();"),
-    #table{class = <<"ddist-table">>,
-        body = #tbody{body = [
-            lists:map(
-                fun({ProviderID, ProvBytes, BlockList}) ->
-                    CanvasID = ?CANVAS_ID(RowID, ProviderID),
-                    SyncButtonID = ?SYNC_BUTTON_ID(RowID, ProviderID),
-                    ExpelButtonID = ?EXPEL_BUTTON_ID(RowID, ProviderID),
-                    JSON = rest_utils:encode_to_json([{<<"file_size">>, FileSize}, {<<"chunks">>, BlockList}]),
-                    gui_jq:wire(<<"new FileChunksBar(document.getElementById('", CanvasID/binary, "'), '", JSON/binary, "');">>),
-                    #tr{cells = [
-                        #td{body = ProviderID, class = <<"ddist-provider">>},
-                        #td{body = gui_str:format_bin("~.2f%", [ProvBytes * 100 / FileSize]), class = <<"ddist-percentage">>},
-                        #td{body = #canvas{id = CanvasID, class = <<"ddist-canvas">>}},
-                        #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FilePath, ProviderID]},
-                            title = <<"Issue full synchronization">>, class = <<"glyph-link ddist-button">>,
-                            body = #span{class = <<"icomoon-spinner6">>}}},
-                        #td{body = #link{id = ExpelButtonID, postback = {action, ?MODULE, expel_file, [FilePath, ProviderID]},
-                            title = <<"Expel all chunks from this provider">>, class = <<"glyph-link ddist-button">>,
-                            body = #span{class = <<"icomoon-blocked">>}}}
-                    ]}
-                end, Blocks)
-        ]}
-    }.
+    [
+        #p{body = <<"File distribution:">>, class = <<"ddist-header">>},
+        #table{class = <<"ddist-table">>,
+            body = #tbody{body = [
+                lists:map(
+                    fun({ProviderID, ProvBytes, BlockList}) ->
+                        CanvasID = ?CANVAS_ID(RowID, ProviderID),
+                        SyncButtonID = ?SYNC_BUTTON_ID(RowID, ProviderID),
+                        ExpelButtonID = ?EXPEL_BUTTON_ID(RowID, ProviderID),
+                        JSON = rest_utils:encode_to_json([{<<"file_size">>, FileSize}, {<<"chunks">>, BlockList}]),
+                        gui_jq:wire(<<"new FileChunksBar(document.getElementById('", CanvasID/binary, "'), '", JSON/binary, "');">>),
+                        Percentage = ProvBytes * 10000 div FileSize,
+                        PercentageBin = gui_str:format_bin("~b.~b%", [Percentage div 100, Percentage rem 100]),
+                        #tr{cells = [
+                            #td{body = ProviderID, class = <<"ddist-provider">>},
+                            #td{body = PercentageBin, class = <<"ddist-percentage">>},
+                            #td{body = #canvas{id = CanvasID, class = <<"ddist-canvas">>}},
+                            #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FilePath, ProviderID]},
+                                title = <<"Issue full synchronization">>, class = <<"glyph-link ddist-button">>,
+                                body = #span{class = <<"icomoon-spinner6">>}}},
+                            #td{body = #link{id = ExpelButtonID, postback = {action, ?MODULE, expel_file, [FilePath, ProviderID]},
+                                title = <<"Expel all chunks from this provider">>, class = <<"glyph-link ddist-button">>,
+                                body = #span{class = <<"icomoon-blocked">>}}}
+                        ]}
+                    end, Blocks)
+            ]}
+        }
+    ].
 
 
 %% sync_file/2
@@ -146,7 +154,7 @@ render_table(FilePath, RowID) ->
 %% @end
 -spec sync_file(FullPath :: binary(), ProviderID :: string()) -> term().
 %% ====================================================================
-sync_file(FilePath, ProviderID) ->
+sync_file(_FilePath, _ProviderID) ->
     ?dump(sync_file).
 
 
@@ -156,7 +164,7 @@ sync_file(FilePath, ProviderID) ->
 %% @end
 -spec expel_file(FullPath :: binary(), ProviderID :: string()) -> term().
 %% ====================================================================
-expel_file(FilePath, ProviderID) ->
+expel_file(_FilePath, _ProviderID) ->
     ?dump(expel_file).
 
 
@@ -193,19 +201,19 @@ comet_loop_init(GRUID, UserAccessToken) ->
 %% ====================================================================
 comet_loop(WatchedFiles) ->
     NewWatchedFiles = receive
-                          {toggle_watching, FullPath, RowID, Flag} ->
+                          {toggle_watching, FullPath, FileID, RowID, Flag} ->
                               case Flag of
                                   true ->
                                       [{FullPath, RowID} | WatchedFiles];
                                   false ->
-                                      WatchedFiles -- [{FullPath, RowID}]
+                                      WatchedFiles -- [{FullPath, FileID, RowID}]
                               end
                       after
                           50000 ->
                               % TODO mock
                               lists:foreach(
-                                  fun({FullPath, RowID}) ->
-                                      refresh_view(FullPath, RowID)
+                                  fun({FullPath, FileID, RowID}) ->
+                                      refresh_view(FullPath, FileID, RowID)
                                   end, WatchedFiles),
                               gui_comet:flush(),
                               WatchedFiles

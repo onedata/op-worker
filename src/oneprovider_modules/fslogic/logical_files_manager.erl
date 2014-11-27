@@ -36,7 +36,7 @@
 -export([get_file_children_count/1]).
 
 %% Block synchronization
--export([synchronize/3, mark_as_modified/3, mark_as_truncated/2]).
+-export([synchronize/3, mark_as_modified/3, mark_as_truncated/2, list_all_available_blocks/1]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
@@ -1307,7 +1307,8 @@ synchronize(File, Offset, Size) ->
         case File of
             {uuid, Uuid} ->
                 case logical_files_manager:get_file_full_name_by_uuid(Uuid) of %todo cache this value somehow
-                    {ok, Name} -> contact_fslogic(#synchronizefileblock{logical_name = Name, offset = Offset, size = Size});
+                    {ok, Name} ->
+                        contact_fslogic(#synchronizefileblock{logical_name = Name, offset = Offset, size = Size});
                     Error_ -> Error_
                 end;
             _ -> contact_fslogic(#synchronizefileblock{logical_name = File, offset = Offset, size = Size})
@@ -1356,6 +1357,17 @@ mark_as_truncated(FullFileName, Size) ->
             end;
         _ -> {Status, TmpAns}
     end.
+
+
+% TODO proper implementation
+list_all_available_blocks(FileID) ->
+    {ok, List} = fslogic_available_blocks:call({list_all_available_blocks, FileID}),
+    AvailableBlocks = lists:map(
+        fun(#db_document{record = #available_blocks{} = AvBlocks}) ->
+            AvBlocks
+        end, List),
+    {ok, AvailableBlocks}.
+
 
 %% cache_size/2
 %% ====================================================================
@@ -1639,7 +1651,7 @@ get_file_path_from_cache({uuid, Uuid}) ->
         FullFilePath -> {ok, FullFilePath}
     end;
 get_file_path_from_cache(FileShortName) ->
-    case string:tokens(FileShortName,"/") of
+    case string:tokens(FileShortName, "/") of
         [?SPACES_BASE_DIR_NAME | _] -> {ok, FileShortName};
         _ ->
             case get({path_of, FileShortName}) of

@@ -1069,11 +1069,11 @@ list_view_body() ->
                end,
     {TableRows, _} = lists:mapfoldl(
         fun(Item, Counter) ->
-            FullPath = item_path(Item),
+            FilePath = item_path(Item),
             Basename = item_basename(Item),
             ImageStyle = case get_clipboard_type() of
                              cut ->
-                                 case lists:member({FullPath, Basename}, get_clipboard_items()) of
+                                 case lists:member({FilePath, Basename}, get_clipboard_items()) of
                                      true -> <<"opacity:0.3; filter:alpha(opacity=30);">>;
                                      _ -> <<"">>
                                  end;
@@ -1082,7 +1082,7 @@ list_view_body() ->
 
             ImageUrl = case item_is_dir(Item) of
                            true ->
-                               case is_space_dir(FullPath) of
+                               case is_space_dir(FilePath) of
                                    true -> <<"/images/folder_space32.png">>;
                                    false -> <<"/images/folder32.png">>
                                end;
@@ -1096,19 +1096,19 @@ list_view_body() ->
             % Image won't hightlight if the image is clicked.
             gui_jq:bind_element_click(ImageID, <<"function(e) { e.stopPropagation(); }">>),
             TableRow = #tr{
-                id = wire_click(item_id(Item), {action, select_item, [FullPath]}),
+                id = wire_click(item_id(Item), {action, select_item, [FilePath]}),
                 cells = [
                     case item_is_dir(Item) of
                         true ->
                             #td{style = <<"vertical-align: middle;">>, body = #span{style = <<"word-wrap: break-word;">>,
                                 class = <<"table-cell">>, body = [
                                     #panel{style = <<"display: inline-block; vertical-align: middle;">>, body = [
-                                        #link{id = wire_click(ImageID, {action, navigate, [FullPath]}), body =
+                                        #link{id = wire_click(ImageID, {action, navigate, [FilePath]}), body =
                                         #image{class = <<"list-icon">>, style = ImageStyle, image = ImageUrl}}
                                     ]},
                                     #panel{class = <<"filename_row">>,
                                         style = <<"max-width: 400px; word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
-                                            #link{id = wire_click(LinkID, {action, navigate, [FullPath]}), body = gui_str:html_encode(Basename)}
+                                            #link{id = wire_click(LinkID, {action, navigate, [FilePath]}), body = gui_str:html_encode(Basename)}
                                         ]}
                                 ]}};
                         false ->
@@ -1120,15 +1120,15 @@ list_view_body() ->
                             #td{style = <<"position: relative;">>, class = <<"list-view-name-column">>, body = [
                                 #panel{style = <<"display: inline-block; vertical-align: middle; position: relative;">>, body = [
                                     #link{id = ImageID, target = <<"_blank">>,
-                                        url = <<?user_content_download_path, "/", (gui_str:url_encode(FullPath))/binary>>, body = [
+                                        url = <<?user_content_download_path, "/", (gui_str:url_encode(FilePath))/binary>>, body = [
                                             ShareIcon,
                                             #image{class = <<"list-icon">>, style = ImageStyle, image = ImageUrl}
                                         ]}
                                 ]},
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
                                     #link{id = LinkID, body = gui_str:html_encode(Basename), target = <<"_blank">>,
-                                        url = <<?user_content_download_path, "/", (gui_str:url_encode(FullPath))/binary>>}
-                                ]}] ++ pfm_data_dist:data_distribution_panel(FullPath, Counter)
+                                        url = <<?user_content_download_path, "/", (gui_str:url_encode(FilePath))/binary>>}
+                                ]}] ++ pfm_data_dist:data_distribution_panel(FilePath, Counter)
                             }
                     end
                 ] ++
