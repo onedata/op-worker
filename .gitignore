@@ -29,6 +29,5 @@ c_lib
 c_src/helpers_nif/*.o
 c_src/rt_container/*.o
 c_src/oneproxy/build/*
-c_src/rt_heap/*.o
 
 docs/_build/
