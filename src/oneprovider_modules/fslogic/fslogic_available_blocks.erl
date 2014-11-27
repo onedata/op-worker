@@ -158,28 +158,34 @@ call(Req) ->
     end.
 
 file_synchronized(ProtocolVersion, CacheName, FileId, SyncedParts, FullFileName) ->
-    {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
-    ProviderId = cluster_manager_lib:get_provider_id(),
-    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    try
 
-    %modify document
-    NewDoc = lists:foldl(fun(Ranges, Acc) -> fslogic_available_blocks:mark_as_available(Ranges, Acc) end, MyRemoteLocationDoc, SyncedParts),
+        {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
+        ProviderId = cluster_manager_lib:get_provider_id(),
+        [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
 
-    % notify cache, db and fuses
-    case MyRemoteLocationDoc == NewDoc of
-        true -> ok;
-        false ->
-            %update size to newest
-            {ok, FileSize} = get_file_size(ProtocolVersion, CacheName, FileId),
-            FinalNewDoc = update_size(NewDoc, FileSize),
+        %modify document
+        NewDoc = lists:foldl(fun(Ranges, Acc) -> fslogic_available_blocks:mark_as_available(Ranges, Acc) end, MyRemoteLocationDoc, SyncedParts),
 
-            %save available_blocks and notify fuses
-            save_available_blocks(ProtocolVersion, CacheName, FinalNewDoc),
-            lists:foreach(fun(Ranges) ->
-                {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false)
-            end, SyncedParts)
-    end,
-    #atom{value = ?VOK}.
+        % notify cache, db and fuses
+        case MyRemoteLocationDoc == NewDoc of
+            true -> ok;
+            false ->
+                %update size to newest
+                {ok, FileSize} = get_file_size(ProtocolVersion, CacheName, FileId),
+                FinalNewDoc = update_size(NewDoc, FileSize),
+
+                %save available_blocks and notify fuses
+                {ok, _} = save_available_blocks(ProtocolVersion, CacheName, FinalNewDoc),
+                lists:foreach(fun(Ranges) ->
+                    {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false)
+                end, SyncedParts)
+        end,
+        #atom{value = ?VOK}
+    catch
+        _:Error1  ->
+            ?error_stacktrace("ERROR SYNC: ~p", [Error1])
+    end.
 
 file_block_modified(ProtocolVersion, CacheName, FileId, Offset, Size, FullFileName) ->
     % prepare data
