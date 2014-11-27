@@ -97,15 +97,4 @@ private:
 } // namespace provider
 } // namespace one
 
-namespace std {
-
-template <> struct hash<one::provider::rt_local_term> {
-    std::size_t operator()(const one::provider::rt_local_term &term) const
-    {
-        return hash<long long>{}(term.shared_data_->term_);
-    }
-};
-
-} // namespace std
-
 #endif // RT_LOCAL_TERM_H
