@@ -48,7 +48,6 @@ body_devel() ->
             [];
         false ->
             #panel{style = <<"position: relative; text-align: center;">>, body = [
-                #canvas{id = <<"cnvs">>, style = <<"width: 200px; height: 20px;  margin: 200px;">>},
                 #panel{class = <<"alert alert-success login-page">>, body = [
                     #h3{body = <<"Welcome to onedata">>},
                     #p{class = <<"login-info">>, body = <<"THIS IS A NON-PRODUCTION, DEVELOPER-FRIENDLY LOGIN PAGE">>},
@@ -61,8 +60,6 @@ body_devel() ->
 
 
 event(init) ->
-    gui_jq:wire(<<"var fcb = new FileChunksBar(document.getElementById('cnvs'), '#1ABC9C', '#526476');">>),
-    gui_jq:wire(<<"fcb.draw('[{\"file_size\": 1678},{\"chunks\": [0, 234, 356, 399, 789, 1244, 1544, 1544, 1590, 1677]}]');">>),
     ok;
 
 event(terminate) ->

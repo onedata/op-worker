@@ -259,7 +259,7 @@ event(init) ->
             {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(GRUID, AccessToken, Hostname) end),
             put(?COMET_PID, Pid),
             % Initialize comet process that handles data distribution view
-            pfm_data_dist:init(GRUID, UserAccessToken, Pid)
+            pfm_data_dist:init(GRUID, AccessToken, Pid)
     end;
 
 
@@ -1012,19 +1012,20 @@ list_view_body() ->
         "background: white; border: 2px solid #bbbdc0; border-collapse: collapse; min-width: 1024px;">>, header = [
             #tr{cells =
             [
-                #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116);">>, body = [
-                    #panel{style = <<"position: relative;">>, body = [
-                        <<"Name">>,
-                        #panel{style = <<"position: absolute; right: -22px; top: -4px; ">>, body =
-                        lists:map(fun(Attr) ->
-                            #span{style = <<"font-size: 12px; font-weight: normal; background-color: #EBEDEF; ",
-                            "border: 1px solid #34495E; padding: 1px 3px; margin-right: 4px; cursor: pointer;">>,
-                                id = wire_click(<<"toggle_column_", (gui_str:to_binary(Attr))/binary>>, {action, toggle_column, [Attr, true]}),
-                                body = attr_to_name(Attr)}
-                        end, HiddenAttrs)
-                        }
+                #th{class = <<"list-view-name-header">>, style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116);">>,
+                    body = [
+                        #panel{style = <<"position: relative;">>, body = [
+                            <<"Name">>,
+                            #panel{style = <<"position: absolute; right: -22px; top: -4px; ">>, body =
+                            lists:map(fun(Attr) ->
+                                #span{style = <<"font-size: 12px; font-weight: normal; background-color: #EBEDEF; ",
+                                "border: 1px solid #34495E; padding: 1px 3px; margin-right: 4px; cursor: pointer;">>,
+                                    id = wire_click(<<"toggle_column_", (gui_str:to_binary(Attr))/binary>>, {action, toggle_column, [Attr, true]}),
+                                    body = attr_to_name(Attr)}
+                            end, HiddenAttrs)
+                            }
+                        ]}
                     ]}
-                ]}
             ] ++
             lists:map(
                 fun(Attr) ->
@@ -1141,7 +1142,8 @@ list_view_body() ->
     % Set filename containers width
     ContentWithoutFilename = 100 + (?ATTRIBUTE_COLUMN_WIDTH + 51) * NumAttr, % 51 is cell padding
     gui_jq:wire(<<"window.onresize = function(e) { $('.filename_row').css('max-width', ",
-    "'' +($('#header_table').width() - ", (integer_to_binary(ContentWithoutFilename))/binary, ") + 'px'); }; $(window).resize();">>),
+    "'' +($('#header_table').width() - ", (integer_to_binary(ContentWithoutFilename))/binary, ") + 'px'); ",
+    (pfm_data_dist:on_resize_js())/binary, " }; $(window).resize();">>),
     [
         HeaderTable,
         #table{id = <<"main_table">>, class = <<"table table-bordered">>,
