@@ -257,7 +257,7 @@ get_truncate_for_avaialbale_blocks_handler() ->
     fun(Event) ->
         ?info("TRUNCATE"),
         ?dump(Event),
-        Blocks = proplists:get_value("blocks", Event),
+        NewSize = proplists:get_value("newSize", Event),
         FullFileName = proplists:get_value("filePath", Event),
-        lists:foreach(fun({_Offset, Size}) -> ok = logical_files_manager:mark_as_truncated(FullFileName, Size) end, Blocks)
+        ok = logical_files_manager:mark_as_truncated(FullFileName, NewSize)
     end.
