@@ -654,7 +654,7 @@ init_cluster(State) ->
   NewState :: term().
 %% ====================================================================
 init_cluster(State, Repeat) ->
-  ?info("Checking if initialization is needed ~p ~p", [State, Repeat]),
+  ?debug("Checking if initialization is needed ~p ~p", [State, Repeat]),
   Nodes = State#cm_state.nodes,
   case length(Nodes) > 0 of
     true ->
@@ -700,7 +700,7 @@ init_cluster(State, Repeat) ->
 
       case Repeat of
         true -> plan_next_cluster_state_check();
-        _ -> ?info("No Repeat state ~p", [NewState3])
+        _ -> ?debug("Single cluster initialization ~p", [NewState3])
       end,
       NewState3;
     false ->

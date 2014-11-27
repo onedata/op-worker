@@ -198,7 +198,7 @@ permanent_node_cache_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  test_utils:wait_for_cluster_init(length(?PERMANENT_MODULES) + DuplicatedPermanentNodes),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1 + DuplicatedPermanentNodes),
   lists:foreach(CheckCaches, WorkerNodes),
 
   lists:foreach(fun(Pid) -> Pid ! stop_cache end, CachesPids).
@@ -231,7 +231,7 @@ sub_procs_error_cache_clearing_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  test_utils:wait_for_cluster_init(length(?PERMANENT_MODULES) + DuplicatedPermanentNodes),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1 + DuplicatedPermanentNodes),
 
   ProcFun = fun
     (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
@@ -442,7 +442,7 @@ sub_procs_automatic_cache_clearing_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  test_utils:wait_for_cluster_init(length(?PERMANENT_MODULES) + DuplicatedPermanentNodes),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1 + DuplicatedPermanentNodes),
 
   ProcFun = fun
     (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
@@ -636,7 +636,7 @@ sub_proc_cache_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  test_utils:wait_for_cluster_init(length(?PERMANENT_MODULES) + DuplicatedPermanentNodes),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1 + DuplicatedPermanentNodes),
 
   ProcFun = fun
     (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
@@ -858,7 +858,7 @@ sub_proc_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  test_utils:wait_for_cluster_init(length(?PERMANENT_MODULES) + DuplicatedPermanentNodes),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1 + DuplicatedPermanentNodes),
 
   ProcFun = fun(_ProtocolVersion, {sub_proc_test, _, AnsPid}) ->
     Pid = self(),

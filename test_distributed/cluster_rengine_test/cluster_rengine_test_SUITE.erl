@@ -351,7 +351,7 @@ init_per_testcase(_, Config) ->
   end,
 
   lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
-  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes + length(?PERMANENT_MODULES)),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes + length(NodesUp) - 1),
   lists:append([{nodes, NodesUp}], Config).
 
 end_per_testcase(distributed_test, Config) ->
