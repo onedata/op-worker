@@ -20,6 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_providers.hrl").
 
+
 -define(RTRANSFER_RUNNING_JOBS, rtransfer_running_jobs).
 -define(aggregators_map, aggregators_map).
 -define(gateways_map, gateways_map).
@@ -29,12 +30,6 @@
 -ifdef(TEST).
 -compile(export_all).
 -endif.
-
--export([test/0]).
-test() ->
-    RequestTransfer = {request_transfer, "05073bf6703dee28bdb5016b3b53bf70", 0, 1024 * 1024 * 100, <<"050737e1f40ba94168bab38443c5c1e4">>, self()},
-    gen_server:cast(rtransfer, {asynch, 1, RequestTransfer}),
-    receive A -> {thats_a_reply, A} after timer:seconds(20) -> {lol, timeout} end.
 
 
 %% ====================================================================

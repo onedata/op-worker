@@ -35,7 +35,7 @@
 partition([#rt_block{offset = Offset} = Block | ExistingBlocks], #rt_block{offset = Offset} = BaseBlock) ->
     #rt_block{size = BSize, priority = BPriority, terms = BTerms} = Block,
     #rt_block{size = Size, provider_ref = ProviderRef, priority = Priority, terms = Terms} = BaseBlock,
-    UpdatedBlock = Block#rt_block{provider_ref = ProviderRef, priority = erlang:max(BPriority, Priority), terms = BTerms ++ Terms},
+    UpdatedBlock = Block#rt_block{provider_ref = ProviderRef, priority = erlang:max(BPriority, Priority), terms = ordsets:union(ordsets:from_list(BTerms), ordsets:from_list(Terms))},
     ShrunkBaseBlock = BaseBlock#rt_block{offset = Offset + BSize, size = Size - BSize},
     [UpdatedBlock | partition(ExistingBlocks, ShrunkBaseBlock)];
 
