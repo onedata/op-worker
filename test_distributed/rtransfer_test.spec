@@ -5,16 +5,16 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc This file is a specification for gateway tests. The test can be found
-%% in gateway_test directory.
+%% @doc This file is a specification for rtransfer tests. The test can be found
+%% in rtransfer_test directory.
 %% @end
 %% ===================================================================
 
 %% log directories (all_nodes does not include master)
 %% {logdir, master, "."}.
-{logdir, all_nodes, "./gateway_test"}.
+{logdir, all_nodes, "./rtransfer_test"}.
 {include, ["../include", "."]}.
 
 %% test suits to be run
-{alias, gateway_test, "./gateway_test"}.
-{suites, gateway_test, all}.
+{alias, rtransfer_test, "./rtransfer_test"}.
+{suites, rtransfer_test, all}.

@@ -9,6 +9,7 @@
 %% @end
 %% ===================================================================
 -module(rt_priority_queue).
+-behaviour(gen_server).
 
 -include("registered_names.hrl").
 -include("oneprovider_modules/rtransfer/rt_container.hrl").

@@ -19,7 +19,7 @@
 -include("registered_names.hrl").
 -include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
 -include("oneprovider_modules/fslogic/ranges_struct.hrl").
--include("oneprovider_modules/gateway/gateway.hrl").
+-include("oneprovider_modules/rtransfer/rtransfer.hrl").
 
 
 %% API
@@ -464,7 +464,18 @@ synchronize_file_block(FullFileName, Offset, Size) ->
         fun({Id, Ranges}) ->
             lists:foreach(fun(Range = #range{from = From, to = To}) ->
                 ?info("Synchronizing blocks: ~p of file ~s", [Range, FullFileName]),
-                {ok, _} = gateway:do_stuff(Id, #fetchrequest{file_id = FileId, offset = From*?remote_block_size, size = (To-From+1)*?remote_block_size})
+                O = From*?remote_block_size,
+                S = (To-From+1)*?remote_block_size,
+                gen_server:call(?Dispatcher_Name, {rtransfer, 1,
+                    #request_transfer{file_id = FileId, offset = O, size = S, notify = self(), provider_id = Id}}),
+
+                {ok, _} =
+                    receive
+                        {transfer_complete, Read, {FileId, O, S}} -> {ok, Read};
+                        {transfer_error, Reason,  {FileId, O, S}} -> {error, Reason}
+                    after
+                        timer:seconds(10) -> timeout
+                    end
             end, Ranges)
         end, OutOfSyncList),
     SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
