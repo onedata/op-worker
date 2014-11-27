@@ -25,8 +25,7 @@
 
 %% API
 -export([update_times/4, change_file_owner/2, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
-    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0, synchronize_file_block/3, file_block_modified/3, file_truncated/2,
-    attr_unsubscribe/1
+    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0, attr_unsubscribe/1
 ]).
 
 %% ====================================================================
