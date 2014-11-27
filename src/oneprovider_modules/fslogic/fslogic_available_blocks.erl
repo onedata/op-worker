@@ -57,6 +57,8 @@
 %% ====================================================================
 synchronize_file_block(FullFileName, Offset, Size) ->
     ct:print("synchronize_file_block(~p,~p,~p)",[FullFileName, Offset, Size]),
+    ct:print("Context: ~p, UserContext ~p", [fslogic_context:get_fuse_id(), fslogic_context:get_user_context()]),
+
     %prepare data
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
     {ok, RemoteLocationDocs} = call({list_all_available_blocks, FileId}),
