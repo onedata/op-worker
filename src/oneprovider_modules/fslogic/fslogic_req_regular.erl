@@ -226,7 +226,7 @@ update_file_block_map(FullFileName, Blocks, ClearMap) ->
 
     utils:pforeach(fun(#db_document{record = #file_descriptor{fuse_id = FuseId, file = FileUuid}}) ->
         % get storage file_id, todo check if works for both proxy and directio
-        ct:print("Context: ~p, UserContext ~p, FuseId: ~p, FileUuid ~p", [fslogic_context:get_fuse_id(), fslogic_context:get_user_context(), FuseId, FileUuid])
+        ct:print("Context: ~p, UserContext ~p, FuseId: ~p, FileUuid ~p", [fslogic_context:get_fuse_id(), fslogic_context:get_user_context(), FuseId, FileUuid]),
         #db_document{record = FileLoc} = fslogic_file:get_file_local_location_doc(FileDoc),
         {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
         {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_uuid}),
