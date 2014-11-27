@@ -250,7 +250,7 @@ get_write_for_available_blocks_handler() ->
         ?dump(Event),
         Blocks = proplists:get_value("blocks", Event),
         FullFileName = proplists:get_value("filePath", Event),
-        lists:foreach(fun({Offset, Size}) -> logical_files_manager:mark_as_modified(FullFileName, Offset, Size) end, Blocks)
+        lists:foreach(fun({Offset, Size}) -> ok = logical_files_manager:mark_as_modified(FullFileName, Offset, Size) end, Blocks)
     end.
 
 get_truncate_for_avaialbale_blocks_handler() ->
@@ -259,5 +259,5 @@ get_truncate_for_avaialbale_blocks_handler() ->
         ?dump(Event),
         Blocks = proplists:get_value("blocks", Event),
         FullFileName = proplists:get_value("filePath", Event),
-        lists:foreach(fun({_Offset, Size}) -> logical_files_manager:mark_as_truncated(FullFileName, Size) end, Blocks)
+        lists:foreach(fun({_Offset, Size}) -> ok = logical_files_manager:mark_as_truncated(FullFileName, Size) end, Blocks)
     end.
