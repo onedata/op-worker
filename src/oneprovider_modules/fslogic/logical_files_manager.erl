@@ -587,13 +587,11 @@ read(File, Offset, Size, EventPolicy) ->
     ErrorDetail :: term().
 %% ====================================================================
 write_file_chunk({uuid, Uuid}, Buf) ->
-    ct:print("write/2 ~p",[{uuid, Uuid}]),
     case get_file_path_from_cache({uuid, Uuid}) of
         {ok, FullFilePath} -> write_file_chunk(FullFilePath, Buf);
         Error -> Error
     end;
 write_file_chunk(FilePath, Buf) ->
-    ct:print("write/2 ~p",[FilePath]),
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
             case getfilelocation(FilePath) of
@@ -648,13 +646,11 @@ write(File, Offset, Buf) ->
     ErrorDetail :: term().
 %% ====================================================================
 write({uuid, Uuid}, Offset, Buf, EventPolicy) ->
-    ct:print("write/4 ~p",[{uuid, Uuid}]),
     case get_file_path_from_cache({uuid, Uuid}) of
         {ok, FullFilePath} -> write(FullFilePath, Offset, Buf, EventPolicy);
         Error -> Error
     end;
 write(FilePath, Offset, Buf, EventPolicy) ->
-    ct:print("write/4 ~p",[FilePath]),
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
             case getfilelocation(FilePath) of

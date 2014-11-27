@@ -33,7 +33,6 @@
 -spec on_file_size_update(FileUUID :: uuid(), OldFileSize :: non_neg_integer(), NewFileSize :: non_neg_integer()) -> ok.
 %% ====================================================================
 on_file_size_update(FileUUID, OldFileSize, NewFileSize) ->
-    ct:print("Filesize update ~p", [NewFileSize]),
     gen_server:call(?Dispatcher_Name, {fslogic, 1, {internal_event, on_file_size_update, {FileUUID, OldFileSize, NewFileSize}}}, timer:seconds(5)).
 
 
@@ -43,7 +42,6 @@ on_file_size_update(FileUUID, OldFileSize, NewFileSize) ->
 -spec on_file_meta_update(FileUUID :: uuid(), Doc :: db_doc()) -> ok.
 %% ====================================================================
 on_file_meta_update(FileUUID, Doc) ->
-    ct:print("Filemeta update"),
     gen_server:call(?Dispatcher_Name, {fslogic, 1, {internal_event, on_file_meta_update, {FileUUID, Doc}}}, timer:seconds(5)).
 
 %% ===================================================================
