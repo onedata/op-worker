@@ -30,7 +30,7 @@
 -export([synchronize_file_block/3, file_block_modified/3, file_truncated/2, db_sync_hook/0]).
 % cache/dao_proxy api
 -export([cast/1, call/1]).
--export([file_synchronized/5, file_block_modified/6, file_truncated/5, external_available_blocks_changed/4]).
+-export([file_synchronized/6, file_block_modified/7, file_truncated/6, external_available_blocks_changed/5]).
 -export([registered_requests/0, save_available_blocks/3, get_available_blocks/3, list_all_available_blocks/3, get_file_size/3, invalidate_blocks_cache/3]).
 % Low level document modification api
 -export([mark_as_modified/2, mark_as_available/2, check_if_synchronized/3, truncate/2, mark_other_provider_changes/2]).
@@ -77,11 +77,10 @@ synchronize_file_block(FullFileName, Offset, Size) ->
         end, OutOfSyncList),
     SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
 
-    case SyncedParts of
-        [] -> ok;
-        _ -> #atom{value = ?VOK} = call({file_synchronized, FileId, SyncedParts, FullFileName}) % todo remove FullFileName arg
-    end,
-    #atom{value = ?VOK}.
+    #atom{value = ?VOK} = case SyncedParts of
+        [] -> #atom{value = ?VOK};
+        _ -> call({file_synchronized, fslogic_context:get_context(), FileId, SyncedParts, FullFileName}) % todo remove FullFileName arg
+    end.
 
 
 %% file_block_modified/3
@@ -95,8 +94,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
 file_block_modified(FullFileName, Offset, Size) ->
     ct:print("file_block_modified(~p,~p,~p)",[FullFileName, Offset, Size]),
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
-    #atom{value = ?VOK} = call({file_block_modified, FileId, Offset, Size, FullFileName}), % todo remove FullFileName arg
-    #atom{value = ?VOK}.
+    #atom{value = ?VOK} = call({file_block_modified, fslogic_context:get_context(), FileId, Offset, Size, FullFileName}). % todo remove FullFileName arg
 
 %% file_truncated/2
 %% ====================================================================
@@ -109,8 +107,7 @@ file_block_modified(FullFileName, Offset, Size) ->
 file_truncated(FullFileName, Size) ->
     ct:print("file_truncated(~p,~p)",[FullFileName, Size]),
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
-    #atom{value = ?VOK} = call({file_truncated, FileId, Size, FullFileName}), % todo remove FullFileName arg
-    #atom{value = ?VOK}.
+    #atom{value = ?VOK} = call({file_truncated, fslogic_context:get_context(), FileId, Size, FullFileName}). % todo remove FullFileName arg
 
 db_sync_hook() ->
     MyProviderId = cluster_manager_lib:get_provider_id(),
@@ -118,7 +115,7 @@ db_sync_hook() ->
         (?FILES_DB_NAME, _, _, #db_document{record = #available_blocks{file_id = FileId}, deleted = true}) ->
             fslogic_available_blocks:call({invalidate_blocks_cache, FileId});
         (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}, deleted = false}) when Id =/= MyProviderId ->
-            fslogic_available_blocks:call({external_available_blocks_changed, utils:ensure_list(FileId), utils:ensure_list(Uuid)});
+            fslogic_available_blocks:call({external_available_blocks_changed, fslogic_context:get_context(), utils:ensure_list(FileId), utils:ensure_list(Uuid)});
         (?FILES_DB_NAME, _, _, FileDoc = #db_document{uuid = FileId, record = #file{}, deleted = false}) ->
             {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
             fslogic_file:ensure_file_location_exists(FullFileName, FileDoc);
@@ -140,10 +137,10 @@ registered_requests() ->
         (ProtocolVersion, {list_all_available_blocks, FileId}, CacheName) -> fslogic_available_blocks:list_all_available_blocks(ProtocolVersion, CacheName, FileId);
         (ProtocolVersion, {get_file_size, FileId}, CacheName) -> fslogic_available_blocks:get_file_size(ProtocolVersion, CacheName, FileId);
         (ProtocolVersion, {invalidate_blocks_cache, FileId}, CacheName) -> fslogic_available_blocks:invalidate_blocks_cache(ProtocolVersion, CacheName, FileId);
-        (ProtocolVersion, {file_block_modified, FileId, Offset, Size, FullFileName}, CacheName) -> fslogic_available_blocks:file_block_modified(ProtocolVersion, CacheName, FileId, Offset, Size, FullFileName);
-        (ProtocolVersion, {file_truncated, FileId, Size, FullFileName}, CacheName) -> fslogic_available_blocks:file_truncated(ProtocolVersion, CacheName, FileId, Size, FullFileName);
-        (ProtocolVersion, {file_synchronized, FileId, Ranges, FullFileName}, CacheName) -> fslogic_available_blocks:file_synchronized(ProtocolVersion, CacheName, FileId, Ranges, FullFileName);
-        (ProtocolVersion, {external_available_blocks_changed, FileId, DocumentUuid}, CacheName) -> fslogic_available_blocks:external_available_blocks_changed(ProtocolVersion, CacheName, FileId, DocumentUuid)
+        (ProtocolVersion, {file_block_modified, Context, FileId, Offset, Size, FullFileName}, CacheName) -> fslogic_available_blocks:file_block_modified(ProtocolVersion, CacheName, Context, FileId, Offset, Size, FullFileName);
+        (ProtocolVersion, {file_truncated, Context, FileId, Size, FullFileName}, CacheName) -> fslogic_available_blocks:file_truncated(ProtocolVersion, CacheName, Context, FileId, Size, FullFileName);
+        (ProtocolVersion, {file_synchronized, Context, FileId, Ranges, FullFileName}, CacheName) -> fslogic_available_blocks:file_synchronized(ProtocolVersion, CacheName, Context, FileId, Ranges, FullFileName);
+        (ProtocolVersion, {external_available_blocks_changed, Context, FileId, DocumentUuid}, CacheName) -> fslogic_available_blocks:external_available_blocks_changed(ProtocolVersion, CacheName, Context, FileId, DocumentUuid)
     end.
 
 cast(Req) ->
@@ -159,38 +156,34 @@ call(Req) ->
         {error, timeout}
     end.
 
-file_synchronized(ProtocolVersion, CacheName, FileId, SyncedParts, FullFileName) ->
-    try
+file_synchronized(ProtocolVersion, CacheName, Context, FileId, SyncedParts, FullFileName) ->
+    fslogic_context:set_context(Context),
+    {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
+    ProviderId = cluster_manager_lib:get_provider_id(),
+    [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
 
-        {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
-        ProviderId = cluster_manager_lib:get_provider_id(),
-        [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
+    %modify document
+    NewDoc = lists:foldl(fun(Ranges, Acc) -> fslogic_available_blocks:mark_as_available(Ranges, Acc) end, MyRemoteLocationDoc, SyncedParts),
 
-        %modify document
-        NewDoc = lists:foldl(fun(Ranges, Acc) -> fslogic_available_blocks:mark_as_available(Ranges, Acc) end, MyRemoteLocationDoc, SyncedParts),
+    % notify cache, db and fuses
+    case MyRemoteLocationDoc == NewDoc of
+        true -> ok;
+        false ->
+            %update size to newest
+            {ok, FileSize} = get_file_size(ProtocolVersion, CacheName, FileId),
+            FinalNewDoc = update_size(NewDoc, FileSize),
 
-        % notify cache, db and fuses
-        case MyRemoteLocationDoc == NewDoc of
-            true -> ok;
-            false ->
-                %update size to newest
-                {ok, FileSize} = get_file_size(ProtocolVersion, CacheName, FileId),
-                FinalNewDoc = update_size(NewDoc, FileSize),
+            %save available_blocks and notify fuses
+            {ok, _} = save_available_blocks(ProtocolVersion, CacheName, FinalNewDoc),
+            lists:foreach(fun(Ranges) ->
+                {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false)
+            end, SyncedParts)
+    end,
+    #atom{value = ?VOK}.
 
-                %save available_blocks and notify fuses
-                {ok, _} = save_available_blocks(ProtocolVersion, CacheName, FinalNewDoc),
-                lists:foreach(fun(Ranges) ->
-                    {ok, _} = fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), false)
-                end, SyncedParts)
-        end,
-        #atom{value = ?VOK}
-    catch
-        _:Error1  ->
-            ?error_stacktrace("ERROR SYNC: ~p", [Error1])
-    end.
-
-file_block_modified(ProtocolVersion, CacheName, FileId, Offset, Size, FullFileName) ->
+file_block_modified(ProtocolVersion, CacheName, Context, FileId, Offset, Size, FullFileName) ->
     % prepare data
+    fslogic_context:set_context(Context),
     {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
     ProviderId = cluster_manager_lib:get_provider_id(),
     [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
@@ -218,8 +211,9 @@ file_block_modified(ProtocolVersion, CacheName, FileId, Offset, Size, FullFileNa
     end,
     #atom{value = ?VOK}.
 
-file_truncated(ProtocolVersion, CacheName, FileId, Size, FullFileName) ->
+file_truncated(ProtocolVersion, CacheName, Context, FileId, Size, FullFileName) ->
     % prepare data
+    fslogic_context:set_context(Context),
     {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
     ProviderId = cluster_manager_lib:get_provider_id(),
     [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationDocs),
@@ -237,8 +231,9 @@ file_truncated(ProtocolVersion, CacheName, FileId, Size, FullFileName) ->
     end,
     #atom{value = ?VOK}.
 
-external_available_blocks_changed(ProtocolVersion, CacheName, FileId, DocumentUuid) ->
+external_available_blocks_changed(ProtocolVersion, CacheName, Context, FileId, DocumentUuid) ->
     % prepare data
+    fslogic_context:set_context(Context),
     MyProviderId = cluster_manager_lib:get_provider_id(),
     {ok, Docs} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], 1),
     MyDocs = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id_}}) -> Id_ == MyProviderId end, Docs),
