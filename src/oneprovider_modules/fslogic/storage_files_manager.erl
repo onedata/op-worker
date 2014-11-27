@@ -32,7 +32,7 @@
 -export([mkdir/2, mkdir/3, mv/3, delete_dir/2, chmod/3, chown/4, link/3]).
 
 %% Physical files access (used to create temporary copies for remote files)
--export([getattr/2, read/4, write/4, write/3, create/2, create/3, truncate/3, delete/2, ls/0]).
+-export([getattr/2, read/4, write/4, create/2, create/3, truncate/3, delete/2, ls/0]).
 
 %% Helper functions
 -export([check_perms/2, check_perms/3]).
@@ -344,58 +344,6 @@ write(Storage_helper_info, File, Offset, Buf) ->
             end;
         error -> {ErrorCode, Stat};
         _ -> {ErrorCode, Stat}
-    end.
-
-%% write/3
-%% ====================================================================
-%% @doc Appends data to the end of file (operates only on storage).
-%% First it checks file attributes (file type and file size).
-%% If everything is ok, it reads data from file.
-%% @end
--spec write(Storage_helper_info :: record(), File :: string(), Buf :: binary()) -> Result when
-    Result :: BytesWritten | {ErrorGeneral, ErrorDetail},
-    BytesWritten :: integer(),
-    ErrorGeneral :: atom(),
-    ErrorDetail :: term().
-%% ====================================================================
-write(Storage_helper_info, File, Buf) ->
-    ok = case get_cached_value(File, mode, Storage_helper_info) of
-             {ok, Mask} when (Mask band (?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM)) == 0 ->
-                 case has_permission(File, write) of
-                     true -> set_root_ctx();
-                     false -> setup_ctx(File)
-                 end;
-             _ -> setup_ctx(File)
-         end,
-    {ErrorCode, CValue} = get_cached_value(File, size, Storage_helper_info),
-    case ErrorCode of
-        ok ->
-            {IsReg, Offset} = CValue,
-            case IsReg of
-                true ->
-                    {FlagCode, Flag} = get_cached_value(File, o_wronly, Storage_helper_info),
-                    case FlagCode of
-                        ok ->
-                            {ErrorCode2, FFI} = helpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
-                            case ErrorCode2 of
-                                0 ->
-                                    BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
-
-                                    ErrorCode3 = helpers:exec(release, Storage_helper_info, [File, FFI]),
-                                    case ErrorCode3 of
-                                        0 -> BytesWritten;
-                                        {error, 'NIF_not_loaded'} -> ErrorCode3;
-                                        _ -> {wrong_release_return_code, ErrorCode3}
-                                    end;
-                                error -> {ErrorCode, FFI};
-                                _ -> {wrong_open_return_code, ErrorCode2}
-                            end;
-                        _ -> {FlagCode, Flag}
-                    end;
-                false -> {error, not_regular_file}
-            end;
-        error -> {ErrorCode, CValue};
-        _ -> {ErrorCode, CValue}
     end.
 
 %% create/2

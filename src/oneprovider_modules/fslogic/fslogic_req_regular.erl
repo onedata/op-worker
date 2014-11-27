@@ -16,6 +16,8 @@
 -include("fuse_messages_pb.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("oneprovider_modules/dao/dao_types.hrl").
+-include("oneprovider_modules/fslogic/ranges_struct.hrl").
+-include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -67,7 +69,9 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
             throw(?VENOTSUP)
     end,
 
-    fslogic_file:fix_storage_owner(FileDoc),
+    fslogic_file:ensure_file_location_exists(FullFileName, FileDoc),
+
+    catch fslogic_file:fix_storage_owner(FileDoc),
 
     {ok, UserDoc} = fslogic_objects:get_user(),
     ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, list_to_existing_atom(OpenMode)),
@@ -83,7 +87,7 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
 
     {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#db_document.uuid, fslogic_context:get_fuse_id(), Validity),
 
-    #db_document{record = FileLoc} = FileLocDoc = fslogic_file:get_file_local_location_doc(FileDoc),
+    #db_document{record = FileLoc} = fslogic_file:get_file_local_location_doc(FileDoc),
 
     {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
 
@@ -93,7 +97,7 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
 
     #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
         storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args,
-        available = get_blockavailability(FileLocDoc)}.
+        available = get_blockavailability(FileDoc)}.
 
 
 %% get_new_file_location/3
@@ -135,7 +139,7 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
     {ok, LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
 
     RemoteLocation = #available_blocks{file_id = FileUUID, provider_id = cluster_manager_lib:get_provider_id()},
-    {ok, RemoteLocationId} = dao_lib:apply(dao_vfs, save_available_blocks, [RemoteLocation], fslogic_context:get_protocol_version()),
+    {ok, RemoteLocationId} = fslogic_available_blocks:call({save_available_blocks, RemoteLocation}),
 
     Validity = ?LOCATION_VALIDITY,
     FCreateStatus = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, FileRecord, FileUUID], fslogic_context:get_protocol_version()),
@@ -149,13 +153,12 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
             {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), ExistingWFileUUID, fslogic_context:get_fuse_id(), Validity),
 
-            #db_document{record = ExistingWFileLocation} = ExistingWFileLocationDoc = fslogic_file:get_file_local_location_doc(ExistingWFileUUID),
-            Available = get_blockavailability(ExistingWFileLocationDoc),
+            #db_document{record = ExistingWFileLocation} =  fslogic_file:get_file_local_location_doc(ExistingWFileUUID),
 
             {ok, #db_document{record = ExistingWFileStorage}} = fslogic_objects:get_storage({uuid, ExistingWFileLocation#file_location.storage_uuid}),
             {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), ExistingWFileStorage, ExistingWFileLocation#file_location.storage_file_id, SpaceId, ForceClusterProxy),
             #storage_helper_info{name = ExistingWFileStorageSHName, init_args = ExistingWFileStorageSHArgs} = SH,
-            #filelocation{storage_id = ExistingWFileStorage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs, available = Available};
+            #filelocation{storage_id = ExistingWFileStorage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs, available = []};
         {ok, FileUUID} ->
             %% @todo: hack party! dbsync requires file to exist before syncing file_meta
             fslogic_meta:update_meta_attr(FileRecord, times, {CTime, CTime, CTime}),
@@ -164,7 +167,7 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
             {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), Validity),
 
 
-            FuseFileBlocks = [#filelocation_blockavailability{offset = 0, size = ?FILE_BLOCK_SIZE_INF}],
+            FuseFileBlocks = [],
             FileBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
             {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
 
@@ -202,10 +205,12 @@ update_file_block_map(FileId, Blocks) ->
 %% @doc distributes information about file blocks to clients currently using the file
 %% and possibly clears previous mapping. Returns the number of push messages sent.
 %% @end
--spec update_file_block_map(FileId :: string(), [Block], ClearMap :: boolean()) -> ok when
+-spec update_file_block_map(FileId :: string(), [Block], ClearMap :: boolean()) -> {ok, integer()} when
     Block :: {Offset :: non_neg_integer(), Size :: non_neg_integer()}.
 %% ====================================================================
+update_file_block_map(_, [], false) -> {ok, 0};
 update_file_block_map(FullFileName, Blocks, ClearMap) ->
+    ct:print("update_file_block_map ~p, ~p, ~p", [FullFileName, Blocks, ClearMap]),
     {ok, #db_document{} = FileDoc} = fslogic_objects:get_file(FullFileName),
     Location = fslogic_file:get_file_local_location(FileDoc),
     #file_location{storage_uuid = StorageUUID} = Location,
@@ -219,8 +224,13 @@ update_file_block_map(FullFileName, Blocks, ClearMap) ->
 
     {ok, Descriptors} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file, FullFileName}, 10000000000, 0], fslogic_context:get_protocol_version()),
 
-    utils:pforeach(fun(#db_document{record = #file_descriptor{fuse_id = FuseId}}) ->
-        {_, FileId} = fslogic_utils:get_sh_and_id(FuseId, Storage, SpaceId),
+    utils:pforeach(fun(#db_document{record = #file_descriptor{fuse_id = FuseId, file = FileUuid}}) ->
+        % get storage file_id, todo check if works for both proxy and directio
+        #db_document{record = FileLoc} = fslogic_file:get_file_local_location_doc(FileDoc),
+        {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
+        {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_uuid}),
+        {_, FileId} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.storage_file_id, SpaceId),
+
         BlocksAvailable = #blocksavailable{clear_map = ClearMap, storage_id = Storage#storage_info.id, file_id = FileId, blocks = BlocksAvailability},
         request_dispatcher:send_to_fuse(FuseId, BlocksAvailable, "fuse_messages")
     end, Descriptors),
@@ -301,8 +311,11 @@ renew_file_location(FullFileName) ->
 %% @end
 -spec get_blockavailability(file_doc() | file_location_doc()) -> [#filelocation_blockavailability{}].
 %% ====================================================================
-get_blockavailability(#db_document{record = #file{}} = FileDoc) ->
-    get_blockavailability(fslogic_file:get_file_local_location_doc(FileDoc));
-get_blockavailability(#db_document{uuid = LocationId, record = #file_location{}}) ->
-    {ok, FileBlockDocs} = dao_lib:apply(dao_vfs, get_file_blocks, [LocationId], fslogic_context:get_protocol_version()),
-    [#filelocation_blockavailability{offset = Offset, size = Size} || #db_document{record = #file_block{offset = Offset, size = Size}} <- FileBlockDocs].
+get_blockavailability(#db_document{uuid = FileId, record = #file{}}) ->
+    {ok, #db_document{record = #available_blocks{file_parts = AvailableParts}}} = fslogic_available_blocks:call({get_available_blocks, FileId}),
+    {ok, {_Timestamp, FileSize}} = fslogic_available_blocks:call({get_file_size, FileId}),
+    lists:map(
+        fun(Range) ->
+            #offset_range{offset = Offset, size = Size} = fslogic_available_blocks:byte_to_offset_range(fslogic_available_blocks:block_to_byte_range(Range, FileSize)),
+            #filelocation_blockavailability{offset = Offset, size = Size}
+        end, AvailableParts).

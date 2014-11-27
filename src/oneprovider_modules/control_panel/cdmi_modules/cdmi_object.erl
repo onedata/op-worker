@@ -343,7 +343,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
             case OperationAns of
                 ok ->
                     update_completion_status(Filepath, <<"Processing">>),
-                    case logical_files_manager:write(Filepath, RawValue) of
+                    case logical_files_manager:write(Filepath, 0, RawValue) of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                             ok;
                         {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES ->
@@ -399,7 +399,7 @@ put_cdmi_object(Req, #state{filepath = Filepath,opts = Opts} = State) ->
                     end;
                 undefined when is_binary(Value) ->
                     logical_files_manager:truncate(Filepath, 0),
-                    WriteAns = logical_files_manager:write(Filepath, RawValue),
+                    WriteAns = logical_files_manager:write(Filepath, 0, RawValue),
                     set_completion_status_according_to_partial_flag(Filepath, CdmiPartialFlag),
                     case WriteAns of
                         Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) -> {true, Req1, State};

@@ -50,89 +50,89 @@
 -define(ProtocolVersion, 1).
 
 init(_Args) ->
-  ets:new(?RULE_MANAGER_ETS, [named_table, public, set, {read_concurrency, true}]),
-  ets:new(?PRODUCERS_RULES_ETS, [named_table, public, set, {read_concurrency, true}]),
-  ets:new(?HANDLER_TREE_ID_ETS, [named_table, public, set]),
-  ets:insert(?HANDLER_TREE_ID_ETS, {current_id, 1}),
+    ets:new(?RULE_MANAGER_ETS, [named_table, public, set, {read_concurrency, true}]),
+    ets:new(?PRODUCERS_RULES_ETS, [named_table, public, set, {read_concurrency, true}]),
+    ets:new(?HANDLER_TREE_ID_ETS, [named_table, public, set]),
+    ets:insert(?HANDLER_TREE_ID_ETS, {current_id, 1}),
 
-  case ?REGISTER_DEFAULT_RULES of
-    true -> erlang:send_after(30000, self(), {timer, {asynch, ?ProtocolVersion, register_default_rules}});
-    _ -> ok
-  end,
-	[].
+    case ?REGISTER_DEFAULT_RULES of
+        true -> erlang:send_after(30000, self(), {timer, {asynch, ?ProtocolVersion, register_default_rules}});
+        _ -> ok
+    end,
+    [].
 
 handle(_ProtocolVersion, ping) ->
-  pong;
+    pong;
 
 handle(_ProtocolVersion, healthcheck) ->
-	ok;
+    ok;
 
 %% handler called by oneclient on intitialization - returns config for oneclient
 handle(_ProtocolVersion, event_producer_config_request) ->
-  ?debug("event_producer_config_request"),
-  Configs = case ets:lookup(?PRODUCERS_RULES_ETS, producer_configs) of
-              [{_Key, ProducerConfigs}] -> ProducerConfigs;
-              _ -> []
-            end,
-  #eventproducerconfig{event_streams_configs = Configs};
+    ?debug("event_producer_config_request"),
+    Configs = case ets:lookup(?PRODUCERS_RULES_ETS, producer_configs) of
+                  [{_Key, ProducerConfigs}] -> ProducerConfigs;
+                  _ -> []
+              end,
+    #eventproducerconfig{event_streams_configs = Configs};
 
 handle(_ProtocolVersion, get_version) ->
-  node_manager:check_vsn();
+    node_manager:check_vsn();
 
 handle(_ProtocolVersion, get_event_handlers) ->
-  MatchingItems = ets:match(?RULE_MANAGER_ETS, {'$1', '$2'}),
+    MatchingItems = ets:match(?RULE_MANAGER_ETS, {'$1', '$2'}),
 
-  %% ets:match returns list of lists - convert it to list of tuples
-  Res = lists:map(fun(Item) -> list_to_tuple(Item) end, MatchingItems),
-  {ok, Res};
+    %% ets:match returns list of lists - convert it to list of tuples
+    Res = lists:map(fun(Item) -> list_to_tuple(Item) end, MatchingItems),
+    {ok, Res};
 
 handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem}}) ->
-  handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, #eventstreamconfig{}}});
+    handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, #eventstreamconfig{}}});
 
 handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, ProducerConfig}}) ->
-  NewEventItem = case EventHandlerItem#event_handler_item.processing_method of
-                   tree -> EventHandlerItem#event_handler_item{tree_id = generate_tree_name()};
-                   _ -> EventHandlerItem
-                 end,
+    NewEventItem = case EventHandlerItem#event_handler_item.processing_method of
+                       tree -> EventHandlerItem#event_handler_item{tree_id = generate_tree_name()};
+                       _ -> EventHandlerItem
+                   end,
 
-  case ets:lookup(?RULE_MANAGER_ETS, EventType) of
-    [] -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem]});
-    [{_EventType, EventHandlers}] -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem | EventHandlers]})
-  end,
+    case ets:lookup(?RULE_MANAGER_ETS, EventType) of
+        [] -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem]});
+        [{_EventType, EventHandlers}] -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem | EventHandlers]})
+    end,
 
-  register_producer_config(ProducerConfig),
+    register_producer_config(ProducerConfig),
 
-  notify_cluster_rengines(NewEventItem, EventType),
-  notify_producers(ProducerConfig, EventType),
+    notify_cluster_rengines(NewEventItem, EventType),
+    notify_producers(ProducerConfig, EventType),
 
-  ?info("New handler for event ~p registered.", [EventType]),
-  ok;
+    ?info("New handler for event ~p registered.", [EventType]),
+    ok;
 
 handle(_ProtocolVersion, {register_producer_config, ProducerConfig}) ->
-  ?info("Registering producer config.", [ProducerConfig]),
-  register_producer_config(ProducerConfig),
-  notify_fuses(ProducerConfig);
+    ?info("Registering producer config.", [ProducerConfig]),
+    register_producer_config(ProducerConfig),
+    notify_fuses(ProducerConfig);
 
 handle(_ProtocolVersion, {get_event_handlers, EventType}) ->
-  EventHandlerItems = ets:lookup(?RULE_MANAGER_ETS, EventType),
-  Res = case EventHandlerItems of
-          [{_EventType, ItemsList}] -> ItemsList;
-          _ -> []
-        end,
-  {ok, Res};
+    EventHandlerItems = ets:lookup(?RULE_MANAGER_ETS, EventType),
+    Res = case EventHandlerItems of
+              [{_EventType, ItemsList}] -> ItemsList;
+              _ -> []
+          end,
+    {ok, Res};
 
 handle(_ProtocolVersion, register_default_rules) ->
-  {ok, QuotaCheckFreq} = application:get_env(?APP_Name, quota_check_freq),
-  {ok, IOBytesThreshold} = application:get_env(?APP_Name, io_bytes_threshold),
-  ?info("Registering default rules."),
-  register_default_rules(QuotaCheckFreq, IOBytesThreshold);
+    {ok, QuotaCheckFreq} = application:get_env(?APP_Name, quota_check_freq),
+    {ok, IOBytesThreshold} = application:get_env(?APP_Name, io_bytes_threshold),
+    ?info("Registering default rules."),
+    register_default_rules(QuotaCheckFreq, IOBytesThreshold);
 
 handle(_ProtocolVersion, _Msg) ->
-  ?warning("Wrong request: ~p", [_Msg]),
-  ok.
+    ?warning("Wrong request: ~p", [_Msg]),
+    ok.
 
 cleanup() ->
-	ok.
+    ok.
 
 %% ====================================================================
 %% Helper functions
@@ -145,13 +145,13 @@ cleanup() ->
 -spec notify_cluster_rengines(EventHandlerItem :: event_handler_item(), EventType :: atom()) -> ok | error.
 %% ====================================================================
 notify_cluster_rengines(EventHandlerItem, EventType) ->
-  Ans = gen_server:call({global, ?CCM}, {update_cluster_rengines, EventType, EventHandlerItem}),
-  case Ans of
-    ok -> ok;
-    _ ->
-      ?warning("Cannot nofify cluster_rengines"),
-      error
-  end.
+    Ans = gen_server:call({global, ?CCM}, {update_cluster_rengines, EventType, EventHandlerItem}),
+    case Ans of
+        ok -> ok;
+        _ ->
+            ?warning("Cannot nofify cluster_rengines"),
+            error
+    end.
 
 %% notify_producers/2
 %% ====================================================================
@@ -160,16 +160,16 @@ notify_cluster_rengines(EventHandlerItem, EventType) ->
 -spec notify_producers(ProducerConfig :: #eventstreamconfig{}, EventType :: string()) -> term().
 %% ====================================================================
 notify_producers(ProducerConfig, EventType) ->
-  notify_fuses(ProducerConfig),
+    notify_fuses(ProducerConfig),
 
-  %% notify logical_files_manager
-  gen_server:cast({global, ?CCM}, {notify_lfm, EventType, true}).
+    %% notify logical_files_manager
+    gen_server:cast({global, ?CCM}, {notify_lfm, EventType, true}).
 
 register_producer_config(ProducerConfig) ->
-  case ets:lookup(?PRODUCERS_RULES_ETS, producer_configs) of
-    [] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig]});
-    [{_, ListOfConfigs}] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig | ListOfConfigs]})
-  end.
+    case ets:lookup(?PRODUCERS_RULES_ETS, producer_configs) of
+        [] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig]});
+        [{_, ListOfConfigs}] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig | ListOfConfigs]})
+    end.
 
 %% notify_fuses/1
 %% ====================================================================
@@ -178,11 +178,12 @@ register_producer_config(ProducerConfig) ->
 -spec notify_fuses(ProducerConfig :: #eventstreamconfig{}) -> term().
 %% ====================================================================
 notify_fuses(ProducerConfig) ->
-  Rows = fetch_rows(?FUSE_CONNECTIONS_VIEW, #view_query_args{}),
-  FuseIds = lists:map(fun(#view_row{key = FuseId}) -> FuseId end, Rows),
-  UniqueFuseIds = sets:to_list(sets:from_list(FuseIds)),
+    Rows = fetch_rows(?FUSE_CONNECTIONS_VIEW, #view_query_args{}),
+    FuseIds = lists:map(fun(#view_row{key = FuseId}) -> FuseId end, Rows),
+    UniqueFuseIds = sets:to_list(sets:from_list(FuseIds)),
 
-  lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, ProducerConfig, "fuse_messages") end, UniqueFuseIds).
+    lists:foreach(fun(FuseId) ->
+        request_dispatcher:send_to_fuse(FuseId, ProducerConfig, "fuse_messages") end, UniqueFuseIds).
 
 %% generate_tree_name/0
 %% ====================================================================
@@ -191,19 +192,19 @@ notify_fuses(ProducerConfig) ->
 -spec generate_tree_name() -> atom().
 %% ====================================================================
 generate_tree_name() ->
-  [{_, Id}] = ets:lookup(?HANDLER_TREE_ID_ETS, current_id),
-  ets:insert(?HANDLER_TREE_ID_ETS, {current_id, Id + 1}),
-  list_to_atom("event_" ++ integer_to_list(Id)).
+    [{_, Id}] = ets:lookup(?HANDLER_TREE_ID_ETS, current_id),
+    ets:insert(?HANDLER_TREE_ID_ETS, {current_id, Id + 1}),
+    list_to_atom("event_" ++ integer_to_list(Id)).
 
 %% Helper function for fetching rows from view
 fetch_rows(ViewName, QueryArgs) ->
-  case dao_records:list_records(ViewName, QueryArgs) of
-    {ok, #view_result{rows = Rows}} ->
-      Rows;
-    Error ->
-      ?error("Invalid view response: ~p", [Error]),
-      throw(invalid_data)
-  end.
+    case dao_records:list_records(ViewName, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+            Rows;
+        Error ->
+            ?error("Invalid view response: ~p", [Error]),
+            throw(invalid_data)
+    end.
 
 %% register_default_rules/1
 %% ====================================================================
@@ -212,34 +213,41 @@ fetch_rows(ViewName, QueryArgs) ->
 -spec register_default_rules(WriteBytesThreshold :: integer(), IOBytesThreshold :: integer()) -> ok.
 %% ====================================================================
 register_default_rules(WriteBytesThreshold, IOBytesThreshold) ->
-  rule_definitions:register_quota_exceeded_handler(),
-  rule_definitions:register_rm_event_handler(),
-  rule_definitions:register_for_write_events(WriteBytesThreshold),
-  rule_definitions:register_for_write_events_block_updates(WriteBytesThreshold),
-  rule_definitions:register_for_truncate_events(),
-  rule_definitions:register_read_for_stats_events(IOBytesThreshold),
-  rule_definitions:register_write_for_stats_events(IOBytesThreshold),
-  ?info("default rule_manager rules registered"),
-  ok.
+    %quota
+    rule_definitions:register_quota_exceeded_handler(),
+    rule_definitions:register_rm_event_handler(),
+    rule_definitions:register_for_write_events(WriteBytesThreshold),
+    rule_definitions:register_for_truncate_events(),
+
+    %stats
+    rule_definitions:register_read_for_stats_events(IOBytesThreshold),
+    rule_definitions:register_write_for_stats_events(IOBytesThreshold),
+
+    %available blocks
+    rule_definitions:register_write_for_available_blocks_events(WriteBytesThreshold),
+    rule_definitions:register_truncate_for_avaialable_blocks_events(),
+
+    ?info("default rule_manager rules registered"),
+    ok.
 
 %% ====================================================================
 %% Test functions
 %% ====================================================================
 
 on_complete(_Message, SuccessFuseIds, FailFuseIds) ->
-  ?info("oncomplete called"),
-  case FailFuseIds of
-    [] -> ?info("------- ack success --------");
-    _ -> ?info("-------- ack fail, success: ~p, fail: ~p ---------", [length(SuccessFuseIds), length(FailFuseIds)])
-  end.
+    ?info("oncomplete called"),
+    case FailFuseIds of
+        [] -> ?info("------- ack success --------");
+        _ -> ?info("-------- ack fail, success: ~p, fail: ~p ---------", [length(SuccessFuseIds), length(FailFuseIds)])
+    end.
 
 %% Uuid :: string()
 send_push_msg(Uuid) ->
-  TestAtom = #atom{value = "test_atom2"},
-  OnComplete = fun(SuccessFuseIds, FailFuseIds) -> on_complete(TestAtom, SuccessFuseIds, FailFuseIds) end,
-  worker_host:send_to_user_with_ack({uuid, Uuid}, TestAtom, "communication_protocol", OnComplete, 1).
+    TestAtom = #atom{value = "test_atom2"},
+    OnComplete = fun(SuccessFuseIds, FailFuseIds) -> on_complete(TestAtom, SuccessFuseIds, FailFuseIds) end,
+    worker_host:send_to_user_with_ack({uuid, Uuid}, TestAtom, "communication_protocol", OnComplete, 1).
 
 send_push_msg_ack(Uuid) ->
-  TestAtom = #atom{value = "test_atom2_ack"},
-  OnComplete = fun(SuccessFuseIds, FailFuseIds) -> on_complete(TestAtom, SuccessFuseIds, FailFuseIds) end,
-  worker_host:send_to_user_with_ack({uuid, Uuid}, TestAtom, "communication_protocol", OnComplete, 1).
+    TestAtom = #atom{value = "test_atom2_ack"},
+    OnComplete = fun(SuccessFuseIds, FailFuseIds) -> on_complete(TestAtom, SuccessFuseIds, FailFuseIds) end,
+    worker_host:send_to_user_with_ack({uuid, Uuid}, TestAtom, "communication_protocol", OnComplete, 1).

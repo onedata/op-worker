@@ -895,7 +895,7 @@ send_to_fuse1(FuseId, Message, MessageDecoder, SendNum) ->
               Callback ! {self(), Message, MessageDecoder, -1},
               receive
                 {Callback, -1, Response} -> Response
-              after 500 ->
+              after 1000 ->
                 ?error("Sending message ~p to fuse ~p: socket_error", [Message, FuseId]),
                 socket_error
               end
