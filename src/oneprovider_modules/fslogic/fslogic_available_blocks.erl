@@ -119,8 +119,9 @@ db_sync_hook() ->
         (?FILES_DB_NAME, _, _, FileDoc = #db_document{uuid = FileId, record = #file{}, deleted = false}) ->
             {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
             fslogic_file:ensure_file_location_exists(FullFileName, FileDoc);
-        %todo handle file delete
-        (_, _, _, _) -> ok
+        (?FILES_DB_NAME, _, _, #db_document{uuid = FileId, record = #file{}, deleted = true}) ->
+            {ok, {Storage_helper_info, FileId}} = logical_files_manager:getfilelocation({uuid, FileId}),
+            ok = storage_files_manager:delete(Storage_helper_info, FileId)
     end.
 
 %% ====================================================================
