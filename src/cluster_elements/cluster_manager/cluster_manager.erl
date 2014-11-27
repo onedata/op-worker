@@ -331,7 +331,7 @@ handle_cast({node_is_up, Node}, State) ->
               case State#cm_state.state_loaded of
                 true ->
                   Pid = self(),
-                  erlang:send_after(50, Pid, {timer, init_cluster});
+                  erlang:send_after(50, Pid, {timer, init_cluster_once});
                 _ -> ok
               end,
 
@@ -366,6 +366,10 @@ handle_cast({register_module_listener, Module, Listener}, State) ->
 
 handle_cast(init_cluster, State) ->
   NewState = init_cluster(State),
+  {noreply, NewState};
+
+handle_cast(init_cluster_once, State) ->
+  NewState = init_cluster(State, false),
   {noreply, NewState};
 
 handle_cast(update_dispatchers_and_dns, State) ->
@@ -633,19 +637,28 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% init_cluster/1
 %% ====================================================================
-%% @doc Initializes cluster - decides at which nodes components should
-%% be started (and starts them). Additionally, it sets timer that
-%% initiates checking of cluster state.
+%% @doc Triggers repeated cluster initialization.
 -spec init_cluster(State :: term()) -> NewState when
   NewState :: term().
 %% ====================================================================
 init_cluster(State) ->
-  ?debug("Checking if initialization is needed ~p", [State]),
+  init_cluster(State, true).
+
+
+%% init_cluster/2
+%% ====================================================================
+%% @doc Initializes cluster - decides at which nodes components should
+%% be started (and starts them). Additionally, it sets timer that
+%% initiates checking of cluster state.
+-spec init_cluster(State :: term(), Repeat:: boolean()) -> NewState when
+  NewState :: term().
+%% ====================================================================
+init_cluster(State, Repeat) ->
+  ?info("Checking if initialization is needed ~p ~p", [State, Repeat]),
   Nodes = State#cm_state.nodes,
   case length(Nodes) > 0 of
     true ->
-      %% @todo: check why dbsync sometimes does not start
-      JobsAndArgs = ?MODULES_WITH_ARGS -- [{dbsync, []}],
+      JobsAndArgs = ?MODULES_WITH_ARGS,
       PermanentModules = ?PERMANENT_MODULES,
 
       %% Every node is supposed to have a complete set of permament workes.
@@ -685,12 +698,19 @@ init_cluster(State) ->
                       end
                   end,
 
-      plan_next_cluster_state_check(),
+      case Repeat of
+        true -> plan_next_cluster_state_check();
+        _ -> ?info("No Repeat state ~p", [NewState3])
+      end,
       NewState3;
     false ->
-      Pid = self(),
-      {ok, Interval} = application:get_env(?APP_Name, initialization_time),
-      erlang:send_after(1000 * Interval, Pid, {timer, init_cluster}),
+      case Repeat of
+        true ->
+          Pid = self(),
+          {ok, Interval} = application:get_env(?APP_Name, initialization_time),
+          erlang:send_after(1000 * Interval, Pid, {timer, init_cluster});
+        _ -> ok
+      end,
       State
   end.
 
@@ -1020,8 +1040,7 @@ add_children(_Node, [], Workers, _State) ->
   {ok, Workers};
 
 add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers, State) ->
-  %% @todo: check why dbsync sometimes does not start
-  Jobs = ?MODULES -- [dbsync],
+  Jobs = ?MODULES,
   case lists:member(Id, Jobs) of
     false -> add_children(Node, Children, Workers, State);
     true ->
@@ -1080,7 +1099,7 @@ node_down(Node, State) ->
   case State#cm_state.state_loaded of
     true ->
       Pid = self(),
-      erlang:send_after(50, Pid, {timer, init_cluster});
+      erlang:send_after(50, Pid, {timer, init_cluster_once});
     _ -> ok
   end,
   {State#cm_state{workers = NewWorkers, nodes = NewNodes, callbacks_num = CallbacksNum}, WorkersFound2}.
