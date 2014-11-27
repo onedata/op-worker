@@ -71,7 +71,7 @@ delayed_push_attrs(FileUUID) ->
     case ets:lookup(?fslogic_attr_events_state, utils:ensure_binary(FileUUID)) of
         [{_, _TRef}] -> ok;
         [] ->
-            {ok, TRef} = timer:apply_after(timer:seconds(1), fslogic_events, push_new_attrs, [FileUUID]),
+            TRef = erlang:send_after(500, ?Dispatcher_Name, {timer, {fslogic, 1, {internal_event_handle, push_new_attrs, [FileUUID]}}}),
             ets:insert(?fslogic_attr_events_state, {utils:ensure_binary(FileUUID), TRef}),
             ok
     end.
@@ -83,17 +83,13 @@ delayed_push_attrs(FileUUID) ->
 -spec push_new_attrs(FileUUID :: uuid()) -> [Result :: ok | {error, Reason :: any()}].
 %% ====================================================================
 push_new_attrs(FileUUID) ->
-    Res0 = push_new_attrs3(list_descriptors, fun(#file_descriptor{fuse_id = FID}) -> FID end,
-                            FileUUID, 0, 100),
-    Res1 = push_new_attrs3(list_attr_watchers, fun(#file_attr_watcher{fuse_id = FID}) -> FID end,
-                            FileUUID, 0, 100),
-    lists:flatten([Res0, Res1]).
-push_new_attrs3(ListMethod, RecToFuseId, FileUUID, Offset, Count) ->
+   lists:flatten(push_new_attrs3(FileUUID, 0, 100)).
+push_new_attrs3(FileUUID, Offset, Count) ->
     ets:delete(?fslogic_attr_events_state, utils:ensure_binary(FileUUID)),
-    {ok, FDs} = dao_lib:apply(dao_vfs, ListMethod, [{by_uuid_n_owner, {utils:ensure_list(FileUUID), ""}}, Count, Offset], 1),
+    {ok, FDs} = dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {utils:ensure_list(FileUUID), ""}}, Count, Offset], 1),
     Fuses0 = lists:map(
-        fun(#db_document{record = Record}) ->
-            RecToFuseId(Record)
+        fun(#db_document{record = #file_descriptor{fuse_id = FuseID}}) ->
+            FuseID
         end, FDs),
     Fuses1 = lists:usort(Fuses0),
     ?debug("Pushing new attributes for file ~p to fuses ~p", [FileUUID, Fuses1]),
@@ -108,5 +104,5 @@ push_new_attrs3(ListMethod, RecToFuseId, FileUUID, Offset, Count) ->
                 fun(FuseID) ->
                     request_dispatcher:send_to_fuse(FuseID, Attrs, "fuse_messages")
                 end, FuseIDs),
-            [push_new_attrs3(ListMethod, RecToFuseId, FileUUID, Offset + Count, 100) | Results]
+            [push_new_attrs3(FileUUID, Offset + Count, 100) | Results]
     end.
