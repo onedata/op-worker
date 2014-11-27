@@ -199,6 +199,7 @@ parse_http_upload(Req, Params, Files) ->
                         ok = logical_files_manager:create(FullPath),
                         stream_file_to_fslogic(Req2, FullPath, get_upload_buffer_size())
                     catch Type:Message ->
+                        ?error_stacktrace("Error in parse_file: ~p:~p",[Type,Message]),
                         catch logical_files_manager:delete(FullPath),
                         throw({"Error in parse_file", Type, Message})
                     end,

@@ -79,7 +79,7 @@ spaces_permissions_test(Config) ->
   UserDoc1 = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, Team]),
   UserDoc2 = test_utils:add_user(Config, ?TEST_USER2, Cert2, [?TEST_USER2, Team, Team2, Team3]),
 
-  UID2 = list_to_integer(UserDoc2#db_document.uuid),
+  %% UID2 = list_to_integer(UserDoc2#db_document.uuid),
 
   [DN1 | _] = user_logic:get_dn_list(UserDoc1),
   [DN2 | _] = user_logic:get_dn_list(UserDoc2),
@@ -122,11 +122,11 @@ spaces_permissions_test(Config) ->
   ?assertEqual("ok", Status7),
   ?assertEqual(list_to_atom(?VOK), Answer7),
 
-  {Status8, Answer8} = chown(Socket2, TestFileNewName, UID2),
+  {Status8, Answer8} = chown(Socket2, TestFileNewName, 20000),
   ?assertEqual("ok", Status8),
   ?assertEqual(list_to_atom(?VEACCES), Answer8),
 
-  {Status9, Answer9} = chown(Socket, TestFileNewName, UID2),
+  {Status9, Answer9} = chown(Socket, TestFileNewName, 20000),
   ?assertEqual("ok", Status9),
   ?assertEqual(list_to_atom(?VEACCES), Answer9),
 
@@ -137,14 +137,15 @@ spaces_permissions_test(Config) ->
   FileMetaUID = FileMetaDoc#db_document.record#file_meta.uid,
   ?assertEqual(UserDoc1#db_document.uuid, FileMetaUID),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [TestFileNewName, UID2])),
+  %% @todo: remove this assertion since chown is no longer supported
+  %% ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [TestFileNewName, UID2])),
 
   {GetFileAns1, FileDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file, [TestFileNewName]),
   ?assertEqual(ok, GetFileAns1),
   {GetFileMetaAns1, FileMetaDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file_meta, [FileDoc1#db_document.record#file.meta_doc]),
   ?assertEqual(ok, GetFileMetaAns1),
   FileMetaUID1 = FileMetaDoc1#db_document.record#file_meta.uid,
-  ?assertEqual(UserDoc2#db_document.uuid, FileMetaUID1),
+  ?assertEqual(UserDoc1#db_document.uuid, FileMetaUID1),
 
   ?assertNotEqual(FileMetaUID, FileMetaUID1),
 
@@ -1819,10 +1820,8 @@ users_separation_test(Config) ->
   Time = utils:time(),
   test_utils:wait_for_db_reaction(),
 
-  %% Users have different (and next to each other) IDs
-  UID1 = list_to_integer(UserID1),
-  UID2 = list_to_integer(UserID2),
-  ?assertEqual(UID2, UID1 + 1),
+  %% Users have different IDs
+  ?assert(UserID1 =/= UserID2),
 
   {Status, Helper, Id, _Validity, AnswerOpt} = create_file(Socket, TestFile),
   ?assertEqual("ok", Status),
@@ -1867,33 +1866,31 @@ users_separation_test(Config) ->
   ?assertEqual(Login1, Attr1#fileattr.uname),
   ?assertEqual(Login2, Attr2#fileattr.uname),
 
-  %% Check UIDs
-  ?assertEqual(UID1, Attr1#fileattr.uid),
-  ?assertEqual(UID2, Attr2#fileattr.uid),
 
   test_utils:wait_for_db_reaction(),
 
   %% chown test
-  {Status23, Answer23} = chown(Socket, TestFile, 77777),
-  ?assertEqual("ok", Status23),
-  ?assertEqual(list_to_atom(?VEACCES), Answer23),
-
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login1 ++ "/" ++ TestFile, UID2])),
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login2 ++ "/" ++ TestFile, UID1])),
-
-  %% Check if owners are set properly
-  {Status26, Attr3} = get_file_attr(Socket, TestFile),
-  ?assertEqual("ok", Status26),
-  {Status27, Attr4} = get_file_attr(Socket2, TestFile),
-  ?assertEqual("ok", Status27),
-
-  %% Check logins
-  ?assertEqual(Login2, Attr3#fileattr.uname),
-  ?assertEqual(Login1, Attr4#fileattr.uname),
-
-  %% Check UIDs
-  ?assertEqual(UID2, Attr3#fileattr.uid),
-  ?assertEqual(UID1, Attr4#fileattr.uid),
+    %% @todo: remove chown?
+%%   {Status23, Answer23} = chown(Socket, TestFile, 77777),
+%%   ?assertEqual("ok", Status23),
+%%   ?assertEqual(list_to_atom(?VEACCES), Answer23),
+%%
+%%   ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login1 ++ "/" ++ TestFile, UID2])),
+%%   ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login2 ++ "/" ++ TestFile, UID1])),
+%%
+%%   %% Check if owners are set properly
+%%   {Status26, Attr3} = get_file_attr(Socket, TestFile),
+%%   ?assertEqual("ok", Status26),
+%%   {Status27, Attr4} = get_file_attr(Socket2, TestFile),
+%%   ?assertEqual("ok", Status27),
+%%
+%%   %% Check logins
+%%   ?assertEqual(Login2, Attr3#fileattr.uname),
+%%   ?assertEqual(Login1, Attr4#fileattr.uname),
+%%
+%%   %% Check UIDs
+%%   ?assertEqual(UID2, Attr3#fileattr.uid),
+%%   ?assertEqual(UID1, Attr4#fileattr.uid),
 
   %% Check if change time was updated and if times was setup correctly on file creation
   ?assert(Attr1#fileattr.atime > Time),
@@ -1903,24 +1900,24 @@ users_separation_test(Config) ->
   ?assert(Attr2#fileattr.mtime > Time),
   ?assert(Attr2#fileattr.ctime > Time),
 
-  ?assert(Attr3#fileattr.ctime > Attr1#fileattr.ctime),
-  ?assert(Attr4#fileattr.ctime > Attr2#fileattr.ctime),
+%%   ?assert(Attr3#fileattr.ctime > Attr1#fileattr.ctime),
+%%   ?assert(Attr4#fileattr.ctime > Attr2#fileattr.ctime),
 
   %% Check attrs in logical_files_manager
   {FMStatys, FM_Attrs} = rpc:call(FSLogicNode, logical_files_manager, getfileattr, ["/spaces/" ++ Login2 ++ "/" ++ TestFile]),
   ?assertEqual(ok, FMStatys),
-  ?assertEqual(Attr4#fileattr.mode, FM_Attrs#fileattributes.mode),
-  ?assertEqual(Attr4#fileattr.uid, FM_Attrs#fileattributes.uid),
-  ?assertEqual(Attr4#fileattr.gid, FM_Attrs#fileattributes.gid),
-  ?assertEqual(Attr4#fileattr.type, FM_Attrs#fileattributes.type),
-  ?assertEqual(Attr4#fileattr.size, FM_Attrs#fileattributes.size),
-  ?assertEqual(Attr4#fileattr.uname, utils:ensure_list(FM_Attrs#fileattributes.uname)),
-  ?assertEqual(Attr4#fileattr.gname, FM_Attrs#fileattributes.gname),
-  ?assertEqual(Attr4#fileattr.ctime, FM_Attrs#fileattributes.ctime),
-  ?assertEqual(Attr4#fileattr.mtime, FM_Attrs#fileattributes.mtime),
-  ?assertEqual(Attr4#fileattr.atime, FM_Attrs#fileattributes.atime),
+%%   ?assertEqual(Attr4#fileattr.mode, FM_Attrs#fileattributes.mode),
+%%   ?assertEqual(Attr4#fileattr.uid, FM_Attrs#fileattributes.uid),
+%%   ?assertEqual(Attr4#fileattr.gid, FM_Attrs#fileattributes.gid),
+%%   ?assertEqual(Attr4#fileattr.type, FM_Attrs#fileattributes.type),
+%%   ?assertEqual(Attr4#fileattr.size, FM_Attrs#fileattributes.size),
+%%   ?assertEqual(Attr4#fileattr.uname, utils:ensure_list(FM_Attrs#fileattributes.uname)),
+%%   ?assertEqual(Attr4#fileattr.gname, FM_Attrs#fileattributes.gname),
+%%   ?assertEqual(Attr4#fileattr.ctime, FM_Attrs#fileattributes.ctime),
+%%   ?assertEqual(Attr4#fileattr.mtime, FM_Attrs#fileattributes.mtime),
+%%   ?assertEqual(Attr4#fileattr.atime, FM_Attrs#fileattributes.atime),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login1 ++ "/" ++ TestFile, UID1])),
+%%   ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login1 ++ "/" ++ TestFile, UID1])),
   {Status6, Answer6} = delete_file(Socket, TestFile),
   ?assertEqual("ok", Status6),
   ?assertEqual(list_to_atom(?VOK), Answer6),
@@ -1935,7 +1932,7 @@ users_separation_test(Config) ->
   ?assertEqual(Helper4, Helper8),
   ?assertEqual(Id4, Id8),
 
-  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login2 ++ "/" ++ TestFile, UID2])),
+%%   ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, ["/spaces/" ++ Login2 ++ "/" ++ TestFile, UID2])),
   {Status9, Answer9} = delete_file(Socket2, TestFile),
   ?assertEqual("ok", Status9),
   ?assertEqual(list_to_atom(?VOK), Answer9),

@@ -1,18 +1,16 @@
 %% ===================================================================
-%% @author Krzysztof Trzepla
+%% @author Tomasz Lichon
 %% @copyright (C): 2014 ACK CYFRONET AGH
 %% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc This file contains common macros and records for RTransfer
-%% heap.
+%% @doc This module provides definitions for range storing data structure
 %% @end
 %% ===================================================================
 
-%% gen_server state
-%% * heap - pointer to heap resource created as a call to rt_heap:init_nif() function
--record(state, {heap}).
+-define(infinity, 9999999999999999). %year 2286
 
-%% RTransfer heap element
--record(rt_block, {file_id = "", offset = 0, size = 0, priority = 0}).
+-record(range, {from = 0, to = -1, timestamp = 0}).
+
+-type ranges_struct() :: [#range{}].

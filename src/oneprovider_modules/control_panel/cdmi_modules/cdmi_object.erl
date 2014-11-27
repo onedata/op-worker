@@ -206,7 +206,7 @@ get_cdmi_object(Req, #state{opts = Opts, attributes = #fileattributes{size = Siz
                                    end,
 
             EncodedDataSize = case Encoding of
-                                  <<"base64">> -> byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4 * ceil(DataSize / 3.0));
+                                  <<"base64">> -> byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4 * utils:ceil(DataSize / 3.0));
                                   _ -> byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + DataSize
                               end,
 
@@ -561,14 +561,6 @@ decode(Data, Encoding) when Encoding =:= <<"base64">> ->
     end;
 decode(Data, _) ->
     Data.
-
-%% ceil/1
-%% ====================================================================
-%% @doc math ceil function (works on positive values)
--spec ceil(N :: number()) -> integer().
-%% ====================================================================
-ceil(N) when trunc(N) == N -> N;
-ceil(N) -> trunc(N + 1).
 
 %% parse_byte_range/1
 %% ====================================================================

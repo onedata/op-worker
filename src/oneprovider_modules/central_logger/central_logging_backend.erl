@@ -148,7 +148,7 @@ dispatch_log(Message, Timestamp, Severity, OldMetadata) ->
                        [{node, node()} | OldMetadata2]
                end,
     try
-        gen_server:call(?Dispatcher_Name, {central_logger, 1, {dispatch_log, Message, Timestamp, Severity, Metadata}})
+        gen_server:call(?Dispatcher_Name, {central_logger, 1, {dispatch_log, Message, Timestamp, Severity, Metadata}}, 500)
     catch _:_ ->
         central_logger_not_running
     end.

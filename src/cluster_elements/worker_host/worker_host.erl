@@ -577,8 +577,9 @@ proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId,
 %% ====================================================================
 preproccess_msg(Msg) ->
     case Msg of
-      #worker_request{subject = Subj, request = Msg1, fuse_id = FuseID, access_token = AccessTokenTuple} ->
+      #worker_request{peer_id = PeerId, subject = Subj, request = Msg1, fuse_id = FuseID, access_token = AccessTokenTuple} ->
         fslogic_context:set_user_dn(Subj),
+        put(peer_id, PeerId),
         case AccessTokenTuple of
             {UserID, AccessToken} ->
                 fslogic_context:set_gr_auth(UserID, AccessToken);
