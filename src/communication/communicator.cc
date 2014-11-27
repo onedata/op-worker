@@ -144,8 +144,8 @@ Communicator::communicate(const std::string &module,
                           const unsigned int retries,
                           const std::chrono::milliseconds timeout)
 {
-    if(timeout < 1500ms)
-        timeout = 1500ms;
+    if(timeout < std::chrono::milliseconds(1500))
+        timeout = std::chrono::milliseconds(1500);
     auto cmsg = createMessage(module, true, ans, msg);
     auto future = m_communicationHandler->communicate(*cmsg, poolType(msg), retries);
 
