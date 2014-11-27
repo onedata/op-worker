@@ -691,7 +691,6 @@ write(FilePath, Offset, Buf, EventPolicy) ->
     ErrorDetail :: term().
 %% ====================================================================
 create(File) ->
-    ct:print("create ~p", [File]),
     {ModeStatus, NewFileLogicMode} = get_mode(File),
     case ModeStatus of
         ok ->
