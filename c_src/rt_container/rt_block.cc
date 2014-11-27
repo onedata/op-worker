@@ -16,7 +16,7 @@ namespace provider {
 rt_block::rt_block(std::string file_id, rt_local_term provider_ref,
                    ErlNifUInt64 offset, ErlNifUInt64 size,
                    ErlNifUInt64 priority, int retry,
-                   std::unordered_set<rt_local_term> terms,
+                   std::set<rt_local_term> terms,
                    ErlNifUInt64 counter)
     : file_id_{std::move(file_id)}
     , provider_ref_{std::move(provider_ref)}
@@ -40,7 +40,7 @@ bool rt_block::is_mergeable(const rt_block &block, ErlNifUInt64 block_size)
     return is_mergeable(block) && size_ + block.size_ <= block_size;
 }
 
-void rt_block::appendTerms(const std::unordered_set<rt_local_term> &terms)
+void rt_block::appendTerms(const std::set<rt_local_term> &terms)
 {
     terms_.insert(terms.begin(), terms.end());
 }

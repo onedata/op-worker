@@ -13,7 +13,7 @@
 
 #include <string>
 #include <functional>
-#include <unordered_set>
+#include <set>
 
 using namespace one::provider;
 
@@ -56,7 +56,7 @@ ERL_NIF_TERM put_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
         nifpp::get_throws(env, argv[0], map);
         nifpp::get_throws(env, argv[1], record);
 
-        std::unordered_set<rt_local_term> rt_local_terms;
+        std::set<rt_local_term> rt_local_terms;
         for (const auto &term : terms)
             rt_local_terms.insert(rt_local_term(term));
 
