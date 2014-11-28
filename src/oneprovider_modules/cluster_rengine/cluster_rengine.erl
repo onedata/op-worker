@@ -89,7 +89,7 @@ handle(ProtocolVersion, configure_event_handlers) ->
             ?warning("rule_manager get_event_handlers handler sent back unexpected structure ~p", [Other]),
             error
     after 1000 ->
-        ?info("rule_manager get_event_handlers handler did not replied"),
+        ?info("rule_manager get_event_handlers handler did not reply"),
         error
     end;
 
