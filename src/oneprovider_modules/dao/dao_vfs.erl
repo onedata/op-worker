@@ -441,10 +441,11 @@ save_file(#db_document{record = #file{name = FName} = FileRec} = FileDoc) when i
 %% ====================================================================
 remove_file(File) ->
     {ok, FData} = get_file(File),
+    FRec = FData#db_document.record,
 
     %% Remove file meta
-    case FData of
-        #db_document{record = #file{meta_doc = FMeta}} when is_list(FMeta) ->
+    case FRec of
+        #file{meta_doc = FMeta} when is_list(FMeta) ->
             case remove_file_meta(FMeta) of
                 ok -> ok;
                 {error, Reason} ->
@@ -483,6 +484,11 @@ remove_file(File) ->
         ok -> ok;
         {error, Reason5} ->
             ?warning("Cannot remove available_blocks ~p due to error: ~p", [{file_id, FData#db_document.uuid}, Reason5])
+    end,
+
+    case length(FRec#file.extensions) of
+      0 -> ok;
+      _ -> ets:delete_all_objects(spaces_cache)
     end,
 
     dao_external:set_db(?FILES_DB_NAME),
