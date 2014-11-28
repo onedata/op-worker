@@ -180,13 +180,17 @@ render_table(FilePath, FileSize, FileBlocks, RowID) ->
                             #td{body = fs_interface:get_provider_name(ProviderID), class = <<"ddist-provider">>},
                             #td{body = PercentageBin, class = <<"ddist-percentage">>},
                             #td{body = #canvas{id = CanvasID, class = <<"ddist-canvas">>}},
-                            #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FilePath, ProviderID]},
-                                title = <<"Issue full synchronization">>, class = <<"glyph-link ddist-button">>,
-                                body = #span{class = <<"icomoon-spinner6">>}}},
+                            % TODO Not yet supported
+%%                             #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FilePath, ProviderID]},
+%%                                 title = <<"Issue full synchronization">>, class = <<"glyph-link ddist-button">>,
+%%                                 body = #span{class = <<"icomoon-spinner6">>}}},
                             % TODO Not yet supported
 %%                             #td{body = #link{id = ExpelButtonID, postback = {action, ?MODULE, expel_file, [FilePath, ProviderID]},
 %%                                 title = <<"Expel all chunks from this provider">>, class = <<"glyph-link ddist-button">>,
 %%                                 body = #span{class = <<"icomoon-blocked">>}}},
+                            #td{body = #link{id = SyncButtonID,
+                                title = <<"Issue full synchronization">>, class = <<"glyph-link-gray ddist-button">>,
+                                body = #span{class = <<"icomoon-spinner6">>}}},
                             #td{body = #link{id = ExpelButtonID,
                                 title = <<"Expel all chunks from this provider">>, class = <<"glyph-link-gray ddist-button">>,
                                 body = #span{class = <<"icomoon-blocked">>}}}
@@ -204,7 +208,8 @@ render_table(FilePath, FileSize, FileBlocks, RowID) ->
 -spec sync_file(FullPath :: binary(), ProviderID :: string()) -> term().
 %% ====================================================================
 sync_file(_FilePath, _ProviderID) ->
-    ?dump(sync_file).
+    % TODO Not yet supported
+    ok.
 
 
 %% expel_file/2
@@ -257,7 +262,6 @@ refresh_ddist_panels() ->
                 MD5Hash ->
                     ok;
                 NewHash ->
-                    ?dump({update_blocks, FullPath}),
                     refresh_view(FullPath, FileSize, FileBlocks, RowID),
                     set_displayed_ddist_panels([{FullPath, FileID, RowID, NewHash}] ++ lists:keydelete(FullPath, 1, get_displayed_ddist_panels()))
             end
