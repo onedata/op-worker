@@ -435,6 +435,10 @@ handle_cast({clear_sub_procs_cache, AnsPid, Cache}, State) ->
 handle_cast(stop, State) ->
   {stop, normal, State};
 
+handle_cast({link_process, Pid}, State) ->
+  link(Pid),
+  {noreply, State};
+
 handle_cast(_Msg, State) ->
   ?warning("Wrong cast: ~p", [_Msg]),
   {noreply, State}.
@@ -451,6 +455,11 @@ handle_cast(_Msg, State) ->
 	NewState :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
+handle_info({'EXIT', Pid, Reason}, State) ->
+  PlugIn = State#host_state.plug_in,
+  gen_server:cast(PlugIn, {asynch, 1, {'EXIT', Pid, Reason}}),
+  {noreply, State};
+
 handle_info({timer, Msg}, State) ->
   PlugIn = State#host_state.plug_in,
   gen_server:cast(PlugIn, Msg),

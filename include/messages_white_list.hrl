@@ -23,7 +23,7 @@
   clientstorageinfo, clientstorageinfo_storageinfo, getstatfs, statfsinfo, eventfilterconfig, eventaggregatorconfig, eventtransformerconfig,
   eventstreamconfig, eventproducerconfig, eventmessage, changeremoteloglevel, logmessage, remotefilemangement, createfile,
   deletefileatstorage, truncatefile, readfile, filedata, writefile, writeinfo, changepermsatstorage,
-  rtrequest, rtresponse, docupdated
+  rtrequest, rtresponse, docupdated, message, spacemodified, spaceremoved, usermodified, userremoved, groupmodified, groupremoved
 ]).
 
 %% white lists of atoms that located inside mssags
@@ -39,7 +39,7 @@
 
 %% list of messages decoders that can be used
 -define(DecodersList, [
-  communication_protocol, fuse_messages, logging, remote_file_management, rtcore, dbsync
+  communication_protocol, fuse_messages, logging, remote_file_management, rtcore, dbsync, gr_communication_protocol, gr_messages
 ]).
 
 %% List of messages that needs FuseId to be present in connection state prior to process them.
