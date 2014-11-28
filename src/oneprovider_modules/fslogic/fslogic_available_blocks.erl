@@ -71,8 +71,8 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     lists:foreach(
         fun({Id, Ranges}) ->
             lists:foreach(fun(Range = #range{from = From, to = To}) ->
-                ?info("Synchronizing blocks: ~p of file ~p", [Range, FullFileName]),
-                {ok, _} = gateway:do_stuff(Id, #fetchrequest{file_id = FileId, offset = From*?remote_block_size, size = (To-From+1)*?remote_block_size})
+                ?info("Synchronizing blocks: ~p of file ~p", [Range, FullFileName])
+%%                 {ok, _} = gateway:do_stuff(Id, #fetchrequest{file_id = FileId, offset = From*?remote_block_size, size = (To-From+1)*?remote_block_size})
             end, Ranges)
         end, OutOfSyncList),
     SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
@@ -118,10 +118,10 @@ db_sync_hook() ->
             fslogic_available_blocks:call({external_available_blocks_changed, fslogic_context:get_context(), utils:ensure_list(FileId), utils:ensure_list(Uuid)});
         (?FILES_DB_NAME, _, _, FileDoc = #db_document{uuid = FileId, record = #file{}, deleted = false}) ->
             {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
-            fslogic_file:ensure_file_location_exists(FullFileName, FileDoc);
-        (?FILES_DB_NAME, _, _, #db_document{uuid = FileId, record = #file{}, deleted = true}) ->
-            {ok, {Storage_helper_info, FileId}} = logical_files_manager:getfilelocation({uuid, FileId}),
-            ok = storage_files_manager:delete(Storage_helper_info, FileId)
+            fslogic_file:ensure_file_location_exists(FullFileName, FileDoc)
+%%         (?FILES_DB_NAME, _, _, #db_document{uuid = FileId, record = #file{}, deleted = true}) ->
+%%             {ok, {Storage_helper_info, FileId}} = logical_files_manager:getfilelocation({uuid, FileId}),
+%%             ok = storage_files_manager:delete(Storage_helper_info, FileId)
     end.
 
 %% ====================================================================
