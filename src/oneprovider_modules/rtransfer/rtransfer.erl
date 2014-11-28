@@ -24,6 +24,7 @@
 -define(RTRANSFER_RUNNING_JOBS, rtransfer_running_jobs).
 -define(aggregators_map, aggregators_map).
 -define(gateways_map, gateways_map).
+-define(rtransfer_tab, rtransfer_tab).
 
 -export([init/1, handle/2, cleanup/0]).
 
@@ -43,14 +44,20 @@
 %% @see worker_plugin_behaviour
 -spec init(Args :: term()) -> ok | {error, Error :: any()}.
 init(_Args) ->
-    ets:new(rtransfer, [public, named_table, {read_concurrency, true}]),
+    ets:new(?rtransfer_tab, [public, named_table, {read_concurrency, true}]),
     {ok, _} = rt_map:new({local, ?aggregators_map}),
     {ok, _} = rt_map:new({local, ?gateways_map}),
 
     spawn(
         fun() ->
-            Nodes = gen_server:call({global, central_cluster_manager}, get_nodes),
-            ets:insert(rtransfer, {nodes, array:from_list(Nodes)})
+            try
+                Nodes = gen_server:call({global, central_cluster_manager}, get_nodes),
+                ets:insert(?rtransfer_tab, {nodes, array:from_list(Nodes)})
+            catch
+                Error:Reason ->
+                    ?error_stacktrace("~p:~p Failed to fetch nodes list from CCM: ~p:~p",
+                        [?MODULE, ?LINE, Error, Reason])
+            end
         end),
 
     ok.
@@ -99,7 +106,7 @@ handle(ProtocolVersion, #request_transfer{} = Request) ->
             FetchRequest = #gw_fetch{file_id = BFileId, offset = BOffset, size = BSize,
                 remote = Remote, notify = [Aggregator | AdditionalNotify], retry = FetchRetryNumber},
 
-            gen_server:abcast(GatewayNodes, gateway, {asynch, ProtocolVersion, FetchRequest}) %% @todo test if stuff works with abscast
+            gen_server:abcast(GatewayNodes, gateway, {asynch, ProtocolVersion, FetchRequest})
         end, Blocks),
 
     ok;
@@ -184,7 +191,7 @@ retry(ProtocolVersion, _Why, #gw_fetch{file_id = FileId, offset = Offset, size =
 %% @doc Pick one of gateway nodes available to perform requests.
 -spec pick_gw_node() -> node().
 pick_gw_node() ->
-    [{_, Nodes}] = ets:lookup(rtransfer, nodes),
+    [{_, Nodes}] = ets:lookup(?rtransfer_tab, nodes),
     NodeNo = random:uniform(array:size(Nodes)) - 1,
     array:get(NodeNo, Nodes).
 
@@ -199,7 +206,7 @@ provider_id_to_remote(ProviderId) ->
     {ok, GwPort} = application:get_env(?APP_Name, gateway_listener_port),
 
     URLs =
-        case ets:lookup(rtransfer, {provider_addr_cache, ProviderId}) of
+        case ets:lookup(?rtransfer_tab, {provider_addr_cache, ProviderId}) of
             [{_, ProviderURLs}] -> ProviderURLs;
             [] ->
                 {ok, ProviderDetails} = gr_providers:get_details(provider, ProviderId),
@@ -209,7 +216,7 @@ provider_id_to_remote(ProviderId) ->
                             fun(URL) -> inet:parse_address(utils:ensure_list(URL)) end,
                             ProviderDetails#provider_details.urls)),
 
-                ets:insert(rtransfer, {{provider_addr_cache, ProviderId}, ProviderURLs}),
+                ets:insert(?rtransfer_tab, {{provider_addr_cache, ProviderId}, ProviderURLs}),
                 ProviderURLs
         end,
 
