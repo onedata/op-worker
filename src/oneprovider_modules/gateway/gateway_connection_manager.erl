@@ -110,14 +110,14 @@ handle_call(_Request, _From, State) ->
      Timeout :: timeout(),
      Reason :: term().
 %% ====================================================================
-handle_cast(#fetch{remote = Remote, notify = Notify} = Request, #cmstate{addr = Addr} = State) ->
+handle_cast(#gw_fetch{remote = Remote} = Request, #cmstate{addr = Addr} = State) ->
     case dict:find(Remote, State#cmstate.connections) of
         error ->
             Self = self(),
             spawn(fun() ->
                 case gateway_connection_supervisor:start_connection(Remote, Addr, Self) of
                     {error, Reason} ->
-                        Notify ! {fetch_connect_error, Reason};
+                        gateway:notify(fetch_error, {connection_error, Reason}, Request);
                     {ok, Pid} ->
                         gen_server:cast(Self, {internal, Request, {new, Pid}})
                 end
@@ -128,7 +128,7 @@ handle_cast(#fetch{remote = Remote, notify = Notify} = Request, #cmstate{addr = 
             handle_cast({internal, Request, {old, ConnectionPid}}, State)
     end;
 
-handle_cast({internal, #fetch{remote = Remote} = Request, {Type, CPid}}, State) ->
+handle_cast({internal, #gw_fetch{remote = Remote} = Request, {Type, CPid}}, State) ->
     Connections = State#cmstate.connections,
     {NewConnections, ConnectionPid} =
         case Type of

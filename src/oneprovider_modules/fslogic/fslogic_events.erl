@@ -71,7 +71,7 @@ delayed_push_attrs(FileUUID) ->
     case ets:lookup(?fslogic_attr_events_state, utils:ensure_binary(FileUUID)) of
         [{_, _TRef}] -> ok;
         [] ->
-            TRef = erlang:send_after(timer:seconds(1) / 2, ?Dispatcher_Name, {timer, {fslogic, 1, {internal_event_handle, push_new_attrs, [FileUUID]}}}),
+            TRef = erlang:send_after(500, ?Dispatcher_Name, {timer, {fslogic, 1, {internal_event_handle, push_new_attrs, [FileUUID]}}}),
             ets:insert(?fslogic_attr_events_state, {utils:ensure_binary(FileUUID), TRef}),
             ok
     end.
