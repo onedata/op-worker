@@ -346,7 +346,7 @@ init_per_testcase(_, Config) ->
   lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
   test_utils:wait_for_cluster_init(DuplicatedPermanentNodes + length(NodesUp) - 1),
   {ok, MonitoringInitialization} = rpc:call(CCM, application, get_env, [?APP_Name, cluster_monitoring_initialization]),
-  timer:sleep(8 * 1000 * MonitoringInitialization),
+  timer:sleep(6 * 1000 * MonitoringInitialization),
 
   lists:append([{nodes, NodesUp}], Config).
 
