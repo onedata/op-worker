@@ -18,7 +18,7 @@
 %% API
 -export([init/0, data_distribution_panel/2, no_support_panel/1, on_resize_js/0, display_info_not_supported/0]).
 -export([hide_ddist_panel/1, hide_all_ddist_panels/0, refresh_ddist_panels/0]).
--export([toggle_ddist_view/4, refresh_view/4, sync_file/2, expel_file/2]).
+-export([toggle_ddist_view/4, refresh_view/4, sync_file/3, expel_file/2]).
 
 % Macros used to generate IDs of certain elements
 -define(DIST_PANEL_ID(RowID), <<"dd_", (integer_to_binary(RowID))/binary>>).
@@ -184,7 +184,7 @@ render_table(FilePath, FileSize, FileBlocks, RowID) ->
                             #td{body = PercentageBin, class = <<"ddist-percentage">>},
                             #td{body = #canvas{id = CanvasID, class = <<"ddist-canvas">>}},
                             % TODO Not yet supported
-%%                             #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FilePath, ProviderID]},
+%%                             #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FilePath, ProviderID, FileSize]},
 %%                                 title = <<"Issue full synchronization">>, class = <<"glyph-link ddist-button">>,
 %%                                 body = #span{class = <<"icomoon-spinner6">>}}},
                             % TODO Not yet supported
@@ -204,15 +204,15 @@ render_table(FilePath, FileSize, FileBlocks, RowID) ->
     ].
 
 
-%% sync_file/2
+%% sync_file/3
 %% ====================================================================
 %% @doc Issues full synchronization (downloading all the blocks) of selected file.
 %% @end
--spec sync_file(FullPath :: binary(), ProviderID :: string()) -> term().
+-spec sync_file(FullPath :: binary(), ProviderID :: string(), Size :: integer()) -> term().
 %% ====================================================================
-sync_file(_FilePath, _ProviderID) ->
-    % TODO Not yet supported
-    ok.
+sync_file(FullPath, ProviderID, Size) ->
+    % TODO not yet implemented
+    fs_interface:issue_remote_file_synchronization(FullPath, ProviderID, Size).
 
 
 %% expel_file/2
@@ -265,6 +265,7 @@ refresh_ddist_panels() ->
                 MD5Hash ->
                     ok;
                 NewHash ->
+                    ?dump(newhash),
                     refresh_view(FullPath, FileSize, FileBlocks, RowID),
                     set_displayed_ddist_panels([{FullPath, FileID, RowID, NewHash}] ++ lists:keydelete(FullPath, 1, get_displayed_ddist_panels()))
             end

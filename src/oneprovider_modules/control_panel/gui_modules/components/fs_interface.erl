@@ -13,14 +13,18 @@
 
 -include("oneprovider_modules/dao/dao_vfs.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
+-include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
 -include("oneprovider_modules/fslogic/ranges_struct.hrl").
+-include("fuse_messages_pb.hrl").
+-include("fuse_messages_pb.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_providers.hrl").
 
 %% API
 -export([get_all_available_blocks/1, get_full_file_path/1, get_file_uuid/1, get_provider_name/1]).
+-export([issue_remote_file_synchronization/3]).
 
 
 %% get_all_available_blocks/1
@@ -90,8 +94,21 @@ get_provider_name(ProviderID) ->
     case proplists:get_value(ProviderID, CacheContent) of
         undefined ->
             {ok, #provider_details{name = Name}} = gr_providers:get_details(provider, ProviderID),
-            application:set_env(?APP_Name, provider_names, [{ProviderID, Name}|CacheContent]),
+            application:set_env(?APP_Name, provider_names, [{ProviderID, Name} | CacheContent]),
             Name;
         ExistingName ->
             ExistingName
     end.
+
+
+%% issue_remote_file_synchronization/3
+%% ====================================================================
+%% @doc Issues full block synchronization on remote provider.
+%% @end
+-spec issue_remote_file_synchronization(FullPath :: string(), ProviderID :: binary(), Size::integer()) -> binary().
+%% ====================================================================
+issue_remote_file_synchronization(FullPath, ProviderID, Size) ->
+    % TODO not yet implemented
+    ok.
+%%     Res = provider_proxy:reroute_pull_message(gui_str:to_binary(ProviderID), fslogic_context:get_gr_auth(),
+%%         ?CLUSTER_FUSE_ID, #synchronizefileblock{logical_name = FullPath, offset = 0, size = Size}).
