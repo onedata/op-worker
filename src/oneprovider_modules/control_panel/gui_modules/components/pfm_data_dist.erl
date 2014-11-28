@@ -15,8 +15,6 @@
 -include_lib("ctool/include/logging.hrl").
 
 
-% TODO skonczyc refresh!
-
 %% API
 -export([init/0, data_distribution_panel/2, no_support_panel/1, on_resize_js/0, display_info_not_supported/0]).
 -export([hide_ddist_panel/1, hide_all_ddist_panels/0, refresh_ddist_panels/0]).

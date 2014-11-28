@@ -15,6 +15,7 @@
 -include("oneprovider_modules/dao/dao.hrl").
 -include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
 -include("oneprovider_modules/fslogic/ranges_struct.hrl").
+-include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_providers.hrl").
 
@@ -81,7 +82,17 @@ get_file_uuid(FullFilePath) ->
 %% @end
 -spec get_provider_name(ProviderID :: binary()) -> binary().
 %% ====================================================================
-% TODO Highly inefficient!! Making a REST request for every provider for every data distribution panel update
+% TODO for now, simple cache in application env. Need to find a better solution.
 get_provider_name(ProviderID) ->
-    {ok, #provider_details{name = Name}} = gr_providers:get_details(provider, ProviderID),
-    Name.
+    CacheContent = case application:get_env(?APP_Name, provider_names) of
+                       {ok, Content} -> Content;
+                       _ -> []
+                   end,
+    case proplists:get_value(ProviderID, CacheContent) of
+        undefined ->
+            {ok, #provider_details{name = Name}} = gr_providers:get_details(provider, ProviderID),
+            application:set_env(?APP_Name, provider_names, [{ProviderID, Name}|CacheContent]),
+            Name;
+        ExistingName ->
+            ExistingName
+    end.
