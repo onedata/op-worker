@@ -49,7 +49,6 @@ get_all_available_blocks(FileID) ->
                 end, {0, []}, FileParts),
             {ProviderID, ProvBytes, BlockList}
         end, AvailableBlocks),
-
     {FileSize, Blocks}.
 
 

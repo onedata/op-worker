@@ -43,6 +43,6 @@ FileChunksBar.prototype.draw = function (JSONData) {
 FileChunksBar.prototype.drawBlock = function (start, end, fileSize) {
     this.context.fillStyle = this.fillColor;
     var rectStart = canvasWidth * start / fileSize;
-    var rectEnd = 1 + canvasWidth * end / fileSize;
+    var rectEnd = canvasWidth * (end + 1) / fileSize;
     this.context.fillRect(rectStart, 0, rectEnd - rectStart, canvasHeight);
 };

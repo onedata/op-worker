@@ -174,7 +174,10 @@ render_table(FilePath, FileSize, FileBlocks, RowID) ->
                         gui_jq:bind_element_click(ExpelButtonID, <<"function(e) { e.stopPropagation(); }">>),
                         JSON = rest_utils:encode_to_json([{<<"file_size">>, FileSize}, {<<"chunks">>, BlockList}]),
                         gui_jq:wire(<<"new FileChunksBar(document.getElementById('", CanvasID/binary, "'), '", JSON/binary, "');">>),
-                        Percentage = ProvBytes * 10000 div FileSize,
+                        Percentage = case FileSize of
+                                         0 -> 0;
+                                         _ -> ProvBytes * 10000 div FileSize
+                                     end,
                         PercentageBin = gui_str:format_bin("~b.~b%", [Percentage div 100, Percentage rem 100]),
                         #tr{cells = [
                             #td{body = fs_interface:get_provider_name(ProviderID), class = <<"ddist-provider">>},
