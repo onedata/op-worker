@@ -28,6 +28,7 @@
 -export([init/1, handle/2, cleanup/0]).
 -export([notify/3, compute_request_hash/1]).
 -export([start_queue_loop/1, queue_loop/3]).
+-export([compute_request_hash/1, handle_node_lifecycle_notification/4]).
 
 
 %% ====================================================================
@@ -40,6 +41,7 @@
 %% @doc Initialize the module, starting all necessary services.
 %% @see worker_plugin_behaviour
 -spec init(Args :: term()) -> ok | {error, Error :: any()}.
+%% ====================================================================
 init(_Args) ->
     {ok, GwPort} = application:get_env(?APP_Name, gateway_listener_port),
     {ok, GwProxyPort} = application:get_env(?APP_Name, gateway_proxy_port),
@@ -72,6 +74,7 @@ init(_Args) ->
 %% @see worker_plugin_behaviour
 -spec handle(ProtocolVersion :: term(), Request :: term()) ->
     {ok, Ans :: term()} | {error, Error :: any()}.
+%% ====================================================================
 handle(_ProtocolVersion, ping) ->
     pong;
 
@@ -86,6 +89,11 @@ handle(_ProtocolVersion, #gw_fetch{} = Request) ->
     rt_utils:push(?GATEWAY_INCOMING_QUEUE, Block),
     ok;
 
+handle(_ProtocolVersion, {node_lifecycle_notification, Node, Module, Action, Pid}) ->
+  handle_node_lifecycle_notification(Node, Module, Action, Pid),
+  ok;
+
+
 handle(_ProtocolVersion, _Msg) ->
     ?log_call(_Msg),
     ok.
@@ -96,6 +104,7 @@ handle(_ProtocolVersion, _Msg) ->
 %% @doc Cleanup any state associated with the module.
 %% @see worker_plugin_behaviour
 -spec cleanup() -> ok | {error, Error :: any()}.
+%% ====================================================================
 cleanup() ->
     ranch:stop_listener(?GATEWAY_LISTENER),
     catch exit(whereis(gw_queue_loop), shutdown),
@@ -108,6 +117,7 @@ cleanup() ->
 %% ====================================================================
 %% @doc Computes a sha256 hash of an encoded protobuf #filerequest
 -spec compute_request_hash(RequestBytes :: iodata()) -> Hash :: binary().
+%% ====================================================================
 compute_request_hash(RequestBytes) ->
     crypto:hash(sha256, RequestBytes).
 
@@ -140,6 +150,15 @@ queue_loop(Max, Running, SubRef) ->
 %% Internal functions
 %% ====================================================================
 
+
+%% handle_node_lifecycle_notification/4
+%% ====================================================================
+%% @doc Handles lifecycle calls
+-spec handle_node_lifecycle_notification(Node :: list(), Module :: atom(), Action :: atom(), Pid :: pid()) -> ok.
+%% ====================================================================
+handle_node_lifecycle_notification(Node, Module, Action, Pid) ->
+  ?debug("Lifecycle notification ~p",[{Node, Module, Action, Pid}]),
+  ok.
 
 %% start_queue_loop/1
 %% ====================================================================
