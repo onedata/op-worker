@@ -77,11 +77,11 @@ synchronize_file_block(FullFileName, Offset, Size) ->
         end, OutOfSyncList),
     SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
 
-%%     #atom{value = ?VOK} = case SyncedParts of
-%%         [] -> #atom{value = ?VOK};
-%%         _ -> call({file_synchronized, fslogic_context:get_context(), FileId, SyncedParts, FullFileName}) % todo remove FullFileName arg
-%%     end.
-    call({file_synchronized, fslogic_context:get_context(), FileId, SyncedParts, FullFileName}).
+    #atom{value = ?VOK} = case SyncedParts of
+        [] -> #atom{value = ?VOK};
+        _ -> call({file_synchronized, fslogic_context:get_context(), FileId, SyncedParts, FullFileName}) % todo remove FullFileName arg
+    end.
+%%     call({file_synchronized, fslogic_context:get_context(), FileId, SyncedParts, FullFileName}).
 
 
 %% file_block_modified/3
