@@ -265,7 +265,6 @@ refresh_ddist_panels() ->
                 MD5Hash ->
                     ok;
                 NewHash ->
-                    ?dump(newhash),
                     refresh_view(FullPath, FileSize, FileBlocks, RowID),
                     set_displayed_ddist_panels([{FullPath, FileID, RowID, NewHash}] ++ lists:keydelete(FullPath, 1, get_displayed_ddist_panels()))
             end
