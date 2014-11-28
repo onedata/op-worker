@@ -40,7 +40,7 @@ rtransfer_test_() ->
 setup() ->
     application:set_env(?APP_Name, rtransfer_fetch_retry_number, 1),
     application:set_env(?APP_Name, gateway_listener_port, ?GW_PORT),
-    ets:new(rtransfer, [public, named_table]).
+    ets:new(rtransfer_tab, [public, named_table]).
 
 teardown(_) ->
     ok.
