@@ -117,9 +117,9 @@ db_sync_hook() ->
             fslogic_available_blocks:call({invalidate_blocks_cache, FileId});
         (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}, deleted = false}) when Id =/= MyProviderId ->
             fslogic_available_blocks:call({external_available_blocks_changed, fslogic_context:get_context(), utils:ensure_list(FileId), utils:ensure_list(Uuid)});
-        (?FILES_DB_NAME, _, _, FileDoc = #db_document{uuid = FileId, record = #file{}, deleted = false}) ->
-            {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
-            fslogic_file:ensure_file_location_exists(FullFileName, FileDoc);
+%%         (?FILES_DB_NAME, _, _, FileDoc = #db_document{uuid = FileId, record = #file{}, deleted = false}) ->
+%%             {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
+%%             fslogic_file:ensure_file_location_exists(FullFileName, FileDoc);
         (?FILES_DB_NAME, _, _, #db_document{uuid = FileId, record = #file{}, deleted = true}) ->
             case dao_lib:apply(dao_vfs, exists_file, [{uuid, utils:ensure_list(FileId)}]) of
                 {ok, false} ->
