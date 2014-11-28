@@ -319,22 +319,22 @@ init_per_testcase(_, Config) ->
   DuplicatedPermanentNodes = (length(NodesUp) - 1) * length(?PERMANENT_MODULES),
 
   test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, NodesUp, [
-  [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1313}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {gateway_listener_port, 3217}, {gateway_proxy_port, 3218}, {rest_port, 3308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {cluster_monitoring_initialization, 5}, {cluster_monitoring_period, 5}, {heart_beat, 1}],
-  [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1314}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {gateway_listener_port, 3219}, {gateway_proxy_port, 3220}, {rest_port, 3309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {cluster_monitoring_initialization, 5}, {cluster_monitoring_period, 5}, {heart_beat, 1}]]),
+  [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1313}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {gateway_listener_port, 3217}, {gateway_proxy_port, 3218}, {rest_port, 3308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
+  [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1314}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {gateway_listener_port, 3219}, {gateway_proxy_port, 3220}, {rest_port, 3309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}]]),
 
-  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
   test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
     test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
-  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
   test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
-  ct:print("workers ~p",[Workers]),
 
+  {ok, MonitoringInitialization} = rpc:call(CCM, application, get_env, [?APP_Name, cluster_monitoring_initialization]),
+  timer:sleep(2 * 1000 * MonitoringInitialization),
 
   % Init cluster
 
@@ -349,9 +349,6 @@ init_per_testcase(_, Config) ->
 
   lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
   test_utils:wait_for_cluster_init(DuplicatedPermanentNodes + length(NodesUp) - 1),
-  timer:sleep(30000),
-  {Workers2, _} = gen_server:call({global, ?CCM}, get_workers),
-  ct:print("workers ~p",[Workers2]),
   lists:append([{nodes, NodesUp}], Config).
 
 end_per_testcase(distributed_test, Config) ->
