@@ -77,11 +77,11 @@ synchronize_file_block(FullFileName, Offset, Size) ->
         end, OutOfSyncList),
     SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
 
-    #atom{value = ?VOK} = case SyncedParts of
-        [] -> #atom{value = ?VOK};
-        _ -> call({file_synchronized, fslogic_context:get_context(), FileId, SyncedParts, FullFileName}) % todo remove FullFileName arg
-    end.
-%%     call({file_synchronized, fslogic_context:get_context(), FileId, SyncedParts, FullFileName}).
+%%     #atom{value = ?VOK} = case SyncedParts of
+%%         [] -> #atom{value = ?VOK};
+%%         _ -> call({file_synchronized, fslogic_context:get_context(), FileId, SyncedParts, FullFileName}) % todo remove FullFileName arg
+%%     end.
+    call({file_synchronized, fslogic_context:get_context(), FileId, SyncedParts, FullFileName}).
 
 
 %% file_block_modified/3
@@ -119,10 +119,10 @@ db_sync_hook() ->
             fslogic_available_blocks:call({external_available_blocks_changed, fslogic_context:get_context(), utils:ensure_list(FileId), utils:ensure_list(Uuid)});
         (?FILES_DB_NAME, _, _, FileDoc = #db_document{uuid = FileId, record = #file{}, deleted = false}) ->
             {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
-            fslogic_file:ensure_file_location_exists(FullFileName, FileDoc);
-        (?FILES_DB_NAME, _, _, Doc = #db_document{record = #file{}}) ->
-            ct:print("HOOK: ~p", [Doc])
-%%             case dao_lib:apply(dao_vfs, exists_file, [{uuid, utils:ensure_list(FileId)}]) of
+            fslogic_file:ensure_file_location_exists(FullFileName, FileDoc)
+%%         (?FILES_DB_NAME, _, _, Doc = #db_document{record = #file{}}) ->
+%%             ct:print("HOOK: ~p", [Doc])
+%% %%             case dao_lib:apply(dao_vfs, exists_file, [{uuid, utils:ensure_list(FileId)}]) of
 %%                 {ok, false} ->
 %%                     {ok, {Storage_helper_info, FileId}} = logical_files_manager:getfilelocation({uuid, FileId}),
 %%                     ok = storage_files_manager:delete(Storage_helper_info, FileId);
