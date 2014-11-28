@@ -1012,6 +1012,11 @@ list_view_body() ->
     CellWidth = <<"width: ", (integer_to_binary(?ATTRIBUTE_COLUMN_WIDTH))/binary, "px;">>,
     HiddenAttrs = ?ALL_ATTRIBUTES -- get_displayed_file_attributes(),
     gui_jq:wire(<<"initialize_table_header_scrolling();">>),
+
+    {ok, SupportedSpaces} = gr_providers:get_spaces(provider),
+    {ok, #space_info{space_id = SpaceID}} = fslogic_utils:get_space_info_for_path(fs_interface:get_full_file_path(get_working_directory())),
+    IsSpaceSupported = lists:member(SpaceID, SupportedSpaces),
+
     HeaderTable = [
         #table{id = <<"header_table">>, class = <<"no-margin table">>, style = <<"position: fixed; top: 173px; z-index: 10;",
         "background: white; border: 2px solid #bbbdc0; border-collapse: collapse; min-width: 1024px;">>, header = [
@@ -1117,6 +1122,12 @@ list_view_body() ->
                                         ]}
                                 ]}};
                         false ->
+                            DataDistributionPanel = case IsSpaceSupported of
+                                                        true ->
+                                                            pfm_data_dist:data_distribution_panel(FilePath, Counter);
+                                                        false ->
+                                                            pfm_data_dist:no_support_panel(Counter)
+                                                    end,
                             ShareIcon = case item_is_shared(Item) of
                                             true -> #span{class = <<"icomoon-link">>,
                                                 style = <<"font-size: 18px; position: absolute; top: 0px; left: 0; z-index: 1; color: rgb(82, 100, 118);">>};
@@ -1133,7 +1144,7 @@ list_view_body() ->
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
                                     #link{id = LinkID, body = gui_str:html_encode(Basename), target = <<"_blank">>,
                                         url = <<?user_content_download_path, "/", (gui_str:url_encode(FilePath))/binary>>}
-                                ]}] ++ pfm_data_dist:data_distribution_panel(FilePath, Counter) %pfm_data_dist:no_support_panel(Counter) %
+                                ]}] ++ DataDistributionPanel
                             }
                     end
                 ] ++
@@ -1144,7 +1155,7 @@ list_view_body() ->
             },
             {TableRow, Counter + 1}
         end, 1, get_item_list()),
-    % Set filename containers width
+% Set filename containers width
     ContentWithoutFilename = 100 + (?ATTRIBUTE_COLUMN_WIDTH + 51) * NumAttr, % 51 is cell padding
     gui_jq:wire(<<"window.onresize = function(e) { $('.filename_row').css('max-width', ",
     "'' +($('#header_table').width() - ", (integer_to_binary(ContentWithoutFilename))/binary, ") + 'px'); ",
