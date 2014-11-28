@@ -159,6 +159,8 @@ init_per_testcase(_, Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   test_utils:wait_for_cluster_init(),
 
+  ets:insert(rtransfer_tab, {nodes, array:from_list(NodesUp)}),
+
   ?ENABLE_PROVIDER(lists:append([{port, Port}, {nodes, NodesUp}], Config)).
 
 
