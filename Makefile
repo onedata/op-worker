@@ -7,9 +7,10 @@ DIST_TESTS_SRC_DIR = "test_distributed"
 all: generate docs
 
 compile:
-	-@if [ -f ebin/.test ]; then rm -rf ebin; fi
+	-@if [ -f ebin/.test ]; then rm -rf ebin; fi 
 	cp -R clproto/proto src
 	cp -R rtproto/proto src
+	cp -R deps/prproto/proto src
 	cp -R c_src/oneproxy/proto src
 	./rebar compile
 	rm -rf src/proto src/oneproxy.proto
@@ -40,6 +41,7 @@ ct: deps compile
 	-@mkdir -p ebin ; touch ebin/.test 
 	cp -R clproto/proto src
 	cp -R rtproto/proto src
+	cp -R deps/prproto/proto src
 	cp -R c_src/oneproxy/proto src
 	./rebar -D TEST compile
 	rm -rf src/proto

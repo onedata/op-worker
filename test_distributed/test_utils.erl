@@ -23,7 +23,7 @@
 
 -define(VIEW_REBUILDING_TIME, 2000).
 -define(FUSE_SESSION_EXP_TIME, 8000).
--define(REQUEST_HANDLING_TIME, 1000).
+-define(REQUEST_HANDLING_TIME, 2000).
 -define(GEN_SERV_CALL_TIMEOUT, 100000).
 
 %% Functions to use instead of timer

@@ -33,7 +33,7 @@
 -export([get_space_names/1, create_space_dir/1, get_spaces/1]).
 -export([create_dirs_at_storage/2, create_dirs_at_storage/1]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
--export([synchronize_spaces_info/2, synchronize_groups/2, create_partial_user/2, get_login_with_uid/1]).
+-export([synchronize_spaces_info/2, synchronize_groups/2, create_partial_user/2, create_partial_user/3, get_login_with_uid/1]).
 
 
 %% ====================================================================
@@ -49,12 +49,22 @@
 -spec create_partial_user(GRUID :: binary(), [space_info()]) -> {ok, user_doc()} | {error, Reason :: term()}.
 %% ====================================================================
 create_partial_user(GRUID, Spaces) ->
+  create_partial_user(GRUID, Spaces, []).
+
+%% create_partial_user/3
+%% ====================================================================
+%% @doc Creates user based on data received from Global Registry for user with given GRUID.
+%%      Spaces list shall contain at least one of user's spaces. Adds user to groups.
+%% @end
+-spec create_partial_user(GRUID :: binary(), [space_info()], Groups :: list()) -> {ok, user_doc()} | {error, Reason :: term()}.
+%% ====================================================================
+create_partial_user(GRUID, Spaces, Groups) ->
     [#space_info{space_id = SpaceId} | _] = Spaces,
     case gr_spaces:get_user_details(provider, SpaceId, GRUID) of
         {ok, #user_details{name = Name0}} ->
             Login = openid_utils:get_user_login(GRUID),
             Name = unicode:characters_to_list(Name0),
-            try user_logic:sign_in([{global_id, utils:ensure_list(GRUID)}, {name, Name}, {login, Login}], <<>>, <<>>, 0) of
+            try user_logic:sign_in([{global_id, utils:ensure_list(GRUID)}, {name, Name}, {login, Login}, {groups, Groups}], <<>>, <<>>, 0) of
                 {_, UserDoc} ->
                     {ok, UserDoc}
             catch
@@ -93,6 +103,7 @@ sign_in(Proplist, AccessToken, RefreshToken, AccessExpirationTime) ->
     Teams = proplists:get_value(teams, Proplist, []),
     Emails = proplists:get_value(emails, Proplist, []),
     DnList = proplists:get_value(dn_list, Proplist, []),
+    Groups = proplists:get_value(groups, Proplist, []),
 
     ?debug("Login with token: ~p", [AccessToken]),
 
@@ -101,7 +112,7 @@ sign_in(Proplist, AccessToken, RefreshToken, AccessExpirationTime) ->
                    User1 = synchronize_user_info(ExistingUser, Logins, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime),
                    synchronize_spaces_info(User1, AccessToken);
                {error, user_not_found} ->
-                   case create_user(GlobalId, Logins, Name, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime) of
+                   case create_user(GlobalId, Logins, Name, Teams, Emails, DnList, AccessToken, RefreshToken, AccessExpirationTime, Groups) of
                        {ok, NewUser} ->
                            synchronize_spaces_info(NewUser, AccessToken);
                        {error, Error} ->
@@ -131,6 +142,8 @@ sign_in(Proplist, AccessToken, RefreshToken, AccessExpirationTime) ->
 create_user(GlobalId, Logins, Name, Teams, Email, DnList) ->
     create_user(GlobalId, Logins, Name, Teams, Email, DnList, <<>>, <<>>, 0).
 create_user(GlobalId, Logins, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime) ->
+  create_user(GlobalId, Logins, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime, []).
+create_user(GlobalId, Logins, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime, Groups) ->
     ?debug("Creating user: ~p", [{GlobalId, Logins, Name, Teams, Email, DnList}]),
     Quota = #quota{},
     {QuotaAns, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
@@ -155,7 +168,8 @@ create_user(GlobalId, Logins, Name, Teams, Email, DnList, AccessToken, RefreshTo
         quota_doc = QuotaUUID,
         access_token = AccessToken,
         refresh_token = RefreshToken,
-        access_expiration_time = AccessExpirationTime
+        access_expiration_time = AccessExpirationTime,
+        groups = Groups
     },
     {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [#db_document{record = User, uuid = GlobalId}], 1),
     GetUserAns = get_user({uuid, UUID}),
