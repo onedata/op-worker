@@ -245,7 +245,6 @@ save_file_descriptor(ProtocolVersion, File, Validity) ->
     Result :: term().
 %% ====================================================================
 save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
-    ct:print("save_file_descriptor/4(~p,~p,~p, ~p): ~p",[ProtocolVersion, Uuid, FuseID, Validity, process_info(self(), last_calls)]),
     case FuseID of
         ?CLUSTER_FUSE_ID -> {ok, ok};
         _ ->
@@ -291,7 +290,6 @@ save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
     Result :: term().
 %% ====================================================================
 save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
-    ct:print("save_new_file_descriptor/4(~p,~p,~p, ~p): ~p",[ProtocolVersion, Uuid, FuseID, Validity, process_info(self(), last_calls)]),
     Descriptor = update_file_descriptor(#file_descriptor{file = Uuid, fuse_id = FuseID}, Validity),
     case dao_lib:apply(dao_vfs, save_descriptor, [Descriptor], ProtocolVersion) of
         {error, Reason} ->

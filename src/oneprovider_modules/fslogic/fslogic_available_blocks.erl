@@ -56,8 +56,7 @@
     #atom{} | no_return().
 %% ====================================================================
 synchronize_file_block(FullFileName, Offset, Size) ->
-    ct:print("synchronize_file_block(~p,~p,~p)",[FullFileName, Offset, Size]),
-    ct:print("Context: ~p, UserContext ~p", [fslogic_context:get_fuse_id(), fslogic_context:get_user_context()]),
+    ?info("synchronize_file_block(~p,~p,~p)",[FullFileName, Offset, Size]),
 
     %prepare data
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
@@ -104,7 +103,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     #atom{} | no_return().
 %% ====================================================================
 file_block_modified(FullFileName, Offset, Size) ->
-    ct:print("file_block_modified(~p,~p,~p)",[FullFileName, Offset, Size]),
+    ?info("file_block_modified(~p,~p,~p)",[FullFileName, Offset, Size]),
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
     #atom{value = ?VOK} = call({file_block_modified, fslogic_context:get_context(), FileId, Offset, Size, FullFileName}). % todo remove FullFileName arg
 
@@ -117,7 +116,7 @@ file_block_modified(FullFileName, Offset, Size) ->
     #atom{} | no_return().
 %% ====================================================================
 file_truncated(FullFileName, Size) ->
-    ct:print("file_truncated(~p,~p)",[FullFileName, Size]),
+    ?info("file_truncated(~p,~p)",[FullFileName, Size]),
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
     #atom{value = ?VOK} = call({file_truncated, fslogic_context:get_context(), FileId, Size, FullFileName}). % todo remove FullFileName arg
 
@@ -132,7 +131,6 @@ db_sync_hook() ->
             {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
             fslogic_file:ensure_file_location_exists(FullFileName, FileDoc)
 %%         (?FILES_DB_NAME, _, _, Doc = #db_document{record = #file{}}) ->
-%%             ct:print("HOOK: ~p", [Doc])
 %% %%             case dao_lib:apply(dao_vfs, exists_file, [{uuid, utils:ensure_list(FileId)}]) of
 %%                 {ok, false} ->
 %%                     {ok, {Storage_helper_info, FileId}} = logical_files_manager:getfilelocation({uuid, FileId}),
