@@ -24,7 +24,7 @@
 -include("oneprovider_modules/dao/dao_types.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("fuse_messages_pb.hrl").
--include("oneprovider_modules/gateway/gateway.hrl").
+-include("oneprovider_modules/rtransfer/rtransfer.hrl").
 
 % High level fslogic api
 -export([synchronize_file_block/3, file_block_modified/3, file_truncated/2, db_sync_hook/0]).
@@ -71,8 +71,19 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     lists:foreach(
         fun({Id, Ranges}) ->
             lists:foreach(fun(Range = #range{from = From, to = To}) ->
-                ?info("Synchronizing blocks: ~p of file ~p", [Range, FullFileName]),
-                {ok, _} = gateway:do_stuff(Id, #fetchrequest{file_id = FileId, offset = From*?remote_block_size, size = (To-From+1)*?remote_block_size})
+                ?info("Synchronizing blocks: ~p of file ~s", [Range, FullFileName]),
+                O = From*?remote_block_size,
+                S = (To-From+1)*?remote_block_size,
+                gen_server:call(?Dispatcher_Name, {rtransfer, 1,
+                    #request_transfer{file_id = FileId, offset = O, size = S, notify = self(), provider_id = Id}}),
+
+                {ok, _} =
+                    receive
+                        {transfer_complete, Read, {FileId, O, S}} -> {ok, Read};
+                        {transfer_error, Reason,  {FileId, O, S}} -> {error, Reason}
+                    after
+                        timer:seconds(10) -> timeout
+                    end
             end, Ranges)
         end, OutOfSyncList),
     SyncedParts = [Range || {_PrId, Range} <- OutOfSyncList], % assume that all parts has been synchronized
