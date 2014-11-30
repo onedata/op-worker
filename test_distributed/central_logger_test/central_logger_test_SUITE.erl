@@ -12,6 +12,7 @@
 -module(central_logger_test_SUITE).
 -include("test_utils.hrl").
 -include("registered_names.hrl").
+-include("modules_and_args.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
 
@@ -95,15 +96,17 @@ init_and_cleanup_test(Config) ->
     NodesUp = ?config(nodes, Config),
     [CCM, W] = NodesUp,
 
+    Workers = [W],
     % Get standard trace configuration from worker node
     StandardTraces = rpc:call(W, ?MODULE, get_lager_traces, []),
 
+    DuplicatedPermanentNodes = (length(Workers) - 1) * length(?PERMANENT_MODULES),
     % Init cluster
     gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
     gen_server:cast({global, ?CCM}, {set_monitoring, on}),
     test_utils:wait_for_cluster_cast(),
     gen_server:cast({global, ?CCM}, init_cluster),
-    test_utils:wait_for_cluster_init(),
+    test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
     % Test logger's console loglevel switching functionalities
     ?assertEqual(ok, rpc:call(W, ?MODULE, check_console_loglevel_functionalities, [])),
@@ -146,6 +149,7 @@ init_and_cleanup_test(Config) ->
 logging_test(Config) ->
     NodesUp = ?config(nodes, Config),
     [CCM, W1, W2, W3, W4] = NodesUp,
+    WorkerNodes = [W1, W2, W3, W4],
 
     % Init cluster
     gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
@@ -153,7 +157,9 @@ logging_test(Config) ->
     test_utils:wait_for_cluster_cast(),
     test_utils:wait_for_nodes_registration(length(NodesUp) - 1),
     gen_server:cast({global, ?CCM}, init_cluster),
-    test_utils:wait_for_cluster_init(),
+
+    DuplicatedPermanentNodes = (length(WorkerNodes) - 1) * length(?PERMANENT_MODULES),
+    test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
     % Subscribe for log stream
     Pid = self(),
@@ -236,19 +242,19 @@ init_per_testcase(logging_test, Config) ->
             [{node_type, worker},
                 {dispatcher_port, 5056},
                 {ccm_nodes, [CCM]},
-                {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {heart_beat, 1}],
+                {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {gateway_listener_port, 3217}, {gateway_proxy_port, 3218}, {rest_port, 3309}, {heart_beat, 1}],
             [{node_type, worker},
                 {dispatcher_port, 5057},
                 {ccm_nodes, [CCM]},
-                {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {heart_beat, 1}],
+                {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {gateway_listener_port, 3219}, {gateway_proxy_port, 3220}, {rest_port, 3310}, {heart_beat, 1}],
             [{node_type, worker},
                 {dispatcher_port, 5058},
                 {ccm_nodes, [CCM]},
-                {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {heart_beat, 1}],
+                {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {gateway_listener_port, 3221}, {gateway_proxy_port, 3222}, {rest_port, 3311}, {heart_beat, 1}],
             [{node_type, worker},
                 {dispatcher_port, 5059},
                 {ccm_nodes, [CCM]},
-                {dns_port, 1312}, {control_panel_port, 2312}, {control_panel_redirect_port, 1358}, {rest_port, 3312}, {heart_beat, 1}]]),
+                {dns_port, 1312}, {control_panel_port, 2312}, {control_panel_redirect_port, 1358}, {gateway_listener_port, 3223}, {gateway_proxy_port, 3224}, {rest_port, 3312}, {heart_beat, 1}]]),
 
 
     lists:append([{nodes, Nodes}], Config);
@@ -268,7 +274,7 @@ init_per_testcase(init_and_cleanup_test, Config) ->
             [{node_type, worker},
                 {dispatcher_port, 5056},
                 {ccm_nodes, [CCM]},
-                {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {heart_beat, 1}]]),
+                {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {gateway_listener_port, 3217}, {gateway_proxy_port, 3218}, {heart_beat, 1}]]),
 
 
     lists:append([{nodes, Nodes}], Config).

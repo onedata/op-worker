@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc This file is a specifcation for gateway tests. The test can be fount
+%% @doc This file is a specification for gateway tests. The test can be found
 %% in gateway_test directory.
 %% @end
 %% ===================================================================

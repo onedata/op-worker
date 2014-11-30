@@ -23,7 +23,7 @@
 
 -define(VIEW_REBUILDING_TIME, 2000).
 -define(FUSE_SESSION_EXP_TIME, 8000).
--define(REQUEST_HANDLING_TIME, 1000).
+-define(REQUEST_HANDLING_TIME, 2000).
 -define(GEN_SERV_CALL_TIMEOUT, 100000).
 
 %% Functions to use instead of timer
@@ -230,7 +230,7 @@ wait_for_cluster_init() ->
   Ans :: true | no_return().
 %% ====================================================================
 wait_for_cluster_init(ModulesNum) ->
-  Modules = lists:filter(fun({ModuleName, _}) -> not lists:member(ModuleName, ?ignored_modules) end, ?Modules_With_Args),
+  Modules = lists:filter(fun({ModuleName, _}) -> not lists:member(ModuleName, ?ignored_modules) end, ?MODULES_WITH_ARGS),
   wait_for_cluster_init(ModulesNum + length(Modules), 50, []).
 
 %% wait_for_cluster_init/3

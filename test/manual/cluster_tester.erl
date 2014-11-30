@@ -72,7 +72,7 @@ test_cluster(Nodes, PingsNum) ->
 
 %% This function checks if state of cluster is ok
 test_ccm(Nodes) ->
-  Jobs = ?Modules,
+  Jobs = ?MODULES,
 
   Ans = try
     NodesFromCCM = gen_server:call({global, ?CCM}, get_nodes),
@@ -110,7 +110,7 @@ ping_test(Nodes, PingsNum) ->
   PongAns = #answer{answer_status = "ok", worker_answer = PongBytes},
   PongAnsBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(PongAns)),
 
-  Jobs = ?Modules,
+  Jobs = ?MODULES,
   CreateMessages = fun(M, Sum) ->
     Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom",
     message_decoder_name = "communication_protocol", answer_type = "atom",

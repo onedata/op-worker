@@ -19,7 +19,7 @@
 -include("registered_names.hrl").
 -include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
 -include("oneprovider_modules/fslogic/ranges_struct.hrl").
--include("oneprovider_modules/gateway/gateway.hrl").
+-include("oneprovider_modules/rtransfer/rtransfer.hrl").
 -include("oneprovider_modules/fslogic/ranges_struct.hrl").
 
 

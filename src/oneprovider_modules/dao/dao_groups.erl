@@ -43,9 +43,9 @@ save_group(#db_document{record = #group_details{}, uuid = UUID} = GroupDoc) when
     dao_external:set_db(?GROUPS_DB_NAME),
     dao_records:save_record(GroupDoc);
 
-save_group(#db_document{record = #group_details{}} = GroupDoc) ->
+save_group(#db_document{record = #group_details{id = Id}} = GroupDoc) ->
     dao_external:set_db(?GROUPS_DB_NAME),
-    dao_records:save_record(GroupDoc#db_document{}).
+    dao_records:save_record(GroupDoc#db_document{uuid = Id}).
 
 
 %% get_group/1

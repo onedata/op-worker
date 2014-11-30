@@ -17,6 +17,7 @@
 -include_lib("dao/include/common.hrl").
 -include_lib("ctool/include/global_registry/gr_openid.hrl").
 -include_lib("ctool/include/global_registry/gr_groups.hrl").
+-include("oneprovider_modules/dao/dao_spaces.hrl").
 
 %% Every record that will be saved to DB have to be "registered" with this define.
 %% Each registered record should be listed in defined below 'case' block as fallow:
