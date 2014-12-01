@@ -158,6 +158,23 @@ message FileTruncated {
     required uint64 size = 2;
 }
 
+message GetFileBlockMap {
+  required string file_uuid = 1;
+}
+
+message FileBlockMap {
+  message BlockMapEntity {
+    message BlockRange {
+      required uint64 from = 1;
+      required uint64 to = 2;
+    }
+    required string provider_id = 1;
+    repeated BlockRange ranges = 2;
+  }
+  optional string answer = 1 [default = "ok"];
+  repeated BlockMapEntity block_map = 2;
+}
+
 message CreateFileAck {
     required string file_logic_name = 1;
 }
