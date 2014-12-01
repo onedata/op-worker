@@ -1367,7 +1367,7 @@ mark_as_truncated(FullFileName, Size) ->
     {ok, [{ProviderId :: string(), BlockList :: [#block_range{}]}]} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
 get_file_block_map(FullFileName) ->
-    {Status, TmpAns} = contact_fslogic(#getfileblockmap{file_uuid = FullFileName}),
+    {Status, TmpAns} = contact_fslogic(#getfileblockmap{logical_name = FullFileName}),
     case Status of
         ok ->
             case TmpAns#fileblockmap.answer of
