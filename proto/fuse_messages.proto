@@ -159,7 +159,7 @@ message FileTruncated {
 }
 
 message GetFileBlockMap {
-  required string file_uuid = 1;
+  required string logical_name = 1;
 }
 
 message FileBlockMap {
