@@ -56,7 +56,7 @@
     #atom{} | no_return().
 %% ====================================================================
 synchronize_file_block(FullFileName, Offset, Size) ->
-    ?info("synchronize_file_block(~ts,~p,~p)",[FullFileName, Offset, Size]),
+    ?info("synchronize_file_block(~p,~p,~p)",[FullFileName, Offset, Size]),
 
     %prepare data
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
@@ -70,7 +70,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     lists:foreach(
         fun({Id, Ranges}) ->
             lists:foreach(fun(Range = #range{from = From, to = To}) ->
-                ?info("Synchronizing blocks: ~p of file ~ts", [Range, FullFileName]),
+                ?info("Synchronizing blocks: ~p of file ~p", [Range, FullFileName]),
                 O = From*?remote_block_size,
                 S = (To-From+1)*?remote_block_size,
                 gen_server:call(?Dispatcher_Name, {rtransfer, 1,
@@ -103,7 +103,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     #atom{} | no_return().
 %% ====================================================================
 file_block_modified(FullFileName, Offset, Size) ->
-    ?info("file_block_modified(~ts,~p,~p)",[FullFileName, Offset, Size]),
+    ?info("file_block_modified(~p,~p,~p)",[FullFileName, Offset, Size]),
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
     #atom{value = ?VOK} = call({file_block_modified, fslogic_context:get_context(), FileId, Offset, Size, FullFileName}). % todo remove FullFileName arg
 
@@ -116,7 +116,7 @@ file_block_modified(FullFileName, Offset, Size) ->
     #atom{} | no_return().
 %% ====================================================================
 file_truncated(FullFileName, Size) ->
-    ?info("file_truncated(~ts,~p)",[FullFileName, Size]),
+    ?info("file_truncated(~p,~p)",[FullFileName, Size]),
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
     #atom{value = ?VOK} = call({file_truncated, fslogic_context:get_context(), FileId, Size, FullFileName}). % todo remove FullFileName arg
 
