@@ -1368,6 +1368,7 @@ mark_as_truncated(FullFileName, Size) ->
 %% ====================================================================
 get_file_block_map(FileUuid) ->
     {Status, TmpAns} = contact_fslogic(#getfileblockmap{file_uuid = FileUuid}),
+    ct:print("ANS: ~p", TmpAns),
     case Status of
         ok ->
             case TmpAns#fileblockmap.answer of
