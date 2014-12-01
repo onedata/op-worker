@@ -1373,17 +1373,15 @@ get_file_block_map(FileUuid) ->
         ok ->
             case TmpAns#fileblockmap.answer of
                 ?VOK ->
-                    BlockMap = #fileblockmap.block_map,
+                    BlockMap = TmpAns#fileblockmap.block_map,
                     ProtobufProplist = lists:map(
                         fun(#fileblockmap_blockmapentity{provider_id = Id, ranges = Ranges}) ->
                             {Id, Ranges}
                         end, BlockMap),
-                    ct:print("ANS2: ~p", [ProtobufProplist]),
                     FinalProplist = lists:map(
                         fun({Id, RangeList}) ->
                             {Id, [#block_range{from = From, to = To} || #fileblockmap_blockmapentity_blockrange{from = From, to = To} <- RangeList]}
                         end, ProtobufProplist),
-                    ct:print("ANS3: ~p", [FinalProplist]),
                     {ok, FinalProplist};
                 Error -> {logical_file_system_error, Error}
             end;
