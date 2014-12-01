@@ -13,6 +13,7 @@
 
 -include("test_utils.hrl").
 -include("registered_names.hrl").
+-include("modules_and_args.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
 
@@ -89,6 +90,7 @@ multi_node_test(Config) ->
 
   [CCM | WorkerNodes] = NodesUp,
 
+  DuplicatedPermanentNodes = (length(NodesUp) - 1) * length(?PERMANENT_MODULES),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
   test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
@@ -97,7 +99,7 @@ multi_node_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -167,6 +169,7 @@ sub_proc_load_test(Config) ->
 
   [CCM | WorkerNodes] = NodesUp,
 
+  DuplicatedPermanentNodes = (length(NodesUp) - 1) * length(?PERMANENT_MODULES),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
   test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
@@ -175,7 +178,7 @@ sub_proc_load_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->

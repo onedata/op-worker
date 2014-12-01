@@ -81,10 +81,10 @@
 -define(FILE_COUNTING_BASE, 256).
 
 %% Which fuse operations (messages) are allowed to operate on base group directory ("/groups")
--define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, getfileuuid, updatetimes, getfilechildren, getfilechildrencount, getacl, getxattr, listxattr, checkfileperms]).
+-define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, getfileuuid, updatetimes, getfilechildren, getfilechildrencount, getacl, getxattr, listxattr, checkfileperms, attrunsubscribe]).
 
 %% Which fuse operations (messages) are allowed to operate on second level group directory (e.g. "/groups/grpName")
--define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getfileuuid, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren, getfilechildrencount, getacl, getxattr, listxattr, checkfileperms]).
+-define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getfileuuid, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren, getfilechildrencount, getacl, getxattr, listxattr, checkfileperms, attrunsubscribe]).
 
 % File open modes (open flags)
 -define(UNSPECIFIED_MODE,"").

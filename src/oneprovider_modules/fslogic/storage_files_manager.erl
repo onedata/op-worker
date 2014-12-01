@@ -840,7 +840,7 @@ set_root_ctx() ->
 -spec setup_ctx(File :: string()) -> ok | {error, no_user}.
 %% ====================================================================
 setup_ctx(File) ->
-    ?info("Setup storage ctx based on user ctx: ~p", [fslogic_context:get_user_context()]),
+    ?debug("Setup storage ctx based on user ctx: ~p", [fslogic_context:get_user_context()]),
 
     case fslogic_objects:get_user() of
         {ok, #db_document{record = #user{global_id = GRUID} = UserRec} = UserDoc} ->

@@ -24,6 +24,7 @@
 -export([gen_global_fuse_id/2, read_global_fuse_id/1, is_global_fuse_id/1]).
 -export([clear_user_ctx/0, clear_gr_auth/0]).
 -export([get_user_context/0, set_user_context/1]).
+-export([get_context/0, set_context/1]).
 -export([get_user_query/0]).
 
 %% ====================================================================
@@ -302,7 +303,7 @@ get_user_context() ->
     {get_user_dn(),{get(gruid), get(access_token)}}.
 
 
-%% set_user_context/0
+%% set_user_context/1
 %% ====================================================================
 %% @doc Sets user DN, accessToken and GRUID
 %% @end
@@ -315,6 +316,27 @@ set_user_context(#db_document{record = #user{global_id = GRUID, access_token = A
 set_user_context({DN, {GRUID, AccessToken}}) ->
     set_user_dn(DN),
     set_gr_auth(GRUID, AccessToken),
+    ok.
+
+%% get_context/0
+%% ====================================================================
+%% @doc Gets fuse id and user context
+%% @end
+-spec get_context() -> term().
+%% ====================================================================
+get_context() ->
+    {get_fuse_id(), get_user_context()}.
+
+
+%% set_context/1
+%% ====================================================================
+%% @doc Sets user DN, accessToken and GRUID
+%% @end
+-spec set_context(Context :: term()) -> ok.
+%% ====================================================================
+set_context({FuseId, UserContext}) ->
+    set_fuse_id(FuseId),
+    set_user_context(UserContext),
     ok.
 
 %% ====================================================================

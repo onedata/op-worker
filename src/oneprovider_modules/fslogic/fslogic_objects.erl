@@ -229,7 +229,6 @@ get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
     Result :: term().
 %% ====================================================================
 save_file_descriptor(ProtocolVersion, File, Validity) ->
-    ct:print("save_file_descriptor/3(~p,~p,~p): ~p",[ProtocolVersion, File, Validity, process_info(self(), last_calls)]),
     Descriptor = update_file_descriptor(File#db_document.record, Validity),
     case dao_lib:apply(dao_vfs, save_descriptor, [File#db_document{record = Descriptor}], ProtocolVersion) of
         {error, Reason} ->
@@ -246,7 +245,6 @@ save_file_descriptor(ProtocolVersion, File, Validity) ->
     Result :: term().
 %% ====================================================================
 save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
-    ct:print("save_file_descriptor/4(~p,~p,~p, ~p): ~p",[ProtocolVersion, Uuid, FuseID, Validity, process_info(self(), last_calls)]),
     case FuseID of
         ?CLUSTER_FUSE_ID -> {ok, ok};
         _ ->
@@ -277,7 +275,6 @@ save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
                                 Other -> Other
                             end;
                         _Many ->
-                            ct:print("ANS: ~p", [TmpAns]),
                             ?error("Error: to many file descriptors for file uuid: ~p", [Uuid]),
                             {error, "Error: too many file descriptors"}
                     end;
@@ -293,7 +290,6 @@ save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
     Result :: term().
 %% ====================================================================
 save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
-    ct:print("save_new_file_descriptor/4(~p,~p,~p, ~p): ~p",[ProtocolVersion, Uuid, FuseID, Validity, process_info(self(), last_calls)]),
     Descriptor = update_file_descriptor(#file_descriptor{file = Uuid, fuse_id = FuseID}, Validity),
     case dao_lib:apply(dao_vfs, save_descriptor, [Descriptor], ProtocolVersion) of
         {error, Reason} ->

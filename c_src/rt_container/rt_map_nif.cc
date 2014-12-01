@@ -21,7 +21,9 @@ namespace {
 
 int load(ErlNifEnv *env, void **priv, ERL_NIF_TERM load_info)
 {
-    nifpp::register_resource<rt_map>(env, nullptr, "rt_map");
+    std::string module_name;
+    nifpp::get(env, load_info, module_name);
+    nifpp::register_resource<rt_map>(env, nullptr, module_name.c_str());
     return 0;
 }
 

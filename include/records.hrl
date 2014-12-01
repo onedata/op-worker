@@ -23,7 +23,7 @@
 %% This record is used by ccm (it contains its state). It describes 
 %% nodes, dispatchers and workers in cluster. It also contains reference
 %% to process used to monitor if nodes are alive.
--record(cm_state, {nodes = [], workers = [], dispatcher_maps = [], state_num = 1, callbacks_num = 1, cluster_check_num = 0, state_loaded = false, state_monitoring = on, storage_stats = #storage_stats{}, provider_id}).
+-record(cm_state, {nodes = [], workers = [], worker_lifecycle_listeners = [], dispatcher_maps = [], state_num = 1, callbacks_num = 1, cluster_check_num = 0, state_loaded = false, state_monitoring = on, storage_stats = #storage_stats{}, provider_id}).
 
 %% This record is used by worker_host (it contains its state). It describes
 %% plug_in that is used and state of this plug_in. It contains also

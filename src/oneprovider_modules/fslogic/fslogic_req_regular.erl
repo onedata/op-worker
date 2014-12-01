@@ -60,7 +60,7 @@ get_file_location(FullFileName, OpenMode, ForceClusterProxy) when is_list(FullFi
     #filelocation{} | no_return().
 %% ====================================================================
 get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
-    ?info("get_file_location(~p, ~p, ~p, ~p)", [FileDoc, FullFileName, OpenMode, ForceClusterProxy]),
+    ?debug("get_file_location(~p, ~p, ~p, ~p)", [FileDoc, FullFileName, OpenMode, ForceClusterProxy]),
     Validity = ?LOCATION_VALIDITY,
     case FileDoc#db_document.record#file.type of
         ?REG_TYPE -> ok;
@@ -210,7 +210,6 @@ update_file_block_map(FileId, Blocks) ->
 %% ====================================================================
 update_file_block_map(_, [], false) -> {ok, 0};
 update_file_block_map(FullFileName, Blocks, ClearMap) ->
-    ct:print("update_file_block_map ~p, ~p, ~p", [FullFileName, Blocks, ClearMap]),
     {ok, #db_document{} = FileDoc} = fslogic_objects:get_file(FullFileName),
     Location = fslogic_file:get_file_local_location(FileDoc),
     #file_location{storage_uuid = StorageUUID} = Location,

@@ -5,16 +5,20 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc This file is a specification for gateway tests. The test can be found
-%% in gateway_test directory.
-%% @end
+%% @doc Common includes, defines and macros for rtransfer modules.
 %% ===================================================================
 
-%% log directories (all_nodes does not include master)
-%% {logdir, master, "."}.
-{logdir, all_nodes, "./gateway_test"}.
-{include, ["../include", "."]}.
+-ifndef(RTRANSFER_HRL).
+-define(RTRANSFER_HRL, true).
 
-%% test suits to be run
-{alias, gateway_test, "./gateway_test"}.
-{suites, gateway_test, all}.
+-include_lib("ctool/include/logging.hrl").
+
+-record(request_transfer, {
+    file_id :: string(),
+    offset :: non_neg_integer(),
+    size :: pos_integer(),
+    provider_id :: binary(),
+    notify :: pid() | atom()
+}).
+
+-endif.
