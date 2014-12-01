@@ -20,7 +20,7 @@
 
 %% API
 -export([normalize_file_type/2, get_file_local_location_doc/1]).
--export([update_file_size/1, update_file_size/2, get_real_file_size_and_uid/1, get_file_owner/1, get_file_local_location/1, fix_storage_owner/1]).
+-export([get_real_file_uid/1, get_file_owner/1, get_file_local_location/1, fix_storage_owner/1]).
 -export([ensure_file_location_exists/2]).
 
 %% ====================================================================
@@ -35,7 +35,7 @@
 %% ====================================================================
 fix_storage_owner(#db_document{record = #file{type = ?REG_TYPE} = File, uuid = FileUUID} = FileDoc) ->
     {_UName, _VCUID, RSUID} = fslogic_file:get_file_owner(File),
-    {_Size, SUID} = fslogic_file:get_real_file_size_and_uid(FileDoc),
+    SUID = fslogic_file:get_real_file_uid(FileDoc),
 
     case SUID =:= RSUID of
         true -> ok;
@@ -103,57 +103,31 @@ get_file_local_location_doc(FileId) when is_list(FileId) ->
     Location.
 
 
-%% get_real_file_size_and_uid/1
+%% get_real_file_uid/1
 %% ====================================================================
-%% @doc Fetches real file size and uid from underlying storage. Returns {0, -1} for non-regular file.
-%%      Also errors are silently dropped (return value {0, -1}).
--spec get_real_file_size_and_uid(File :: file() | file_doc() | file_info()) -> FileSize :: non_neg_integer().
+%% @doc Fetches real file uid from underlying storage. Returns -1 for non-regular file.
+%%      Also errors are silently dropped (return value -1).
+-spec get_real_file_uid(File :: file() | file_doc() | file_info()) -> FileSize :: non_neg_integer().
 %% ====================================================================
-get_real_file_size_and_uid(#db_document{uuid = FileId, record = #file{type = ?REG_TYPE} = File}) ->
+get_real_file_uid(#db_document{uuid = FileId, record = #file{type = ?REG_TYPE} = File}) ->
     FileLoc = get_file_local_location(FileId),
+    ct:print("FileLoc: ~p",[FileLoc]),
     {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_uuid}),
 
     {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.storage_file_id),
+    ct:print("get real size ~p",[File_id]),
     case helpers:exec(getattr, SH, [File_id]) of
-        {0, #st_stat{st_size = ST_Size, st_uid = SUID} = _Stat} ->
-            {ST_Size, SUID};
+        {0, #st_stat{st_uid = SUID} = _Stat} ->
+            SUID;
         {Errno, _} ->
             ?error("Cannot fetch attributes for file: ~p, errno: ~p", [File, Errno]),
-            {0, -1}
+            -1
     end;
-get_real_file_size_and_uid(#db_document{record = #file{}}) ->
-    {0, -1};
-get_real_file_size_and_uid(Path) ->
+get_real_file_uid(#db_document{record = #file{}}) ->
+    -1;
+get_real_file_uid(Path) ->
     {ok, #db_document{record = #file{}} = FileDoc} = fslogic_objects:get_file(Path),
-    get_real_file_size_and_uid(FileDoc).
-
-
-%% update_file_size/1
-%% ====================================================================
-%% @doc Updates file size based on it's real size on underlying storage. Whether this call is asynchronous or not depends on
-%%      fslogic_meta:update_meta_attr implementation. <br/>
-%%      Does nothing if given file_info() corresponds to non-regular file.
--spec update_file_size(FileDoc :: file_doc()) ->
-    UpdatedFile :: file_info().
-%% ====================================================================
-update_file_size(#db_document{record = #file{type = ?REG_TYPE} = File} = FileDoc) ->
-    {Size, _} = get_real_file_size_and_uid(FileDoc),
-    update_file_size(File, Size);
-update_file_size(#db_document{record = #file{} = File}) ->
-    File.
-
-
-%% update_file_size/2
-%% ====================================================================
-%% @doc Sets file size to given value. Whether this call is asynchronous or not depends on
-%%      fslogic_meta:update_meta_attr implementation.
--spec update_file_size(File :: file_info(), Size :: non_neg_integer()) ->
-    UpdatedFile :: file_info().
-%% ====================================================================
-update_file_size(#file{} = File, Size) when Size >= 0 ->
-    fslogic_meta:update_meta_attr(File, size, Size).
-
-
+    get_real_file_uid(FileDoc).
 
 %% normalize_file_type/2
 %% ====================================================================
@@ -227,4 +201,5 @@ create_file_location_for_remote_file(FullFileName, FileUuid) ->
     #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
 
     Storage_helper_info = #storage_helper_info{name = SHName, init_args = SHArgs},
+    ct:print("Creating remote location and file: ~s",[StorageFileId]),
     ok = storage_files_manager:create(Storage_helper_info, StorageFileId).
