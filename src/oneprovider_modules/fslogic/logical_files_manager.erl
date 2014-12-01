@@ -16,6 +16,7 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
 -include("oneprovider_modules/dao/dao_vfs.hrl").
 -include("oneprovider_modules/dao/dao_share.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
@@ -37,6 +38,7 @@
 
 %% Block synchronization
 -export([synchronize/3, mark_as_modified/3, mark_as_truncated/2]).
+-export([get_file_block_map/1]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
@@ -1351,6 +1353,32 @@ mark_as_truncated(FullFileName, Size) ->
         ok ->
             case TmpAns#atom.value of
                 ?VOK -> ok;
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
+%% get_file_block_map/1
+%% ====================================================================
+%% @doc Gets list of available_blocks for each provider supporting space.
+%% The result is a proplist [{ProviderId, BlockList}]
+%% @end
+-spec get_file_block_map(FileUuid :: string()) ->
+    {ok, [{ProviderId :: string(), BlockList :: [#block_range{}]}]} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+get_file_block_map(FileUuid) ->
+    {Status, TmpAns} = contact_fslogic(#getfileblockmap{file_uuid = FileUuid}),
+    case Status of
+        ok ->
+            case TmpAns#fileblockmap.answer of
+                ?VOK ->
+                    BlockMap = #fileblockmap.block_map,
+                    ProtobufProplist = [{X#fileblockmap_blockmapentity.provider_id, X#fileblockmap_blockmapentity.ranges} || X <- BlockMap],
+                    FinalProplist = lists:map(
+                        fun({Id, RangeList}) ->
+                            {Id, [#block_range{from = From, to = To} || #fileblockmap_blockmapentity_blockrange{from = From, to = To} <- RangeList]}
+                        end, ProtobufProplist),
+                    {ok, FinalProplist};
                 Error -> {logical_file_system_error, Error}
             end;
         _ -> {Status, TmpAns}
