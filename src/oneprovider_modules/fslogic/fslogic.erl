@@ -459,8 +459,9 @@ handle_fuse_message(Req = #filetruncated{logical_name = FName, size = Size}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_available_blocks:file_truncated(FullFileName, Size);
 
-handle_fuse_message(#getfileblockmap{file_uuid = FileId}) ->
-    fslogic_req_generic:get_file_block_map(FileId);
+handle_fuse_message(Req = #getfileblockmap{file_uuid = FName}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    fslogic_req_generic:get_file_block_map(FullFileName);
 
 handle_fuse_message(Req = #requestfileblock{logical_name = FName, offset = Offset, size = Size}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
@@ -575,6 +576,8 @@ extract_logical_path(#synchronizefileblock{logical_name = Path}) ->
 extract_logical_path(#fileblockmodified{logical_name = Path}) ->
     Path;
 extract_logical_path(#filetruncated{logical_name = Path}) ->
+    Path;
+extract_logical_path(#getfileblockmap{file_uuid = Path}) ->
     Path;
 extract_logical_path(#filenotused{file_logic_name = Path}) ->
     Path;

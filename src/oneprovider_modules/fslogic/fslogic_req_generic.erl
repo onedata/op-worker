@@ -375,8 +375,9 @@ get_statfs() ->
 %% @end
 -spec get_file_block_map(FileId :: string()) -> #fileblockmap{} | no_return().
 %% ====================================================================
-get_file_block_map(FileId) ->
-    ?debug("get_file_block_map(FileId: ~p)", [FileId]),
+get_file_block_map(FullFileName) ->
+    ?debug("get_file_block_map(FullFileName: ~p)", [FullFileName]),
+    {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName),
     {ok, Docs} = fslogic_available_blocks:call({list_all_available_blocks, FileId}),
     ProtobufList = lists:map(
         fun(#db_document{record = #available_blocks{provider_id = Id, file_parts = Blocks}}) ->

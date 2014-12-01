@@ -1363,12 +1363,11 @@ mark_as_truncated(FullFileName, Size) ->
 %% @doc Gets list of available_blocks for each provider supporting space.
 %% The result is a proplist [{ProviderId, BlockList}]
 %% @end
--spec get_file_block_map(FileUuid :: string()) ->
+-spec get_file_block_map(FullFileName :: string()) ->
     {ok, [{ProviderId :: string(), BlockList :: [#block_range{}]}]} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
-get_file_block_map(FileUuid) ->
-    {Status, TmpAns} = contact_fslogic(#getfileblockmap{file_uuid = FileUuid}),
-    ct:print("ANS: ~p", [TmpAns]),
+get_file_block_map(FullFileName) ->
+    {Status, TmpAns} = contact_fslogic(#getfileblockmap{file_uuid = FullFileName}),
     case Status of
         ok ->
             case TmpAns#fileblockmap.answer of
