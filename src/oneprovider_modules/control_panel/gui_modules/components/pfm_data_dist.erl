@@ -162,7 +162,7 @@ render_table(FileSize, FileBlocks, RowID) ->
                                      end,
                         PercentageBin = gui_str:format_bin("~b.~b%", [Percentage div 100, Percentage rem 100]),
                         #tr{cells = [
-                            #td{body = fs_interface:get_provider_name(ProviderID), class = <<"ddist-provider">>},
+                            #td{body = ProviderID, class = <<"ddist-provider">>},
                             #td{body = PercentageBin, class = <<"ddist-percentage">>},
                             #td{body = #canvas{id = CanvasID, class = <<"ddist-canvas">>}},
                             % TODO Not yet supported

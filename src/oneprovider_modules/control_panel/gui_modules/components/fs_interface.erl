@@ -44,9 +44,9 @@ get_file_block_map(FullFilePath) ->
                     ToBytes = min(FileSize - 1, To * ?remote_block_size + ?remote_block_size - 1),
                     {AccBytes + ToBytes - FromBytes + 1, AccBlocks ++ [FromBytes, ToBytes]}
                 end, {0, []}, FileParts),
-            {ProviderID, ProvBytes, BlockList}
-        end, lists:sort(FileBlockMap)),
-    {FileSize, Blocks}.
+            {fs_interface:get_provider_name(ProviderID), ProvBytes, BlockList}
+        end, FileBlockMap),
+    {FileSize, lists:sort(Blocks)}.
 
 
 %% get_full_file_path/1
