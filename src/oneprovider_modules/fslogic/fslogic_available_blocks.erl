@@ -27,10 +27,10 @@
 -include("oneprovider_modules/rtransfer/rtransfer.hrl").
 
 % High level fslogic api
--export([synchronize_file_block/3, file_block_modified/3, file_truncated/2, db_sync_hook/0]).
+-export([synchronize_file_block/3, file_block_modified/5, file_truncated/4, db_sync_hook/0]).
 % cache/dao_proxy api
 -export([cast/1, call/1]).
--export([file_synchronized/6, file_block_modified/7, file_truncated/6, external_available_blocks_changed/5]).
+-export([file_synchronized/6, file_block_modified/9, file_truncated/8, external_available_blocks_changed/5]).
 -export([registered_requests/0, save_available_blocks/3, get_available_blocks/3, list_all_available_blocks/3, get_file_size/3, invalidate_blocks_cache/3]).
 % Low level document modification api
 -export([mark_as_modified/2, mark_as_available/2, check_if_synchronized/3, truncate/2, mark_other_provider_changes/2]).
@@ -94,31 +94,31 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     call({file_synchronized, fslogic_context:get_context(), FileId, SyncedParts, FullFileName}).
 
 
-%% file_block_modified/3
+%% file_block_modified/5
 %% ====================================================================
 %% @doc Marks given file block as modified, so other provider would know
 %% that they need to synchronize their data
 %% @end
--spec file_block_modified(FullFileName :: string(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+-spec file_block_modified(FullFileName :: string(), FuseId :: string(), SequenceNumber :: non_neg_integer(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
     #atom{} | no_return().
 %% ====================================================================
-file_block_modified(FullFileName, Offset, Size) ->
-    ?debug("file_block_modified(~p,~p,~p)",[FullFileName, Offset, Size]),
+file_block_modified(FullFileName, FuseId, SequenceNumber, Offset, Size) ->
+    ?debug("file_block_modified(~p,~p,~p,~p,~p)",[FullFileName, FuseId, SequenceNumber, Offset, Size]),
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
-    #atom{value = ?VOK} = call({file_block_modified, fslogic_context:get_context(), FileId, Offset, Size, FullFileName}). % todo remove FullFileName arg
+    #atom{value = ?VOK} = call({file_block_modified, fslogic_context:get_context(), FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}). % todo remove FullFileName arg
 
-%% file_truncated/2
+%% file_truncated/4
 %% ====================================================================
 %% @doc Deletes synchronization info of truncated blocks, so other provider would know
 %% that those blocks has been deleted
 %% @end
--spec file_truncated(FullFileName :: string(), Size :: non_neg_integer()) ->
+-spec file_truncated(FullFileName :: string(), FuseId :: string(), SequenceNumber :: non_neg_integer(), Size :: non_neg_integer()) ->
     #atom{} | no_return().
 %% ====================================================================
-file_truncated(FullFileName, Size) ->
-    ?debug("file_truncated(~p,~p)",[FullFileName, Size]),
+file_truncated(FullFileName, FuseId, SequenceNumber, Size) ->
+    ?debug("file_truncated(~p,~p,~p,~p)",[FullFileName, FuseId, SequenceNumber, Size]),
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
-    #atom{value = ?VOK} = call({file_truncated, fslogic_context:get_context(), FileId, Size, FullFileName}). % todo remove FullFileName arg
+    #atom{value = ?VOK} = call({file_truncated, fslogic_context:get_context(), FileId, FuseId, SequenceNumber, Size, FullFileName}). % todo remove FullFileName arg
 
 db_sync_hook() ->
     MyProviderId = cluster_manager_lib:get_provider_id(),
@@ -153,8 +153,8 @@ registered_requests() ->
         (ProtocolVersion, {list_all_available_blocks, FileId}, CacheName) -> fslogic_available_blocks:list_all_available_blocks(ProtocolVersion, CacheName, FileId);
         (ProtocolVersion, {get_file_size, FileId}, CacheName) -> fslogic_available_blocks:get_file_size(ProtocolVersion, CacheName, FileId);
         (ProtocolVersion, {invalidate_blocks_cache, FileId}, CacheName) -> fslogic_available_blocks:invalidate_blocks_cache(ProtocolVersion, CacheName, FileId);
-        (ProtocolVersion, {file_block_modified, Context, FileId, Offset, Size, FullFileName}, CacheName) -> fslogic_available_blocks:file_block_modified(ProtocolVersion, CacheName, Context, FileId, Offset, Size, FullFileName);
-        (ProtocolVersion, {file_truncated, Context, FileId, Size, FullFileName}, CacheName) -> fslogic_available_blocks:file_truncated(ProtocolVersion, CacheName, Context, FileId, Size, FullFileName);
+        (ProtocolVersion, {file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}, CacheName) -> fslogic_available_blocks:file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName);
+        (ProtocolVersion, {file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}, CacheName) -> fslogic_available_blocks:file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName);
         (ProtocolVersion, {file_synchronized, Context, FileId, Ranges, FullFileName}, CacheName) -> fslogic_available_blocks:file_synchronized(ProtocolVersion, CacheName, Context, FileId, Ranges, FullFileName);
         (ProtocolVersion, {external_available_blocks_changed, Context, FileId, DocumentUuid}, CacheName) -> fslogic_available_blocks:external_available_blocks_changed(ProtocolVersion, CacheName, Context, FileId, DocumentUuid)
     end.
@@ -197,7 +197,9 @@ file_synchronized(ProtocolVersion, CacheName, Context, FileId, SyncedParts, Full
     end,
     #atom{value = ?VOK}.
 
-file_block_modified(ProtocolVersion, CacheName, Context, FileId, Offset, Size, FullFileName) ->
+file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName) ->
+    ?dump(FuseId),
+    ?dump(SequenceNumber),
     % prepare data
     fslogic_context:set_context(Context),
     {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
@@ -227,7 +229,9 @@ file_block_modified(ProtocolVersion, CacheName, Context, FileId, Offset, Size, F
     end,
     #atom{value = ?VOK}.
 
-file_truncated(ProtocolVersion, CacheName, Context, FileId, Size, FullFileName) ->
+file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName) ->
+    ?dump(FuseId),
+    ?dump(SequenceNumber),
     % prepare data
     fslogic_context:set_context(Context),
     {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),

@@ -451,13 +451,13 @@ handle_fuse_message(Req = #synchronizefileblock{logical_name = FName, offset = O
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_available_blocks:synchronize_file_block(FullFileName, Offset, Size);
 
-handle_fuse_message(Req = #fileblockmodified{logical_name = FName, offset = Offset, size = Size}) ->
+handle_fuse_message(Req = #fileblockmodified{logical_name = FName, fuse_id = FuseId, sequence_number = SequenceNumber, offset = Offset, size = Size}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    fslogic_available_blocks:file_block_modified(FullFileName, Offset, Size);
+    fslogic_available_blocks:file_block_modified(FullFileName, FuseId, SequenceNumber, Offset, Size);
 
-handle_fuse_message(Req = #filetruncated{logical_name = FName, size = Size}) ->
+handle_fuse_message(Req = #filetruncated{logical_name = FName, fuse_id = FuseId, sequence_number = SequenceNumber, size = Size}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    fslogic_available_blocks:file_truncated(FullFileName, Size);
+    fslogic_available_blocks:file_truncated(FullFileName, FuseId, SequenceNumber, Size);
 
 handle_fuse_message(Req = #getfileblockmap{logical_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
