@@ -95,7 +95,7 @@ body() ->
     pfm_perms:init(),
     [
         #panel{class = <<"page-container">>, body = [
-            #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
+            #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 12px; z-index: 1234; width: 32px;">>, body = [
                 #image{image = <<"/images/spinner.gif">>}
             ]},
             opn_gui_utils:top_menu(data_tab, manager_submenu()),
