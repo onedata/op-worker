@@ -185,17 +185,14 @@ ensure_file_location_exists(FullFileName, FileDoc) ->
                         end, FirstUuid, Docs),
                     ToDelete = lists:filter(fun(#db_document{uuid = Uuid}) -> Uuid =/= MinimalUuid end, Docs),
                     lists:foreach(
-                        fun(#db_document{uuid = Uuid}) ->
-                            {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
-                            {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], fslogic_context:get_protocol_version()),
-                            #db_document{record = #storage_info{} = Storage} = fslogic_storage:select_storage(?CLUSTER_FUSE_ID, StorageList),
-                            {SH, StorageFileId} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId, SpaceId, false),
-                            #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
-                            Storage_helper_info = #storage_helper_info{name = SHName, init_args = SHArgs},
-                            ?info("DELETING FROM STORAGE ~s", [StorageFileId]),
-                            ok = storage_files_manager:delete(Storage_helper_info, StorageFileId),
+                        fun(#db_document{uuid = Uuid, record = #file_location{storage_file_id = StorageFileId, storage_uuid = StorageUuid}}) ->
+                            {ok, #db_document{record = Storage}} = fslogic_objects:get_storage(StorageUuid),
+                            {SH, _} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, StorageFileId),
+                            ?info("DELETING FROM STORAGE ~s, sh ~p", [StorageFileId, SH]),
+                            ok = storage_files_manager:delete(SH, StorageFileId),
                             dao_lib:apply(dao_vfs, remove_file_location, [Uuid], fslogic_context:get_protocol_version())
                         end, ToDelete)
+                %todo call recursive ensure_file_location_exists
             end;
         _ -> ok
     end.
@@ -236,10 +233,7 @@ create_file_location_for_remote_file(FullFileName, FileUuid) ->
 %%     {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
 
     {SH, StorageFileId} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId, SpaceId, false),
-    ?info("11 storageFileID: ~s",[StorageFileId]),
-    #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
-
-    Storage_helper_info = #storage_helper_info{name = SHName, init_args = SHArgs},
-    ok = storage_files_manager:create(Storage_helper_info, StorageFileId),
+    ?info("11 storageFileID: ~s, sh ~p",[StorageFileId, SH]),
+    ok = storage_files_manager:create(SH, StorageFileId),
     ?info("12 created"),
-    {ok, LocationId}.
+    {ok, {LocationId, StorageFileId}}.
