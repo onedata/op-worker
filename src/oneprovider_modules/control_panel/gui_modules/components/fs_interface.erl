@@ -35,7 +35,7 @@
 -spec get_all_available_blocks(FileID :: string()) -> {integer(), [{ProviderID :: string(), [integer()]}]}.
 %% ====================================================================
 get_all_available_blocks(FileID) ->
-    {ok, AvailableBlocks} = logical_files_manager:list_all_available_blocks(FileID),
+    {ok, AvailableBlocks} = logical_files_manager:get_file_block_map(FileID),
     {_, FileSize} = lists:foldl(
         fun(#available_blocks{file_size = {Timestamp, Size}}, {AccTmstp, AccSize}) ->
             case Timestamp > AccTmstp of
