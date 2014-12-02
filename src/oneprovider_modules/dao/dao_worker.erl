@@ -70,7 +70,7 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
 
     MapFun =
         fun
-            (_, {ensure_file_location_exists, FullFileName, _}) ->
+            ({ensure_file_location_exists, FullFileName, _}) ->
                 lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FullFileName);
             ({_, _, [File, _]}) ->
                 lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, File)
