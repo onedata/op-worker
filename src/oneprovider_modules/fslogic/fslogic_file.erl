@@ -186,7 +186,7 @@ ensure_file_location_exists(FullFileName, FileDoc) ->
                     ToDelete = lists:filter(fun(#db_document{uuid = Uuid}) -> Uuid =/= MinimalUuid end, Docs),
                     lists:foreach(
                         fun(#db_document{uuid = Uuid, record = #file_location{storage_file_id = StorageFileId, storage_uuid = StorageUuid}}) ->
-                            {ok, #db_document{record = Storage}} = fslogic_objects:get_storage(StorageUuid),
+                            {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageUuid}),
                             {SH, _} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, StorageFileId),
                             ?info("DELETING FROM STORAGE ~s, sh ~p", [StorageFileId, SH]),
                             ok = storage_files_manager:delete(SH, StorageFileId),
