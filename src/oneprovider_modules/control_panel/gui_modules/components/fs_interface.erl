@@ -45,7 +45,7 @@ get_file_block_map(FullFilePath) ->
                     {AccBytes + ToBytes - FromBytes + 1, AccBlocks ++ [FromBytes, ToBytes]}
                 end, {0, []}, FileParts),
             {ProviderID, ProvBytes, BlockList}
-        end, FileBlockMap),
+        end, lists:sort(FileBlockMap)),
     {FileSize, Blocks}.
 
 
