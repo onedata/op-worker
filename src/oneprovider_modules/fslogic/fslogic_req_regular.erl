@@ -286,7 +286,7 @@ renew_file_location(FullFileName) ->
     {ok, Descriptors} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file_n_owner, {FullFileName, fslogic_context:get_fuse_id()}}, 10, 0], fslogic_context:get_protocol_version()),
     case length(Descriptors) of
         0 ->
-            ?error("Error: can not renew file location for file: ~s, descriptor not found", [FullFileName]),
+            ?error("Error: can not renew file location for file: ~p, descriptor not found", [FullFileName]),
             #filelocationvalidity{answer = ?VENOENT, validity = 0};
         1 ->
             [DbDoc | _] = Descriptors,
@@ -295,7 +295,7 @@ renew_file_location(FullFileName) ->
             {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), DbDoc, Validity),
             #filelocationvalidity{answer = ?VOK, validity = Validity};
         _Many ->
-            ?error("Error: can not renew file location for file: ~s, too many file descriptors", [FullFileName]),
+            ?error("Error: can not renew file location for file: ~p, too many file descriptors", [FullFileName]),
             #filelocationvalidity{answer = ?VEREMOTEIO, validity = 0}
     end.
 
