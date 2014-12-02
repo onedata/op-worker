@@ -174,8 +174,11 @@ ensure_file_location_exists(FullFileName, FileDoc) ->
         {ok, []} ->
             {ok, _CreatedDocUuid} = create_file_location_for_remote_file(FullFileName, FileId),
             case dao_lib:apply(dao_vfs, get_file_locations, [FileId], fslogic_context:get_protocol_version()) of
-                {ok, [_]} -> ok; %todo this assumes each file has at most one file_location
+                {ok, [_]} ->
+                    ?info("NO CONFLICT, LOCATION CREATED"),
+                    ok; %todo this assumes each file has at most one file_location
                 {ok, [#db_document{uuid = FirstUuid} | _] = Docs} ->
+                    ?info("CONFLICT DETECTED ~p", [Docs]),
                     MinimalUuid = lists:foldl(
                         fun(#db_document{uuid = Uuid}, MinUuid) when Uuid < MinUuid -> Uuid;
                            (_, MinUuid) -> MinUuid
@@ -189,6 +192,7 @@ ensure_file_location_exists(FullFileName, FileDoc) ->
                             {SH, StorageFileId} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId, SpaceId, false),
                             #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
                             Storage_helper_info = #storage_helper_info{name = SHName, init_args = SHArgs},
+                            ?info("DELETING FROM STORAGE ~s", [StorageFileId]),
                             ok = storage_files_manager:delete(Storage_helper_info, StorageFileId),
                             dao_lib:apply(dao_vfs, remove_file_location, [Uuid], fslogic_context:get_protocol_version())
                         end, ToDelete)
