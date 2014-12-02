@@ -171,7 +171,28 @@ normalize_file_type(internal, Type) ->
 ensure_file_location_exists(FullFileName, FileDoc) ->
     FileId = FileDoc#db_document.uuid,
     case dao_lib:apply(dao_vfs, get_file_locations, [FileId], fslogic_context:get_protocol_version()) of
-        {ok, []} -> create_file_location_for_remote_file(FullFileName, FileId);
+        {ok, []} ->
+            {ok, _CreatedDocUuid} = create_file_location_for_remote_file(FullFileName, FileId),
+            case dao_lib:apply(dao_vfs, get_file_locations, [FileId], fslogic_context:get_protocol_version()) of
+                {ok, [_]} -> ok;
+                {ok, [#db_document{uuid = FirstUuid} | _] = Docs} ->
+                    MinimalUuid = lists:foldl(
+                        fun(#db_document{uuid = Uuid}, MinUuid) when Uuid < MinUuid -> Uuid;
+                           (_, MinUuid) -> MinUuid
+                        end, FirstUuid, Docs),
+                    ToDelete = lists:filter(fun(#db_document{uuid = Uuid}) -> Uuid =/= MinimalUuid end, Docs),
+                    lists:foreach(
+                        fun(#db_document{uuid = Uuid}) ->
+                            {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
+                            {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], fslogic_context:get_protocol_version()),
+                            #db_document{record = #storage_info{} = Storage} = fslogic_storage:select_storage(fslogic_context:get_fuse_id(), StorageList),
+                            {SH, StorageFileId} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId, SpaceId, false),
+                            #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
+                            Storage_helper_info = #storage_helper_info{name = SHName, init_args = SHArgs},
+                            storage_files_manager:delete(Storage_helper_info, StorageFileId),
+                            dao_lib:apply(dao_vfs, remove_file_location, [Uuid], fslogic_context:get_protocol_version())
+                        end, ToDelete)
+            end;
         _ -> ok
     end.
 
@@ -203,17 +224,18 @@ create_file_location_for_remote_file(FullFileName, FileUuid) ->
 
     FileLocation = #file_location{file_id = FileUuid, storage_uuid = UUID, storage_file_id = FileId},
     ?info("9 FileLocation: ~p", [FileLocation]),
-    {ok, _LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
+    {ok, LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
     ?info("10 LocationId: ~p", [_LocationId]),
 
 %%     _FuseFileBlocks = [#filelocation_blockavailability{offset = 0, size = ?FILE_BLOCK_SIZE_INF}],
 %%     FileBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
 %%     {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
 
-    {SH, StorageFileId} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileId, SpaceId, false),
+    {SH, StorageFileId} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId, SpaceId, false),
     ?info("11 storageFileID: ~s",[StorageFileId]),
     #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
 
     Storage_helper_info = #storage_helper_info{name = SHName, init_args = SHArgs},
     ok = storage_files_manager:create(Storage_helper_info, StorageFileId),
-    ?info("12 created").
+    ?info("12 created"),
+    {ok, LocationId}.
