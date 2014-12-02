@@ -1366,7 +1366,7 @@ mark_as_truncated(FullFileName, Size) ->
 %% The result is a proplist [{ProviderId, BlockList}]
 %% @end
 -spec get_file_block_map(FullFileName :: string()) ->
-    {ok, [{ProviderId :: string(), BlockList :: [#block_range{}]}]} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+    {ok, [{ProviderId :: binary(), BlockList :: [#block_range{}]}]} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
 get_file_block_map(FullFileName) ->
     {Status, TmpAns} = contact_fslogic(#getfileblockmap{logical_name = FullFileName}),

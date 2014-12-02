@@ -16,9 +16,9 @@
 
 
 %% API
--export([init/0, data_distribution_panel/2, no_support_panel/1, on_resize_js/0, display_info_not_supported/0]).
+-export([init/0, data_distribution_panel/2, on_resize_js/0, display_info_not_supported/0]).
 -export([hide_ddist_panel/1, hide_all_ddist_panels/0, refresh_ddist_panels/0]).
--export([toggle_ddist_view/4, refresh_view/4, sync_file/3, expel_file/2]).
+-export([toggle_ddist_view/4, refresh_view/3, sync_file/3, expel_file/2]).
 
 % Macros used to generate IDs of certain elements
 -define(DIST_PANEL_ID(RowID), <<"dd_", (integer_to_binary(RowID))/binary>>).
@@ -79,7 +79,7 @@ data_distribution_panel(FilePath, RowID) ->
                                                                         <<"glyph-link hidden ddist-show-button">>,
                                                                         <<"glyph-link ddist-hide-button">>,
                                                                         <<"ddist-panel">>,
-                                                                        render_table(FullPath, FileSize, FileBlocks, RowID)
+                                                                        render_table(FileSize, FileBlocks, RowID)
                                                                     }
                                                             end,
     [
@@ -91,24 +91,6 @@ data_distribution_panel(FilePath, RowID) ->
             body = #span{class = <<"icomoon-minus4">>}},
         #panel{class = <<"clearfix">>},
         #panel{id = DDistPanelID, class = DDistPanelClass, body = Body}
-    ].
-
-
-%% no_support_panel/1
-%% ====================================================================
-%% @doc Renders the button that would normally open data distribution panel, but
-%% here it only displays a message, that the space is not supported.
-%% @end
--spec no_support_panel(RowID :: integer()) -> [term()].
-%% ====================================================================
-no_support_panel(RowID) ->
-    ShowDDistID = ?SHOW_DIST_PANEL_ID(RowID),
-    % Item won't hightlight if the link is clicked.
-    gui_jq:bind_element_click(ShowDDistID, <<"function(e) { e.stopPropagation(); }">>),
-    [
-        #link{id = ShowDDistID, postback = {action, ?MODULE, display_info_not_supported},
-            title = <<"Data distribution (advanced)">>, class = <<"glyph-link hidden show-on-parent-hover ddist-show-button">>,
-            body = #span{class = <<"icomoon-earth">>}}
     ].
 
 
@@ -125,7 +107,7 @@ toggle_ddist_view(FullPath, FileID, RowID, Flag) ->
     DDistPanelID = ?DIST_PANEL_ID(RowID),
     case Flag of
         true ->
-            gui_jq:update(DDistPanelID, render_table(FullPath, FileSize, FileBlocks, RowID)),
+            gui_jq:update(DDistPanelID, render_table(FileSize, FileBlocks, RowID)),
             gui_jq:remove_class(HideDDistID, <<"hidden">>),
             gui_jq:remove_class(ShowDDistID, <<"show-on-parent-hover">>),
             gui_jq:slide_down(DDistPanelID, 400);
@@ -142,23 +124,23 @@ toggle_ddist_view(FullPath, FileID, RowID, Flag) ->
     set_displayed_ddist_panels(NewDisplayed).
 
 
-%% refresh_view/4
+%% refresh_view/3
 %% ====================================================================
 %% @doc Refreshes the distribution status of given file.
 %% @end
--spec refresh_view(FullPath :: string(), FileSize :: integer(), FileBlocks :: [{ProviderID :: binary(), [integer()]}], RowID :: integer()) -> term().
+-spec refresh_view(FileSize :: integer(), FileBlocks :: [{ProviderID :: binary(), [integer()]}], RowID :: integer()) -> term().
 %% ====================================================================
-refresh_view(FullPath, FileSize, FileBlocks, RowID) ->
-    gui_jq:update(?DIST_PANEL_ID(RowID), render_table(FullPath, FileSize, FileBlocks, RowID)).
+refresh_view(FileSize, FileBlocks, RowID) ->
+    gui_jq:update(?DIST_PANEL_ID(RowID), render_table(FileSize, FileBlocks, RowID)).
 
 
-%% render_table/4
+%% render_table/3
 %% ====================================================================
 %% @doc Renders the table with distribution status for given file.
 %% @end
--spec render_table(FullPath :: string(), FileSize :: integer(), FileBlocks :: [{ProviderID :: binary(), [integer()]}], RowID :: integer()) -> term().
+-spec render_table(FileSize :: integer(), FileBlocks :: [{ProviderID :: binary(), [integer()]}], RowID :: integer()) -> term().
 %% ====================================================================
-render_table(FilePath, FileSize, FileBlocks, RowID) ->
+render_table(FileSize, FileBlocks, RowID) ->
     gui_jq:wire("$(window).resize();"),
     [
         #p{body = <<"File distribution:">>, class = <<"ddist-header">>},
@@ -265,7 +247,7 @@ refresh_ddist_panels() ->
                 MD5Hash ->
                     ok;
                 NewHash ->
-                    refresh_view(FullPath, FileSize, FileBlocks, RowID),
+                    refresh_view(FileSize, FileBlocks, RowID),
                     set_displayed_ddist_panels([{FullPath, FileID, RowID, NewHash}] ++ lists:keydelete(FullPath, 1, get_displayed_ddist_panels()))
             end
         end, get_displayed_ddist_panels()).

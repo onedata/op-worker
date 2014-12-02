@@ -11,7 +11,6 @@
 %% ===================================================================
 -module(fs_interface).
 
--include("oneprovider_modules/dao/dao_vfs.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
@@ -35,16 +34,10 @@
 -spec get_file_block_map(FullFilePath :: string()) -> {integer(), [{ProviderID :: string(), [integer()]}]}.
 %% ====================================================================
 get_file_block_map(FullFilePath) ->
-    {ok, AvailableBlocks} = logical_files_manager:get_file_block_map(FullFilePath),
-    {_, FileSize} = lists:foldl(
-        fun(#available_blocks{file_size = {Timestamp, Size}}, {AccTmstp, AccSize}) ->
-            case Timestamp > AccTmstp of
-                true -> {Timestamp, Size};
-                false -> {AccTmstp, AccSize}
-            end
-        end, {-1, 0}, AvailableBlocks),
+    {ok, FileBlockMap} = logical_files_manager:get_file_block_map(FullFilePath),
+    {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(FullFilePath),
     Blocks = lists:map(
-        fun(#available_blocks{provider_id = ProviderID, file_parts = FileParts}) ->
+        fun({ProviderID, FileParts}) ->
             {ProvBytes, BlockList} = lists:foldl(
                 fun(#block_range{from = From, to = To}, {AccBytes, AccBlocks}) ->
                     FromBytes = From * ?remote_block_size,
@@ -52,7 +45,7 @@ get_file_block_map(FullFilePath) ->
                     {AccBytes + ToBytes - FromBytes + 1, AccBlocks ++ [FromBytes, ToBytes]}
                 end, {0, []}, FileParts),
             {ProviderID, ProvBytes, BlockList}
-        end, AvailableBlocks),
+        end, FileBlockMap),
     {FileSize, Blocks}.
 
 
@@ -107,7 +100,7 @@ get_provider_name(ProviderID) ->
 %% @end
 -spec issue_remote_file_synchronization(FullPath :: string(), ProviderID :: binary(), Size::integer()) -> binary().
 %% ====================================================================
-issue_remote_file_synchronization(FullPath, ProviderID, Size) ->
+issue_remote_file_synchronization(_FullPath, _ProviderID, _Size) ->
     % TODO not yet implemented
     ok.
 %%     Res = provider_proxy:reroute_pull_message(gui_str:to_binary(ProviderID), fslogic_context:get_gr_auth(),
