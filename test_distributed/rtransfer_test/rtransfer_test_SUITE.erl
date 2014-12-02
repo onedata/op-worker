@@ -60,7 +60,7 @@ test_gateway_delegation(Config) ->
 test_retry_transfer(Config) ->
     [Node] = ?config(nodes, Config),
 
-    ?assertEqual(ok, rpc:call(Node, erlang, apply,
+    CallResult = rpc:call(Node, erlang, apply,
         [fun() ->
             ok = meck:new(gateway, [passthrough]),
             ok = meck:new(gr_providers, [passthrough]),
@@ -79,13 +79,15 @@ test_retry_transfer(Config) ->
             ?assertEqual(FetchRetryNumber + 1, meck:num_calls(gateway, handle, ['_', '_'])),
             meck:unload(),
             ok
-        end, []])).
+        end, []]),
+
+    ?assertEqual(ok, CallResult).
 
 
 test_requester_receives_feedback(Config) ->
     [Node] = ?config(nodes, Config),
 
-    ?assertEqual(ok, rpc:call(Node, erlang, apply,
+    CallResult = rpc:call(Node, erlang, apply,
         [fun() ->
             ok = meck:new(gateway, [passthrough]),
             ok = meck:new(gr_providers, [passthrough]),
@@ -101,13 +103,15 @@ test_requester_receives_feedback(Config) ->
             ?assert(receive {transfer_complete, 10240, {"id", 0, 10240}} -> true after timer:seconds(10) -> false end),
             meck:unload(),
             ok
-        end, []])).
+        end, []]),
+
+    ?assertEqual(ok, CallResult).
 
 
 test_requester_assumes_multiple_0_read_is_fine(Config) ->
     [Node] = ?config(nodes, Config),
 
-    ?assertEqual(ok, rpc:call(Node, erlang, apply,
+    CallResult = rpc:call(Node, erlang, apply,
         [fun() ->
             ok = meck:new(gateway, [passthrough]),
             ok = meck:new(gr_providers, [passthrough]),
@@ -127,7 +131,9 @@ test_requester_assumes_multiple_0_read_is_fine(Config) ->
             ?assertEqual(FetchRetryNumber + 2, meck:num_calls(gateway, handle, ['_', '_'])),
             meck:unload(),
             ok
-        end, []])).
+        end, []]),
+
+    ?assertEqual(ok, CallResult).
 
 
 %% ====================================================================
@@ -159,7 +165,7 @@ init_per_testcase(_, Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   test_utils:wait_for_cluster_init(),
 
-  ets:insert(rtransfer_tab, {nodes, array:from_list(NodesUp)}),
+  timer:sleep(1000),
 
   ?ENABLE_PROVIDER(lists:append([{port, Port}, {nodes, NodesUp}], Config)).
 
