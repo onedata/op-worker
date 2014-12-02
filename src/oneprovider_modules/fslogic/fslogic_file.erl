@@ -180,6 +180,10 @@ ensure_file_location_exists(FullFileName, FileDoc) ->
 %% ====================================================================
 
 create_file_location_for_remote_file(FullFileName, FileUuid) ->
+
+    catch throw(exception),
+    ?info_stacktrace("Creating remote location and file ~p, ~p",[FullFileName, FileUuid]),
+
     {ok, #space_info{space_id = SpaceId} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FullFileName),
 
     {ok, UserDoc} = fslogic_objects:get_user(),
@@ -201,5 +205,5 @@ create_file_location_for_remote_file(FullFileName, FileUuid) ->
     #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
 
     Storage_helper_info = #storage_helper_info{name = SHName, init_args = SHArgs},
-    ct:print("Creating remote location and file: ~s",[StorageFileId]),
+    ct:print("Creating remote location, storageFileID: ~s",[StorageFileId]),
     ok = storage_files_manager:create(Storage_helper_info, StorageFileId).
