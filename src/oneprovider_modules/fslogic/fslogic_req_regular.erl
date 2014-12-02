@@ -69,7 +69,7 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
             throw(?VENOTSUP)
     end,
 
-    fslogic_file:ensure_file_location_exists(FullFileName, FileDoc),
+    ok = fslogic_file:ensure_file_location_exists(FullFileName, FileDoc),
 
     catch fslogic_file:fix_storage_owner(FileDoc),
 

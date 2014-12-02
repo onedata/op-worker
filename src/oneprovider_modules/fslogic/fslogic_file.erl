@@ -17,11 +17,12 @@
 -include("files_common.hrl").
 -include("oneprovider_modules/dao/dao_types.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("registered_names.hrl").
 
 %% API
 -export([normalize_file_type/2, get_file_local_location_doc/1]).
 -export([get_real_file_uid/1, get_file_owner/1, get_file_local_location/1, fix_storage_owner/1]).
--export([ensure_file_location_exists/2]).
+-export([ensure_file_location_exists/2, ensure_file_location_exists_unsafe/2]).
 
 %% ====================================================================
 %% API functions
@@ -169,6 +170,17 @@ normalize_file_type(internal, Type) ->
     throw({unknown_file_type, Type}).
 
 ensure_file_location_exists(FullFileName, FileDoc) ->
+    MsgId = make_ref(),
+    gen_server:call(?Dispatcher_Name, {dao_worker, 1, self(), MsgId, {ensure_file_location_exists, FullFileName, FileDoc}}, ?CACHE_REQUEST_TIMEOUT),
+    receive
+        {worker_answer, MsgId, Resp} -> Resp
+    after ?CACHE_REQUEST_TIMEOUT ->
+        ?error("Timeout in call to ensure_file_location_exists function in process tree"),
+        {error, timeout}
+    end.
+
+
+ensure_file_location_exists_unsafe(FullFileName, FileDoc) ->
     FileId = FileDoc#db_document.uuid,
     case dao_lib:apply(dao_vfs, get_file_locations, [FileId], fslogic_context:get_protocol_version()) of
         {ok, []} ->
@@ -190,9 +202,8 @@ ensure_file_location_exists(FullFileName, FileDoc) ->
                             {SH, _} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, StorageFileId),
                             ?info("DELETING FROM STORAGE ~s, sh ~p", [StorageFileId, SH]),
                             ok = storage_files_manager:delete(SH, StorageFileId),
-                            dao_lib:apply(dao_vfs, remove_file_location, [Uuid], fslogic_context:get_protocol_version())
+                            ok = dao_lib:apply(dao_vfs, remove_file_location, [Uuid], fslogic_context:get_protocol_version())
                         end, ToDelete)
-                %todo call recursive ensure_file_location_exists
             end;
         _ -> ok
     end.
