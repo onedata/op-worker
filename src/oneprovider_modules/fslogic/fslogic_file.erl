@@ -185,11 +185,11 @@ ensure_file_location_exists(FullFileName, FileDoc) ->
                         fun(#db_document{uuid = Uuid}) ->
                             {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
                             {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], fslogic_context:get_protocol_version()),
-                            #db_document{record = #storage_info{} = Storage} = fslogic_storage:select_storage(fslogic_context:get_fuse_id(), StorageList),
+                            #db_document{record = #storage_info{} = Storage} = fslogic_storage:select_storage(?CLUSTER_FUSE_ID, StorageList),
                             {SH, StorageFileId} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId, SpaceId, false),
                             #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
                             Storage_helper_info = #storage_helper_info{name = SHName, init_args = SHArgs},
-                            storage_files_manager:delete(Storage_helper_info, StorageFileId),
+                            ok = storage_files_manager:delete(Storage_helper_info, StorageFileId),
                             dao_lib:apply(dao_vfs, remove_file_location, [Uuid], fslogic_context:get_protocol_version())
                         end, ToDelete)
             end;
@@ -215,7 +215,7 @@ create_file_location_for_remote_file(FullFileName, FileUuid) ->
 
     {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], fslogic_context:get_protocol_version()),
     ?info("5 StorageList: ~p", [StorageList]),
-    #db_document{uuid = UUID, record = #storage_info{} = Storage} = fslogic_storage:select_storage(fslogic_context:get_fuse_id(), StorageList),
+    #db_document{uuid = UUID, record = #storage_info{} = Storage} = fslogic_storage:select_storage(?CLUSTER_FUSE_ID, StorageList),
     ?info("6 selected storage: ~p", [Storage]),
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
     ?info("7 shi: ~p", [SHI]),
