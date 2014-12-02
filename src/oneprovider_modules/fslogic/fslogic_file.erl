@@ -174,7 +174,7 @@ ensure_file_location_exists(FullFileName, FileDoc) ->
         {ok, []} ->
             {ok, _CreatedDocUuid} = create_file_location_for_remote_file(FullFileName, FileId),
             case dao_lib:apply(dao_vfs, get_file_locations, [FileId], fslogic_context:get_protocol_version()) of
-                {ok, [_]} -> ok;
+                {ok, [_]} -> ok; %todo this assumes each file has at most one file_location
                 {ok, [#db_document{uuid = FirstUuid} | _] = Docs} ->
                     MinimalUuid = lists:foldl(
                         fun(#db_document{uuid = Uuid}, MinUuid) when Uuid < MinUuid -> Uuid;
@@ -225,7 +225,7 @@ create_file_location_for_remote_file(FullFileName, FileUuid) ->
     FileLocation = #file_location{file_id = FileUuid, storage_uuid = UUID, storage_file_id = FileId},
     ?info("9 FileLocation: ~p", [FileLocation]),
     {ok, LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
-    ?info("10 LocationId: ~p", [_LocationId]),
+    ?info("10 LocationId: ~p", [LocationId]),
 
 %%     _FuseFileBlocks = [#filelocation_blockavailability{offset = 0, size = ?FILE_BLOCK_SIZE_INF}],
 %%     FileBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
