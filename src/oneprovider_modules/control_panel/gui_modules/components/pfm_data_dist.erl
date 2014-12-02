@@ -58,7 +58,7 @@ init() ->
 data_distribution_panel(FilePath, RowID) ->
     FullPath = fs_interface:get_full_file_path(FilePath),
     FileID = fs_interface:get_file_uuid(FullPath),
-    {FileSize, FileBlocks} = fs_interface:get_all_available_blocks(FileID),
+    {FileSize, FileBlocks} = fs_interface:get_file_block_map(FullPath),
     ShowDDistID = ?SHOW_DIST_PANEL_ID(RowID),
     % Item won't hightlight if the link is clicked.
     gui_jq:bind_element_click(ShowDDistID, <<"function(e) { e.stopPropagation(); }">>),
@@ -119,7 +119,7 @@ no_support_panel(RowID) ->
 -spec toggle_ddist_view(FullPath :: string(), FileID :: string(), RowID :: integer(), Flag :: boolean()) -> term().
 %% ====================================================================
 toggle_ddist_view(FullPath, FileID, RowID, Flag) ->
-    {FileSize, FileBlocks} = fs_interface:get_all_available_blocks(FileID),
+    {FileSize, FileBlocks} = fs_interface:get_file_block_map(FullPath),
     ShowDDistID = ?SHOW_DIST_PANEL_ID(RowID),
     HideDDistID = ?HIDE_DIST_PANEL_ID(RowID),
     DDistPanelID = ?DIST_PANEL_ID(RowID),
@@ -260,7 +260,7 @@ display_info_not_supported() ->
 refresh_ddist_panels() ->
     lists:foreach(
         fun({FullPath, FileID, RowID, MD5Hash}) ->
-            {FileSize, FileBlocks} = fs_interface:get_all_available_blocks(FileID),
+            {FileSize, FileBlocks} = fs_interface:get_file_block_map(FullPath),
             case md5_hash(FileSize, FileBlocks) of
                 MD5Hash ->
                     ok;

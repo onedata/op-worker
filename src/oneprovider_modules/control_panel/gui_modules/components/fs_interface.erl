@@ -23,7 +23,7 @@
 -include_lib("ctool/include/global_registry/gr_providers.hrl").
 
 %% API
--export([get_all_available_blocks/1, get_full_file_path/1, get_file_uuid/1, get_provider_name/1]).
+-export([get_file_block_map/1, get_full_file_path/1, get_file_uuid/1, get_provider_name/1]).
 -export([issue_remote_file_synchronization/3]).
 
 
@@ -32,10 +32,10 @@
 %% @doc Lists all available blocks for given file and returns them in simplified format.
 %% The first tuple element is file size, the seconds is list of {ProviderID, ProviderBlocks} tuples.
 %% @end
--spec get_all_available_blocks(FileID :: string()) -> {integer(), [{ProviderID :: string(), [integer()]}]}.
+-spec get_file_block_map(FullFilePath :: string()) -> {integer(), [{ProviderID :: string(), [integer()]}]}.
 %% ====================================================================
-get_all_available_blocks(FileID) ->
-    {ok, AvailableBlocks} = logical_files_manager:get_file_block_map(FileID),
+get_file_block_map(FullFilePath) ->
+    {ok, AvailableBlocks} = logical_files_manager:get_file_block_map(FullFilePath),
     {_, FileSize} = lists:foldl(
         fun(#available_blocks{file_size = {Timestamp, Size}}, {AccTmstp, AccSize}) ->
             case Timestamp > AccTmstp of
@@ -46,7 +46,7 @@ get_all_available_blocks(FileID) ->
     Blocks = lists:map(
         fun(#available_blocks{provider_id = ProviderID, file_parts = FileParts}) ->
             {ProvBytes, BlockList} = lists:foldl(
-                fun(#range{from = From, to = To}, {AccBytes, AccBlocks}) ->
+                fun(#block_range{from = From, to = To}, {AccBytes, AccBlocks}) ->
                     FromBytes = From * ?remote_block_size,
                     ToBytes = min(FileSize - 1, To * ?remote_block_size + ?remote_block_size - 1),
                     {AccBytes + ToBytes - FromBytes + 1, AccBlocks ++ [FromBytes, ToBytes]}
