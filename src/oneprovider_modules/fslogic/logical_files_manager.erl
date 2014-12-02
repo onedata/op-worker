@@ -16,6 +16,7 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
 -include("oneprovider_modules/dao/dao_vfs.hrl").
 -include("oneprovider_modules/dao/dao_share.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
@@ -36,7 +37,8 @@
 -export([get_file_children_count/1]).
 
 %% Block synchronization
--export([synchronize/3, mark_as_modified/3, mark_as_truncated/2, list_all_available_blocks/1]).
+-export([synchronize/3, mark_as_modified/3, mark_as_truncated/2]).
+-export([get_file_block_map/1]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
@@ -1358,14 +1360,34 @@ mark_as_truncated(FullFileName, Size) ->
     end.
 
 
-% TODO proper implementation
-list_all_available_blocks(FileID) ->
-    {ok, List} = fslogic_available_blocks:call({list_all_available_blocks, FileID}),
-    AvailableBlocks = lists:map(
-        fun(#db_document{record = #available_blocks{} = AvBlocks}) ->
-            AvBlocks
-        end, List),
-    {ok, AvailableBlocks}.
+%% get_file_block_map/1
+%% ====================================================================
+%% @doc Gets list of available_blocks for each provider supporting space.
+%% The result is a proplist [{ProviderId, BlockList}]
+%% @end
+-spec get_file_block_map(FullFileName :: string()) ->
+    {ok, [{ProviderId :: string(), BlockList :: [#block_range{}]}]} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+get_file_block_map(FullFileName) ->
+    {Status, TmpAns} = contact_fslogic(#getfileblockmap{logical_name = FullFileName}),
+    case Status of
+        ok ->
+            case TmpAns#fileblockmap.answer of
+                ?VOK ->
+                    BlockMap = TmpAns#fileblockmap.block_map,
+                    ProtobufProplist = lists:map(
+                        fun(#fileblockmap_blockmapentity{provider_id = Id, ranges = Ranges}) ->
+                            {Id, Ranges}
+                        end, BlockMap),
+                    FinalProplist = lists:map(
+                        fun({Id, RangeList}) ->
+                            {Id, [#block_range{from = From, to = To} || #fileblockmap_blockmapentity_blockrange{from = From, to = To} <- RangeList]}
+                        end, ProtobufProplist),
+                    {ok, FinalProplist};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
 
 
 %% cache_size/2

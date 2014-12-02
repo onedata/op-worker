@@ -12,7 +12,7 @@
 -include("oneprovider_modules/fslogic/ranges_struct.hrl").
 
 %% API
--export([merge/2, truncate/2, minimize/1, subtract_newer/2, subtract/2, intersection/2]).
+-export([merge/2, truncate/2, minimize/1, subtract_newer/2, subtract/2, intersection/2, strip_timestamps/1]).
 
 %% merge/3
 %% ====================================================================
@@ -169,3 +169,11 @@ intersection([#range{to = To1, timestamp = Time1} = Range1 | Rest1], [#range{tim
 intersection([#range{to = To1, timestamp = Time1} | Rest1], [#range{timestamp = Time2} = Range2 | Rest2])
     when Time1 =< Time2 ->
     [Range2#range{to = To1} | intersection(Rest1, [Range2#range{from = To1+1} | Rest2])].
+
+%% strip_timestamps/1
+%% ====================================================================
+%% @doc returns minimazied struct with all timestamps set to 0
+%% @end
+-spec strip_timestamps(Ranges :: ranges_struct()) -> ranges_struct().
+strip_timestamps(Ranges) ->
+    minimize([#range{from = From, to = To} || #range{from = From, to = To} <- Ranges]).
