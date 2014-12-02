@@ -186,11 +186,8 @@ ensure_file_location_exists_unsafe(FullFileName, FileDoc) ->
         {ok, []} ->
             {ok, _CreatedDocUuid} = create_file_location_for_remote_file(FullFileName, FileId),
             case dao_lib:apply(dao_vfs, get_file_locations, [FileId], fslogic_context:get_protocol_version()) of
-                {ok, [_]} ->
-                    ?info("NO CONFLICT, LOCATION CREATED"),
-                    ok; %todo this assumes each file has at most one file_location
+                {ok, [_]} -> ok; %todo this assumes each file has at most one file_location
                 {ok, [#db_document{uuid = FirstUuid} | _] = Docs} ->
-                    ?info("CONFLICT DETECTED ~p", [Docs]),
                     MinimalUuid = lists:foldl(
                         fun(#db_document{uuid = Uuid}, MinUuid) when Uuid < MinUuid -> Uuid;
                            (_, MinUuid) -> MinUuid
@@ -200,7 +197,6 @@ ensure_file_location_exists_unsafe(FullFileName, FileDoc) ->
                         fun(#db_document{uuid = Uuid, record = #file_location{storage_file_id = StorageFileId, storage_uuid = StorageUuid}}) ->
                             {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageUuid}),
                             {SH, _} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, StorageFileId),
-                            ?info("DELETING FROM STORAGE ~s, sh ~p", [StorageFileId, SH]),
                             ok = storage_files_manager:delete(SH, StorageFileId),
                             ok = dao_lib:apply(dao_vfs, remove_file_location, [Uuid], fslogic_context:get_protocol_version())
                         end, ToDelete)
@@ -213,38 +209,18 @@ ensure_file_location_exists_unsafe(FullFileName, FileDoc) ->
 %% ====================================================================
 
 create_file_location_for_remote_file(FullFileName, FileUuid) ->
-
-    catch throw(exception),
-    ?info_stacktrace("1 Creating remote location and file ~p, ~p",[FullFileName, FileUuid]),
-
     {ok, #space_info{space_id = SpaceId} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FullFileName),
-    ?info("2 space info: ~p",[SpaceInfo]),
-
     {ok, UserDoc} = fslogic_objects:get_user(),
-    ?info("3 user: ~p",[UserDoc]),
     FileBaseName = fslogic_path:get_user_file_name(FullFileName, UserDoc),
-    ?info("4 fileBaseName: ~p", [FileBaseName]),
-
     {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], fslogic_context:get_protocol_version()),
-    ?info("5 StorageList: ~p", [StorageList]),
     #db_document{uuid = UUID, record = #storage_info{} = Storage} = fslogic_storage:select_storage(?CLUSTER_FUSE_ID, StorageList),
-    ?info("6 selected storage: ~p", [Storage]),
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
-    ?info("7 shi: ~p", [SHI]),
     FileId = fslogic_storage:get_new_file_id(SpaceInfo, FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
-    ?info("8 FileId: ~p", [FileId]),
-
     FileLocation = #file_location{file_id = FileUuid, storage_uuid = UUID, storage_file_id = FileId},
-    ?info("9 FileLocation: ~p", [FileLocation]),
     {ok, LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
-    ?info("10 LocationId: ~p", [LocationId]),
-
 %%     _FuseFileBlocks = [#filelocation_blockavailability{offset = 0, size = ?FILE_BLOCK_SIZE_INF}],
 %%     FileBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
 %%     {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
-
     {SH, StorageFileId} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId, SpaceId, false),
-    ?info("11 storageFileID: ~s, sh ~p",[StorageFileId, SH]),
     ok = storage_files_manager:create(SH, StorageFileId),
-    ?info("12 created"),
     {ok, {LocationId, StorageFileId}}.
