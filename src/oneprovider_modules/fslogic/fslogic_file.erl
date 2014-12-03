@@ -112,11 +112,9 @@ get_file_local_location_doc(FileId) when is_list(FileId) ->
 %% ====================================================================
 get_real_file_uid(#db_document{uuid = FileId, record = #file{type = ?REG_TYPE} = File}) ->
     FileLoc = get_file_local_location(FileId),
-    ct:print("FileLoc: ~p",[FileLoc]),
     {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_uuid}),
 
     {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.storage_file_id),
-    ct:print("get real size ~p",[File_id]),
     case helpers:exec(getattr, SH, [File_id]) of
         {0, #st_stat{st_uid = SUID} = _Stat} ->
             SUID;
