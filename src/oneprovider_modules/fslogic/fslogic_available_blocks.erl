@@ -131,29 +131,14 @@ db_sync_hook() ->
             {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
             ok = fslogic_file:ensure_file_location_exists(FullFileName, FileDoc);
         (?FILES_DB_NAME, _, _, #db_document{uuid = FileUuid, record = #file{}, deleted = true}) ->
-            ct:print("1 FILE_DOC_DELETED"),
-%%             case dao_lib:apply(dao_vfs, exists_file, [{uuid, FileUuid}]) of
-%%                 {ok, false} ->
-                    ct:print("2 uuid: ~p", [utils:ensure_list(FileUuid)]),
-                    Ans = (catch (dao_lib:apply(dao_vfs, get_file_locations, [utils:ensure_list(FileUuid)], fslogic_context:get_protocol_version()))),
-                    ct:print("3 locationAns: ~p",[Ans]),
-                    {ok, Locations} = Ans,
-                    lists:foreach(
-                        fun(#db_document{uuid = Uuid, record = #file_location{storage_file_id = StorageFileId, storage_uuid = StorageUuid}}) ->
-                            ct:print("4"),
-                            {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageUuid}),
-                            ct:print("5"),
-                            {SH, _} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, StorageFileId),
-                            ct:print("6 DELETING ~s",[StorageFileId]),
-                            ok = storage_files_manager:delete(SH, StorageFileId),
-                            ct:print("7"),
-                            ok = dao_lib:apply(dao_vfs, remove_file_location, [Uuid], fslogic_context:get_protocol_version()),
-                            ct:print("8")
-                        end, Locations);
-%%                 {ok, true} -> ok
-%%             end;
-        (?FILES_DB_NAME, _, _, #db_document{record = #file{}}) ->
-            ct:print("FILE_DOC_CHANGED")
+            {ok, Locations} = dao_lib:apply(dao_vfs, get_file_locations, [utils:ensure_list(FileUuid)], fslogic_context:get_protocol_version()),
+            lists:foreach(
+                fun(#db_document{uuid = Uuid, record = #file_location{storage_file_id = StorageFileId, storage_uuid = StorageUuid}}) ->
+                    {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageUuid}),
+                    {SH, _} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, StorageFileId),
+                    ok = storage_files_manager:delete(SH, StorageFileId),
+                    ok = dao_lib:apply(dao_vfs, remove_file_location, [Uuid], fslogic_context:get_protocol_version())
+                end, Locations)
     end.
 
 %% ====================================================================
