@@ -27,7 +27,7 @@
 %% Triggers
 %% ===================================================================
 
-%% on_file_size_update/3
+%% on_file_size_update/4
 %% ====================================================================
 %% @doc Shall be called whenever size of the file has changed.
 -spec on_file_size_update(FileUUID :: uuid(), OldFileSize :: non_neg_integer(),
@@ -63,10 +63,10 @@ handle_event(EventType, _Args) ->
     ok.
 
 
-%% delayed_push_attrs/1
+%% delayed_push_attrs/2
 %% ====================================================================
 %% @doc Mark the file's attributes to be updated in fuse clients within
-%% next second except clients listed in 'IgnoredFuses' list.
+%% next second, except for clients listed in 'IgnoredFuses' list.
 -spec delayed_push_attrs(FileUUID :: uuid(), IgnoredFuses :: list()) -> ok.
 %% ====================================================================
 delayed_push_attrs(FileUUID, IgnoredFuses) ->
@@ -81,7 +81,8 @@ delayed_push_attrs(FileUUID, IgnoredFuses) ->
 
 %% push_new_attrs/2
 %% ====================================================================
-%% @doc Pushes current file's attributes to all fuses that are currently using this file
+%% @doc Pushes current file's attributes to all fuses, except for those
+%% listed in 'IgnoredFuses' list, that are currently using this file.
 -spec push_new_attrs(FileUUID :: uuid(), IgnoredFuses :: list()) ->
     [Result :: ok | {error, Reason :: any()}].
 %% ====================================================================

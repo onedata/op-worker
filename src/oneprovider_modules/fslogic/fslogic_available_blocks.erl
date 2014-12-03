@@ -42,7 +42,7 @@
 -export([byte_to_block_range/1]).
 -endif.
 
-%% Defines how long cluster will wait for event with missing sequence number
+%% Defines how long in miliseconds event processing unit will wait for event with missing sequence number
 -define(EVENT_SYNCH_TIMEOUT, 5000).
 
 %% ====================================================================
