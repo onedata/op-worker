@@ -122,7 +122,7 @@ init(_Args) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
         ({external_available_blocks_changed, _, FileId, _}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
-        ({file_block_modified, _, FileId, _, _, _}) ->
+        ({file_block_modified, _, FileId, _, _, _, _, _}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
         ({get_file_size, FileId}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
@@ -451,10 +451,12 @@ handle_fuse_message(Req = #synchronizefileblock{logical_name = FName, offset = O
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_available_blocks:synchronize_file_block(FullFileName, Offset, Size);
 
+% @todo Remove FUSE ID from protocol and get it from context
 handle_fuse_message(Req = #fileblockmodified{logical_name = FName, fuse_id = FuseId, sequence_number = SequenceNumber, offset = Offset, size = Size}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_available_blocks:file_block_modified(FullFileName, FuseId, SequenceNumber, Offset, Size);
 
+% @todo Remove FUSE ID from protocol and get it from context
 handle_fuse_message(Req = #filetruncated{logical_name = FName, fuse_id = FuseId, sequence_number = SequenceNumber, size = Size}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_available_blocks:file_truncated(FullFileName, FuseId, SequenceNumber, Size);

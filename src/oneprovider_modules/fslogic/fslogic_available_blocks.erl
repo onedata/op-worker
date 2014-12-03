@@ -213,7 +213,7 @@ file_synchronized(ProtocolVersion, CacheName, Context, FileId, SyncedParts, Full
     end,
     #atom{value = ?VOK}.
 
-file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, Offset, Size, FullFileName) ->
+file_block_modified_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Offset, Size, FullFileName) ->
     % prepare data
     fslogic_context:set_context(Context),
     {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
@@ -249,19 +249,22 @@ file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, Sequenc
     case SequenceNumber of
         ExpectedSequenceNumber ->
             set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
-            file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, Offset, Size, FullFileName);
+            file_block_modified_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Offset, Size, FullFileName);
         _ ->
             receive
                 {file_block_modified, NewContext, FileId, FuseId, ExpectedSequenceNumber, NewOffset, NewSize, NewFullFileName} ->
                     set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
-                    file_block_modified(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewOffset, NewSize, NewFullFileName)
+                    file_block_modified_internal(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewOffset, NewSize, NewFullFileName);
+                {file_truncated, NewContext, FileId, FuseId, ExpectedSequenceNumber, NewSize, NewFullFileName} ->
+                    set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
+                    file_truncated_internal(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewSize, NewFullFileName)
             after Timeout ->
                 set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
                 file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, 0)
             end
     end.
 
-file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, Size, FullFileName) ->
+file_truncated_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Size, FullFileName) ->
     % prepare data
     fslogic_context:set_context(Context),
     {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
@@ -287,12 +290,15 @@ file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumb
     case SequenceNumber of
         ExpectedSequenceNumber ->
             set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
-            file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, Size, FullFileName);
+            file_truncated_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Size, FullFileName);
         _ ->
             receive
                 {file_truncated, NewContext, FileId, FuseId, ExpectedSequenceNumber, NewSize, NewFullFileName} ->
                     set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
-                    file_truncated(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewSize, NewFullFileName)
+                    file_truncated_internal(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewSize, NewFullFileName);
+                {file_block_modified, NewContext, FileId, FuseId, ExpectedSequenceNumber, NewOffset, NewSize, NewFullFileName} ->
+                    set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
+                    file_block_modified_internal(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewOffset, NewSize, NewFullFileName)
             after Timeout ->
                 set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
                 file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, 0)
