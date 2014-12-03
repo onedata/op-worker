@@ -210,6 +210,7 @@ update_file_block_map(FileId, Blocks) ->
 %% ====================================================================
 update_file_block_map(_, [], false) -> {ok, 0};
 update_file_block_map(FullFileName, Blocks, ClearMap) ->
+    ct:print("UPDATE_FILE_BLOCK_MAP ~p ~p ~p",[FullFileName, Blocks, ClearMap]),
     {ok, #db_document{} = FileDoc} = fslogic_objects:get_file(FullFileName),
     Location = fslogic_file:get_file_local_location(FileDoc),
     #file_location{storage_uuid = StorageUUID} = Location,
@@ -225,6 +226,7 @@ update_file_block_map(FullFileName, Blocks, ClearMap) ->
 
     utils:pforeach(fun(#db_document{record = #file_descriptor{fuse_id = FuseId}}) ->
         % get storage file_id, todo check if works for both proxy and directio
+        ct:print("UPDATE_FILE_BLOCK_MAP in fuse ~p",[FuseId]),
         #db_document{record = FileLoc} = fslogic_file:get_file_local_location_doc(FileDoc),
         {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
         {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_uuid}),
