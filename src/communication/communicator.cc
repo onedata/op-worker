@@ -21,7 +21,6 @@
 
 #include <cassert>
 #include <unordered_set>
-#include <curses.h>
 
 namespace one
 {
@@ -144,14 +143,11 @@ Communicator::communicate(const std::string &module,
                           const unsigned int retries,
                           const std::chrono::milliseconds timeout)
 {
-    std::chrono::milliseconds scaledTimout = timeout;
-    if(scaledTimout < std::chrono::milliseconds(1500))
-        scaledTimout = std::chrono::milliseconds(1500);
     auto cmsg = createMessage(module, true, ans, msg);
     auto future = m_communicationHandler->communicate(*cmsg, poolType(msg), retries);
 
-    if(future.wait_for(scaledTimout) != std::future_status::ready)
-        throw ReceiveError{"timeout of " + std::to_string(scaledTimout.count()) +
+    if(future.wait_for(timeout) != std::future_status::ready)
+        throw ReceiveError{"timeout of " + std::to_string(timeout.count()) +
                           " milliseconds exceeded"};
 
     return future.get();
