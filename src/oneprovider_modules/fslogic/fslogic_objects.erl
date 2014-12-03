@@ -230,7 +230,7 @@ get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
 %% ====================================================================
 ensure_file_descriptor_exists(ProtocolVersion, Uuid, FuseID, Validity) ->
     MsgId = make_ref(),
-    gen_server:call(?Dispatcher_Name, {dao_worker, ProtocolVersion, self(), MsgId, {ensure_file_location_exists, Uuid, FuseID, Validity}}, ?CACHE_REQUEST_TIMEOUT),
+    gen_server:call(?Dispatcher_Name, {dao_worker, ProtocolVersion, self(), MsgId, {ensure_file_descriptor_exists, Uuid, FuseID, Validity}}, ?CACHE_REQUEST_TIMEOUT),
     receive
         {worker_answer, MsgId, Resp} -> Resp
     after ?CACHE_REQUEST_TIMEOUT ->
