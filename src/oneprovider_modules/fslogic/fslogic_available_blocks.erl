@@ -42,6 +42,9 @@
 -export([byte_to_block_range/1]).
 -endif.
 
+%% Defines how long cluster will wait for event with missing sequence number
+-define(EVENT_SYNCH_TIMEOUT, 5000).
+
 %% ====================================================================
 %% High level functions for handling available_blocks document changes
 %% ====================================================================
@@ -161,9 +164,9 @@ registered_requests() ->
         (ProtocolVersion, {invalidate_blocks_cache, FileId}, CacheName) ->
             fslogic_available_blocks:invalidate_blocks_cache(ProtocolVersion, CacheName, FileId);
         (ProtocolVersion, {file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}, CacheName) ->
-            fslogic_available_blocks:file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, 5000);
+            fslogic_available_blocks:file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, ?EVENT_SYNCH_TIMEOUT);
         (ProtocolVersion, {file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}, CacheName) ->
-            fslogic_available_blocks:file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, 5000);
+            fslogic_available_blocks:file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, ?EVENT_SYNCH_TIMEOUT);
         (ProtocolVersion, {file_synchronized, Context, FileId, Ranges, FullFileName}, CacheName) ->
             fslogic_available_blocks:file_synchronized(ProtocolVersion, CacheName, Context, FileId, Ranges, FullFileName);
         (ProtocolVersion, {external_available_blocks_changed, Context, FileId, DocumentUuid}, CacheName) ->
@@ -210,7 +213,7 @@ file_synchronized(ProtocolVersion, CacheName, Context, FileId, SyncedParts, Full
     end,
     #atom{value = ?VOK}.
 
-file_block_modified(ProtocolVersion, CacheName, Context, FileId, Offset, Size, FullFileName) ->
+file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, Offset, Size, FullFileName) ->
     % prepare data
     fslogic_context:set_context(Context),
     {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
@@ -235,34 +238,30 @@ file_block_modified(ProtocolVersion, CacheName, Context, FileId, Offset, Size, F
             FinalNewDoc = update_size(NewDoc, NewFileSizeTuple),
 
             %save available_blocks and notify fuses
-            save_available_blocks(ProtocolVersion, CacheName, FinalNewDoc),
+            save_available_blocks(ProtocolVersion, CacheName, FinalNewDoc, [FuseId]),
 
             fslogic_req_regular:update_file_block_map(FullFileName, [{Offset, Size}], false)
     end,
     #atom{value = ?VOK}.
 
 file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout) ->
-
-    ?dump(FuseId),
-    ?dump(SequenceNumber),
-
     ExpectedSequenceNumber = get_expected_sequence_number(CacheName, FileId, FuseId),
     case SequenceNumber of
         ExpectedSequenceNumber ->
             set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
-            file_block_modified(ProtocolVersion, CacheName, Context, FileId, Offset, Size, FullFileName);
+            file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, Offset, Size, FullFileName);
         _ ->
             receive
                 {file_block_modified, NewContext, FileId, FuseId, ExpectedSequenceNumber, NewOffset, NewSize, NewFullFileName} ->
                     set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
-                    file_block_modified(ProtocolVersion, CacheName, NewContext, FileId, NewOffset, NewSize, NewFullFileName)
+                    file_block_modified(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewOffset, NewSize, NewFullFileName)
             after Timeout ->
                 set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
                 file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, 0)
             end
     end.
 
-file_truncated(ProtocolVersion, CacheName, Context, FileId, Size, FullFileName) ->
+file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, Size, FullFileName) ->
     % prepare data
     fslogic_context:set_context(Context),
     {ok, RemoteLocationDocs} = list_all_available_blocks(ProtocolVersion, CacheName, FileId),
@@ -278,26 +277,22 @@ file_truncated(ProtocolVersion, CacheName, Context, FileId, Size, FullFileName) 
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
         false ->
-            save_available_blocks(ProtocolVersion, CacheName, NewDoc),
+            save_available_blocks(ProtocolVersion, CacheName, NewDoc, [FuseId]),
             fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true)
     end,
     #atom{value = ?VOK}.
 
 file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, Timeout) ->
-
-    ?dump(FuseId),
-    ?dump(SequenceNumber),
-
     ExpectedSequenceNumber = get_expected_sequence_number(CacheName, FileId, FuseId),
     case SequenceNumber of
         ExpectedSequenceNumber ->
             set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
-            file_truncated(ProtocolVersion, CacheName, Context, FileId, Size, FullFileName);
+            file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, Size, FullFileName);
         _ ->
             receive
                 {file_truncated, NewContext, FileId, FuseId, ExpectedSequenceNumber, NewSize, NewFullFileName} ->
                     set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
-                    file_truncated(ProtocolVersion, CacheName, NewContext, FileId, NewSize, NewFullFileName)
+                    file_truncated(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewSize, NewFullFileName)
             after Timeout ->
                 set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
                 file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, 0)
@@ -336,6 +331,9 @@ external_available_blocks_changed(ProtocolVersion, CacheName, Context, FileId, D
     end.
 
 save_available_blocks(ProtocolVersion, CacheName, Doc) ->
+    save_available_blocks(ProtocolVersion, CacheName, Doc, []).
+
+save_available_blocks(ProtocolVersion, CacheName, Doc, IgnoredFuses) ->
     % save block to db
     {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion), % [Doc#db_document{force_update = true}]
     {ok, NewDoc = #db_document{record = #available_blocks{file_id = FileId, file_size = NewDocSize}}} =
@@ -356,7 +354,7 @@ save_available_blocks(ProtocolVersion, CacheName, Doc) ->
                     _ -> NewDocSize
                 end,
             update_docs_cache(CacheName, FileId, NewDocs),
-            update_size_cache(CacheName, FileId, NewSize);
+            update_size_cache(CacheName, FileId, NewSize, IgnoredFuses);
         _ ->
             {ok, _} = list_all_available_blocks(ProtocolVersion, CacheName, FileId)
     end,
@@ -401,7 +399,7 @@ list_all_available_blocks(ProtocolVersion, CacheName, FileId) ->
 
             % inset results to cache
             update_docs_cache(CacheName, FileId, NewDocs),
-            update_size_cache(CacheName, FileId, Size),
+            update_size_cache(CacheName, FileId, Size, []),
             {ok, NewDocs}
     end.
 
@@ -600,16 +598,16 @@ get_docs_from_cache(CacheName, FileId) ->
         [] -> undefined
     end.
 
-update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple) ->
+update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple, IgnoredFuses) ->
     case ets:lookup(CacheName, {FileId, old_file_size}) of
         [] ->
             ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
-            fslogic_events:on_file_size_update(utils:ensure_list(FileId), 0, NewSize);
+            fslogic_events:on_file_size_update(utils:ensure_list(FileId), 0, NewSize, IgnoredFuses);
         [{_, {_, OldSize}}] when OldSize =/= NewSize ->
             ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
-            fslogic_events:on_file_size_update(utils:ensure_list(FileId), OldSize, NewSize);
+            fslogic_events:on_file_size_update(utils:ensure_list(FileId), OldSize, NewSize, IgnoredFuses);
         [_] ->
             ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple})
