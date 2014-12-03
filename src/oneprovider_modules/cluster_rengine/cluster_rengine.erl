@@ -103,7 +103,6 @@ handle(ProtocolVersion, {update_cluster_rengine, EventType, EventHandlerItem}) -
 
 handle(ProtocolVersion, {event_arrived, Event}) ->
     EventType = proplists:get_value("type", Event),
-    ?dump(Event),
     case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
         [] ->
             ?warning("No handler for event of type: ~p", [EventType]),
