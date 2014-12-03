@@ -132,8 +132,8 @@ db_sync_hook() ->
             ok = fslogic_file:ensure_file_location_exists(FullFileName, FileDoc);
         (?FILES_DB_NAME, _, _, #db_document{uuid = FileUuid, record = #file{}, deleted = true}) ->
             ct:print("1 FILE_DOC_DELETED"),
-            case dao_lib:apply(dao_vfs, exists_file, [{uuid, FileUuid}]) of
-                {ok, false} ->
+%%             case dao_lib:apply(dao_vfs, exists_file, [{uuid, FileUuid}]) of
+%%                 {ok, false} ->
                     ct:print("2"),
                     {ok, Locations} = dao_lib:apply(dao_vfs, get_file_locations, [FileUuid]),
                     ct:print("3"),
@@ -149,8 +149,8 @@ db_sync_hook() ->
                             ok = dao_lib:apply(dao_vfs, remove_file_location, [Uuid], fslogic_context:get_protocol_version()),
                             ct:print("8")
                         end, Locations);
-                {ok, true} -> ok
-            end;
+%%                 {ok, true} -> ok
+%%             end;
         (?FILES_DB_NAME, _, _, #db_document{record = #file{}}) ->
             ct:print("FILE_DOC_CHANGED")
     end.
