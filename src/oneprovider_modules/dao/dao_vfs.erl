@@ -122,6 +122,7 @@ get_space_files({gruid, GRUID}) when is_list(GRUID) ->
 save_descriptor(#file_descriptor{} = Fd) ->
     save_descriptor(#db_document{record = Fd});
 save_descriptor(#db_document{record = #file_descriptor{}} = FdDoc) ->
+    ct:print("CREATING DESCRIPTOR: ~p",[FdDoc]),
     dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:save_record(FdDoc).
 
@@ -136,6 +137,7 @@ save_descriptor(#db_document{record = #file_descriptor{}} = FdDoc) ->
 remove_descriptor(ListSpec) when is_tuple(ListSpec) ->
     remove_descriptor3(ListSpec, 1000, 0);
 remove_descriptor(Fd) when is_list(Fd) ->
+    ct:print("REMOVING DESCRIPTOR: ~p",[Fd]),
     dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:remove_record(Fd).
 
