@@ -64,6 +64,8 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
         fun
             (_, {ensure_file_location_exists, FullFileName, File}) ->
                 fslogic_file:ensure_file_location_exists_unsafe(FullFileName, File);
+            (ProtocolVersion, {ensure_file_descriptor_exists, Uuid, FuseID, Validity}) ->
+                fslogic_objects:ensure_file_descriptor_exists_unsafe(ProtocolVersion, Uuid, FuseID, Validity);
             (ProtocolVersion, {Target, Method, Args}) ->
                 handle(ProtocolVersion, {Target, Method, Args})
         end,
@@ -72,6 +74,8 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
         fun
             ({ensure_file_location_exists, FullFileName, _}) ->
                 lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FullFileName);
+            ({ensure_file_descriptor_exists, _, FuseID, _}) ->
+                lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FuseID);
             ({_, _, [File, _]}) ->
                 lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, File)
         end,
@@ -81,6 +85,7 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
     RequestMap = fun
       ({dao_vfs, save_new_file, _}) ->id_generation;
       ({ensure_file_location_exists, _, _}) ->id_generation; %todo move this to fslogic
+      ({ensure_file_descriptor_exists, _, _, _}) ->id_generation; %todo move this to fslogic
       (_) -> non
     end,
 
@@ -89,6 +94,8 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, File);
       ({ensure_file_location_exists, FullFileName, _}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FullFileName);
+      ({ensure_file_descriptor_exists, _, FuseID, _}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FuseID);
       (_) -> non
     end,
 

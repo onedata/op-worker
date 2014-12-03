@@ -85,7 +85,7 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
         _ -> ok
     end,
 
-    {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#db_document.uuid, fslogic_context:get_fuse_id(), Validity),
+    {ok, _} = fslogic_objects:ensure_file_descriptor_exists(fslogic_context:get_protocol_version(), FileDoc#db_document.uuid, fslogic_context:get_fuse_id(), Validity),
 
     #db_document{record = FileLoc} = fslogic_file:get_file_local_location_doc(FileDoc),
 
@@ -151,7 +151,7 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
 
             ExistingWFileUUID = ExistingWFile#db_document.uuid,
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
-            {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), ExistingWFileUUID, fslogic_context:get_fuse_id(), Validity),
+            {ok, _} = fslogic_objects:ensure_file_descriptor_exists(fslogic_context:get_protocol_version(), ExistingWFileUUID, fslogic_context:get_fuse_id(), Validity),
 
             #db_document{record = ExistingWFileLocation} =  fslogic_file:get_file_local_location_doc(ExistingWFileUUID),
 
@@ -164,7 +164,7 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
             fslogic_meta:update_meta_attr(FileRecord, times, {CTime, CTime, CTime}),
 
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
-            {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), Validity),
+            {ok, _} = fslogic_objects:ensure_file_descriptor_exists(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), Validity),
 
 
             FuseFileBlocks = [],
@@ -294,7 +294,10 @@ renew_file_location(FullFileName) ->
             [DbDoc | _] = Descriptors,
             Validity = ?LOCATION_VALIDITY,
 
-            {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), DbDoc, Validity),
+            ok = case fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), DbDoc, Validity) of
+                {ok, _} -> ok;
+                {error, {save_file_descriptor, {conflict, _}}} -> ok
+            end,
             #filelocationvalidity{answer = ?VOK, validity = Validity};
         _Many ->
             ?error("Error: can not renew file location for file: ~p, too many file descriptors", [FullFileName]),
