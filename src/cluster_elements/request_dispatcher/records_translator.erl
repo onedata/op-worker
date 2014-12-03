@@ -140,6 +140,8 @@ get_answer_decoder_and_type(#fusemessage{input = #fileblockmodified{}}) ->
     {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #filetruncated{}}) ->
     {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #getfileblockmap{}}) ->
+    {fuse_messages, fileblockmap};
 
 get_answer_decoder_and_type(#remotefilemangement{input = #createfile{}}) ->
     {communication_protocol, atom};

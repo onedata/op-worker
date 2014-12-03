@@ -16,6 +16,7 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
 -include("oneprovider_modules/dao/dao_vfs.hrl").
 -include("oneprovider_modules/dao/dao_share.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
@@ -37,6 +38,7 @@
 
 %% Block synchronization
 -export([synchronize/3, mark_as_modified/3, mark_as_truncated/2]).
+-export([get_file_block_map/1]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
@@ -1306,7 +1308,8 @@ synchronize(File, Offset, Size) ->
         case File of
             {uuid, Uuid} ->
                 case logical_files_manager:get_file_full_name_by_uuid(Uuid) of %todo cache this value somehow
-                    {ok, Name} -> contact_fslogic(#synchronizefileblock{logical_name = Name, offset = Offset, size = Size});
+                    {ok, Name} ->
+                        contact_fslogic(#synchronizefileblock{logical_name = Name, offset = Offset, size = Size});
                     Error_ -> Error_
                 end;
             _ -> contact_fslogic(#synchronizefileblock{logical_name = File, offset = Offset, size = Size})
@@ -1355,6 +1358,37 @@ mark_as_truncated(FullFileName, Size) ->
             end;
         _ -> {Status, TmpAns}
     end.
+
+
+%% get_file_block_map/1
+%% ====================================================================
+%% @doc Gets list of available_blocks for each provider supporting space.
+%% The result is a proplist [{ProviderId, BlockList}]
+%% @end
+-spec get_file_block_map(FullFileName :: string()) ->
+    {ok, [{ProviderId :: binary(), BlockList :: [#block_range{}]}]} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+get_file_block_map(FullFileName) ->
+    {Status, TmpAns} = contact_fslogic(#getfileblockmap{logical_name = FullFileName}),
+    case Status of
+        ok ->
+            case TmpAns#fileblockmap.answer of
+                ?VOK ->
+                    BlockMap = TmpAns#fileblockmap.block_map,
+                    ProtobufProplist = lists:map(
+                        fun(#fileblockmap_blockmapentity{provider_id = Id, ranges = Ranges}) ->
+                            {Id, Ranges}
+                        end, BlockMap),
+                    FinalProplist = lists:map(
+                        fun({Id, RangeList}) ->
+                            {Id, [#block_range{from = From, to = To} || #fileblockmap_blockmapentity_blockrange{from = From, to = To} <- RangeList]}
+                        end, ProtobufProplist),
+                    {ok, FinalProplist};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
 
 %% cache_size/2
 %% ====================================================================
@@ -1638,7 +1672,7 @@ get_file_path_from_cache({uuid, Uuid}) ->
         FullFilePath -> {ok, FullFilePath}
     end;
 get_file_path_from_cache(FileShortName) ->
-    case string:tokens(FileShortName,"/") of
+    case string:tokens(FileShortName, "/") of
         [?SPACES_BASE_DIR_NAME | _] -> {ok, FileShortName};
         _ ->
             case get({path_of, FileShortName}) of

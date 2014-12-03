@@ -23,7 +23,8 @@
 -export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
 -export([toggle_view/1, select_item/1, select_all/0, deselect_all/0]).
 -export([clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0, confirm_paste/0]).
--export([rename_item/2, create_directory/1, remove_selected/0, search/1, toggle_column/2, show_popup/1, hide_popup/0, path_navigator_body/1]).
+-export([rename_item/2, create_directory/1, remove_selected/0, search/1, toggle_column/2]).
+-export([show_popup/1, hide_popup/0, path_navigator_body/1]).
 -export([item_is_dir/1, item_find/1, item_attr/2]).
 -export([fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
 -export([fs_list_dir/1, fs_list_dir_to_paths/1, fs_list_dir_to_items/1]).
@@ -34,8 +35,14 @@
 % Attributes displayed by default
 -define(DEFAULT_ATTRIBUTES, [size, atime, mtime]).
 
+% Column width of attributes columns
+-define(ATTRIBUTE_COLUMN_WIDTH, 150).
+
 % How often should comet process check for changes in current dir
 -define(AUTOREFRESH_PERIOD, 1000).
+
+% Reference to main comet pid
+-define(COMET_PID, comet_pid).
 
 
 % Item is either a file or a dir represented in manager
@@ -73,7 +80,8 @@ title() -> <<"File manager">>.
 %% This will be placed in the template instead of {{custom}} tag
 custom() ->
     <<"<script src=\"/js/oneprovider_upload.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
-    "<script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>">>.
+    "<script src=\"/js/file_manager.js\" type=\"text/javascript\" charset=\"utf-8\"></script>\n",
+    "<script src=\"/js/file_chunks_bar.js\" type=\"text/javascript\" charset=\"utf-8\"></script>">>.
 
 %% This will be placed in the template instead of {{css}} tag
 css() ->
@@ -86,7 +94,7 @@ body() ->
     gui_jq:wire(#api{name = "confirm_paste_event", tag = "confirm_paste_event"}, false),
     pfm_perms:init(),
     [
-        #panel{class= <<"page-container">>, body = [
+        #panel{class = <<"page-container">>, body = [
             #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
                 #image{image = <<"/images/spinner.gif">>}
             ]},
@@ -249,7 +257,7 @@ event(init) ->
             AccessToken = opn_gui_utils:get_access_token(),
             Hostname = gui_ctx:get_requested_hostname(),
             {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(GRUID, AccessToken, Hostname) end),
-            put(comet_pid, Pid)
+            put(?COMET_PID, Pid)
     end;
 
 
@@ -280,15 +288,19 @@ event({action, Module, Fun, Args}) ->
                     Other
             end
         end, Args),
-    opn_gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, Module, Fun, NewArgs}]).
+    opn_gui_utils:apply_or_redirect(erlang, send, [get(?COMET_PID), {action, Module, Fun, NewArgs}]).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Comet loop and functions evaluated by comet
 comet_loop_init(GRUID, UserAccessToken, RequestedHostname) ->
-    % Initialize page state
+    % Initialize context
     fslogic_context:set_gr_auth(GRUID, UserAccessToken),
 
+    % Initialize data distribution view state
+    pfm_data_dist:init(),
+
+    % Initialize page state
     set_requested_hostname(RequestedHostname),
     set_working_directory(<<"/">>),
     set_selected_items([]),
@@ -328,6 +340,9 @@ comet_loop(IsUploadInProgress) ->
                     true;
                 upload_finished ->
                     false;
+                {put, Key, Value} ->
+                    put(Key, Value),
+                    IsUploadInProgress;
                 Other ->
                     ?debug("Unrecognized comet message in page_file_manager: ~p", [Other]),
                     IsUploadInProgress
@@ -345,6 +360,7 @@ comet_loop(IsUploadInProgress) ->
                         refresh_workspace(),
                         gui_comet:flush()
                 end,
+                pfm_data_dist:refresh_ddist_panels(),
                 IsUploadInProgress
             end
 
@@ -498,6 +514,7 @@ navigate(Path) ->
     case pfm_perms:fs_has_perms(Path, read) of
         true ->
             set_working_directory(Path),
+            pfm_data_dist:hide_all_ddist_panels(),
             clear_manager();
         false ->
             gui_jq:info_popup(<<"Insufficient permissions">>,
@@ -623,6 +640,7 @@ rename_item(OldPath, NewName) ->
         OldName -> hide_popup();
         _ ->
             NewPath = filename:absname(NewName, get_working_directory()),
+            pfm_data_dist:hide_ddist_panel(OldPath),
             ErrorMessage = case fs_mv(OldPath, get_working_directory(), NewName) of
                                ok ->
                                    clear_clipboard(),
@@ -673,7 +691,8 @@ remove_selected() ->
     SelectedItems = get_selected_items(),
     lists:foreach(
         fun({Path, _}) ->
-            fs_remove(Path)
+            fs_remove(Path),
+            pfm_data_dist:hide_ddist_panel(Path)
         end, SelectedItems),
     clear_clipboard(),
     clear_manager().
@@ -990,27 +1009,29 @@ grid_view_body() ->
 % Render list view workspace
 list_view_body() ->
     NumAttr = erlang:max(1, length(get_displayed_file_attributes())),
-    CellWidth = <<"width: 150px;">>,
+    CellWidth = <<"width: ", (integer_to_binary(?ATTRIBUTE_COLUMN_WIDTH))/binary, "px;">>,
     HiddenAttrs = ?ALL_ATTRIBUTES -- get_displayed_file_attributes(),
     gui_jq:wire(<<"initialize_table_header_scrolling();">>),
+
     HeaderTable = [
         #table{id = <<"header_table">>, class = <<"no-margin table">>, style = <<"position: fixed; top: 173px; z-index: 10;",
         "background: white; border: 2px solid #bbbdc0; border-collapse: collapse; min-width: 1024px;">>, header = [
             #tr{cells =
             [
-                #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116);">>, body = [
-                    #panel{style = <<"position: relative;">>, body = [
-                        <<"Name">>,
-                        #panel{style = <<"position: absolute; right: -22px; top: -4px; ">>, body =
-                        lists:map(fun(Attr) ->
-                            #span{style = <<"font-size: 12px; font-weight: normal; background-color: #EBEDEF; ",
-                            "border: 1px solid #34495E; padding: 1px 3px; margin-right: 4px; cursor: pointer;">>,
-                                id = wire_click(<<"toggle_column_", (gui_str:to_binary(Attr))/binary>>, {action, toggle_column, [Attr, true]}),
-                                body = attr_to_name(Attr)}
-                        end, HiddenAttrs)
-                        }
+                #th{class = <<"list-view-name-header">>, style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116);">>,
+                    body = [
+                        #panel{style = <<"position: relative;">>, body = [
+                            <<"Name">>,
+                            #panel{style = <<"position: absolute; right: -22px; top: -4px; ">>, body =
+                            lists:map(fun(Attr) ->
+                                #span{style = <<"font-size: 12px; font-weight: normal; background-color: #EBEDEF; ",
+                                "border: 1px solid #34495E; padding: 1px 3px; margin-right: 4px; cursor: pointer;">>,
+                                    id = wire_click(<<"toggle_column_", (gui_str:to_binary(Attr))/binary>>, {action, toggle_column, [Attr, true]}),
+                                    body = attr_to_name(Attr)}
+                            end, HiddenAttrs)
+                            }
+                        ]}
                     ]}
-                ]}
             ] ++
             lists:map(
                 fun(Attr) ->
@@ -1054,11 +1075,11 @@ list_view_body() ->
                end,
     {TableRows, _} = lists:mapfoldl(
         fun(Item, Counter) ->
-            FullPath = item_path(Item),
+            FilePath = item_path(Item),
             Basename = item_basename(Item),
             ImageStyle = case get_clipboard_type() of
                              cut ->
-                                 case lists:member({FullPath, Basename}, get_clipboard_items()) of
+                                 case lists:member({FilePath, Basename}, get_clipboard_items()) of
                                      true -> <<"opacity:0.3; filter:alpha(opacity=30);">>;
                                      _ -> <<"">>
                                  end;
@@ -1067,7 +1088,7 @@ list_view_body() ->
 
             ImageUrl = case item_is_dir(Item) of
                            true ->
-                               case is_space_dir(FullPath) of
+                               case is_space_dir(FilePath) of
                                    true -> <<"/images/folder_space32.png">>;
                                    false -> <<"/images/folder32.png">>
                                end;
@@ -1081,19 +1102,19 @@ list_view_body() ->
             % Image won't hightlight if the image is clicked.
             gui_jq:bind_element_click(ImageID, <<"function(e) { e.stopPropagation(); }">>),
             TableRow = #tr{
-                id = wire_click(item_id(Item), {action, select_item, [FullPath]}),
+                id = wire_click(item_id(Item), {action, select_item, [FilePath]}),
                 cells = [
                     case item_is_dir(Item) of
                         true ->
                             #td{style = <<"vertical-align: middle;">>, body = #span{style = <<"word-wrap: break-word;">>,
                                 class = <<"table-cell">>, body = [
                                     #panel{style = <<"display: inline-block; vertical-align: middle;">>, body = [
-                                        #link{id = wire_click(ImageID, {action, navigate, [FullPath]}), body =
+                                        #link{id = wire_click(ImageID, {action, navigate, [FilePath]}), body =
                                         #image{class = <<"list-icon">>, style = ImageStyle, image = ImageUrl}}
                                     ]},
                                     #panel{class = <<"filename_row">>,
                                         style = <<"max-width: 400px; word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
-                                            #link{id = wire_click(LinkID, {action, navigate, [FullPath]}), body = gui_str:html_encode(Basename)}
+                                            #link{id = wire_click(LinkID, {action, navigate, [FilePath]}), body = gui_str:html_encode(Basename)}
                                         ]}
                                 ]}};
                         false ->
@@ -1102,19 +1123,19 @@ list_view_body() ->
                                                 style = <<"font-size: 18px; position: absolute; top: 0px; left: 0; z-index: 1; color: rgb(82, 100, 118);">>};
                                             false -> <<"">>
                                         end,
-                            #td{body = #span{class = <<"table-cell">>, body = [
+                            #td{style = <<"position: relative;">>, class = <<"list-view-name-column">>, body = [
                                 #panel{style = <<"display: inline-block; vertical-align: middle; position: relative;">>, body = [
                                     #link{id = ImageID, target = <<"_blank">>,
-                                        url = <<?user_content_download_path, "/", (gui_str:url_encode(FullPath))/binary>>, body = [
+                                        url = <<?user_content_download_path, "/", (gui_str:url_encode(FilePath))/binary>>, body = [
                                             ShareIcon,
                                             #image{class = <<"list-icon">>, style = ImageStyle, image = ImageUrl}
                                         ]}
                                 ]},
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
                                     #link{id = LinkID, body = gui_str:html_encode(Basename), target = <<"_blank">>,
-                                        url = <<?user_content_download_path, "/", (gui_str:url_encode(FullPath))/binary>>}
-                                ]}
-                            ]}}
+                                        url = <<?user_content_download_path, "/", (gui_str:url_encode(FilePath))/binary>>}
+                                ]}] ++ pfm_data_dist:data_distribution_panel(FilePath, Counter)
+                            }
                     end
                 ] ++
                 lists:map(
@@ -1124,10 +1145,11 @@ list_view_body() ->
             },
             {TableRow, Counter + 1}
         end, 1, get_item_list()),
-    % Set filename containers width
-    ContentWithoutFilename = 100 + (51 + round(90 * (2 + NumAttr) / NumAttr)) * NumAttr, % 51 is padding + border
+% Set filename containers width
+    ContentWithoutFilename = 100 + (?ATTRIBUTE_COLUMN_WIDTH + 51) * NumAttr, % 51 is cell padding
     gui_jq:wire(<<"window.onresize = function(e) { $('.filename_row').css('max-width', ",
-    "'' +($(window).width() - ", (integer_to_binary(ContentWithoutFilename))/binary, ") + 'px'); }; $(window).resize();">>),
+    "'' +($('#header_table').width() - ", (integer_to_binary(ContentWithoutFilename))/binary, ") + 'px'); ",
+    (pfm_data_dist:on_resize_js())/binary, " }; $(window).resize();">>),
     [
         HeaderTable,
         #table{id = <<"main_table">>, class = <<"table table-bordered">>,

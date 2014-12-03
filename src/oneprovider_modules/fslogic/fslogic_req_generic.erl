@@ -25,7 +25,7 @@
 
 %% API
 -export([update_times/4, change_file_owner/2, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
-    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0]).
+    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0, get_file_block_map/1]).
 
 %% ====================================================================
 %% API functions
@@ -367,6 +367,24 @@ get_statfs() ->
         _ ->
             #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
     end.
+
+%% get_file_block_map/1
+%% ====================================================================
+%% @doc Gets list of available_blocks for each provider supporting space.
+%% @end
+-spec get_file_block_map(FileId :: string()) -> #fileblockmap{} | no_return().
+%% ====================================================================
+get_file_block_map(FullFileName) ->
+    ?debug("get_file_block_map(FullFileName: ~p)", [FullFileName]),
+    {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName),
+    {ok, Docs} = fslogic_available_blocks:call({list_all_available_blocks, FileId}),
+    ProtobufList = lists:map(
+        fun(#db_document{record = #available_blocks{provider_id = Id, file_parts = Blocks}}) ->
+            RawBlocks = ranges_struct:strip_timestamps(Blocks),
+            ProtobufRanges = [#fileblockmap_blockmapentity_blockrange{from = From, to = To} || #range{from = From, to = To} <- RawBlocks],
+            #fileblockmap_blockmapentity{provider_id = Id, ranges = ProtobufRanges}
+        end, Docs),
+    #fileblockmap{block_map = ProtobufList}.
 
 
 %% rename_file/2

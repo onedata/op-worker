@@ -61,6 +61,7 @@
     line-height: 22px;
     display: inline-block;
 }
+
 .perms-warning > p > strong {
     font-weight: 900;
 }
@@ -364,4 +365,79 @@
     display: inline-block;
     width: 10px;
     text-align: center;
+}
+
+.list-view-name-column:hover .show-on-parent-hover {
+    display: block;
+    visibility: visible;
+}
+
+.ddist-panel {
+    margin-top: 12px;
+    margin-left: 7px;
+}
+
+.ddist-panel-hidden {
+    display: none;
+}
+
+.ddist-show-button {
+    position: absolute;
+    top: 15px;
+    right: 6px;
+}
+
+.ddist-show-button > span {
+    font-size: 20px;
+}
+
+.ddist-hide-button {
+    position: absolute;
+    top: 8px;
+    right: 4px;
+}
+
+.ddist-hide-button > span {
+    font-size: 24px;
+}
+
+.ddist-table {
+    border: 0 none !important;
+}
+
+.ddist-table > tbody > tr {
+    border: 0 none !important;
+}
+
+.ddist-table > tbody > tr > td {
+    border: 0 none !important;
+    padding: 9px;
+    vertical-align: middle;
+}
+
+.ddist-provider {
+    font-weight: 700;
+    overflow: hidden;
+}
+
+.ddist-button {
+    font-size: 16px;
+}
+
+.ddist-canvas {
+    width: 125px;
+    height: 20px;
+    display: block;
+    border: 1px solid #526476;
+    border-radius: 5px;
+}
+
+.ddist-header {
+    margin: 0;
+    padding: 0 9px;
+    font-size: 16px;
+}
+
+.ddist-percentage {
+    width: 50px;
 }

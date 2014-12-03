@@ -223,7 +223,7 @@ update_file_block_map(FullFileName, Blocks, ClearMap) ->
 
     {ok, Descriptors} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file, FullFileName}, 10000000000, 0], fslogic_context:get_protocol_version()),
 
-    utils:pforeach(fun(#db_document{record = #file_descriptor{fuse_id = FuseId, file = FileUuid}}) ->
+    utils:pforeach(fun(#db_document{record = #file_descriptor{fuse_id = FuseId}}) ->
         % get storage file_id, todo check if works for both proxy and directio
         #db_document{record = FileLoc} = fslogic_file:get_file_local_location_doc(FileDoc),
         {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
