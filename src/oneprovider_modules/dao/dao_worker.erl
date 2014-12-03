@@ -80,7 +80,7 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
 
     RequestMap = fun
       ({dao_vfs, save_new_file, _}) ->id_generation;
-      ({ensure_file_location_exists, _, _}) ->id_generation;
+      ({ensure_file_location_exists, _, _}) ->id_generation; %todo move this to fslogic
       (_) -> non
     end,
 
