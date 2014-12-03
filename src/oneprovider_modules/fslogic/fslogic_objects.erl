@@ -290,9 +290,9 @@ ensure_file_descriptor_exists_unsafe(ProtocolVersion, Uuid, FuseID, Validity) ->
 -spec save_file_descriptor(ProtocolVersion :: term(), File :: record(), Validity :: integer()) -> Result when
     Result :: term().
 %% ====================================================================
-save_file_descriptor(ProtocolVersion, File, Validity) ->
-    Descriptor = update_file_descriptor(File#db_document.record, Validity),
-    case dao_lib:apply(dao_vfs, save_descriptor, [File#db_document{record = Descriptor}], ProtocolVersion) of
+save_file_descriptor(ProtocolVersion, FileDescriptorDoc, Validity) ->
+    Descriptor = update_file_descriptor(FileDescriptorDoc#db_document.record, Validity),
+    case dao_lib:apply(dao_vfs, save_descriptor, [FileDescriptorDoc#db_document{record = Descriptor}], ProtocolVersion) of
         {error, Reason} ->
             {error, {save_file_descriptor, {Reason, Descriptor}}};
         Other -> Other
