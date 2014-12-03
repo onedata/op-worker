@@ -134,8 +134,8 @@ db_sync_hook() ->
             ct:print("1 FILE_DOC_DELETED"),
 %%             case dao_lib:apply(dao_vfs, exists_file, [{uuid, FileUuid}]) of
 %%                 {ok, false} ->
-                    ct:print("2 uuid: ~p", [FileUuid]),
-                    Ans = dao_lib:apply(dao_vfs, get_file_locations, [FileUuid]),
+                    ct:print("2 uuid: ~p", [utils:ensure_list(FileUuid)]),
+                    Ans = dao_lib:apply(dao_vfs, get_file_locations, [utils:ensure_list(FileUuid)]),
                     ct:print("3 locationAns: ~p",[Ans]),
                     {ok, Locations} = Ans,
                     lists:foreach(
