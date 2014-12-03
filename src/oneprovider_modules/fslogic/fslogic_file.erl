@@ -184,7 +184,8 @@ ensure_file_location_exists_unsafe(FullFileName, FileDoc) ->
         {ok, []} ->
             {ok, _CreatedDocUuid} = create_file_location_for_remote_file(FullFileName, FileId),
             case dao_lib:apply(dao_vfs, get_file_locations, [FileId], fslogic_context:get_protocol_version()) of
-                {ok, [_]} -> ok; %todo this assumes each file has at most one file_location
+                {ok, [_]} -> ok; %todo this assumes each file has at most one file_location, in case of allowing multiple
+                                 %file_locations (i. e. for data redundancy) we need to check storage also, to detect duplicates
                 {ok, [#db_document{uuid = FirstUuid} | _] = Docs} ->
                     MinimalUuid = lists:foldl(
                         fun(#db_document{uuid = Uuid}, MinUuid) when Uuid < MinUuid -> Uuid;
