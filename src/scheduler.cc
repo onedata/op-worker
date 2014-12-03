@@ -27,17 +27,27 @@ namespace one
 {
 
 Scheduler::Scheduler(const unsigned int threadNumber)
-    : m_idleWork{m_ioService}
+    : m_threadNumber{threadNumber}
+    , m_idleWork{m_ioService}
 {
-    for(auto i = 0u; i < threadNumber; ++i)
-        m_workers.emplace_back([this]{ m_ioService.run(); });
+    start();
 }
 
 Scheduler::~Scheduler()
 {
-    m_ioService.stop();
-    for(auto &t: m_workers)
-        t.join();
+    stop();
+}
+
+void Scheduler::prepareForDaemonize()
+{
+    stop();
+    m_ioService.notify_fork(boost::asio::io_service::fork_prepare);
+}
+
+void Scheduler::restartAfterDaemonize()
+{
+    m_ioService.notify_fork(boost::asio::io_service::fork_child);
+    start();
 }
 
 void Scheduler::post(const std::function<void()> &task)
@@ -57,6 +67,24 @@ std::function<void()> Scheduler::schedule(const std::chrono::milliseconds after,
             timer->cancel();
     };
 
+}
+
+void Scheduler::start()
+{
+    if(m_ioService.stopped())
+        m_ioService.reset();
+
+    for(auto i = 0u; i < m_threadNumber; ++i)
+        m_workers.emplace_back([this]{ m_ioService.run(); });
+}
+
+void Scheduler::stop()
+{
+    m_ioService.stop();
+    for(auto &t: m_workers)
+        t.join();
+
+    m_workers.clear();
 }
 
 } // namespace one
