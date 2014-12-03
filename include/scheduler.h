@@ -39,6 +39,9 @@ public:
      */
     virtual ~Scheduler();
 
+    void prepareForDaemonize();
+    void restartAfterDaemonize();
+
     /**
      * Runs a task asynchronously in @c Scheduler's thread pool.
      * @param task The task to execute.
@@ -116,6 +119,10 @@ public:
     }
 
 private:
+    void start();
+    void stop();
+
+    const unsigned int m_threadNumber;
     std::vector<std::thread> m_workers;
     boost::asio::io_service m_ioService;
     boost::asio::io_service::work m_idleWork;
