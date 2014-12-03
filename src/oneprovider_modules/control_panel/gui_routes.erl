@@ -32,6 +32,7 @@ route(<<"/spaces">>) -> page_spaces;
 route(<<"/space">>) -> page_space;
 route(<<"/privileges/space">>) -> page_space_privileges;
 route(<<"/groups">>) -> page_groups;
+route(<<"/groups_old">>) -> page_groups_old;
 route(<<"/group">>) -> page_group;
 route(<<"/privileges/group">>) -> page_group_privileges;
 route(<<"/tokens">>) -> page_tokens;
