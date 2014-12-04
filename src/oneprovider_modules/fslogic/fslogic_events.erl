@@ -88,14 +88,17 @@ delayed_push_attrs(FileUUID, IgnoredFuse, Reason) ->
     [Result :: ok | {error, Reason :: any()}].
 %% ====================================================================
 push_new_attrs(FileUUID, IgnoredFuse, Reason) ->
-   lists:flatten(push_new_attrs5(FileUUID, IgnoredFuse, Reason, 0, 100)).
-push_new_attrs5(FileUUID, IgnoredFuse, Reason, Offset, Count) ->
+    lists:flatten([push_new_attrs7(list_descriptors, fun(#file_descriptor{fuse_id = FID}) -> FID end,
+                                    FileUUID, IgnoredFuse, Reason, 0, 100) | 
+                    push_new_attrs7(list_attr_watchers, fun(#file_attr_watcher{fuse_id = FID}) -> FID end,
+                                    FileUUID, IgnoredFuse, Reason, 0, 100)]).
+push_new_attrs7(ListMethod, RecToFuseId, FileUUID, IgnoredFuse, Reason, Offset, Count) ->
     ETSKey = {utils:ensure_binary(FileUUID), utils:ensure_binary(IgnoredFuse), Reason},
     ets:delete(?fslogic_attr_events_state, ETSKey),
-    {ok, FDs} = dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {utils:ensure_list(FileUUID), ""}}, Count, Offset], 1),
+    {ok, FDs} = dao_lib:apply(dao_vfs, ListMethod, [{by_uuid_n_owner, {utils:ensure_list(FileUUID), ""}}, Count, Offset], 1),
     Fuses0 = lists:map(
         fun(#db_document{record = #file_descriptor{fuse_id = FuseID}}) ->
-            FuseID
+            RecToFuseId(Record)
         end, FDs),
     Fuses1 = lists:delete(IgnoredFuse, lists:usort(Fuses0)),
     ?debug("Pushing new attributes for file ~p to fuses ~p", [FileUUID, Fuses1]),
@@ -117,5 +120,5 @@ push_new_attrs5(FileUUID, IgnoredFuse, Reason, Offset, Count) ->
                 fun(FuseID) ->
                     request_dispatcher:send_to_fuse(FuseID, Attrs1, "fuse_messages")
                 end, FuseIDs),
-            [push_new_attrs5(FileUUID, IgnoredFuse, Reason, Offset + Count, 100) | Results]
+            [push_new_attrs7(ListMethod, RecToFuseId, FileUUID, IgnoredFuse, Reason, Offset + Count, 100) | Results]
     end.
