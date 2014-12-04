@@ -97,7 +97,7 @@ push_new_attrs7(ListMethod, RecToFuseId, FileUUID, IgnoredFuse, Reason, Offset, 
     ets:delete(?fslogic_attr_events_state, ETSKey),
     {ok, FDs} = dao_lib:apply(dao_vfs, ListMethod, [{by_uuid_n_owner, {utils:ensure_list(FileUUID), ""}}, Count, Offset], 1),
     Fuses0 = lists:map(
-        fun(#db_document{record = #file_descriptor{fuse_id = FuseID}}) ->
+        fun(#db_document{record = Record}) ->
             RecToFuseId(Record)
         end, FDs),
     Fuses1 = lists:delete(IgnoredFuse, lists:usort(Fuses0)),
