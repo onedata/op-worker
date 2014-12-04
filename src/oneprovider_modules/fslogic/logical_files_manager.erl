@@ -1383,7 +1383,7 @@ get_file_block_map(FullFileName) ->
                         end, BlockMap),
                     FinalProplist = lists:map(
                         fun({Id, RangeList}) ->
-                            {Id, [#block_range{from = From, to = To} || #fileblockmap_blockmapentity_blockrange{from = From, to = To} <- RangeList]}
+                            {utils:ensure_binary(Id), [#block_range{from = From, to = To} || #fileblockmap_blockmapentity_blockrange{from = From, to = To} <- RangeList]}
                         end, ProtobufProplist),
                     {ok, FinalProplist};
                 Error -> {logical_file_system_error, Error}
