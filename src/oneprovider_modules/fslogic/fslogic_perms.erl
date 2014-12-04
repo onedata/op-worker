@@ -152,7 +152,7 @@ is_member_of_space(#db_document{record = #user{}} = UserDoc, SpaceReq) ->
         is_member_of_space3(UserDoc, SpaceReq, true)
     catch
         _:Reason ->
-            ?error_stacktrace("Cannot check space (~p) membership of user ~p due to: ~p", [SpaceReq, UserDoc, Reason]),
+            ?error("Cannot check space (~p) membership of user ~p due to: ~p", [SpaceReq, UserDoc, Reason]),
             false
     end.
 is_member_of_space3(#db_document{record = #user{global_id = GRUID}} = UserDoc, #space_info{users = Users} = SpaceInfo, Retry) ->

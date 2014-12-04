@@ -21,7 +21,7 @@
 %% API
 -export([on_file_size_update/3, on_file_meta_update/2]).
 -export([handle_event/2]).
--export([push_new_attrs/1]).
+-export([push_new_attrs/2]).
 
 %% ===================================================================
 %% Triggers
@@ -54,9 +54,9 @@ on_file_meta_update(FileUUID, Doc) ->
 -spec handle_event(EventType :: atom(), Args :: term()) -> ok.
 %% ====================================================================
 handle_event(on_file_size_update, {FileUUID, _OldFileSize, _NewFileSize}) ->
-    delayed_push_attrs(FileUUID);
+    delayed_push_attrs(FileUUID, file_size_updated);
 handle_event(on_file_meta_update, {FileUUID, _Doc}) ->
-    delayed_push_attrs(FileUUID);
+    delayed_push_attrs(FileUUID, file_meta_updated);
 handle_event(EventType, _Args) ->
     ?warning("Unknown event with type: ~p", [EventType]),
     ok.
@@ -65,14 +65,15 @@ handle_event(EventType, _Args) ->
 %% delayed_push_attrs/1
 %% ====================================================================
 %% @doc Mark the file's attributes to be updated in fuse clients within next second.
--spec delayed_push_attrs(FileUUID :: uuid()) -> ok.
+-spec delayed_push_attrs(FileUUID :: uuid(), Reason :: atom()) -> ok.
 %% ====================================================================
-delayed_push_attrs(FileUUID) ->
-    case ets:lookup(?fslogic_attr_events_state, utils:ensure_binary(FileUUID)) of
+delayed_push_attrs(FileUUID, Reason) ->
+    ETSKey = {utils:ensure_binary(FileUUID), Reason},
+    case ets:lookup(?fslogic_attr_events_state, ETSKey) of
         [{_, _TRef}] -> ok;
         [] ->
-            TRef = erlang:send_after(500, ?Dispatcher_Name, {timer, {fslogic, 1, {internal_event_handle, push_new_attrs, [FileUUID]}}}),
-            ets:insert(?fslogic_attr_events_state, {utils:ensure_binary(FileUUID), TRef}),
+            TRef = erlang:send_after(500, ?Dispatcher_Name, {timer, {fslogic, 1, {internal_event_handle, push_new_attrs, [FileUUID, Reason]}}}),
+            ets:insert(?fslogic_attr_events_state, {ETSKey, TRef}),
             ok
     end.
 
@@ -80,12 +81,13 @@ delayed_push_attrs(FileUUID) ->
 %% push_new_attrs/1
 %% ====================================================================
 %% @doc Pushes current file's attributes to all fuses that are currently using this file
--spec push_new_attrs(FileUUID :: uuid()) -> [Result :: ok | {error, Reason :: any()}].
+-spec push_new_attrs(FileUUID :: uuid(), Reason :: atom()) -> [Result :: ok | {error, Reason :: any()}].
 %% ====================================================================
-push_new_attrs(FileUUID) ->
-   lists:flatten(push_new_attrs3(FileUUID, 0, 100)).
-push_new_attrs3(FileUUID, Offset, Count) ->
-    ets:delete(?fslogic_attr_events_state, utils:ensure_binary(FileUUID)),
+push_new_attrs(FileUUID, Reason) ->
+   lists:flatten(push_new_attrs3(FileUUID, Reason, 0, 100)).
+push_new_attrs3(FileUUID, Reason, Offset, Count) ->
+    ETSKey = {utils:ensure_binary(FileUUID), Reason},
+    ets:delete(?fslogic_attr_events_state, ETSKey),
     {ok, FDs} = dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {FileUUID, ""}}, Count, Offset], 1),
     Fuses0 = lists:map(
         fun(#db_document{record = #file_descriptor{fuse_id = FuseID}}) ->
@@ -99,10 +101,17 @@ push_new_attrs3(FileUUID, Offset, Count) ->
         FuseIDs ->
             {ok, #db_document{} = FileDoc} = fslogic_objects:get_file({uuid, FileUUID}),
             Attrs = #fileattr{} = fslogic_req_generic:get_file_attr(FileDoc),
+            Attrs1 =
+                case Reason of
+                    file_meta_updated ->
+                        Attrs#fileattr{size = undefined};
+                    _ ->
+                        Attrs
+                end,
 
             Results = lists:map(
                 fun(FuseID) ->
-                    request_dispatcher:send_to_fuse(FuseID, Attrs, "fuse_messages")
+                    request_dispatcher:send_to_fuse(FuseID, Attrs1, "fuse_messages")
                 end, FuseIDs),
-            [push_new_attrs3(FileUUID, Offset + Count, 100) | Results]
+            [push_new_attrs3(FileUUID, Reason, Offset + Count, 100) | Results]
     end.
