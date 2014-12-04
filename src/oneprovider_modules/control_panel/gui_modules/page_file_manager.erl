@@ -281,7 +281,7 @@ event({action, Module, Fun, Args}) ->
         fun(Arg) ->
             case Arg of
                 {query_value, FieldName} ->
-                    % This tuple means, that element with id=FieldName has to be queried
+                    % This tuple means that element with id=FieldName has to be queried
                     % and the result be put in function args
                     gui_ctx:postback_param(FieldName);
                 Other ->
