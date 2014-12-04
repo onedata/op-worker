@@ -13,6 +13,7 @@
 -module(fslogic_objects).
 -author("Rafal Slota").
 
+-include("registered_names.hrl").
 -include("oneprovider_modules/dao/dao.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
 -include("oneprovider_modules/dao/dao_types.hrl").
@@ -21,11 +22,10 @@
 
 %% API
 -export([get_file/1, get_waiting_file/1, get_file/3, get_waiting_file/3]).
--export([save_file_descriptor/3, save_file_descriptor/4, save_new_file_descriptor/4, update_file_descriptor/2, delete_old_descriptors/2]).
+-export([ensure_file_descriptor_exists/4, ensure_file_descriptor_exists_unsafe/4, save_file_descriptor/3, save_new_file_descriptor/4, update_file_descriptor/2, delete_old_descriptors/2]).
 -export([get_user/0, get_user/1]).
 -export([save_file/1, get_storage/1]).
 -export([get_space/1]).
--export([get_available_blocks/1]).
 
 %% ====================================================================
 %% API functions
@@ -221,30 +221,31 @@ get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
     end.
 
 
-%% save_file_descriptor/3
+%% ensure_file_descriptor_exists/4
 %% ====================================================================
-%% @doc Saves in db information that a file is used by FUSE.
+%% @doc Saves in db information that a file is used by FUSE. Requests are synchronized through dao_worker process tree
 %% @end
--spec save_file_descriptor(ProtocolVersion :: term(), File :: record(), Validity :: integer()) -> Result when
+-spec ensure_file_descriptor_exists(ProtocolVersion :: term(), Uuid::uuid(), FuseID :: string(), Validity :: integer()) -> Result when
     Result :: term().
 %% ====================================================================
-save_file_descriptor(ProtocolVersion, File, Validity) ->
-    Descriptor = update_file_descriptor(File#db_document.record, Validity),
-    case dao_lib:apply(dao_vfs, save_descriptor, [File#db_document{record = Descriptor}], ProtocolVersion) of
-        {error, Reason} ->
-            {error, {save_file_descriptor, {Reason, Descriptor}}};
-        Other -> Other
+ensure_file_descriptor_exists(ProtocolVersion, Uuid, FuseID, Validity) ->
+    MsgId = make_ref(),
+    gen_server:call(?Dispatcher_Name, {dao_worker, ProtocolVersion, self(), MsgId, {ensure_file_descriptor_exists, Uuid, FuseID, Validity}}, ?CACHE_REQUEST_TIMEOUT),
+    receive
+        {worker_answer, MsgId, Resp} -> Resp
+    after ?CACHE_REQUEST_TIMEOUT ->
+        ?error("Timeout in call to ensure_file_location_exists function in process tree"),
+        {error, timeout}
     end.
 
-
-%% save_file_descriptor/4
+%% ensure_file_descriptor_exists_unsafe/4
 %% ====================================================================
 %% @doc Saves in db information that a file is used by FUSE.
 %% @end
--spec save_file_descriptor(ProtocolVersion :: term(), Uuid::uuid(), FuseID :: string(), Validity :: integer()) -> Result when
+-spec ensure_file_descriptor_exists_unsafe(ProtocolVersion :: term(), Uuid::uuid(), FuseID :: string(), Validity :: integer()) -> Result when
     Result :: term().
 %% ====================================================================
-save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
+ensure_file_descriptor_exists_unsafe(ProtocolVersion, Uuid, FuseID, Validity) ->
     case FuseID of
         ?CLUSTER_FUSE_ID -> {ok, ok};
         _ ->
@@ -253,12 +254,24 @@ save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
                 {ok, TmpAns} ->
                     case length(TmpAns) of
                         0 ->
-                            save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity);
+                            {ok, NewUuid} = save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity),
+                            case dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {Uuid, FuseID}}, 10, 0], ProtocolVersion) of
+                                {ok, [_]} -> {ok, NewUuid};
+                                {ok, List} when length(List) =/= 0 ->
+                                    dao_lib:apply(dao_vfs, remove_descriptor, [NewUuid], ProtocolVersion),
+                                    case [ Id || #db_document{uuid = Id} <- List, Id =/= NewUuid] of
+                                        [Element] -> {ok, Element};
+                                        _ ->
+                                            ?error("Error: to many file descriptors for file uuid: ~p", [Uuid]),
+                                            {error, "Error: too many file descriptors"}
+                                    end;
+                                Other -> Other
+                            end;
                         1 ->
-                            [DbDoc | _] = TmpAns,
+                            [DbDoc] = TmpAns,
                             case save_file_descriptor(ProtocolVersion, DbDoc, Validity) of
                                 {ok,Uid} -> {ok,Uid};
-                                {error, {save_file_descriptor, {conflict,_}}} -> {ok,DbDoc#db_document.uuid};
+                                {error, {save_file_descriptor, {conflict, _}}} -> {ok,DbDoc#db_document.uuid};
                                 Other -> Other
                             end;
                         _Many ->
@@ -268,6 +281,23 @@ save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
                 _Other -> _Other
             end
     end.
+
+
+%% save_file_descriptor/3
+%% ====================================================================
+%% @doc Saves in db information that a file is used by FUSE.
+%% @end
+-spec save_file_descriptor(ProtocolVersion :: term(), File :: record(), Validity :: integer()) -> Result when
+    Result :: term().
+%% ====================================================================
+save_file_descriptor(ProtocolVersion, FileDescriptorDoc, Validity) ->
+    Descriptor = update_file_descriptor(FileDescriptorDoc#db_document.record, Validity),
+    case dao_lib:apply(dao_vfs, save_descriptor, [FileDescriptorDoc#db_document{record = Descriptor}], ProtocolVersion) of
+        {error, Reason} ->
+            {error, {save_file_descriptor, {Reason, Descriptor}}};
+        Other -> Other
+    end.
+
 
 %% save_new_file_descriptor/4
 %% ====================================================================
@@ -314,26 +344,6 @@ delete_old_descriptors(ProtocolVersion, Time) ->
             ?error("Error during clearing old descriptors: ~p", [Other]),
             Other
     end.
-
-%% get_available_blocks/2
-%% ====================================================================
-%% @doc Gets available_blocks document of file, creates it if location for actual provider does not exist
-%% @end
--spec get_available_blocks(FullFileName :: string()) -> {ok, [available_blocks_doc()]} | no_return().
-%% ====================================================================
-get_available_blocks(FullFileName) ->
-    {ok, #db_document{uuid = FileId}} = get_file(FullFileName),
-    {ok, RemoteLocationList} = dao_lib:apply(dao_vfs, available_blocks_by_file_id, [FileId], fslogic_context:get_protocol_version()),
-    ProviderId = cluster_manager_lib:get_provider_id(),
-    CreatedDocs = case lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) -> Id == ProviderId end, RemoteLocationList) of
-        [] ->
-            {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [#available_blocks{file_id = FileId, provider_id = ProviderId}], fslogic_context:get_protocol_version()),
-            {ok, Doc} = dao_lib:apply(dao_vfs, get_available_blocks, [Uuid], fslogic_context:get_protocol_version()),
-            [Doc];
-        _ -> []
-    end,
-    {ok, CreatedDocs ++ RemoteLocationList}.
-
 
 %% ====================================================================
 %% Internal functions

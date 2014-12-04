@@ -132,6 +132,10 @@ gen_error_message(fileblockmodified, Error) ->
     #atom{value = Error};
 gen_error_message(filetruncated, Error) ->
     #atom{value = Error};
+gen_error_message(requestfileblock, Error) ->
+    #atom{value = Error};
+gen_error_message(getfileblockmap, Error) ->
+    #fileblockmap{answer = Error, block_map = []};
 gen_error_message(RecordName, _Error) ->
     ?error("Unsupported record: ~p", [RecordName]),
     throw({unsupported_record, RecordName}).

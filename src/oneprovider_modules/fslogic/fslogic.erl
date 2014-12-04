@@ -64,14 +64,23 @@ init(_Args) ->
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, StorageFileName)
     end,
 
-    % Create remote location dao proxy
-    RemoteLocationProxyProcFun = fun
-        (ProtocolVersion, {save_available_blocks_doc, Doc}, _CacheName) ->
-            {ok, _} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion)
-    end,
+    % Create avilable blocks cache & dao proxy
+    RemoteLocationProxyProcFun = fslogic_available_blocks:registered_requests(),
     RemoteLocationProxyMapFun = fun
-        ({save_available_blocks_doc, #db_document{uuid = Uuid}}) ->
-            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, Uuid)
+        ({save_available_blocks, #db_document{record = #available_blocks{file_id = FileId}}}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
+        ({save_available_blocks, #available_blocks{file_id = FileId}}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
+        ({file_truncated, _, FileId, _, _, _, _}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
+        ({file_synchronized, _, FileId, _, _}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
+        ({external_available_blocks_changed, _, FileId, _}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
+        ({file_block_modified, _, FileId, _, _, _, _, _}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
+        ({_, FileId}) ->
+            lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId)
     end,
 
     % generate process lists
@@ -85,12 +94,38 @@ init(_Args) ->
         ({grant_permission, _, _, _}) -> pemission_cache;
         ({has_permission, _, _, _}) -> pemission_cache;
         ({invalidate_cache, _}) -> pemission_cache;
-        ({save_available_blocks_doc, _}) -> available_blocks_dao_proxy;
+        ({save_available_blocks, _}) -> available_blocks_dao_proxy;
+        ({list_all_available_blocks, _}) -> available_blocks_dao_proxy;
+        ({get_file_size, _}) -> available_blocks_dao_proxy;
+        ({get_available_blocks, _}) -> available_blocks_dao_proxy;
+        ({invalidate_blocks_cache, _}) -> available_blocks_dao_proxy;
+        ({file_truncated, _, _, _, _, _, _}) -> available_blocks_dao_proxy;
+        ({file_synchronized, _, _, _, _}) -> available_blocks_dao_proxy;
+        ({external_available_blocks_changed, _, _, _}) -> available_blocks_dao_proxy;
+        ({file_block_modified, _, _, _, _, _, _, _}) -> available_blocks_dao_proxy;
         (_) -> non
     end,
     DispMapFun = fun
-        ({save_available_blocks_doc, #db_document{uuid = Uuid}}) ->
-            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, Uuid);
+        ({save_available_blocks, #db_document{record = #available_blocks{file_id = FileId}}}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
+        ({save_available_blocks, #available_blocks{file_id = FileId}}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
+        ({get_available_blocks, FileId}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
+        ({list_all_available_blocks, FileId}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
+        ({invalidate_blocks_cache, FileId}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
+        ({file_truncated, _, FileId, _, _, _, _}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
+        ({file_synchronized, _, FileId, _, _}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
+        ({external_available_blocks_changed, _, FileId, _}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
+        ({file_block_modified, _, FileId, _, _, _, _, _}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
+        ({get_file_size, FileId}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
         ({invalidate_cache, StorageFileName}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, StorageFileName);
         ({_, StorageFileName, _, _}) ->
@@ -414,19 +449,25 @@ handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mo
 
 handle_fuse_message(Req = #synchronizefileblock{logical_name = FName, offset = Offset, size = Size}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    fslogic_req_generic:synchronize_file_block(FullFileName, Offset, Size);
+    fslogic_available_blocks:synchronize_file_block(FullFileName, Offset, Size);
 
-handle_fuse_message(Req = #fileblockmodified{logical_name = FName, offset = Offset, size = Size}) ->
+% @todo Remove FUSE ID from protocol and get it from context
+handle_fuse_message(Req = #fileblockmodified{logical_name = FName, fuse_id = FuseId, sequence_number = SequenceNumber, offset = Offset, size = Size}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    fslogic_req_generic:file_block_modified(FullFileName, Offset, Size);
+    fslogic_available_blocks:file_block_modified(FullFileName, FuseId, SequenceNumber, Offset, Size);
 
-handle_fuse_message(Req = #filetruncated{logical_name = FName, size = Size}) ->
+% @todo Remove FUSE ID from protocol and get it from context
+handle_fuse_message(Req = #filetruncated{logical_name = FName, fuse_id = FuseId, sequence_number = SequenceNumber, size = Size}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    fslogic_req_generic:file_truncated(FullFileName, Size);
+    fslogic_available_blocks:file_truncated(FullFileName, FuseId, SequenceNumber, Size);
 
-handle_fuse_message(Req = #requestfileblock{logical_name = FName, offset = _Offset, size = _Size}) ->
-    {ok, _FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    #atom{value = ?VOK}; %% @TODO: To be implemented along with rtransfer logic
+handle_fuse_message(Req = #getfileblockmap{logical_name = FName}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    fslogic_req_generic:get_file_block_map(FullFileName);
+
+handle_fuse_message(Req = #requestfileblock{logical_name = FName, offset = Offset, size = Size}) ->
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
+    fslogic_available_blocks:synchronize_file_block(FullFileName, Offset, Size);
 
 handle_fuse_message(Req = #createfileack{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
@@ -537,6 +578,8 @@ extract_logical_path(#synchronizefileblock{logical_name = Path}) ->
 extract_logical_path(#fileblockmodified{logical_name = Path}) ->
     Path;
 extract_logical_path(#filetruncated{logical_name = Path}) ->
+    Path;
+extract_logical_path(#getfileblockmap{logical_name = Path}) ->
     Path;
 extract_logical_path(#filenotused{file_logic_name = Path}) ->
     Path;

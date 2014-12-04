@@ -50,7 +50,7 @@ create_storage_test_file(StorageId) ->
         timer:sleep(DeleteStorageTestFileTime * 1000),
         storage_files_manager:delete(StorageHelperInfo, Path)
     end),
-    Length = storage_files_manager:write(StorageHelperInfo, Path, Text),
+    Length = storage_files_manager:write(StorageHelperInfo, Path, 0, Text),
     #createstoragetestfileresponse{answer = true, relative_path = Path, text = Text}.
 
 

@@ -23,7 +23,7 @@
 %% Files' location (storage helper id and its relative file ID). Designed for use within #file record (`location` filed).
 -record(file_location, {file_id = "", storage_uuid = "", storage_file_id = ""}).
 % File remote location informs about global location of file (what parts do each provider have), it is defined as a list of remote_file_part
--record(available_blocks, {file_id = "", provider_id = "", file_parts = []}).
+-record(available_blocks, {file_id = "", provider_id = "", file_size = {0, 0}, file_parts = []}).
 %% Files' locks. Designed for use within #file record (`locks` field).
 -record(file_lock, {type = ?REG_TYPE, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
 %% onedata file

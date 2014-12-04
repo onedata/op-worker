@@ -9,8 +9,13 @@
 %% @end
 %% ===================================================================
 
+-ifndef(RANGES_STRUCT_HRL).
+-define(RANGES_STRUCT_HRL, 1).
+
 -define(infinity, 9999999999999999). %year 2286
 
 -record(range, {from = 0, to = -1, timestamp = 0}).
 
 -type ranges_struct() :: [#range{}].
+
+-endif.

@@ -17,10 +17,12 @@
 -include("files_common.hrl").
 -include("oneprovider_modules/dao/dao_types.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("registered_names.hrl").
 
 %% API
 -export([normalize_file_type/2, get_file_local_location_doc/1]).
--export([update_file_size/1, update_file_size/2, get_real_file_size_and_uid/1, get_file_owner/1, get_file_local_location/1, fix_storage_owner/1]).
+-export([get_real_file_uid/1, get_file_owner/1, get_file_local_location/1, fix_storage_owner/1]).
+-export([ensure_file_location_exists/2, ensure_file_location_exists_unsafe/2]).
 
 %% ====================================================================
 %% API functions
@@ -34,7 +36,7 @@
 %% ====================================================================
 fix_storage_owner(#db_document{record = #file{type = ?REG_TYPE} = File, uuid = FileUUID} = FileDoc) ->
     {_UName, _VCUID, RSUID} = fslogic_file:get_file_owner(File),
-    {_Size, SUID} = fslogic_file:get_real_file_size_and_uid(FileDoc),
+    SUID = fslogic_file:get_real_file_uid(FileDoc),
 
     case SUID =:= RSUID of
         true -> ok;
@@ -102,57 +104,29 @@ get_file_local_location_doc(FileId) when is_list(FileId) ->
     Location.
 
 
-%% get_real_file_size_and_uid/1
+%% get_real_file_uid/1
 %% ====================================================================
-%% @doc Fetches real file size and uid from underlying storage. Returns {0, -1} for non-regular file.
-%%      Also errors are silently dropped (return value {0, -1}).
--spec get_real_file_size_and_uid(File :: file() | file_doc() | file_info()) -> FileSize :: non_neg_integer().
+%% @doc Fetches real file uid from underlying storage. Returns -1 for non-regular file.
+%%      Also errors are silently dropped (return value -1).
+-spec get_real_file_uid(File :: file() | file_doc() | file_info()) -> FileSize :: non_neg_integer().
 %% ====================================================================
-get_real_file_size_and_uid(#db_document{uuid = FileId, record = #file{type = ?REG_TYPE} = File}) ->
+get_real_file_uid(#db_document{uuid = FileId, record = #file{type = ?REG_TYPE} = File}) ->
     FileLoc = get_file_local_location(FileId),
     {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_uuid}),
 
     {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.storage_file_id),
     case helpers:exec(getattr, SH, [File_id]) of
-        {0, #st_stat{st_size = ST_Size, st_uid = SUID} = _Stat} ->
-            {ST_Size, SUID};
+        {0, #st_stat{st_uid = SUID} = _Stat} ->
+            SUID;
         {Errno, _} ->
             ?error("Cannot fetch attributes for file: ~p, errno: ~p", [File, Errno]),
-            {0, -1}
+            -1
     end;
-get_real_file_size_and_uid(#db_document{record = #file{}}) ->
-    {0, -1};
-get_real_file_size_and_uid(Path) ->
+get_real_file_uid(#db_document{record = #file{}}) ->
+    -1;
+get_real_file_uid(Path) ->
     {ok, #db_document{record = #file{}} = FileDoc} = fslogic_objects:get_file(Path),
-    get_real_file_size_and_uid(FileDoc).
-
-
-%% update_file_size/1
-%% ====================================================================
-%% @doc Updates file size based on it's real size on underlying storage. Whether this call is asynchronous or not depends on
-%%      fslogic_meta:update_meta_attr implementation. <br/>
-%%      Does nothing if given file_info() corresponds to non-regular file.
--spec update_file_size(FileDoc :: file_doc()) ->
-    UpdatedFile :: file_info().
-%% ====================================================================
-update_file_size(#db_document{record = #file{type = ?REG_TYPE} = File} = FileDoc) ->
-    {Size, _} = get_real_file_size_and_uid(FileDoc),
-    update_file_size(File, Size);
-update_file_size(#db_document{record = #file{} = File}) ->
-    File.
-
-
-%% update_file_size/2
-%% ====================================================================
-%% @doc Sets file size to given value. Whether this call is asynchronous or not depends on
-%%      fslogic_meta:update_meta_attr implementation.
--spec update_file_size(File :: file_info(), Size :: non_neg_integer()) ->
-    UpdatedFile :: file_info().
-%% ====================================================================
-update_file_size(#file{} = File, Size) when Size >= 0 ->
-    fslogic_meta:update_meta_attr(File, size, Size).
-
-
+    get_real_file_uid(FileDoc).
 
 %% normalize_file_type/2
 %% ====================================================================
@@ -193,6 +167,59 @@ normalize_file_type(internal, Type) ->
     ?error("Unknown file type: ~p", [Type]),
     throw({unknown_file_type, Type}).
 
+ensure_file_location_exists(FullFileName, FileDoc) ->
+    MsgId = make_ref(),
+    gen_server:call(?Dispatcher_Name, {dao_worker, 1, self(), MsgId, {ensure_file_location_exists, FullFileName, FileDoc}}, ?CACHE_REQUEST_TIMEOUT),
+    receive
+        {worker_answer, MsgId, Resp} -> Resp
+    after ?CACHE_REQUEST_TIMEOUT ->
+        ?error("Timeout in call to ensure_file_location_exists function in process tree"),
+        {error, timeout}
+    end.
+
+
+ensure_file_location_exists_unsafe(FullFileName, FileDoc) ->
+    FileId = FileDoc#db_document.uuid,
+    case dao_lib:apply(dao_vfs, get_file_locations, [FileId], fslogic_context:get_protocol_version()) of
+        {ok, []} ->
+            {ok, _CreatedDocUuid} = create_file_location_for_remote_file(FullFileName, FileId),
+            case dao_lib:apply(dao_vfs, get_file_locations, [FileId], fslogic_context:get_protocol_version()) of
+                {ok, [_]} -> ok; %todo this assumes each file has at most one file_location, in case of allowing multiple
+                                 %file_locations (i. e. for data redundancy) we need to check storage also, to detect duplicates
+                {ok, [#db_document{uuid = FirstUuid} | _] = Docs} ->
+                    MinimalUuid = lists:foldl(
+                        fun(#db_document{uuid = Uuid}, MinUuid) when Uuid < MinUuid -> Uuid;
+                           (_, MinUuid) -> MinUuid
+                        end, FirstUuid, Docs),
+                    ToDelete = lists:filter(fun(#db_document{uuid = Uuid}) -> Uuid =/= MinimalUuid end, Docs),
+                    lists:foreach(
+                        fun(#db_document{uuid = Uuid, record = #file_location{storage_file_id = StorageFileId, storage_uuid = StorageUuid}}) ->
+                            {ok, #db_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageUuid}),
+                            {SH, _} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, StorageFileId),
+                            ok = storage_files_manager:delete(SH, StorageFileId),
+                            ok = dao_lib:apply(dao_vfs, remove_file_location, [Uuid], fslogic_context:get_protocol_version())
+                        end, ToDelete)
+            end;
+        _ -> ok
+    end.
+
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+create_file_location_for_remote_file(FullFileName, FileUuid) ->
+    {ok, #space_info{space_id = SpaceId} = SpaceInfo} = fslogic_utils:get_space_info_for_path(FullFileName),
+    {ok, UserDoc} = fslogic_objects:get_user(),
+    FileBaseName = fslogic_path:get_user_file_name(FullFileName, UserDoc),
+    {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], fslogic_context:get_protocol_version()),
+    #db_document{uuid = UUID, record = #storage_info{} = Storage} = fslogic_storage:select_storage(?CLUSTER_FUSE_ID, StorageList),
+    SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+    FileId = fslogic_storage:get_new_file_id(SpaceInfo, FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
+    FileLocation = #file_location{file_id = FileUuid, storage_uuid = UUID, storage_file_id = FileId},
+    {ok, LocationId} = dao_lib:apply(dao_vfs, save_file_location, [FileLocation], fslogic_context:get_protocol_version()),
+%%     _FuseFileBlocks = [#filelocation_blockavailability{offset = 0, size = ?FILE_BLOCK_SIZE_INF}],
+%%     FileBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
+%%     {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
+    {SH, StorageFileId} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId, SpaceId, false),
+    ok = storage_files_manager:create(SH, StorageFileId),
+    {ok, {LocationId, StorageFileId}}.

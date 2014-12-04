@@ -1496,7 +1496,7 @@ write_to_file(Path,Data) ->
 
     rpc_call_node(fun() ->
         fslogic_context:set_user_dn(DN),
-        logical_files_manager:write(Path,Data)
+        logical_files_manager:write_file_chunk(Path,Data)
     end).
 
 rpc_call_node(F) ->
@@ -1537,7 +1537,7 @@ setup_user_in_db(Cert, Config) ->
             fslogic_context:set_user_dn(DN),
             FullName = filename:join(["/",?Test_dir_name,?Test_file_name]),
             logical_files_manager:create(FullName),
-            logical_files_manager:write(FullName, ?Test_file_content)
+            logical_files_manager:write_file_chunk(FullName, ?Test_file_content)
         end, [] ]),
     ?assert(is_integer(Ans7)),
 
