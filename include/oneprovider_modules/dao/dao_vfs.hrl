@@ -59,6 +59,8 @@
 %% For dirs it should be used as FUSE's readdir state. Cursor says how many dir has been read by now
 -record(file_descriptor, {file = "", mode = 0, fuse_id = "", create_time = "", validity_time = 60*15, cursor = 0}).
 
+-record(file_attr_watcher, {file, fuse_id, create_time, validity_time = timer:minutes(5)}).
+
 %% This record containg info about storage helper instance. i.e. its name and initialization arguments
 -record(storage_helper_info, {name = "", init_args = []}).
 

@@ -336,6 +336,7 @@ update_file_descriptor(Descriptor, Validity) ->
 %% ====================================================================
 delete_old_descriptors(ProtocolVersion, Time) ->
     Status = dao_lib:apply(dao_vfs, remove_descriptor, [{by_expired_before, Time}], ProtocolVersion),
+    %% dao_lib:apply(dao_vfs, remove_attr_watcher, [{by_expired_before, Time}], ProtocolVersion),
     case Status of
         ok ->
             ?info("Old descriptors cleared"),

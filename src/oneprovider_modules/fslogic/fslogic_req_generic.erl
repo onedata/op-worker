@@ -25,11 +25,15 @@
 
 %% API
 -export([update_times/4, change_file_owner/2, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
-    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0, get_file_block_map/1]).
+    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0, get_file_block_map/1, attr_unsubscribe/1]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+attr_unsubscribe(FileUUID) ->
+    dao_lib:apply(dao_vfs, remove_attr_watcher, [FileUUID, fslogic_context:get_fuse_id()], fslogic_context:get_protocol_version()),
+    #atom{value = ?VOK}.
 
 
 %% update_times/4
@@ -198,6 +202,23 @@ get_file_attr(FileDoc = #db_document{uuid = FileId, record = #file{}}) ->
                     end;
                 _ -> 1
             end,
+
+    FuseId = fslogic_context:get_fuse_id(),
+    ProtocolVersion = fslogic_context:get_protocol_version(),
+
+    case FuseId of
+        ?CLUSTER_FUSE_ID -> ignore;
+        FuseId ->
+            spawn(fun() ->
+                dao_lib:apply(dao_vfs, remove_attr_watcher, [FileUUID, FuseId], ProtocolVersion),
+                dao_lib:apply(dao_vfs, save_attr_watcher,
+                    [#file_attr_watcher{
+                        fuse_id = FuseId,
+                        file = FileUUID, create_time = utils:time(),
+                        validity_time = 5 * 60}], ProtocolVersion)
+            end)
+    end,
+
     #fileattr{uuid = utils:ensure_list(FileUUID), answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
         type = Type, size = Size, uname = UName, gname = unicode:characters_to_list(SpaceName), uid = VCUID,
         gid = fslogic_spaces:map_to_grp_owner(SpaceInfo), links = Links, has_acl = HasAcl};
