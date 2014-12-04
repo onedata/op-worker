@@ -21,7 +21,7 @@
 %% API
 -export([on_file_size_update/4, on_file_meta_update/2]).
 -export([handle_event/2]).
--export([push_new_attrs/2]).
+-export([push_new_attrs/3]).
 
 %% ===================================================================
 %% Triggers

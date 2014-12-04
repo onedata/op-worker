@@ -44,6 +44,8 @@
 -export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
 -export([create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
 
+-export([sync_from_remote/2]).
+
 %% ====================================================================
 %% Test API
 %% ====================================================================
@@ -63,6 +65,14 @@
 %% Logical file organization management (only db is used)
 %% ====================================================================
 
+sync_from_remote(Path, ProviderId) ->
+    FullFileName = fslogic_path:get_full_file_name(Path),
+    {ok, #fileattributes{size = Size}} = getfileattr(FullFileName),
+    SyncReq = #synchronizefileblock{logical_name = FullFileName, offset = 0, size = Size},
+    Request = #fusemessage{message_type = "synchronizefileblock", input = fuse_messages_pb:encode_synchronizefileblock(SyncReq)},
+    {GRUID, AccessToken} = fslogic_context:get_gr_auth(),
+    #atom{value = Value} = provider_proxy:reroute_pull_message(ProviderId, {GRUID, AccessToken}, ?CLUSTER_FUSE_ID, Request),
+    Value.
 
 %% read_link/1
 %% ====================================================================
