@@ -46,6 +46,11 @@
     width: 300px;
 }
 
+.warning-message {
+    color: #E00000;
+    font-weight: 700;
+}
+
 .manage-groups-header {
     font-size: x-large;
     margin: 30px auto 0;
@@ -63,7 +68,7 @@
 }
 
 .group-list-panel {
-    margin: 40px auto 350px;
+    margin: 40px auto 400px;
     width: 950px;
     position: relative;
 }
@@ -174,8 +179,11 @@
 }
 
 .collapse-wrapper {
-    display: none;
     position: relative;
+}
+
+.collapsed {
+    display: none;
 }
 
 .group-left-ph {
@@ -334,7 +342,7 @@
 
 .spaces-table > tbody > tr > td {
     width: 685px;
-    padding: 7px 0 7px 15px;
+    padding: 9px 0 9px 15px;
     font-size: 14px;
     line-height: 18px;
     text-align: left;
