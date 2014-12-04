@@ -179,7 +179,6 @@ get_file_attr(FileDoc = #db_document{uuid = FileId, record = #file{}}) ->
                            ?DIR_TYPE_PROT -> 0;
                            _ ->
                                {ok, {_Stamp, FileSize}} = fslogic_available_blocks:call({get_file_size, FileId}),
-%%                                fslogic_file:update_file_size(File, FileSize),
                                FileSize
                        end,
                 {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, SizeFromMap, FMeta#file_meta.acl =/= []};

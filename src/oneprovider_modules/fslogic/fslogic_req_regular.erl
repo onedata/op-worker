@@ -69,7 +69,7 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
             throw(?VENOTSUP)
     end,
 
-    fslogic_file:ensure_file_location_exists(FullFileName, FileDoc),
+    ok = fslogic_file:ensure_file_location_exists(FullFileName, FileDoc),
 
     catch fslogic_file:fix_storage_owner(FileDoc),
 
@@ -85,7 +85,7 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
         _ -> ok
     end,
 
-    {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#db_document.uuid, fslogic_context:get_fuse_id(), Validity),
+    {ok, _} = fslogic_objects:ensure_file_descriptor_exists(fslogic_context:get_protocol_version(), FileDoc#db_document.uuid, fslogic_context:get_fuse_id(), Validity),
 
     #db_document{record = FileLoc} = fslogic_file:get_file_local_location_doc(FileDoc),
 
@@ -151,7 +151,7 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
 
             ExistingWFileUUID = ExistingWFile#db_document.uuid,
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
-            {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), ExistingWFileUUID, fslogic_context:get_fuse_id(), Validity),
+            {ok, _} = fslogic_objects:ensure_file_descriptor_exists(fslogic_context:get_protocol_version(), ExistingWFileUUID, fslogic_context:get_fuse_id(), Validity),
 
             #db_document{record = ExistingWFileLocation} =  fslogic_file:get_file_local_location_doc(ExistingWFileUUID),
 
@@ -164,7 +164,7 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
             fslogic_meta:update_meta_attr(FileRecord, times, {CTime, CTime, CTime}),
 
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
-            {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), Validity),
+            {ok, _} = fslogic_objects:ensure_file_descriptor_exists(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), Validity),
 
 
             FuseFileBlocks = [],
@@ -223,7 +223,7 @@ update_file_block_map(FullFileName, Blocks, ClearMap) ->
 
     {ok, Descriptors} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file, FullFileName}, 10000000000, 0], fslogic_context:get_protocol_version()),
 
-    utils:pforeach(fun(#db_document{record = #file_descriptor{fuse_id = FuseId, file = FileUuid}}) ->
+    utils:pforeach(fun(#db_document{record = #file_descriptor{fuse_id = FuseId}}) ->
         % get storage file_id, todo check if works for both proxy and directio
         #db_document{record = FileLoc} = fslogic_file:get_file_local_location_doc(FileDoc),
         {ok, #space_info{space_id = SpaceId}} = fslogic_utils:get_space_info_for_path(FullFileName),
@@ -286,16 +286,19 @@ renew_file_location(FullFileName) ->
     {ok, Descriptors} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file_n_owner, {FullFileName, fslogic_context:get_fuse_id()}}, 10, 0], fslogic_context:get_protocol_version()),
     case length(Descriptors) of
         0 ->
-            ?error("Error: can not renew file location for file: ~s, descriptor not found", [FullFileName]),
+            ?error("Error: can not renew file location for file: ~p, descriptor not found", [FullFileName]),
             #filelocationvalidity{answer = ?VENOENT, validity = 0};
         1 ->
             [DbDoc | _] = Descriptors,
             Validity = ?LOCATION_VALIDITY,
 
-            {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), DbDoc, Validity),
+            ok = case fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), DbDoc, Validity) of
+                {ok, _} -> ok;
+                {error, {save_file_descriptor, {conflict, _}}} -> ok
+            end,
             #filelocationvalidity{answer = ?VOK, validity = Validity};
         _Many ->
-            ?error("Error: can not renew file location for file: ~s, too many file descriptors", [FullFileName]),
+            ?error("Error: can not renew file location for file: ~p, too many file descriptors", [FullFileName]),
             #filelocationvalidity{answer = ?VEREMOTEIO, validity = 0}
     end.
 
