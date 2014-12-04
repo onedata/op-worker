@@ -240,7 +240,7 @@ file_block_modified_internal(ProtocolVersion, CacheName, Context, FileId, FuseId
             FinalNewDoc = update_size(NewDoc, NewFileSizeTuple),
 
             %save available_blocks and notify fuses
-            save_available_blocks(ProtocolVersion, CacheName, FinalNewDoc, [FuseId]),
+            save_available_blocks(ProtocolVersion, CacheName, FinalNewDoc, FuseId),
 
             fslogic_req_regular:update_file_block_map(FullFileName, [{Offset, Size}], false)
     end,
@@ -282,7 +282,7 @@ file_truncated_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Siz
     case MyRemoteLocationDoc == NewDoc of
         true -> ok;
         false ->
-            save_available_blocks(ProtocolVersion, CacheName, NewDoc, [FuseId]),
+            save_available_blocks(ProtocolVersion, CacheName, NewDoc, FuseId),
             fslogic_req_regular:update_file_block_map(FullFileName, fslogic_available_blocks:ranges_to_offset_tuples(Ranges), true)
     end,
     #atom{value = ?VOK}.
@@ -339,9 +339,9 @@ external_available_blocks_changed(ProtocolVersion, CacheName, Context, FileId, D
     end.
 
 save_available_blocks(ProtocolVersion, CacheName, Doc) ->
-    save_available_blocks(ProtocolVersion, CacheName, Doc, []).
+    save_available_blocks(ProtocolVersion, CacheName, Doc, undefined).
 
-save_available_blocks(ProtocolVersion, CacheName, Doc, IgnoredFuses) ->
+save_available_blocks(ProtocolVersion, CacheName, Doc, IgnoredFuse) ->
     % save block to db
     {ok, Uuid} = dao_lib:apply(dao_vfs, save_available_blocks, [Doc], ProtocolVersion), % [Doc#db_document{force_update = true}]
     {ok, NewDoc = #db_document{record = #available_blocks{file_id = FileId, file_size = NewDocSize}}} =
@@ -362,7 +362,7 @@ save_available_blocks(ProtocolVersion, CacheName, Doc, IgnoredFuses) ->
                     _ -> NewDocSize
                 end,
             update_docs_cache(CacheName, FileId, NewDocs),
-            update_size_cache(CacheName, FileId, NewSize, IgnoredFuses);
+            update_size_cache(CacheName, FileId, NewSize, IgnoredFuse);
         _ ->
             {ok, _} = list_all_available_blocks(ProtocolVersion, CacheName, FileId)
     end,
@@ -407,7 +407,7 @@ list_all_available_blocks(ProtocolVersion, CacheName, FileId) ->
 
             % inset results to cache
             update_docs_cache(CacheName, FileId, NewDocs),
-            update_size_cache(CacheName, FileId, Size, []),
+            update_size_cache(CacheName, FileId, Size),
             {ok, NewDocs}
     end.
 
@@ -606,16 +606,19 @@ get_docs_from_cache(CacheName, FileId) ->
         [] -> undefined
     end.
 
-update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple, IgnoredFuses) ->
+update_size_cache(CacheName, FileId, NewSizeTuple) ->
+    update_size_cache(CacheName, FileId, NewSizeTuple, undefined).
+
+update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple, IgnoredFuse) ->
     case ets:lookup(CacheName, {FileId, old_file_size}) of
         [] ->
             ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
-            fslogic_events:on_file_size_update(utils:ensure_list(FileId), 0, NewSize, IgnoredFuses);
+            fslogic_events:on_file_size_update(utils:ensure_list(FileId), 0, NewSize, IgnoredFuse);
         [{_, {_, OldSize}}] when OldSize =/= NewSize ->
             ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
-            fslogic_events:on_file_size_update(utils:ensure_list(FileId), OldSize, NewSize, IgnoredFuses);
+            fslogic_events:on_file_size_update(utils:ensure_list(FileId), OldSize, NewSize, IgnoredFuse);
         [_] ->
             ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple})
