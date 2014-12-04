@@ -25,11 +25,15 @@
 
 %% API
 -export([update_times/4, change_file_owner/2, change_file_group/3, change_file_perms/2, check_file_perms/2, get_file_attr/1, get_xattr/2, set_xattr/4,
-    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0, get_file_block_map/1]).
+    remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2, delete_file/1, rename_file/2, get_statfs/0, get_file_block_map/1, attr_unsubscribe/1]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+attr_unsubscribe(FileUUID) ->
+    dao_lib:apply(dao_vfs, remove_attr_watcher, [FileUUID, fslogic_context:get_fuse_id()], fslogic_context:get_protocol_version()),
+    #atom{value = ?VOK}.
 
 
 %% update_times/4

@@ -526,6 +526,9 @@ handle_fuse_message(_Req = #storagetestfilemodifiedrequest{storage_id = StorageI
 handle_fuse_message(_Req = #clientstorageinfo{storage_info = SInfo}) ->
     fslogic_req_storage:client_storage_info(SInfo);
 
+handle_fuse_message(#attrunsubscribe{file_uuid = FileUUID}) ->
+    fslogic_req_generic:attr_unsubscribe(FileUUID);
+
 %% Test message
 handle_fuse_message(_Req = #testchannel{answer_delay_in_ms = Interval, answer_message = Answer}) ->
     timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, fslogic_context:get_protocol_version(), {answer_test_message, fslogic_context:get_fuse_id(), Answer}}]),
@@ -606,6 +609,9 @@ extract_logical_path(#checkfileperms{file_logic_name = Path}) ->
 extract_logical_path(#updatetimes{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#createfileack{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#attrunsubscribe{file_uuid = UUID}) ->
+    {ok, Path} = logical_files_manager:get_file_full_name_by_uuid(UUID),
     Path;
 extract_logical_path(_) ->
     "/".
