@@ -37,7 +37,7 @@
 -export([get_file_children_count/1]).
 
 %% Block synchronization
--export([synchronize/3, mark_as_modified/3, mark_as_truncated/2]).
+-export([synchronize/3, mark_as_modified/5, mark_as_truncated/4]).
 -export([get_file_block_map/1]).
 
 %% File sharing
@@ -1323,15 +1323,16 @@ synchronize(File, Offset, Size) ->
         _ -> {Status, TmpAns}
     end.
 
-%% mark_as_modified/3
+%% mark_as_modified/5
 %% ====================================================================
 %% @doc Mark given byte range as modified, so other providers would know that they need to synchronize their data
 %% @end
--spec mark_as_modified(FullFileName :: string(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+-spec mark_as_modified(FullFileName :: string(), FuseId :: string(), SequenceNumber :: non_neg_integer(),
+    Offset :: non_neg_integer(), Size :: non_neg_integer()) -> ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
-mark_as_modified(FullFileName, Offset, Size) ->
-    {Status, TmpAns} = contact_fslogic(#fileblockmodified{logical_name = FullFileName, offset = Offset, size = Size}),
+mark_as_modified(FullFileName, FuseId, SequenceNumber, Offset, Size) ->
+    {Status, TmpAns} = contact_fslogic(#fileblockmodified{logical_name = FullFileName, fuse_id = FuseId,
+        sequence_number = SequenceNumber, offset = Offset, size = Size}),
     case Status of
         ok ->
             case TmpAns#atom.value of
@@ -1341,15 +1342,16 @@ mark_as_modified(FullFileName, Offset, Size) ->
         _ -> {Status, TmpAns}
     end.
 
-%% mark_as_truncated/2
+%% mark_as_truncated/4
 %% ====================================================================
 %% @doc truncate given byte range in remote location, so other providers would know that they need to synchronize their data.
 %% @end
--spec mark_as_truncated(FullFileName :: string(), Size :: non_neg_integer()) ->
-    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+-spec mark_as_truncated(FullFileName :: string(), FuseId :: string(), SequenceNumber :: non_neg_integer(),
+    Size :: non_neg_integer()) ->  ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
-mark_as_truncated(FullFileName, Size) ->
-    {Status, TmpAns} = contact_fslogic(#filetruncated{logical_name = FullFileName, size = Size}),
+mark_as_truncated(FullFileName, FuseId, SequenceNumber, Size) ->
+    {Status, TmpAns} = contact_fslogic(#filetruncated{logical_name = FullFileName, fuse_id = FuseId,
+        sequence_number = SequenceNumber, size = Size}),
     case Status of
         ok ->
             case TmpAns#atom.value of
