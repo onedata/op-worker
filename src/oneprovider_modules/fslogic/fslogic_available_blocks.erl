@@ -251,22 +251,26 @@ file_block_modified(ProtocolVersion, CacheName, Context, FileId, ?CLUSTER_FUSE_I
 
 file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout) ->
     ExpectedSequenceNumber = get_expected_sequence_number(CacheName, FileId, FuseId),
-    case SequenceNumber of
-        ExpectedSequenceNumber ->
-            set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
+    case SequenceNumber =< ExpectedSequenceNumber of
+        true ->
+            set_expected_sequence_number(CacheName, FileId, FuseId, SequenceNumber + 1),
             file_block_modified_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Offset, Size, FullFileName);
         _ ->
             receive
                 {file_block_modified, NewContext, FileId, ?CLUSTER_FUSE_ID, _, NewOffset, NewSize, NewFullFileName} ->
-                    file_block_modified_internal(ProtocolVersion, CacheName, NewContext, FileId, ?CLUSTER_FUSE_ID, NewOffset, NewSize, NewFullFileName);
+                    file_block_modified_internal(ProtocolVersion, CacheName, NewContext, FileId, ?CLUSTER_FUSE_ID, NewOffset, NewSize, NewFullFileName),
+                    file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout);
                 {file_block_modified, NewContext, FileId, FuseId, ExpectedSequenceNumber, NewOffset, NewSize, NewFullFileName} ->
                     set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
-                    file_block_modified_internal(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewOffset, NewSize, NewFullFileName);
+                    file_block_modified_internal(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewOffset, NewSize, NewFullFileName),
+                    file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout);
                 {file_truncated, NewContext, FileId, ?CLUSTER_FUSE_ID, _, NewSize, NewFullFileName} ->
-                    file_truncated_internal(ProtocolVersion, CacheName, NewContext, FileId, ?CLUSTER_FUSE_ID, NewSize, NewFullFileName);
+                    file_truncated_internal(ProtocolVersion, CacheName, NewContext, FileId, ?CLUSTER_FUSE_ID, NewSize, NewFullFileName),
+                    file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout);
                 {file_truncated, NewContext, FileId, FuseId, ExpectedSequenceNumber, NewSize, NewFullFileName} ->
                     set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
-                    file_truncated_internal(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewSize, NewFullFileName)
+                    file_truncated_internal(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewSize, NewFullFileName),
+                    file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout)
             after Timeout ->
                 set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
                 file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, 0)
@@ -299,22 +303,26 @@ file_truncated(ProtocolVersion, CacheName, Context, FileId, ?CLUSTER_FUSE_ID, _,
 
 file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, Timeout) ->
     ExpectedSequenceNumber = get_expected_sequence_number(CacheName, FileId, FuseId),
-    case SequenceNumber of
-        ExpectedSequenceNumber ->
-            set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
+    case SequenceNumber =< ExpectedSequenceNumber of
+        true ->
+            set_expected_sequence_number(CacheName, FileId, FuseId, SequenceNumber + 1),
             file_truncated_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Size, FullFileName);
         _ ->
             receive
                 {file_truncated, NewContext, FileId, ?CLUSTER_FUSE_ID, _, NewSize, NewFullFileName} ->
-                    file_truncated_internal(ProtocolVersion, CacheName, NewContext, FileId, ?CLUSTER_FUSE_ID, NewSize, NewFullFileName);
+                    file_truncated_internal(ProtocolVersion, CacheName, NewContext, FileId, ?CLUSTER_FUSE_ID, NewSize, NewFullFileName),
+                    file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, Timeout);
                 {file_truncated, NewContext, FileId, FuseId, ExpectedSequenceNumber, NewSize, NewFullFileName} ->
                     set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
-                    file_truncated_internal(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewSize, NewFullFileName);
+                    file_truncated_internal(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewSize, NewFullFileName),
+                    file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, Timeout);
                 {file_block_modified, NewContext, FileId, ?CLUSTER_FUSE_ID, _, NewOffset, NewSize, NewFullFileName} ->
-                    file_block_modified_internal(ProtocolVersion, CacheName, NewContext, FileId, ?CLUSTER_FUSE_ID, NewOffset, NewSize, NewFullFileName);
+                    file_block_modified_internal(ProtocolVersion, CacheName, NewContext, FileId, ?CLUSTER_FUSE_ID, NewOffset, NewSize, NewFullFileName),
+                    file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, Timeout);
                 {file_block_modified, NewContext, FileId, FuseId, ExpectedSequenceNumber, NewOffset, NewSize, NewFullFileName} ->
                     set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
-                    file_block_modified_internal(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewOffset, NewSize, NewFullFileName)
+                    file_block_modified_internal(ProtocolVersion, CacheName, NewContext, FileId, FuseId, NewOffset, NewSize, NewFullFileName),
+                    file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, Timeout)
             after Timeout ->
                 set_expected_sequence_number(CacheName, FileId, FuseId, ExpectedSequenceNumber + 1),
                 file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, 0)
