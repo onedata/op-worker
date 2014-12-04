@@ -101,7 +101,6 @@ push_new_attrs7(ListMethod, RecToFuseId, FileUUID, IgnoredFuse, Reason, Offset, 
             RecToFuseId(Record)
         end, FDs),
     Fuses1 = lists:delete(IgnoredFuse, lists:usort(Fuses0)),
-    ?debug("Pushing new attributes for file ~p to fuses ~p", [FileUUID, Fuses1]),
 
     case Fuses1 of
         [] -> [];
@@ -111,10 +110,12 @@ push_new_attrs7(ListMethod, RecToFuseId, FileUUID, IgnoredFuse, Reason, Offset, 
             Attrs1 =
                 case Reason of
                     file_meta_updated ->
-                        Attrs#fileattr{size = undefined};
+                        Attrs#fileattr{size = -1};
                     _ ->
                         Attrs
                 end,
+
+            ?debug("Pushing new attributes for file ~p to fuses ~p. Reason: ~p, Attrs: ~p", [FileUUID, Fuses1, Reason, Attrs1]),
 
             Results = lists:map(
                 fun(FuseID) ->
