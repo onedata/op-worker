@@ -650,8 +650,6 @@ update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple, IgnoredFuse) -
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(utils:ensure_list(FileId), OldSize, NewSize, IgnoredFuse);
         [_] ->
-            ets:delete(CacheName, {FileId, old_file_size}),
-            ets:insert(CacheName, {{FileId, old_file_size}, NewSizeTuple}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple})
     end.
 
@@ -665,7 +663,6 @@ clear_size_cache(CacheName, FileId) ->
             ets:delete(CacheName, {FileId, file_size}),
             OldSize;
         [] ->
-            ets:delete(CacheName, {FileId, old_file_size}),
             ets:delete(CacheName, {FileId, file_size}),
             undefined
     end.
