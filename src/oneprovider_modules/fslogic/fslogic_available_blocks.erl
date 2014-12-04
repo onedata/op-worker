@@ -637,10 +637,14 @@ update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple, IgnoredFuse) -
     case ets:lookup(CacheName, {FileId, old_file_size}) of
         [] ->
             ets:delete(CacheName, {FileId, old_file_size}),
+            catch throw(info),
+            ?info_stacktrace("UPDATE_SIZE1 ~p",[NewSize]),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(utils:ensure_list(FileId), 0, NewSize, IgnoredFuse);
         [{_, {_, OldSize}}] when OldSize =/= NewSize ->
             ets:delete(CacheName, {FileId, old_file_size}),
+            catch throw(info),
+            ?info_stacktrace("UPDATE_SIZE2 ~p",[NewSize]),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(utils:ensure_list(FileId), OldSize, NewSize, IgnoredFuse);
         [_] ->
