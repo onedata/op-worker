@@ -257,6 +257,27 @@ file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, Sequenc
             file_block_modified_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Offset, Size, FullFileName);
         _ ->
             receive
+                {save_available_blocks, NewDoc} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    save_available_blocks(ProtocolVersion, CacheName, NewDoc);
+                {get_available_blocks, NewFileId} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    get_available_blocks(ProtocolVersion, CacheName, NewFileId);
+                {list_all_available_blocks, NewFileId} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    list_all_available_blocks(ProtocolVersion, CacheName, NewFileId);
+                {get_file_size, NewFileId} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    get_file_size(ProtocolVersion, CacheName, NewFileId);
+                {invalidate_blocks_cache, NewFileId} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    invalidate_blocks_cache(ProtocolVersion, CacheName, NewFileId);
+                {file_synchronized, NewContext, NewFileId, NewRanges, NewFullFileName} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    file_synchronized(ProtocolVersion, CacheName, NewContext, NewFileId, NewRanges, NewFullFileName);
+                {external_available_blocks_changed, NewContext, NewFileId, NewDocumentUuid} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    external_available_blocks_changed(ProtocolVersion, CacheName, NewContext, NewFileId, NewDocumentUuid);
                 {file_block_modified, NewContext, FileId, ?CLUSTER_FUSE_ID, _, NewOffset, NewSize, NewFullFileName} ->
                     file_block_modified_internal(ProtocolVersion, CacheName, NewContext, FileId, ?CLUSTER_FUSE_ID, NewOffset, NewSize, NewFullFileName),
                     file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout);
@@ -309,6 +330,27 @@ file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumb
             file_truncated_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Size, FullFileName);
         _ ->
             receive
+                {save_available_blocks, NewDoc} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    save_available_blocks(ProtocolVersion, CacheName, NewDoc);
+                {get_available_blocks, NewFileId} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    get_available_blocks(ProtocolVersion, CacheName, NewFileId);
+                {list_all_available_blocks, NewFileId} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    list_all_available_blocks(ProtocolVersion, CacheName, NewFileId);
+                {get_file_size, NewFileId} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    get_file_size(ProtocolVersion, CacheName, NewFileId);
+                {invalidate_blocks_cache, NewFileId} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    invalidate_blocks_cache(ProtocolVersion, CacheName, NewFileId);
+                {file_synchronized, NewContext, NewFileId, NewRanges, NewFullFileName} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    file_synchronized(ProtocolVersion, CacheName, NewContext, NewFileId, NewRanges, NewFullFileName);
+                {external_available_blocks_changed, NewContext, NewFileId, NewDocumentUuid} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    external_available_blocks_changed(ProtocolVersion, CacheName, NewContext, NewFileId, NewDocumentUuid);
                 {file_truncated, NewContext, FileId, ?CLUSTER_FUSE_ID, _, NewSize, NewFullFileName} ->
                     file_truncated_internal(ProtocolVersion, CacheName, NewContext, FileId, ?CLUSTER_FUSE_ID, NewSize, NewFullFileName),
                     file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, Timeout);
