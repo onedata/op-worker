@@ -34,7 +34,6 @@
     NewFileSize :: non_neg_integer(), IgnoredFuse :: string()) -> ok.
 %% ====================================================================
 on_file_size_update(FileUUID, OldFileSize, NewFileSize, IgnoredFuse) ->
-    ct:print("on_file_size_update(FileUUID: ~p, NewFileSize: ~p, IgnoredFuse: ~p)",[FileUUID, NewFileSize, IgnoredFuse]),
     gen_server:call(?Dispatcher_Name, {fslogic, 1, {internal_event, on_file_size_update, {FileUUID, OldFileSize, NewFileSize, IgnoredFuse}}}, timer:seconds(5)).
 
 

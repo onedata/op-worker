@@ -247,12 +247,10 @@ file_block_modified_internal(ProtocolVersion, CacheName, Context, FileId, FuseId
     #atom{value = ?VOK}.
 
 file_block_modified(ProtocolVersion, CacheName, Context, FileId, ?CLUSTER_FUSE_ID, _, Offset, Size, FullFileName, _) ->
-    ct:print("file_block_modified_CLUSTER(~p, ~p, ~p, ~p, ~p, ~p, ~p)",[ProtocolVersion, CacheName, Context, FileId, Offset, Size, FullFileName]),
     file_block_modified_internal(ProtocolVersion, CacheName, Context, FileId, ?CLUSTER_FUSE_ID, Offset, Size, FullFileName);
 
 file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout) when is_integer(SequenceNumber) ->
     ExpectedSequenceNumber = get_expected_sequence_number(CacheName, FileId, FuseId),
-    ct:print("file_block_modified(~p, ~p, ~p, ~p, ~p, ~p, ~p, ~p, ~p, ~p)",[ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout]),
     case SequenceNumber =< ExpectedSequenceNumber of
         true ->
             set_expected_sequence_number(CacheName, FileId, FuseId, SequenceNumber + 1),
@@ -637,15 +635,11 @@ update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple, IgnoredFuse) -
     case ets:lookup(CacheName, {FileId, old_file_size}) of
         [] ->
             ets:delete(CacheName, {FileId, old_file_size}),
-            catch throw(info),
-            ?info_stacktrace("UPDATE_SIZE1 ~p",[NewSize]),
             ets:insert(CacheName, {{FileId, old_file_size}, NewSizeTuple}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(utils:ensure_list(FileId), 0, NewSize, IgnoredFuse);
         [{_, {_, OldSize}}] when OldSize =/= NewSize ->
             ets:delete(CacheName, {FileId, old_file_size}),
-            catch throw(info),
-            ?info_stacktrace("UPDATE_SIZE2 ~p",[NewSize]),
             ets:insert(CacheName, {{FileId, old_file_size}, NewSizeTuple}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(utils:ensure_list(FileId), OldSize, NewSize, IgnoredFuse);
