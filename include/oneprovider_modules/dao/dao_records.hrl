@@ -49,6 +49,7 @@
         id_token_login      -> ?record_info_gen(id_token_login);
         dbsync_state        -> ?record_info_gen(dbsync_state);
         group_details       -> ?record_info_gen(group_details);
+        file_attr_watcher   -> ?record_info_gen(file_attr_watcher);
     %next_record        -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).
