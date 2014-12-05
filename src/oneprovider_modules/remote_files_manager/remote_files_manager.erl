@@ -125,7 +125,6 @@ maybe_handle_message(RequestBody, SpaceId) ->
 
 handle_message(Record) when is_record(Record, getattr) ->
     FileId = Record#getattr.file_id,
-    ct:print("REMOTE_MANAGER GETATTR ~p", [FileId]),
     {Storage_helper_info, File} = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
     {ok, #st_stat{} = Stat} = storage_files_manager:getattr(Storage_helper_info, File),
     #storageattibutes{

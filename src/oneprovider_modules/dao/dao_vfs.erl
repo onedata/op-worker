@@ -28,6 +28,7 @@
 -export([list_file_locations/1, get_file_locations/1, save_file_location/1, remove_file_location/1]).
 -export([list_file_blocks/1, get_file_blocks/1, save_file_block/1, remove_file_block/1]).
 -export([save_available_blocks/1, get_available_blocks/1, remove_available_blocks/1, available_blocks_by_file_id/1]).
+-export([save_attr_watcher/1, remove_attr_watcher/2, remove_attr_watcher/1, exist_attr_watcher/2, list_attr_watchers/3]).
 
 
 -ifdef(TEST).
@@ -37,6 +38,88 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
+
+
+
+save_attr_watcher(#file_attr_watcher{file = FileId, fuse_id = FID} = Record) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    UUID = gen_attr_watcher_uuid(FileId, FID),
+    dao_records:save_record(#db_document{uuid = UUID, record = Record}).
+
+
+remove_attr_watcher(FileId, FID) ->
+    remove_attr_watcher(gen_attr_watcher_uuid(FileId, FID)).
+
+
+remove_attr_watcher(ListSpec) when is_tuple(ListSpec) ->
+    remove_attr_watcher3(ListSpec, 1000, 0);
+remove_attr_watcher(Fd) when is_list(Fd); is_binary(Fd) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:remove_record(Fd).
+
+remove_attr_watcher3(ListSpec, BatchSize, Offset) ->
+    case list_attr_watchers(ListSpec, BatchSize, Offset) of
+        {ok, []} -> ok;
+        {ok, Docs} ->
+            [remove_attr_watcher(Fd) || #db_document{uuid = Fd} <- Docs, is_list(Fd)],
+            remove_attr_watcher3(ListSpec, BatchSize, Offset + BatchSize);
+        Other -> Other
+    end.
+
+
+
+gen_attr_watcher_uuid(FileId, FID) ->
+    utils:ensure_list(FID) ++ "//" ++ utils:ensure_list(FileId).
+
+
+exist_attr_watcher(FileId, FID) ->
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
+    Time = utils:mtime(),
+    WatcherUUID = gen_attr_watcher_uuid(FileId, FID),
+    case dao_records:get_record(gen_attr_watcher_uuid(FileId, FID)) of
+        {ok, #db_document{record =
+            #file_attr_watcher{create_time = CTime, validity_time = VTime}}} when CTime + VTime > Time ->
+            true;
+        {ok, #db_document{}} ->
+            dao_records:remove_record(WatcherUUID),
+            false;
+        _ ->
+            false
+    end.
+
+
+list_attr_watchers({by_file, File}, N, Offset) when N > 0, Offset >= 0 ->
+    list_attr_watchers({by_file_n_owner, {File, ""}}, N, Offset);
+list_attr_watchers({by_file_n_owner, {File, Owner}}, N, Offset) when N > 0, Offset >= 0 ->
+    {ok, #db_document{uuid = FileId}} = get_file(File),
+    list_attr_watchers({by_uuid_n_owner, {FileId, Owner}}, N, Offset);
+list_attr_watchers({by_uuid_n_owner, {FileId, Owner}}, N, Offset) when N > 0, Offset >= 0 ->
+    StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
+    EndKey = case Owner of "" -> [dao_helper:name(uca_increment(FileId)), dao_helper:name("")]; _ ->
+        [dao_helper:name((FileId)), dao_helper:name(uca_increment(Owner))] end,
+    QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
+    case dao_records:list_records(?ATTR_WATCHERS_BY_NAME_VIEW, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+            {ok, [FdDoc || #view_row{doc = #db_document{record = #file_attr_watcher{file = FileId1, fuse_id = OwnerId}} = FdDoc} <- Rows,
+                FileId1 == FileId, OwnerId == Owner orelse Owner == ""]};
+        Data ->
+            ?error("Invalid file attr watcher view response: ~p", [Data]),
+            throw({inavlid_data, Data})
+    end;
+list_attr_watchers({by_expired_before, Time}, N, Offset) when N > 0, Offset >= 0 ->
+    StartKey = 0,
+    EndKey = Time,
+    QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
+    case dao_records:list_records(?ATTR_WATCHERS_BY_EXPIRED_BEFORE_VIEW, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+            {ok, [FdDoc || #view_row{doc = #db_document{record = #file_attr_watcher{}} = FdDoc} <- Rows]};
+        Data ->
+            ?error("Invalid file attr watcher view response: ~p", [Data]),
+            throw({inavlid_data, Data})
+    end;
+list_attr_watchers({_Type, _Resource}, _N, _Offset) when _N > 0, _Offset >= 0 ->
+    not_yet_implemented.
+    
 
 %% ===================================================================
 %% Space File Management

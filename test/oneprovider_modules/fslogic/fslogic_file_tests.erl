@@ -44,8 +44,8 @@ normalize_file_type_test() ->
 
 get_real_file_size_test() ->
     %% This call shall be logic-less for non-regular files
-    ?assertEqual({0, -1}, fslogic_file:get_real_file_size_and_uid(#db_document{record = #file{type = ?DIR_TYPE}})),
-    ?assertEqual({0, -1}, fslogic_file:get_real_file_size_and_uid(#db_document{record = #file{type = ?LNK_TYPE}})).
+    ?assertEqual(-1, fslogic_file:get_real_file_uid(#db_document{record = #file{type = ?DIR_TYPE}})),
+    ?assertEqual(-1, fslogic_file:get_real_file_uid(#db_document{record = #file{type = ?LNK_TYPE}})).
 
 
 get_file_owner_test_() ->

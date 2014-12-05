@@ -37,12 +37,14 @@
 -export([get_file_children_count/1]).
 
 %% Block synchronization
--export([synchronize/3, mark_as_modified/3, mark_as_truncated/2]).
+-export([synchronize/3, mark_as_modified/5, mark_as_truncated/4]).
 -export([get_file_block_map/1]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
 -export([create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
+
+-export([sync_from_remote/2]).
 
 %% ====================================================================
 %% Test API
@@ -63,6 +65,14 @@
 %% Logical file organization management (only db is used)
 %% ====================================================================
 
+sync_from_remote(Path, ProviderId) ->
+    FullFileName = fslogic_path:get_full_file_name(Path),
+    {ok, #fileattributes{size = Size}} = getfileattr(FullFileName),
+    SyncReq = #synchronizefileblock{logical_name = FullFileName, offset = 0, size = Size},
+    Request = #fusemessage{message_type = "synchronizefileblock", input = fuse_messages_pb:encode_synchronizefileblock(SyncReq)},
+    {GRUID, AccessToken} = fslogic_context:get_gr_auth(),
+    #atom{value = Value} = provider_proxy:reroute_pull_message(ProviderId, {GRUID, AccessToken}, ?CLUSTER_FUSE_ID, Request),
+    Value.
 
 %% read_link/1
 %% ====================================================================
@@ -610,6 +620,7 @@ write_file_chunk(FilePath, Buf) ->
                                 {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
                             WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"fuse_id", ?CLUSTER_FUSE_ID}, {"sequence_number", 0},
                                 {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}});
                         _ ->
@@ -669,6 +680,7 @@ write(FilePath, Offset, Buf, EventPolicy) ->
                                 {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
                             WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"fuse_id", ?CLUSTER_FUSE_ID}, {"sequence_number", 0},
                                 {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}});
                         _ ->
@@ -757,8 +769,8 @@ truncate(FilePath, Size) ->
                     {ok, FullFileName} = get_file_path_from_cache(FilePath),
                     TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", FullFileName}],
                     gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}}),
-                    TruncateEventAvailableBlocks = [{"type", "truncate_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", FullFileName},
-                        {"newSize", Size}],
+                    TruncateEventAvailableBlocks = [{"type", "truncate_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
+                        {"fuse_id", ?CLUSTER_FUSE_ID}, {"sequence_number", 0}, {"filePath", FullFileName}, {"newSize", Size}],
                     gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEventAvailableBlocks}});
                 _ ->
                     ok
@@ -1323,15 +1335,20 @@ synchronize(File, Offset, Size) ->
         _ -> {Status, TmpAns}
     end.
 
-%% mark_as_modified/3
+%% mark_as_modified/5
 %% ====================================================================
 %% @doc Mark given byte range as modified, so other providers would know that they need to synchronize their data
 %% @end
--spec mark_as_modified(FullFileName :: string(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+-spec mark_as_modified(FullFileName :: string(), FuseId :: string(), SequenceNumber :: non_neg_integer(),
+    Offset :: non_neg_integer(), Size :: non_neg_integer()) -> ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
-mark_as_modified(FullFileName, Offset, Size) ->
-    {Status, TmpAns} = contact_fslogic(#fileblockmodified{logical_name = FullFileName, offset = Offset, size = Size}),
+mark_as_modified(_, undefined, _, _, _) ->
+    ok;
+mark_as_modified(_, _, undefined, _, _) ->
+    ok;
+mark_as_modified(FullFileName, FuseId, SequenceNumber, Offset, Size) ->
+    {Status, TmpAns} = contact_fslogic(#fileblockmodified{logical_name = FullFileName, fuse_id = FuseId,
+        sequence_number = SequenceNumber, offset = Offset, size = Size}),
     case Status of
         ok ->
             case TmpAns#atom.value of
@@ -1341,15 +1358,20 @@ mark_as_modified(FullFileName, Offset, Size) ->
         _ -> {Status, TmpAns}
     end.
 
-%% mark_as_truncated/2
+%% mark_as_truncated/4
 %% ====================================================================
 %% @doc truncate given byte range in remote location, so other providers would know that they need to synchronize their data.
 %% @end
--spec mark_as_truncated(FullFileName :: string(), Size :: non_neg_integer()) ->
-    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+-spec mark_as_truncated(FullFileName :: string(), FuseId :: string(), SequenceNumber :: non_neg_integer(),
+    Size :: non_neg_integer()) ->  ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
-mark_as_truncated(FullFileName, Size) ->
-    {Status, TmpAns} = contact_fslogic(#filetruncated{logical_name = FullFileName, size = Size}),
+mark_as_truncated(_, undefined, _, _) ->
+    ok;
+mark_as_truncated(_, _, undefined, _) ->
+    ok;
+mark_as_truncated(FullFileName, FuseId, SequenceNumber, Size) ->
+    {Status, TmpAns} = contact_fslogic(#filetruncated{logical_name = FullFileName, fuse_id = FuseId,
+        sequence_number = SequenceNumber, size = Size}),
     case Status of
         ok ->
             case TmpAns#atom.value of
@@ -1381,7 +1403,7 @@ get_file_block_map(FullFileName) ->
                         end, BlockMap),
                     FinalProplist = lists:map(
                         fun({Id, RangeList}) ->
-                            {Id, [#block_range{from = From, to = To} || #fileblockmap_blockmapentity_blockrange{from = From, to = To} <- RangeList]}
+                            {utils:ensure_binary(Id), [#block_range{from = From, to = To} || #fileblockmap_blockmapentity_blockrange{from = From, to = To} <- RangeList]}
                         end, ProtobufProplist),
                     {ok, FinalProplist};
                 Error -> {logical_file_system_error, Error}

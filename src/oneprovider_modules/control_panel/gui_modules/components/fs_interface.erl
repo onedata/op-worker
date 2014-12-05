@@ -68,7 +68,7 @@ get_full_file_path(FilePath) ->
 -spec get_file_uuid(FullFilePath :: string()) -> string().
 %% ====================================================================
 get_file_uuid(FullFilePath) ->
-    {ok, #db_document{uuid = FileID}} = fslogic_objects:get_file(FullFilePath),
+    {ok, FileID} = logical_files_manager:get_file_uuid(FullFilePath),
     FileID.
 
 

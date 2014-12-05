@@ -71,13 +71,13 @@ init(_Args) ->
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
         ({save_available_blocks, #available_blocks{file_id = FileId}}) ->
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
-        ({file_truncated, _, FileId, _, _}) ->
+        ({file_truncated, _, FileId, _, _, _, _}) ->
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
         ({file_synchronized, _, FileId, _, _}) ->
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
         ({external_available_blocks_changed, _, FileId, _}) ->
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
-        ({file_block_modified, _, FileId, _, _, _}) ->
+        ({file_block_modified, _, FileId, _, _, _, _, _}) ->
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId);
         ({_, FileId}) ->
             lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FileId)
@@ -99,10 +99,10 @@ init(_Args) ->
         ({get_file_size, _}) -> available_blocks_dao_proxy;
         ({get_available_blocks, _}) -> available_blocks_dao_proxy;
         ({invalidate_blocks_cache, _}) -> available_blocks_dao_proxy;
-        ({file_truncated, _, _, _, _}) -> available_blocks_dao_proxy;
+        ({file_truncated, _, _, _, _, _, _}) -> available_blocks_dao_proxy;
         ({file_synchronized, _, _, _, _}) -> available_blocks_dao_proxy;
         ({external_available_blocks_changed, _, _, _}) -> available_blocks_dao_proxy;
-        ({file_block_modified, _, _, _, _, _}) -> available_blocks_dao_proxy;
+        ({file_block_modified, _, _, _, _, _, _, _}) -> available_blocks_dao_proxy;
         (_) -> non
     end,
     DispMapFun = fun
@@ -116,13 +116,13 @@ init(_Args) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
         ({invalidate_blocks_cache, FileId}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
-        ({file_truncated, _, FileId, _, _}) ->
+        ({file_truncated, _, FileId, _, _, _, _}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
         ({file_synchronized, _, FileId, _, _}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
         ({external_available_blocks_changed, _, FileId, _}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
-        ({file_block_modified, _, FileId, _, _, _}) ->
+        ({file_block_modified, _, FileId, _, _, _, _, _}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
         ({get_file_size, FileId}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FileId);
@@ -451,13 +451,15 @@ handle_fuse_message(Req = #synchronizefileblock{logical_name = FName, offset = O
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
     fslogic_available_blocks:synchronize_file_block(FullFileName, Offset, Size);
 
-handle_fuse_message(Req = #fileblockmodified{logical_name = FName, offset = Offset, size = Size}) ->
+% @todo Remove FUSE ID from protocol and get it from context
+handle_fuse_message(Req = #fileblockmodified{logical_name = FName, fuse_id = FuseId, sequence_number = SequenceNumber, offset = Offset, size = Size}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    fslogic_available_blocks:file_block_modified(FullFileName, Offset, Size);
+    fslogic_available_blocks:file_block_modified(FullFileName, FuseId, SequenceNumber, Offset, Size);
 
-handle_fuse_message(Req = #filetruncated{logical_name = FName, size = Size}) ->
+% @todo Remove FUSE ID from protocol and get it from context
+handle_fuse_message(Req = #filetruncated{logical_name = FName, fuse_id = FuseId, sequence_number = SequenceNumber, size = Size}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
-    fslogic_available_blocks:file_truncated(FullFileName, Size);
+    fslogic_available_blocks:file_truncated(FullFileName, FuseId, SequenceNumber, Size);
 
 handle_fuse_message(Req = #getfileblockmap{logical_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, utils:record_type(Req)),
@@ -523,6 +525,9 @@ handle_fuse_message(_Req = #storagetestfilemodifiedrequest{storage_id = StorageI
 
 handle_fuse_message(_Req = #clientstorageinfo{storage_info = SInfo}) ->
     fslogic_req_storage:client_storage_info(SInfo);
+
+handle_fuse_message(#attrunsubscribe{file_uuid = FileUUID}) ->
+    fslogic_req_generic:attr_unsubscribe(FileUUID);
 
 %% Test message
 handle_fuse_message(_Req = #testchannel{answer_delay_in_ms = Interval, answer_message = Answer}) ->
@@ -604,6 +609,9 @@ extract_logical_path(#checkfileperms{file_logic_name = Path}) ->
 extract_logical_path(#updatetimes{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#createfileack{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#attrunsubscribe{file_uuid = UUID}) ->
+    {ok, Path} = logical_files_manager:get_file_full_name_by_uuid(UUID),
     Path;
 extract_logical_path(_) ->
     "/".

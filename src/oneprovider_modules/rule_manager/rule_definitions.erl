@@ -248,16 +248,20 @@ get_write_for_available_blocks_handler() ->
     fun(Event) ->
         ?info("WRITE"),
         ?dump(Event),
+        FuseId = proplists:get_value("fuse_id", Event),
+        SequenceNumber = proplists:get_value("sequence_number", Event),
         Blocks = proplists:get_value("blocks", Event),
         FullFileName = proplists:get_value("filePath", Event),
-        lists:foreach(fun({Offset, Size}) -> ok = logical_files_manager:mark_as_modified(FullFileName, Offset, Size) end, Blocks)
+        lists:foreach(fun({Offset, Size}) -> ok = logical_files_manager:mark_as_modified(FullFileName, FuseId, SequenceNumber, Offset, Size) end, Blocks)
     end.
 
 get_truncate_for_avaialbale_blocks_handler() ->
     fun(Event) ->
         ?info("TRUNCATE"),
         ?dump(Event),
+        FuseId = proplists:get_value("fuse_id", Event),
+        SequenceNumber = proplists:get_value("sequence_number", Event),
         NewSize = proplists:get_value("newSize", Event),
         FullFileName = proplists:get_value("filePath", Event),
-        ok = logical_files_manager:mark_as_truncated(FullFileName, NewSize)
+        ok = logical_files_manager:mark_as_truncated(FullFileName, FuseId, SequenceNumber, NewSize)
     end.
