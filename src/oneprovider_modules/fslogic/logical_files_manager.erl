@@ -1342,6 +1342,10 @@ synchronize(File, Offset, Size) ->
 -spec mark_as_modified(FullFileName :: string(), FuseId :: string(), SequenceNumber :: non_neg_integer(),
     Offset :: non_neg_integer(), Size :: non_neg_integer()) -> ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
+mark_as_modified(_, undefined, _, _, _) ->
+    ok;
+mark_as_modified(_, _, undefined, _, _) ->
+    ok;
 mark_as_modified(FullFileName, FuseId, SequenceNumber, Offset, Size) ->
     {Status, TmpAns} = contact_fslogic(#fileblockmodified{logical_name = FullFileName, fuse_id = FuseId,
         sequence_number = SequenceNumber, offset = Offset, size = Size}),
@@ -1361,6 +1365,10 @@ mark_as_modified(FullFileName, FuseId, SequenceNumber, Offset, Size) ->
 -spec mark_as_truncated(FullFileName :: string(), FuseId :: string(), SequenceNumber :: non_neg_integer(),
     Size :: non_neg_integer()) ->  ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
+mark_as_truncated(_, undefined, _, _) ->
+    ok;
+mark_as_truncated(_, _, undefined, _) ->
+    ok;
 mark_as_truncated(FullFileName, FuseId, SequenceNumber, Size) ->
     {Status, TmpAns} = contact_fslogic(#filetruncated{logical_name = FullFileName, fuse_id = FuseId,
         sequence_number = SequenceNumber, size = Size}),

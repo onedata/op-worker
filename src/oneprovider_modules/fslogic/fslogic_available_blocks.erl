@@ -249,7 +249,7 @@ file_block_modified_internal(ProtocolVersion, CacheName, Context, FileId, FuseId
 file_block_modified(ProtocolVersion, CacheName, Context, FileId, ?CLUSTER_FUSE_ID, _, Offset, Size, FullFileName, _) ->
     file_block_modified_internal(ProtocolVersion, CacheName, Context, FileId, ?CLUSTER_FUSE_ID, Offset, Size, FullFileName);
 
-file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout) ->
+file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout) when is_integer(SequenceNumber) ->
     ExpectedSequenceNumber = get_expected_sequence_number(CacheName, FileId, FuseId),
     case SequenceNumber =< ExpectedSequenceNumber of
         true ->
@@ -257,6 +257,27 @@ file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, Sequenc
             file_block_modified_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Offset, Size, FullFileName);
         _ ->
             receive
+                {save_available_blocks, NewDoc} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    save_available_blocks(ProtocolVersion, CacheName, NewDoc);
+                {get_available_blocks, NewFileId} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    get_available_blocks(ProtocolVersion, CacheName, NewFileId);
+                {list_all_available_blocks, NewFileId} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    list_all_available_blocks(ProtocolVersion, CacheName, NewFileId);
+                {get_file_size, NewFileId} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    get_file_size(ProtocolVersion, CacheName, NewFileId);
+                {invalidate_blocks_cache, NewFileId} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    invalidate_blocks_cache(ProtocolVersion, CacheName, NewFileId);
+                {file_synchronized, NewContext, NewFileId, NewRanges, NewFullFileName} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    file_synchronized(ProtocolVersion, CacheName, NewContext, NewFileId, NewRanges, NewFullFileName);
+                {external_available_blocks_changed, NewContext, NewFileId, NewDocumentUuid} ->
+                    cast({file_block_modified, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}),
+                    external_available_blocks_changed(ProtocolVersion, CacheName, NewContext, NewFileId, NewDocumentUuid);
                 {file_block_modified, NewContext, FileId, ?CLUSTER_FUSE_ID, _, NewOffset, NewSize, NewFullFileName} ->
                     file_block_modified_internal(ProtocolVersion, CacheName, NewContext, FileId, ?CLUSTER_FUSE_ID, NewOffset, NewSize, NewFullFileName),
                     file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout);
@@ -301,7 +322,7 @@ file_truncated_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Siz
 file_truncated(ProtocolVersion, CacheName, Context, FileId, ?CLUSTER_FUSE_ID, _, Size, FullFileName, _) ->
     file_truncated_internal(ProtocolVersion, CacheName, Context, FileId, ?CLUSTER_FUSE_ID, Size, FullFileName);
 
-file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, Timeout) ->
+file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, Timeout) when is_integer(SequenceNumber) ->
     ExpectedSequenceNumber = get_expected_sequence_number(CacheName, FileId, FuseId),
     case SequenceNumber =< ExpectedSequenceNumber of
         true ->
@@ -309,6 +330,27 @@ file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumb
             file_truncated_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Size, FullFileName);
         _ ->
             receive
+                {save_available_blocks, NewDoc} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    save_available_blocks(ProtocolVersion, CacheName, NewDoc);
+                {get_available_blocks, NewFileId} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    get_available_blocks(ProtocolVersion, CacheName, NewFileId);
+                {list_all_available_blocks, NewFileId} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    list_all_available_blocks(ProtocolVersion, CacheName, NewFileId);
+                {get_file_size, NewFileId} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    get_file_size(ProtocolVersion, CacheName, NewFileId);
+                {invalidate_blocks_cache, NewFileId} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    invalidate_blocks_cache(ProtocolVersion, CacheName, NewFileId);
+                {file_synchronized, NewContext, NewFileId, NewRanges, NewFullFileName} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    file_synchronized(ProtocolVersion, CacheName, NewContext, NewFileId, NewRanges, NewFullFileName);
+                {external_available_blocks_changed, NewContext, NewFileId, NewDocumentUuid} ->
+                    cast({file_truncated, Context, FileId, FuseId, SequenceNumber, Size, FullFileName}),
+                    external_available_blocks_changed(ProtocolVersion, CacheName, NewContext, NewFileId, NewDocumentUuid);
                 {file_truncated, NewContext, FileId, ?CLUSTER_FUSE_ID, _, NewSize, NewFullFileName} ->
                     file_truncated_internal(ProtocolVersion, CacheName, NewContext, FileId, ?CLUSTER_FUSE_ID, NewSize, NewFullFileName),
                     file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, Timeout);
@@ -635,14 +677,15 @@ update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple, IgnoredFuse) -
     case ets:lookup(CacheName, {FileId, old_file_size}) of
         [] ->
             ets:delete(CacheName, {FileId, old_file_size}),
+            ets:insert(CacheName, {{FileId, old_file_size}, NewSizeTuple}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(utils:ensure_list(FileId), 0, NewSize, IgnoredFuse);
         [{_, {_, OldSize}}] when OldSize =/= NewSize ->
             ets:delete(CacheName, {FileId, old_file_size}),
+            ets:insert(CacheName, {{FileId, old_file_size}, NewSizeTuple}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(utils:ensure_list(FileId), OldSize, NewSize, IgnoredFuse);
         [_] ->
-            ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple})
     end.
 
@@ -656,7 +699,6 @@ clear_size_cache(CacheName, FileId) ->
             ets:delete(CacheName, {FileId, file_size}),
             OldSize;
         [] ->
-            ets:delete(CacheName, {FileId, old_file_size}),
             ets:delete(CacheName, {FileId, file_size}),
             undefined
     end.
