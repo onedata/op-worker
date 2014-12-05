@@ -262,7 +262,6 @@
 .gen-table-header-wrapper {
     background-color: #e9e9e9;
     border-bottom: 1px solid #bbb;
-    padding-right: 13px;
 }
 
 .gen-table-header {
@@ -348,6 +347,14 @@
 .privilege-checkbox {
     margin: 6px auto !important;
     width: 20px;
+}
+
+.disabled-checkbox-ph {
+    cursor: pointer !important;
+}
+
+.disabled-checkbox-ph > .privilege-checkbox{
+    cursor: pointer !important;
 }
 
 .group-spaces {

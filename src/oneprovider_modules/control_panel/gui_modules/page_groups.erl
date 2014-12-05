@@ -180,6 +180,11 @@ css() ->
 -spec body() -> [#panel{}].
 %% ====================================================================
 body() ->
+    % On resize, adjust user tables' headers width (scroll bar takes some space out of table and header would be too wide)
+    gui_jq:wire(<<"window.onresize = function(e) { ",
+    "var pad = $($('.gen-table-wrapper')[0]).width() - $($('.gen-table')[0]).width();",
+    "$('.gen-table-header-wrapper').css('padding-right', pad + 'px'); };">>),
+
     #panel{class = <<"page-container">>, body = [
         #panel{id = <<"spinner">>, body = #image{image = <<"/images/spinner.gif">>}},
         opn_gui_utils:top_menu(groups_tab),
@@ -210,12 +215,13 @@ footer_popup() ->
 %% @doc Renders HTML responsible for group list element.
 -spec group_list_element(GroupState :: #group_state{}, Expanded :: boolean) -> term().
 %% ====================================================================
-group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = UserStates, spaces = SpaceStates}, Expanded) ->
+group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = UserStates,
+    spaces = SpaceStates, current_privileges = UserPrivileges}, Expanded) ->
     {CanViewGroup, GroupName, GroupHeaderClass} =
         case GroupNameOrUndef of
             undefined -> {
                 false,
-                <<"<i>You don not have privileges to view this group</i>">>,
+                <<"<i>You do not have privileges to view this group</i>">>,
                 <<"group-name-ph-no-perms">>
             };
             _ -> {
@@ -230,7 +236,7 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
             false ->
                 {<<"collapse-wrapper collapsed">>, [], []};
             true ->
-                {<<"collapse-wrapper">>, group_users_body(GroupID, UserStates), group_spaces_body(GroupID, SpaceStates)}
+                {<<"collapse-wrapper">>, group_users_body(GroupID, UserStates, UserPrivileges), group_spaces_body(GroupID, SpaceStates)}
         end,
     ListElement = #li{id = ?GROUP_LIST_ELEMENT_ID(GroupID), body = [
         #panel{class = <<"group-container">>, body = [
@@ -246,7 +252,7 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
                     false ->
                         #panel{class = <<"group-actions-ph">>, body = [
                             #button{title = <<"Leave this group">>, class = <<"btn btn-small btn-info leave-space-button">>,
-                                postback = {action, ?ACTION_SHOW_LEAVE_GROUP_POPUP, [GroupID, <<"<Unknown Name>">>]}, body = [
+                                postback = {action, ?ACTION_SHOW_LEAVE_GROUP_POPUP, [GroupID, undefined]}, body = [
                                     <<"<i class=\"icomoon-exit action-button-icon\"></i>">>, <<"Leave group">>
                                 ]}
                         ]};
@@ -254,9 +260,10 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
                         #panel{class = <<"group-actions-ph">>, body = [
                             #panel{class = <<"btn-group group-actions-dropdown">>, body = [
                                 <<"<i class=\"dropdown-arrow\"></i>">>,
-                                #button{title = <<"Actions">>, class = <<"btn btn-small btn-info">>, body = [
-                                    <<"<i class=\"icomoon-cog action-button-icon\"></i>">>, <<"Actions">>
-                                ]},
+                                #button{title = <<"Actions">>, class = <<"btn btn-small btn-info">>,
+                                    data_fields = [{<<"data-toggle">>, <<"dropdown">>}], body = [
+                                        <<"<i class=\"icomoon-cog action-button-icon\"></i>">>, <<"Actions">>
+                                    ]},
                                 #button{title = <<"Actions">>, class = <<"btn btn-small btn-info dropdown-toggle">>,
                                     data_fields = [{<<"data-toggle">>, <<"dropdown">>}], body = #span{class = <<"caret">>}},
                                 #list{class = <<"dropdown-menu">>,
@@ -330,10 +337,15 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
     ListElement.
 
 
-group_users_body(GroupID, UserStates) ->
+group_users_body(GroupID, UserStates, CurrentUserPrivileges) ->
+    CanSetPrivileges = lists:member(?PRVLG_SET_PRIVILEGES, CurrentUserPrivileges),
+    JS = <<"function(e) {var box = bootbox.dialog({ title: 'Not authorized',",
+    "message: 'To perform this operation, you need the <b>Set privileges</b> privileges.',",
+    "buttons: {'OK': {className: 'btn-primary confirm', callback: function() {} } } }); }">>,
+    gui_jq:wire(<<"$('.disabled-checkbox-ph').unbind('click.cantsetprivs').bind('click.cantsetprivs', ", JS/binary, ");">>),
     [
         #panel{class = <<"group-left-ph">>, body = [
-            <<"USERS<br />&<br />RIGTHS">>,
+            <<"USERS<br />&<br />RIGHTS">>,
             #link{title = <<"Help">>, class = <<"glyph-link">>, postback = show_users_info,
                 body = #span{class = <<"icomoon-question">>}}
         ]},
@@ -380,13 +392,19 @@ group_users_body(GroupID, UserStates) ->
                                 fun({PrivilegeID, _PrivilegeName, _ColumnName}) ->
                                     CheckboxID = ?CHECKBOX_ID(GroupID, UserID, PrivilegeID),
                                     flatui_checkbox:init_checkbox(CheckboxID),
-                                    #td{body = [
-                                        #flatui_checkbox{label_class = <<"privilege-checkbox checkbox no-label">>,
-                                            id = CheckboxID,
+                                    {TDClass, LabelClass} =
+                                        case CanSetPrivileges of
+                                            true ->
+                                                {<<"">>, <<"privilege-checkbox checkbox no-label">>};
+                                            false ->
+                                                {<<"disabled-checkbox-ph">>, <<"privilege-checkbox checkbox primary no-label">>}
+                                        end,
+                                    #td{class = TDClass, body = [
+                                        #flatui_checkbox{label_class = LabelClass, id = CheckboxID, delegate = ?MODULE,
                                             checked = lists:member(PrivilegeID, UserPrivileges),
-                                            delegate = ?MODULE,
                                             postback = {group_action, ?GROUP_ACTION_SET_PRIVILEGE, GroupID, [UserID, PrivilegeID, {query_value, CheckboxID}]},
-                                            source = [gui_str:to_list(CheckboxID)]}
+                                            source = [gui_str:to_list(CheckboxID)],
+                                            disabled = not CanSetPrivileges}
                                     ]}
                                 end, ?PRIVILEGES)
                         ]}
@@ -551,19 +569,15 @@ comet_handle_action(State, Action, Args) ->
             end;
 
         {?ACTION_SHOW_LEAVE_GROUP_POPUP, [GroupID, GroupName]} ->
-            ButtonID = <<"ok_button">>,
-            gui_jq:bind_enter_to_submit_button(ButtonID, ButtonID),
-            Body = [
-                #p{body = <<"Are you sure you want to leave group:<br />",
-                (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, "<br />">>},
-                #form{class = <<"control-group">>, body = [
-                    #button{id = ButtonID, postback = {action, ?ACTION_LEAVE_GROUP, [GroupID, GroupName]},
-                        class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
-                    #button{id = <<"cancel_button">>, postback = {action, ?ACTION_HIDE_POPUP},
-                        class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
-                ]}
-            ],
-            show_popup(Body, <<"$('#", ButtonID/binary, "').focus();">>),
+            PBody = case GroupName of
+                        undefined ->
+                            <<"Are you sure you want to leave group with ID:<br /><b>", GroupID/binary, "</b>">>;
+                        _ ->
+                            <<"Are you sure you want to leave group:<br />",
+                            (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, "">>
+                    end,
+            show_confirm_popup(PBody, <<"">>, <<"ok_button">>,
+                {action, ?ACTION_LEAVE_GROUP, [GroupID, GroupName]}),
             State;
 
         {?ACTION_LEAVE_GROUP, [GroupID, GroupName]} ->
@@ -571,7 +585,14 @@ comet_handle_action(State, Action, Args) ->
             case gr_users:leave_group({user, AccessToken}, GroupID) of
                 ok ->
                     gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
-                    opn_gui_utils:message(success, <<"Successfully left group ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
+                    Message =
+                        case GroupName of
+                            undefined ->
+                                <<"Successfully left group with ID: <b>", GroupID/binary, "</b>">>;
+                            _ ->
+                                <<"Successfully left group ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>
+                        end,
+                    opn_gui_utils:message(success, Message),
                     SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                     refresh_group_list(SyncedState),
                     SyncedState;
@@ -617,31 +638,18 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                                 gui_jq:slide_up(?COLLAPSE_WRAPPER_ID(GroupID), 400),
                                 {ExpandedGroups -- [GroupID], proplists:delete(GroupID, EditedPrivileges)};
                             false ->
-                                gui_jq:update(?USERS_SECTION_ID(GroupID), group_users_body(GroupID, UserStates)),
+                                gui_jq:update(?USERS_SECTION_ID(GroupID), group_users_body(GroupID, UserStates, UserPrivileges)),
                                 gui_jq:update(?SPACES_SECTION_ID(GroupID), group_spaces_body(GroupID, SpaceStates)),
                                 gui_jq:slide_down(?COLLAPSE_WRAPPER_ID(GroupID), 600),
-                                % Adjust user tables' headers width (scroll bar takes some space out of table and header would be too wide)
-                                gui_jq:wire(<<"var pad = $($('.gen-table-wrapper')[0]).width() - $($('.gen-table')[0]).width();",
-                                "$('.gen-table-header-wrapper').css('padding-right', pad + 'px');">>),
+                                gui_jq:wire(<<"$(window).resize();">>),
                                 {[GroupID | ExpandedGroups], EditedPrivileges}
                         end,
                     State#page_state{expanded_groups = NewExpandedGroups, edited_privileges = NewEditedPrivileges};
 
                 {?GROUP_ACTION_SHOW_REMOVE_POPUP, _} ->
-                    ButtonID = <<"ok_button">>,
-                    gui_jq:bind_enter_to_submit_button(ButtonID, ButtonID),
-                    Body = [
-                        #p{body = <<"Are you sure you want to remove group:<br />",
-                        (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, "?<br />">>},
-                        #p{class = <<"warning-message">>, body = <<"This operation cannot be undone!">>},
-                        #form{class = <<"control-group">>, body = [
-                            #button{id = ButtonID, postback = {group_action, ?GROUP_ACTION_REMOVE, GroupID},
-                                class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
-                            #button{id = <<"cancel_button">>, postback = {action, ?ACTION_HIDE_POPUP},
-                                class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
-                        ]}
-                    ],
-                    show_popup(Body, <<"$('#", ButtonID/binary, "').focus();">>),
+                    show_confirm_popup(<<"Are you sure you want to remove group:<br />",
+                    (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, "?<br />">>, <<"">>, <<"ok_button">>,
+                        {group_action, ?GROUP_ACTION_REMOVE, GroupID}),
                     State;
 
                 {?GROUP_ACTION_REMOVE, _} ->
@@ -744,9 +752,10 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
 
                 {?GROUP_ACTION_DISCARD_PRIVILEGES, _} ->
                     NewEditedPrivileges = proplists:delete(GroupID, EditedPrivileges),
-                    gui_jq:update(?USERS_SECTION_ID(GroupID), group_users_body(GroupID, UserStates)),
+                    gui_jq:update(?USERS_SECTION_ID(GroupID), group_users_body(GroupID, UserStates, UserPrivileges)),
                     gui_jq:hide(?PRVLGS_SAVE_PH_ID(GroupID)),
                     gui_jq:fade_in(?PRVLGS_USER_HEADER_PH_ID(GroupID), 500),
+                    gui_jq:wire(<<"$(window).resize();">>),
                     State#page_state{edited_privileges = NewEditedPrivileges};
 
                 {?GROUP_ACTION_INVITE_USER, _} ->
@@ -829,20 +838,9 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     end;
 
                 {?GROUP_ACTION_SHOW_LEAVE_SPACE_POPUP, [SpaceID, SpaceName]} ->
-                    ButtonID = <<"ok_button">>,
-                    gui_jq:bind_enter_to_submit_button(ButtonID, ButtonID),
-                    Body = [
-                        #p{body = <<"Are you sure you want ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, " to leave space:<br />",
-                        (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, "<br />">>},
-                        #p{class = <<"warning-message">>, body = <<"This operation cannot be undone!">>},
-                        #form{class = <<"control-group">>, body = [
-                            #button{id = ButtonID, postback = {group_action, ?GROUP_ACTION_LEAVE_SPACE, GroupID, [SpaceID, SpaceName]},
-                                class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
-                            #button{id = <<"cancel_button">>, postback = {action, ?ACTION_HIDE_POPUP},
-                                class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
-                        ]}
-                    ],
-                    show_popup(Body, <<"$('#", ButtonID/binary, "').focus();">>),
+                    show_confirm_popup(<<"Are you sure you want the group ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, " to leave space:<br />",
+                    (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, "<br />">>, <<"This operation cannot be undone!">>, <<"ok_button">>,
+                        {group_action, ?GROUP_ACTION_LEAVE_SPACE, GroupID, [SpaceID, SpaceName]}),
                     State;
 
                 {?GROUP_ACTION_LEAVE_SPACE, [SpaceID, SpaceName]} ->
@@ -862,19 +860,9 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     end;
 
                 {?GROUP_ACTION_SHOW_REMOVE_USER_POPUP, [UserID, UserName]} ->
-                    ButtonID = <<"ok_button">>,
-                    gui_jq:bind_enter_to_submit_button(ButtonID, ButtonID),
-                    Body = [
-                        #p{body = <<"Are you sure you want to remove user:<br />",
-                        (?FORMAT_ID_AND_NAME(UserID, UserName))/binary, "<br />">>},
-                        #form{class = <<"control-group">>, body = [
-                            #button{id = ButtonID, postback = {group_action, ?GROUP_ACTION_REMOVE_USER, GroupID, [UserID, UserName]},
-                                class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
-                            #button{id = <<"cancel_button">>, postback = {action, ?ACTION_HIDE_POPUP},
-                                class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
-                        ]}
-                    ],
-                    show_popup(Body, <<"$('#", ButtonID/binary, "').focus();">>),
+                    show_confirm_popup(<<"Are you sure you want to remove user:<br />",
+                    (?FORMAT_ID_AND_NAME(UserID, UserName))/binary, "<br />">>, <<"">>, <<"ok_button">>,
+                        {group_action, ?GROUP_ACTION_REMOVE_USER, GroupID, [UserID, UserName]}),
                     State;
 
                 {?GROUP_ACTION_REMOVE_USER, [UserID, UserName]} ->
@@ -908,7 +896,8 @@ refresh_group_list(#page_state{groups = Groups, expanded_groups = ExpandedGroups
                            group_list_element(GroupState, lists:member(ID, ExpandedGroups))
                        end, Groups)
            end,
-    gui_jq:update(<<"group_list">>, Body).
+    gui_jq:update(<<"group_list">>, Body),
+    gui_jq:wire(<<"$(window).resize();">>).
 
 
 scroll_to_group(GroupID) ->
@@ -958,6 +947,21 @@ show_name_insert_popup(Text, TextboxID, Placeholder, TextboxValue, DoSelect, But
     ],
     show_popup(Body, <<"$('#", TextboxID/binary, "').focus()",
     (case DoSelect of true -> <<".select();">>; false -> <<";">> end)/binary>>).
+
+
+show_confirm_popup(Text, ExtraText, ButtonID, OkButtonPostback) ->
+    gui_jq:bind_enter_to_submit_button(ButtonID, ButtonID),
+    Body = [
+        #p{body = Text},
+        case ExtraText of <<"">> -> []; _ -> #p{class = <<"warning-message">>, body = ExtraText} end,
+        #form{class = <<"control-group">>, body = [
+            #button{id = ButtonID, postback = OkButtonPostback,
+                class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
+            #button{id = <<"cancel_button">>, postback = {action, ?ACTION_HIDE_POPUP},
+                class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
+        ]}
+    ],
+    show_popup(Body, <<"$('#", ButtonID/binary, "').focus();">>).
 
 
 show_popup(Body, ScriptAfterUpdate) ->
