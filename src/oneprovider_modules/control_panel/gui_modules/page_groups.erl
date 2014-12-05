@@ -500,20 +500,9 @@ comet_handle_action(State, Action, Args) ->
     #page_state{expanded_groups = ExpandedGroups, gruid = GRUID, access_token = AccessToken} = State,
     case {Action, Args} of
         {?ACTION_SHOW_CREATE_GROUP_POPUP, _} ->
-            TextboxID = <<"new_group_textbox">>,
-            TextboxIDString = "new_group_textbox",
-            ButtonID = <<"new_group_submit">>,
-            gui_jq:bind_enter_to_submit_button(TextboxID, ButtonID),
-            Body = [
-                #p{body = <<"Create new group">>},
-                #form{class = <<"control-group">>, body = [
-                    #textbox{id = TextboxID, class = <<"flat name-textbox">>, placeholder = <<"New group name">>},
-                    #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, id = ButtonID,
-                        postback = {action, ?ACTION_CREATE_GROUP, [{query_value, TextboxID}]},
-                        source = [TextboxIDString]}
-                ]}
-            ],
-            show_popup(Body, <<"$('#", TextboxID/binary, "').focus();">>),
+            show_name_insert_popup(<<"Create new group">>, <<"new_group_textbox">>,
+                <<"New group name">>, <<"">>, false, <<"new_group_submit">>,
+                {action, ?ACTION_CREATE_GROUP, [{query_value, <<"new_group_textbox">>}]}, ["new_group_textbox"]),
             State;
 
         {?ACTION_CREATE_GROUP, [<<"">>]} ->
@@ -539,7 +528,7 @@ comet_handle_action(State, Action, Args) ->
 
         {?ACTION_SHOW_JOIN_GROUP_POPUP, _} ->
             show_token_popup(<<"To join an existing group, please paste a user invitation token below:">>,
-                <<"join_group_textbox">>, <<"">>, <<"join_group_submit">>, false,
+                <<"join_group_textbox">>, <<"">>, false, <<"join_group_submit">>,
                 {action, ?ACTION_JOIN_GROUP, [{query_value, <<"join_group_textbox">>}]}, ["join_group_textbox"]),
             State;
 
@@ -672,20 +661,9 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     end;
 
                 {?GROUP_ACTION_SHOW_RENAME_POPUP, _} ->
-                    TextboxID = <<"rename_group_textbox">>,
-                    TextboxIDString = "rename_group_textbox",
-                    ButtonID = <<"rename_group_submit">>,
-                    gui_jq:bind_enter_to_submit_button(TextboxID, ButtonID),
-                    Body = [
-                        #p{body = <<"Rename <b>", GroupName/binary, "</b>">>},
-                        #form{class = <<"control-group">>, body = [
-                            #textbox{id = TextboxID, class = <<"flat name-textbox">>, value = GroupName, placeholder = <<"New group name">>},
-                            #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, id = ButtonID,
-                                postback = {group_action, ?GROUP_ACTION_RENAME, GroupID, [{query_value, TextboxID}]},
-                                source = [TextboxIDString]}
-                        ]}
-                    ],
-                    show_popup(Body, <<"$('#", TextboxID/binary, "').focus().select();">>),
+                    show_name_insert_popup(<<"Rename ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>,
+                        <<"rename_group_textbox">>, <<"New group name">>, GroupName, true, <<"rename_group_submit">>,
+                        {group_action, ?GROUP_ACTION_RENAME, GroupID, [{query_value, <<"rename_group_textbox">>}]}, ["rename_group_textbox"]),
                     State;
 
                 {?GROUP_ACTION_RENAME, [NewGroupName]} ->
@@ -776,7 +754,7 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                         {ok, Token} ->
                             show_token_popup(<<"Give the token below to a user willing to join group ",
                             (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, ":">>,
-                                <<"token_textbox">>, Token, <<"token_ok">>, true,
+                                <<"token_textbox">>, Token, true, <<"token_ok">>,
                                 {action, ?ACTION_HIDE_POPUP}, []);
                         Other ->
                             ?error("Cannot get user invitation token for group with ID ~p: ~p", [GroupID, Other]),
@@ -790,7 +768,7 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                         {ok, Token} ->
                             show_token_popup(<<"Give the token below to a provider willing to create a Space for group ",
                             (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, ":">>,
-                                <<"token_textbox">>, Token, <<"token_ok">>, true,
+                                <<"token_textbox">>, Token, true, <<"token_ok">>,
                                 {action, ?ACTION_HIDE_POPUP}, []);
                         Other ->
                             ?error("Cannot get support token for group with ID ~p: ~p", [GroupID, Other]),
@@ -802,7 +780,7 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                 {?GROUP_ACTION_SHOW_JOIN_SPACE_POPUP, _} ->
                     show_token_popup(<<"To join an existing space as ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary,
                     ", please paste a group invitation token below:">>,
-                        <<"join_space_textbox">>, <<"">>, <<"join_space_button">>, false,
+                        <<"join_space_textbox">>, <<"">>, false, <<"join_space_button">>,
                         {group_action, ?GROUP_ACTION_JOIN_SPACE, GroupID, [{query_value, <<"join_space_textbox">>}]}, ["join_space_textbox"]),
                     State;
 
@@ -823,20 +801,9 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     end;
 
                 {?GROUP_ACTION_SHOW_CREATE_SPACE_POPUP, _} ->
-                    TextboxID = <<"new_space_textbox">>,
-                    TextboxIDString = "new_space_textbox",
-                    ButtonID = <<"new_space_submit">>,
-                    gui_jq:bind_enter_to_submit_button(TextboxID, ButtonID),
-                    Body = [
-                        #p{body = <<"Create new space">>},
-                        #form{class = <<"control-group">>, body = [
-                            #textbox{id = TextboxID, class = <<"flat name-textbox">>, placeholder = <<"New space name">>},
-                            #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, id = ButtonID,
-                                postback = {group_action, ?GROUP_ACTION_CREATE_SPACE, GroupID, [{query_value, TextboxID}]},
-                                source = [TextboxIDString]}
-                        ]}
-                    ],
-                    show_popup(Body, <<"$('#", TextboxID/binary, "').focus();">>),
+                    show_name_insert_popup(<<"Create new space">>, <<"new_space_textbox">>,
+                        <<"New space name">>, <<"">>, false, <<"new_space_submit">>,
+                        {group_action, ?GROUP_ACTION_CREATE_SPACE, GroupID, [{query_value, <<"new_space_textbox">>}]}, ["new_space_textbox"]),
                     State;
 
                 {?GROUP_ACTION_CREATE_SPACE, [<<"">>]} ->
@@ -965,15 +932,28 @@ check_privileges(ActionType, UserPrivileges) ->
 
 
 
-show_token_popup(Text, TextboxID, TextboxValue, ButtonID, DoSelect, Postback, Source) ->
+show_token_popup(Text, TextboxID, TextboxValue, DoSelect, ButtonID, Postback, Source) ->
     gui_jq:bind_enter_to_submit_button(TextboxID, ButtonID),
     Body = [
         #p{body = Text},
         #form{class = <<"control-group">>, body = [
             #textbox{id = TextboxID, class = <<"flat token-textbox">>, placeholder = <<"Token">>, value = TextboxValue},
             #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, id = ButtonID,
-                postback = Postback,
-                source = Source}
+                postback = Postback, source = Source}
+        ]}
+    ],
+    show_popup(Body, <<"$('#", TextboxID/binary, "').focus()",
+    (case DoSelect of true -> <<".select();">>; false -> <<";">> end)/binary>>).
+
+
+show_name_insert_popup(Text, TextboxID, Placeholder, TextboxValue, DoSelect, ButtonID, Postback, Source) ->
+    gui_jq:bind_enter_to_submit_button(TextboxID, ButtonID),
+    Body = [
+        #p{body = [Text]},
+        #form{class = <<"control-group">>, body = [
+            #textbox{id = TextboxID, class = <<"flat name-textbox">>, value = TextboxValue, placeholder = Placeholder},
+            #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, id = ButtonID,
+                postback = Postback, source = Source}
         ]}
     ],
     show_popup(Body, <<"$('#", TextboxID/binary, "').focus()",

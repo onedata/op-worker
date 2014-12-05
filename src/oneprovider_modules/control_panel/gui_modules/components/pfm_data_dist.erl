@@ -66,22 +66,23 @@ data_distribution_panel(FilePath, RowID) ->
     % Item won't hightlight if the link is clicked.
     gui_jq:bind_element_click(HideDDistID, <<"function(e) { e.stopPropagation(); }">>),
     DDistPanelID = ?DIST_PANEL_ID(RowID),
-    {ShowLinkClass, HideLinkClass, DDistPanelClass, Body} = case lists:keyfind(FullPath, 1, get_displayed_ddist_panels()) of
-                                                                false ->
-                                                                    {
-                                                                        <<"glyph-link hidden show-on-parent-hover ddist-show-button">>,
-                                                                        <<"glyph-link hidden ddist-hide-button">>,
-                                                                        <<"ddist-panel display-none">>,
-                                                                        <<"">>
-                                                                    };
-                                                                _ ->
-                                                                    {
-                                                                        <<"glyph-link hidden ddist-show-button">>,
-                                                                        <<"glyph-link ddist-hide-button">>,
-                                                                        <<"ddist-panel">>,
-                                                                        render_table(FileSize, FileBlocks, RowID)
-                                                                    }
-                                                            end,
+    {ShowLinkClass, HideLinkClass, DDistPanelClass, Body} =
+        case lists:keyfind(FullPath, 1, get_displayed_ddist_panels()) of
+            false ->
+                {
+                    <<"glyph-link hidden show-on-parent-hover ddist-show-button">>,
+                    <<"glyph-link hidden ddist-hide-button">>,
+                    <<"ddist-panel display-none">>,
+                    <<"">>
+                };
+            _ ->
+                {
+                    <<"glyph-link hidden ddist-show-button">>,
+                    <<"glyph-link ddist-hide-button">>,
+                    <<"ddist-panel">>,
+                    render_table(FileSize, FileBlocks, RowID)
+                }
+        end,
     [
         #link{id = ShowDDistID, postback = {action, ?MODULE, toggle_ddist_view, [FullPath, FileID, RowID, true]},
             title = <<"Data distribution (advanced)">>, class = ShowLinkClass,
