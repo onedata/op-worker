@@ -1020,6 +1020,10 @@ synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups) ->
                             {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupID, UserID),
                             #user_state{id = UserID, name = UserName, privileges = Privileges}
                         end, UsersIDs),
+                    #user_state{privileges = CurrentPrivileges} = CurrentUser = lists:keyfind(GRUID, 2, UserStates),
+                    UserStatesWithoutCurrent = lists:keydelete(GRUID, 2, UserStates),
+                    UserStatesSorted = [CurrentUser | lists:keysort(3, UserStatesWithoutCurrent)],
+
                     % Synchronize spaces data (belonging to certain group)
                     {ok, SpacesIDs} = gr_groups:get_spaces({user, AccessToken}, GroupID),
                     SpaceStates = lists:map(
@@ -1028,8 +1032,8 @@ synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups) ->
                             #space_state{id = SpaceID, name = SpaceName}
 
                         end, SpacesIDs),
-                    #user_state{privileges = CurrentPrivileges} = lists:keyfind(GRUID, 2, UserStates),
-                    #group_state{id = GroupID, name = GroupName, users = UserStates, spaces = SpaceStates, current_privileges = CurrentPrivileges};
+                    SpaceStatesSorted =lists:keysort(3, SpaceStates),
+                    #group_state{id = GroupID, name = GroupName, users = UserStatesSorted, spaces = SpaceStatesSorted, current_privileges = CurrentPrivileges};
                 _ ->
                     % User does not have rights to view this group
                     #group_state{id = GroupID, name = undefined, users = [], spaces = [], current_privileges = []}
