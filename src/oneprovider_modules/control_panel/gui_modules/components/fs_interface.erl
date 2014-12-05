@@ -98,8 +98,12 @@ get_provider_name(ProviderID) ->
 %% ====================================================================
 %% @doc Issues full block synchronization on remote provider.
 %% @end
--spec issue_remote_file_synchronization(FullPath :: string(), ProviderID :: binary()) -> binary().
+-spec issue_remote_file_synchronization(FullPath :: string(), ProviderID :: binary()) -> ok | error.
 %% ====================================================================
 issue_remote_file_synchronization(FullPath, ProviderID) ->
-    logical_files_manager:sync_from_remote(FullPath, ProviderID),
-    ok.
+    try
+        logical_files_manager:sync_from_remote(FullPath, ProviderID),
+        ok
+    catch _:_ ->
+        error
+    end.
