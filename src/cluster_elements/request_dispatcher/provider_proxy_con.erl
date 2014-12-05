@@ -238,7 +238,7 @@ main_loop(#ppcon_state{msg_id = CurrentMsgId, connections = Connections, inbox =
                     end,
                 SendTo = maps:get(MsgId, Inbox),
                 SendTo ! {response, MsgId, AnswerStatus, WorkerAnswer},
-                State
+                State#ppcon_state{inbox = maps:remove(MsgId, Inbox)}
         after 10000 ->
             State
         end,
