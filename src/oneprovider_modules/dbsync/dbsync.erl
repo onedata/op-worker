@@ -376,6 +376,8 @@ emit_documents(DbName, DocsWithSeq, SinceSeqInfo) ->
             catch
                 _:{badmatch,{error,{not_found,missing}}} ->
                     Acc;
+                _:{badmatch,{error,root_space_dir}} ->
+                    Acc;
                 _:Reason ->
                     ?error_stacktrace("Unable to emit document ~p due to ~p", [UUID, Reason]),
                     Acc
@@ -611,7 +613,7 @@ ping_service_loop(Spaces) ->
 -spec get_space_ctx(DbName :: string() | binary(), #db_document{}) ->
     {ok, #space_info{}} | {error, Reason :: any()}.
 %% ====================================================================
-get_space_ctx(_DbName, #db_document{uuid = UUID} = Doc) ->
+get_space_ctx(_DbName, #db_document{uuid = UUID, record = Record} = Doc) ->
     case dbsync_state:get({uuid_to_spaceid, UUID}) of
         undefined ->
             case dbsync_records:get_space_ctx(Doc, []) of
@@ -620,9 +622,14 @@ get_space_ctx(_DbName, #db_document{uuid = UUID} = Doc) ->
                         fun(FUUID) ->
                             dbsync_state:set({uuid_to_spaceid, FUUID}, SpaceInfo)
                         end, UUIDs),
-                    {ok, SpaceInfo};
+
+                    case UUIDs of
+                        [] -> {error, root_space_dir};
+                        _->
+                            {ok, SpaceInfo}
+                    end;
                 {error, Reason} ->
-                    ?warning("Cannot get space info for document ~p due to ~p", [UUID, Reason]),
+                    ?warning("Cannot get space info for document ~p (type ~p) due to ~p", [UUID, element(1, Record), Reason]),
                     {error, Reason}
             end;
         SpaceId ->

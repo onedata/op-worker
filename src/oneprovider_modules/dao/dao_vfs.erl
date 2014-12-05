@@ -117,6 +117,18 @@ list_attr_watchers({by_expired_before, Time}, N, Offset) when N > 0, Offset >= 0
             ?error("Invalid file attr watcher view response: ~p", [Data]),
             throw({inavlid_data, Data})
     end;
+list_attr_watchers({by_owner, Owner}, N, Offset) when N > 0, Offset >= 0 ->
+    StartKey = dao_helper:name(Owner),
+    EndKey = dao_helper:name(uca_increment(Owner)),
+    QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
+    case dao_records:list_records(?ATTR_WATCHERS_BY_OWNER_VIEW, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+            {ok, [FdDoc || #view_row{doc = #db_document{record = #file_attr_watcher{fuse_id = OwnerId}} = FdDoc} <- Rows,
+                OwnerId == Owner]};
+        Data ->
+            ?error("Invalid file attr watcher view response: ~p", [Data]),
+            throw({inavlid_data, Data})
+    end;
 list_attr_watchers({_Type, _Resource}, _N, _Offset) when _N > 0, _Offset >= 0 ->
     not_yet_implemented.
     
