@@ -166,7 +166,7 @@ render_table(FullPath, FileSize, FileBlocks, RowID) ->
                             #td{body = ProviderID, class = <<"ddist-provider">>},
                             #td{body = PercentageBin, class = <<"ddist-percentage">>},
                             #td{body = #canvas{id = CanvasID, class = <<"ddist-canvas">>}},
-                            #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FilePath, ProviderID, FileSize]},
+                            #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FullPath, ProviderID, FileSize]},
                                 title = <<"Issue full synchronization">>, class = <<"glyph-link ddist-button">>,
                                 body = #span{class = <<"icomoon-spinner6">>}}},
                             % TODO Not yet supported
