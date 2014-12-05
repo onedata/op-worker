@@ -83,6 +83,16 @@
     margin-bottom: 35px;
 }
 
+.no-groups-info {
+    text-align: center;
+    padding-top: 30px;
+}
+
+.no-groups-info > p {
+    font-style: italic;
+    font-size: 22px;
+}
+
 .group-container {
     border: 1px solid #bbb;
     border-radius: 4px;
@@ -371,4 +381,8 @@
 .spaces-table > tbody > tr > td:first-child {
     width: auto !important;
     max-width: 169px !important;
+}
+
+.no-spaces-info {
+    font-style: italic;
 }

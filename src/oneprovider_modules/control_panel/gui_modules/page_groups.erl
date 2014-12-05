@@ -416,28 +416,37 @@ group_spaces_body(GroupID, SpaceStates) ->
             ]},
             #panel{class = <<"gen-table-wrapper">>, body = [
                 #table{class = <<"table table-striped gen-table spaces-table">>, body = #tbody{body =
-                lists:map(
-                    fun(#space_state{id = SpaceID, name = SpaceName}) ->
+                case SpaceStates of
+                    [] ->
                         #tr{cells = [
-                            #td{body = [
-                                #panel{class = <<"name-wrapper">>, body = [
-                                    #link{title = <<"View this space">>, class = <<"glyph-link">>,
-                                        postback = {redirect_to_space, SpaceID}, body = [
-                                            #span{class = <<"icomoon-cloud action-button-icon">>},
-                                            SpaceName
-                                        ]}
-                                ]},
-                                #panel{class = <<"remove-wrapper">>, body = [
-                                    #link{title = <<"Leave this space">>, class = <<"glyph-link">>,
-                                        postback = {group_action, ?GROUP_ACTION_SHOW_LEAVE_SPACE_POPUP, GroupID, [SpaceID, SpaceName]},
-                                        body = #span{class = <<"icomoon-exit">>}}
-                                ]}
-                            ]},
-                            #td{body = [
-                                SpaceID
+                            #td{class = <<"no-spaces-info">>, body = [
+                                <<"No spaces">>
                             ]}
-                        ]}
-                    end, SpaceStates)
+                        ]};
+                    _ ->
+                        lists:map(
+                            fun(#space_state{id = SpaceID, name = SpaceName}) ->
+                                #tr{cells = [
+                                    #td{body = [
+                                        #panel{class = <<"name-wrapper">>, body = [
+                                            #link{title = <<"View this space">>, class = <<"glyph-link">>,
+                                                postback = {redirect_to_space, SpaceID}, body = [
+                                                    #span{class = <<"icomoon-cloud action-button-icon">>},
+                                                    SpaceName
+                                                ]}
+                                        ]},
+                                        #panel{class = <<"remove-wrapper">>, body = [
+                                            #link{title = <<"Leave this space">>, class = <<"glyph-link">>,
+                                                postback = {group_action, ?GROUP_ACTION_SHOW_LEAVE_SPACE_POPUP, GroupID, [SpaceID, SpaceName]},
+                                                body = #span{class = <<"icomoon-exit">>}}
+                                        ]}
+                                    ]},
+                                    #td{body = [
+                                        SpaceID
+                                    ]}
+                                ]}
+                            end, SpaceStates)
+                end
                 }}
             ]}
         ]}
@@ -923,10 +932,17 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
 
 
 refresh_group_list(#page_state{groups = Groups, expanded_groups = ExpandedGroups}) ->
-    Body = lists:map(
-        fun(#group_state{id = ID} = GroupState) ->
-            group_list_element(GroupState, lists:member(ID, ExpandedGroups))
-        end, Groups),
+    Body = case Groups of
+               [] ->
+                   #li{class = <<"no-groups-info">>, body = [
+                       #p{body = [<<"You don't belong to any groups.">>]}
+                   ]};
+               _ ->
+                   lists:map(
+                       fun(#group_state{id = ID} = GroupState) ->
+                           group_list_element(GroupState, lists:member(ID, ExpandedGroups))
+                       end, Groups)
+           end,
     gui_jq:update(<<"group_list">>, Body).
 
 
