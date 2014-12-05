@@ -208,7 +208,7 @@ footer_popup() ->
 -spec group_list_element(GroupState :: #group_state{}, Expanded :: boolean) -> term().
 %% ====================================================================
 group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = UserStates, spaces = SpaceStates}, Expanded) ->
-    {HasPerms, GroupName, GroupHeaderClass} =
+    {CanViewGroup, GroupName, GroupHeaderClass} =
         case GroupNameOrUndef of
             undefined -> {
                 false,
@@ -239,9 +239,14 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
                     #p{class = <<"group-name">>, body = [GroupName]},
                     #p{class = <<"group-id">>, body = [<<"ID: ", GroupID/binary>>]}
                 ]},
-                case HasPerms of
+                case CanViewGroup of
                     false ->
-                        [];
+                        #panel{class = <<"group-actions-ph">>, body = [
+                            #button{title = <<"Leave this group">>, class = <<"btn btn-small btn-info leave-space-button">>,
+                                postback = {action, ?ACTION_SHOW_LEAVE_GROUP_POPUP, [GroupID, <<"<Unknown Name>">>]}, body = [
+                                    <<"<i class=\"icomoon-exit action-button-icon\"></i>">>, <<"Leave group">>
+                                ]}
+                        ]};
                     true ->
                         #panel{class = <<"group-actions-ph">>, body = [
                             #panel{class = <<"btn-group group-actions-dropdown">>, body = [
@@ -313,7 +318,7 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
         ]}
     ]},
 
-    case HasPerms of
+    case CanViewGroup of
         true ->
             gui_jq:wire(gui_jq:postback_action(GroupHeaderID, {group_action, ?GROUP_ACTION_TOGGLE, GroupID}));
         false ->
