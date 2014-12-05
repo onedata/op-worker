@@ -711,7 +711,6 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                                <<"on">> -> true;
                                _ -> false
                            end,
-%%                     ?dump({UserID, PrivilegeID, Flag}),
 
                     case proplists:get_value(GroupID, EditedPrivileges, undefined) of
                         undefined ->
@@ -728,7 +727,6 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     NewUsersPrivs = [{PrivilegeID, Flag} | proplists:delete(PrivilegeID, UsersPrivs)],
                     NewGroupsUsers = [{UserID, NewUsersPrivs} | WithoutUser],
                     NewEditedPrivileges = [{GroupID, NewGroupsUsers} | WithoutGroup],
-                    ?dump(NewEditedPrivileges),
                     State#page_state{edited_privileges = NewEditedPrivileges};
 
                 {?GROUP_ACTION_SAVE_PRIVILEGES, _} ->
@@ -1021,7 +1019,7 @@ synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups) ->
                         end, UsersIDs),
                     #user_state{privileges = CurrentPrivileges} = CurrentUser = lists:keyfind(GRUID, 2, UserStates),
                     UserStatesWithoutCurrent = lists:keydelete(GRUID, 2, UserStates),
-                    UserStatesSorted = [CurrentUser | lists:keysort(3, UserStatesWithoutCurrent)],
+                    UserStatesSorted = [CurrentUser | sort_states(UserStatesWithoutCurrent)],
 
                     % Synchronize spaces data (belonging to certain group)
                     {ok, SpacesIDs} = gr_groups:get_spaces({user, AccessToken}, GroupID),
@@ -1031,7 +1029,7 @@ synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups) ->
                             #space_state{id = SpaceID, name = SpaceName}
 
                         end, SpacesIDs),
-                    SpaceStatesSorted = lists:keysort(3, SpaceStates),
+                    SpaceStatesSorted = sort_states(SpaceStates),
                     #group_state{id = GroupID, name = GroupName, users = UserStatesSorted, spaces = SpaceStatesSorted, current_privileges = CurrentPrivileges};
                 _ ->
                     % User does not have rights to view this group
@@ -1044,6 +1042,17 @@ synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups) ->
         end, GroupStates),
     SortedGroupStates = CanView ++ CannotView,
     #page_state{groups = SortedGroupStates, gruid = GRUID, access_token = AccessToken, expanded_groups = ExpandedGroups}.
+
+
+sort_states(TupleList) ->
+    ListToSort = lists:map(
+        fun(T) ->
+            {string:to_lower(gui_str:binary_to_unicode_list(element(3, T))), element(2, T)}
+        end, TupleList),
+    lists:map(
+        fun({_, StateID}) ->
+            lists:keyfind(StateID, 2, TupleList)
+        end, lists:sort(ListToSort)).
 
 
 %% event/1
