@@ -54,6 +54,7 @@
 -define(ACTION_JOIN_GROUP, join_group).
 -define(ACTION_SHOW_LEAVE_GROUP_POPUP, show_leave_group_popup).
 -define(ACTION_LEAVE_GROUP, leave_group).
+-define(ACTION_MOVE_GROUP, move_group).
 -define(ACTION_HIDE_POPUP, hide_popup).
 
 
@@ -64,7 +65,12 @@
 -define(GROUP_ACTION_REMOVE, remove_group).
 -define(GROUP_ACTION_SHOW_RENAME_POPUP, show_rename_group_popup).
 -define(GROUP_ACTION_RENAME, rename_group).
+-define(GROUP_ACTION_SET_PRIVILEGE, change_privilege).
+-define(GROUP_ACTION_SAVE_PRIVILEGES, save_privileges).
+-define(GROUP_ACTION_DISCARD_PRIVILEGES, discard_privileges).
 -define(GROUP_ACTION_INVITE_USER, invite_user).
+-define(GROUP_ACTION_SHOW_REMOVE_USER_POPUP, show_remove_user_popup).
+-define(GROUP_ACTION_REMOVE_USER, remove_user).
 -define(GROUP_ACTION_REQUEST_SUPPORT, request_space_creation).
 -define(GROUP_ACTION_SHOW_JOIN_SPACE_POPUP, show_join_space_popup).
 -define(GROUP_ACTION_JOIN_SPACE, join_space).
@@ -75,12 +81,17 @@
 
 % What privilege is required for what action
 -define(PRIVILEGES_FOR_ACTIONS, [
+    {?GROUP_ACTION_TOGGLE, ?PRVLG_VIEW},
     {?GROUP_ACTION_SHOW_REMOVE_POPUP, ?PRVLG_REMOVE},
     {?GROUP_ACTION_REMOVE, ?PRVLG_REMOVE},
-    {?GROUP_ACTION_TOGGLE, ?PRVLG_VIEW},
     {?GROUP_ACTION_SHOW_RENAME_POPUP, ?PRVLG_CHANGE},
     {?GROUP_ACTION_RENAME, ?PRVLG_CHANGE},
+    {?GROUP_ACTION_SET_PRIVILEGE, ?PRVLG_SET_PRIVILEGES},
+    {?GROUP_ACTION_SAVE_PRIVILEGES, ?PRVLG_SET_PRIVILEGES},
+    {?GROUP_ACTION_DISCARD_PRIVILEGES, ?PRVLG_SET_PRIVILEGES},
     {?GROUP_ACTION_INVITE_USER, ?PRVLG_INVITE_USER},
+    {?GROUP_ACTION_SHOW_REMOVE_USER_POPUP, ?PRVLG_CHANGE},
+    {?GROUP_ACTION_REMOVE_USER, ?PRVLG_INVITE_USER},
     {?GROUP_ACTION_REQUEST_SUPPORT, ?PRVLG_REQUEST_SUPPORT},
     {?GROUP_ACTION_SHOW_JOIN_SPACE_POPUP, ?PRVLG_JOIN_SPACE},
     {?GROUP_ACTION_JOIN_SPACE, ?PRVLG_JOIN_SPACE},
@@ -99,13 +110,18 @@
 -define(COLLAPSE_WRAPPER_ID(GroupID), <<"gr_collapse_wrapper_", GroupID/binary>>).
 -define(USERS_SECTION_ID(GroupID), <<"gr_users_ph_", GroupID/binary>>).
 -define(SPACES_SECTION_ID(GroupID), <<"gr_spaces_ph_", GroupID/binary>>).
--define(CHECKBOX_ID(UserID, PrivilegeName), <<"pr_chckbx_", PrivilegeName/binary, "_", UserID/binary>>).
+-define(PRVLGS_USER_HEADER_PH_ID(GroupID), <<"pr_user_header_ph_", GroupID/binary>>).
+-define(PRVLGS_SAVE_PH_ID(GroupID), <<"pr_save_ph_", GroupID/binary>>).
+-define(CHECKBOX_ID(GroupID, UserID, PrivilegeID), <<"pr_chckbx_", GroupID/binary, "_", UserID/binary, "_", PrivilegeID/binary>>).
 
 %% Page state
--record(page_state, {groups = [], expanded_groups = [], gruid, access_token}).
+%% Edited privileges is a proplist with GroupID keys, which values are proplists with UserID keys, which values
+%% are proplists with {PrivilegeID, Flag} tuples.
+-record(page_state, {groups = [], expanded_groups = [], edited_privileges = [], gruid, access_token}).
 
 %% Records used to store current info about groups
--record(group_state, {id = <<"">>, name = <<"">>, users = [], spaces = [], current_privileges}).
+%% current_privileges is a list of privileges of current user in specific group
+-record(group_state, {id = <<"">>, name = <<"">>, users = [], spaces = [], current_privileges = []}).
 -record(user_state, {id = <<"">>, name = <<"">>, privileges = <<"">>}).
 -record(space_state, {id = <<"">>, name = <<"">>}).
 
@@ -207,9 +223,11 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
         end,
     GroupHeaderID = ?GROUP_HEADER_ID(GroupID),
     {WrapperClass, UsersBody, SpacesBody} =
-        case Expanded of
-            false -> {<<"collapse-wrapper collapsed">>, [], []};
-            true -> {<<"collapse-wrapper">>, group_users_body(GroupID, UserStates), group_spaces_body(GroupID, SpaceStates)}
+        case Expanded and (GroupNameOrUndef /= undefined) of
+            false ->
+                {<<"collapse-wrapper collapsed">>, [], []};
+            true ->
+                {<<"collapse-wrapper">>, group_users_body(GroupID, UserStates), group_spaces_body(GroupID, SpaceStates)}
         end,
     ListElement = #li{id = ?GROUP_LIST_ELEMENT_ID(GroupID), body = [
         #panel{class = <<"group-container">>, body = [
@@ -236,10 +254,14 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
                                 #list{class = <<"dropdown-menu">>,
                                     body = [
                                         #li{body = [
-                                            #link{body = [<<"<i class=\"icomoon-arrow-up2\"></i>">>, <<"Move up">>]}
+                                            #link{title = <<"Move this group to the top">>,
+                                                postback = {action, ?ACTION_MOVE_GROUP, [GroupID, true]},
+                                                body = [<<"<i class=\"icomoon-arrow-up2\"></i>">>, <<"Move up">>]}
                                         ]},
                                         #li{body = [
-                                            #link{body = [<<"<i class=\"icomoon-arrow-down2\"></i>">>, <<"Move down">>]}
+                                            #link{title = <<"Move this group to the bottom">>,
+                                                postback = {action, ?ACTION_MOVE_GROUP, [GroupID, false]},
+                                                body = [<<"<i class=\"icomoon-arrow-down2\"></i>">>, <<"Move down">>]}
                                         ]},
                                         #li{body = [
                                             #link{title = <<"Leave this group">>,
@@ -248,11 +270,13 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
                                         ]},
                                         #li{body = [
                                             #panel{class = <<"divider">>},
-                                            #link{title = <<"Rename this group">>, postback = {group_action, ?GROUP_ACTION_SHOW_RENAME_POPUP, GroupID},
+                                            #link{title = <<"Rename this group">>,
+                                                postback = {group_action, ?GROUP_ACTION_SHOW_RENAME_POPUP, GroupID},
                                                 body = [<<"<i class=\"icomoon-pencil2\"></i>">>, <<"Rename">>]}
                                         ]},
                                         #li{body = [
-                                            #link{title = <<"Remove this group">>, postback = {group_action, ?GROUP_ACTION_SHOW_REMOVE_POPUP, GroupID},
+                                            #link{title = <<"Remove this group">>,
+                                                postback = {group_action, ?GROUP_ACTION_SHOW_REMOVE_POPUP, GroupID},
                                                 body = [<<"<i class=\"icomoon-remove\"></i>">>, <<"Remove">>]}
                                         ]},
                                         #li{body = [
@@ -299,9 +323,6 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
 
 
 group_users_body(GroupID, UserStates) ->
-    % TODO usunac
-%%     ?dump(UserStates),
-    random:seed(),
     [
         #panel{class = <<"group-left-ph">>, body = [
             <<"USERS<br />&<br />RIGTHS">>,
@@ -311,12 +332,23 @@ group_users_body(GroupID, UserStates) ->
         #panel{class = <<"group-middle-ph">>, body = [
             #panel{class = <<"gen-table-header-wrapper">>, body = [
                 #table{class = <<"table table-striped gen-table-header users-table-header">>, header = #thead{body = [
-                    #tr{cells =
-                    lists:map(
-                        fun({_PrivilegeID, _PrivilegeName, ColumnName}) ->
-                            #th{body = [ColumnName]}
-                        end, [{a, a, <<"User">>}] ++ ?PRIVILEGES)
-                    }
+                    #tr{cells = [
+                        #th{body = [
+                            #panel{id = ?PRVLGS_USER_HEADER_PH_ID(GroupID), body = [<<"User">>]},
+                            #panel{id = ?PRVLGS_SAVE_PH_ID(GroupID), class = <<"privileges-save-ph">>, body = [
+                                #button{class = <<"btn btn-small btn-success privileges-save-button">>,
+                                    postback = {group_action, ?GROUP_ACTION_SAVE_PRIVILEGES, GroupID},
+                                    body = <<"Save">>},
+                                #button{class = <<"btn btn-small btn-danger privileges-save-button">>,
+                                    postback = {group_action, ?GROUP_ACTION_DISCARD_PRIVILEGES, GroupID},
+                                    body = <<"Discard">>}
+                            ]}
+                        ]},
+                        lists:map(
+                            fun({_PrivilegeID, _PrivilegeName, ColumnName}) ->
+                                #th{body = [ColumnName]}
+                            end, ?PRIVILEGES)
+                    ]}
                 ]}}
             ]},
             #panel{class = <<"gen-table-wrapper">>, body = [
@@ -326,32 +358,30 @@ group_users_body(GroupID, UserStates) ->
                         #tr{cells = [
                             #td{body = [
                                 #panel{class = <<"name-wrapper">>, body = [
-                                    #link{title = UserID, class = <<"glyph-link">>,
+                                    #link{title = <<"ID: ", UserID/binary>>, class = <<"glyph-link">>,
                                         body = #span{class = <<"icomoon-user action-button-icon top-1">>}},
                                     UserName
                                 ]},
                                 #panel{class = <<"remove-wrapper">>, body = [
-                                    #link{title = <<"Remove user from group">>, class = <<"glyph-link">>,
+                                    #link{title = <<"Remove this user from group">>, class = <<"glyph-link">>,
+                                        postback = {group_action, ?GROUP_ACTION_SHOW_REMOVE_USER_POPUP, GroupID, [UserID, UserName]},
                                         body = #span{class = <<"icomoon-remove">>}}
                                 ]}
                             ]},
                             lists:map(
                                 fun({PrivilegeID, _PrivilegeName, _ColumnName}) ->
-                                    Bleh = integer_to_binary(random:uniform(5633456346346)),
-                                    % TODO Bleh -> PrivilegeName
-                                    CheckboxID = ?CHECKBOX_ID(UserID, Bleh),
+                                    CheckboxID = ?CHECKBOX_ID(GroupID, UserID, PrivilegeID),
                                     flatui_checkbox:init_checkbox(CheckboxID),
                                     #td{body = [
                                         #flatui_checkbox{label_class = <<"privilege-checkbox checkbox no-label">>,
                                             id = CheckboxID,
                                             checked = lists:member(PrivilegeID, UserPrivileges),
                                             delegate = ?MODULE,
-                                            postback = {message, {checkbox_toggled}}}
+                                            postback = {group_action, ?GROUP_ACTION_SET_PRIVILEGE, GroupID, [UserID, PrivilegeID, {query_value, CheckboxID}]},
+                                            source = [gui_str:to_list(CheckboxID)]}
                                     ]}
                                 end, ?PRIVILEGES)
                         ]}
-                    % TODO usunac dup
-%%                     end, lists:flatten(lists:duplicate(5, UserStates)))
                     end, UserStates)
                 }}
             ]}
@@ -361,8 +391,6 @@ group_users_body(GroupID, UserStates) ->
 
 
 group_spaces_body(GroupID, SpaceStates) ->
-    % TODO usunac
-    random:seed(),
     [
         #panel{class = <<"group-left-ph">>, body = [
             <<"SPACES">>,
@@ -385,10 +413,11 @@ group_spaces_body(GroupID, SpaceStates) ->
                         #tr{cells = [
                             #td{body = [
                                 #panel{class = <<"name-wrapper">>, body = [
-                                    #link{title = <<"View this space">>, class = <<"glyph-link">>, body = [
-                                        #span{class = <<"icomoon-cloud action-button-icon">>},
-                                        SpaceName
-                                    ]}
+                                    #link{title = <<"View this space">>, class = <<"glyph-link">>,
+                                        postback = {redirect_to_space, SpaceID}, body = [
+                                            #span{class = <<"icomoon-cloud action-button-icon">>},
+                                            SpaceName
+                                        ]}
                                 ]},
                                 #panel{class = <<"remove-wrapper">>, body = [
                                     #link{title = <<"Leave this space">>, class = <<"glyph-link">>,
@@ -400,8 +429,6 @@ group_spaces_body(GroupID, SpaceStates) ->
                                 SpaceID
                             ]}
                         ]}
-                    % TODO usunac dup
-%%                     end, lists:flatten(lists:duplicate(5, SpaceStates)))
                     end, SpaceStates)
                 }}
             ]}
@@ -558,6 +585,10 @@ comet_handle_action(State, Action, Args) ->
                     State
             end;
 
+        {?ACTION_MOVE_GROUP, _} ->
+            gui_jq:info_popup(<<"Not implemented">>, <<"This feature will be available soon.">>, <<"">>),
+            State;
+
         {?ACTION_HIDE_POPUP, _} ->
             hide_popup(),
             State
@@ -565,7 +596,11 @@ comet_handle_action(State, Action, Args) ->
 
 
 comet_handle_group_action(State, Action, GroupID, Args) ->
-    #page_state{groups = Groups, expanded_groups = ExpandedGroups, gruid = GRUID, access_token = AccessToken} = State,
+    #page_state{groups = Groups,
+        expanded_groups = ExpandedGroups,
+        edited_privileges = EditedPrivileges,
+        gruid = GRUID,
+        access_token = AccessToken} = State,
     #group_state{
         users = UserStates,
         spaces = SpaceStates,
@@ -579,11 +614,11 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
         true ->
             case {Action, Args} of
                 {?GROUP_ACTION_TOGGLE, _} ->
-                    NewExpandedGroups =
+                    {NewExpandedGroups, NewEditedPrivileges} =
                         case lists:member(GroupID, ExpandedGroups) of
                             true ->
                                 gui_jq:slide_up(?COLLAPSE_WRAPPER_ID(GroupID), 400),
-                                ExpandedGroups -- [GroupID];
+                                {ExpandedGroups -- [GroupID], proplists:delete(GroupID, EditedPrivileges)};
                             false ->
                                 gui_jq:update(?USERS_SECTION_ID(GroupID), group_users_body(GroupID, UserStates)),
                                 gui_jq:update(?SPACES_SECTION_ID(GroupID), group_spaces_body(GroupID, SpaceStates)),
@@ -591,9 +626,9 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                                 % Adjust user tables' headers width (scroll bar takes some space out of table and header would be too wide)
                                 gui_jq:wire(<<"var pad = $($('.gen-table-wrapper')[0]).width() - $($('.gen-table')[0]).width();",
                                 "$('.gen-table-header-wrapper').css('padding-right', pad + 'px');">>),
-                                [GroupID | ExpandedGroups]
+                                {[GroupID | ExpandedGroups], EditedPrivileges}
                         end,
-                    State#page_state{expanded_groups = NewExpandedGroups};
+                    State#page_state{expanded_groups = NewExpandedGroups, edited_privileges = NewEditedPrivileges};
 
                 {?GROUP_ACTION_SHOW_REMOVE_POPUP, _} ->
                     ButtonID = <<"ok_button">>,
@@ -663,6 +698,73 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                             State
 
                     end;
+
+                {?GROUP_ACTION_SET_PRIVILEGE, [UserID, PrivilegeID, FlagString]} ->
+                    Flag = case FlagString of
+                               <<"on">> -> true;
+                               _ -> false
+                           end,
+%%                     ?dump({UserID, PrivilegeID, Flag}),
+
+                    case proplists:get_value(GroupID, EditedPrivileges, undefined) of
+                        undefined ->
+                            gui_jq:hide(?PRVLGS_USER_HEADER_PH_ID(GroupID)),
+                            gui_jq:fade_in(?PRVLGS_SAVE_PH_ID(GroupID), 500);
+                        _ ->
+                            ok
+                    end,
+                    GroupsUsers = proplists:get_value(GroupID, EditedPrivileges, []),
+                    WithoutGroup = proplists:delete(GroupID, EditedPrivileges),
+                    UsersPrivs = proplists:get_value(UserID, GroupsUsers, []),
+                    WithoutUser = proplists:delete(UserID, GroupsUsers),
+
+                    NewUsersPrivs = [{PrivilegeID, Flag} | proplists:delete(PrivilegeID, UsersPrivs)],
+                    NewGroupsUsers = [{UserID, NewUsersPrivs} | WithoutUser],
+                    NewEditedPrivileges = [{GroupID, NewGroupsUsers} | WithoutGroup],
+                    ?dump(NewEditedPrivileges),
+                    State#page_state{edited_privileges = NewEditedPrivileges};
+
+                {?GROUP_ACTION_SAVE_PRIVILEGES, _} ->
+                    try
+                        GroupUsers = proplists:get_value(GroupID, EditedPrivileges),
+                        lists:foreach(
+                            fun({UserID, UserPrivs}) ->
+                                #user_state{privileges = CurrentUserPrivs} = lists:keyfind(UserID, 2, UserStates),
+                                NewUserPrivs = lists:foldl(
+                                    fun({PrivilegeID, Flag}, PrivAcc) ->
+                                        PrivsWithoutPriv = lists:delete(PrivilegeID, PrivAcc),
+                                        case Flag of
+                                            true -> [PrivilegeID | PrivsWithoutPriv];
+                                            false -> PrivsWithoutPriv
+                                        end
+                                    end, CurrentUserPrivs, UserPrivs),
+                                SortedNewPrivs = lists:sort(NewUserPrivs),
+                                case lists:sort(CurrentUserPrivs) of
+                                    SortedNewPrivs ->
+                                        ok;
+                                    _ ->
+                                        ok = gr_groups:set_user_privileges({user, AccessToken}, GroupID, UserID, [{<<"privileges">>, SortedNewPrivs}])
+                                end
+                            end, GroupUsers),
+                        opn_gui_utils:message(success, <<"Users privileges for group <b>", GroupName/binary,
+                        "</b> (ID: <b>", GroupID/binary, "</b>) saved successfully.">>),
+                        SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
+                        refresh_group_list(SyncedState),
+                        SyncedState
+                    catch
+                        _:Reason ->
+                            ?error("Cannot save group (~p) privileges: ~p", [GroupID, Reason]),
+                            opn_gui_utils:message(error, <<"Cannot save users privileges for group <b>", GroupName/binary,
+                            "</b> (ID: <b>", GroupID/binary, "</b>).<br>Please try again later.">>),
+                            State
+                    end;
+
+                {?GROUP_ACTION_DISCARD_PRIVILEGES, _} ->
+                    NewEditedPrivileges = proplists:delete(GroupID, EditedPrivileges),
+                    gui_jq:update(?USERS_SECTION_ID(GroupID), group_users_body(GroupID, UserStates)),
+                    gui_jq:hide(?PRVLGS_SAVE_PH_ID(GroupID)),
+                    gui_jq:fade_in(?PRVLGS_USER_HEADER_PH_ID(GroupID), 500),
+                    State#page_state{edited_privileges = NewEditedPrivileges};
 
                 {?GROUP_ACTION_INVITE_USER, _} ->
                     case gr_groups:get_invite_user_token({user, AccessToken}, GroupID) of
@@ -809,6 +911,39 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                             ?error("Cannot leave Space with ID ~p: ~p", [SpaceID, Other]),
                             opn_gui_utils:message(error, <<"Cannot leave Space <b>", SpaceName/binary,
                             "</b> (ID: <b>", SpaceID/binary, "</b>).<br />Please try again later.">>),
+                            State
+                    end;
+
+                {?GROUP_ACTION_SHOW_REMOVE_USER_POPUP, [UserID, UserName]} ->
+                    ButtonID = <<"ok_button">>,
+                    gui_jq:bind_enter_to_submit_button(ButtonID, ButtonID),
+                    Body = [
+                        #p{body = <<"Are you sure you want to remove user:<br /><b>",
+                        (gui_str:html_encode(UserName))/binary, " (", UserID/binary, ")</b><br />">>},
+                        #form{class = <<"control-group">>, body = [
+                            #button{id = ButtonID, postback = {group_action, ?GROUP_ACTION_REMOVE_USER, GroupID, [UserID, UserName]},
+                                class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
+                            #button{id = <<"cancel_button">>, postback = {action, ?ACTION_HIDE_POPUP},
+                                class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
+                        ]}
+                    ],
+                    show_popup(Body, <<"$('#", ButtonID/binary, "').focus();">>),
+                    State;
+
+                {?GROUP_ACTION_REMOVE_USER, [UserID, UserName]} ->
+                    hide_popup(),
+                    case gr_groups:remove_user({user, AccessToken}, GroupID, UserID) of
+                        ok ->
+                            opn_gui_utils:message(success, <<"User <b>", UserName/binary, "</b> (ID: <b>",
+                            UserID/binary, "</b>) has been successfully removed from the group <b>", GroupName/binary, "</b>.">>),
+                            SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
+                            refresh_group_list(SyncedState),
+                            SyncedState;
+                        Other ->
+                            ?error("Cannot remove user with ID ~p: ~p", [UserID, Other]),
+                            opn_gui_utils:message(error, <<"Cannot remove user <b>", UserName/binary,
+                            "</b> (ID: <b>", UserID/binary, "</b>).<br />Please try again later.">>),
+                            opn_gui_utils:message(error, <<"Cannot remove user with ID: <b>", UserID/binary, "</b>.<br>Please try again later.">>),
                             State
                     end
             end
@@ -970,6 +1105,9 @@ event({group_action, Action, GroupID, Args}) ->
 
 event({close_message, MessageId}) ->
     gui_jq:hide(MessageId);
+
+event({redirect_to_space, SpaceID}) ->
+    gui_jq:redirect(<<"/spaces?show=", SpaceID/binary>>);
 
 event(show_users_info) ->
     gui_jq:info_popup(<<"Users section">>,

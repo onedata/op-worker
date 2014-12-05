@@ -315,6 +315,16 @@
     padding-left: 15px;
 }
 
+.privileges-save-ph {
+    position: relative;
+    display: none;
+}
+
+.privileges-save-button {
+    padding: 3px 11px 4px !important;
+    margin: 0 3px;
+}
+
 .privilege-checkbox {
     margin: 6px auto !important;
     width: 20px;
