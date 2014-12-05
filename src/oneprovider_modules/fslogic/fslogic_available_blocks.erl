@@ -249,7 +249,7 @@ file_block_modified_internal(ProtocolVersion, CacheName, Context, FileId, FuseId
 file_block_modified(ProtocolVersion, CacheName, Context, FileId, ?CLUSTER_FUSE_ID, _, Offset, Size, FullFileName, _) ->
     file_block_modified_internal(ProtocolVersion, CacheName, Context, FileId, ?CLUSTER_FUSE_ID, Offset, Size, FullFileName);
 
-file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout) ->
+file_block_modified(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Offset, Size, FullFileName, Timeout) when is_integer(SequenceNumber) ->
     ExpectedSequenceNumber = get_expected_sequence_number(CacheName, FileId, FuseId),
     case SequenceNumber =< ExpectedSequenceNumber of
         true ->
@@ -322,7 +322,7 @@ file_truncated_internal(ProtocolVersion, CacheName, Context, FileId, FuseId, Siz
 file_truncated(ProtocolVersion, CacheName, Context, FileId, ?CLUSTER_FUSE_ID, _, Size, FullFileName, _) ->
     file_truncated_internal(ProtocolVersion, CacheName, Context, FileId, ?CLUSTER_FUSE_ID, Size, FullFileName);
 
-file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, Timeout) ->
+file_truncated(ProtocolVersion, CacheName, Context, FileId, FuseId, SequenceNumber, Size, FullFileName, Timeout) when is_integer(SequenceNumber) ->
     ExpectedSequenceNumber = get_expected_sequence_number(CacheName, FileId, FuseId),
     case SequenceNumber =< ExpectedSequenceNumber of
         true ->
@@ -677,14 +677,15 @@ update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple, IgnoredFuse) -
     case ets:lookup(CacheName, {FileId, old_file_size}) of
         [] ->
             ets:delete(CacheName, {FileId, old_file_size}),
+            ets:insert(CacheName, {{FileId, old_file_size}, NewSizeTuple}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(utils:ensure_list(FileId), 0, NewSize, IgnoredFuse);
         [{_, {_, OldSize}}] when OldSize =/= NewSize ->
             ets:delete(CacheName, {FileId, old_file_size}),
+            ets:insert(CacheName, {{FileId, old_file_size}, NewSizeTuple}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
             fslogic_events:on_file_size_update(utils:ensure_list(FileId), OldSize, NewSize, IgnoredFuse);
         [_] ->
-            ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple})
     end.
 
@@ -698,7 +699,6 @@ clear_size_cache(CacheName, FileId) ->
             ets:delete(CacheName, {FileId, file_size}),
             OldSize;
         [] ->
-            ets:delete(CacheName, {FileId, old_file_size}),
             ets:delete(CacheName, {FileId, file_size}),
             undefined
     end.
