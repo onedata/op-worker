@@ -114,8 +114,8 @@
 -define(PRVLGS_SAVE_PH_ID(GroupID), <<"pr_save_ph_", GroupID/binary>>).
 -define(CHECKBOX_ID(GroupID, UserID, PrivilegeID), <<"pr_chckbx_", GroupID/binary, "_", UserID/binary, "_", PrivilegeID/binary>>).
 
-% Macros used to format names and IDs that appear in messages
--define(FORMAT_NAME_AND_ID(GroupID, GroupName), <<"<b>", GroupName/binary, "</b> (ID: <b>", GroupID/binary, "</b>)">>).
+% Macro used to format names and IDs that appear in messages
+-define(FORMAT_ID_AND_NAME(GroupID, GroupName), <<"<b>", (gui_str:html_encode(GroupName))/binary, "</b> (ID: <b>", GroupID/binary, "</b>)">>).
 
 %% Page state
 %% Edited privileges is a proplist with GroupID keys, which values are proplists with UserID keys, which values
@@ -516,33 +516,22 @@ comet_handle_action(State, Action, Args) ->
             try
                 {ok, GroupID} = gr_users:create_group({user, AccessToken}, [{<<"name">>, GroupName}]),
                 gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
-                opn_gui_utils:message(success, <<"Group created: ", (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary>>),
+                opn_gui_utils:message(success, <<"Group created: ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
                 SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                 refresh_group_list(SyncedState),
                 SyncedState
             catch
                 _:Other ->
                     ?error_stacktrace("Cannot create group ~p: ~p", [GroupName, Other]),
-                    opn_gui_utils:message(error, <<"Cannot create group: ", (gui_str:html_encode(GroupName))/binary,
+                    opn_gui_utils:message(error, <<"Cannot create group: <b>", (gui_str:html_encode(GroupName))/binary,
                     "</b>.<br />Please try again later.">>),
                     State
             end;
 
         {?ACTION_SHOW_JOIN_GROUP_POPUP, _} ->
-            TextboxID = <<"join_group_textbox">>,
-            TextboxIDString = "join_group_textbox",
-            ButtonID = <<"join_group_submit">>,
-            gui_jq:bind_enter_to_submit_button(TextboxID, ButtonID),
-            Body = [
-                #p{body = <<"To join an existing group, please paste a user invitation token below:">>},
-                #form{class = <<"control-group">>, body = [
-                    #textbox{id = TextboxID, class = <<"flat token-textbox">>, placeholder = <<"Token">>},
-                    #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, id = ButtonID,
-                        postback = {action, ?ACTION_JOIN_GROUP, [{query_value, TextboxID}]},
-                        source = [TextboxIDString]}
-                ]}
-            ],
-            show_popup(Body, <<"$('#", TextboxID/binary, "').focus();">>),
+            show_token_popup(<<"To join an existing group, please paste a user invitation token below:">>,
+                <<"join_group_textbox">>, <<"">>, <<"join_group_submit">>, false,
+                {action, ?ACTION_JOIN_GROUP, [{query_value, <<"join_group_textbox">>}]}, ["join_group_textbox"]),
             State;
 
         {?ACTION_JOIN_GROUP, [Token]} ->
@@ -552,7 +541,7 @@ comet_handle_action(State, Action, Args) ->
                 gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                 SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                 #group_state{name = GroupName} = lists:keyfind(GroupID, 2, SyncedState#page_state.groups),
-                opn_gui_utils:message(success, <<"Successfully joined group ", (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary>>),
+                opn_gui_utils:message(success, <<"Successfully joined group ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
                 refresh_group_list(SyncedState),
                 SyncedState
             catch
@@ -568,7 +557,7 @@ comet_handle_action(State, Action, Args) ->
             gui_jq:bind_enter_to_submit_button(ButtonID, ButtonID),
             Body = [
                 #p{body = <<"Are you sure you want to leave group:<br />",
-                (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary, "<br />">>},
+                (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, "<br />">>},
                 #form{class = <<"control-group">>, body = [
                     #button{id = ButtonID, postback = {action, ?ACTION_LEAVE_GROUP, [GroupID, GroupName]},
                         class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
@@ -584,14 +573,14 @@ comet_handle_action(State, Action, Args) ->
             case gr_users:leave_group({user, AccessToken}, GroupID) of
                 ok ->
                     gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
-                    opn_gui_utils:message(success, <<"Successfully left group ", (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary>>),
+                    opn_gui_utils:message(success, <<"Successfully left group ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
                     SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                     refresh_group_list(SyncedState),
                     SyncedState;
                 Other ->
                     ?error("Cannot leave group with ID ~p: ~p", [GroupID, Other]),
                     opn_gui_utils:message(error, <<"Cannot leave group ",
-                    (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary, ".<br />Please try again later.">>),
+                    (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, ".<br />Please try again later.">>),
                     State
             end;
 
@@ -645,7 +634,7 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     gui_jq:bind_enter_to_submit_button(ButtonID, ButtonID),
                     Body = [
                         #p{body = <<"Are you sure you want to remove group:<br />",
-                        (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary, "?<br />">>},
+                        (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, "?<br />">>},
                         #p{class = <<"warning-message">>, body = <<"This operation cannot be undone!">>},
                         #form{class = <<"control-group">>, body = [
                             #button{id = ButtonID, postback = {group_action, ?GROUP_ACTION_REMOVE, GroupID},
@@ -662,14 +651,14 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     case gr_groups:remove({user, AccessToken}, GroupID) of
                         ok ->
                             gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
-                            opn_gui_utils:message(success, <<"Group removed: ", (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary>>),
+                            opn_gui_utils:message(success, <<"Group removed: ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
                             SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                             refresh_group_list(SyncedState),
                             SyncedState;
                         Other ->
                             ?error("Cannot remove group with ID ~p: ~p", [GroupID, Other]),
                             opn_gui_utils:message(error, <<"Cannot remove group ",
-                            (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary, ".<br />Please try again later.">>),
+                            (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, ".<br />Please try again later.">>),
                             State
                     end;
 
@@ -696,14 +685,14 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                         ok ->
                             gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                             opn_gui_utils:message(success, <<"Group renamed: <b>", GroupName/binary,
-                            "</b> -> ", (?FORMAT_NAME_AND_ID(GroupID, NewGroupName))/binary>>),
+                            "</b> -> ", (?FORMAT_ID_AND_NAME(GroupID, NewGroupName))/binary>>),
                             SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                             refresh_group_list(SyncedState),
                             SyncedState;
                         Other ->
                             ?error("Cannot change name of group ~p: ~p", [GroupID, Other]),
                             opn_gui_utils:message(error, <<"Cannot rename group ",
-                            (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary, ".<br />Please try again later.">>),
+                            (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, ".<br />Please try again later.">>),
                             State
 
                     end;
@@ -756,7 +745,7 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                                 end
                             end, GroupUsers),
                         opn_gui_utils:message(success, <<"Saved users privileges for group ",
-                        (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary>>),
+                        (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
                         SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                         refresh_group_list(SyncedState),
                         SyncedState
@@ -764,7 +753,7 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                         _:Reason ->
                             ?error("Cannot save group (~p) privileges: ~p", [GroupID, Reason]),
                             opn_gui_utils:message(error, <<"Cannot save users privileges for group ",
-                            (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary, ".<br />Please try again later.">>),
+                            (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, ".<br />Please try again later.">>),
                             State
                     end;
 
@@ -778,71 +767,43 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                 {?GROUP_ACTION_INVITE_USER, _} ->
                     case gr_groups:get_invite_user_token({user, AccessToken}, GroupID) of
                         {ok, Token} ->
-                            TextboxID = <<"token_textbox">>,
-                            ButtonID = <<"token_ok">>,
-                            gui_jq:bind_enter_to_submit_button(TextboxID, ButtonID),
-                            Body = [
-                                #p{body = <<"Give the token below to a user willing to join group ",
-                                (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary, ":">>},
-                                #form{class = <<"control-group">>, body = [
-                                    #textbox{id = TextboxID, class = <<"flat token-textbox">>, value = Token, placeholder = <<"Token">>},
-                                    #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, id = ButtonID,
-                                        postback = {action, ?ACTION_HIDE_POPUP}}
-                                ]}
-                            ],
-                            show_popup(Body, <<"$('#", TextboxID/binary, "').focus().select();">>);
+                            show_token_popup(<<"Give the token below to a user willing to join group ",
+                            (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, ":">>,
+                                <<"token_textbox">>, Token, <<"token_ok">>, true,
+                                {action, ?ACTION_HIDE_POPUP}, []);
                         Other ->
                             ?error("Cannot get user invitation token for group with ID ~p: ~p", [GroupID, Other]),
                             opn_gui_utils:message(error, <<"Cannot get invitation token for group ",
-                            (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary, ".<br />Please try again later.">>)
+                            (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, ".<br />Please try again later.">>)
                     end,
                     State;
 
                 {?GROUP_ACTION_REQUEST_SUPPORT, _} ->
                     case gr_groups:get_create_space_token({user, AccessToken}, GroupID) of
                         {ok, Token} ->
-                            TextboxID = <<"token_textbox">>,
-                            ButtonID = <<"token_ok">>,
-                            gui_jq:bind_enter_to_submit_button(TextboxID, ButtonID),
-                            Body = [
-                                #p{body = <<"Give the token below to a provider willing to create a Space for group ",
-                                (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary, ":">>},
-                                #form{class = <<"control-group">>, body = [
-                                    #textbox{id = TextboxID, class = <<"flat token-textbox">>, value = Token, placeholder = <<"Token">>},
-                                    #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, id = ButtonID,
-                                        postback = {action, ?ACTION_HIDE_POPUP}}
-                                ]}
-                            ],
-                            show_popup(Body, <<"$('#", TextboxID/binary, "').focus().select();">>);
+                            show_token_popup(<<"Give the token below to a provider willing to create a Space for group ",
+                            (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, ":">>,
+                                <<"token_textbox">>, Token, <<"token_ok">>, true,
+                                {action, ?ACTION_HIDE_POPUP}, []);
                         Other ->
                             ?error("Cannot get support token for group with ID ~p: ~p", [GroupID, Other]),
                             opn_gui_utils:message(error, <<"Cannot get Space creation token for group ",
-                            (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary, ".<br />Please try again later.">>)
+                            (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, ".<br />Please try again later.">>)
                     end,
                     State;
 
                 {?GROUP_ACTION_SHOW_JOIN_SPACE_POPUP, _} ->
-                    TextboxID = <<"join_space_textbox">>,
-                    TextboxIDString = "join_space_textbox",
-                    ButtonID = <<"join_space_button">>,
-                    gui_jq:bind_enter_to_submit_button(TextboxID, ButtonID),
-                    Body = [
-                        #p{body = <<"To join an existing space as ", (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary, ", please paste a group invitation token below:">>},
-                        #form{class = <<"control-group">>, body = [
-                            #textbox{id = TextboxID, class = <<"flat token-textbox">>, placeholder = <<"Token">>},
-                            #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, id = ButtonID,
-                                postback = {group_action, ?GROUP_ACTION_JOIN_SPACE, GroupID, [{query_value, TextboxID}]},
-                                source = [TextboxIDString]}
-                        ]}
-                    ],
-                    show_popup(Body, <<"$('#", TextboxID/binary, "').focus();">>),
+                    show_token_popup(<<"To join an existing space as ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary,
+                    ", please paste a group invitation token below:">>,
+                        <<"join_space_textbox">>, <<"">>, <<"join_space_button">>, false,
+                        {group_action, ?GROUP_ACTION_JOIN_SPACE, GroupID, [{query_value, <<"join_space_textbox">>}]}, ["join_space_textbox"]),
                     State;
 
                 {?GROUP_ACTION_JOIN_SPACE, [Token]} ->
                     hide_popup(),
                     try
                         {ok, SpaceID} = gr_groups:join_space({user, AccessToken}, GroupID, [{<<"token">>, Token}]),
-                        opn_gui_utils:message(success, <<"Space joined as: ", (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary>>),
+                        opn_gui_utils:message(success, <<"Space joined as: ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
                         SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                         refresh_group_list(SyncedState),
                         SyncedState
@@ -880,8 +841,8 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     try
                         {ok, SpaceID} = gr_groups:create_space({user, AccessToken}, GroupID, [{<<"name">>, SpaceName}]),
                         gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
-                        opn_gui_utils:message(success, <<"Created space ", (?FORMAT_NAME_AND_ID(SpaceID, SpaceName))/binary,
-                        " for group ", (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary>>),
+                        opn_gui_utils:message(success, <<"Created space ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary,
+                        " for group ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
                         SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                         refresh_group_list(SyncedState),
                         SyncedState
@@ -897,8 +858,8 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     ButtonID = <<"ok_button">>,
                     gui_jq:bind_enter_to_submit_button(ButtonID, ButtonID),
                     Body = [
-                        #p{body = <<"Are you sure you want ", (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary, " to leave space:<br />",
-                        (?FORMAT_NAME_AND_ID(SpaceID, SpaceName))/binary, "<br />">>},
+                        #p{body = <<"Are you sure you want ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, " to leave space:<br />",
+                        (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, "<br />">>},
                         #p{class = <<"warning-message">>, body = <<"This operation cannot be undone!">>},
                         #form{class = <<"control-group">>, body = [
                             #button{id = ButtonID, postback = {group_action, ?GROUP_ACTION_LEAVE_SPACE, GroupID, [SpaceID, SpaceName]},
@@ -914,15 +875,15 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     hide_popup(),
                     case gr_groups:leave_space({user, AccessToken}, GroupID, SpaceID) of
                         ok ->
-                            opn_gui_utils:message(success, <<"Group ", (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary,
-                            " has successfully left the space ", (?FORMAT_NAME_AND_ID(SpaceID, SpaceName))/binary>>),
+                            opn_gui_utils:message(success, <<"Group ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary,
+                            " has successfully left the space ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
                             SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                             refresh_group_list(SyncedState),
                             SyncedState;
                         Other ->
                             ?error("Cannot leave Space with ID ~p: ~p", [SpaceID, Other]),
                             opn_gui_utils:message(error, <<"Cannot leave Space ",
-                            (?FORMAT_NAME_AND_ID(SpaceID, SpaceName))/binary, ".<br />Please try again later.">>),
+                            (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ".<br />Please try again later.">>),
                             State
                     end;
 
@@ -931,7 +892,7 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     gui_jq:bind_enter_to_submit_button(ButtonID, ButtonID),
                     Body = [
                         #p{body = <<"Are you sure you want to remove user:<br />",
-                        (?FORMAT_NAME_AND_ID(UserID, UserName))/binary, "<br />">>},
+                        (?FORMAT_ID_AND_NAME(UserID, UserName))/binary, "<br />">>},
                         #form{class = <<"control-group">>, body = [
                             #button{id = ButtonID, postback = {group_action, ?GROUP_ACTION_REMOVE_USER, GroupID, [UserID, UserName]},
                                 class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
@@ -946,15 +907,15 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     hide_popup(),
                     case gr_groups:remove_user({user, AccessToken}, GroupID, UserID) of
                         ok ->
-                            opn_gui_utils:message(success, <<"User ", (?FORMAT_NAME_AND_ID(UserID, UserName))/binary,
-                            " removed from the group ", (?FORMAT_NAME_AND_ID(GroupID, GroupName))/binary>>),
+                            opn_gui_utils:message(success, <<"User ", (?FORMAT_ID_AND_NAME(UserID, UserName))/binary,
+                            " removed from the group ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
                             SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                             refresh_group_list(SyncedState),
                             SyncedState;
                         Other ->
                             ?error("Cannot remove user with ID ~p: ~p", [UserID, Other]),
                             opn_gui_utils:message(error, <<"Cannot remove user ",
-                            (?FORMAT_NAME_AND_ID(UserID, UserName))/binary, ".<br />Please try again later.">>),
+                            (?FORMAT_ID_AND_NAME(UserID, UserName))/binary, ".<br />Please try again later.">>),
                             State
                     end
             end
@@ -987,6 +948,22 @@ check_privileges(ActionType, UserPrivileges) ->
                     {false, PrivName}
             end
     end.
+
+
+
+show_token_popup(Text, TextboxID, TextboxValue, ButtonID, DoSelect, Postback, Source) ->
+    gui_jq:bind_enter_to_submit_button(TextboxID, ButtonID),
+    Body = [
+        #p{body = Text},
+        #form{class = <<"control-group">>, body = [
+            #textbox{id = TextboxID, class = <<"flat token-textbox">>, placeholder = <<"Token">>, value = TextboxValue},
+            #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, id = ButtonID,
+                postback = Postback,
+                source = Source}
+        ]}
+    ],
+    show_popup(Body, <<"$('#", TextboxID/binary, "').focus()",
+    (case DoSelect of true -> <<".select();">>; false -> <<";">> end)/binary>>).
 
 
 show_popup(Body, ScriptAfterUpdate) ->
