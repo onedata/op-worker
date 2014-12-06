@@ -18,7 +18,7 @@
 % 'remote_block_size' defines the size of minimal file unit in synchronization process.
 % The data that needs to be transfered during file synchronization must be multiple
 % of this value in order to be sure that everything is up to date
--define(remote_block_size, 4194304). % 4MB in Bytes
+-define(remote_block_size, 1). % 4MB in Bytes
 
 % Range of file value given in bytes ('from' and 'to' are inslusive)
 -record(byte_range, {from = 0, to = 0}).

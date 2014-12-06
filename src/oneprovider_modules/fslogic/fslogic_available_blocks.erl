@@ -62,7 +62,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
     ?debug("synchronize_file_block(~p,~p,~p)", [FullFileName, Offset, Size]),
 
     %prepare data
-    {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
+    FileId = get_uuid_from_cache(FullFileName), %todo use uuids only
     {ok, RemoteLocationDocs} = call({list_all_available_blocks, FileId}),
     ProviderId = cluster_manager_lib:get_provider_id(),
     [MyRemoteLocationDoc] = lists:filter(fun(#db_document{record = #available_blocks{provider_id = Id}}) ->
@@ -109,7 +109,7 @@ synchronize_file_block(FullFileName, Offset, Size) ->
 %% ====================================================================
 file_block_modified(FullFileName, FuseId, SequenceNumber, Offset, Size) ->
     ?debug("file_block_modified(~p,~p,~p,~p,~p)", [FullFileName, FuseId, SequenceNumber, Offset, Size]),
-    {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
+    FileId = get_uuid_from_cache(FullFileName), %todo use uuids only
     #atom{value = ?VOK} = call({file_block_modified, fslogic_context:get_context(), FileId, FuseId, SequenceNumber, Offset, Size, FullFileName}). % todo remove FullFileName arg
 
 %% file_truncated/4
@@ -122,7 +122,7 @@ file_block_modified(FullFileName, FuseId, SequenceNumber, Offset, Size) ->
 %% ====================================================================
 file_truncated(FullFileName, FuseId, SequenceNumber, Size) ->
     ?debug("file_truncated(~p,~p,~p,~p)", [FullFileName, FuseId, SequenceNumber, Size]),
-    {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName), %todo cache this somehow
+    FileId = get_uuid_from_cache(FullFileName), %todo use uuids only
     #atom{value = ?VOK} = call({file_truncated, fslogic_context:get_context(), FileId, FuseId, SequenceNumber, Size, FullFileName}). % todo remove FullFileName arg
 
 db_sync_hook() ->
@@ -130,8 +130,12 @@ db_sync_hook() ->
     fun
         (?FILES_DB_NAME, _, _, #db_document{record = #available_blocks{file_id = FileId}, deleted = true}) ->
             fslogic_available_blocks:call({invalidate_blocks_cache, FileId});
-        (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}, deleted = false}) when Id =/= MyProviderId ->
-            fslogic_available_blocks:call({external_available_blocks_changed, fslogic_context:get_context(), utils:ensure_list(FileId), utils:ensure_list(Uuid)});
+        (?FILES_DB_NAME, _, Uuid, #db_document{record = #available_blocks{provider_id = Id, file_id = FileId}, deleted = false}) ->
+            case utils:ensure_binary(Id) =/= utils:ensure_binary(MyProviderId) of
+                true ->
+                    fslogic_available_blocks:call({external_available_blocks_changed, fslogic_context:get_context(), utils:ensure_list(FileId), utils:ensure_list(Uuid)});
+                false -> ok
+            end;
         (?FILES_DB_NAME, _, _, FileDoc = #db_document{uuid = FileId, record = #file{}, deleted = false}) ->
             {ok, FullFileName} = logical_files_manager:get_file_full_name_by_uuid(FileId),
             ok = fslogic_file:ensure_file_location_exists(FullFileName, FileDoc);
@@ -591,14 +595,24 @@ update_size(MyDoc = #db_document{record = AvailableBlocks}, OtherSize) ->
 %% Utility functions
 %% ====================================================================
 
+%% get_timestamp/0
+%% ====================================================================
+%% @doc gets a timestamp in ms from the epoch
+%% @end
+-spec get_timestamp() -> non_neg_integer().
+%% ====================================================================
+get_timestamp() ->
+    {Mega, Sec, Micro} = erlang:now(),
+    (Mega * 1000000 + Sec) * 1000000 + Micro.
+
+%% ====================================================================
+%% Range conversion functions
+%% ====================================================================
+
 ranges_to_offset_tuples([]) -> [];
 ranges_to_offset_tuples([#range{} = H | T]) ->
     #offset_range{offset = Offset, size = Size} = byte_to_offset_range(block_to_byte_range(H)),
     [{Offset, Size} | ranges_to_offset_tuples(T)].
-
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
 
 block_to_byte_range(#range{from = From, to = To}) ->
     block_to_byte_range(#block_range{from = From, to = To});
@@ -646,17 +660,10 @@ offset_to_block_range(#offset_range{offset = Offset, size = Size}) ->
 byte_to_block(Byte) ->
     utils:ceil(Byte / ?remote_block_size).
 
-%% get_timestamp/0
-%% ====================================================================
-%% @doc gets a timestamp in ms from the epoch
-%% @end
--spec get_timestamp() -> non_neg_integer().
-%% ====================================================================
-get_timestamp() ->
-    {Mega, Sec, Micro} = erlang:now(),
-    (Mega * 1000000 + Sec) * 1000000 + Micro.
 
-%Internal ets cache wrapping functions
+%% ====================================================================
+%% Internal ets cache wrapping functions
+%% ====================================================================
 
 get_size_from_cache(CacheName, FileId) ->
     case ets:lookup(CacheName, {FileId, file_size}) of
@@ -673,21 +680,25 @@ get_docs_from_cache(CacheName, FileId) ->
 update_size_cache(CacheName, FileId, NewSizeTuple) ->
     update_size_cache(CacheName, FileId, NewSizeTuple, undefined).
 
-update_size_cache(CacheName, FileId, {_, NewSize} = NewSizeTuple, IgnoredFuse) ->
+update_size_cache(CacheName, FileId, {_Timestamp, NewSize} = NewSizeTuple, IgnoredFuse) ->
     case ets:lookup(CacheName, {FileId, old_file_size}) of
         [] ->
-            ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, old_file_size}, NewSizeTuple}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
-            fslogic_events:on_file_size_update(utils:ensure_list(FileId), 0, NewSize, IgnoredFuse);
+            notify_fslogic_of_size_change(FileId, NewSizeTuple, IgnoredFuse);
         [{_, {_, OldSize}}] when OldSize =/= NewSize ->
             ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, old_file_size}, NewSizeTuple}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
-            fslogic_events:on_file_size_update(utils:ensure_list(FileId), OldSize, NewSize, IgnoredFuse);
+            notify_fslogic_of_size_change(FileId, NewSizeTuple, IgnoredFuse);
         [_] ->
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple})
     end.
+
+notify_fslogic_of_size_change(_FileId, {0, _}, _IgnoredFuse) -> ok;
+notify_fslogic_of_size_change(FileId, {_, NewSize}, IgnoredFuse) ->
+    fslogic_events:on_file_size_update(utils:ensure_list(FileId), 0, NewSize, IgnoredFuse).
+
 
 update_docs_cache(CacheName, FileId, Docs) when is_list(Docs) ->
     ets:insert(CacheName, {{FileId, all_docs}, Docs}).
@@ -721,3 +732,14 @@ get_expected_sequence_number(CacheName, FileId, FuseId) ->
 
 set_expected_sequence_number(CacheName, FileId, FuseId, SequenceNumber) ->
     ets:insert(CacheName, {{FileId, FuseId, sequence_number}, SequenceNumber}).
+
+%todo remove that function and use only uuid
+get_uuid_from_cache(FullFileName) ->
+    case ets:lookup(?uuid_cache, FullFileName) of
+        [] ->
+            {ok, #db_document{uuid = FileUuid}} = fslogic_objects:get_file(FullFileName),
+            ets:insert(?uuid_cache, {FullFileName, FileUuid}),
+            FileUuid;
+        [{FullFileName, Uuid}] ->
+            Uuid
+    end.
