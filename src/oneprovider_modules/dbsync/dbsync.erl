@@ -219,6 +219,8 @@ handle2(_ProtocolVersion, #requestseqdiff{space_id = SpaceId, dbname = DbName, s
                     Acc;
                 _:{badmatch, {ok, #space_info{}}} ->
                     Acc;
+                _:{badmatch,{error,root_space_dir}} ->
+                    Acc;
                 _:Reason ->
                     ?error_stacktrace("Unable to emit document ~p due to ~p", [Doc, Reason]),
                     Acc

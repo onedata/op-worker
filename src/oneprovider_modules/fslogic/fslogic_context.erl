@@ -134,7 +134,7 @@ clear_user_dn() ->
 -spec get_fuse_id() -> Result when Result :: term() | undefined.
 %% ====================================================================
 get_fuse_id() ->
-    get(fuse_id).
+    utils:ensure_list(get(fuse_id)).
 
 
 %% set_fuse_id/1
