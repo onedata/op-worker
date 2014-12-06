@@ -266,7 +266,7 @@ stream_file_to_fslogic(Req, FullPath, BufferSize) ->
 %% ====================================================================
 write_to_file(Binary, FullPath) ->
     Size = size(Binary),
-    BytesWritten = logical_files_manager:write(FullPath, Binary),
+    BytesWritten = logical_files_manager:write_file_chunk(FullPath, Binary),
     case BytesWritten of
         I when is_integer(I) ->
             case BytesWritten of

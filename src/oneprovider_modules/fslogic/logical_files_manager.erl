@@ -16,6 +16,7 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("oneprovider_modules/fslogic/fslogic.hrl").
+-include("oneprovider_modules/fslogic/fslogic_available_blocks.hrl").
 -include("oneprovider_modules/dao/dao_vfs.hrl").
 -include("oneprovider_modules/dao/dao_share.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
@@ -31,13 +32,19 @@
     getfileattr/1, get_xattr/2, set_xattr/3, remove_xattr/2, list_xattr/1, get_acl/1, set_acl/2,
     rmlink/1, read_link/1, create_symlink/2]).
 %% File access (db and helper are used)
--export([rmdir_recursive/1, cp/2, read/4, read/3, write/4, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
+-export([rmdir_recursive/1, cp/2, read/4, read/3, write/4, write/3, write_file_chunk/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
 -export([change_file_perm/3, check_file_perm/2]).
 -export([get_file_children_count/1]).
+
+%% Block synchronization
+-export([synchronize/3, mark_as_modified/5, mark_as_truncated/4]).
+-export([get_file_block_map/1]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
 -export([create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
+
+-export([sync_from_remote/2]).
 
 %% ====================================================================
 %% Test API
@@ -58,6 +65,14 @@
 %% Logical file organization management (only db is used)
 %% ====================================================================
 
+sync_from_remote(Path, ProviderId) ->
+    FullFileName = fslogic_path:get_full_file_name(Path),
+    {ok, #fileattributes{size = Size}} = getfileattr(FullFileName),
+    SyncReq = #synchronizefileblock{logical_name = FullFileName, offset = 0, size = Size},
+    Request = #fusemessage{message_type = "synchronizefileblock", input = fuse_messages_pb:encode_synchronizefileblock(SyncReq)},
+    {GRUID, AccessToken} = fslogic_context:get_gr_auth(),
+    #atom{value = Value} = provider_proxy:reroute_pull_message(ProviderId, {GRUID, AccessToken}, ?CLUSTER_FUSE_ID, Request),
+    Value.
 
 %% read_link/1
 %% ====================================================================
@@ -545,8 +560,8 @@ read(File, Offset, Size) ->
     ErrorDetail :: term().
 %% ====================================================================
 read(File, Offset, Size, EventPolicy) ->
-    synchronize(File, Offset, Size),
     {Response, Response2} = getfilelocation(File),
+    synchronize(File, Offset, Size),
     case Response of
         ok ->
             {Storage_helper_info, FileId} = Response2,
@@ -570,46 +585,49 @@ read(File, Offset, Size, EventPolicy) ->
     end.
 
 
-%% write/2
+%% write_file_chunk/2
 %% ====================================================================
-%% @doc Appends data to the end of file (uses logical name of file).
+%% @doc Write file chunk beggining at offset 0, consecutive calls cache
+%% file size and appends data at the end
 %% First it gets information about storage helper and file id at helper.
 %% Next it uses storage helper to write data to file.
 %% @end
--spec write(File :: term(), Buf :: binary()) -> Result when
+-spec write_file_chunk(File :: term(), Buf :: binary()) -> Result when
     Result :: BytesWritten | {ErrorGeneral, ErrorDetail},
     BytesWritten :: integer(),
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
-write(File, Buf) ->
+write_file_chunk({uuid, Uuid}, Buf) ->
+    case get_file_path_from_cache({uuid, Uuid}) of
+        {ok, FullFilePath} -> write_file_chunk(FullFilePath, Buf);
+        Error -> Error
+    end;
+write_file_chunk(FilePath, Buf) ->
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
-            {Response, Response2} = getfilelocation(File),
-            case Response of
-                ok ->
-                    {Storage_helper_info, FileId} = Response2,
-                    Res = storage_files_manager:write(Storage_helper_info, FileId, Buf),
+            case getfilelocation(FilePath) of
+                {ok, {Storage_helper_info, FileId}} ->
+                    Offset = cache_size(FilePath, byte_size(Buf)),
+                    Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
                     case {is_integer(Res), event_production_enabled("write_event")} of
                         {true, true} ->
-                            % async get attrs and send wite event
-                            Ctx = fslogic_context:get_user_context(),
-                            spawn(fun() ->
-                                fslogic_context:set_user_context(Ctx),
-                                {ok, #fileattributes{size = FileSize}} = logical_files_manager:getfileattr(File),
-                                mark_as_truncated(File, FileSize), %todo get this info from event handler
-                                WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}],
-                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-                                WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
-                                    {"bytes", Res}, {"blocks", [{FileSize - Res, Res}]}],
-                                gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}})
-                            end);
+                            {ok, FullFileName} = get_file_path_from_cache(FilePath),
+                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
+                            WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"fuse_id", ?CLUSTER_FUSE_ID}, {"sequence_number", 0},
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}});
                         _ ->
                             ok
                     end,
                     Res;
-                _ -> {Response, Response2}
+                Err -> Err
             end;
         _ ->
             {error, quota_exceeded}
@@ -640,77 +658,36 @@ write(File, Offset, Buf) ->
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
-write(File, Offset, Buf, EventPolicy) ->
+write({uuid, Uuid}, Offset, Buf, EventPolicy) ->
+    case get_file_path_from_cache({uuid, Uuid}) of
+        {ok, FullFilePath} -> write(FullFilePath, Offset, Buf, EventPolicy);
+        Error -> Error
+    end;
+write(FilePath, Offset, Buf, EventPolicy) ->
     case write_enabled(fslogic_context:get_user_dn()) of
         true ->
-            {Response, Response2} = getfilelocation(File),
-            case Response of
-                ok ->
-                    {Storage_helper_info, FileId} = Response2,
+            case getfilelocation(FilePath) of
+                {ok, {Storage_helper_info, FileId}} ->
                     Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
 
-                    %% TODO - check if asynchronous processing needed
                     case {is_integer(Res), event_production_enabled("write_event"), EventPolicy} of
                         {true, true, generate_events} ->
-                            % async infrom other providers about modification
-                            Ctx = fslogic_context:get_user_context(),
-                            spawn(fun() -> fslogic_context:set_user_context(Ctx), ok = mark_as_modified(File, Offset, byte_size(Buf)) end), %todo get this info from events
-
+                            {ok, FullFileName} = get_file_path_from_cache(FilePath),
                             WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"count", Res}, {"blocks", [{Offset, Res}]}],
+                                {"count", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
                             WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"bytes", Res}, {"blocks", [{Offset, Res}]}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
+                            WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
+                                {"fuse_id", ?CLUSTER_FUSE_ID}, {"sequence_number", 0},
+                                {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
+                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}});
                         _ ->
                             ok
                     end,
                     Res;
-                _ -> {Response, Response2}
-            end;
-        _ ->
-            {error, quota_exceeded}
-    end.
-
-
-%% write_from_stream/2
-%% ====================================================================
-%% @doc Appends data to the end of file (uses logical name of file).
-%% First it gets information about storage helper and file id at helper.
-%% Next it uses storage helper to write data to file.
-%% @end
--spec write_from_stream(File :: string(), Buf :: binary()) -> Result when
-    Result :: BytesWritten | {ErrorGeneral, ErrorDetail},
-    BytesWritten :: integer(),
-    ErrorGeneral :: atom(),
-    ErrorDetail :: term().
-%% ====================================================================
-write_from_stream(File, Buf) ->
-    case write_enabled(fslogic_context:get_user_dn()) of
-        true ->
-            {Response, Response2} = getfilelocation(File),
-            case Response of
-                ok ->
-                    {Storage_helper_info, FileId} = Response2,
-                    Offset = cache_size(File, byte_size(Buf)),
-                    Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
-                    case {is_integer(Res), event_production_enabled("write_event")} of
-                        {true, true} ->
-                            % async infrom other providers about modification
-                            Ctx = fslogic_context:get_user_context(),
-                            spawn(fun() -> fslogic_context:set_user_context(Ctx), ok = mark_as_modified(File, Offset, byte_size(Buf)) end), %todo get this info from events
-
-                            WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"count", Res}, {"blocks", [{Offset, Res}]}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-                            WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"bytes", Res}, {"blocks", [{Offset, Res}]}],
-                            gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
-                        _ ->
-                            ok
-                    end,
-                    Res;
-                _ -> {Response, Response2}
+                Err -> Err
             end;
         _ ->
             {error, quota_exceeded}
@@ -778,25 +755,28 @@ create(File) ->
     ErrorGeneral :: atom(),
     ErrorDetail :: term().
 %% ====================================================================
-truncate(File, Size) ->
-    {Response, Response2} = getfilelocation(File),
-    case Response of
-        ok ->
-            {Storage_helper_info, FileId} = Response2,
+truncate({uuid, Uuid}, Size) ->
+    case get_file_path_from_cache({uuid, Uuid}) of
+        {ok, FullFilePath} -> truncate(FullFilePath, Size);
+        Error -> Error
+    end;
+truncate(FilePath, Size) ->
+    case getfilelocation(FilePath) of
+        {ok, {Storage_helper_info, FileId}} ->
             Res = storage_files_manager:truncate(Storage_helper_info, FileId, Size),
             case {Res, event_production_enabled("truncate_event")} of
                 {ok, true} ->
-                    % async infrom other providers about modification
-                    Ctx = fslogic_context:get_user_context(),
-                    spawn(fun() -> fslogic_context:set_user_context(Ctx), ok = mark_as_truncated(File, Size) end),  %todo get this info from events
-
-                    TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File}],
-                    gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}});
+                    {ok, FullFileName} = get_file_path_from_cache(FilePath),
+                    TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", FullFileName}],
+                    gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}}),
+                    TruncateEventAvailableBlocks = [{"type", "truncate_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
+                        {"fuse_id", ?CLUSTER_FUSE_ID}, {"sequence_number", 0}, {"filePath", FullFileName}, {"newSize", Size}],
+                    gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEventAvailableBlocks}});
                 _ ->
                     ok
             end,
             Res;
-        _ -> {Response, Response2}
+        Err -> Err
     end.
 
 %% delete/1
@@ -1340,7 +1320,8 @@ synchronize(File, Offset, Size) ->
         case File of
             {uuid, Uuid} ->
                 case logical_files_manager:get_file_full_name_by_uuid(Uuid) of %todo cache this value somehow
-                    {ok, Name} -> contact_fslogic(#synchronizefileblock{logical_name = Name, offset = Offset, size = Size});
+                    {ok, Name} ->
+                        contact_fslogic(#synchronizefileblock{logical_name = Name, offset = Offset, size = Size});
                     Error_ -> Error_
                 end;
             _ -> contact_fslogic(#synchronizefileblock{logical_name = File, offset = Offset, size = Size})
@@ -1354,15 +1335,20 @@ synchronize(File, Offset, Size) ->
         _ -> {Status, TmpAns}
     end.
 
-%% mark_as_modified/3
+%% mark_as_modified/5
 %% ====================================================================
 %% @doc Mark given byte range as modified, so other providers would know that they need to synchronize their data
 %% @end
--spec mark_as_modified(FullFileName :: string(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+-spec mark_as_modified(FullFileName :: string(), FuseId :: string(), SequenceNumber :: non_neg_integer(),
+    Offset :: non_neg_integer(), Size :: non_neg_integer()) -> ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
-mark_as_modified(FullFileName, Offset, Size) ->
-    {Status, TmpAns} = contact_fslogic(#fileblockmodified{logical_name = FullFileName, offset = Offset, size = Size}),
+mark_as_modified(_, undefined, _, _, _) ->
+    ok;
+mark_as_modified(_, _, undefined, _, _) ->
+    ok;
+mark_as_modified(FullFileName, FuseId, SequenceNumber, Offset, Size) ->
+    {Status, TmpAns} = contact_fslogic(#fileblockmodified{logical_name = FullFileName, fuse_id = FuseId,
+        sequence_number = SequenceNumber, offset = Offset, size = Size}),
     case Status of
         ok ->
             case TmpAns#atom.value of
@@ -1372,15 +1358,20 @@ mark_as_modified(FullFileName, Offset, Size) ->
         _ -> {Status, TmpAns}
     end.
 
-%% mark_as_truncated/2
+%% mark_as_truncated/4
 %% ====================================================================
 %% @doc truncate given byte range in remote location, so other providers would know that they need to synchronize their data.
 %% @end
--spec mark_as_truncated(FullFileName :: string(), Size :: non_neg_integer()) ->
-    ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+-spec mark_as_truncated(FullFileName :: string(), FuseId :: string(), SequenceNumber :: non_neg_integer(),
+    Size :: non_neg_integer()) ->  ok | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
 %% ====================================================================
-mark_as_truncated(FullFileName, Size) ->
-    {Status, TmpAns} = contact_fslogic(#filetruncated{logical_name = FullFileName, size = Size}),
+mark_as_truncated(_, undefined, _, _) ->
+    ok;
+mark_as_truncated(_, _, undefined, _) ->
+    ok;
+mark_as_truncated(FullFileName, FuseId, SequenceNumber, Size) ->
+    {Status, TmpAns} = contact_fslogic(#filetruncated{logical_name = FullFileName, fuse_id = FuseId,
+        sequence_number = SequenceNumber, size = Size}),
     case Status of
         ok ->
             case TmpAns#atom.value of
@@ -1389,6 +1380,37 @@ mark_as_truncated(FullFileName, Size) ->
             end;
         _ -> {Status, TmpAns}
     end.
+
+
+%% get_file_block_map/1
+%% ====================================================================
+%% @doc Gets list of available_blocks for each provider supporting space.
+%% The result is a proplist [{ProviderId, BlockList}]
+%% @end
+-spec get_file_block_map(FullFileName :: string()) ->
+    {ok, [{ProviderId :: binary(), BlockList :: [#block_range{}]}]} | {ErrorGeneral :: atom(), ErrorDetail :: term()}.
+%% ====================================================================
+get_file_block_map(FullFileName) ->
+    {Status, TmpAns} = contact_fslogic(#getfileblockmap{logical_name = FullFileName}),
+    case Status of
+        ok ->
+            case TmpAns#fileblockmap.answer of
+                ?VOK ->
+                    BlockMap = TmpAns#fileblockmap.block_map,
+                    ProtobufProplist = lists:map(
+                        fun(#fileblockmap_blockmapentity{provider_id = Id, ranges = Ranges}) ->
+                            {Id, Ranges}
+                        end, BlockMap),
+                    FinalProplist = lists:map(
+                        fun({Id, RangeList}) ->
+                            {utils:ensure_binary(Id), [#block_range{from = From, to = To} || #fileblockmap_blockmapentity_blockrange{from = From, to = To} <- RangeList]}
+                        end, ProtobufProplist),
+                    {ok, FinalProplist};
+                Error -> {logical_file_system_error, Error}
+            end;
+        _ -> {Status, TmpAns}
+    end.
+
 
 %% cache_size/2
 %% ====================================================================
@@ -1453,11 +1475,11 @@ error_to_string(Error) ->
 %% ====================================================================
 doUploadTest(File, WriteFunNum, Size, Times) ->
     Write = fun(Buf, TmpAns) ->
-        write(File, Buf) + TmpAns
+        write_file_chunk(File, Buf) + TmpAns
     end,
 
     Write2 = fun(Buf, TmpAns) ->
-        write_from_stream(File, Buf) + TmpAns
+        write_file_chunk(File, Buf) + TmpAns
     end,
 
     WriteFun = case WriteFunNum of
@@ -1613,12 +1635,12 @@ copy_file_content(From, To, Offset, BufferSize) ->
         {ok, Data} ->
             case byte_size(Data) < BufferSize of
                 true ->
-                    case write(To, Data) of
+                    case write_file_chunk(To, Data) of
                         Written when is_integer(Written) -> ok;
                         Error -> Error
                     end;
                 false ->
-                    case write(To, Data) of
+                    case write_file_chunk(To, Data) of
                         Written when is_integer(Written) ->
                             copy_file_content(From, To, Offset + Written, BufferSize);
                         Error -> Error
@@ -1658,4 +1680,31 @@ copy_file_xattr(From, To) ->
             lists:foreach(fun({Key, Value}) -> set_xattr(To, Key, Value) end, XattrList),
             ok;
         Error -> Error
+    end.
+
+get_file_path_from_cache({uuid, Uuid}) ->
+    case get({path_of, Uuid}) of
+        undefined ->
+            case logical_files_manager:get_file_full_name_by_uuid(Uuid) of
+                {ok, FullFilePath} ->
+                    put({path_of, Uuid}, FullFilePath),
+                    {ok, FullFilePath};
+                Error -> Error
+            end;
+        FullFilePath -> {ok, FullFilePath}
+    end;
+get_file_path_from_cache(FileShortName) ->
+    case string:tokens(FileShortName, "/") of
+        [?SPACES_BASE_DIR_NAME | _] -> {ok, FileShortName};
+        _ ->
+            case get({path_of, FileShortName}) of
+                undefined ->
+                    case fslogic_path:get_full_file_name(FileShortName) of
+                        {ok, FullFileName} ->
+                            put({path_of, FileShortName}, FullFileName),
+                            {ok, FullFileName};
+                        Error -> Error
+                    end;
+                FullFileName -> {ok, FullFileName}
+            end
     end.

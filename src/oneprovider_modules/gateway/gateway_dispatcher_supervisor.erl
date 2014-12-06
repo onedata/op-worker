@@ -59,7 +59,9 @@ init(NetworkInterfaces) ->
     MaxT = timer:minutes(1),
     {ok, {{RestartStrategy, MaxR, MaxT},
         [connection_manager_supervisor_spec(),
-         dispatcher_spec(NetworkInterfaces)]}}.
+         dispatcher_spec(NetworkInterfaces),
+         rt_priority_queue_spec(),
+         rt_map_spec()]}}.
 
 
 %% ====================================================================
@@ -67,7 +69,7 @@ init(NetworkInterfaces) ->
 %% ====================================================================
 
 
-%% dispatcher_spec/2
+%% dispatcher_spec/1
 %% ====================================================================
 %% @doc Creates a supervisor child_spec for a dispatcher child.
 -spec dispatcher_spec(NetworkInterfaces :: [inet:ip_address()]) ->
@@ -82,7 +84,7 @@ dispatcher_spec(NetworkInterfaces) ->
     {ChildId, Function, Restart, ExitTimeout, Type, [Module]}.
 
 
-%% connection_manager_supervisor_spec/2
+%% connection_manager_supervisor_spec/0
 %% ====================================================================
 %% @doc Creates a supervisor child_spec for a connection manager supervisor child.
 -spec connection_manager_supervisor_spec() -> supervisor:child_spec().
@@ -93,4 +95,32 @@ connection_manager_supervisor_spec() ->
     Restart = permanent,
     ExitTimeout = timer:seconds(10),
     Type = supervisor,
+    {ChildId, Function, Restart, ExitTimeout, Type, [Module]}.
+
+
+%% rt_priority_queue_spec/0
+%% ====================================================================
+%% @doc Creates a supervisor child_spec for a rt_containter child.
+-spec rt_priority_queue_spec() -> supervisor:child_spec().
+%% ====================================================================
+rt_priority_queue_spec() ->
+    ChildId = Module = rt_priority_queue,
+    Function = {Module, new, [{local, ?GATEWAY_INCOMING_QUEUE}]},
+    Restart = permanent,
+    ExitTimeout = timer:seconds(10),
+    Type = worker,
+    {ChildId, Function, Restart, ExitTimeout, Type, [Module]}.
+
+
+%% rt_map_spec/0
+%% ====================================================================
+%% @doc Creates a supervisor child_spec for a rt_containter child.
+-spec rt_map_spec() -> supervisor:child_spec().
+%% ====================================================================
+rt_map_spec() ->
+    ChildId = Module = rt_map,
+    Function = {Module, new, [{local, ?GATEWAY_NOTIFY_MAP}]},
+    Restart = permanent,
+    ExitTimeout = timer:seconds(10),
+    Type = worker,
     {ChildId, Function, Restart, ExitTimeout, Type, [Module]}.

@@ -231,7 +231,7 @@ get_user_from_db({Key, Value}) ->
 
     case dao_records:list_records(View, QueryArgs) of
         {ok, #view_result{rows = []}} ->
-            ?warning("User by ~p: ~p not found", [Key, Value]),
+            %% ?warning("User by ~p: ~p not found", [Key, Value]),
             throw(user_not_found);
         {ok, #view_result{rows = AllRows}} when Key == name ->
             {ok, [Doc || #view_row{doc = Doc} <- AllRows]};

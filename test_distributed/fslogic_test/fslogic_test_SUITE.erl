@@ -31,13 +31,14 @@
 -export([permissions_management_test/1, user_creation_test/1, get_file_links_test/1, fuse_requests_test/1, users_separation_test/1]).
 -export([file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, user_file_size_test/1, dirs_creating_test/1, spaces_test/1]).
 -export([get_by_uuid_test/1, concurrent_file_creation_test/1, create_standard_share/2, create_share/3, get_share/2, get_acl/2, make_dir/2, xattrs_test/1, acl_test/1]).
--export([get_file_local_location_test/1, block_creation_test/1, block_registration_test/1]).
+-export([get_file_local_location_test/1, block_creation_test/1, block_registration_test/1, available_blocks_cache_test/1]).
+-export([get_file_uuid/2]).
 
 all() ->
  [spaces_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
    fuse_requests_test, spaces_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test,
    concurrent_file_creation_test, get_file_links_test, user_file_size_test, xattrs_test, acl_test, get_file_local_location_test, block_creation_test,
-   block_registration_test
+   block_registration_test, available_blocks_cache_test
  ].
 
 -define(SH, "DirectIO").
@@ -2004,7 +2005,7 @@ files_manager_tmp_files_test(Config) ->
   AnsCreate2 = rpc:call(Node1, storage_files_manager, create, [SHInfo, File]),
   ?assertEqual({error, file_exists}, AnsCreate2),
 
-  AnsWrite1 = rpc:call(Node1, storage_files_manager, write, [SHInfo, File, list_to_binary("abcdefgh")]),
+  AnsWrite1 = rpc:call(Node1, storage_files_manager, write, [SHInfo, File, 0, list_to_binary("abcdefgh")]),
   ?assertEqual(8, AnsWrite1),
   ?assertEqual({ok, "abcdefgh"}, files_tester:read_file_storage(?TEST_ROOT ++ "/" ++ File, 100)),
 
@@ -2024,7 +2025,7 @@ files_manager_tmp_files_test(Config) ->
   ?assertEqual(ok, StatusRead3),
   ?assertEqual("c123g", binary_to_list(AnsRead3)),
 
-  AnsWrite3 = rpc:call(Node1, storage_files_manager, write, [SHInfo, File, list_to_binary("XYZ")]),
+  AnsWrite3 = rpc:call(Node1, storage_files_manager, write, [SHInfo, File, 8, list_to_binary("XYZ")]),
   ?assertEqual(3, AnsWrite3),
   ?assertEqual({ok, "abc123ghXYZ"}, files_tester:read_file_storage(?TEST_ROOT ++ "/" ++ File, 100)),
 
@@ -2520,6 +2521,37 @@ block_registration_test(Config) ->
     ?assertEqual({ok, 1}, rpc:call(Node1, fslogic_req_regular, register_file_block, [FullFileName, 9, 9])).
 
 
+available_blocks_cache_test(Config) ->
+    FileName = "/cache_test",
+    Cert = ?COMMON_FILE("peer.pem"),
+    Host = "localhost",
+    Port = ?config(port, Config),
+    [Node1 | _] = ?config(nodes, Config),
+
+    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    test_utils:wait_for_cluster_cast(),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    test_utils:wait_for_cluster_init(),
+
+    ?assertMatch({ok, _}, rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT])),
+
+    UserDoc = test_utils:add_user(Config, ?TEST_USER, Cert, [?TEST_USER, ?TEST_GROUP]),
+    [DN | _] = user_logic:get_dn_list(UserDoc),
+    {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
+
+    ?assertMatch({?VOK, _, _, _, ?VOK}, create_file(Socket, FileName)),
+    ?assertEqual({?VOK, ok}, send_creation_ack(Socket, FileName)),
+    {ok, Uuid} = rpc:call(Node1, fslogic_test_SUITE, get_file_uuid, [FileName, DN]),
+
+    Size = {100, 10},
+    Blocks = #available_blocks{file_id = Uuid, file_parts = [], file_size = Size},
+    rpc:call(Node1, fslogic_available_blocks, call, [{save_available_blocks, Blocks}]),
+    ?assertMatch({ok, Size}, rpc:call(Node1, fslogic_available_blocks, call, [{get_file_size, Uuid}])),
+    ?assertMatch({ok, [#db_document{record = Blocks}, _]}, rpc:call(Node1, fslogic_available_blocks, call, [{list_all_available_blocks, Uuid}])),
+    ?assertMatch({ok, Size}, rpc:call(Node1, fslogic_available_blocks, call, [{get_file_size, Uuid}])).
+
+
 %% ====================================================================
 %% SetUp and TearDown functions
 %% ====================================================================
@@ -2540,7 +2572,7 @@ init_per_testcase(_, Config) ->
   ?INIT_CODE_PATH, ?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1,true),
   [FSLogicNode | _] = NodesUp,
 
   DB_Node = ?DB_NODE,
@@ -2925,3 +2957,7 @@ get_acl(FilePath, DN) ->
 make_dir(FilePath, DN) ->
   fslogic_context:set_user_dn(DN),
   logical_files_manager:mkdir(FilePath).
+
+get_file_uuid(FilePath, DN) ->
+  fslogic_context:set_user_dn(DN),
+  logical_files_manager:get_file_uuid(FilePath).

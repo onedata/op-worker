@@ -17,10 +17,13 @@
 -define(connection_close_timeout, timer:minutes(1)).
 
 %% Description for a `fetch` action commisioned to the gateway module
--record(fetch, {
-    request :: #fetchrequest{},                        %% the actual request to be fulfilled
+-record(gw_fetch, {
+    file_id :: string(),
+    offset :: non_neg_integer(),
+    size :: pos_integer(),
     remote :: {inet:ip_address(), inet:port_number()}, %% IP address and port of remote node that should fulfill the request
-    notify :: pid() | atom()                           %% a process to be notified of action's results
+    notify :: [pid() | atom()],                        %% a process to be notified of action's results
+    retry :: pos_integer()
 }).
 
 -define(log_terminate(Reason, State),

@@ -60,32 +60,42 @@ init({Args, {init_status, undefined}}) ->
 init({_Args, {init_status, table_initialized}}) -> %% Final stage of initialization. ETS table was initialized
     set_db(),
 
-    ProcFun = fun(ProtocolVersion, {Target, Method, Args}) ->
-      handle(ProtocolVersion, {Target, Method, Args})
-    end,
+    ProcFun =
+        fun
+            (_, {ensure_file_location_exists, FullFileName, File}) ->
+                fslogic_file:ensure_file_location_exists_unsafe(FullFileName, File);
+            (ProtocolVersion, {ensure_file_descriptor_exists, Uuid, FuseID, Validity}) ->
+                fslogic_objects:ensure_file_descriptor_exists_unsafe(ProtocolVersion, Uuid, FuseID, Validity);
+            (ProtocolVersion, {Target, Method, Args}) ->
+                handle(ProtocolVersion, {Target, Method, Args})
+        end,
 
-    MapFun = fun({_, _, [File, _]}) ->
-      lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, File)
-    end,
+    MapFun =
+        fun
+            ({ensure_file_location_exists, FullFileName, _}) ->
+                lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FullFileName);
+            ({ensure_file_descriptor_exists, _, FuseID, _}) ->
+                lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, FuseID);
+            ({_, _, [File, _]}) ->
+                lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, File)
+        end,
 
     SubProcList = worker_host:generate_sub_proc_list(id_generation, 6, 10, ProcFun, MapFun),
 
     RequestMap = fun
-      ({T, M, _}) ->
-        case {T, M} of
-          {dao_vfs, save_new_file} -> id_generation;
-          _ -> non
-        end;
+      ({dao_vfs, save_new_file, _}) ->id_generation;
+      ({ensure_file_location_exists, _, _}) ->id_generation; %todo move this to fslogic
+      ({ensure_file_descriptor_exists, _, _, _}) ->id_generation; %todo move this to fslogic
       (_) -> non
     end,
 
     DispMapFun = fun
-      ({T2, M2, [File, _]}) ->
-        case {T2, M2} of
-          {dao_vfs, save_new_file} ->
+      ({dao_vfs, save_new_file, [File, _]}) ->
             lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, File);
-          _ -> non
-        end;
+      ({ensure_file_location_exists, FullFileName, _}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FullFileName);
+      ({ensure_file_descriptor_exists, _, FuseID, _}) ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, FuseID);
       (_) -> non
     end,
 

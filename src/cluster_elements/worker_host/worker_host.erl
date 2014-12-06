@@ -477,9 +477,8 @@ handle_info(dispatcher_map_registered, State) ->
   ?debug("dispatcher_map_registered"),
   {noreply, State#host_state{dispatcher_request_map_ok = true}};
 
-handle_info(_Info, State) ->
-  ?warning("Worker host wrong info: ~p", [_Info]),
-  {noreply, State}.
+handle_info(Msg, State) ->
+  handle_cast({asynch, 1, Msg}, State).
 
 
 %% terminate/2

@@ -567,7 +567,6 @@ comet_loop(#?STATE{counter = Counter, group_id = GroupId, spaces_details = Space
                                    {ok, SpaceDetails} = gr_groups:get_space_details({user, AccessToken}, GroupId, SpaceId),
                                    {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
                                    opn_gui_utils:message(success, <<"Created Space ID: <b>", SpaceId/binary, "</b>">>),
-                                   gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                                    RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_space_row(RowId, Privileges, SpaceDetails),
                                    State#?STATE{counter = Counter + 1, spaces_details = [{RowId, Privileges, SpaceDetails} | SpacesDetails]}
@@ -586,7 +585,6 @@ comet_loop(#?STATE{counter = Counter, group_id = GroupId, spaces_details = Space
                                    {ok, SpaceDetails} = gr_groups:get_space_details({user, AccessToken}, GroupId, SpaceId),
                                    {ok, Privileges} = gr_groups:get_user_privileges({user, AccessToken}, GroupId, GRUID),
                                    opn_gui_utils:message(success, <<"Joined Space ID: <b>", SpaceId/binary, "</b>">>),
-                                   gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                                    RowId = <<"space_", (integer_to_binary(Counter + 1))/binary>>,
                                    add_space_row(RowId, Privileges, SpaceDetails),
                                    State#?STATE{counter = Counter + 1, spaces_details = [{RowId, Privileges, SpaceDetails} | SpacesDetails]}
@@ -632,7 +630,6 @@ comet_loop(#?STATE{counter = Counter, group_id = GroupId, spaces_details = Space
                 {change_group_name, #group_details{id = GroupId} = GroupDetails, NewGroupName} ->
                     case gr_groups:modify_details({user, AccessToken}, GroupId, [{<<"name">>, NewGroupName}]) of
                         ok ->
-                            gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                             gui_jq:update(<<"group_name">>, group_name(GroupDetails#group_details{name = NewGroupName}));
                         Other ->
                             ?error("Cannot change name of group ~p: ~p", [GroupDetails, Other]),

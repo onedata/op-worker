@@ -43,6 +43,8 @@
 -define(FILE_CHILDS_VIEW, #view_info{name = "file_childs", db_name = ?FILES_DB_NAME, version = 1}).
 -define(FD_BY_FILE_VIEW, #view_info{name = "fd_by_name", db_name = ?DESCRIPTORS_DB_NAME, version = 1}).
 -define(FD_BY_EXPIRED_BEFORE_VIEW, #view_info{name = "fd_by_expired_before", db_name = ?DESCRIPTORS_DB_NAME, version = 1}).
+-define(ATTR_WATCHERS_BY_EXPIRED_BEFORE_VIEW, #view_info{name = "attr_watchers_by_expired_before", db_name = ?DESCRIPTORS_DB_NAME, version = 1}).
+-define(ATTR_WATCHERS_BY_NAME_VIEW, #view_info{name = "attr_watchers_by_name", db_name = ?DESCRIPTORS_DB_NAME, version = 1}).
 -define(ALL_STORAGE_VIEW, #view_info{name = "all_storage", db_name = ?SYSTEM_DB_NAME, version = 1}).
 -define(STORAGE_BY_ID_VIEW, #view_info{name = "storage_by_id", db_name = ?SYSTEM_DB_NAME, version = 1}).
 -define(FILES_BY_UID_AND_FILENAME, #view_info{name = "files_by_uid_and_filename", db_name = ?FILES_DB_NAME, version = 1}).
@@ -89,7 +91,7 @@
     ?USER_BY_GLOBAL_ID_VIEW, ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_NAME_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UNVERIFIED_DN_VIEW, ?USER_BY_UID_VIEW,
     ?STORAGE_BY_ID_VIEW, ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?USER_FILES_SIZE_VIEW, ?GROUP_FILES_NUMBER_VIEW,
     ?FUSE_CONNECTIONS_VIEW, ?EXPIRED_FUSE_SESSIONS_VIEW, ?FUSE_SESSIONS_BY_USER_ID_VIEW, ?SPACES_BY_GRUID_VIEW, ?COOKIES_BY_EXPIRED_BEFORE_VIEW,
-    ?AVAILABLE_BLOCKS_BY_FILE_ID]).
+    ?AVAILABLE_BLOCKS_BY_FILE_ID, ?ATTR_WATCHERS_BY_EXPIRED_BEFORE_VIEW, ?ATTR_WATCHERS_BY_NAME_VIEW]).
 
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).

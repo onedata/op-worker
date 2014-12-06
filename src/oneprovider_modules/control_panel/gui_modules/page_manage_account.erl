@@ -35,12 +35,12 @@ title() -> <<"Manage account">>.
 %% This will be placed in the template instead of [[[page:body()]]] tag
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
-    #panel{class= <<"page-container">>, body = [
+    #panel{class = <<"page-container">>, body = [
         opn_gui_utils:top_menu(manage_account_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
             #panel{id = <<"unverified_dns_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-warning">>, body = [
-                    #p{body = <<"Some of certificates you added are not verified. To verify them, connect to the system with OneClient ",
+                    #p{body = <<"Some of certificates you added are not verified. To verify them, connect to the system with oneclient ",
                     "using matching credentials.">>}
                 ]},
             #panel{id = <<"helper_error_panel">>, style = <<"display: none;">>,
@@ -84,20 +84,21 @@ main_table() ->
     maybe_display_dn_message(UserDoc),
     maybe_display_verify_dn_message(UserDoc),
     maybe_display_helper_message(),
-    #table{style = <<"border-width: 0px; width: auto;">>, body = [
-        #tr{cells = [
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Login">>}},
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #p{style = <<"margin: -3px 0 0;">>, body = gui_str:unicode_list_to_binary(user_logic:get_login(UserDoc))}}
-        ]},
+    #table{style = <<"border-width: 0px; width: auto;">>,
+        body = #tbody{body = [
+            #tr{cells = [
+                #td{style = <<"padding: 15px; vertical-align: top;">>,
+                    body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Login">>}},
+                #td{style = <<"padding: 15px; vertical-align: top;">>,
+                    body = #p{style = <<"margin: -3px 0 0;">>, body = gui_str:unicode_list_to_binary(user_logic:get_login(UserDoc))}}
+            ]},
 
-        #tr{cells = [
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Name">>}},
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #p{style = <<"margin: -3px 0 0;">>, body = gui_str:unicode_list_to_binary(user_logic:get_name(UserDoc))}}
-        ]},
+            #tr{cells = [
+                #td{style = <<"padding: 15px; vertical-align: top;">>,
+                    body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Name">>}},
+                #td{style = <<"padding: 15px; vertical-align: top;">>,
+                    body = #p{style = <<"margin: -3px 0 0;">>, body = gui_str:unicode_list_to_binary(user_logic:get_name(UserDoc))}}
+            ]},
 
 %%         #tr{cells = [
 %%             #td{style = <<"padding: 15px; vertical-align: top;">>,
@@ -113,28 +114,29 @@ main_table() ->
 %%                 body = email_list_body(UserDoc)}
 %%         ]},
 
-        #tr{cells = [
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Certificates&#8217 DNs">>}},
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = dn_list_body(UserDoc)}
-        ]},
+            #tr{cells = [
+                #td{style = <<"padding: 15px; vertical-align: top;">>,
+                    body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Certificates&#8217 DNs">>}},
+                #td{style = <<"padding: 15px; vertical-align: top;">>,
+                    body = dn_list_body(UserDoc)}
+            ]},
 
-        #tr{cells = [
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"OAuth / OpenID">>}},
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #link{style = <<"font-size: 18px;">>, body = <<"Authorization preferences">>,
-                    url = <<"https://", (list_to_binary(GlobalRegistryHostname))/binary, "/manage_account">>}}
-        ]},
+            #tr{cells = [
+                #td{style = <<"padding: 15px; vertical-align: top;">>,
+                    body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"OAuth / OpenID">>}},
+                #td{style = <<"padding: 15px; vertical-align: top;">>,
+                    body = #link{style = <<"font-size: 18px;">>, body = <<"Authorization preferences">>,
+                        url = <<"https://", (list_to_binary(GlobalRegistryHostname))/binary, "/manage_account">>}}
+            ]},
 
-        #tr{cells = [
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Access via oneclient">>}},
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #link{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<"Learn about oneclient">>, url = <<?client_download_page_url>>}}
+            #tr{cells = [
+                #td{style = <<"padding: 15px; vertical-align: top;">>,
+                    body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Access via oneclient">>}},
+                #td{style = <<"padding: 15px; vertical-align: top;">>,
+                    body = #link{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<"Learn about oneclient">>, url = <<?client_download_page_url>>}}
+            ]}
         ]}
-    ]}.
+    }.
 
 
 %% % HTML list with teams printed

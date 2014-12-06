@@ -12,6 +12,7 @@
 
 -module(example_SUITE).
 -include("test_utils.hrl").
+-include("modules_and_args.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
@@ -40,12 +41,14 @@ distributed_test(Config) ->
   [Node1 | Nodes2] = Nodes,
   [Node2 | _] = Nodes2,
 
+  DuplicatedPermanentNodes = (length(Nodes) - 1) * length(?PERMANENT_MODULES),
+
   ?assertEqual(ok, rpc:call(Node1, ?MODULE, node1_code1, [])),
   test_utils:wait_for_cluster_cast(),
   ?assertEqual(ok, rpc:call(Node2, ?MODULE, node2_code, [])),
   test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node2}),
   ?assertEqual(ok, rpc:call(Node1, ?MODULE, node1_code2, [])),
-  test_utils:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
   NodesListFromCCM = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(length(Nodes), length(NodesListFromCCM)),
@@ -96,8 +99,8 @@ init_per_testcase(distributed_test, Config) ->
   Nodes = test_node_starter:start_test_nodes(2),
   [Node1 | _] = Nodes,
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [Node1]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [Node1]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {heart_beat, 1}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {gateway_listener_port, 8877}, {gateway_proxy_port, 8876}, {ccm_nodes, [Node1]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [Node1]}, {dns_port, 1309}, {control_panel_port, 2309}, {gateway_listener_port, 8878}, {gateway_proxy_port, 8879}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {heart_beat, 1}]]),
 
   lists:append([{nodes, Nodes}], Config);
 

@@ -122,7 +122,7 @@ handle_cast({register_connection_manager, Id, Addr, Pid}, State) ->
     AugmentedConnectionsManagers = queue:in_r(NewCM, FilteredManagers),
     {noreply, State#gwstate{connection_managers = AugmentedConnectionsManagers}};
 
-handle_cast(#fetch{} = Request, State) ->
+handle_cast(#gw_fetch{} = Request, State) ->
     Managers = State#gwstate.connection_managers,
     {{value, #cmref{pid = MgrPid} = Manager}, PoppedManagers} = queue:out(Managers),
     gen_server:cast(MgrPid, Request),

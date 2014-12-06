@@ -11,9 +11,9 @@ compile:
 	cp -R clproto/proto src
 	cp -R rtproto/proto src
 	cp -R deps/prproto/proto src
-	cp c_src/oneproxy/proto/* src
+	cp -R c_src/oneproxy/proto src
 	./rebar compile
-	rm -rf src/proto
+	rm -rf src/proto src/oneproxy.proto
 
 deps:
 	./rebar get-deps
@@ -32,16 +32,17 @@ distclean: clean
 
 
 eunit: deps compile
-	./rebar eunit skip_deps=true
+	./rebar eunit skip_deps=true suites=${SUITES}
 ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
 ct: deps compile
 	-@if [ ! -f ebin/.test ]; then rm -rf ebin; fi
 	-@mkdir -p ebin ; touch ebin/.test 
-	 cp -R clproto/proto src
-	 cp -R rtproto/proto src
-	 cp -R deps/prproto/proto src
+	cp -R clproto/proto src
+	cp -R rtproto/proto src
+	cp -R deps/prproto/proto src
+	cp -R c_src/oneproxy/proto src
 	./rebar -D TEST compile
 	rm -rf src/proto
 #	./rebar ct skip_deps=true

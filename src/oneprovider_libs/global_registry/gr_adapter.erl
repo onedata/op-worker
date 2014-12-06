@@ -73,7 +73,8 @@ get_space_info(SpaceId, {UserGID, AccessToken}) ->
     try
         {ok, #space_details{
             id = BinarySpaceId,
-            name = Name}
+            name = Name,
+            size = Size}
         } = gr_spaces:get_details({try_user, AccessToken}, utils:ensure_binary(SpaceId)),
         {ok, ProviderIds} = get_space_providers(SpaceId, {UserGID, AccessToken}),
 
@@ -89,7 +90,7 @@ get_space_info(SpaceId, {UserGID, AccessToken}) ->
                 _           -> []
             end,
 
-        {ok, #space_info{space_id = BinarySpaceId, name = Name, providers = ProviderIds, groups = GroupDetailsList, users = UserIds}}
+        {ok, #space_info{space_id = BinarySpaceId, name = Name, size = Size, providers = ProviderIds, groups = GroupDetailsList, users = UserIds}}
     catch
         _:Reason ->
             ?error("Cannot get info of Space with ID ~p: ~p", [SpaceId, Reason]),

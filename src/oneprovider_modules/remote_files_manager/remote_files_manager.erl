@@ -192,7 +192,7 @@ handle_message(Record) when is_record(Record, deletefileatstorage) ->
   end;
 
 handle_message(Record) when is_record(Record, truncatefile) ->
-  FileId = Record#truncatefile.file_id,
+    FileId = Record#truncatefile.file_id,
   Length = Record#truncatefile.length,
   SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
   case SH_And_ID of
@@ -222,7 +222,7 @@ handle_message(Record) when is_record(Record, truncatefile) ->
   end;
 
 handle_message(Record) when is_record(Record, readfile) ->
-  FileId = Record#readfile.file_id,
+    FileId = Record#readfile.file_id,
   Size = Record#readfile.size,
   Offset = Record#readfile.offset,
   SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),

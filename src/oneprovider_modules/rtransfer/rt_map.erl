@@ -5,16 +5,20 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc This module allows for management of RTransfer heap.
+%% @doc This module allows for management of RTransfer map.
 %% @end
 %% ===================================================================
--module(rt_heap).
+-module(rt_map).
+-behaviour(gen_server).
 
 -include("registered_names.hrl").
--include("oneprovider_modules/rtransfer/rt_heap.hrl").
+-include("oneprovider_modules/rtransfer/rt_container.hrl").
+
+-on_load(load_nif/0).
 
 %% API
--export([new/0, new/1, new/2, new/3, delete/1, push/2, fetch/1]).
+-export([new/0, new/1, delete/1]).
+-export([put/2, get/4, remove/4]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -24,114 +28,86 @@
     terminate/2,
     code_change/3]).
 
+%% gen_server state
+%% * container - pointer to container resource created as a call to rt_container:init_nif() function
+-record(state, {container_ptr}).
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
 %% new/0
 %% ====================================================================
-%% @doc Creates RTransfer heap with default prefix and maximal RTransfer
-%% block size.
+%% @doc Creates RTransfer map with default prefix and maximal
+%% RTransfer block size.
 %% @end
 -spec new() -> {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
 new() ->
-    {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
-    new(".", BlockSize).
+    gen_server:start_link(?MODULE, [], []).
 
 
 %% new/1
 %% ====================================================================
-%% @doc Same as new/0, but allows to register heap under given name.
+%% @doc Creates RTransfer map and registeres it under given name.
 %% @end
--spec new(HeapName) -> {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
-    HeapName :: {local, Name} | {global, GlobalName} | {via, Module, ViaName},
-    Name :: atom(),
-    Module :: module(),
-    GlobalName :: term(),
-    ViaName :: term().
-%% ====================================================================
-new(HeapName) ->
-    {ok, BlockSize} = application:get_env(?APP_Name, max_rt_block_size),
-    new(HeapName, ".", BlockSize).
-
-
-%% new/2
-%% ====================================================================
-%% @doc Creates RTransfer heap.
-%% @end
--spec new(Prefix :: string(), BlockSize :: integer()) ->
+-spec new(ContainerName :: container_name()) ->
     {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 %% ====================================================================
-new(Prefix, BlockSize) ->
-    gen_server:start_link(?MODULE, [Prefix, BlockSize], []).
-
-
-%% new/3
-%% ====================================================================
-%% @doc Creates RTransfer heap and registeres it under given name.
-%% @end
--spec new(HeapName, Prefix :: string(), BlockSize :: integer()) ->
-    {ok, Pid :: pid()} | ignore | {error, Error :: term()} when
-    HeapName :: {local, Name} | {global, GlobalName} | {via, Module, ViaName},
-    Name :: atom(),
-    Module :: module(),
-    GlobalName :: term(),
-    ViaName :: term().
-%% ====================================================================
-new(HeapName, Prefix, BlockSize) ->
-    gen_server:start_link(HeapName, ?MODULE, [Prefix, BlockSize], []).
-
-
-%% push/2
-%% ====================================================================
-%% @doc Pushes block on RTransfer heap.
-%% @end
--spec push(HeapRef, Block :: #rt_block{}) -> ok when
-    HeapRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
-    Pid :: pid(),
-    Name :: atom(),
-    Node :: node(),
-    Module :: module(),
-    GlobalName :: term(),
-    ViaName :: term().
-%% ====================================================================
-push(HeapRef, Block) ->
-    gen_server:cast(HeapRef, {push, Block}).
-
-
-%% fetch/1
-%% ====================================================================
-%% @doc Fetches block from RTransfer heap.
-%% @end
--spec fetch(HeapRef) -> {ok, #rt_block{}} | {error, Error :: string()} when
-    HeapRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
-    Pid :: pid(),
-    Name :: atom(),
-    Node :: node(),
-    Module :: module(),
-    GlobalName :: term(),
-    ViaName :: term().
-%% ====================================================================
-fetch(HeapRef) ->
-    gen_server:call(HeapRef, fetch).
+new(ContainerName) ->
+    gen_server:start_link(ContainerName, ?MODULE, [], []).
 
 
 %% delete/1
 %% ====================================================================
-%% @doc Deletes RTransfer heap.
+%% @doc Deletes RTransfer map.
 %% @end
--spec delete(HeapRef) -> ok when
-    HeapRef :: Name | {Name, Node} | {global, GlobalName} | {via, Module, ViaName} | Pid,
-    Pid :: pid(),
-    Name :: atom(),
-    Node :: node(),
-    Module :: module(),
-    GlobalName :: term(),
-    ViaName :: term().
+-spec delete(ContainerRef) -> ok | {error, Reason :: term()} when
+    ContainerRef :: container_ref().
 %% ====================================================================
-delete(HeapRef) ->
-    gen_server:call(HeapRef, delete).
+delete(ContainerRef) ->
+    gen_server:call(ContainerRef, delete).
+
+
+%% put/2
+%% ====================================================================
+%% @doc Puts block on RTransfer map.
+%% @end
+-spec put(ContainerRef, Block :: #rt_block{}) -> ok when
+    ContainerRef :: container_ref().
+%% ====================================================================
+put(ContainerRef, Block) ->
+    gen_server:cast(ContainerRef, {put, Block}).
+
+
+%% get/4
+%% ====================================================================
+%% @doc Gets blocks from RTransfer map that matches range
+%% given as offset and size using NIF library.
+%% @end
+-spec get(ContainerRef, FileId, Offset, Size) -> {ok, [#rt_block{}]} | {error, Error :: term()} when
+    ContainerRef :: container_ref(),
+    FileId :: string(),
+    Offset :: non_neg_integer(),
+    Size :: non_neg_integer().
+%% ====================================================================
+get(ContainerRef, FileId, Offset, Size) ->
+    gen_server:call(ContainerRef, {get, FileId, Offset, Size}).
+
+
+%% remove/4
+%% ====================================================================
+%% @doc Removes blocks from RTransfer map that matches range
+%% given as offset and size using NIF library.
+%% @end
+-spec remove(ContainerRef, FileId, Offset, Size) -> ok when
+    ContainerRef :: container_ref(),
+    FileId :: string(),
+    Offset :: non_neg_integer(),
+    Size :: non_neg_integer().
+%% ====================================================================
+remove(ContainerRef, FileId, Offset, Size) ->
+    gen_server:cast(ContainerRef, {remove, FileId, Offset, Size}).
 
 
 %%%===================================================================
@@ -151,11 +127,10 @@ delete(HeapRef) ->
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-init([Prefix, BlockSize]) ->
+init([]) ->
     try
-        erlang:load_nif(filename:join(Prefix, "c_lib/rt_heap_drv"), 0),
-        {ok, Heap} = init_nif(BlockSize),
-        {ok, #state{heap = Heap}}
+        {ok, ContainerPtr} = init_nif(),
+        {ok, #state{container_ptr = ContainerPtr}}
     catch
         _:Reason -> {stop, Reason}
     end.
@@ -179,10 +154,12 @@ init([Prefix, BlockSize]) ->
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
 %% ====================================================================
-handle_call(fetch, _From, #state{heap = Heap} = State) ->
-    {reply, fetch_nif(Heap), State};
+handle_call({get, FileId, Offset, Size}, _From, #state{container_ptr = ContainerPtr} = State) ->
+    {reply, get_nif(ContainerPtr, FileId, Offset, Size), State};
+
 handle_call(delete, _From, State) ->
     {stop, normal, ok, State};
+
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -199,9 +176,14 @@ handle_call(_Request, _From, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({push, Block}, #state{heap = Heap} = State) ->
-    push_nif(Heap, Block),
+handle_cast({put, Block}, #state{container_ptr = ContainerPtr} = State) ->
+    put_nif(ContainerPtr, Block),
     {noreply, State};
+
+handle_cast({remove, FileId, Offset, Size}, #state{container_ptr = ContainerPtr} = State) ->
+    remove_nif(ContainerPtr, FileId, Offset, Size),
+    {noreply, State};
+
 handle_cast(_Request, State) ->
     {noreply, State}.
 
@@ -248,35 +230,74 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+
 %% ====================================================================
 %% NIF functions
 %% ====================================================================
 
-%% init_nif/0
+%% load_nif/0
 %% ====================================================================
-%% @doc Initializes RTransfer heap using NIF library.
+%% @doc Loads RTransfer map NIF library.
 %% @end
--spec init_nif(BlockSize :: integer()) -> {ok, Heap :: term()} | no_return().
+-spec load_nif() -> ok | no_return().
 %% ====================================================================
-init_nif(_BlockSize) ->
-    throw("NIF library not loaded.").
+load_nif() ->
+    Prefix = application:get_env(?APP_Name, rt_nif_prefix, "c_lib"),
+    case erlang:load_nif(filename:join(Prefix, "rt_map_drv"), 0) of
+        ok -> ok;
+        {error, {reload, _}} -> ok;
+        {error, {upgrade, _}} -> ok;
+        Other -> throw(Other)
+    end.
 
 
-%% push_nif/2
+%% init_nif/1
 %% ====================================================================
-%% @doc Pushes block on RTransfer heap using NIF library.
+%% @doc Initializes RTransfer map using NIF library.
 %% @end
--spec push_nif(Heap :: term(), Block :: #rt_block{}) -> ok | no_return().
+-spec init_nif() ->
+    {ok, ContainerPtr :: container_ptr()} | no_return().
 %% ====================================================================
-push_nif(_Heap, _Block) ->
-    throw("NIF library not loaded.").
+init_nif() ->
+    throw(nif_library_not_loaded).
 
 
-%% fetch_nif/1
+%% put_nif/2
 %% ====================================================================
-%% @doc Fetches block from RTransfer heap using NIF library.
+%% @doc Puts block on RTransfer map using NIF library.
 %% @end
--spec fetch_nif(Heap :: term()) -> {ok, #rt_block{}} | {error, Error :: string()} | no_return().
+-spec put_nif(ContainerPtr :: container_ptr(), Block :: #rt_block{}) ->
+    ok | no_return().
 %% ====================================================================
-fetch_nif(_Heap) ->
-    throw("NIF library not loaded.").
+put_nif(_ContainerPtr, _Block) ->
+    throw(nif_library_not_loaded).
+
+
+%% get_nif/4
+%% ====================================================================
+%% @doc Gets blocks from RTransfer map that matches range
+%% given as offset and size using NIF library.
+%% @end
+-spec get_nif(ContainerPtr :: container_ptr(), FileId, Offset, Size) ->
+    {ok, [#rt_block{}]} | {error, Error :: term()} | no_return() when
+    FileId :: string(),
+    Offset :: non_neg_integer(),
+    Size :: non_neg_integer().
+%% ====================================================================
+get_nif(_ContainerPtr, _FileId, _Offset, _Size) ->
+    throw(nif_library_not_loaded).
+
+
+%% remove_nif/4
+%% ====================================================================
+%% @doc Removes blocks from RTransfer map that matches range
+%% given as offset and size using NIF library.
+%% @end
+-spec remove_nif(ContainerPtr :: container_ptr(), FileId, Offset, Size) ->
+    ok | {error, Error :: term()} | no_return() when
+    FileId :: string(),
+    Offset :: non_neg_integer(),
+    Size :: non_neg_integer().
+%% ====================================================================
+remove_nif(_ContainerPtr, _FileId, _Offset, _Size) ->
+    throw(nif_library_not_loaded).

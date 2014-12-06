@@ -31,8 +31,8 @@
 
 // Only define map functions if they are available
 #define NIFPP_HAS_MAPS                                                         \
-    ((ERL_NIF_MAJOR_VERSION > 2)                                               \
-     || (ERL_NIF_MAJOR_VERSION == 2 && ERL_NIF_MINOR_VERSION >= 6))
+    ((ERL_NIF_MAJOR_VERSION > 2) ||                                            \
+     (ERL_NIF_MAJOR_VERSION == 2 && ERL_NIF_MINOR_VERSION >= 6))
 
 #include <string>
 #include <tuple>
@@ -55,7 +55,10 @@ struct TERM {
     ERL_NIF_TERM v;
 
     TERM() {}
-    explicit TERM(ERL_NIF_TERM x) : v(x) {}
+    explicit TERM(ERL_NIF_TERM x)
+        : v(x)
+    {
+    }
 
     inline operator ERL_NIF_TERM() { return v; }
 
@@ -69,7 +72,11 @@ static_assert(sizeof(TERM) == sizeof(ERL_NIF_TERM),
 
 class str_atom : public std::string {
 public:
-    template <class... Args> str_atom(Args &&... args) : std::string(args...) {}
+    template <class... Args>
+    str_atom(Args &&... args)
+        : std::string(args...)
+    {
+    }
 };
 
 } // namespace nifpp
@@ -212,8 +219,8 @@ inline int get(ErlNifEnv *env, ERL_NIF_TERM term, str_atom &var)
     if (!ret)
         return 0;
     var.resize(len + 1); // +1 for terminating null
-    ret = enif_get_atom(env, term, &(*(var.begin())), var.size(),
-                        ERL_NIF_LATIN1);
+    ret =
+        enif_get_atom(env, term, &(*(var.begin())), var.size(), ERL_NIF_LATIN1);
     if (!ret)
         return 0;
     var.resize(len); // trim terminating null
@@ -398,10 +405,14 @@ private:
 public:
     typedef T element_type;
 
-    resource_ptr() : px(0) {}
+    resource_ptr()
+        : px(0)
+    {
+    }
 
 private:
-    resource_ptr(T *p, bool add_ref) : px(p)
+    resource_ptr(T *p, bool add_ref)
+        : px(p)
     {
         if (px != 0 && add_ref)
             enif_keep_resource((void *)px);
@@ -416,7 +427,8 @@ private:
     // to all U, but this is just simpler.
 
 public:
-    resource_ptr(resource_ptr const &rhs) : px(rhs.px)
+    resource_ptr(resource_ptr const &rhs)
+        : px(rhs.px)
     {
         if (px != 0)
             enif_keep_resource((void *)px);
@@ -428,7 +440,11 @@ public:
             enif_release_resource((void *)px);
     }
 
-    resource_ptr(resource_ptr &&rhs) : px(rhs.px) { rhs.px = 0; }
+    resource_ptr(resource_ptr &&rhs)
+        : px(rhs.px)
+    {
+        rhs.px = 0;
+    }
 
     resource_ptr &operator=(resource_ptr &&rhs)
     {
@@ -623,9 +639,8 @@ TERM make_resource_binary(ErlNifEnv *env, const resource_ptr<T> &var,
 
 template <typename T>
 int register_resource(ErlNifEnv *env, const char *module_str, const char *name,
-                      ErlNifResourceFlags flags
-                      = ErlNifResourceFlags(ERL_NIF_RT_CREATE
-                                            | ERL_NIF_RT_TAKEOVER),
+                      ErlNifResourceFlags flags = ErlNifResourceFlags(
+                          ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER),
                       ErlNifResourceFlags * tried = nullptr)
 {
     ErlNifResourceType *type = enif_open_resource_type(
@@ -714,8 +729,8 @@ int get(ErlNifEnv *env, ERL_NIF_TERM term, std::tuple<Ts...> &var)
         return 0;
 
     // invoke recursive template to convert all items of tuple
-    return detail::array_to_tupler<std::tuple_size<std::tuple<Ts...>>::value>::
-        go(env, var, array + arity);
+    return detail::array_to_tupler<
+        std::tuple_size<std::tuple<Ts...>>::value>::go(env, var, array + arity);
 }
 
 namespace detail {

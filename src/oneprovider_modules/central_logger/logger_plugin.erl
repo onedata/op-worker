@@ -25,7 +25,7 @@
 %% ====================================================================
 gather_metadata() ->
     % Add user's ID and FUSE ID to metadata if in context
-    case fslogic_context:get_user_id() of
+    case undefined of
         {ok, UserId} -> [{user_id, UserId}];
         _ -> []
     end.

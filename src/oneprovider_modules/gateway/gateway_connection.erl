@@ -128,7 +128,10 @@ handle_call(_Request, _From, State) ->
      Timeout :: timeout(),
      Reason :: term().
 %% ====================================================================
-handle_cast(#fetch{request = Request} = Action, #gwcstate{socket = Socket, waiting_requests = TID} = State) ->
+handle_cast(#gw_fetch{} = Action, #gwcstate{socket = Socket, waiting_requests = TID} = State) ->
+    #gw_fetch{offset = Offset, size = Size, file_id = FileId} = Action,
+    Request = #fetchrequest{offset = Offset, size = Size, file_id = FileId},
+
     Data = gwproto_pb:encode_fetchrequest(Request),
     case gen_tcp:send(Socket, Data) of
         {error, Reason} -> {stop, Reason, State};
@@ -179,7 +182,7 @@ handle_info({request_timeout, Hash}, #gwcstate{waiting_requests = TID} = State) 
         [] -> ignore;
         [{_, Action, _}] ->
             ets:delete(TID, Hash),
-            notify(fetch_timeout, Action)
+            gateway:notify(fetch_error, timeout, Action)
     end,
     {noreply, State};
 
@@ -213,7 +216,9 @@ terminate(Reason, #gwcstate{remote = Remote, socket = Socket, connection_manager
 
     gen_server:cast(CM, {connection_closed, Remote}),
     lists:foreach(
-        fun({_, Action, _}) -> notify(fetch_send_error, NotifyReason, Action) end,
+        fun({_, Action, _}) ->
+            gateway:notify(fetch_error, {send_error, NotifyReason}, Action)
+        end,
         ets:tab2list(TID)).
 
 
@@ -248,44 +253,22 @@ code_change(_OldVsn, State, _Extra) ->
 complete_request(TID, #fetchreply{content = Content, request_hash = RequestHash}) ->
     case ets:lookup(TID, RequestHash) of
         [] -> ignore, ?warning("Ignored ~p", [Content]);
-        [{_, #fetch{request = Request} = Action, Timer}] ->
+        [{_, #gw_fetch{} = Action, Timer}] ->
             erlang:cancel_timer(Timer),
 
             case Content of
-                undefined -> notify(fetch_complete, 0, Action);
+                undefined -> gateway:notify(fetch_complete, 0, Action);
                 _ ->
-                    #fetchrequest{file_id = FileId, offset = Offset, size = RequestedSize} = Request,
+                    #gw_fetch{file_id = FileId, offset = Offset, size = RequestedSize} = Action,
                     Size = erlang:min(byte_size(Content), RequestedSize),
                     Data = binary_part(Content, 0, Size),
 
                     case logical_files_manager:write({uuid, FileId}, Offset, Data, no_events) of
-                        {Error, Reason} -> notify(Error, Reason, Action);
-                        Val -> notify(fetch_complete, Val, Action)
+                        {Error, Reason} -> gateway:notify(Error, Reason, Action);
+                        Val -> gateway:notify(fetch_complete, Val, Action)
                     end
             end,
 
             ets:delete(TID, RequestHash)
     end,
-    ok.
-
-
-%% notify/2
-%% ====================================================================
-%% @doc Notifies a process about something related to the action it required.
--spec notify(What :: atom(), Action :: #fetch{}) -> ok.
-%% ====================================================================
-notify(What, #fetch{notify = Notify, request = Request}) when is_atom(What) ->
-    Notify ! {What, Request},
-    ok.
-
-
-%% notify/3
-%% ====================================================================
-%% @doc Notifies a process about something related to the action it required.
-%% Now including a reason!
-%% @end
--spec notify(What :: atom(), Reason :: term(), Action :: #fetch{}) -> ok.
-%% ====================================================================
-notify(What, Details, #fetch{notify = Notify, request = Request}) when is_atom(What) ->
-    Notify ! {What, Details, Request},
     ok.

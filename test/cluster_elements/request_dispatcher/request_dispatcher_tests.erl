@@ -319,7 +319,7 @@ request_forward_test() ->
 
   N1 = node(),
   WorkersList = [{N1, Module}],
-  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, 1, 1, [Module | ?Modules]}),
+  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, 1, 1, [Module | ?MODULES]}),
 
   ok = gen_server:call(?Dispatcher_Name, {Module, 1, self(), 11, {ok_request, 1}}),
   First =

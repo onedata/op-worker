@@ -65,7 +65,7 @@ apply_asynch() ->
   worker_host:start_link(Module, {[], {init_status, ets:info(db_host_store)}}, 10),
   N1 = node(),
   WorkersList = [{N1, Module}],
-  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, 1, 1, [Module | ?Modules]}),
+  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, 1, 1, [Module | ?MODULES]}),
 
   ?assertEqual(dao_lib:apply(some_module, {asynch, some_method}, args, 1), ok),
 
@@ -83,7 +83,7 @@ apply_synch() ->
   worker_host:start_link(Module, {[], {init_status, ets:info(db_host_store)}}, 10),
   N1 = node(),
   WorkersList = [{N1, Module}],
-  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, 1, 1, [Module | ?Modules]}),
+  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, 1, 1, [Module | ?MODULES]}),
 
   ?assertEqual({error, wrong_args}, dao_lib:apply(some_module, some_method, args, 1)),
 

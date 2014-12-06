@@ -60,12 +60,13 @@ handle(_ProtocolVersion, ping) ->
 handle(ProtocolVersion, EventMessage) when is_record(EventMessage, eventmessage) ->
     Properties = lists:zip(EventMessage#eventmessage.numeric_properties_keys, EventMessage#eventmessage.numeric_properties_values)
         ++ lists:zip(EventMessage#eventmessage.string_properties_keys, EventMessage#eventmessage.string_properties_values)
-        ++ [{"blocks", lists:map(fun({_, Offset, Size}) -> {Offset, Size} end, EventMessage#eventmessage.block)}],
+        ++ [{"blocks", lists:map(fun({_, Offset, Size}) -> {Offset, Size} end, EventMessage#eventmessage.block)},
+            {"sequence_number", EventMessage#eventmessage.sequence_number}],
 
     AdditionalProperties = [{"user_dn", fslogic_context:get_user_dn()}, {"fuse_id", get(fuse_id)}],
     Event = Properties ++ AdditionalProperties,
     ?debug("Event from client arrived, type: ~p", [proplists:lookup("type", Event)]),
-    handle(ProtocolVersion, {event_arrived, Event ++ AdditionalProperties});
+    handle(ProtocolVersion, {event_arrived, Event});
 
 handle(_ProtocolVersion, healthcheck) ->
     ok;
@@ -81,7 +82,7 @@ handle(ProtocolVersion, configure_event_handlers) ->
             ?debug("New event handlers: ~p", [EventHandlers]),
             lists:foreach(fun({EventType, EventHandlerItems}) ->
                 lists:foreach(fun(EventHandlerItem) ->
-                    update_event_handler(1, EventType, EventHandlerItem)
+                    update_event_handler(ProtocolVersion, EventType, EventHandlerItem)
                 end, EventHandlerItems)
             end, EventHandlers),
             ok;
@@ -89,7 +90,7 @@ handle(ProtocolVersion, configure_event_handlers) ->
             ?warning("rule_manager get_event_handlers handler sent back unexpected structure ~p", [Other]),
             error
     after 1000 ->
-        ?info("rule_manager get_event_handlers handler did not replied"),
+        ?info("rule_manager get_event_handlers handler did not reply"),
         error
     end;
 

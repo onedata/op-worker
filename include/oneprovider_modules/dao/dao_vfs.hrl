@@ -23,7 +23,7 @@
 %% Files' location (storage helper id and its relative file ID). Designed for use within #file record (`location` filed).
 -record(file_location, {file_id = "", storage_uuid = "", storage_file_id = ""}).
 % File remote location informs about global location of file (what parts do each provider have), it is defined as a list of remote_file_part
--record(available_blocks, {file_id = "", provider_id = "", file_parts = []}).
+-record(available_blocks, {file_id = "", provider_id = "", file_size = {0, 0}, file_parts = []}).
 %% Files' locks. Designed for use within #file record (`locks` field).
 -record(file_lock, {type = ?REG_TYPE, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
 %% onedata file
@@ -58,6 +58,8 @@
 %% For regular files can be used to mark file as used in order to block e.g. physical file transfer
 %% For dirs it should be used as FUSE's readdir state. Cursor says how many dir has been read by now
 -record(file_descriptor, {file = "", mode = 0, fuse_id = "", create_time = "", validity_time = 60*15, cursor = 0}).
+
+-record(file_attr_watcher, {file, fuse_id, create_time, validity_time = timer:minutes(5)}).
 
 %% This record containg info about storage helper instance. i.e. its name and initialization arguments
 -record(storage_helper_info, {name = "", init_args = []}).

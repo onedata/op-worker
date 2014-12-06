@@ -56,7 +56,7 @@
 %% ====================================================================
 
 start_link() ->
-  gen_server:start_link({local, ?Dispatcher_Name}, ?MODULE, ?Modules, []).
+  gen_server:start_link({local, ?Dispatcher_Name}, ?MODULE, ?MODULES, []).
 
 -ifdef(TEST).
 %% start_link/1
@@ -406,7 +406,7 @@ handle_cast({update_pulled_state, WorkersList, StateNum, CallbacksList, Callback
                  ?error("Dispatcher had old state number but could not update data"),
                  State;
                _ ->
-                 TmpState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.callbacks_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
+                 TmpState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.callbacks_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?MODULES),
                  ?info("Dispatcher state updated, state num: ~p", [StateNum]),
                  TmpState#dispatcher_state{state_num = StateNum}
              end,
@@ -430,7 +430,7 @@ handle_cast({update_pulled_state, WorkersList, StateNum, CallbacksList, Callback
   {noreply, NewState2};
 
 handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad}, State) ->
-  NewState = update_workers(WorkersList, NewStateNum, State#dispatcher_state.callbacks_num, CurLoad, AvgLoad, ?Modules),
+  NewState = update_workers(WorkersList, NewStateNum, State#dispatcher_state.callbacks_num, CurLoad, AvgLoad, ?MODULES),
   ?info("Dispatcher state updated, state num: ~p", [NewStateNum]),
   {noreply, NewState#dispatcher_state{request_map = RequestMap}};
 
@@ -895,7 +895,7 @@ send_to_fuse1(FuseId, Message, MessageDecoder, SendNum) ->
               Callback ! {self(), Message, MessageDecoder, -1},
               receive
                 {Callback, -1, Response} -> Response
-              after 500 ->
+              after 1000 ->
                 ?error("Sending message ~p to fuse ~p: socket_error", [Message, FuseId]),
                 socket_error
               end
