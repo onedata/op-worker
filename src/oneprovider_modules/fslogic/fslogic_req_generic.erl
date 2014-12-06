@@ -206,14 +206,23 @@ get_file_attr(FileDoc = #db_document{uuid = FileId, record = #file{}}) ->
     FuseId = fslogic_context:get_fuse_id(),
     ProtocolVersion = fslogic_context:get_protocol_version(),
 
-    case FuseId of
+    LocalFuseId =
+        case fslogic_context:is_global_fuse_id(FuseId) of
+            true ->
+                {_RemoteProviderId, RemoteFuseId} = fslogic_context:read_global_fuse_id(FuseId),
+                utils:ensure_list(RemoteFuseId);
+            false ->
+                utils:ensure_list(FuseId)
+        end,
+
+    case LocalFuseId of
         ?CLUSTER_FUSE_ID -> ignore;
-        FuseId ->
+        _ ->
             spawn(fun() ->
                 dao_lib:apply(dao_vfs, remove_attr_watcher, [FileUUID, FuseId], ProtocolVersion),
                 dao_lib:apply(dao_vfs, save_attr_watcher,
                     [#file_attr_watcher{
-                        fuse_id = FuseId,
+                        fuse_id = utils:ensure_list(FuseId),
                         file = FileUUID, create_time = utils:time(),
                         validity_time = 5 * 60}], ProtocolVersion)
             end)
