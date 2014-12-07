@@ -17,7 +17,7 @@
 -include("oneprovider_modules/fslogic/ranges_struct.hrl").
 
 byte_to_block_range_test() ->
-    ?assertEqual(#block_range{from = 0, to = 1}, fslogic_available_blocks:byte_to_block_range(#byte_range{from = 0, to = ?remote_block_size + 1})),
+    ?assertEqual(#block_range{from = 0, to = 1}, fslogic_available_blocks:byte_to_block_range(#byte_range{from = 0, to = ?remote_block_size})),
     ?assertEqual(#block_range{from = 1, to = 1}, fslogic_available_blocks:byte_to_block_range(#byte_range{from = ?remote_block_size, to = ?remote_block_size})),
     ?assertEqual(#block_range{from = 0, to = 2}, fslogic_available_blocks:byte_to_block_range(#byte_range{from = 0, to = 2*?remote_block_size})).
 
