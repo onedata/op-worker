@@ -112,4 +112,6 @@
 %% Name of fslogic's state for file attributes events
 -define(fslogic_attr_events_state, fslogic_attr_events_state).
 
+-define(uuid_cache, uuid_cache).
+
 -endif.
