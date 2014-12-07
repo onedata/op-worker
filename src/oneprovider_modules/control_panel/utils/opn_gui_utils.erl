@@ -13,7 +13,6 @@
 -module(opn_gui_utils).
 -include("oneprovider_modules/control_panel/common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/global_registry/gr_providers.hrl").
 
 % Functions connected with user's session
 -export([storage_defined/0]).
@@ -256,7 +255,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
         {brand_tab, #li{body = #link{style = <<"padding: 13px;">>, url = <<"/">>,
             body = [
                 #span{style = <<"font-size: 23px;">>, class = <<"icomoon-home">>},
-                #b{style = <<"margin-left: 5px; font-size: 20px;">>, body = get_provider_name()}
+                #b{style = <<"margin-left: 5px; font-size: 20px;">>, body = <<"onedata">>}
             ]}
         }},
         {data_tab, #li{body = [
@@ -322,29 +321,6 @@ top_menu(ActiveTabID, SubMenuBody) ->
             ]}
         ] ++ SubMenuBody}
     ] ++ gui_utils:cookie_policy_popup_body(<<?privacy_policy_url>>).
-
-
-%% get_provider_name/0
-%% ====================================================================
-%% @doc Returns provider name fetched from Global Registry.
-%% @end
--spec get_provider_name() -> ProviderName :: binary().
-%% ====================================================================
-get_provider_name() ->
-    case gui_ctx:get(provider_name) of
-        undefined ->
-            case gr_providers:get_details(provider) of
-                {ok, #provider_details{name = ProviderName}} ->
-                    EncodedProviderName = gui_str:html_encode(ProviderName),
-                    gui_ctx:put(provider_name, EncodedProviderName),
-                    EncodedProviderName;
-                _ ->
-                    ?error("Cannot get provider name: ~p. Returning 'onedata'..."),
-                    <<"onedata">>
-            end;
-        ProviderName ->
-            ProviderName
-    end.
 
 
 %% message/2
