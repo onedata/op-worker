@@ -685,19 +685,19 @@ update_size_cache(CacheName, FileId, {_Timestamp, NewSize} = NewSizeTuple, Ignor
         [] ->
             ets:insert(CacheName, {{FileId, old_file_size}, NewSizeTuple}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
-            notify_fslogic_of_size_change(FileId, NewSizeTuple, IgnoredFuse);
-        [{_, {_, OldSize}}] when OldSize =/= NewSize ->
+            notify_fslogic_of_size_change(FileId, {0, 0}, NewSizeTuple, IgnoredFuse);
+        [{_, OldSizeTuple = {_, OldSize}}] when OldSize =/= NewSize ->
             ets:delete(CacheName, {FileId, old_file_size}),
             ets:insert(CacheName, {{FileId, old_file_size}, NewSizeTuple}),
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple}),
-            notify_fslogic_of_size_change(FileId, NewSizeTuple, IgnoredFuse);
+            notify_fslogic_of_size_change(FileId, OldSizeTuple, NewSizeTuple, IgnoredFuse);
         [_] ->
             ets:insert(CacheName, {{FileId, file_size}, NewSizeTuple})
     end.
 
-notify_fslogic_of_size_change(_FileId, {0, _}, _IgnoredFuse) -> ok;
-notify_fslogic_of_size_change(FileId, {_, NewSize}, IgnoredFuse) ->
-    fslogic_events:on_file_size_update(utils:ensure_list(FileId), 0, NewSize, IgnoredFuse).
+notify_fslogic_of_size_change(_FileId, _, {0, 0}, _IgnoredFuse) -> ok;
+notify_fslogic_of_size_change(FileId, {_, OldSize}, {_, NewSize}, IgnoredFuse) ->
+    fslogic_events:on_file_size_update(utils:ensure_list(FileId), OldSize, NewSize, IgnoredFuse).
 
 
 update_docs_cache(CacheName, FileId, Docs) when is_list(Docs) ->
