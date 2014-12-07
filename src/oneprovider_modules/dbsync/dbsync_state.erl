@@ -18,7 +18,17 @@
 -define(dbsync_state, dbsync_state).
 
 %% API
--export([get/1, set/2, save/0, load/0, call/1, call/3, state_loop/1, state_loop/0]).
+-export([get/1, set/2, save/0, load/0, call/1, call/3, state_loop/1, state_loop/0, clear_requests/0]).
+
+clear_requests() ->
+    call(fun(_) ->
+        State = ets:tab2list(dbsync_state),
+        CTime = utils:mtime(),
+        RemTime = CTime - timer:minutes(1),
+        ToRM = [Object || {{request, _}, MTime} = Object <- State, MTime < RemTime],
+        NewState = State -- ToRM,
+        [ets:insert(dbsync_state, Elem) || Elem <- NewState]
+    end).
 
 
 %% set/2
@@ -27,7 +37,16 @@
 -spec set(Key :: term(), Value :: term()) -> true.
 %% ====================================================================
 set(Key, Value) ->
-    ets:insert(?dbsync_state, {Key, Value}).
+    Job = fun() -> ets:insert(?dbsync_state, {Key, Value}) end,
+    DBSyncPid = whereis(?dbsync_state),
+    case self() of
+        DBSyncPid ->
+            Job();
+        _ ->
+            call(fun(_) ->
+                Job()
+            end)
+    end.
 
 
 %% get/1
@@ -36,9 +55,20 @@ set(Key, Value) ->
 -spec get(Key :: term()) -> undefined | term().
 %% ====================================================================
 get(Key) ->
-    case ets:lookup(?dbsync_state, Key) of
-        [{_, Value}] -> Value;
-        _ -> undefined
+    Job = fun() ->
+        case ets:lookup(?dbsync_state, Key) of
+            [{_, Value}] -> Value;
+            _ -> undefined
+        end
+    end,
+    DBSyncPid = whereis(?dbsync_state),
+    case self() of
+        DBSyncPid ->
+            Job();
+        _ ->
+            call(fun(_) ->
+                Job()
+            end)
     end.
 
 
@@ -131,8 +161,16 @@ state_loop(State) ->
     Result :: term().
 %% ====================================================================
 call(Fun) when is_function(Fun) ->
-    ?dbsync_state ! {self(), Fun},
-    sync_call_get_response().
+    DBSyncPid = whereis(?dbsync_state),
+    case self() of
+        DBSyncPid ->
+            Trace = try throw(test) catch test -> erlang:get_stacktrace() end,
+            ?error("Unable to call the function inside dbsync's state loop. Trace: ~p", [Trace]),
+            throw(invalid_call);
+        _ ->
+            ?dbsync_state ! {self(), Fun},
+            sync_call_get_response()
+    end.
 
 %% call/3
 %% ====================================================================

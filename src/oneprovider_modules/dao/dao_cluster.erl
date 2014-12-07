@@ -200,7 +200,13 @@ get_fuse_session(FuseId) ->
 remove_fuse_session(FuseId) ->
     %% This fuse id will not be added later so we do not have to clear cache globally
     ets:delete(dao_fuse_cache, FuseId), %% Delete cached entry
-    dao_records:remove_record(FuseId).
+    case dao_records:remove_record(FuseId) of
+        ok ->
+            spawn(fun() -> dao_vfs:remove_attr_watcher({by_owner, FuseId}) end),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 
 %% close_fuse_session/1
@@ -307,13 +313,14 @@ remove_connection_info("") ->
 	ok;
 remove_connection_info(SessID) ->
 	{ok, #db_document{record = #connection_info{session_id = SessionID}}} = get_connection_info(SessID),
+  Res = dao_records:remove_record(SessID),
 	case list_connection_info({by_session_id, SessionID}) of
-		{ok,[_OneConnection]} ->
-			remove_fuse_session(SessionID);
-		{ok,_} ->
-			ok
+		  {ok, []} ->
+			    remove_fuse_session(SessionID);
+		  {ok, _} ->
+			    ok
 	end,
-	dao_records:remove_record(SessID).
+  Res.
 
 
 %% close_connection/1
