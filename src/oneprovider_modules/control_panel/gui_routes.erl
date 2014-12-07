@@ -23,6 +23,8 @@ init(State, Ctx) ->
                         Other -> Other
                     end,
     {ok, State, Ctx#context{path = Path, module = route(RequestedPage)}}.
+route(<<"/groups_old">>) -> page_groups_old;
+route(<<"/spaces_old">>) -> page_spaces_old;
 route(<<"/">>) -> page_file_manager;
 route(<<"/login">>) -> page_login;
 route(<<"/logout">>) -> page_logout;
@@ -32,7 +34,6 @@ route(<<"/spaces">>) -> page_spaces;
 route(<<"/space">>) -> page_space;
 route(<<"/privileges/space">>) -> page_space_privileges;
 route(<<"/groups">>) -> page_groups;
-route(<<"/groups_old">>) -> page_groups_old;
 route(<<"/group">>) -> page_group;
 route(<<"/privileges/group">>) -> page_group_privileges;
 route(<<"/tokens">>) -> page_tokens;

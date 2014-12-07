@@ -1,5 +1,5 @@
 %% ===================================================================
-%% @author Krzysztof Trzepla
+%% @author Lukasz Opiola
 %% @copyright (C): 2014 ACK CYFRONET AGH
 %% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
@@ -46,18 +46,6 @@
     {?PRVLG_SET_PRIVILEGES, <<"Set privileges">>, <<"Set<br />privileges">>}
 ]).
 
-% Actions that can be performed by user
-% Theyare represented by tuples {action, ActionName, Args}
--define(ACTION_SHOW_CREATE_GROUP_POPUP, show_create_group_popup).
--define(ACTION_CREATE_GROUP, create_group).
--define(ACTION_SHOW_JOIN_GROUP_POPUP, show_join_group_popup).
--define(ACTION_JOIN_GROUP, join_group).
--define(ACTION_SHOW_LEAVE_GROUP_POPUP, show_leave_group_popup).
--define(ACTION_LEAVE_GROUP, leave_group).
--define(ACTION_MOVE_GROUP, move_group).
--define(ACTION_HIDE_POPUP, hide_popup).
-
-
 % Actions that can be performed by user concerning specific groups and posibly requiring privileges
 % Theyare represented by tuples {group_action, ActionName, GroupID, Args}
 -define(GROUP_ACTION_TOGGLE, toggle_group).
@@ -100,6 +88,17 @@
     {?GROUP_ACTION_SHOW_LEAVE_SPACE_POPUP, ?PRVLG_LEAVE_SPACE},
     {?GROUP_ACTION_LEAVE_SPACE, ?PRVLG_LEAVE_SPACE}
 ]).
+
+% Actions that can be performed by user, they do not require privileges.
+% Theyare represented by tuples {action, ActionName, Args}
+-define(ACTION_SHOW_CREATE_GROUP_POPUP, show_create_group_popup).
+-define(ACTION_CREATE_GROUP, create_group).
+-define(ACTION_SHOW_JOIN_GROUP_POPUP, show_join_group_popup).
+-define(ACTION_JOIN_GROUP, join_group).
+-define(ACTION_SHOW_LEAVE_GROUP_POPUP, show_leave_group_popup).
+-define(ACTION_LEAVE_GROUP, leave_group).
+-define(ACTION_MOVE_GROUP, move_group).
+-define(ACTION_HIDE_POPUP, hide_popup).
 
 %% Comet process pid
 -define(COMET_PID, comet_pid).
