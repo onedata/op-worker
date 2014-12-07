@@ -406,15 +406,23 @@ get_statfs() ->
 %% ====================================================================
 get_file_block_map(FullFileName) ->
     ?debug("get_file_block_map(FullFileName: ~p)", [FullFileName]),
+    {ok, #space_info{providers = SpaceProviders}} = fslogic_utils:get_space_info_for_path(FullFileName),
     {ok, #db_document{uuid = FileId}} = fslogic_objects:get_file(FullFileName),
     {ok, Docs} = fslogic_available_blocks:call({list_all_available_blocks, FileId}),
-    ProtobufList = lists:map(
+    ProtobufListReal = lists:map(
         fun(#db_document{record = #available_blocks{provider_id = Id, file_parts = Blocks}}) ->
             RawBlocks = ranges_struct:strip_timestamps(Blocks),
             ProtobufRanges = [#fileblockmap_blockmapentity_blockrange{from = From, to = To} || #range{from = From, to = To} <- RawBlocks],
             #fileblockmap_blockmapentity{provider_id = Id, ranges = ProtobufRanges}
         end, Docs),
-    #fileblockmap{block_map = ProtobufList}.
+    ProtobufListFake = lists:foldl(
+        fun(ProviderId, Acc) ->
+            case lists:filter(fun(#fileblockmap_blockmapentity{provider_id = Id}) -> Id == ProviderId end, ProtobufListReal) of
+                [] -> [#fileblockmap_blockmapentity{provider_id = ProviderId, ranges = []} | Acc];
+                _ -> Acc
+            end
+        end, [], SpaceProviders),
+    #fileblockmap{block_map = ProtobufListReal ++ ProtobufListFake}.
 
 
 %% rename_file/2
