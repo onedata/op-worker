@@ -184,8 +184,7 @@ title() -> <<"Groups">>.
 -spec css() -> binary().
 %% ====================================================================
 css() ->
-    <<"<link rel=\"stylesheet\" href=\"/css/groups_spaces_common.css\" type=\"text/css\" media=\"screen\" charset=\"utf-8\" />",
-    "    <link rel=\"stylesheet\" href=\"/css/groups.css\" type=\"text/css\" media=\"screen\" charset=\"utf-8\" />">>.
+    <<"<link rel=\"stylesheet\" href=\"/css/groups_spaces_common.css\" type=\"text/css\" media=\"screen\" charset=\"utf-8\" />">>.
 
 
 %% body/0
@@ -336,8 +335,8 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
                 end
             ]},
             #panel{id = ?COLLAPSE_WRAPPER_ID(GroupID), class = WrapperClass, body = [
-                #panel{id = ?USERS_SECTION_ID(GroupID), class = <<"users-section">>, body = UsersBody},
-                #panel{id = ?SPACES_SECTION_ID(GroupID), class = <<"spaces-section">>, body = SpacesBody}
+                #panel{id = ?USERS_SECTION_ID(GroupID), class = <<"section-wrapper">>, body = UsersBody},
+                #panel{id = ?SPACES_SECTION_ID(GroupID), class = <<"section-wrapper">>, body = SpacesBody}
             ]}
         ]}
     ]},
@@ -640,9 +639,9 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
         gruid = GRUID,
         access_token = AccessToken} = State,
     #group_state{
+        name = GroupName,
         users = UserStates,
         spaces = SpaceStates,
-        name = GroupName,
         current_privileges = UserPrivileges} = lists:keyfind(GroupID, 2, Groups),
     % Check if the user is permitted to perform such action
     case check_privileges(Action, UserPrivileges) of

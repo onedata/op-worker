@@ -132,17 +132,17 @@
 -define(COMET_PID, comet_pid).
 
 %% Macros used to create HTML element IDs
--define(SPACE_LIST_ELEMENT_ID(GroupID), <<"sp_li_", GroupID/binary>>).
--define(SPACE_HEADER_ID(GroupID), <<"sp_name_ph_", GroupID/binary>>).
--define(COLLAPSE_WRAPPER_ID(GroupID), <<"sp_collapse_wrapper_", GroupID/binary>>).
--define(USERS_SECTION_ID(GroupID), <<"sp_users_ph_", GroupID/binary>>).
--define(GROUPS_SECTION_ID(GroupID), <<"sp_groups_ph_", GroupID/binary>>).
--define(PROVIDERS_SECTION_ID(GroupID), <<"sp_providers_ph_", GroupID/binary>>).
--define(PRVLGS_USER_HEADER_PH_ID(GroupID), <<"pr_user_header_ph_", GroupID/binary>>).
--define(PRVLGS_USER_SAVE_PH_ID(GroupID), <<"pr_save_ph_", GroupID/binary>>).
+-define(SPACE_LIST_ELEMENT_ID(SpaceID), <<"sp_li_", SpaceID/binary>>).
+-define(SPACE_HEADER_ID(SpaceID), <<"sp_name_ph_", SpaceID/binary>>).
+-define(COLLAPSE_WRAPPER_ID(SpaceID), <<"sp_collapse_wrapper_", SpaceID/binary>>).
+-define(USERS_SECTION_ID(SpaceID), <<"sp_users_ph_", SpaceID/binary>>).
+-define(GROUPS_SECTION_ID(SpaceID), <<"sp_groups_ph_", SpaceID/binary>>).
+-define(PROVIDERS_SECTION_ID(SpaceID), <<"sp_providers_ph_", SpaceID/binary>>).
+-define(PRVLGS_USER_HEADER_PH_ID(SpaceID), <<"pr_user_header_ph_", SpaceID/binary>>).
+-define(PRVLGS_USER_SAVE_PH_ID(SpaceID), <<"pr_save_ph_", SpaceID/binary>>).
 -define(USER_CHECKBOX_ID(SpaceID, UserID, PrivilegeID), <<"us_pr_chckbx_", SpaceID/binary, "_", UserID/binary, "_", PrivilegeID/binary>>).
--define(PRVLGS_GROUP_HEADER_PH_ID(GroupID), <<"pr_user_header_ph_", GroupID/binary>>).
--define(PRVLGS_GROUP_SAVE_PH_ID(GroupID), <<"pr_save_ph_", GroupID/binary>>).
+-define(PRVLGS_GROUP_HEADER_PH_ID(SpaceID), <<"pr_user_header_ph_", SpaceID/binary>>).
+-define(PRVLGS_GROUP_SAVE_PH_ID(SpaceID), <<"pr_save_ph_", SpaceID/binary>>).
 -define(GROUP_CHECKBOX_ID(SpaceID, GroupID, PrivilegeID), <<"gr_pr_chckbx_", SpaceID/binary, "_", GroupID/binary, "_", PrivilegeID/binary>>).
 
 % Macro used to format names and IDs that appear in messages
@@ -213,8 +213,7 @@ title() -> <<"Spaces">>.
 -spec css() -> binary().
 %% ====================================================================
 css() ->
-    <<"<link rel=\"stylesheet\" href=\"/css/groups_spaces_common.css\" type=\"text/css\" media=\"screen\" charset=\"utf-8\" />",
-    "    <link rel=\"stylesheet\" href=\"/css/spaces.css\" type=\"text/css\" media=\"screen\" charset=\"utf-8\" />">>.
+    <<"<link rel=\"stylesheet\" href=\"/css/groups_spaces_common.css\" type=\"text/css\" media=\"screen\" charset=\"utf-8\" />\n">>.
 
 
 %% body/0
@@ -256,7 +255,7 @@ footer_popup() ->
 %% space_list_element/3
 %% ====================================================================
 %% @doc Renders HTML responsible for space list element.
--spec space_list_element(SpaceState :: #space_state{}, Expanded :: boolean, IsDefault :: boolean()) -> term().
+-spec space_list_element(SpaceState :: #space_state{}, Expanded :: boolean(), IsDefault :: boolean()) -> term().
 %% ====================================================================
 space_list_element(#space_state{id = SpaceID, name = SpaceNameOrUndef, users = UserStates,
     groups = GroupStates, providers = ProviderStates, current_privileges = UserPrivileges}, Expanded, IsDefault) ->
@@ -372,9 +371,9 @@ space_list_element(#space_state{id = SpaceID, name = SpaceNameOrUndef, users = U
                 end
             ]},
             #panel{id = ?COLLAPSE_WRAPPER_ID(SpaceID), class = WrapperClass, body = [
-                #panel{id = ?USERS_SECTION_ID(SpaceID), class = <<"users-section">>, body = UsersBody},
-                #panel{id = ?GROUPS_SECTION_ID(SpaceID), class = <<"users-section">>, body = GroupsBody},
-                #panel{id = ?GROUPS_SECTION_ID(SpaceID), class = <<"groups-section">>, body = ProvidersBody}
+                #panel{id = ?USERS_SECTION_ID(SpaceID), class = <<"section-wrapper">>, body = UsersBody},
+                #panel{id = ?GROUPS_SECTION_ID(SpaceID), class = <<"section-wrapper">>, body = GroupsBody},
+                #panel{id = ?PROVIDERS_SECTION_ID(SpaceID), class = <<"section-wrapper">>, body = ProvidersBody}
             ]}
         ]}
     ]},
@@ -713,16 +712,203 @@ comet_loop(State) ->
     end.
 
 
-comet_handle_action(_State, Action, Args) ->
-    ?dump({comet_handle_action, Action, Args}).
+comet_handle_action(State, Action, Args) ->
+    ?dump({State, Action, Args}),
+    #page_state{expanded_spaces = ExpandedSpaces, gruid = GRUID, access_token = AccessToken} = State,
+    case {Action, Args} of
+        {?ACTION_SHOW_CREATE_SPACE_POPUP, _} ->
+            show_name_insert_popup(<<"Create new space">>, <<"new_space_textbox">>,
+                <<"New space name">>, <<"">>, false, <<"new_space_submit">>,
+                {action, ?ACTION_CREATE_SPACE, [{query_value, <<"new_space_textbox">>}]}, ["new_space_textbox"]),
+            State;
 
-comet_handle_space_action(_State, Action, SpaceID, Args) ->
-    ?dump({comet_handle_space_action, Action, SpaceID, Args}).
+        {?ACTION_CREATE_SPACE, [<<"">>]} ->
+            gui_jq:info_popup(<<"Error">>, <<"Please insert a space name">>, <<"">>),
+            State;
+
+        {?ACTION_CREATE_SPACE, [SpaceName]} ->
+            hide_popup(),
+            try
+                {ok, SpaceID} = gr_users:create_space({user, AccessToken}, [{<<"name">>, SpaceName}]),
+                gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
+                opn_gui_utils:message(success, <<"Space created: ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
+                SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
+                refresh_space_list(SyncedState),
+                SyncedState
+            catch
+                _:Other ->
+                    ?error_stacktrace("Cannot create space ~p: ~p", [SpaceName, Other]),
+                    opn_gui_utils:message(error, <<"Cannot create space: <b>", (gui_str:html_encode(SpaceName))/binary,
+                    "</b>.<br />Please try again later.">>),
+                    State
+            end;
+
+        {?ACTION_SHOW_JOIN_SPACE_POPUP, _} ->
+            show_token_popup(<<"To join an existing space, please paste a user invitation token below:">>,
+                <<"join_space_textbox">>, <<"">>, false, <<"join_space_submit">>,
+                {action, ?ACTION_JOIN_SPACE, [{query_value, <<"join_space_textbox">>}]}, ["join_space_textbox"]),
+            State;
+
+        {?ACTION_JOIN_SPACE, [Token]} ->
+            hide_popup(),
+            try
+                {ok, SpaceID} = gr_users:join_space({user, AccessToken}, [{<<"token">>, Token}]),
+                gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
+                SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
+                #space_state{name = SpaceName} = lists:keyfind(SpaceID, 2, SyncedState#page_state.spaces),
+                opn_gui_utils:message(success, <<"Successfully joined space ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
+                refresh_space_list(SyncedState),
+                SyncedState
+            catch
+                _:Other ->
+                    ?error("Cannot join space using token ~p: ~p", [Token, Other]),
+                    opn_gui_utils:message(error, <<"Cannot join space using token: <b>", (gui_str:html_encode(Token))/binary,
+                    "</b>.<br />Please try again later.">>),
+                    State
+            end;
+
+        {?ACTION_SHOW_LEAVE_SPACE_POPUP, [SpaceID, SpaceName]} ->
+            PBody = case SpaceName of
+                        undefined ->
+                            <<"Are you sure you want to leave space with ID:<br /><b>", SpaceID/binary, "</b>">>;
+                        _ ->
+                            <<"Are you sure you want to leave space:<br />",
+                            (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, "">>
+                    end,
+            show_confirm_popup(PBody, <<"">>, <<"ok_button">>,
+                {action, ?ACTION_LEAVE_SPACE, [SpaceID, SpaceName]}),
+            State;
+
+        {?ACTION_LEAVE_SPACE, [SpaceID, SpaceName]} ->
+            hide_popup(),
+            case gr_users:leave_space({user, AccessToken}, SpaceID) of
+                ok ->
+                    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
+                    Message =
+                        case SpaceName of
+                            undefined ->
+                                <<"Successfully left space with ID: <b>", SpaceID/binary, "</b>">>;
+                            _ ->
+                                <<"Successfully left space ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>
+                        end,
+                    opn_gui_utils:message(success, Message),
+                    SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
+                    refresh_space_list(SyncedState),
+                    SyncedState;
+                Other ->
+                    ?error("Cannot leave space with ID ~p: ~p", [SpaceID, Other]),
+                    opn_gui_utils:message(error, <<"Cannot leave space ",
+                    (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ".<br />Please try again later.">>),
+                    State
+            end;
+
+        {?ACTION_MOVE_SPACE, _} ->
+            gui_jq:info_popup(<<"Not implemented">>, <<"This feature will be available soon.">>, <<"">>),
+            State;
+
+        {?ACTION_HIDE_POPUP, _} ->
+            hide_popup(),
+            State
+    end.
+
+comet_handle_space_action(State, Action, SpaceID, Args) ->
+    ?dump({Action, SpaceID, Args}),
+    #page_state{spaces = Spaces,
+        expanded_spaces = ExpandedSpaces,
+        edited_user_privileges = EditedUserPrivileges,
+        edited_group_privileges = EditedGroupPrivileges,
+        gruid = _GRUID,
+        access_token = AccessToken} = State,
+    #space_state{
+        name = SpaceName,
+        users = UserStates,
+        groups = GroupStates,
+        providers = ProviderStates,
+        current_privileges = UserPrivileges} = lists:keyfind(SpaceID, 2, Spaces),
+    % Check if the user is permitted to perform such action
+    case check_privileges(Action, UserPrivileges) of
+        {false, RequiredPrivilege} ->
+            gui_jq:info_popup(<<"Not authorized">>, <<"To perform this operation, you need the <b>\"", RequiredPrivilege/binary, "\"</b> privileges.">>, <<"">>),
+            State;
+        true ->
+            case {Action, Args} of
+                {?SPACE_ACTION_TOGGLE, _} ->
+                    {NewExpandedSpaces, NewEditedUserPrivileges, NewEditedGroupPrivileges} =
+                        case lists:member(SpaceID, ExpandedSpaces) of
+                            true ->
+                                gui_jq:slide_up(?COLLAPSE_WRAPPER_ID(SpaceID), 400),
+                                {
+                                    ExpandedSpaces -- [SpaceID],
+                                    proplists:delete(SpaceID, EditedUserPrivileges),
+                                    proplists:delete(SpaceID, EditedGroupPrivileges)
+                                };
+                            false ->
+                                gui_jq:update(?USERS_SECTION_ID(SpaceID), user_table_body(SpaceID, UserStates, UserPrivileges)),
+                                gui_jq:update(?GROUPS_SECTION_ID(SpaceID), group_table_body(SpaceID, GroupStates, UserPrivileges)),
+                                gui_jq:update(?PROVIDERS_SECTION_ID(SpaceID), provider_table_body(SpaceID, ProviderStates)),
+                                gui_jq:slide_down(?COLLAPSE_WRAPPER_ID(SpaceID), 600),
+                                gui_jq:wire(<<"$(window).resize();">>),
+                                {
+                                    [SpaceID | ExpandedSpaces],
+                                    EditedUserPrivileges,
+                                    EditedGroupPrivileges
+                                }
+                        end,
+                    ?dump(NewExpandedSpaces),
+                    State#page_state{expanded_spaces = NewExpandedSpaces, edited_user_privileges = NewEditedUserPrivileges,
+                        edited_group_privileges = NewEditedGroupPrivileges};
+
+                {?SPACE_ACTION_INVITE_USER, _} ->
+                    case gr_spaces:get_invite_user_token({user, AccessToken}, SpaceID) of
+                        {ok, Token} ->
+                            show_token_popup(<<"Give the token below to a user willing to join space ",
+                            (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ":">>,
+                                <<"token_textbox">>, Token, true, <<"token_ok">>,
+                                {action, ?ACTION_HIDE_POPUP}, []);
+                        Other ->
+                            ?error("Cannot get user invitation token for space with ID ~p: ~p", [SpaceID, Other]),
+                            opn_gui_utils:message(error, <<"Cannot get invitation token for space ",
+                            (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ".<br />Please try again later.">>)
+                    end,
+                    State;
+
+                {?SPACE_ACTION_INVITE_GROUP, _} ->
+                    case gr_spaces:get_invite_group_token({user, AccessToken}, SpaceID) of
+                        {ok, Token} ->
+                            show_token_popup(<<"Give the token below to a group willing to join space ",
+                            (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ":">>,
+                                <<"token_textbox">>, Token, true, <<"token_ok">>,
+                                {action, ?ACTION_HIDE_POPUP}, []);
+                        Other ->
+                            ?error("Cannot get group invitation token for space with ID ~p: ~p", [SpaceID, Other]),
+                            opn_gui_utils:message(error, <<"Cannot get invitation token for space ",
+                            (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ".<br />Please try again later.">>)
+                    end,
+                    State;
+
+                {?SPACE_ACTION_REQUEST_SUPPORT, _} ->
+                    case gr_spaces:get_invite_provider_token({user, AccessToken}, SpaceID) of
+                        {ok, Token} ->
+                            show_token_popup(<<"Give the token below to a provider willing to create a Space for group ",
+                            (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ":">>,
+                                <<"token_textbox">>, Token, true, <<"token_ok">>,
+                                {action, ?ACTION_HIDE_POPUP}, []);
+                        Other ->
+                            ?error("Cannot get support token for space with ID ~p: ~p", [SpaceID, Other]),
+                            opn_gui_utils:message(error, <<"Cannot get support token for space ",
+                            (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ".<br />Please try again later.">>)
+                    end,
+                    State;
+                A ->
+                    ?dump(A),
+                    State
+            end
+    end.
 
 
 refresh_space_list(#page_state{spaces = Spaces, expanded_spaces = ExpandedSpaces}) ->
     % Default space is the first on the list
-    [#space_state{id = DefaultSpace}] = Spaces,
+    [#space_state{id = DefaultSpace} | _] = Spaces,
     Body = case Spaces of
                [] ->
                    #li{class = <<"empty-list-info">>, body = [
@@ -741,6 +927,87 @@ refresh_space_list(#page_state{spaces = Spaces, expanded_spaces = ExpandedSpaces
 scroll_to_space(SpaceID) ->
     gui_jq:wire(<<"var el = $('#", (?SPACE_LIST_ELEMENT_ID(SpaceID))/binary, "'); if ($(el).length > 0) {",
     "$('html, body').animate({scrollTop: parseInt($(el).offset().top - 150)}, 200); }">>).
+
+
+check_privileges(ActionType, UserPrivileges) ->
+    case proplists:get_value(ActionType, ?PRIVILEGES_FOR_ACTIONS) of
+        undefined ->
+            true;
+        PrivilegeName ->
+            case lists:member(PrivilegeName, UserPrivileges) of
+                true ->
+                    true;
+                false ->
+                    {_PrivID, PrivName, _ColumnName} = lists:keyfind(PrivilegeName, 1, ?PRIVILEGES),
+                    {false, PrivName}
+            end
+    end.
+
+
+
+show_token_popup(Text, TextboxID, TextboxValue, DoSelect, ButtonID, Postback, Source) ->
+    gui_jq:bind_enter_to_submit_button(TextboxID, ButtonID),
+    Body = [
+        #p{body = Text},
+        #form{class = <<"control-group">>, body = [
+            #textbox{id = TextboxID, class = <<"flat token-textbox">>, placeholder = <<"Token">>, value = TextboxValue},
+            #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, id = ButtonID,
+                postback = Postback, source = Source}
+        ]}
+    ],
+    show_popup(Body, <<"$('#", TextboxID/binary, "').focus()",
+    (case DoSelect of true -> <<".select();">>; false -> <<";">> end)/binary>>).
+
+
+show_name_insert_popup(Text, TextboxID, Placeholder, TextboxValue, DoSelect, ButtonID, Postback, Source) ->
+    gui_jq:bind_enter_to_submit_button(TextboxID, ButtonID),
+    Body = [
+        #p{body = [Text]},
+        #form{class = <<"control-group">>, body = [
+            #textbox{id = TextboxID, class = <<"flat name-textbox">>, value = TextboxValue, placeholder = Placeholder},
+            #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, id = ButtonID,
+                postback = Postback, source = Source}
+        ]}
+    ],
+    show_popup(Body, <<"$('#", TextboxID/binary, "').focus()",
+    (case DoSelect of true -> <<".select();">>; false -> <<";">> end)/binary>>).
+
+
+show_confirm_popup(Text, ExtraText, ButtonID, OkButtonPostback) ->
+    gui_jq:bind_enter_to_submit_button(ButtonID, ButtonID),
+    Body = [
+        #p{body = Text},
+        case ExtraText of <<"">> -> []; _ -> #p{class = <<"warning-message">>, body = ExtraText} end,
+        #form{class = <<"control-group">>, body = [
+            #button{id = ButtonID, postback = OkButtonPostback,
+                class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
+            #button{id = <<"cancel_button">>, postback = {action, ?ACTION_HIDE_POPUP},
+                class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
+        ]}
+    ],
+    show_popup(Body, <<"$('#", ButtonID/binary, "').focus();">>).
+
+
+show_popup(Body, ScriptAfterUpdate) ->
+    case Body of
+        [] ->
+            skip;
+        _ ->
+            CloseButton = #link{id = <<"footer_close_button">>, postback = {action, ?ACTION_HIDE_POPUP}, title = <<"Hide">>,
+                class = <<"glyph-link footer-close-button">>, body = #span{class = <<"fui-cross">>}},
+            gui_jq:update(<<"footer_popup">>, [CloseButton | Body]),
+            gui_jq:slide_down(<<"footer_popup">>, 300),
+            case ScriptAfterUpdate of
+                undefined ->
+                    ok;
+                _ ->
+                    gui_jq:wire(ScriptAfterUpdate)
+            end
+    end.
+
+
+hide_popup() ->
+    gui_jq:slide_up(<<"footer_popup">>, 200).
 
 
 %% event/1

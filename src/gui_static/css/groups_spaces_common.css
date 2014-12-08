@@ -276,7 +276,7 @@
     cursor: pointer !important;
 }
 
-.users-section {
+.section-wrapper {
     display: table;
     table-layout: auto;
     border-top: 1px solid #bbb;
