@@ -1347,7 +1347,6 @@ mark_as_modified(_, undefined, _, _, _) ->
 mark_as_modified(_, _, undefined, _, _) ->
     ok;
 mark_as_modified(FullFileName, FuseId, SequenceNumber, Offset, Size) ->
-    ct:print("ctx: ~p ~p",[fslogic_context:get_fuse_id(), fslogic_context:get_gr_auth()]),
     {Status, TmpAns} = contact_fslogic(#fileblockmodified{logical_name = FullFileName, fuse_id = FuseId,
         sequence_number = SequenceNumber, offset = Offset, size = Size}),
     case Status of
