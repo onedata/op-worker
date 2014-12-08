@@ -289,7 +289,16 @@ space_list_element(#space_state{id = SpaceID, name = SpaceNameOrUndef, users = U
                 ]},
                 #panel{id = SpaceHeaderID, class = SpaceHeaderClass, body = [
                     #p{class = <<"gen-name">>, body = [SpaceName]},
-                    #p{class = <<"gen-id">>, body = [<<"ID: ", SpaceID/binary>>]}
+                    #p{class = <<"gen-id">>, body = [<<"ID: ", SpaceID/binary>>]},
+                    case IsDefault of
+                        false ->
+                            [];
+                        true ->
+                            #p{class = <<"default-space-info">>, body = [
+                                <<"<i class=\"icomoon-checkbox-checked action-button-icon\"></i>">>,
+                                <<"Default space">>
+                            ]}
+                    end
                 ]},
                 case CanViewSpace of
                     false ->
@@ -328,7 +337,7 @@ space_list_element(#space_state{id = SpaceID, name = SpaceNameOrUndef, users = U
                                                 #li{body = [
                                                     #link{title = <<"Set this space as default space">>,
                                                         postback = {action, ?ACTION_SET_DEFAULT, [SpaceID]},
-                                                        body = [<<"<i class=\"icomoon-arrow-down2\"></i>">>, <<"Set default">>]}
+                                                        body = [<<"<i class=\"icomoon-checkbox-checked\"></i>">>, <<"Set default">>]}
                                                 ]}
                                         end,
                                         #li{body = [

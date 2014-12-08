@@ -367,3 +367,14 @@
 .empty-table-info {
     font-style: italic;
 }
+
+.default-space-info {
+    position: absolute;
+    top: 19px;
+    left: 580px;
+}
+
+.default-space-info > i {
+    top: 1px !important;
+    margin-right: 8px;
+}
