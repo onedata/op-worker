@@ -252,6 +252,12 @@ get_write_for_available_blocks_handler() ->
         SequenceNumber = proplists:get_value("sequence_number", Event),
         Blocks = proplists:get_value("blocks", Event),
         FullFileName = proplists:get_value("filePath", Event),
+        Context = proplists:get_value("user_context", Event),
+        case Context of
+            undefined -> ok;
+            _ -> fslogic_context:set_user_context(Context)
+        end,
+        fslogic_context:set_fuse_id(FuseId),
         lists:foreach(fun({Offset, Size}) -> ok = logical_files_manager:mark_as_modified(FullFileName, FuseId, SequenceNumber, Offset, Size) end, Blocks)
     end.
 
@@ -263,5 +269,11 @@ get_truncate_for_avaialbale_blocks_handler() ->
         SequenceNumber = proplists:get_value("sequence_number", Event),
         NewSize = proplists:get_value("newSize", Event),
         FullFileName = proplists:get_value("filePath", Event),
+        Context = proplists:get_value("user_context", Event),
+        case Context of
+            undefined -> ok;
+            _ -> fslogic_context:set_user_context(Context)
+        end,
+        fslogic_context:set_fuse_id(FuseId),
         ok = logical_files_manager:mark_as_truncated(FullFileName, FuseId, SequenceNumber, NewSize)
     end.
