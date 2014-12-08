@@ -24,8 +24,6 @@
     websocket_info/3,
     websocket_terminate/3]).
 
--define(PROTOCOL_VERSION, 1).
-
 %% ====================================================================
 %% Test API
 %% ====================================================================
@@ -47,8 +45,8 @@
     State :: any(),
     KeepAlive :: integer().
 %% ====================================================================
-init(_Args, _Req) ->
-    gen_server:call(?GR_CHANNEL_WORKER, {asynch, ?PROTOCOL_VERSION, {connected, self()}}),
+init([Pid], _Req) ->
+    Pid ! {connected, self()},
     {ok, state}.
 
 
@@ -121,23 +119,23 @@ websocket_terminate(_Reason, _Req, _State) ->
 -spec send_to_gr_channel(Data :: binary()) -> ok.
 %% ====================================================================
 send_to_gr_channel(Data) ->
-  try
-    {ok, GRMessage} = pb:decode("gr_communication_protocol", "message", Data),
-    ProtocolVersion = GRMessage#message.protocol_version,
-    Type = GRMessage#message.message_type,
-    Decoder = GRMessage#message.message_decoder_name,
-    Input = GRMessage#message.input,
-    {ok, Request} = pb:decode(Decoder, Type, Input),
+    try
+        {ok, GRMessage} = pb:decode("gr_communication_protocol", "message", Data),
+        ProtocolVersion = GRMessage#message.protocol_version,
+        Type = GRMessage#message.message_type,
+        Decoder = GRMessage#message.message_decoder_name,
+        Input = GRMessage#message.input,
+        {ok, Request} = pb:decode(Decoder, Type, Input),
 
-    Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {gr_channel, ProtocolVersion, {gr_message, Request}}}),
-    case Ans of
-      ok ->
-        ok;
-      Other ->
-        ?error("Dispatcher connection error: ~p for request ~p", [Other, Request])
-    end
-  catch
-    E1:E2 ->
-      ?error("Dispatcher connection error: ~p:~p for request ~p", [E1, E2, Data])
-  end,
-  ok.
+        Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {gr_channel, ProtocolVersion, {gr_message, Request}}}),
+        case Ans of
+            ok ->
+                ok;
+            Other ->
+                ?error("Dispatcher connection error: ~p for request ~p", [Other, Request])
+        end
+    catch
+        E1:E2 ->
+            ?error("Dispatcher connection error: ~p:~p for request ~p", [E1, E2, Data])
+    end,
+    ok.

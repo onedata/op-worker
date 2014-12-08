@@ -74,7 +74,7 @@ push(Msg) ->
 %% ====================================================================
 init(_) ->
     {ok, Delay} = application:get_env(?APP_Name, gr_channel_next_connection_attempt_delay),
-    timer:send_after(timer:seconds(Delay), ?GR_CHANNEL_WORKER, {timer, {asynch, ?PROTOCOL_VERSION, check_registration}}),
+    erlang:send_after(timer:seconds(Delay), ?GR_CHANNEL_WORKER, {timer, {asynch, ?PROTOCOL_VERSION, connect}}),
     #?GR_CHANNEL_STATE{status = disconnected}.
 
 
@@ -102,48 +102,53 @@ handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
 
 handle(_ProtocolVersion, connect) ->
+    {ok, URL} = application:get_env(?APP_Name, global_registry_channel_url),
+    {ok, Delay} = application:get_env(?APP_Name, gr_channel_next_connection_attempt_delay),
     case get_state() of
-        #?GR_CHANNEL_STATE{status = connected} ->
-            ok;
-        _ ->
-            {ok, URL} = application:get_env(?APP_Name, global_registry_channel_url),
-            {ok, Delay} = application:get_env(?APP_Name, gr_channel_next_connection_attempt_delay),
-            Opts = [{keyfile, gr_plugin:get_key_path()}, {certfile, gr_plugin:get_cert_path()}],
-            case websocket_client:start_link(URL, gr_channel_handler, [], Opts) of
-                {ok, Pid} ->
-                    set_state(#?GR_CHANNEL_STATE{status = connecting, pid = Pid}),
-                    gen_server:cast(?GR_CHANNEL_WORKER, {link_process, Pid});
-                Other ->
+        #?GR_CHANNEL_STATE{status = disconnected} ->
+            try
+                KeyPath = gr_plugin:get_key_path(),
+                CertPath = gr_plugin:get_cert_path(),
+                CACertPath = gr_plugin:get_cacert_path(),
+                {ok, Key} = file:read_file(KeyPath),
+                {ok, Cert} = file:read_file(CertPath),
+                {ok, CACert} = file:read_file(CACertPath),
+                [{KeyType, KeyEncoded, _} | _] = public_key:pem_decode(Key),
+                [{_, CertEncoded, _} | _] = public_key:pem_decode(Cert),
+                [{_, CACertEncoded, _} | _] = public_key:pem_decode(CACert),
+                Opts = [{cacerts, [CACertEncoded]}, {key, {KeyType, KeyEncoded}}, {cert, CertEncoded}],
+                {ok, Pid} = websocket_client:start_link(URL, gr_channel_handler, [self()], Opts),
+                ok = gen_server:call(?GR_CHANNEL_WORKER, {link_process, Pid}),
+                ok = receive
+                         {connected, Pid} ->
+                             ?info("Connection to Global Registry established successfully."),
+                             ok
+                     after 5000 ->
+                         timeout
+                     end,
+                set_state(#?GR_CHANNEL_STATE{status = connected, pid = Pid}),
+                ok
+            catch
+                _:Reason ->
                     ?error("Cannot establish connection to Global Registry due to: ~p."
-                    " Reconnecting in ~p seconds...", [Other, Delay]),
-                    timer:send_after(timer:seconds(Delay), ?GR_CHANNEL_WORKER, {timer, {asynch, ?PROTOCOL_VERSION, connect}})
-            end
-    end,
-    ok;
+                    " Reconnecting in ~p seconds...", [Reason, Delay]),
+                    erlang:send_after(timer:seconds(Delay), ?GR_CHANNEL_WORKER, {timer, {asynch, ?PROTOCOL_VERSION, connect}}),
+                    {error, Reason}
+            end;
+        #?GR_CHANNEL_STATE{status = Status} ->
+            {error, Status}
+    end;
 
 handle(_ProtocolVersion, disconnect) ->
     State = get_state(),
     case State of
         #?GR_CHANNEL_STATE{status = connected, pid = Pid} ->
             set_state(State#?GR_CHANNEL_STATE{status = disconnecting}),
-            Pid ! disconnect;
-        #?GR_CHANNEL_STATE{status = connecting, pid = Pid} ->
-            set_state(State#?GR_CHANNEL_STATE{status = disconnecting}),
-            Pid ! disconnect;
-        _ ->
-            ok
+            Pid ! disconnect,
+            ok;
+        #?GR_CHANNEL_STATE{status = Status} ->
+            {error, Status}
     end;
-
-handle(_ProtocolVersion, {connected, Pid}) ->
-    ?info("Connection to Global Registry established successfully."),
-    State = get_state(),
-    case State of
-        #?GR_CHANNEL_STATE{status = connecting, pid = Pid} ->
-            set_state(State#?GR_CHANNEL_STATE{status = connected});
-        _ ->
-            ok
-    end,
-    ok;
 
 handle(_ProtocolVersion, {push, Msg}) ->
     case get_state() of
@@ -152,22 +157,15 @@ handle(_ProtocolVersion, {push, Msg}) ->
     end,
     ok;
 
-handle(_ProtocolVersion, check_registration) ->
-    case gen_server:call({global, ?CCM}, get_provider_id) of
-        {ok, ProviderId} when is_binary(ProviderId) ->
-            gen_server:cast(?GR_CHANNEL_WORKER, {asynch, ?PROTOCOL_VERSION, connect});
-        _ ->
-            ok
-    end;
-
 handle(ProtocolVersion, {gr_message, Request}) ->
-  updates_handler:update(ProtocolVersion, Request);
+    updates_handler:update(ProtocolVersion, Request);
 
 handle(_ProtocolVersion, {'EXIT', Pid, Reason}) ->
     case get_state() of
         #?GR_CHANNEL_STATE{status = disconnecting, pid = Pid} ->
             ?info("Connection to Global Registry closed."),
-            set_state(#?GR_CHANNEL_STATE{status = disconnected, pid = undefined});
+            set_state(#?GR_CHANNEL_STATE{status = disconnected, pid = undefined}),
+            gen_server:cast(?GR_CHANNEL_WORKER, {asynch, ?PROTOCOL_VERSION, connect});
         #?GR_CHANNEL_STATE{pid = Pid} ->
             ?error("Connection to Global Registry lost due to: ~p. Reconnecting...", [Reason]),
             set_state(#?GR_CHANNEL_STATE{status = disconnected, pid = undefined}),
