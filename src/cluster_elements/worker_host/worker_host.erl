@@ -244,6 +244,16 @@ handle_call({register_or_update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, Map
 handle_call({register_or_update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
   handle_call({register_or_update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, non}, _From, State);
 
+handle_call({link_process, Pid}, _From, State) ->
+    LinkAns = try
+                  link(Pid),
+                  ok
+              catch
+                  _:Reason ->
+                      {error, Reason}
+              end,
+    {reply, LinkAns, State};
+
 handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
                                                              %% that request was made, unlike cast because cast ignores state of node/gen_server
     {reply, gen_server:cast(State#host_state.plug_in, Request), State};
@@ -434,10 +444,6 @@ handle_cast({clear_sub_procs_cache, AnsPid, Cache}, State) ->
 
 handle_cast(stop, State) ->
   {stop, normal, State};
-
-handle_cast({link_process, Pid}, State) ->
-  link(Pid),
-  {noreply, State};
 
 handle_cast(_Msg, State) ->
   ?warning("Wrong cast: ~p", [_Msg]),

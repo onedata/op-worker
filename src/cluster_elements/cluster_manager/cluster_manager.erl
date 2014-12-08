@@ -240,12 +240,6 @@ handle_call({get_cluster_stats, StartTime, EndTime, Columns}, _From, State) ->
   Reply = get_cluster_stats(StartTime, EndTime, Columns),
   {reply, Reply, State};
 
-handle_call({set_provider_id, ProviderId}, _From, State) ->
-  {reply, ok, State#cm_state{provider_id = ProviderId}};
-
-handle_call(get_provider_id, _From, #cm_state{provider_id = ProviderId} = State) ->
-  {reply, {ok, ProviderId}, State};
-
 %% TODO if callbacks with ack will be used intensively, information should be forwarded to nodes without ccm usage
 %% (e.g. request dispatchers can have nodes list)
 handle_call({node_for_ack, NodeForAck}, _From, State) ->
