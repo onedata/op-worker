@@ -13,7 +13,7 @@ compile:
 	cp -R deps/prproto/proto src
 	cp -R c_src/oneproxy/proto src
 	./rebar compile
-	rm -rf src/proto src/oneproxy.proto
+	rm -rf src/proto
 
 deps:
 	./rebar get-deps

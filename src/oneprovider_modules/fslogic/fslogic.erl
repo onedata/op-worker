@@ -134,6 +134,7 @@ init(_Args) ->
     end,
 
     ets:new(?fslogic_attr_events_state, [public, named_table, set]),
+    ets:new(?uuid_cache, [public, named_table, {read_concurrency, true}]),
 
     #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispMapFun, sub_procs = SubProcList, plug_in_state = ok}.
 

@@ -63,7 +63,7 @@ handle(ProtocolVersion, EventMessage) when is_record(EventMessage, eventmessage)
         ++ [{"blocks", lists:map(fun({_, Offset, Size}) -> {Offset, Size} end, EventMessage#eventmessage.block)},
             {"sequence_number", EventMessage#eventmessage.sequence_number}],
 
-    AdditionalProperties = [{"user_dn", fslogic_context:get_user_dn()}, {"fuse_id", get(fuse_id)}],
+    AdditionalProperties = [{"user_dn", fslogic_context:get_user_dn()}, {"fuse_id", fslogic_context:get_fuse_id()}, {"user_context", fslogic_context:get_user_context()}],
     Event = Properties ++ AdditionalProperties,
     ?debug("Event from client arrived, type: ~p", [proplists:lookup("type", Event)]),
     handle(ProtocolVersion, {event_arrived, Event});

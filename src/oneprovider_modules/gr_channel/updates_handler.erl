@@ -29,7 +29,7 @@
 -spec update(ProtocolVersion :: non_neg_integer(), Request :: term()) -> ok.
 %% ====================================================================
 update(_ProtocolVersion, Request) when is_record(Request, spacemodified) ->
-  Id = binary_to_list(Request#spacemodified.id),
+  Id = utils:ensure_binary(Request#spacemodified.id),
   Name = Request#spacemodified.name,
   SizeRecords = Request#spacemodified.size,
   Size = lists:map(fun(S) -> {S#spacemodified_size.provider, S#spacemodified_size.size} end, SizeRecords),

@@ -620,7 +620,7 @@ write_file_chunk(FilePath, Buf) ->
                                 {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
                             WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"fuse_id", ?CLUSTER_FUSE_ID}, {"sequence_number", 0},
+                                {"fuse_id", ?CLUSTER_FUSE_ID}, {"user_context", fslogic_context:get_user_context()}, {"sequence_number", 0},
                                 {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}});
                         _ ->
@@ -680,7 +680,7 @@ write(FilePath, Offset, Buf, EventPolicy) ->
                                 {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}}),
                             WriteEventAvailableBlocks = [{"type", "write_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
-                                {"fuse_id", ?CLUSTER_FUSE_ID}, {"sequence_number", 0},
+                                {"fuse_id", ?CLUSTER_FUSE_ID}, {"user_context", fslogic_context:get_user_context()}, {"sequence_number", 0},
                                 {"bytes", Res}, {"blocks", [{Offset, Res}]}, {"filePath", FullFileName}],
                             gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventAvailableBlocks}});
                         _ ->
@@ -770,7 +770,7 @@ truncate(FilePath, Size) ->
                     TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", FullFileName}],
                     gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}}),
                     TruncateEventAvailableBlocks = [{"type", "truncate_for_available_blocks"}, {"user_dn", fslogic_context:get_user_dn()},
-                        {"fuse_id", ?CLUSTER_FUSE_ID}, {"sequence_number", 0}, {"filePath", FullFileName}, {"newSize", Size}],
+                        {"fuse_id", ?CLUSTER_FUSE_ID}, {"user_context", fslogic_context:get_user_context()}, {"sequence_number", 0}, {"filePath", FullFileName}, {"newSize", Size}],
                     gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEventAvailableBlocks}});
                 _ ->
                     ok

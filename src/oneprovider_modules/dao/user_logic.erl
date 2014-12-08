@@ -60,7 +60,7 @@ create_partial_user(GRUID, Spaces) ->
 %% ====================================================================
 create_partial_user(GRUID, Spaces, Groups) ->
     [#space_info{space_id = SpaceId} | _] = Spaces,
-    case gr_spaces:get_user_details(provider, SpaceId, GRUID) of
+    case gr_spaces:get_user_details(provider, SpaceId, utils:ensure_binary(GRUID)) of
         {ok, #user_details{name = Name0}} ->
             Login = openid_utils:get_user_login(GRUID),
             Name = unicode:characters_to_list(Name0),

@@ -162,8 +162,8 @@ handle2(_ProtocolVersion, {reemit, #treebroadcast{ledge = LEdge, redge = REdge, 
     ok = dbsync_protocol:tree_broadcast(SpaceInfo, Providers4, Request, BaseRequest, 3);
 
 %% Handle treebroadcast{} message
-handle2(ProtocolVersion, #treebroadcast{input = RequestData, message_type = DecoderName, space_id = SpaceId, request_id = ReqId} = BaseRequest) ->
-
+handle2(ProtocolVersion, #treebroadcast{input = RequestData, message_type = DecoderName, space_id = SpaceId0, request_id = ReqId} = BaseRequest) ->
+    SpaceId = utils:ensure_binary(SpaceId0),
     Ignore = dbsync_state:call(fun(_State) ->
         case dbsync_state:get({request, ReqId}) of
             undefined ->
@@ -219,6 +219,8 @@ handle2(_ProtocolVersion, #requestseqdiff{space_id = SpaceId, dbname = DbName, s
                     Acc;
                 _:{badmatch, {ok, #space_info{}}} ->
                     Acc;
+                _:{badmatch,{error,root_space_dir}} ->
+                    Acc;
                 _:Reason ->
                     ?error_stacktrace("Unable to emit document ~p due to ~p", [Doc, Reason]),
                     Acc
@@ -246,11 +248,22 @@ handle_broadcast(_ProtocolVersion, SpaceId, #docupdated{dbname = DbName, documen
     {provider_id, ProviderId} = get(peer_id),
     CurrSeqInfo = dbsync_utils:decode_term(CurrSeqInfoBin),
     PrevSeqInfo = dbsync_utils:decode_term(PrevSeqInfoBin),
-    lists:foreach(
+    Docs = lists:map(
         fun(DocData) ->
-            #db_document{uuid = _DocUUID, rev_info = {_, [_EmitedRev | _]}} = Doc = dbsync_utils:decode_term(DocData),
-            replicate_doc(SpaceId, Doc)
+            #db_document{uuid = _DocUUID, rev_info = {_, [_EmitedRev | _]}} = Doc = dbsync_utils:decode_term(DocData)
         end, DocsData),
+
+    {MetaDocs, OtherDocs} =
+        lists:partition(fun
+            (#db_document{record = #file_meta{}}) ->
+                true;
+            (_) ->
+                false
+        end, Docs),
+
+    replicate_docs(SpaceId, OtherDocs),
+    replicate_docs(SpaceId, MetaDocs),
+
     dbsync_state:call(fun(_State) ->
         case get_current_seq(ProviderId, SpaceId, DbName) of
             PrevSeqInfo ->
@@ -307,11 +320,22 @@ request_diff(ProviderId, SpaceId, DbName, SinceSeqInfo, Attempts) ->
     #docupdated{document = DocsData, curr_seq = CurrSeqInfoBin, prev_seq = PrevSeqInfoBin} = dbsync_protocol:send_direct_message(ProviderId, Request, {dbsync, docupdated}, Attempts),
     CurrSeqInfo = dbsync_utils:decode_term(CurrSeqInfoBin),
     PrevSeqInfo = dbsync_utils:decode_term(PrevSeqInfoBin),
-    lists:foreach(
+
+    Docs = lists:map(
         fun(DocData) ->
-            #db_document{uuid = _DocUUID, rev_info = {_, [_EmitedRev | _]}} = Doc = dbsync_utils:decode_term(DocData),
-            catch replicate_doc(SpaceId, Doc)
+            #db_document{uuid = _DocUUID, rev_info = {_, [_EmitedRev | _]}} = Doc = dbsync_utils:decode_term(DocData)
         end, DocsData),
+
+    {MetaDocs, OtherDocs} =
+        lists:partition(fun
+            (#db_document{record = #file_meta{}}) ->
+                true;
+            (_) ->
+                false
+        end, Docs),
+
+    replicate_docs(SpaceId, OtherDocs),
+    replicate_docs(SpaceId, MetaDocs),
 
     dbsync_state:call(fun(_State) ->
         case get_current_seq(ProviderId, SpaceId, DbName) of
@@ -353,6 +377,8 @@ emit_documents(DbName, DocsWithSeq, SinceSeqInfo) ->
                 maps:put(SpaceId, {SpaceInfo, max(LastSSeq, CSeq), [NewDoc | SpaceDocs]}, Acc)
             catch
                 _:{badmatch,{error,{not_found,missing}}} ->
+                    Acc;
+                _:{badmatch,{error,root_space_dir}} ->
                     Acc;
                 _:Reason ->
                     ?error_stacktrace("Unable to emit document ~p due to ~p", [UUID, Reason]),
@@ -570,6 +596,7 @@ ping_service_loop(Spaces) ->
     Res = [catch broadcast_space_state(SpaceId) || SpaceId <- NewSpaces],
     ?debug("DBSync ping result: ~p", [Res]),
 
+    catch dbsync_state:clear_requests(),
     catch dbsync_state:save(),
 
     timer:sleep(timer:seconds(30)),
@@ -588,7 +615,7 @@ ping_service_loop(Spaces) ->
 -spec get_space_ctx(DbName :: string() | binary(), #db_document{}) ->
     {ok, #space_info{}} | {error, Reason :: any()}.
 %% ====================================================================
-get_space_ctx(_DbName, #db_document{uuid = UUID} = Doc) ->
+get_space_ctx(_DbName, #db_document{uuid = UUID, record = Record} = Doc) ->
     case dbsync_state:get({uuid_to_spaceid, UUID}) of
         undefined ->
             case dbsync_records:get_space_ctx(Doc, []) of
@@ -597,8 +624,14 @@ get_space_ctx(_DbName, #db_document{uuid = UUID} = Doc) ->
                         fun(FUUID) ->
                             dbsync_state:set({uuid_to_spaceid, FUUID}, SpaceInfo)
                         end, UUIDs),
-                    {ok, SpaceInfo};
+
+                    case UUIDs of
+                        [] -> {error, root_space_dir};
+                        _->
+                            {ok, SpaceInfo}
+                    end;
                 {error, Reason} ->
+                    ?warning("Cannot get space info for document ~p (type ~p) due to ~p", [UUID, element(1, Record), Reason]),
                     {error, Reason}
             end;
         SpaceId ->
@@ -626,6 +659,20 @@ get_current_seq(ProviderId, SpaceId, DbName) ->
     end.
 
 
+replicate_docs(_SpaceId, []) ->
+    ok;
+replicate_docs(SpaceId, [#db_document{uuid = DocUUID} = Doc | T]) ->
+    try replicate_doc(SpaceId, Doc) of
+        ok -> ok;
+        {error, Reason} ->
+            ?error("Cannot replicate document ~p due to ~p", [DocUUID, Reason])
+    catch
+        Type1:Reason1 ->
+            ?error("Cannot replicate document ~p due to ~p", [DocUUID, {Type1, Reason1}])
+    end,
+    replicate_docs(SpaceId, T).
+
+
 %% replicate_doc/2
 %% ====================================================================
 %% @doc Replicates given document to DB.
@@ -640,7 +687,19 @@ replicate_doc(SpaceId, #db_document{uuid = DocUUID} = Doc) ->
         end,
 
     DocDbName = dbsync_records:doc_to_db(Doc),
-    {ok, #space_info{space_id = SpaceId} = _SpaceInfo} = get_space_ctx(DocDbName, Doc),
+    %% {ok, #space_info{space_id = SpaceId} = _SpaceInfo} = get_space_ctx(DocDbName, Doc),
+    try get_space_ctx(DocDbName, Doc) of
+        {ok, #space_info{space_id = SpaceId}} ->
+            ?debug("Replication of document ~p verified", [DocUUID]);
+        {ok, #space_info{space_id = RealSpaceId}} ->
+            ?warning("Invalid space for document ~p. Expected ~p, got ~p", [DocUUID, RealSpaceId, SpaceId]);
+        {error, Reason3} ->
+            ?warning("Unable to get space for document ~p due to ~p", [DocUUID, Reason3])
+    catch
+        _:Reason4 ->
+            ?warning("Unable to get space for document ~p due to ~p", [DocUUID, Reason4])
+    end,
+
     case dao_lib:apply(dao_records, save_record, [DocDbName, Doc, [replicated_changes]], 1) of
         {ok, _} ->
             [spawn(fun() -> catch Callback(DocDbName, SpaceId, DocUUID, Doc) end) || {_, Callback} <- Hooks],
