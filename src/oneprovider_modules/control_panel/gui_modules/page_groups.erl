@@ -49,16 +49,21 @@
 % Actions that can be performed by user concerning specific groups and posibly requiring privileges
 % Theyare represented by tuples {group_action, ActionName, GroupID, Args}
 -define(GROUP_ACTION_TOGGLE, toggle_group).
+
 -define(GROUP_ACTION_SHOW_REMOVE_POPUP, show_remove_group_popup).
 -define(GROUP_ACTION_REMOVE, remove_group).
+
 -define(GROUP_ACTION_SHOW_RENAME_POPUP, show_rename_group_popup).
 -define(GROUP_ACTION_RENAME, rename_group).
+
 -define(GROUP_ACTION_SET_PRIVILEGE, change_privilege).
 -define(GROUP_ACTION_SAVE_PRIVILEGES, save_privileges).
 -define(GROUP_ACTION_DISCARD_PRIVILEGES, discard_privileges).
+
 -define(GROUP_ACTION_INVITE_USER, invite_user).
 -define(GROUP_ACTION_SHOW_REMOVE_USER_POPUP, show_remove_user_popup).
 -define(GROUP_ACTION_REMOVE_USER, remove_user).
+
 -define(GROUP_ACTION_REQUEST_SUPPORT, request_space_creation).
 -define(GROUP_ACTION_SHOW_JOIN_SPACE_POPUP, show_join_space_popup).
 -define(GROUP_ACTION_JOIN_SPACE, join_space).
@@ -70,16 +75,21 @@
 % What privilege is required for what action
 -define(PRIVILEGES_FOR_ACTIONS, [
     {?GROUP_ACTION_TOGGLE, ?PRVLG_VIEW},
+
     {?GROUP_ACTION_SHOW_REMOVE_POPUP, ?PRVLG_REMOVE},
     {?GROUP_ACTION_REMOVE, ?PRVLG_REMOVE},
+
     {?GROUP_ACTION_SHOW_RENAME_POPUP, ?PRVLG_CHANGE},
     {?GROUP_ACTION_RENAME, ?PRVLG_CHANGE},
+
     {?GROUP_ACTION_SET_PRIVILEGE, ?PRVLG_SET_PRIVILEGES},
     {?GROUP_ACTION_SAVE_PRIVILEGES, ?PRVLG_SET_PRIVILEGES},
     {?GROUP_ACTION_DISCARD_PRIVILEGES, ?PRVLG_SET_PRIVILEGES},
+
     {?GROUP_ACTION_INVITE_USER, ?PRVLG_INVITE_USER},
-    {?GROUP_ACTION_SHOW_REMOVE_USER_POPUP, ?PRVLG_CHANGE},
-    {?GROUP_ACTION_REMOVE_USER, ?PRVLG_INVITE_USER},
+    {?GROUP_ACTION_SHOW_REMOVE_USER_POPUP, ?PRVLG_REMOVE_USER},
+    {?GROUP_ACTION_REMOVE_USER, ?PRVLG_REMOVE_USER},
+
     {?GROUP_ACTION_REQUEST_SUPPORT, ?PRVLG_REQUEST_SUPPORT},
     {?GROUP_ACTION_SHOW_JOIN_SPACE_POPUP, ?PRVLG_JOIN_SPACE},
     {?GROUP_ACTION_JOIN_SPACE, ?PRVLG_JOIN_SPACE},
@@ -95,9 +105,9 @@
 -define(ACTION_CREATE_GROUP, create_group).
 -define(ACTION_SHOW_JOIN_GROUP_POPUP, show_join_group_popup).
 -define(ACTION_JOIN_GROUP, join_group).
+-define(ACTION_MOVE_GROUP, move_group).
 -define(ACTION_SHOW_LEAVE_GROUP_POPUP, show_leave_group_popup).
 -define(ACTION_LEAVE_GROUP, leave_group).
--define(ACTION_MOVE_GROUP, move_group).
 -define(ACTION_HIDE_POPUP, hide_popup).
 
 %% Comet process pid
@@ -116,6 +126,10 @@
 % Macro used to format names and IDs that appear in messages
 -define(FORMAT_ID_AND_NAME(GroupID, GroupName), <<"<b>", (gui_str:html_encode(GroupName))/binary, "</b> (ID: <b>", GroupID/binary, "</b>)">>).
 
+% Macro used to generate redirec tURL to show a space
+-define(REDIRECT_TO_SPACE_URL(SpaceID), <<"/spaces?show=", SpaceID/binary>>).
+
+
 %% Page state
 %% Edited privileges is a proplist with GroupID keys, which values are proplists with UserID keys, which values
 %% are proplists with {PrivilegeID, Flag} tuples.
@@ -124,7 +138,7 @@
 %% Records used to store current info about groups
 %% current_privileges is a list of privileges of current user in specific group
 -record(group_state, {id = <<"">>, name = <<"">>, users = [], spaces = [], current_privileges = []}).
--record(user_state, {id = <<"">>, name = <<"">>, privileges = <<"">>}).
+-record(user_state, {id = <<"">>, name = <<"">>, privileges = []}).
 -record(space_state, {id = <<"">>, name = <<"">>}).
 
 
@@ -170,7 +184,8 @@ title() -> <<"Groups">>.
 -spec css() -> binary().
 %% ====================================================================
 css() ->
-    <<"<link rel=\"stylesheet\" href=\"/css/groups.css\" type=\"text/css\" media=\"screen\" charset=\"utf-8\" />">>.
+    <<"<link rel=\"stylesheet\" href=\"/css/groups_spaces_common.css\" type=\"text/css\" media=\"screen\" charset=\"utf-8\" />",
+    "    <link rel=\"stylesheet\" href=\"/css/groups.css\" type=\"text/css\" media=\"screen\" charset=\"utf-8\" />">>.
 
 
 %% body/0
@@ -187,17 +202,17 @@ body() ->
     #panel{class = <<"page-container">>, body = [
         #panel{id = <<"spinner">>, body = #image{image = <<"/images/spinner.gif">>}},
         opn_gui_utils:top_menu(groups_tab),
-        #panel{id = <<"page_content">>, body = [
+        #panel{class = <<"page-content">>, body = [
             #panel{id = <<"message">>, class = <<"dialog">>},
-            #h6{class = <<"manage-groups-header">>, body = <<"Manage groups">>},
+            #h6{class = <<"page-header">>, body = <<"Manage groups">>},
             #panel{class = <<"top-buttons-panel">>, body = [
                 #button{id = <<"create_group_button">>, postback = {action, ?ACTION_SHOW_CREATE_GROUP_POPUP},
                     class = <<"btn btn-inverse btn-small top-button">>, body = <<"Create new group">>},
                 #button{id = <<"join_group_button">>, postback = {action, ?ACTION_SHOW_JOIN_GROUP_POPUP},
                     class = <<"btn btn-inverse btn-small top-button">>, body = <<"Join existing group">>}
             ]},
-            #panel{class = <<"group-list-panel">>, body = [
-                #list{id = <<"group_list">>, body = []}
+            #panel{class = <<"gen-list-panel">>, body = [
+                #list{class = <<"gen-list">>, id = <<"group_list">>, body = []}
             ]}
         ]},
         footer_popup()
@@ -206,7 +221,7 @@ body() ->
 
 % Footer popup to display prompts and forms.
 footer_popup() ->
-    #panel{id = <<"footer_popup">>, class = <<"dialog success-dialog">>}.
+    #panel{id = <<"footer_popup">>, class = <<"dialog success-dialog footer-popup">>}.
 
 
 %% group_list_element/2
@@ -221,12 +236,12 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
             undefined -> {
                 false,
                 <<"<i>You do not have privileges to view this group</i>">>,
-                <<"group-name-ph-no-perms">>
+                <<"gen-name-wrapper">>
             };
             _ -> {
                 true,
                 GroupNameOrUndef,
-                <<"group-name-ph">>
+                <<"gen-name-wrapper cursor-pointer">>
             }
         end,
     GroupHeaderID = ?GROUP_HEADER_ID(GroupID),
@@ -235,29 +250,29 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
             false ->
                 {<<"collapse-wrapper collapsed">>, [], []};
             true ->
-                {<<"collapse-wrapper">>, group_users_body(GroupID, UserStates, UserPrivileges), group_spaces_body(GroupID, SpaceStates)}
+                {<<"collapse-wrapper">>, user_table_body(GroupID, UserStates, UserPrivileges), space_table_body(GroupID, SpaceStates)}
         end,
     ListElement = #li{id = ?GROUP_LIST_ELEMENT_ID(GroupID), body = [
-        #panel{class = <<"group-container">>, body = [
-            #panel{class = <<"group-header">>, body = [
-                #panel{class = <<"group-header-icon-ph">>, body = [
+        #panel{class = <<"gen-container">>, body = [
+            #panel{class = <<"gen-header">>, body = [
+                #panel{class = <<"gen-header-icon-wrapper">>, body = [
                     #span{class = <<"icomoon-users">>}
                 ]},
                 #panel{id = GroupHeaderID, class = GroupHeaderClass, body = [
-                    #p{class = <<"group-name">>, body = [GroupName]},
-                    #p{class = <<"group-id">>, body = [<<"ID: ", GroupID/binary>>]}
+                    #p{class = <<"gen-name">>, body = [GroupName]},
+                    #p{class = <<"gen-id">>, body = [<<"ID: ", GroupID/binary>>]}
                 ]},
                 case CanViewGroup of
                     false ->
-                        #panel{class = <<"group-actions-ph">>, body = [
-                            #button{title = <<"Leave this group">>, class = <<"btn btn-small btn-info leave-space-button">>,
+                        #panel{class = <<"gen-actions-wrapper">>, body = [
+                            #button{title = <<"Leave this group">>, class = <<"btn btn-small btn-info gen-leave-button">>,
                                 postback = {action, ?ACTION_SHOW_LEAVE_GROUP_POPUP, [GroupID, undefined]}, body = [
                                     <<"<i class=\"icomoon-exit action-button-icon\"></i>">>, <<"Leave group">>
                                 ]}
                         ]};
                     true ->
-                        #panel{class = <<"group-actions-ph">>, body = [
-                            #panel{class = <<"btn-group group-actions-dropdown">>, body = [
+                        #panel{class = <<"gen-actions-wrapper">>, body = [
+                            #panel{class = <<"btn-group gen-actions-dropdown">>, body = [
                                 <<"<i class=\"dropdown-arrow\"></i>">>,
                                 #button{title = <<"Actions">>, class = <<"btn btn-small btn-info">>,
                                     data_fields = [{<<"data-toggle">>, <<"dropdown">>}], body = [
@@ -321,8 +336,8 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
                 end
             ]},
             #panel{id = ?COLLAPSE_WRAPPER_ID(GroupID), class = WrapperClass, body = [
-                #panel{id = ?USERS_SECTION_ID(GroupID), class = <<"group-users">>, body = UsersBody},
-                #panel{id = ?SPACES_SECTION_ID(GroupID), class = <<"group-spaces">>, body = SpacesBody}
+                #panel{id = ?USERS_SECTION_ID(GroupID), class = <<"users-section">>, body = UsersBody},
+                #panel{id = ?SPACES_SECTION_ID(GroupID), class = <<"spaces-section">>, body = SpacesBody}
             ]}
         ]}
     ]},
@@ -336,25 +351,26 @@ group_list_element(#group_state{id = GroupID, name = GroupNameOrUndef, users = U
     ListElement.
 
 
-group_users_body(GroupID, UserStates, CurrentUserPrivileges) ->
+user_table_body(GroupID, UserStates, CurrentUserPrivileges) ->
     CanSetPrivileges = lists:member(?PRVLG_SET_PRIVILEGES, CurrentUserPrivileges),
     JS = <<"function(e) {var box = bootbox.dialog({ title: 'Not authorized',",
     "message: 'To perform this operation, you need the <b>Set privileges</b> privileges.',",
     "buttons: {'OK': {className: 'btn-primary confirm', callback: function() {} } } }); }">>,
-    gui_jq:wire(<<"$('.disabled-checkbox-ph').unbind('click.cantsetprivs').bind('click.cantsetprivs', ", JS/binary, ");">>),
+    gui_jq:wire(<<"$('.disabled-checkbox-wrapper').unbind('click.cantsetprivs').bind('click.cantsetprivs', ", JS/binary, ");">>),
+
     [
-        #panel{class = <<"group-left-ph">>, body = [
+        #panel{class = <<"gen-left-wrapper">>, body = [
             <<"USERS<br />&<br />RIGHTS">>,
             #link{title = <<"Help">>, class = <<"glyph-link">>, postback = show_users_info,
                 body = #span{class = <<"icomoon-question">>}}
         ]},
-        #panel{class = <<"group-middle-ph">>, body = [
+        #panel{class = <<"gen-middle-wrapper">>, body = [
             #panel{class = <<"gen-table-header-wrapper">>, body = [
                 #table{class = <<"table table-striped gen-table-header users-table-header">>, header = #thead{body = [
                     #tr{cells = [
                         #th{body = [
                             #panel{id = ?PRVLGS_USER_HEADER_PH_ID(GroupID), body = [<<"User">>]},
-                            #panel{id = ?PRVLGS_SAVE_PH_ID(GroupID), class = <<"privileges-save-ph">>, body = [
+                            #panel{id = ?PRVLGS_SAVE_PH_ID(GroupID), class = <<"privileges-save-wrapper">>, body = [
                                 #button{class = <<"btn btn-small btn-success privileges-save-button">>,
                                     postback = {group_action, ?GROUP_ACTION_SAVE_PRIVILEGES, GroupID},
                                     body = <<"Save">>},
@@ -396,7 +412,7 @@ group_users_body(GroupID, UserStates, CurrentUserPrivileges) ->
                                             true ->
                                                 {<<"">>, <<"privilege-checkbox checkbox no-label">>};
                                             false ->
-                                                {<<"disabled-checkbox-ph">>, <<"privilege-checkbox checkbox primary no-label">>}
+                                                {<<"disabled-checkbox-wrapper">>, <<"privilege-checkbox checkbox primary no-label">>}
                                         end,
                                     #td{class = TDClass, body = [
                                         #flatui_checkbox{label_class = LabelClass, id = CheckboxID, delegate = ?MODULE,
@@ -415,14 +431,14 @@ group_users_body(GroupID, UserStates, CurrentUserPrivileges) ->
     ].
 
 
-group_spaces_body(GroupID, SpaceStates) ->
+space_table_body(GroupID, SpaceStates) ->
     [
-        #panel{class = <<"group-left-ph">>, body = [
+        #panel{class = <<"gen-left-wrapper">>, body = [
             <<"SPACES">>,
             #link{title = <<"Help">>, class = <<"glyph-link">>, postback = show_spaces_info,
                 body = #span{class = <<"icomoon-question">>}}
         ]},
-        #panel{class = <<"group-spaces-ph">>, body = [
+        #panel{class = <<"gen-middle-wrapper">>, body = [
             #panel{class = <<"gen-table-header-wrapper">>, body = [
                 #table{class = <<"table table-striped gen-table-header spaces-table-header">>, header = #thead{body = [
                     #tr{cells = [
@@ -447,7 +463,7 @@ group_spaces_body(GroupID, SpaceStates) ->
                                     #td{body = [
                                         #panel{class = <<"name-wrapper">>, body = [
                                             #link{title = <<"View this space">>, class = <<"glyph-link">>,
-                                                postback = {redirect_to_space, SpaceID}, body = [
+                                                url = ?REDIRECT_TO_SPACE_URL(SpaceID), body = [
                                                     #span{class = <<"icomoon-cloud action-button-icon">>},
                                                     SpaceName
                                                 ]}
@@ -472,15 +488,20 @@ group_spaces_body(GroupID, SpaceStates) ->
 
 
 comet_loop_init(GRUID, AccessToken, ExpandedGroups, ScrollToGroupID) ->
-    PageState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
-    refresh_group_list(PageState),
-    case ScrollToGroupID of
-        undefined -> ok;
-        _ -> scroll_to_group(ScrollToGroupID)
-    end,
-    gui_jq:hide(<<"spinner">>),
-    gui_comet:flush(),
-    comet_loop(PageState).
+    try
+        PageState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
+        refresh_group_list(PageState),
+        gui_jq:hide(<<"spinner">>),
+        case ScrollToGroupID of
+            undefined -> ok;
+            _ -> scroll_to_group(ScrollToGroupID)
+        end,
+        gui_comet:flush(),
+        comet_loop(PageState),
+        ok
+    catch T:M ->
+        ?dump({T, M, erlang:get_stacktrace()})
+    end.
 
 
 comet_loop(State) ->
@@ -637,8 +658,8 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                                 gui_jq:slide_up(?COLLAPSE_WRAPPER_ID(GroupID), 400),
                                 {ExpandedGroups -- [GroupID], proplists:delete(GroupID, EditedPrivileges)};
                             false ->
-                                gui_jq:update(?USERS_SECTION_ID(GroupID), group_users_body(GroupID, UserStates, UserPrivileges)),
-                                gui_jq:update(?SPACES_SECTION_ID(GroupID), group_spaces_body(GroupID, SpaceStates)),
+                                gui_jq:update(?USERS_SECTION_ID(GroupID), user_table_body(GroupID, UserStates, UserPrivileges)),
+                                gui_jq:update(?SPACES_SECTION_ID(GroupID), space_table_body(GroupID, SpaceStates)),
                                 gui_jq:slide_down(?COLLAPSE_WRAPPER_ID(GroupID), 600),
                                 gui_jq:wire(<<"$(window).resize();">>),
                                 {[GroupID | ExpandedGroups], EditedPrivileges}
@@ -751,7 +772,7 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
 
                 {?GROUP_ACTION_DISCARD_PRIVILEGES, _} ->
                     NewEditedPrivileges = proplists:delete(GroupID, EditedPrivileges),
-                    gui_jq:update(?USERS_SECTION_ID(GroupID), group_users_body(GroupID, UserStates, UserPrivileges)),
+                    gui_jq:update(?USERS_SECTION_ID(GroupID), user_table_body(GroupID, UserStates, UserPrivileges)),
                     gui_jq:hide(?PRVLGS_SAVE_PH_ID(GroupID)),
                     gui_jq:fade_in(?PRVLGS_USER_HEADER_PH_ID(GroupID), 500),
                     gui_jq:wire(<<"$(window).resize();">>),
@@ -886,7 +907,7 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
 refresh_group_list(#page_state{groups = Groups, expanded_groups = ExpandedGroups}) ->
     Body = case Groups of
                [] ->
-                   #li{class = <<"no-groups-info">>, body = [
+                   #li{class = <<"empty-list-info">>, body = [
                        #p{body = [<<"You don't belong to any groups.">>]}
                    ]};
                _ ->
@@ -900,8 +921,8 @@ refresh_group_list(#page_state{groups = Groups, expanded_groups = ExpandedGroups
 
 
 scroll_to_group(GroupID) ->
-    gui_jq:wire(<<"$('html, body').animate({scrollTop: parseInt($('#",
-    (?GROUP_LIST_ELEMENT_ID(GroupID))/binary, "').offset().top - 150)}, 200);">>).
+    gui_jq:wire(<<"var el = $('#", (?GROUP_LIST_ELEMENT_ID(GroupID))/binary, "'); if ($(el).length > 0) {",
+    "$('html, body').animate({scrollTop: parseInt($(el).offset().top - 150)}, 200); }">>).
 
 
 check_privileges(ActionType, UserPrivileges) ->
@@ -969,7 +990,7 @@ show_popup(Body, ScriptAfterUpdate) ->
             skip;
         _ ->
             CloseButton = #link{id = <<"footer_close_button">>, postback = {action, ?ACTION_HIDE_POPUP}, title = <<"Hide">>,
-                class = <<"glyph-link">>, body = #span{class = <<"fui-cross">>}},
+                class = <<"glyph-link footer-close-button">>, body = #span{class = <<"fui-cross">>}},
             gui_jq:update(<<"footer_popup">>, [CloseButton | Body]),
             gui_jq:slide_down(<<"footer_popup">>, 300),
             case ScriptAfterUpdate of
@@ -1053,8 +1074,6 @@ event(init) ->
                 Bin -> {[Bin], Bin}
             end,
 
-        gui_jq:wire(#api{name = "join_group", tag = "join_group"}, false),
-        gui_jq:wire(#api{name = "leave_group", tag = "leave_group"}, false),
         gui_jq:bind_key_to_click_on_class(<<"13">>, <<"confirm">>),
         gui_jq:register_escape_event("escape_pressed_event"),
 
