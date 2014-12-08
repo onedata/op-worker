@@ -114,7 +114,7 @@ ping_test(Nodes, PingsNum) ->
   CreateMessages = fun(M, Sum) ->
     Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom",
     message_decoder_name = "communication_protocol", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = PingBytes},
     Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
     [Msg | Sum]
   end,

@@ -104,14 +104,14 @@ fuse_ack_routing_test(Config) ->
   Reg1Bytes = erlang:iolist_to_binary(fuse_messages_pb:encode_channelregistration(Reg1)),
   Message1 = #clustermsg{module_name = "fslogic", message_type = "channelregistration",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = Reg1Bytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = Reg1Bytes},
   Msg1 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message1)),
 
   Reg2 = #channelregistration{fuse_id = FuseId2},
   Reg2Bytes = erlang:iolist_to_binary(fuse_messages_pb:encode_channelregistration(Reg2)),
   Message2 = #clustermsg{module_name = "fslogic", message_type = "channelregistration",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = Reg2Bytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = Reg2Bytes},
   Msg2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
 
   Ans = #atom{value = "ok"},
@@ -166,7 +166,7 @@ fuse_ack_routing_test(Config) ->
   AckBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ack)),
   AckMessage = #clustermsg{module_name = "fslogic", message_type = "atom",
   message_decoder_name = "communication_protocol", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, message_id = MsgId1, input = AckBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = MsgId1, input = AckBytes},
   AckMessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(AckMessage)),
 
   {CallbackRecvAns, CallbackAns} = wss:recv(Socket, 1000),
@@ -214,22 +214,22 @@ fuse_ack_routing_test(Config) ->
 
   AckMessage2 = #clustermsg{module_name = "fslogic", message_type = "atom",
   message_decoder_name = "communication_protocol", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, message_id = MsgId2, input = AckBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = MsgId2, input = AckBytes},
   AckMessageBytes2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(AckMessage2)),
 
   AckMessage3 = #clustermsg{module_name = "fslogic", message_type = "atom",
   message_decoder_name = "communication_protocol", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, message_id = MsgId3, input = AckBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = MsgId3, input = AckBytes},
   AckMessageBytes3 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(AckMessage3)),
 
   AckMessage4 = #clustermsg{module_name = "fslogic", message_type = "atom",
   message_decoder_name = "communication_protocol", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, message_id = MsgId4, input = AckBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = MsgId4, input = AckBytes},
   AckMessageBytes4 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(AckMessage4)),
 
   AckMessage5 = #clustermsg{module_name = "fslogic", message_type = "atom",
   message_decoder_name = "communication_protocol", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, message_id = MsgId5, input = AckBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = MsgId5, input = AckBytes},
   AckMessageBytes5 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(AckMessage5)),
 
   {CallbackRecvAns3, CallbackAns3} = wss:recv(Socket, 1000),
@@ -455,7 +455,7 @@ main_test(Config) ->
     CheckModules = fun(M, Sum) ->
       Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom",
       message_decoder_name = "communication_protocol", answer_type = "atom",
-      answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
+      answer_decoder_name = "communication_protocol", protocol_version = 1, input = PingBytes},
       Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
       ok = wss:send(Socket, Msg),
@@ -510,21 +510,21 @@ callbacks_test(Config) ->
   Reg1Bytes = erlang:iolist_to_binary(fuse_messages_pb:encode_channelregistration(Reg1)),
   Message1 = #clustermsg{module_name = "fslogic", message_type = "channelregistration",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = Reg1Bytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = Reg1Bytes},
   Msg1 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message1)),
 
   Reg2 = #channelregistration{fuse_id = FuseId2},
   Reg2Bytes = erlang:iolist_to_binary(fuse_messages_pb:encode_channelregistration(Reg2)),
   Message2 = #clustermsg{module_name = "fslogic", message_type = "channelregistration",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = Reg2Bytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = Reg2Bytes},
   Msg2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
 
   UnReg = #channelclose{fuse_id = FuseId1},
   UnRegBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_channelclose(UnReg)),
   UnMessage = #clustermsg{module_name = "fslogic", message_type = "channelclose",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = UnRegBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = UnRegBytes},
   UnMsg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(UnMessage)),
 
   SampleAtom = #atom{value = "test_atom"},
@@ -642,7 +642,7 @@ callbacks_test(Config) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   CallbackAns = #testchannelanswer{message = "CallbackTest"},
