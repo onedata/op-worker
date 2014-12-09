@@ -104,6 +104,8 @@ issue_remote_file_synchronization(FullPath, ProviderID) ->
     try
         logical_files_manager:sync_from_remote(FullPath, ProviderID),
         ok
-    catch _:_ ->
+    catch T:M ->
+        ?error_stacktrace("Cannot issue remote synchronization of file ~p on provider ~p - ~p:~p",
+            [FullPath, ProviderID, T, M]),
         error
     end.

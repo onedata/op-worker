@@ -811,6 +811,7 @@ comet_handle_action(State, Action, Args) ->
             hide_popup(),
             case gr_users:leave_space({user, AccessToken}, SpaceID) of
                 ok ->
+                    ?dump(okej),
                     gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                     Message =
                         case SpaceName of
