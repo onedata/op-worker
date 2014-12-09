@@ -57,7 +57,7 @@ reroute_pull_message(ProviderId, {GlobalID, AccessToken}, FuseId, Message) ->
     MsgId = provider_proxy_con:get_msg_id(),
 
     ClusterMessage =
-        #clustermsg{synch = true, protocol_version = 1, module_name = a2l(TargetModule), message_id = MsgId,
+        #clustermsg{protocol_version = 1, module_name = a2l(TargetModule), message_id = MsgId,
                     answer_decoder_name = a2l(AnswerDecoderName), answer_type = a2l(AnswerType), input = MsgBytes,
                     token_hash = TokenHash, global_user_id = GlobalID,
                     message_decoder_name = a2l(get_message_decoder(Message)), message_type = a2l(get_message_type(Message))},

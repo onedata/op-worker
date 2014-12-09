@@ -39,7 +39,7 @@ test(Host, Cert, Port, FSLogicNode) ->
   NewNameOfFIle = "new_name_of_file",
 
   {ok, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", "/tmp/onedata"]),
-  
+
   {Status, Helper, Id, Validity, AnswerOpt0} = create_file(Host, Cert, Port, TestFile),
   io:format("Test file creation: aswer status: ~s, helper: ~s, id: ~s, validity: ~b, answer: ~p ~n", [Status, Helper, Id, Validity, AnswerOpt0]),
   {Status1, Helper1, Id1, Validity1, AnswerOpt1} = create_file(Host, Cert, Port, TestFile),
@@ -146,7 +146,7 @@ create_file(Host, Cert, Port, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "filelocation",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
@@ -167,7 +167,7 @@ get_file_location(Host, Cert, Port, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "filelocation",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
@@ -188,7 +188,7 @@ renew_file_location(Host, Cert, Port, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "filelocationvalidity",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
@@ -209,7 +209,7 @@ file_not_used(Host, Cert, Port, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
@@ -230,7 +230,7 @@ mkdir(Host, Cert, Port, DirName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
@@ -254,7 +254,7 @@ ls(Host, Cert, Port, Dir, Num, Offset) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "filechildren",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
@@ -276,7 +276,7 @@ delete_file(Host, Cert, Port, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
@@ -297,7 +297,7 @@ rename_file(Host, Cert, Port, FileName, NewName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
@@ -318,7 +318,7 @@ change_file_perms(Host, Cert, Port, FileName, Perms) ->
 
     Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
     MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
     {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),

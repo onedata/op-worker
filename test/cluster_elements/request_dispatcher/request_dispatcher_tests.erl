@@ -41,11 +41,10 @@ protocol_buffers_test() ->
 
   Message = #clustermsg{module_name = "dao", message_type = "atom",
   message_decoder_name = "communication_protocol", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = PingBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = 22, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {_, _}} = ws_handler:decode_clustermsg_pb(MessageBytes),
-  ?assert(Synch),
+  {Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {_, _}} = ws_handler:decode_clustermsg_pb(MessageBytes),
   ?assert(Msg =:= ping),
   ?assert(Task =:= dao),
   ?assert(Answer_decoder_name =:= "communication_protocol"),
@@ -72,11 +71,10 @@ recursive_decoding_test() ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = InternalMessage2Bytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = 22, input = InternalMessage2Bytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, _} = ws_handler:decode_clustermsg_pb(MessageBytes),
-  ?assert(Synch),
+  {Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, _} = ws_handler:decode_clustermsg_pb(MessageBytes),
   ?assert(Task =:= fslogic),
   ?assert(Answer_decoder_name =:= "communication_protocol"),
   ?assert(ProtocolVersion == 1),
@@ -97,11 +95,10 @@ recursive_decoding_error_test() ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = InternalMessageBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = 22, input = InternalMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, _} = ws_handler:decode_clustermsg_pb(MessageBytes),
-  ?assert(Synch),
+  {Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, _} = ws_handler:decode_clustermsg_pb(MessageBytes),
   ?assert(Task =:= fslogic),
   ?assert(Answer_decoder_name =:= "communication_protocol"),
   ?assert(ProtocolVersion == 1),
@@ -122,11 +119,11 @@ recursive_not_supported_message_decoding_test() ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = InternalMessage2Bytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = 22, input = InternalMessage2Bytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, _} = ws_handler:decode_clustermsg_pb(MessageBytes),
-  ?assert(Synch),
+  {Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, _} = ws_handler:decode_clustermsg_pb(MessageBytes),
+
   ?assert(Task =:= fslogic),
   ?assert(Answer_decoder_name =:= "communication_protocol"),
   ?assert(ProtocolVersion == 1),
@@ -161,7 +158,7 @@ protocol_buffers_wrong_request_message_test() ->
 
   Message = #clustermsg{module_name = "dao", message_type = "strange_message",
   message_decoder_name = "communication_protocol", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 33, input = PingBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = 33, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
   Ans2 = try
     ws_handler:decode_clustermsg_pb(MessageBytes),
@@ -174,7 +171,7 @@ protocol_buffers_wrong_request_message_test() ->
 
   Message2 = #clustermsg{module_name = "dao", message_type = "atom",
   message_decoder_name = "communication_protocol", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 44, input = NotExistingAtomBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = 44, input = NotExistingAtomBytes},
   MessageBytes2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
   Ans3 = try
     ws_handler:decode_clustermsg_pb(MessageBytes2),
@@ -187,7 +184,7 @@ protocol_buffers_wrong_request_message_test() ->
 
   Message3 = #clustermsg{module_name = "dao", message_type = "atom",
   message_decoder_name = "communication_protocol", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 55, input = "wrong_input"},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = 55, input = "wrong_input"},
   MessageBytes3 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message3)),
   Ans4 = try
     ws_handler:decode_clustermsg_pb(MessageBytes3),
@@ -207,7 +204,7 @@ protocol_buffers_wrong_request_decoder_test() ->
 
   Message = #clustermsg{module_name = "dao", message_type = "atom",
   message_decoder_name = "not_existing_decoder", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 66, input = PingBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = 66, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   Ans = try
@@ -228,7 +225,7 @@ protocol_buffers_wrong_request_module_test() ->
 
   Message = #clustermsg{module_name = "strange_module", message_type = "atom",
   message_decoder_name = "communication_protocol", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 77, input = PingBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, message_id = 77, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   Ans = try
