@@ -139,10 +139,10 @@
 -define(GROUPS_SECTION_ID(SpaceID), <<"sp_groups_ph_", SpaceID/binary>>).
 -define(PROVIDERS_SECTION_ID(SpaceID), <<"sp_providers_ph_", SpaceID/binary>>).
 -define(PRVLGS_USER_HEADER_PH_ID(SpaceID), <<"pr_user_header_ph_", SpaceID/binary>>).
--define(PRVLGS_USER_SAVE_PH_ID(SpaceID), <<"pr_save_ph_", SpaceID/binary>>).
+-define(PRVLGS_USER_SAVE_PH_ID(SpaceID), <<"pr_save_user_ph_", SpaceID/binary>>).
 -define(USER_CHECKBOX_ID(SpaceID, UserID, PrivilegeID), <<"us_pr_chckbx_", SpaceID/binary, "_", UserID/binary, "_", PrivilegeID/binary>>).
--define(PRVLGS_GROUP_HEADER_PH_ID(SpaceID), <<"pr_user_header_ph_", SpaceID/binary>>).
--define(PRVLGS_GROUP_SAVE_PH_ID(SpaceID), <<"pr_save_ph_", SpaceID/binary>>).
+-define(PRVLGS_GROUP_HEADER_PH_ID(SpaceID), <<"pr_group_header_ph_", SpaceID/binary>>).
+-define(PRVLGS_GROUP_SAVE_PH_ID(SpaceID), <<"pr_save_group_ph_", SpaceID/binary>>).
 -define(GROUP_CHECKBOX_ID(SpaceID, GroupID, PrivilegeID), <<"gr_pr_chckbx_", SpaceID/binary, "_", GroupID/binary, "_", PrivilegeID/binary>>).
 
 % Macro used to format names and IDs that appear in messages
@@ -295,7 +295,7 @@ space_list_element(#space_state{id = SpaceID, name = SpaceNameOrUndef, users = U
                             [];
                         true ->
                             #p{class = <<"default-space-info">>, body = [
-                                <<"<i class=\"icomoon-checkbox-checked action-button-icon\"></i>">>,
+                                <<"<i class=\"icomoon-checkmark-circle action-button-icon\"></i>">>,
                                 <<"Default space">>
                             ]}
                     end
@@ -336,8 +336,8 @@ space_list_element(#space_state{id = SpaceID, name = SpaceNameOrUndef, users = U
                                             false ->
                                                 #li{body = [
                                                     #link{title = <<"Set this space as default space">>,
-                                                        postback = {action, ?ACTION_SET_DEFAULT, [SpaceID]},
-                                                        body = [<<"<i class=\"icomoon-checkbox-checked\"></i>">>, <<"Set default">>]}
+                                                        postback = {action, ?ACTION_SET_DEFAULT, [SpaceID, SpaceName]},
+                                                        body = [<<"<i class=\"icomoon-checkmark-circle\"></i>">>, <<"Set as default">>]}
                                                 ]}
                                         end,
                                         #li{body = [
@@ -512,44 +512,53 @@ group_table_body(SpaceID, GroupStates, CurrentUserPrivileges) ->
             ]},
             #panel{class = <<"gen-table-wrapper">>, body = [
                 #table{class = <<"table table-striped gen-table users-table">>, body = #tbody{body =
-                lists:map(
-                    fun(#group_state{id = GroupID, name = GroupName, privileges = UserPrivileges}) ->
+                case GroupStates of
+                    [] ->
                         #tr{cells = [
-                            #td{body = [
-                                #panel{class = <<"name-wrapper">>, body = [
-                                    #link{title = <<"View this group">>, class = <<"glyph-link">>,
-                                        url = ?REDIRECT_TO_GROUP_URL(GroupID), body = [
-                                            #span{class = <<"icomoon-users action-button-icon top-1">>},
-                                            GroupName
+                            #td{class = <<"empty-table-info">>, body = [
+                                <<"No groups">>
+                            ]}
+                        ]};
+                    _ ->
+                        lists:map(
+                            fun(#group_state{id = GroupID, name = GroupName, privileges = UserPrivileges}) ->
+                                #tr{cells = [
+                                    #td{body = [
+                                        #panel{class = <<"name-wrapper">>, body = [
+                                            #link{title = <<"View this group">>, class = <<"glyph-link">>,
+                                                url = ?REDIRECT_TO_GROUP_URL(GroupID), body = [
+                                                    #span{class = <<"icomoon-users action-button-icon top-1">>},
+                                                    GroupName
+                                                ]}
+                                        ]},
+                                        #panel{class = <<"remove-wrapper">>, body = [
+                                            #link{title = <<"Remove this group from space">>, class = <<"glyph-link">>,
+                                                postback = {space_action, ?SPACE_ACTION_SHOW_REMOVE_GROUP_POPUP, SpaceID, [GroupID, GroupName]},
+                                                body = #span{class = <<"icomoon-remove">>}}
                                         ]}
-                                ]},
-                                #panel{class = <<"remove-wrapper">>, body = [
-                                    #link{title = <<"Remove this group from space">>, class = <<"glyph-link">>,
-                                        postback = {space_action, ?SPACE_ACTION_SHOW_REMOVE_GROUP_POPUP, SpaceID, [GroupID, GroupName]},
-                                        body = #span{class = <<"icomoon-remove">>}}
+                                    ]},
+                                    lists:map(
+                                        fun({PrivilegeID, _PrivilegeName, _ColumnName}) ->
+                                            CheckboxID = ?GROUP_CHECKBOX_ID(SpaceID, GroupID, PrivilegeID),
+                                            flatui_checkbox:init_checkbox(CheckboxID),
+                                            {TDClass, LabelClass} =
+                                                case CanSetPrivileges of
+                                                    true ->
+                                                        {<<"">>, <<"privilege-checkbox checkbox no-label">>};
+                                                    false ->
+                                                        {<<"disabled-checkbox-wrapper">>, <<"privilege-checkbox checkbox primary no-label">>}
+                                                end,
+                                            #td{class = TDClass, body = [
+                                                #flatui_checkbox{label_class = LabelClass, id = CheckboxID, delegate = ?MODULE,
+                                                    checked = lists:member(PrivilegeID, UserPrivileges),
+                                                    postback = {space_action, ?SPACE_ACTION_SET_GROUP_PRIVILEGE, SpaceID, [GroupID, PrivilegeID, {query_value, CheckboxID}]},
+                                                    source = [gui_str:to_list(CheckboxID)],
+                                                    disabled = not CanSetPrivileges}
+                                            ]}
+                                        end, ?PRIVILEGES)
                                 ]}
-                            ]},
-                            lists:map(
-                                fun({PrivilegeID, _PrivilegeName, _ColumnName}) ->
-                                    CheckboxID = ?GROUP_CHECKBOX_ID(SpaceID, GroupID, PrivilegeID),
-                                    flatui_checkbox:init_checkbox(CheckboxID),
-                                    {TDClass, LabelClass} =
-                                        case CanSetPrivileges of
-                                            true ->
-                                                {<<"">>, <<"privilege-checkbox checkbox no-label">>};
-                                            false ->
-                                                {<<"disabled-checkbox-wrapper">>, <<"privilege-checkbox checkbox primary no-label">>}
-                                        end,
-                                    #td{class = TDClass, body = [
-                                        #flatui_checkbox{label_class = LabelClass, id = CheckboxID, delegate = ?MODULE,
-                                            checked = lists:member(PrivilegeID, UserPrivileges),
-                                            postback = {space_action, ?SPACE_ACTION_SET_GROUP_PRIVILEGE, SpaceID, [GroupID, PrivilegeID, {query_value, CheckboxID}]},
-                                            source = [gui_str:to_list(CheckboxID)],
-                                            disabled = not CanSetPrivileges}
-                                    ]}
-                                end, ?PRIVILEGES)
-                        ]}
-                    end, GroupStates)
+                            end, GroupStates)
+                end
                 }}
             ]}
         ]}
@@ -623,47 +632,58 @@ synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces) ->
                 {ok, #space_details{name = SpaceName}} ->
                     % Synchronize users data (belonging to certain space)
                     {ok, UsersIDs} = gr_spaces:get_users({user, AccessToken}, SpaceID),
-                    UserStates = lists:map(
-                        fun(UserID) ->
-                            {ok, #user_details{name = UserName}} = gr_spaces:get_user_details({user, AccessToken}, SpaceID, UserID),
-                            {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceID, UserID),
-                            #user_state{id = UserID, name = UserName, privileges = Privileges}
-                        end, UsersIDs),
-                    #user_state{id = CurrentUserID} = CurrentUser = lists:keyfind(GRUID, 2, UserStates),
-                    % Get effective privileges of current user
-                    {ok, CurrentPrivileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceID, CurrentUserID),
-                    UserStatesWithoutCurrent = lists:keydelete(GRUID, 2, UserStates),
-                    UserStatesSorted = [CurrentUser | sort_states(UserStatesWithoutCurrent)],
+                    % TODO There is a bug - if you leave a space that has only one user (you), it will
+                    % TODO be listed as your space, but will have no users. Need a case for this for now.
+                    % TODO Later undefined space states are filtered out.
+                    % TODO remove this when the bug gets fixed
+                    case UsersIDs of
+                        [] ->
+                            undefined;
+                        _ ->
+                            UserStates = lists:map(
+                                fun(UserID) ->
+                                    {ok, #user_details{name = UserName}} = gr_spaces:get_user_details({user, AccessToken}, SpaceID, UserID),
+                                    {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceID, UserID),
+                                    #user_state{id = UserID, name = UserName, privileges = Privileges}
+                                end, UsersIDs),
+                            #user_state{id = CurrentUserID} = CurrentUser = lists:keyfind(GRUID, 2, UserStates),
+                            % Get effective privileges of current user
+                            {ok, CurrentPrivileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceID, CurrentUserID),
+                            UserStatesWithoutCurrent = lists:keydelete(GRUID, 2, UserStates),
+                            UserStatesSorted = [CurrentUser | sort_states(UserStatesWithoutCurrent)],
 
-                    % Synchronize groups data (belonging to certain space)
-                    {ok, GroupIDs} = gr_spaces:get_groups({user, AccessToken}, SpaceID),
-                    GroupStates = lists:map(
-                        fun(GroupID) ->
-                            {ok, #group_details{name = GroupName}} = gr_spaces:get_group_details({user, AccessToken}, SpaceID, GroupID),
-                            {ok, Privileges} = gr_spaces:get_group_privileges({user, AccessToken}, SpaceID, GroupID),
-                            #group_state{id = GroupID, name = GroupName, privileges = Privileges}
-                        end, GroupIDs),
-                    GroupStatesSorted = sort_states(GroupStates),
+                            % Synchronize groups data (belonging to certain space)
+                            {ok, GroupIDs} = gr_spaces:get_groups({user, AccessToken}, SpaceID),
+                            GroupStates = lists:map(
+                                fun(GroupID) ->
+                                    {ok, #group_details{name = GroupName}} = gr_spaces:get_group_details({user, AccessToken}, SpaceID, GroupID),
+                                    {ok, Privileges} = gr_spaces:get_group_privileges({user, AccessToken}, SpaceID, GroupID),
+                                    #group_state{id = GroupID, name = GroupName, privileges = Privileges}
+                                end, GroupIDs),
+                            GroupStatesSorted = sort_states(GroupStates),
 
-                    % Synchronize providers data (supporting to certain space)
-                    {ok, ProviderIDs} = gr_spaces:get_providers({user, AccessToken}, SpaceID),
-                    ProviderStates = lists:map(
-                        fun(ProviderID) ->
-                            {ok, #provider_details{name = ProviderName}} = gr_spaces:get_provider_details({user, AccessToken}, SpaceID, ProviderID),
-                            #provider_state{id = ProviderID, name = ProviderName}
-                        end, ProviderIDs),
-                    ProviderStatesSorted = sort_states(ProviderStates),
-                    #space_state{id = SpaceID, name = SpaceName, users = UserStatesSorted, groups = GroupStatesSorted,
-                        providers = ProviderStatesSorted, current_privileges = CurrentPrivileges};
+                            % Synchronize providers data (supporting to certain space)
+                            {ok, ProviderIDs} = gr_spaces:get_providers({user, AccessToken}, SpaceID),
+                            ProviderStates = lists:map(
+                                fun(ProviderID) ->
+                                    {ok, #provider_details{name = ProviderName}} = gr_spaces:get_provider_details({user, AccessToken}, SpaceID, ProviderID),
+                                    #provider_state{id = ProviderID, name = ProviderName}
+                                end, ProviderIDs),
+                            ProviderStatesSorted = sort_states(ProviderStates),
+                            #space_state{id = SpaceID, name = SpaceName, users = UserStatesSorted, groups = GroupStatesSorted,
+                                providers = ProviderStatesSorted, current_privileges = CurrentPrivileges}
+                    end;
                 _ ->
                     % User does not have rights to view this group
                     #space_state{id = SpaceID, name = undefined, users = [], groups = [], current_privileges = []}
             end
         end, SpaceIDs),
+    % TODO Filter out spaces that are broken - remove when bug in GR is fixed
+    SpaceStatesFiltered = lists:filter(fun(SState) -> SState /= undefined end, SpaceStates),
     {CanView, CannotView} = lists:partition(
         fun(#space_state{name = Name}) ->
             Name /= undefined
-        end, SpaceStates),
+        end, SpaceStatesFiltered),
     SortedSpaceStates = CanView ++ CannotView,
     #page_state{spaces = SortedSpaceStates, gruid = GRUID, access_token = AccessToken, expanded_spaces = ExpandedSpaces}.
 
@@ -722,7 +742,6 @@ comet_loop(State) ->
 
 
 comet_handle_action(State, Action, Args) ->
-    ?dump({State, Action, Args}),
     #page_state{expanded_spaces = ExpandedSpaces, gruid = GRUID, access_token = AccessToken} = State,
     case {Action, Args} of
         {?ACTION_SHOW_CREATE_SPACE_POPUP, _} ->
@@ -772,7 +791,7 @@ comet_handle_action(State, Action, Args) ->
                 _:Other ->
                     ?error("Cannot join space using token ~p: ~p", [Token, Other]),
                     opn_gui_utils:message(error, <<"Cannot join space using token: <b>", (gui_str:html_encode(Token))/binary,
-                    "</b>.<br />Please try again later.">>),
+                    "</b><br />Please try again later.">>),
                     State
             end;
 
@@ -815,18 +834,31 @@ comet_handle_action(State, Action, Args) ->
             gui_jq:info_popup(<<"Not implemented">>, <<"This feature will be available soon.">>, <<"">>),
             State;
 
+        {?ACTION_SET_DEFAULT, [SpaceID, SpaceName]} ->
+            case gr_users:set_default_space({user, AccessToken}, [{<<"spaceId">>, SpaceID}]) of
+                ok ->
+                    opn_gui_utils:message(success, <<"Space set as default: ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
+                    SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
+                    refresh_space_list(SyncedState),
+                    SyncedState;
+                Other ->
+                    ?error("Cannot set Space with ID ~p as a default Space: ~p", [SpaceID, Other]),
+                    opn_gui_utils:message(error, <<"Cannot set Space as default: <b>",
+                    (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, "<br>Please try again later.">>),
+                    State
+            end;
+
         {?ACTION_HIDE_POPUP, _} ->
             hide_popup(),
             State
     end.
 
 comet_handle_space_action(State, Action, SpaceID, Args) ->
-    ?dump({Action, SpaceID, Args}),
     #page_state{spaces = Spaces,
         expanded_spaces = ExpandedSpaces,
         edited_user_privileges = EditedUserPrivileges,
         edited_group_privileges = EditedGroupPrivileges,
-        gruid = _GRUID,
+        gruid = GRUID,
         access_token = AccessToken} = State,
     #space_state{
         name = SpaceName,
@@ -847,7 +879,7 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                             true ->
                                 gui_jq:slide_up(?COLLAPSE_WRAPPER_ID(SpaceID), 400),
                                 {
-                                    ExpandedSpaces -- [SpaceID],
+                                        ExpandedSpaces -- [SpaceID],
                                     proplists:delete(SpaceID, EditedUserPrivileges),
                                     proplists:delete(SpaceID, EditedGroupPrivileges)
                                 };
@@ -863,9 +895,54 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                                     EditedGroupPrivileges
                                 }
                         end,
-                    ?dump(NewExpandedSpaces),
                     State#page_state{expanded_spaces = NewExpandedSpaces, edited_user_privileges = NewEditedUserPrivileges,
                         edited_group_privileges = NewEditedGroupPrivileges};
+
+                {?SPACE_ACTION_SHOW_REMOVE_POPUP, _} ->
+                    show_confirm_popup(<<"Are you sure you want to remove space:<br />",
+                    (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, "?<br />">>, <<"">>, <<"ok_button">>,
+                        {space_action, ?SPACE_ACTION_REMOVE, SpaceID}),
+                    State;
+
+                {?SPACE_ACTION_REMOVE, _} ->
+                    hide_popup(),
+                    case gr_spaces:remove({user, AccessToken}, SpaceID) of
+                        ok ->
+                            gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
+                            opn_gui_utils:message(success, <<"Space removed: ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
+                            SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
+                            refresh_space_list(SyncedState),
+                            SyncedState;
+                        Other ->
+                            ?error("Cannot remove space with ID ~p: ~p", [SpaceID, Other]),
+                            opn_gui_utils:message(error, <<"Cannot remove space ",
+                            (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ".<br />Please try again later.">>),
+                            State
+                    end;
+
+                {?SPACE_ACTION_SHOW_RENAME_POPUP, _} ->
+                    show_name_insert_popup(<<"Rename ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>,
+                        <<"rename_space_textbox">>, <<"New space name">>, SpaceName, true, <<"rename_space_submit">>,
+                        {space_action, ?SPACE_ACTION_RENAME, SpaceID, [{query_value, <<"rename_space_textbox">>}]}, ["rename_space_textbox"]),
+                    State;
+
+                {?SPACE_ACTION_RENAME, [NewSpaceName]} ->
+                    hide_popup(),
+                    case gr_spaces:modify_details({user, AccessToken}, SpaceID, [{<<"name">>, NewSpaceName}]) of
+                        ok ->
+                            gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
+                            opn_gui_utils:message(success, <<"Space renamed: <b>", SpaceName/binary,
+                            "</b> -> ", (?FORMAT_ID_AND_NAME(SpaceID, NewSpaceName))/binary>>),
+                            SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
+                            refresh_space_list(SyncedState),
+                            SyncedState;
+                        Other ->
+                            ?error("Cannot change name of space ~p: ~p", [SpaceID, Other]),
+                            opn_gui_utils:message(error, <<"Cannot rename space ",
+                            (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ".<br />Please try again later.">>),
+                            State
+
+                    end;
 
                 {?SPACE_ACTION_INVITE_USER, _} ->
                     case gr_spaces:get_invite_user_token({user, AccessToken}, SpaceID) of
@@ -881,6 +958,94 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                     end,
                     State;
 
+                {?SPACE_ACTION_SHOW_REMOVE_USER_POPUP, [UserID, UserName]} ->
+                    show_confirm_popup(<<"Are you sure you want to remove user:<br />",
+                    (?FORMAT_ID_AND_NAME(UserID, UserName))/binary, "<br />">>, <<"">>, <<"ok_button">>,
+                        {space_action, ?SPACE_ACTION_REMOVE_USER, SpaceID, [UserID, UserName]}),
+                    State;
+
+                {?SPACE_ACTION_REMOVE_USER, [UserID, UserName]} ->
+                    hide_popup(),
+                    case gr_spaces:remove_user({user, AccessToken}, SpaceID, UserID) of
+                        ok ->
+                            opn_gui_utils:message(success, <<"User ", (?FORMAT_ID_AND_NAME(UserID, UserName))/binary,
+                            " removed from the space ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
+                            SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
+                            refresh_space_list(SyncedState),
+                            SyncedState;
+                        Other ->
+                            ?error("Cannot remove user ~p from space ~p: ~p", [UserID, SpaceID, Other]),
+                            opn_gui_utils:message(error, <<"Cannot remove user ",
+                            (?FORMAT_ID_AND_NAME(UserID, UserName))/binary, ".<br />Please try again later.">>),
+                            State
+                    end;
+
+                {?SPACE_ACTION_SET_USER_PRIVILEGE, [UserID, PrivilegeID, FlagString]} ->
+                    Flag = case FlagString of
+                               <<"on">> -> true;
+                               _ -> false
+                           end,
+                    case proplists:get_value(SpaceID, EditedUserPrivileges, undefined) of
+                        undefined ->
+                            gui_jq:hide(?PRVLGS_USER_HEADER_PH_ID(SpaceID)),
+                            gui_jq:fade_in(?PRVLGS_USER_SAVE_PH_ID(SpaceID), 500);
+                        _ ->
+                            ok
+                    end,
+                    SpacesUsers = proplists:get_value(SpaceID, EditedUserPrivileges, []),
+                    WithoutSpace = proplists:delete(SpaceID, EditedUserPrivileges),
+                    UsersPrivs = proplists:get_value(UserID, SpacesUsers, []),
+                    WithoutUser = proplists:delete(UserID, SpacesUsers),
+
+                    NewUsersPrivs = [{PrivilegeID, Flag} | proplists:delete(PrivilegeID, UsersPrivs)],
+                    NewSpacesUsers = [{UserID, NewUsersPrivs} | WithoutUser],
+                    NewEditedUserPrivileges = [{SpaceID, NewSpacesUsers} | WithoutSpace],
+                    State#page_state{edited_user_privileges = NewEditedUserPrivileges};
+
+                {?SPACE_ACTION_SAVE_USER_PRIVILEGES, _} ->
+                    try
+                        SpaceUsers = proplists:get_value(SpaceID, EditedUserPrivileges),
+                        lists:foreach(
+                            fun({UserID, UserPrivs}) ->
+                                #user_state{privileges = CurrentUserPrivs} = lists:keyfind(UserID, 2, UserStates),
+                                NewUserPrivs = lists:foldl(
+                                    fun({PrivilegeID, Flag}, PrivAcc) ->
+                                        PrivsWithoutPriv = lists:delete(PrivilegeID, PrivAcc),
+                                        case Flag of
+                                            true -> [PrivilegeID | PrivsWithoutPriv];
+                                            false -> PrivsWithoutPriv
+                                        end
+                                    end, CurrentUserPrivs, UserPrivs),
+                                SortedNewPrivs = lists:sort(NewUserPrivs),
+                                case lists:sort(CurrentUserPrivs) of
+                                    SortedNewPrivs ->
+                                        ok;
+                                    _ ->
+                                        ok = gr_spaces:set_user_privileges({user, AccessToken}, SpaceID, UserID, [{<<"privileges">>, SortedNewPrivs}])
+                                end
+                            end, SpaceUsers),
+                        opn_gui_utils:message(success, <<"Saved users privileges for space ",
+                        (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
+                        SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
+                        refresh_space_list(SyncedState),
+                        NewEditedUserPrivileges = proplists:delete(SpaceID, EditedUserPrivileges),
+                        SyncedState#page_state{edited_user_privileges = NewEditedUserPrivileges}
+                    catch
+                        _:Reason ->
+                            ?error("Cannot save spaces (~p) privileges: ~p", [SpaceID, Reason]),
+                            opn_gui_utils:message(error, <<"Cannot save users privileges for sprace ",
+                            (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ".<br />Please try again later.">>),
+                            State
+                    end;
+
+                {?SPACE_ACTION_DISCARD_USER_PRIVILEGES, _} ->
+                    NewEditedUserPrivileges = proplists:delete(SpaceID, EditedUserPrivileges),
+                    gui_jq:update(?USERS_SECTION_ID(SpaceID), user_table_body(SpaceID, UserStates, UserPrivileges)),
+                    gui_jq:hide(?PRVLGS_USER_SAVE_PH_ID(SpaceID)),
+                    gui_jq:fade_in(?PRVLGS_USER_HEADER_PH_ID(SpaceID), 500),
+                    gui_jq:wire(<<"$(window).resize();">>),
+                    State#page_state{edited_user_privileges = NewEditedUserPrivileges};
+
                 {?SPACE_ACTION_INVITE_GROUP, _} ->
                     case gr_spaces:get_invite_group_token({user, AccessToken}, SpaceID) of
                         {ok, Token} ->
@@ -895,10 +1060,100 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                     end,
                     State;
 
+                {?SPACE_ACTION_SHOW_REMOVE_GROUP_POPUP, [GroupID, GroupName]} ->
+                    show_confirm_popup(<<"Are you sure you want to remove group:<br />",
+                    (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, "<br />">>, <<"">>, <<"ok_button">>,
+                        {space_action, ?SPACE_ACTION_REMOVE_GROUP, SpaceID, [GroupID, GroupName]}),
+                    State;
+
+                {?SPACE_ACTION_REMOVE_GROUP, [GroupID, GroupName]} ->
+                    hide_popup(),
+                    case gr_spaces:remove_group({user, AccessToken}, SpaceID, GroupID) of
+                        ok ->
+                            opn_gui_utils:message(success, <<"Group ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary,
+                            " removed from the space ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
+                            SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
+                            refresh_space_list(SyncedState),
+                            SyncedState;
+                        Other ->
+                            ?error("Cannot remove group ~p from space ~p: ~p", [GroupID, SpaceID, Other]),
+                            opn_gui_utils:message(error, <<"Cannot remove group ",
+                            (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary, ".<br />Please try again later.">>),
+                            State
+                    end;
+
+                {?SPACE_ACTION_SET_GROUP_PRIVILEGE, [GroupID, PrivilegeID, FlagString]} ->
+                    Flag = case FlagString of
+                               <<"on">> -> true;
+                               _ -> false
+                           end,
+                    case proplists:get_value(SpaceID, EditedGroupPrivileges, undefined) of
+                        undefined ->
+                            gui_jq:hide(?PRVLGS_GROUP_HEADER_PH_ID(SpaceID)),
+                            gui_jq:fade_in(?PRVLGS_GROUP_SAVE_PH_ID(SpaceID), 500);
+                        _ ->
+                            ok
+                    end,
+                    SpacesGroups = proplists:get_value(SpaceID, EditedGroupPrivileges, []),
+                    WithoutSpace = proplists:delete(SpaceID, EditedGroupPrivileges),
+                    GroupsPrivs = proplists:get_value(GroupID, SpacesGroups, []),
+                    WithoutGroup = proplists:delete(GroupID, SpacesGroups),
+
+                    NewGroupsPrivs = [{PrivilegeID, Flag} | proplists:delete(PrivilegeID, GroupsPrivs)],
+                    NewSpacesGroups = [{GroupID, NewGroupsPrivs} | WithoutGroup],
+                    NewEditedGroupPrivileges = [{SpaceID, NewSpacesGroups} | WithoutSpace],
+                    State#page_state{edited_group_privileges = NewEditedGroupPrivileges};
+
+                {?SPACE_ACTION_SAVE_GROUP_PRIVILEGES, _} ->
+                    try
+                        SpaceGroups = proplists:get_value(SpaceID, EditedGroupPrivileges),
+                        lists:foreach(
+                            fun({GroupID, GroupPrivs}) ->
+                                #group_state{privileges = CurrentGroupPrivs} = lists:keyfind(GroupID, 2, GroupStates),
+                                NewGroupPrivs = lists:foldl(
+                                    fun({PrivilegeID, Flag}, PrivAcc) ->
+                                        PrivsWithoutPriv = lists:delete(PrivilegeID, PrivAcc),
+                                        case Flag of
+                                            true -> [PrivilegeID | PrivsWithoutPriv];
+                                            false -> PrivsWithoutPriv
+                                        end
+                                    end, CurrentGroupPrivs, GroupPrivs),
+                                SortedNewPrivs = lists:sort(NewGroupPrivs),
+                                case lists:sort(CurrentGroupPrivs) of
+                                    SortedNewPrivs ->
+                                        ok;
+                                    _ ->
+                                        ok = gr_spaces:set_group_privileges({user, AccessToken}, SpaceID, GroupID, [{<<"privileges">>, SortedNewPrivs}])
+                                end
+                            end, SpaceGroups),
+                        opn_gui_utils:message(success, <<"Saved groups privileges for space ",
+                        (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
+                        SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
+                        refresh_space_list(SyncedState),
+                        NewEditedGroupPrivileges = proplists:delete(SpaceID, EditedGroupPrivileges),
+                        SyncedState#page_state{edited_group_privileges = NewEditedGroupPrivileges}
+                    catch
+                        _:Reason ->
+                            ?error("Cannot save spaces (~p) privileges: ~p", [SpaceID, Reason]),
+                            opn_gui_utils:message(error, <<"Cannot save groups privileges for sprace ",
+                            (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ".<br />Please try again later.">>),
+                            State
+                    end;
+
+                {?SPACE_ACTION_DISCARD_GROUP_PRIVILEGES, _} ->
+                    ?dump(EditedGroupPrivileges),
+                    NewEditedGroupPrivileges = proplists:delete(SpaceID, EditedGroupPrivileges),
+                    ?dump(NewEditedGroupPrivileges),
+                    gui_jq:update(?GROUPS_SECTION_ID(SpaceID), group_table_body(SpaceID, GroupStates, UserPrivileges)),
+                    gui_jq:hide(?PRVLGS_GROUP_SAVE_PH_ID(SpaceID)),
+                    gui_jq:fade_in(?PRVLGS_GROUP_HEADER_PH_ID(SpaceID), 500),
+                    gui_jq:wire(<<"$(window).resize();">>),
+                    State#page_state{edited_group_privileges = NewEditedGroupPrivileges};
+
                 {?SPACE_ACTION_REQUEST_SUPPORT, _} ->
                     case gr_spaces:get_invite_provider_token({user, AccessToken}, SpaceID) of
                         {ok, Token} ->
-                            show_token_popup(<<"Give the token below to a provider willing to create a Space for group ",
+                            show_token_popup(<<"Give the token below to a provider willing support space ",
                             (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ":">>,
                                 <<"token_textbox">>, Token, true, <<"token_ok">>,
                                 {action, ?ACTION_HIDE_POPUP}, []);
@@ -908,6 +1163,29 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                             (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ".<br />Please try again later.">>)
                     end,
                     State;
+
+                {?SPACE_ACTION_SHOW_REMOVE_PROVIDER_POPUP, [ProviderID, ProviderName]} ->
+                    show_confirm_popup(<<"Are you sure you want to cease support for this space from provider:<br />",
+                    (?FORMAT_ID_AND_NAME(ProviderID, ProviderName))/binary, "<br />">>, <<"">>, <<"ok_button">>,
+                        {space_action, ?SPACE_ACTION_REMOVE_PROVIDER, SpaceID, [ProviderID, ProviderName]}),
+                    State;
+
+                {?SPACE_ACTION_REMOVE_PROVIDER, [ProviderID, ProviderName]} ->
+                    hide_popup(),
+                    case gr_spaces:remove_provider({user, AccessToken}, SpaceID, ProviderID) of
+                        ok ->
+                            opn_gui_utils:message(success, <<"Provider ", (?FORMAT_ID_AND_NAME(ProviderID, ProviderName))/binary,
+                            " no longer supports the space ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
+                            SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
+                            refresh_space_list(SyncedState),
+                            SyncedState;
+                        Other ->
+                            ?error("Cannot remove provider ~p from space ~p: ~p", [ProviderID, SpaceID, Other]),
+                            opn_gui_utils:message(error, <<"Cannot remove provider ",
+                            (?FORMAT_ID_AND_NAME(ProviderID, ProviderName))/binary, ".<br />Please try again later.">>),
+                            State
+                    end;
+
                 A ->
                     ?dump(A),
                     State
@@ -1084,9 +1362,6 @@ event({space_action, Action, GroupID, Args}) ->
 
 event({close_message, MessageId}) ->
     gui_jq:hide(MessageId);
-
-event({redirect_to_group, SpaceID}) ->
-    gui_jq:redirect(<<"/groups?show=", SpaceID/binary>>);
 
 event(show_users_info) ->
     gui_jq:info_popup(<<"Users section">>,

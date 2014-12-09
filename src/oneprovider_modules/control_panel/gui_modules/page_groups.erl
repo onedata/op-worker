@@ -583,7 +583,7 @@ comet_handle_action(State, Action, Args) ->
                 _:Other ->
                     ?error("Cannot join group using token ~p: ~p", [Token, Other]),
                     opn_gui_utils:message(error, <<"Cannot join group using token: <b>", (gui_str:html_encode(Token))/binary,
-                    "</b>.<br />Please try again later.">>),
+                    "</b><br />Please try again later.">>),
                     State
             end;
 
@@ -760,7 +760,8 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                         (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
                         SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                         refresh_group_list(SyncedState),
-                        SyncedState
+                        NewEditedPrivileges = proplists:delete(GroupID, EditedPrivileges),
+                        SyncedState#page_state{edited_privileges = NewEditedPrivileges}
                     catch
                         _:Reason ->
                             ?error("Cannot save group (~p) privileges: ~p", [GroupID, Reason]),
@@ -824,7 +825,7 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                         _:Other ->
                             ?error("Cannot join Space using token ~p: ~p", [Token, Other]),
                             opn_gui_utils:message(error, <<"Cannot join Space using token: <b>",
-                            (gui_str:html_encode(Token))/binary, "</b>.<br />Please try again later.">>),
+                            (gui_str:html_encode(Token))/binary, "</b><br />Please try again later.">>),
                             State
                     end;
 
@@ -894,7 +895,7 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                             refresh_group_list(SyncedState),
                             SyncedState;
                         Other ->
-                            ?error("Cannot remove user with ID ~p: ~p", [UserID, Other]),
+                            ?error("Cannot remove user ~p from group ~p: ~p", [UserID, GroupID, Other]),
                             opn_gui_utils:message(error, <<"Cannot remove user ",
                             (?FORMAT_ID_AND_NAME(UserID, UserName))/binary, ".<br />Please try again later.">>),
                             State
@@ -1123,9 +1124,6 @@ event({group_action, Action, GroupID, Args}) ->
 
 event({close_message, MessageId}) ->
     gui_jq:hide(MessageId);
-
-event({redirect_to_space, SpaceID}) ->
-    gui_jq:redirect(<<"/spaces?show=", SpaceID/binary>>);
 
 event(show_users_info) ->
     gui_jq:info_popup(<<"Users section">>,
