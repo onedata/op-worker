@@ -23,7 +23,7 @@
 
 %% API
 -export([get_file_block_map/1, get_full_file_path/1, get_file_uuid/1, get_provider_name/1]).
--export([issue_remote_file_synchronization/3]).
+-export([issue_remote_file_synchronization/2]).
 
 
 %% get_all_available_blocks/1
@@ -94,14 +94,18 @@ get_provider_name(ProviderID) ->
     end.
 
 
-%% issue_remote_file_synchronization/3
+%% issue_remote_file_synchronization/2
 %% ====================================================================
 %% @doc Issues full block synchronization on remote provider.
 %% @end
--spec issue_remote_file_synchronization(FullPath :: string(), ProviderID :: binary(), Size::integer()) -> binary().
+-spec issue_remote_file_synchronization(FullPath :: string(), ProviderID :: binary()) -> ok | error.
 %% ====================================================================
-issue_remote_file_synchronization(_FullPath, _ProviderID, _Size) ->
-    % TODO not yet implemented
-    ok.
-%%     Res = provider_proxy:reroute_pull_message(gui_str:to_binary(ProviderID), fslogic_context:get_gr_auth(),
-%%         ?CLUSTER_FUSE_ID, #synchronizefileblock{logical_name = FullPath, offset = 0, size = Size}).
+issue_remote_file_synchronization(FullPath, ProviderID) ->
+    try
+        logical_files_manager:sync_from_remote(FullPath, ProviderID),
+        ok
+    catch T:M ->
+        ?error_stacktrace("Cannot issue remote synchronization of file ~p on provider ~p - ~p:~p",
+            [FullPath, ProviderID, T, M]),
+        error
+    end.

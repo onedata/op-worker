@@ -18,7 +18,7 @@
 %% API
 -export([init/0, data_distribution_panel/2, on_resize_js/0, display_info_not_supported/0]).
 -export([hide_ddist_panel/1, hide_all_ddist_panels/0, refresh_ddist_panels/0]).
--export([toggle_ddist_view/4, refresh_view/3, sync_file/3, expel_file/2]).
+-export([toggle_ddist_view/4, refresh_view/4, sync_file/3, expel_file/2]).
 
 % Macros used to generate IDs of certain elements
 -define(DIST_PANEL_ID(RowID), <<"dd_", (integer_to_binary(RowID))/binary>>).
@@ -66,22 +66,23 @@ data_distribution_panel(FilePath, RowID) ->
     % Item won't hightlight if the link is clicked.
     gui_jq:bind_element_click(HideDDistID, <<"function(e) { e.stopPropagation(); }">>),
     DDistPanelID = ?DIST_PANEL_ID(RowID),
-    {ShowLinkClass, HideLinkClass, DDistPanelClass, Body} = case lists:keyfind(FullPath, 1, get_displayed_ddist_panels()) of
-                                                                false ->
-                                                                    {
-                                                                        <<"glyph-link hidden show-on-parent-hover ddist-show-button">>,
-                                                                        <<"glyph-link hidden ddist-hide-button">>,
-                                                                        <<"ddist-panel display-none">>,
-                                                                        <<"">>
-                                                                    };
-                                                                _ ->
-                                                                    {
-                                                                        <<"glyph-link hidden ddist-show-button">>,
-                                                                        <<"glyph-link ddist-hide-button">>,
-                                                                        <<"ddist-panel">>,
-                                                                        render_table(FileSize, FileBlocks, RowID)
-                                                                    }
-                                                            end,
+    {ShowLinkClass, HideLinkClass, DDistPanelClass, Body} =
+        case lists:keyfind(FullPath, 1, get_displayed_ddist_panels()) of
+            false ->
+                {
+                    <<"glyph-link hidden show-on-parent-hover ddist-show-button">>,
+                    <<"glyph-link hidden ddist-hide-button">>,
+                    <<"ddist-panel display-none">>,
+                    <<"">>
+                };
+            _ ->
+                {
+                    <<"glyph-link hidden ddist-show-button">>,
+                    <<"glyph-link ddist-hide-button">>,
+                    <<"ddist-panel">>,
+                    render_table(FullPath, FileSize, FileBlocks, RowID)
+                }
+        end,
     [
         #link{id = ShowDDistID, postback = {action, ?MODULE, toggle_ddist_view, [FullPath, FileID, RowID, true]},
             title = <<"Data distribution (advanced)">>, class = ShowLinkClass,
@@ -107,7 +108,7 @@ toggle_ddist_view(FullPath, FileID, RowID, Flag) ->
     DDistPanelID = ?DIST_PANEL_ID(RowID),
     case Flag of
         true ->
-            gui_jq:update(DDistPanelID, render_table(FileSize, FileBlocks, RowID)),
+            gui_jq:update(DDistPanelID, render_table(FullPath, FileSize, FileBlocks, RowID)),
             gui_jq:remove_class(HideDDistID, <<"hidden">>),
             gui_jq:remove_class(ShowDDistID, <<"show-on-parent-hover">>),
             gui_jq:slide_down(DDistPanelID, 400);
@@ -124,23 +125,23 @@ toggle_ddist_view(FullPath, FileID, RowID, Flag) ->
     set_displayed_ddist_panels(NewDisplayed).
 
 
-%% refresh_view/3
+%% refresh_view/4
 %% ====================================================================
 %% @doc Refreshes the distribution status of given file.
 %% @end
--spec refresh_view(FileSize :: integer(), FileBlocks :: [{ProviderID :: binary(), [integer()]}], RowID :: integer()) -> term().
+-spec refresh_view(FullPath :: string(), FileSize :: integer(), FileBlocks :: [{ProviderID :: binary(), [integer()]}], RowID :: integer()) -> term().
 %% ====================================================================
-refresh_view(FileSize, FileBlocks, RowID) ->
-    gui_jq:update(?DIST_PANEL_ID(RowID), render_table(FileSize, FileBlocks, RowID)).
+refresh_view(FullPath, FileSize, FileBlocks, RowID) ->
+    gui_jq:update(?DIST_PANEL_ID(RowID), render_table(FullPath, FileSize, FileBlocks, RowID)).
 
 
-%% render_table/3
+%% render_table/4
 %% ====================================================================
 %% @doc Renders the table with distribution status for given file.
 %% @end
--spec render_table(FileSize :: integer(), FileBlocks :: [{ProviderID :: binary(), [integer()]}], RowID :: integer()) -> term().
+-spec render_table(FullPath :: string(), FileSize :: integer(), FileBlocks :: [{ProviderID :: binary(), [integer()]}], RowID :: integer()) -> term().
 %% ====================================================================
-render_table(FileSize, FileBlocks, RowID) ->
+render_table(FullPath, FileSize, FileBlocks, RowID) ->
     gui_jq:wire("$(window).resize();"),
     [
         #p{body = <<"File distribution:">>, class = <<"ddist-header">>},
@@ -166,7 +167,7 @@ render_table(FileSize, FileBlocks, RowID) ->
                             #td{body = PercentageBin, class = <<"ddist-percentage">>},
                             #td{body = #canvas{id = CanvasID, class = <<"ddist-canvas">>}},
                             % TODO Not yet supported
-%%                             #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FilePath, ProviderID, FileSize]},
+%%                             #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FullPath, ProviderID, FileSize]},
 %%                                 title = <<"Issue full synchronization">>, class = <<"glyph-link ddist-button">>,
 %%                                 body = #span{class = <<"icomoon-spinner6">>}}},
                             % TODO Not yet supported
@@ -193,8 +194,7 @@ render_table(FileSize, FileBlocks, RowID) ->
 -spec sync_file(FullPath :: binary(), ProviderID :: string(), Size :: integer()) -> term().
 %% ====================================================================
 sync_file(FullPath, ProviderID, Size) ->
-    % TODO not yet implemented
-    fs_interface:issue_remote_file_synchronization(FullPath, ProviderID, Size).
+    fs_interface:issue_remote_file_synchronization(FullPath, ProviderID).
 
 
 %% expel_file/2
@@ -247,7 +247,7 @@ refresh_ddist_panels() ->
                 MD5Hash ->
                     ok;
                 NewHash ->
-                    refresh_view(FileSize, FileBlocks, RowID),
+                    refresh_view(FullPath, FileSize, FileBlocks, RowID),
                     set_displayed_ddist_panels([{FullPath, FileID, RowID, NewHash}] ++ lists:keydelete(FullPath, 1, get_displayed_ddist_panels()))
             end
         end, get_displayed_ddist_panels()).

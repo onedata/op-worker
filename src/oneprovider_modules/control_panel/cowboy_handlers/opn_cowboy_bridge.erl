@@ -94,13 +94,20 @@ request_processing_loop() ->
     SocketProcessPid = get_socket_pid(),
     receive
         {apply, Module, Fun, Args} ->
-            try
-                SocketProcessPid ! {result, erlang:apply(Module, Fun, Args)},
-                ?MODULE:request_processing_loop()
-            catch
-                T:M ->
-                    ?error_stacktrace("Error in request processing loop - ~p:~p", [T, M]),
-                    ok
+            Result =
+                try
+                    erlang:apply(Module, Fun, Args)
+                catch
+                    T:M ->
+                        ?error_stacktrace("Error in request processing loop - ~p:~p", [T, M]),
+                        error
+                end,
+            case Result of
+                error ->
+                    ok;
+                _ ->
+                    SocketProcessPid ! {result, Result},
+                    ?MODULE:request_processing_loop()
             end;
         {flush, Actions} ->
             SocketProcessPid ! {flush, Actions},
@@ -153,7 +160,7 @@ init(Type, Req, Opts) ->
     set_handler_module(HandlerModule),
     set_delegation(Delegation),
 
-    DoDelegate=
+    DoDelegate =
         fun() ->
             case delegate(init, [Type, Req, HandlerOpts], 3) of
                 {upgrade, protocol, Module, Req2, HandlerOpts2} ->
