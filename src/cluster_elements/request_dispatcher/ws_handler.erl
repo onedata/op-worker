@@ -164,7 +164,7 @@ websocket_handle({Type, Data}, Req, State) ->
 
 %% Internal websocket_handle method implementation
 %% Handle Handshake request - FUSE ID negotiation
-handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
+handle(Req, {_, Answer_decoder_name, ProtocolVersion,
     #handshakerequest{hostname = Hostname, variable = Vars, cert_confirmation = CertConfirmation} = HReq, MsgId, Answer_type, _AccessToken},
     #handler_state{peer_dn = DnString, user_global_id = GRUID} = State) ->
 
@@ -230,7 +230,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = NewFuseId})}, Req, NewState};
 
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
-handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, {_GlobalId, _TokenHash}}, #handler_state{peer_dn = DnString, user_global_id = GRUID} = State) ->
+handle(Req, {_Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, {_GlobalId, _TokenHash}}, #handler_state{peer_dn = DnString, user_global_id = GRUID} = State) ->
     UserKey = case DnString =:= undefined of
         true  -> {global_id, utils:ensure_list(GRUID)};
         false -> {dn, DnString}
@@ -286,7 +286,7 @@ handle(Req, {push, FuseID, {Msg, MsgId, DecoderName1, MsgType}}, #handler_state{
 handle(Req, {pull, FuseID, CLM}, #handler_state{peer_type = provider, provider_id = ProviderId} = State) ->
     ?debug("Got pull msg: ~p from ~p", [CLM, FuseID]),
     handle(Req, CLM, State#handler_state{fuse_id = utils:ensure_list( fslogic_context:gen_global_fuse_id(ProviderId, FuseID) )});
-handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = _CLM,
+handle(Req, {Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = _CLM,
         #handler_state{peer_type = PeerType, provider_id = ProviderId, peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
                       access_token = SessionAccessToken, user_global_id = SessionUserGID} = State) ->
     %% Check if received message requires FuseId
@@ -346,37 +346,26 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                       #worker_request{peer_id = PeerId, subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
               end,
 
-    case Synch of
-        true ->
+    case Answer_type of
+        undefined ->
+            spawn(
+                fun() ->
+                    case Msg of
+                        ack ->
+                            gen_server:call(?Dispatcher_Name, {node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId, FuseID}});
+                        _ ->
+                            gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}})
+                    end
+                end),
+            {ok, Req, State};
+
+        _ ->
             try
                 Pid = self(),
-                Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Pid, MsgId, Request}}),
+                Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Pid, {MsgId, Answer_type, Answer_decoder_name}, Request}}),
                 case Ans of
-                    ok ->
-                        receive
-                            {worker_answer, MsgId, Ans2} ->
-                                {reply, {binary, encode_answer(Ans, MsgId, Answer_type, Answer_decoder_name, Ans2)}, Req, State}
-                        after DispatcherTimeout ->
-                            {reply, {binary, encode_answer(dispatcher_timeout, MsgId)}, Req, State}
-                        end;
+                    ok -> {ok, Req, State};
                     Other -> {reply, {binary, encode_answer(Other, MsgId)}, Req, State}
-                end
-            catch
-                _:_ -> {reply, {binary, encode_answer(dispatcher_error, MsgId)}, Req, State}
-            end;
-        false ->
-            try
-                case Msg of
-                    ack ->
-                        gen_server:call(?Dispatcher_Name, {node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId, FuseID}}),
-                        {ok, Req, State};
-                    %% @todo This is a temporaary matching. It is necessary to avoid infinite logging loop.
-                    #logmessage{} ->
-                        gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
-                        {ok, Req, State};
-                    _ ->
-                        Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
-                        {reply, {binary, encode_answer(Ans, MsgId)}, Req, State}
                 end
             catch
                 _:_ -> {reply, {binary, encode_answer(dispatcher_error, MsgId)}, Req, State}
@@ -402,6 +391,8 @@ websocket_info({Pid, get_session_id}, Req, State) ->
 websocket_info({Pid, shutdown}, Req, State) -> %% Handler internal shutdown request - close the connection
     Pid ! ok,
     {shutdown, Req, State};
+websocket_info({worker_answer, {MsgId, AnswerType, AnswerDecoder}, Answer}, Req, State) ->
+    {reply, {binary, encode_answer(ok, MsgId, AnswerType, AnswerDecoder, Answer)}, Req, State};
 websocket_info({ResponsePid, Message, MessageDecoder, MsgID}, Req, State) ->
     encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, -1, Req, State);
 websocket_info({with_ack, ResponsePid, Message, MessageDecoder, MsgID}, Req, State) ->
@@ -479,8 +470,7 @@ encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, MessageIdForClien
 %% ====================================================================
 %% @doc Decodes the clustermsg message using protocol buffers records_translator.
 -spec decode_clustermsg_pb(MsgBytes :: binary()) -> Result when
-    Result :: {Synch, ModuleName, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} | no_return(),
-    Synch :: boolean(),
+    Result :: {ModuleName, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} | no_return(),
     ModuleName :: atom(),
     Msg :: term(),
     MsgId :: integer(),
@@ -496,7 +486,7 @@ decode_clustermsg_pb(MsgBytes) ->
                    end,
 
     #clustermsg{module_name = ModuleName, message_type = Message_type, message_decoder_name = Message_decoder_name, answer_type = Answer_type,
-        answer_decoder_name = Answer_decoder_name, synch = Synch, protocol_version = Prot_version, message_id = MsgId, input = Bytes,
+        answer_decoder_name = Answer_decoder_name, protocol_version = Prot_version, message_id = MsgId, input = Bytes,
         token_hash = TokenHash, global_user_id = GlobalId} = DecodedBytes,
 
     {Decoder, DecodingFun, ModuleNameAtom} = try
@@ -517,7 +507,7 @@ decode_clustermsg_pb(MsgBytes) ->
                     catch
                       _:message_not_supported -> throw({message_not_supported, MsgId})
                     end,
-    {Synch, ModuleNameAtom, Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type, {GlobalId, TokenHash}}.
+    {ModuleNameAtom, Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type, {GlobalId, TokenHash}}.
 
 %% decode_answer_pb/1
 %% ====================================================================

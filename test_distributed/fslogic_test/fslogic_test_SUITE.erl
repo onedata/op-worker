@@ -2601,7 +2601,7 @@ create_file(Socket, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "filelocation",
-    answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2622,7 +2622,7 @@ send_creation_ack(Socket, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2643,7 +2643,7 @@ get_file_location(Socket, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "filelocation",
-    answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2664,7 +2664,7 @@ renew_file_location(Socket, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "filelocationvalidity",
-    answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2685,7 +2685,7 @@ file_not_used(Socket, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2706,7 +2706,7 @@ mkdir(Socket, DirName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2730,7 +2730,7 @@ ls(Socket, Dir, Num, Offset) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "filechildren",
-    answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2752,7 +2752,7 @@ delete_file(Socket, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2773,7 +2773,7 @@ rename_file(Socket, FileName, NewName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2794,7 +2794,7 @@ change_file_perms(Socket, FileName, Perms) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2815,7 +2815,7 @@ create_link(Socket, From, To) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2836,7 +2836,7 @@ get_link(Socket, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "linkinfo",
-    answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2857,7 +2857,7 @@ get_file_attr(Socket, FileName) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "fileattr",
-    answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2878,7 +2878,7 @@ update_times(Socket, FileName, ATime, MTime) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2899,7 +2899,7 @@ chown(Socket, FileName, UID) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, MessageBytes),
@@ -2920,7 +2920,7 @@ chown(Socket, FileName, UID) ->
 %%
 %%   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
 %%     message_decoder_name = "fuse_messages", answer_type = "atom",
-%%     answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+%%     answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
 %%   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 %%
 %%   wss:send(Socket, MessageBytes),

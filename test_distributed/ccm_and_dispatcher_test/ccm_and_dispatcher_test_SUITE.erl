@@ -97,7 +97,7 @@ modules_start_and_ping_test(Config) ->
   Workers2 = State2#cm_state.workers,
 
   %% @todo: check why dbsync sometimes does not start
-  Jobs = ?MODULES -- [dbsync],  
+  Jobs = ?MODULES -- [dbsync],
   ?assert(length(Workers2) >= length(Jobs)),
   ?assertEqual(5, gen_server:call({global, ?CCM}, get_state_num, 1000)),
 
@@ -133,7 +133,7 @@ dispatcher_connection_test(Config) ->
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
 
   Message = #clustermsg{module_name = "module", message_type = "atom", message_decoder_name = "communication_protocol",
-    answer_type = "atom", answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
+    answer_type = "atom", answer_decoder_name = "communication_protocol", protocol_version = 1, input = PingBytes},
   Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   wss:send(Socket, Msg),
@@ -146,7 +146,7 @@ dispatcher_connection_test(Config) ->
   ?assertEqual(Ans, AnsMessageBytes),
 
   Message2 = #clustermsg{module_name = "module", message_type = "atom", message_decoder_name = "communication_protocol",
-    answer_type = "atom", answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, input = PingBytes},
+    answer_type = "atom", answer_decoder_name = "communication_protocol", protocol_version = 1, input = PingBytes},
   Msg2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
   wss:send(Socket, Msg2),
   {RecvAns2, Ans2} = wss:recv(Socket, 5000),
@@ -228,7 +228,7 @@ onedata_handshake_test(Config) ->
   Reg2Bytes = erlang:iolist_to_binary(fuse_messages_pb:encode_channelregistration(Reg2)),
   Message2 = #clustermsg{module_name = "fslogic", message_type = "channelregistration",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = Reg2Bytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = Reg2Bytes},
   RegMsg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
 
   %% Channel close
@@ -236,7 +236,7 @@ onedata_handshake_test(Config) ->
   UnRegBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_channelclose(UnReg)),
   UnMessage = #clustermsg{module_name = "fslogic", message_type = "channelclose",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = UnRegBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = UnRegBytes},
   UnMsg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(UnMessage)),
 
   %% Fuse message
@@ -246,7 +246,7 @@ onedata_handshake_test(Config) ->
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
     message_decoder_name = "fuse_messages", answer_type = "atom",
-    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   FMsgBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
 
@@ -500,7 +500,7 @@ ping_test(Config) ->
   CheckModules = fun(M, Sum) ->
     Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom",
       message_decoder_name = "communication_protocol", answer_type = "atom",
-      answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
+      answer_decoder_name = "communication_protocol", protocol_version = 1, input = PingBytes},
     Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
     wss:send(Socket, Msg),

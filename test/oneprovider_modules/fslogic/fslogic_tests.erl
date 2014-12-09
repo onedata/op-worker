@@ -44,11 +44,10 @@ protocol_buffers_test() ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "filelocation",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {_, _}} = ws_handler:decode_clustermsg_pb(MessageBytes),
-  ?assert(Synch),
+  {Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {_, _}} = ws_handler:decode_clustermsg_pb(MessageBytes),
   ?assert(Task =:= fslogic),
   ?assert(Answer_decoder_name =:= "fuse_messages"),
   ?assert(ProtocolVersion == 1),

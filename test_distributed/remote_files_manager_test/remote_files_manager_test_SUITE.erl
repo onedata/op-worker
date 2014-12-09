@@ -513,7 +513,7 @@ create_file(Host, Cert, Port, FileName, FuseID) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "filelocation",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -542,7 +542,7 @@ send_creation_ack(Host, Cert, Port, FileName, FuseID) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -572,7 +572,7 @@ get_file_location(Host, Cert, Port, FileName, FuseID) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "filelocation",
-  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "fuse_messages", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -601,7 +601,7 @@ delete_file(Host, Cert, Port, FileName, FuseID) ->
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
   message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -630,7 +630,7 @@ create_file_on_storage(Host, Cert, Port, FileID) ->
 
   Message = #clustermsg{module_name = "remote_files_manager", message_type = "remotefilemangement",
   message_decoder_name = "remote_file_management", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = RemoteMangementMessageBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = RemoteMangementMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -654,7 +654,7 @@ delete_file_on_storage(Host, Cert, Port, FileID) ->
 
   Message = #clustermsg{module_name = "remote_files_manager", message_type = "remotefilemangement",
   message_decoder_name = "remote_file_management", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = RemoteMangementMessageBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = RemoteMangementMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -678,7 +678,7 @@ truncate_file_on_storage(Host, Cert, Port, FileID, Length) ->
 
   Message = #clustermsg{module_name = "remote_files_manager", message_type = "remotefilemangement",
   message_decoder_name = "remote_file_management", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = RemoteMangementMessageBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = RemoteMangementMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -702,7 +702,7 @@ change_perm_on_storage(Host, Cert, Port, FileID, NewPerm) ->
 
   Message = #clustermsg{module_name = "remote_files_manager", message_type = "remotefilemangement",
   message_decoder_name = "remote_file_management", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = RemoteMangementMessageBytes},
+  answer_decoder_name = "communication_protocol", protocol_version = 1, input = RemoteMangementMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -726,7 +726,7 @@ read(Host, Cert, Port, FileID, Offset, Size) ->
 
   Message = #clustermsg{module_name = "remote_files_manager", message_type = "remotefilemangement",
   message_decoder_name = "remote_file_management", answer_type = "filedata",
-  answer_decoder_name = "remote_file_management", synch = true, protocol_version = 1, input = RemoteMangementMessageBytes},
+  answer_decoder_name = "remote_file_management", protocol_version = 1, input = RemoteMangementMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -750,7 +750,7 @@ write(Host, Cert, Port, FileID, Offset, WriteData) ->
 
   Message = #clustermsg{module_name = "remote_files_manager", message_type = "remotefilemangement",
   message_decoder_name = "remote_file_management", answer_type = "writeinfo",
-  answer_decoder_name = "remote_file_management", synch = true, protocol_version = 1, input = RemoteMangementMessageBytes},
+  answer_decoder_name = "remote_file_management", protocol_version = 1, input = RemoteMangementMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
