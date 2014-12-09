@@ -618,6 +618,7 @@ provider_table_body(SpaceID, ProviderStates) ->
 
 
 synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces) ->
+    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
     {ok, #user_spaces{ids = SpaceIDsFromGR, default = DefaultSpace}} =
         gr_users:get_spaces({user, AccessToken}),
     % Move default space to the head of the list, if such space exists
@@ -628,6 +629,8 @@ synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces) ->
     % Synchronize spaces data
     SpaceStates = lists:map(
         fun(SpaceID) ->
+            % Issue synchronization of space
+            gr_adapter:get_space_info(SpaceID, {user, AccessToken}),
             case gr_spaces:get_details({user, AccessToken}, SpaceID) of
                 {ok, #space_details{name = SpaceName}} ->
                     % Synchronize users data (belonging to certain space)
@@ -758,7 +761,6 @@ comet_handle_action(State, Action, Args) ->
             hide_popup(),
             try
                 {ok, SpaceID} = gr_users:create_space({user, AccessToken}, [{<<"name">>, SpaceName}]),
-                gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                 opn_gui_utils:message(success, <<"Space created: ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
                 SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
                 refresh_space_list(SyncedState),
@@ -781,7 +783,6 @@ comet_handle_action(State, Action, Args) ->
             hide_popup(),
             try
                 {ok, SpaceID} = gr_users:join_space({user, AccessToken}, [{<<"token">>, Token}]),
-                gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                 SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
                 #space_state{name = SpaceName} = lists:keyfind(SpaceID, 2, SyncedState#page_state.spaces),
                 opn_gui_utils:message(success, <<"Successfully joined space ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
@@ -811,8 +812,6 @@ comet_handle_action(State, Action, Args) ->
             hide_popup(),
             case gr_users:leave_space({user, AccessToken}, SpaceID) of
                 ok ->
-                    ?dump(okej),
-                    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                     Message =
                         case SpaceName of
                             undefined ->
@@ -909,7 +908,6 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                     hide_popup(),
                     case gr_spaces:remove({user, AccessToken}, SpaceID) of
                         ok ->
-                            gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                             opn_gui_utils:message(success, <<"Space removed: ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
                             SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
                             refresh_space_list(SyncedState),
@@ -931,7 +929,6 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                     hide_popup(),
                     case gr_spaces:modify_details({user, AccessToken}, SpaceID, [{<<"name">>, NewSpaceName}]) of
                         ok ->
-                            gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                             opn_gui_utils:message(success, <<"Space renamed: <b>", SpaceName/binary,
                             "</b> -> ", (?FORMAT_ID_AND_NAME(SpaceID, NewSpaceName))/binary>>),
                             SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
@@ -1142,9 +1139,7 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                     end;
 
                 {?SPACE_ACTION_DISCARD_GROUP_PRIVILEGES, _} ->
-                    ?dump(EditedGroupPrivileges),
                     NewEditedGroupPrivileges = proplists:delete(SpaceID, EditedGroupPrivileges),
-                    ?dump(NewEditedGroupPrivileges),
                     gui_jq:update(?GROUPS_SECTION_ID(SpaceID), group_table_body(SpaceID, GroupStates, UserPrivileges)),
                     gui_jq:hide(?PRVLGS_GROUP_SAVE_PH_ID(SpaceID)),
                     gui_jq:fade_in(?PRVLGS_GROUP_HEADER_PH_ID(SpaceID), 500),
@@ -1185,11 +1180,7 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                             opn_gui_utils:message(error, <<"Cannot remove provider ",
                             (?FORMAT_ID_AND_NAME(ProviderID, ProviderName))/binary, ".<br />Please try again later.">>),
                             State
-                    end;
-
-                A ->
-                    ?dump(A),
-                    State
+                    end
             end
     end.
 

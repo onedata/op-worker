@@ -31,7 +31,8 @@
 %% @doc Lists all available blocks for given file and returns them in simplified format.
 %% The first tuple element is file size, the seconds is list of {ProviderID, ProviderBlocks} tuples.
 %% @end
--spec get_file_block_map(FullFilePath :: string()) -> {integer(), [{ProviderID :: string(), [integer()]}]}.
+-spec get_file_block_map(FullFilePath :: string()) ->
+    {integer(), [{ProviderID :: string(), ProviderName :: binary(), ProviderBytes :: integer(), BlockList :: [integer()]}]}.
 %% ====================================================================
 get_file_block_map(FullFilePath) ->
     {ok, FileBlockMap} = logical_files_manager:get_file_block_map(FullFilePath),
@@ -44,7 +45,7 @@ get_file_block_map(FullFilePath) ->
                     ToBytes = min(FileSize - 1, To * ?remote_block_size + ?remote_block_size - 1),
                     {AccBytes + ToBytes - FromBytes + 1, AccBlocks ++ [FromBytes, ToBytes]}
                 end, {0, []}, FileParts),
-            {fs_interface:get_provider_name(ProviderID), ProvBytes, BlockList}
+            {ProviderID, get_provider_name(ProviderID), ProvBytes, BlockList}
         end, FileBlockMap),
     {FileSize, lists:sort(Blocks)}.
 

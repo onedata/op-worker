@@ -1134,7 +1134,7 @@ list_view_body() ->
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
                                     #link{id = LinkID, body = gui_str:html_encode(Basename), target = <<"_blank">>,
                                         url = <<?user_content_download_path, "/", (gui_str:url_encode(FilePath))/binary>>}
-                                ]}] ++ pfm_data_dist:data_distribution_panel(FilePath, Counter)
+                                ]}] ++ pfm_data_dist:data_distribution_panel(FilePath)
                             }
                     end
                 ] ++

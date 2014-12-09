@@ -550,7 +550,6 @@ comet_handle_action(State, Action, Args) ->
             hide_popup(),
             try
                 {ok, GroupID} = gr_users:create_group({user, AccessToken}, [{<<"name">>, GroupName}]),
-                gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                 opn_gui_utils:message(success, <<"Group created: ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
                 SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                 refresh_group_list(SyncedState),
@@ -573,7 +572,6 @@ comet_handle_action(State, Action, Args) ->
             hide_popup(),
             try
                 {ok, GroupID} = gr_users:join_group({user, AccessToken}, [{<<"token">>, Token}]),
-                gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                 SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                 #group_state{name = GroupName} = lists:keyfind(GroupID, 2, SyncedState#page_state.groups),
                 opn_gui_utils:message(success, <<"Successfully joined group ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
@@ -603,7 +601,6 @@ comet_handle_action(State, Action, Args) ->
             hide_popup(),
             case gr_users:leave_group({user, AccessToken}, GroupID) of
                 ok ->
-                    gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                     Message =
                         case GroupName of
                             undefined ->
@@ -675,7 +672,6 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     hide_popup(),
                     case gr_groups:remove({user, AccessToken}, GroupID) of
                         ok ->
-                            gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                             opn_gui_utils:message(success, <<"Group removed: ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
                             SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
                             refresh_group_list(SyncedState),
@@ -697,7 +693,6 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     hide_popup(),
                     case gr_groups:modify_details({user, AccessToken}, GroupID, [{<<"name">>, NewGroupName}]) of
                         ok ->
-                            gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                             opn_gui_utils:message(success, <<"Group renamed: <b>", GroupName/binary,
                             "</b> -> ", (?FORMAT_ID_AND_NAME(GroupID, NewGroupName))/binary>>),
                             SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
@@ -843,7 +838,6 @@ comet_handle_group_action(State, Action, GroupID, Args) ->
                     hide_popup(),
                     try
                         {ok, SpaceID} = gr_groups:create_space({user, AccessToken}, GroupID, [{<<"name">>, SpaceName}]),
-                        gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
                         opn_gui_utils:message(success, <<"Created space ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary,
                         " for group ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
                         SyncedState = synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups),
@@ -1007,6 +1001,7 @@ hide_popup() ->
 
 
 synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups) ->
+    gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
     {ok, GroupIDs} = gr_users:get_groups({user, AccessToken}),
     % Synchronize groups data
     GroupStates = lists:map(
