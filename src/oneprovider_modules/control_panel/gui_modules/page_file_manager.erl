@@ -1281,14 +1281,16 @@ time_to_string(Time) ->
 size_to_printable(Size) ->
     gui_str:to_binary(size_to_printable(Size, ["B", "KB", "MB", "GB", "TB", "PB"])).
 
+size_to_printable(Size, []) ->
+    case is_float(Size) of
+        true -> lists:flatten(io_lib:format("~.2f ~s", [Size, Current]));
+        false -> lists:flatten(io_lib:format("~B ~s", [Size, Current]))
+    end;
+
 size_to_printable(Size, [Current | Bigger]) ->
     case Size > 1024 of
         true -> size_to_printable(Size / 1024, Bigger);
-        false ->
-            case is_float(Size) of
-                true -> lists:flatten(io_lib:format("~.2f ~s", [Size, Current]));
-                false -> lists:flatten(io_lib:format("~B ~s", [Size, Current]))
-            end
+        false -> size_to_printable(Size, [])
     end.
 
 item_list_md5(ItemList) ->

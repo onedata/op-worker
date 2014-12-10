@@ -143,7 +143,7 @@ refresh_view(FileID, FullPath, FileSize, FileBlocks) ->
 -spec render_table(FileID :: string(), FullPath :: string(), FileSize :: integer(),
     FileBlocks :: [{ProviderID :: binary(), ProviderName :: binary(), [integer()]}]) -> term().
 %% ====================================================================
-render_table(FileID, FullPath, FileSize, FileBlocks) ->
+render_table(FileID, _FullPath, FileSize, FileBlocks) ->
     gui_jq:wire("$(window).resize();"),
     [
         #p{body = <<"File distribution:">>, class = <<"ddist-header">>},
@@ -168,16 +168,17 @@ render_table(FileID, FullPath, FileSize, FileBlocks) ->
                             #td{body = ProviderName, class = <<"ddist-provider">>},
                             #td{body = PercentageBin, class = <<"ddist-percentage">>},
                             #td{body = #canvas{id = CanvasID, class = <<"ddist-canvas">>}},
-                            #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FullPath, ProviderID]},
-                                title = <<"Issue full synchronization">>, class = <<"glyph-link ddist-button">>,
-                                style = <<"z-index: 2;">>, body = #span{class = <<"icomoon-spinner6">>}}},
+                            % TODO Not yet supported
+%%                             #td{body = #link{id = SyncButtonID, postback = {action, ?MODULE, sync_file, [FullPath, ProviderID]},
+%%                                 title = <<"Issue full synchronization">>, class = <<"glyph-link ddist-button">>,
+%%                                 style = <<"z-index: 2;">>, body = #span{class = <<"icomoon-spinner6">>}}},
                             % TODO Not yet supported
 %%                             #td{body = #link{id = ExpelButtonID, postback = {action, ?MODULE, expel_file, [FilePath, ProviderID]},
 %%                                 title = <<"Expel all chunks from this provider">>, class = <<"glyph-link ddist-button">>,
 %%                                 body = #span{class = <<"icomoon-blocked">>}}},
-%%                             #td{body = #link{id = SyncButtonID,
-%%                                 title = <<"Issue full synchronization">>, class = <<"glyph-link-gray ddist-button">>,
-%%                                 body = #span{class = <<"icomoon-spinner6">>}}},
+                            #td{body = #link{id = SyncButtonID,
+                                title = <<"Issue full synchronization">>, class = <<"glyph-link-gray ddist-button">>,
+                                body = #span{class = <<"icomoon-spinner6">>}}},
                             #td{body = #link{id = ExpelButtonID,
                                 title = <<"Expel all chunks from this provider">>, class = <<"glyph-link-gray ddist-button">>,
                                 body = #span{class = <<"icomoon-blocked">>}}}
