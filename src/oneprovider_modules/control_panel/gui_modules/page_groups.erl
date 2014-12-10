@@ -902,7 +902,7 @@ refresh_group_list(#page_state{groups = Groups, expanded_groups = ExpandedGroups
     Body = case Groups of
                [] ->
                    #li{class = <<"empty-list-info">>, body = [
-                       #p{body = [<<"You don't belong to any groups.">>]}
+                       #p{body = [<<"You don't belong to any group.">>]}
                    ]};
                _ ->
                    lists:map(
@@ -1021,13 +1021,13 @@ synchronize_groups_and_users(GRUID, AccessToken, ExpandedGroups) ->
                     UserStatesSorted = [CurrentUser | sort_states(UserStatesWithoutCurrent)],
 
                     % Synchronize spaces data (belonging to certain group)
-                    {ok, SpacesIDs} = gr_groups:get_spaces({user, AccessToken}, GroupID),
+                    {ok, SpaceIDs} = gr_groups:get_spaces({user, AccessToken}, GroupID),
                     SpaceStates = lists:map(
                         fun(SpaceID) ->
                             {ok, #space_details{name = SpaceName}} = gr_groups:get_space_details({user, AccessToken}, GroupID, SpaceID),
                             #space_state{id = SpaceID, name = SpaceName}
 
-                        end, SpacesIDs),
+                        end, SpaceIDs),
                     SpaceStatesSorted = sort_states(SpaceStates),
                     #group_state{id = GroupID, name = GroupName, users = UserStatesSorted, spaces = SpaceStatesSorted, current_privileges = CurrentPrivileges};
                 _ ->

@@ -635,10 +635,28 @@ synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces) ->
     {ok, #user_spaces{ids = SpaceIDsFromGR, default = DefaultSpace}} =
         gr_users:get_spaces({user, AccessToken}),
     % Move default space to the head of the list, if such space exists
-    SpaceIDs = case DefaultSpace of
-                   undefined -> SpaceIDsFromGR;
-                   _ -> [DefaultSpace | lists:delete(DefaultSpace, SpaceIDsFromGR)]
-               end,
+    SpaceIDsWithoutGroups = case DefaultSpace of
+                                undefined -> SpaceIDsFromGR;
+                                _ -> [DefaultSpace | lists:delete(DefaultSpace, SpaceIDsFromGR)]
+                            end,
+    % Get spaces of groups that user belongs to
+%%     {ok, UserGroupIDs} = gr_users:get_groups({user, AccessToken}),
+    % TODO uncomment above, delete below
+    UserGroupIDs = [],
+%%     GroupsSpaceIDs = lists:foldl(
+%%         fun(GID, Acc) ->
+%%             {ok, GSpaceIDs} = gr_groups:get_spaces({user, AccessToken}, GID),
+%%             GSpaceIDs ++ Acc
+%%         end, [], UserGroupIDs),
+    % TODO uncomment above, delete below
+    GroupsSpaceIDs = [],
+    % Make a list of all user spaces (those that he or his groups belong to)
+    % The list is unique
+    GroupsSpaceIDsUnique = lists:filter(
+        fun(GID) ->
+            not lists:member(GID, SpaceIDsWithoutGroups)
+        end, GroupsSpaceIDs),
+    SpaceIDs = SpaceIDsWithoutGroups ++ GroupsSpaceIDsUnique,
     % Synchronize spaces data
     SpaceStates = lists:map(
         fun(SpaceID) ->
@@ -648,12 +666,19 @@ synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces) ->
                 {ok, #space_details{name = SpaceName, size = SupportSizes}} ->
                     % Synchronize users data (belonging to certain space)
                     {ok, UsersIDs} = gr_spaces:get_users({user, AccessToken}, SpaceID),
+                    {ok, GroupIDs} = gr_spaces:get_groups({user, AccessToken}, SpaceID),
+                    {ok, ProviderIDs} = gr_spaces:get_providers({user, AccessToken}, SpaceID),
+
                     % TODO There is a bug - if you leave a space that has only one user (you), it will
                     % TODO be listed as your space, but will have no users. Need a case for this for now.
                     % TODO Later undefined space states are filtered out.
                     % TODO remove this when the bug gets fixed
-                    case UsersIDs of
-                        [] ->
+                    IsAnyUserGroupInSpaceGroups = lists:foldl(
+                        fun(CurrGID, Acc) ->
+                            Acc orelse lists:member(CurrGID, GroupIDs)
+                        end, false, UserGroupIDs),
+                    case lists:member(GRUID, UsersIDs) orelse IsAnyUserGroupInSpaceGroups of
+                        false ->
                             undefined;
                         _ ->
                             UserStates = lists:map(
@@ -662,14 +687,17 @@ synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces) ->
                                     {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceID, UserID),
                                     #user_state{id = UserID, name = UserName, privileges = Privileges}
                                 end, UsersIDs),
-                            #user_state{id = CurrentUserID} = CurrentUser = lists:keyfind(GRUID, 2, UserStates),
+                            % If the user belongs to this space, move him to the front of users list
+                            CurrentUserAsList = case lists:keyfind(GRUID, 2, UserStates) of
+                                              #user_state{id = GRUID} = CUser -> [CUser];
+                                              _ -> []
+                                          end,
                             % Get effective privileges of current user
-                            {ok, CurrentPrivileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceID, CurrentUserID),
+                            {ok, CurrentPrivileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceID, GRUID),
                             UserStatesWithoutCurrent = lists:keydelete(GRUID, 2, UserStates),
-                            UserStatesSorted = [CurrentUser | sort_states(UserStatesWithoutCurrent)],
+                            UserStatesSorted = CurrentUserAsList ++ sort_states(UserStatesWithoutCurrent),
 
                             % Synchronize groups data (belonging to certain space)
-                            {ok, GroupIDs} = gr_spaces:get_groups({user, AccessToken}, SpaceID),
                             GroupStates = lists:map(
                                 fun(GroupID) ->
                                     {ok, #group_details{name = GroupName}} = gr_spaces:get_group_details({user, AccessToken}, SpaceID, GroupID),
@@ -679,7 +707,6 @@ synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces) ->
                             GroupStatesSorted = sort_states(GroupStates),
 
                             % Synchronize providers data (supporting to certain space)
-                            {ok, ProviderIDs} = gr_spaces:get_providers({user, AccessToken}, SpaceID),
                             ProviderStates = lists:map(
                                 fun(ProviderID) ->
                                     {ok, #provider_details{name = ProviderName}} = gr_spaces:get_provider_details({user, AccessToken}, SpaceID, ProviderID),
@@ -1069,6 +1096,7 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                     State;
 
                 {?SPACE_ACTION_CREATE_GROUP, [GroupName]} ->
+                    hide_popup(),
                     try
                         {ok, GroupID} = gr_users:create_group({user, AccessToken}, [{<<"name">>, GroupName}]),
                         {ok, Token} = gr_spaces:get_invite_group_token({user, AccessToken}, SpaceID),
@@ -1227,14 +1255,14 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
 
 
 refresh_space_list(#page_state{spaces = Spaces, expanded_spaces = ExpandedSpaces}) ->
-    % Default space is the first on the list
-    [#space_state{id = DefaultSpace} | _] = Spaces,
     Body = case Spaces of
                [] ->
                    #li{class = <<"empty-list-info">>, body = [
-                       #p{body = [<<"You don't belong to any spaces.">>]}
+                       #p{body = [<<"You don't belong to any space.">>]}
                    ]};
                _ ->
+                   % Default space is the first on the list
+                   [#space_state{id = DefaultSpace} | _] = Spaces,
                    lists:map(
                        fun(#space_state{id = ID} = SpaceState) ->
                            space_list_element(SpaceState, lists:member(ID, ExpandedSpaces), ID =:= DefaultSpace)
