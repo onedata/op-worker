@@ -348,17 +348,13 @@ handle(Req, {Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type
 
     case Answer_type of
         undefined ->
-            spawn(
-                fun() ->
-                    case Msg of
-                        ack ->
-                            gen_server:call(?Dispatcher_Name, {node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId, FuseID}});
-                        _ ->
-                            gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}})
-                    end
-                end),
+            case Msg of
+                ack ->
+                    gen_server:call(?Dispatcher_Name, {node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId, FuseID}});
+                _ ->
+                    gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}})
+            end,
             {ok, Req, State};
-
         _ ->
             try
                 Pid = self(),
