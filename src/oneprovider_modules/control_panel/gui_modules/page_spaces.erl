@@ -641,11 +641,13 @@ synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces) ->
                             end,
     % Get spaces of groups that user belongs to
     {ok, UserGroupIDs} = gr_users:get_groups({user, AccessToken}),
-    GroupsSpaceIDs = lists:foldl(
-        fun(GID, Acc) ->
-            {ok, GSpaceIDs} = gr_groups:get_spaces({user, AccessToken}, GID),
-            GSpaceIDs ++ Acc
-        end, [], UserGroupIDs),
+%%     GroupsSpaceIDs = lists:foldl(
+%%         fun(GID, Acc) ->
+%%             {ok, GSpaceIDs} = gr_groups:get_spaces({user, AccessToken}, GID),
+%%             GSpaceIDs ++ Acc
+%%         end, [], UserGroupIDs),
+    % TODO uncomment above
+    GroupsSpaceIDs = [],
     % Make a list of all user spaces (those that he or his groups belong to)
     % The list is unique
     GroupsSpaceIDsUnique = lists:filter(
