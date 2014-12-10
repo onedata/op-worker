@@ -77,6 +77,8 @@
 -define(SPACE_ACTION_SHOW_REMOVE_USER_POPUP, show_remove_user_popup).
 -define(SPACE_ACTION_REMOVE_USER, remove_user).
 
+-define(SPACE_ACTION_SHOW_CREATE_GROUP_POPUP, show_create_group_popup).
+-define(SPACE_ACTION_CREATE_GROUP, create_group).
 -define(SPACE_ACTION_INVITE_GROUP, invite_group).
 -define(SPACE_ACTION_SHOW_REMOVE_GROUP_POPUP, show_remove_group_popup).
 -define(SPACE_ACTION_REMOVE_GROUP, remove_group).
@@ -107,6 +109,8 @@
     {?SPACE_ACTION_SHOW_REMOVE_USER_POPUP, ?PRVLG_REMOVE_USER},
     {?SPACE_ACTION_REMOVE_USER, ?PRVLG_REMOVE_USER},
 
+    {?SPACE_ACTION_SHOW_CREATE_GROUP_POPUP, ?PRVLG_INVITE_GROUP},
+    {?SPACE_ACTION_CREATE_GROUP, ?PRVLG_INVITE_GROUP},
     {?SPACE_ACTION_INVITE_GROUP, ?PRVLG_INVITE_GROUP},
     {?SPACE_ACTION_SHOW_REMOVE_GROUP_POPUP, ?PRVLG_REMOVE_GROUP},
     {?SPACE_ACTION_REMOVE_GROUP, ?PRVLG_REMOVE_GROUP},
@@ -168,7 +172,7 @@
 -record(space_state, {id = <<"">>, name = <<"">>, users = [], groups = [], providers = [], current_privileges = []}).
 -record(user_state, {id = <<"">>, name = <<"">>, privileges = []}).
 -record(group_state, {id = <<"">>, name = <<"">>, privileges = []}).
--record(provider_state, {id = <<"">>, name = <<"">>}).
+-record(provider_state, {id = <<"">>, name = <<"">>, support_size = 0}).
 
 
 %% ====================================================================
@@ -364,6 +368,11 @@ space_list_element(#space_state{id = SpaceID, name = SpaceNameOrUndef, users = U
                                         ]},
                                         #li{body = [
                                             #panel{class = <<"divider">>},
+                                            #link{title = <<"Create a group that will have access to this space">>,
+                                                postback = {space_action, ?SPACE_ACTION_SHOW_CREATE_GROUP_POPUP, SpaceID},
+                                                body = [<<"<i class=\"icomoon-plus3\"></i>">>, <<"Create group">>]}
+                                        ]},
+                                        #li{body = [
                                             #link{title = <<"Obtain a token to invite a group to this space">>,
                                                 postback = {space_action, ?SPACE_ACTION_INVITE_GROUP, SpaceID},
                                                 body = [<<"<i class=\"icomoon-users\"></i>">>, <<"Invite group">>]}
@@ -574,15 +583,16 @@ provider_table_body(SpaceID, ProviderStates) ->
         ]},
         #panel{class = <<"gen-middle-wrapper">>, body = [
             #panel{class = <<"gen-table-header-wrapper">>, body = [
-                #table{class = <<"table table-striped gen-table-header spaces-table-header">>, header = #thead{body = [
+                #table{class = <<"table table-striped gen-table-header providers-table-header">>, header = #thead{body = [
                     #tr{cells = [
                         #th{body = [<<"Provider name">>]},
-                        #th{body = [<<"Provider ID">>]}
+                        #th{body = [<<"Provider ID">>]},
+                        #th{body = [<<"Provided space">>]}
                     ]}
                 ]}}
             ]},
             #panel{class = <<"gen-table-wrapper">>, body = [
-                #table{class = <<"table table-striped gen-table spaces-table">>, body = #tbody{body =
+                #table{class = <<"table table-striped gen-table providers-table">>, body = #tbody{body =
                 case ProviderStates of
                     [] ->
                         #tr{cells = [
@@ -592,7 +602,7 @@ provider_table_body(SpaceID, ProviderStates) ->
                         ]};
                     _ ->
                         lists:map(
-                            fun(#provider_state{id = ProviderID, name = ProviderName}) ->
+                            fun(#provider_state{id = ProviderID, name = ProviderName, support_size = SupportSize}) ->
                                 #tr{cells = [
                                     #td{body = [
                                         #panel{class = <<"name-wrapper">>, body = [
@@ -607,6 +617,9 @@ provider_table_body(SpaceID, ProviderStates) ->
                                     ]},
                                     #td{body = [
                                         ProviderID
+                                    ]},
+                                    #td{body = [
+                                        page_file_manager:size_to_printable(SupportSize)
                                     ]}
                                 ]}
                             end, ProviderStates)
@@ -618,6 +631,7 @@ provider_table_body(SpaceID, ProviderStates) ->
 
 
 synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces) ->
+    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
     {ok, #user_spaces{ids = SpaceIDsFromGR, default = DefaultSpace}} =
         gr_users:get_spaces({user, AccessToken}),
     % Move default space to the head of the list, if such space exists
@@ -628,8 +642,10 @@ synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces) ->
     % Synchronize spaces data
     SpaceStates = lists:map(
         fun(SpaceID) ->
+            % Issue synchronization of space
+            gr_adapter:get_space_info(SpaceID, {user, AccessToken}),
             case gr_spaces:get_details({user, AccessToken}, SpaceID) of
-                {ok, #space_details{name = SpaceName}} ->
+                {ok, #space_details{name = SpaceName, size = SupportSizes}} ->
                     % Synchronize users data (belonging to certain space)
                     {ok, UsersIDs} = gr_spaces:get_users({user, AccessToken}, SpaceID),
                     % TODO There is a bug - if you leave a space that has only one user (you), it will
@@ -667,7 +683,7 @@ synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces) ->
                             ProviderStates = lists:map(
                                 fun(ProviderID) ->
                                     {ok, #provider_details{name = ProviderName}} = gr_spaces:get_provider_details({user, AccessToken}, SpaceID, ProviderID),
-                                    #provider_state{id = ProviderID, name = ProviderName}
+                                    #provider_state{id = ProviderID, name = ProviderName, support_size = proplists:get_value(ProviderID, SupportSizes)}
                                 end, ProviderIDs),
                             ProviderStatesSorted = sort_states(ProviderStates),
                             #space_state{id = SpaceID, name = SpaceName, users = UserStatesSorted, groups = GroupStatesSorted,
@@ -758,7 +774,6 @@ comet_handle_action(State, Action, Args) ->
             hide_popup(),
             try
                 {ok, SpaceID} = gr_users:create_space({user, AccessToken}, [{<<"name">>, SpaceName}]),
-                gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                 opn_gui_utils:message(success, <<"Space created: ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
                 SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
                 refresh_space_list(SyncedState),
@@ -781,7 +796,6 @@ comet_handle_action(State, Action, Args) ->
             hide_popup(),
             try
                 {ok, SpaceID} = gr_users:join_space({user, AccessToken}, [{<<"token">>, Token}]),
-                gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                 SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
                 #space_state{name = SpaceName} = lists:keyfind(SpaceID, 2, SyncedState#page_state.spaces),
                 opn_gui_utils:message(success, <<"Successfully joined space ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
@@ -811,8 +825,6 @@ comet_handle_action(State, Action, Args) ->
             hide_popup(),
             case gr_users:leave_space({user, AccessToken}, SpaceID) of
                 ok ->
-                    ?dump(okej),
-                    gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                     Message =
                         case SpaceName of
                             undefined ->
@@ -909,7 +921,6 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                     hide_popup(),
                     case gr_spaces:remove({user, AccessToken}, SpaceID) of
                         ok ->
-                            gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                             opn_gui_utils:message(success, <<"Space removed: ", (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary>>),
                             SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
                             refresh_space_list(SyncedState),
@@ -931,7 +942,6 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                     hide_popup(),
                     case gr_spaces:modify_details({user, AccessToken}, SpaceID, [{<<"name">>, NewSpaceName}]) of
                         ok ->
-                            gr_adapter:synchronize_user_spaces({GRUID, AccessToken}),
                             opn_gui_utils:message(success, <<"Space renamed: <b>", SpaceName/binary,
                             "</b> -> ", (?FORMAT_ID_AND_NAME(SpaceID, NewSpaceName))/binary>>),
                             SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
@@ -1047,6 +1057,34 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                     gui_jq:wire(<<"$(window).resize();">>),
                     State#page_state{edited_user_privileges = NewEditedUserPrivileges};
 
+
+                {?SPACE_ACTION_SHOW_CREATE_GROUP_POPUP, _} ->
+                    show_name_insert_popup(<<"Create new group">>, <<"new_group_textbox">>,
+                        <<"New group name">>, <<"">>, false, <<"new_group_submit">>,
+                        {space_action, ?SPACE_ACTION_CREATE_GROUP, SpaceID, [{query_value, <<"new_group_textbox">>}]}, ["new_group_textbox"]),
+                    State;
+
+                {?SPACE_ACTION_CREATE_GROUP, [<<"">>]} ->
+                    gui_jq:info_popup(<<"Error">>, <<"Please insert a group name">>, <<"">>),
+                    State;
+
+                {?SPACE_ACTION_CREATE_GROUP, [GroupName]} ->
+                    try
+                        {ok, GroupID} = gr_users:create_group({user, AccessToken}, [{<<"name">>, GroupName}]),
+                        {ok, Token} = gr_spaces:get_invite_group_token({user, AccessToken}, SpaceID),
+                        {ok, SpaceID} = gr_groups:join_space({user, AccessToken}, GroupID, [{<<"token">>, Token}]),
+                        gr_adapter:synchronize_user_groups({GRUID, AccessToken}),
+                        opn_gui_utils:message(success, <<"Group created: ", (?FORMAT_ID_AND_NAME(GroupID, GroupName))/binary>>),
+                        SyncedState = synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces),
+                        refresh_space_list(SyncedState),
+                        SyncedState
+                    catch T:M ->
+                        ?error_stacktrace("Cannot create group for space with ID ~p - ~p:~p", [SpaceID, T, M]),
+                        opn_gui_utils:message(error, <<"Cannot create group for space ",
+                        (?FORMAT_ID_AND_NAME(SpaceID, SpaceName))/binary, ".<br />Please try again later.">>),
+                        State
+                    end;
+
                 {?SPACE_ACTION_INVITE_GROUP, _} ->
                     case gr_spaces:get_invite_group_token({user, AccessToken}, SpaceID) of
                         {ok, Token} ->
@@ -1142,9 +1180,7 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                     end;
 
                 {?SPACE_ACTION_DISCARD_GROUP_PRIVILEGES, _} ->
-                    ?dump(EditedGroupPrivileges),
                     NewEditedGroupPrivileges = proplists:delete(SpaceID, EditedGroupPrivileges),
-                    ?dump(NewEditedGroupPrivileges),
                     gui_jq:update(?GROUPS_SECTION_ID(SpaceID), group_table_body(SpaceID, GroupStates, UserPrivileges)),
                     gui_jq:hide(?PRVLGS_GROUP_SAVE_PH_ID(SpaceID)),
                     gui_jq:fade_in(?PRVLGS_GROUP_HEADER_PH_ID(SpaceID), 500),
@@ -1185,11 +1221,7 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                             opn_gui_utils:message(error, <<"Cannot remove provider ",
                             (?FORMAT_ID_AND_NAME(ProviderID, ProviderName))/binary, ".<br />Please try again later.">>),
                             State
-                    end;
-
-                A ->
-                    ?dump(A),
-                    State
+                    end
             end
     end.
 

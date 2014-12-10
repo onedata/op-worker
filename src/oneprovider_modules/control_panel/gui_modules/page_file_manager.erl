@@ -28,6 +28,7 @@
 -export([item_is_dir/1, item_find/1, item_attr/2]).
 -export([fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
 -export([fs_list_dir/1, fs_list_dir_to_paths/1, fs_list_dir_to_items/1]).
+-export([size_to_printable/1]).
 
 % All file attributes that are supported
 -define(ALL_ATTRIBUTES, [perms, size, atime, mtime]).
@@ -1134,7 +1135,7 @@ list_view_body() ->
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
                                     #link{id = LinkID, body = gui_str:html_encode(Basename), target = <<"_blank">>,
                                         url = <<?user_content_download_path, "/", (gui_str:url_encode(FilePath))/binary>>}
-                                ]}] ++ pfm_data_dist:data_distribution_panel(FilePath, Counter)
+                                ]}] ++ pfm_data_dist:data_distribution_panel(FilePath)
                             }
                     end
                 ] ++
@@ -1278,10 +1279,10 @@ time_to_string(Time) ->
         [YY, MM, DD, Hour, Min, Sec]).
 
 size_to_printable(Size) ->
-    gui_str:to_binary(size_to_printable(Size, ["B", "KB", "MB", "GB", "TB"])).
+    gui_str:to_binary(size_to_printable(Size, ["B", "KB", "MB", "GB", "TB", "PB"])).
 
 size_to_printable(Size, [Current | Bigger]) ->
-    case Size > 1024 of
+    case Size > 1024 andalso Bigger /= [] of
         true -> size_to_printable(Size / 1024, Bigger);
         false ->
             case is_float(Size) of

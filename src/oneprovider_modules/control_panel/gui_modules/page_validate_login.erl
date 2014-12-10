@@ -76,6 +76,8 @@ body() ->
 
                                         mock(AllNodes, cluster_manager_lib, get_provider_id, fun() ->
                                             <<"providerId">> end),
+                                        mock(AllNodes, fs_interface, get_provider_name, fun() ->
+                                            <<"Mocked Provider Name">> end),
                                         mock(AllNodes, gr_users, get_spaces, fun(_) ->
                                             {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
                                         mock(AllNodes, gr_adapter, get_space_info, fun(SpaceId, _) ->
