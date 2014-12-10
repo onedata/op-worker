@@ -1069,6 +1069,7 @@ comet_handle_space_action(State, Action, SpaceID, Args) ->
                     State;
 
                 {?SPACE_ACTION_CREATE_GROUP, [GroupName]} ->
+                    hide_popup(),
                     try
                         {ok, GroupID} = gr_users:create_group({user, AccessToken}, [{<<"name">>, GroupName}]),
                         {ok, Token} = gr_spaces:get_invite_group_token({user, AccessToken}, SpaceID),
