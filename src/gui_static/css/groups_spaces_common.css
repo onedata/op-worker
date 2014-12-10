@@ -144,6 +144,17 @@
     margin: 11px 15px 0;
 }
 
+.default-space-info {
+    position: absolute;
+    top: 19px;
+    left: 580px;
+}
+
+.default-space-info > i {
+    top: 1px !important;
+    margin-right: 8px;
+}
+
 .gen-actions-wrapper {
     display: table-cell;
     width: 150px;
@@ -177,10 +188,10 @@
 }
 
 .gen-leave-button {
-     width: 130px;
-     margin: 8px 0;
-     display: inline-block;
- }
+    width: 130px;
+    margin: 8px 0;
+    display: inline-block;
+}
 
 .top-1 {
     top: 1px !important;
@@ -364,17 +375,40 @@
     max-width: 169px !important;
 }
 
+.providers-table-header > thead > tr > th {
+    width: 385px;
+    padding: 7px 0 7px 15px;
+    font-size: 14px;
+    line-height: 18px;
+    text-align: left;
+}
+
+.providers-table-header > thead > tr > th:first-child {
+    width: auto !important;
+    max-width: 169px !important;
+}
+
+.providers-table-header > thead > tr > th:last-child {
+    width: 285px;
+}
+
+.providers-table > tbody > tr > td {
+    width: 385px;
+    padding: 9px 0 9px 15px;
+    font-size: 14px;
+    line-height: 18px;
+    text-align: left;
+}
+
+.providers-table > tbody > tr > td:first-child {
+    width: auto !important;
+    max-width: 169px !important;
+}
+
+.providers-table > tbody > tr > td:last-child {
+    max-width: 285px;
+}
+
 .empty-table-info {
     font-style: italic;
-}
-
-.default-space-info {
-    position: absolute;
-    top: 19px;
-    left: 580px;
-}
-
-.default-space-info > i {
-    top: 1px !important;
-    margin-right: 8px;
 }
