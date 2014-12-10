@@ -316,43 +316,34 @@ write(Storage_helper_info, File, Offset, Buf) ->
                  end;
              _ -> setup_ctx(File)
          end,
-    case get_cached_value(File, size, Storage_helper_info) of
-        {ok, Size} ->
-            case Size < Offset of
+    {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
+    case ErrorCode of
+        ok ->
+            case Stat of
                 true ->
-                    truncate(Storage_helper_info, File, Offset + byte_size(Buf));
-                false -> ok
-            end,
-            {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
-            case ErrorCode of
-                ok ->
-                    case Stat of
-                        true ->
-                            {FlagCode, Flag} = get_cached_value(File, o_wronly, Storage_helper_info),
-                            case FlagCode of
-                                ok ->
-                                    {ErrorCode2, FFI} = helpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
-                                    case ErrorCode2 of
-                                        0 ->
-                                            BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
+                    {FlagCode, Flag} = get_cached_value(File, o_wronly, Storage_helper_info),
+                    case FlagCode of
+                        ok ->
+                            {ErrorCode2, FFI} = helpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
+                            case ErrorCode2 of
+                                0 ->
+                                    BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
 
-                                            ErrorCode3 = helpers:exec(release, Storage_helper_info, [File, FFI]),
-                                            case ErrorCode3 of
-                                                0 -> BytesWritten;
-                                                {error, 'NIF_not_loaded'} -> ErrorCode3;
-                                                _ -> {wrong_release_return_code, ErrorCode3}
-                                            end;
-                                        error -> {ErrorCode, FFI};
-                                        _ -> {wrong_open_return_code, ErrorCode2}
+                                    ErrorCode3 = helpers:exec(release, Storage_helper_info, [File, FFI]),
+                                    case ErrorCode3 of
+                                        0 -> BytesWritten;
+                                        {error, 'NIF_not_loaded'} -> ErrorCode3;
+                                        _ -> {wrong_release_return_code, ErrorCode3}
                                     end;
-                                _ -> {FlagCode, Flag}
+                                error -> {ErrorCode, FFI};
+                                _ -> {wrong_open_return_code, ErrorCode2}
                             end;
-                        false -> {error, not_regular_file}
+                        _ -> {FlagCode, Flag}
                     end;
-                error -> {ErrorCode, Stat};
-                _ -> {ErrorCode, Stat}
+                false -> {error, not_regular_file}
             end;
-        Error -> Error
+        error -> {ErrorCode, Stat};
+        _ -> {ErrorCode, Stat}
     end.
 
 %% create/2

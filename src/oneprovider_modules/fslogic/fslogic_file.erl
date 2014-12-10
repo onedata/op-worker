@@ -221,6 +221,5 @@ create_file_location_for_remote_file(FullFileName, FileUuid) ->
 %%     FileBlock = #file_block{file_location_id = LocationId, offset = 0, size = ?FILE_BLOCK_SIZE_INF},
 %%     {ok, _} = dao_lib:apply(dao_vfs, save_file_block, [FileBlock], fslogic_context:get_protocol_version()),
     {SH, StorageFileId} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId, SpaceId, false),
-    {ok, #fileattributes{mode = Mode}} = logical_files_manager:getfileattr(FullFileName),
-    ok = storage_files_manager:create(SH, StorageFileId, Mode),
+    ok = storage_files_manager:create(SH, StorageFileId),
     {ok, {LocationId, StorageFileId}}.
