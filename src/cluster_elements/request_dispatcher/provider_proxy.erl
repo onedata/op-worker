@@ -217,7 +217,7 @@ a2l(List) when is_list(List) ->
 timeout_for_message(#fusemessage{input = #getfilechildren{}}) ->
     timer:seconds(3);
 timeout_for_message(#fusemessage{input = #getfileattr{}}) ->
-    timer:seconds(2);
+    timer:seconds(5);
 timeout_for_message(#fusemessage{input = #renamefile{}}) ->
     timer:hours(1);
 timeout_for_message(#remotefilemangement{input = #readfile{size = Bytes}}) ->
