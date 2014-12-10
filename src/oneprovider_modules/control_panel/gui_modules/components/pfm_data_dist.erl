@@ -70,7 +70,7 @@ data_distribution_panel(FilePath) ->
         case lists:keyfind(FullPath, 1, get_displayed_ddist_panels()) of
             false ->
                 {
-                    <<"glyph-link hidden show-on-parent-hover ddist-show-button">>,
+                    <<"glyph-link show-on-parent-hover ddist-show-button">>,
                     <<"glyph-link hidden ddist-hide-button">>,
                     <<"ddist-panel display-none">>,
                     <<"">>
