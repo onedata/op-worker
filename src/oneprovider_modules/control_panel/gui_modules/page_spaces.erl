@@ -683,14 +683,15 @@ synchronize_spaces_and_users(GRUID, AccessToken, ExpandedSpaces) ->
                                     {ok, Privileges} = gr_spaces:get_user_privileges({user, AccessToken}, SpaceID, UserID),
                                     #user_state{id = UserID, name = UserName, privileges = Privileges}
                                 end, UsersIDs),
-                            CurrentUser = case lists:keyfind(GRUID, 2, UserStates) of
-                                              #user_state{id = CurrentUserID} = CUser -> CUser;
+                            % If the user belongs to this space, move him to the front of users list
+                            CurrentUserAsList = case lists:keyfind(GRUID, 2, UserStates) of
+                                              #user_state{id = GRUID} = CUser -> [CUser];
                                               _ -> []
                                           end,
                             % Get effective privileges of current user
                             {ok, CurrentPrivileges} = gr_spaces:get_effective_user_privileges({user, AccessToken}, SpaceID, GRUID),
                             UserStatesWithoutCurrent = lists:keydelete(GRUID, 2, UserStates),
-                            UserStatesSorted = lists:flatten([CurrentUser | sort_states(UserStatesWithoutCurrent)]),
+                            UserStatesSorted = CurrentUserAsList ++ sort_states(UserStatesWithoutCurrent),
 
                             % Synchronize groups data (belonging to certain space)
                             GroupStates = lists:map(
