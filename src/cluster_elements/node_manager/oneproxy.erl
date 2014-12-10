@@ -25,7 +25,7 @@
 -record(oneproxy_state, {timeout = timer:minutes(1), endpoint}).
 
 %% API
--export([start_proxy/3, start_rproxy/4, start_rproxy/5, main_loop/2,
+-export([start/3, start_proxy/3, start_rproxy/4, start_rproxy/5, main_loop/2,
     get_session/2, get_local_port/1, get_der_certs_dir/0, ca_crl_to_der/1]).
 
 
