@@ -353,8 +353,7 @@ write(Storage_helper_info, File, Offset, Buf) ->
                 _ -> {ErrorCode, Stat}
             end;
         Error -> Error
-
-    end,
+    end.
 
 %% create/2
 %% ====================================================================
