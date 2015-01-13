@@ -11,9 +11,9 @@
 
 {application, oneprovider_node,
     [
-        {description, "Application starts node of oneprovider central cluster"},
+        {description, "Application starts node of oneprovider cluster"},
         {vsn, git},
-        {registered, []},
+        {registered, [oneprovider_node_sup]},
         {applications, [
             kernel,
             stdlib,
