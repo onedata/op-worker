@@ -14,9 +14,9 @@
 
 -define(TEST, true).
 
--include("oneprovider_modules/dao/dao_spaces.hrl").
+%% -include("oneprovider_modules/dao/dao_spaces.hrl").
 
--include("oneprovider_modules/dao/dao_users.hrl").
+%% -include("oneprovider_modules/dao/dao_users.hrl").
 -include_lib("dao/include/common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").

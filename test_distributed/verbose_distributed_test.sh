@@ -45,12 +45,12 @@ groupadd onedatatestgroup3
 mkdir -p distributed_tests_out
 cp -R test_distributed/* distributed_tests_out
 cd distributed_tests_out
-cp -R ../cacerts .
-cp -R ../certs .
-cp -R ../c_lib/ .
-cp -R ../src/oneprovider_modules/dao/views .
-cp -R ../src/gui_static .
-cp -R ../releases/sys.config .
+#cp -R ../cacerts .
+#cp -R ../certs .
+#cp -R ../c_lib/ .
+#cp -R ../src/oneprovider_modules/dao/views .
+#cp -R ../src/gui_static .
+cp -R ../rel/sys.config .
 
 if [ $# -gt 0 ]
 then

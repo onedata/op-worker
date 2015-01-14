@@ -86,9 +86,10 @@ add_user(Config, Login, Cert, Spaces, AccessToken, RefreshToken, AccessExpiratio
     ["global_id_for_" ++ Login, Logins, Name, Teams, Email, DnList, AccessToken, RefreshToken, AccessExpirationTime]),
   ?assertMatch({ok, _}, {CreateUserAns, NewUserDoc}),
 
-  test_utils:ct_mock(Config, gr_users, get_spaces, fun(_) -> {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
-  test_utils:ct_mock(Config, gr_adapter, get_space_info, fun(SpaceId, _) -> {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [?LOCAL_PROVIDER_ID]}} end),
-  test_utils:ct_mock(Config, gr_providers, get_spaces, fun(provider) -> {ok, AllSpaces} end),
+    %todo repair
+%%   test_utils:ct_mock(Config, gr_users, get_spaces, fun(_) -> {ok, #user_spaces{ids = SpacesBinary, default = lists:nth(1, SpacesBinary)}} end),
+%%   test_utils:ct_mock(Config, gr_adapter, get_space_info, fun(SpaceId, _) -> {ok, #space_info{space_id = SpaceId, name = SpaceId, providers = [?LOCAL_PROVIDER_ID]}} end),
+%%   test_utils:ct_mock(Config, gr_providers, get_spaces, fun(provider) -> {ok, AllSpaces} end),
 
   _UserDoc = rpc:call(CCM, user_logic, synchronize_spaces_info, [NewUserDoc, AccessToken]).
 
