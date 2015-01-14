@@ -2,21 +2,26 @@
 
 -module(gen_dev).
 
+-define(app_name, "oneprovider_node").
+
 -define(args_file, atom_to_list(?MODULE) ++ ".args").
 -define(releases_directory, "rel").
--define(app_name, "oneprovider_node").
 -define(fresh_release_directory, filename:join(?releases_directory, ?app_name)).
 -define(test_releases_directory, filename:join(?releases_directory, "test_cluster")).
+
 -define(worker_name_suffix, "_worker").
+-define(dist_app_failover_timeout, 5000).
 
 main(_) ->
     try
+        prepare_helper_modules(),
         {ok, [Args]} = file:consult(?args_file),
         NodesConfig = expand_full_list_of_nodes(Args),
         file:make_dir(?test_releases_directory),
         create_releases(NodesConfig)
     catch
         _Type:Error ->
+            file:delete("configurator.beam"),
             print("Error: ~p",[Error]),
             print("Stacktrace: ~p",[erlang:get_stacktrace()])
     end.
@@ -35,13 +40,15 @@ create_releases([Config | Rest]) ->
     print("ccm_nodes - ~p", [CcmNodesList]),
     DbNodesList = proplists:get_value(db_nodes, Config),
     print("db_nodes - ~p", [DbNodesList]),
+    Cookie = get_host(Name),
+    print("cookie - ~p", [Cookie]),
     ReleaseDirectory = get_release_location(Name),
     print("release_dir - ~p", [ReleaseDirectory]),
 
     remove_dir(ReleaseDirectory),
     copy_dir(?fresh_release_directory, ReleaseDirectory),
     print("Fresh release copied to ~p", [ReleaseDirectory]),
-    %todo invoke configurator
+    configurator:configure_release(ReleaseDirectory, ?app_name, Name, Cookie, Type, CcmNodesList, DbNodesList, ?dist_app_failover_timeout),
     print("Release configured sucessfully!"),
     print("==================================~n"),
     create_releases(Rest).
@@ -75,6 +82,9 @@ copy_dir(From, To) ->
         Err -> throw(Err)
     end.
 
+prepare_helper_modules() ->
+    compile:file(filename:join([?releases_directory, "files", "configurator.erl"])).
+
 get_release_location(Hostname) ->
     [Name, _] = string:tokens(Hostname, "@"),
     filename:join(?test_releases_directory, Name).
@@ -82,6 +92,10 @@ get_release_location(Hostname) ->
 extend_hostname_by_suffix(Hostname, Suffix) ->
     [Name, Host] = string:tokens(Hostname, "@"),
     Name ++ Suffix ++ "@" ++ Host.
+
+get_host(Hostname) ->
+    [_, Host] = string:tokens(Hostname, "@"),
+    Host.
 
 print(Msg) ->
     print(Msg,[]).

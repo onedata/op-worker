@@ -9,9 +9,11 @@
 -module(configurator).
 
 %% API
--export([get_env/3, replace_env/4, replace_vm_arg/3]).
+-export([get_env/3, replace_env/4, replace_vm_arg/3, configure_release/8]).
 
-configure_release(ReleaseRootPath, ApplicationName, NodeName, Cookie, NodeType, CcmNodes, DbNodes, DistributedAppFailoverTimeout, DistributedAppSyncNodesTimeout) ->
+-spec configure_release(ReleaseRootPath :: string(), ApplicationName :: atom(), NodeName :: string(), Cookie :: string(), NodeType :: atom(),
+    CcmNodes :: [atom()], DbNodes :: [atom()], DistributedAppFailoverTimeout :: integer()) -> ok | no_return().
+configure_release(ReleaseRootPath, ApplicationName, NodeName, Cookie, NodeType, CcmNodes, DbNodes, DistributedAppFailoverTimeout) ->
     {ok,[[{release, ApplicationName, AppVsn, _, _, _}]]} = file:consult(filename:join([ReleaseRootPath, "releases", "RELEASES"])),
     SysConfigPath = filename:join([ReleaseRootPath, "releases", AppVsn, "sys.config"]),
     VmArgsPath = filename:join([ReleaseRootPath, "releases", AppVsn, "vm.args"]),
@@ -21,9 +23,8 @@ configure_release(ReleaseRootPath, ApplicationName, NodeName, Cookie, NodeType, 
     replace_env(SysConfigPath, ApplicationName, node_type, NodeType),
     replace_env(SysConfigPath, ApplicationName, ccm_nodes, CcmNodes),
     replace_env(SysConfigPath, ApplicationName, db_nodes, DbNodes),
-    replace_env(SysConfigPath, "kernel", distributed, [{list_to_atom(ApplicationName), DistributedAppFailoverTimeout, CcmNodes}]),
-    replace_env(SysConfigPath, "kernel", sync_nodes_mandatory, CcmNodes -- list_to_atom(ApplicationName)),
-    replace_env(SysConfigPath, "kernel", sync_nodes_timeout, DistributedAppSyncNodesTimeout).
+    replace_env(SysConfigPath, "kernel", distributed, [{list_to_atom(NodeName), DistributedAppFailoverTimeout, CcmNodes}]),
+    replace_env(SysConfigPath, "kernel", sync_nodes_mandatory, CcmNodes -- [list_to_atom(NodeName)]).
 
 -spec get_env(string(), atom(), atom()) -> term() | no_return().
 get_env(SysConfigPath, ApplicationName, EnvName) ->
@@ -44,4 +45,4 @@ replace_vm_arg(VMArgsPath, FullArgName, ArgValue) ->
 
 -spec term_to_bash_escaped_string(term()) -> string().
 term_to_bash_escaped_string(Term) ->
-    re:replace(io_lib:fwrite("~p",[Term]), "[^\\[\\]{},\\.]+@[^\\[\\]{},\\.]+", "'&'", [global, {return, list}]).
+    io_lib:fwrite("~p",[Term]).

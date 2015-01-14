@@ -1,7 +1,7 @@
 [
     [
         {name, "ccm1@127.0.0.1"},
-        {type, ccm_and_worker},
+        {type, ccm_and_worker},  % ccm | worker | ccm_and_worker
         {ccm_nodes, ['ccm1@127.0.0.1']},
         {db_nodes, ['db@127.0.0.1']}
     ]

@@ -40,6 +40,7 @@ test: eunit ct
 rel: generate
 
 relclean:
+	rm -rf rel/test_cluster
 	rm -rf rel/oneprovider_node
 
 ##
