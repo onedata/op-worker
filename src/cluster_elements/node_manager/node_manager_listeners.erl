@@ -9,13 +9,13 @@
 -module(node_manager_listeners).
 -include("registered_names.hrl").
 -include("cluster_elements/node_manager/node_manager_listeners.hrl").
-
+-include("cluster_elements/oneproxy/oneproxy.hrl").
 
 %% API
 -export([start_dispatcher_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0, start_dns_listeners/0]).
 
 %todo remove those mocks
-start_dispatcher_listener() -> ok.
+%% start_dispatcher_listener() -> ok.
 start_gui_listener() -> ok.
 start_redirector_listener() -> ok.
 start_rest_listener() -> ok.
@@ -25,37 +25,37 @@ start_dns_listeners() -> ok.
 %% Cowboy listeners starting
 %% ====================================================================
 
-%% %% start_dispatcher_listener/0
-%% %% ====================================================================
-%% %% @doc Starts a cowboy listener for request_dispatcher.
-%% %% @end
-%% -spec start_dispatcher_listener() -> ok | no_return().
-%% %% ====================================================================
-%% start_dispatcher_listener() ->
-%%     catch cowboy:stop_listener(?dispatcher_listener),
-%%     {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
-%%     {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
-%%     {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
-%%
-%%     LocalPort = oneproxy:get_local_port(Port),
-%%     Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_peer) end),
-%%     register(?ONEPROXY_DISPATCHER, Pid),
-%%
-%%     Dispatch = cowboy_router:compile([{'_', [
-%%         {?ONECLIENT_URI_PATH, ws_handler, []},
-%%         {?ONEPROVIDER_URI_PATH, provider_handler, []}
-%%     ]}]),
-%%
-%%     {ok, _} = cowboy:start_http(?dispatcher_listener, DispatcherPoolSize,
-%%         [
-%%             {ip, {127, 0, 0, 1}},
-%%             {port, LocalPort}
-%%         ],
-%%         [
-%%             {env, [{dispatch, Dispatch}]}
-%%         ]),
-%%     ok.
-%%
+%% start_dispatcher_listener/0
+%% ====================================================================
+%% @doc Starts a cowboy listener for request_dispatcher.
+%% @end
+-spec start_dispatcher_listener() -> ok | no_return().
+%% ====================================================================
+start_dispatcher_listener() ->
+    catch cowboy:stop_listener(?dispatcher_listener),
+    {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
+    {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
+    {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
+
+    LocalPort = oneproxy:get_local_port(Port),
+    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_none) end), %todo change verify type
+    register(?ONEPROXY_DISPATCHER, Pid),
+
+    Dispatch = cowboy_router:compile([{'_', [
+        {?ONECLIENT_URI_PATH, client_handler, []},
+        {?ONEPROVIDER_URI_PATH, provider_handler, []}
+    ]}]),
+
+    {ok, _} = cowboy:start_http(?dispatcher_listener, DispatcherPoolSize,
+        [
+            {ip, {127, 0, 0, 1}},
+            {port, LocalPort}
+        ],
+        [
+            {env, [{dispatch, Dispatch}]}
+        ]),
+    ok.
+
 %%
 %% %% start_gui_listener/0
 %% %% ====================================================================
@@ -198,7 +198,7 @@ start_dns_listeners() -> ok.
 %%     {ok, RestPort} = application:get_env(?APP_Name, rest_port),
 %%
 %%     LocalPort = oneproxy:get_local_port(RestPort),
-%%     Pid = spawn_link(fun() -> oneproxy:start_rproxy(RestPort, LocalPort, Cert, verify_peer) end),
+%%     Pid = spawn_link(fun() -> oneproxy:start_rproxy(RestPort, LocalPort, Cert, verify_none) end), %todo change verify type
 %%     register(oneproxy_rest, Pid),
 %%
 %%     RestDispatch = [

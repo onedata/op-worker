@@ -3,6 +3,7 @@
 all: rel
 
 compile:
+	cp -R c_src/oneproxy/proto src
 	./rebar compile
 
 deps:

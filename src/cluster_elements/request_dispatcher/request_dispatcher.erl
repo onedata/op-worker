@@ -65,6 +65,7 @@ stop() ->
 %% ====================================================================
 init(Modules) ->
     process_flag(trap_exit, true),
+    catch gsi_handler:init(),   %% Failed initialization of GSI should not disturb dispacher's startup
     NewState = initState(Modules),
     ModulesConstList = lists:map(fun({M, {L1, L2}}) ->
         {M, lists:append(L1, L2)}

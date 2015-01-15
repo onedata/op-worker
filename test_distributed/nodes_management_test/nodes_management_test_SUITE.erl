@@ -58,7 +58,7 @@ ccm_and_worker_test(Config) ->
     ?assertMatch(ccm, gen_server:call({?Node_Manager_Name, Ccm}, getNodeType)),
     ?assertMatch(worker, gen_server:call({?Node_Manager_Name, Worker}, getNodeType)),
 
-    timer:sleep(10000), %todo reorganize cluster startup, so we don't have to wait
+    timer:sleep(15000), %todo reorganize cluster startup, so we don't have to wait
 
     ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Ccm}, {http_worker, 1, self(), ping})),
     ?assertEqual(pong, receive Msg -> Msg end),
