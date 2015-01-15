@@ -21,12 +21,12 @@
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([main_test/1, one_node_test/1]).
+-export([one_node_test/1, ccm_and_worker_test/1]).
 
 %% export nodes' codes
 -export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
-all() -> [one_node_test]. %todo refill
+all() -> [one_node_test, ccm_and_worker_test]. %todo refill
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -50,11 +50,16 @@ worker_code() ->
 %% ====================================================================
 one_node_test(Config) ->
     [Node] = ?config(nodes, Config),
-    ?assertMatch(ccm, rpc:call(Node, gen_server, call, [?Node_Manager_Name, getNodeType])),
-    timer:sleep(10).
+    ?assertMatch(ccm, gen_server:call({?Node_Manager_Name, Node}, getNodeType)).
 
-main_test(Config) ->
-  NodesUp = ?config(nodes, Config).
+ccm_and_worker_test(Config) ->
+    [Ccm, Worker] = ?config(nodes, Config),
+    gen_server:call({?Node_Manager_Name, Ccm}, getNodeType),
+    ?assertMatch(ccm, gen_server:call({?Node_Manager_Name, Ccm}, getNodeType)),
+    ?assertMatch(worker, gen_server:call({?Node_Manager_Name, Worker}, getNodeType)).
+
+%% main_test(Config) ->
+%%   NodesUp = ?config(nodes, Config).
 %%
 %%   [CCM | WorkerNodes] = NodesUp,
 %%
@@ -127,13 +132,27 @@ init_per_testcase(one_node_test, Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [Node] = test_node_starter:start_test_nodes(1, true),
+    [Node] = test_node_starter:start_test_nodes(1),
     DBNode = ?DB_NODE,
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, [Node], [
         [{node_type, ccm}, {dispatcher_port, 8888}, {ccm_nodes, [Node]}, {db_nodes, [DBNode]}, {heart_beat, 1}]]),
 
     lists:append([{nodes, [Node]}, {dbnode, DBNode}], Config);
+
+init_per_testcase(ccm_and_worker_test, Config) ->
+    ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+    test_node_starter:start_deps_for_tester_node(),
+
+    Nodes = [Ccm, _] = test_node_starter:start_test_nodes(2),
+    DBNode = ?DB_NODE,
+
+    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes, [
+        [{node_type, ccm}, {dispatcher_port, 8888}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}, {heart_beat, 1}],
+        [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}, {heart_beat, 1}]
+    ]),
+
+    lists:append([{nodes, Nodes}, {dbnode, DBNode}], Config);
 
 init_per_testcase(_, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
@@ -156,15 +175,3 @@ end_per_testcase(_, Config) ->
   test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node().
-
-%% check_answers(0) ->
-%%   [];
-%% check_answers(Num) ->
-%%   receive
-%%     {on_complete_callback, OkNum, ErrorNum, AnsNode} ->
-%%       ?assertEqual(2, OkNum),
-%%       ?assertEqual(0, ErrorNum),
-%%       [AnsNode | check_answers(Num - 1)]
-%%   after 5000 ->
-%%     [error]
-%%   end.

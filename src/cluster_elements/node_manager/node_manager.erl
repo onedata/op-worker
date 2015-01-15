@@ -119,10 +119,6 @@ handle_call(getNodeType, _From, State) ->
     Reply = State#node_state.node_type,
     {reply, Reply, State};
 
-handle_call(getNode, _From, State) ->
-    Reply = node(),
-    {reply, Reply, State};
-
 handle_call(get_ccm_connection_status, _From, State) ->
     {reply, State#node_state.ccm_con_status, State};
 
@@ -155,10 +151,7 @@ handle_cast({heart_beat_ok, StateNum}, State) ->
     {noreply, heart_beat_response(StateNum, State)};
 
 handle_cast(reset_ccm_connection, State) ->
-    {noreply,            heart_beat(not_connected, State)};
-
-handle_cast(stop, State) ->
-    {stop, normal, State};
+    {noreply, heart_beat(not_connected, State)};
 
 handle_cast(init_listeners, State) ->
     node_manager_listeners:start_gui_listener(),
@@ -166,6 +159,9 @@ handle_cast(init_listeners, State) ->
     node_manager_listeners:start_redirector_listener(),
     node_manager_listeners:start_dns_listeners(),
     {noreply, State};
+
+handle_cast(stop, State) ->
+    {stop, normal, State};
 
 handle_cast(_Msg, State) ->
     ?warning("Wrong node_manager cast: ~p", [_Msg]),

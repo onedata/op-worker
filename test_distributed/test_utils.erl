@@ -160,8 +160,7 @@ wait_for_cluster_init() ->
   Ans :: true | no_return().
 %% ====================================================================
 wait_for_cluster_init(ModulesNum) ->
-  Modules = lists:filter(fun({ModuleName, _}) -> not lists:member(ModuleName, ?ignored_modules) end, ?MODULES_WITH_ARGS),
-  wait_for_cluster_init(ModulesNum + length(Modules), 50, []).
+  wait_for_cluster_init(ModulesNum + length(?MODULES_WITH_ARGS), 50, []).
 
 %% wait_for_cluster_init/3
 %% ====================================================================
