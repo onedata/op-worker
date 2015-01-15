@@ -1,6 +1,7 @@
 #!/usr/bin/env escript
 
 -module(gen_dev).
+-export([main/1]).
 
 -define(app_name, "oneprovider_node").
 
