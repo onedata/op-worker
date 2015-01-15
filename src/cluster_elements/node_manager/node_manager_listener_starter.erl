@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 12. Jan 2015 16:59
 %%%-------------------------------------------------------------------
--module(node_manager_listeners).
+-module(node_manager_listener_starter).
 -include("registered_names.hrl").
 -include("cluster_elements/node_manager/node_manager_listeners.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
@@ -18,7 +18,7 @@
 %% start_dispatcher_listener() -> ok.
 start_gui_listener() -> ok.
 start_redirector_listener() -> ok.
-start_rest_listener() -> ok.
+%% start_rest_listener() -> ok.
 start_dns_listeners() -> ok.
 
 %% ====================================================================
@@ -38,7 +38,7 @@ start_dispatcher_listener() ->
     {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
 
     LocalPort = oneproxy:get_local_port(Port),
-    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_none) end), %todo change verify type
+    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_none) end),
     register(?ONEPROXY_DISPATCHER, Pid),
 
     Dispatch = cowboy_router:compile([{'_', [
@@ -56,7 +56,7 @@ start_dispatcher_listener() ->
         ]),
     ok.
 
-%%
+
 %% %% start_gui_listener/0
 %% %% ====================================================================
 %% %% @doc Starts a cowboy listener for n2o GUI.
@@ -65,14 +65,14 @@ start_dispatcher_listener() ->
 %% %% ====================================================================
 %% start_gui_listener() ->
 %%     % Get params from env for gui
-%%     {ok, DocRoot} = application:get_env(?APP_Name, control_panel_static_files_root),
+%%     {ok, DocRoot} = application:get_env(?APP_Name, http_worker_static_files_root),
 %%
 %%     {ok, Cert} = application:get_env(?APP_Name, web_ssl_cert_path),
 %%
-%%     {ok, GuiPort} = application:get_env(?APP_Name, control_panel_port),
-%%     {ok, GuiNbAcceptors} = application:get_env(?APP_Name, control_panel_number_of_acceptors),
-%%     {ok, MaxKeepAlive} = application:get_env(?APP_Name, control_panel_max_keepalive),
-%%     {ok, Timeout} = application:get_env(?APP_Name, control_panel_socket_timeout),
+%%     {ok, GuiPort} = application:get_env(?APP_Name, http_worker_port),
+%%     {ok, GuiNbAcceptors} = application:get_env(?APP_Name, http_worker_number_of_acceptors),
+%%     {ok, MaxKeepAlive} = application:get_env(?APP_Name, http_worker_max_keepalive),
+%%     {ok, Timeout} = application:get_env(?APP_Name, http_worker_socket_timeout),
 %%
 %%     LocalPort = oneproxy:get_local_port(GuiPort),
 %%     spawn_link(fun() -> oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none) end),
@@ -92,36 +92,6 @@ start_dispatcher_listener() ->
 %%         ]},
 %%         % Proper requests are routed to handler modules
 %%         {'_', static_dispatches(DocRoot, ?static_paths) ++ [
-%%             {"/nagios/[...]", opn_cowboy_bridge,
-%%                 [
-%%                     {delegation, true},
-%%                     {handler_module, nagios_handler},
-%%                     {handler_opts, []}
-%%                 ]},
-%%             {?user_content_download_path ++ "/:path", opn_cowboy_bridge,
-%%                 [
-%%                     {delegation, true},
-%%                     {handler_module, file_download_handler},
-%%                     {handler_opts, [{type, ?user_content_request_type}]}
-%%                 ]},
-%%             {?shared_files_download_path ++ "/:path", opn_cowboy_bridge,
-%%                 [
-%%                     {delegation, true},
-%%                     {handler_module, file_download_handler},
-%%                     {handler_opts, [{type, ?shared_files_request_type}]}
-%%                 ]},
-%%             {?file_upload_path, opn_cowboy_bridge,
-%%                 [
-%%                     {delegation, true},
-%%                     {handler_module, file_upload_handler},
-%%                     {handler_opts, []}
-%%                 ]},
-%%             {"/ws/[...]", opn_cowboy_bridge,
-%%                 [
-%%                     {delegation, true},
-%%                     {handler_module, opn_bullet_handler},
-%%                     {handler_opts, [{handler, n2o_bullet}]}
-%%                 ]},
 %%             {'_', opn_cowboy_bridge,
 %%                 [
 %%                     {delegation, true},
@@ -156,9 +126,9 @@ start_dispatcher_listener() ->
 %% -spec start_redirector_listener() -> ok | no_return().
 %% %% ====================================================================
 %% start_redirector_listener() ->
-%%     {ok, RedirectPort} = application:get_env(?APP_Name, control_panel_redirect_port),
-%%     {ok, RedirectNbAcceptors} = application:get_env(?APP_Name, control_panel_number_of_http_acceptors),
-%%     {ok, Timeout} = application:get_env(?APP_Name, control_panel_socket_timeout),
+%%     {ok, RedirectPort} = application:get_env(?APP_Name, http_worker_redirect_port),
+%%     {ok, RedirectNbAcceptors} = application:get_env(?APP_Name, http_worker_number_of_http_acceptors),
+%%     {ok, Timeout} = application:get_env(?APP_Name, http_worker_socket_timeout),
 %%
 %%     RedirectDispatch = [
 %%         {'_', [
@@ -180,57 +150,57 @@ start_dispatcher_listener() ->
 %%             {max_keepalive, 1},
 %%             {timeout, Timeout}
 %%         ]).
-%%
-%%
-%% %% start_rest_listener/0
-%% %% ====================================================================
-%% %% @doc Starts a cowboy listener for REST requests.
-%% %% @end
-%% -spec start_rest_listener() -> ok | no_return().
-%% %% ====================================================================
-%% start_rest_listener() ->
-%%     {ok, NbAcceptors} = application:get_env(?APP_Name, control_panel_number_of_acceptors),
-%%     {ok, Timeout} = application:get_env(?APP_Name, control_panel_socket_timeout),
-%%
-%%     {ok, Cert} = application:get_env(?APP_Name, web_ssl_cert_path),
-%%
-%%     % Get REST port from env and setup dispatch opts for cowboy
-%%     {ok, RestPort} = application:get_env(?APP_Name, rest_port),
-%%
-%%     LocalPort = oneproxy:get_local_port(RestPort),
-%%     Pid = spawn_link(fun() -> oneproxy:start_rproxy(RestPort, LocalPort, Cert, verify_none) end), %todo change verify type
-%%     register(oneproxy_rest, Pid),
-%%
-%%     RestDispatch = [
-%%         {'_', [
-%%             {"/rest/:version/[...]", opn_cowboy_bridge,
-%%                 [
-%%                     {delegation, true},
-%%                     {handler_module, rest_handler},
-%%                     {handler_opts, []}
-%%                 ]},
-%%             {"/cdmi/[...]", opn_cowboy_bridge,
-%%                 [
-%%                     {delegation, true},
-%%                     {handler_module, cdmi_handler},
-%%                     {handler_opts, []}
-%%                 ]}
-%%         ]}
-%%     ],
-%%
-%%     % Start the listener for REST handler
-%%     {ok, _} = cowboy:start_http(?rest_listener, NbAcceptors,
-%%         [
-%%             {ip, {127, 0, 0, 1}},
-%%             {port, LocalPort}
-%%         ],
-%%         [
-%%             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
-%%             {max_keepalive, 1},
-%%             {timeout, Timeout}
-%%         ]),
-%%
-%%     ok.
+
+
+%% start_rest_listener/0
+%% ====================================================================
+%% @doc Starts a cowboy listener for REST requests.
+%% @end
+-spec start_rest_listener() -> ok | no_return().
+%% ====================================================================
+start_rest_listener() ->
+    {ok, NbAcceptors} = application:get_env(?APP_Name, http_worker_number_of_acceptors),
+    {ok, Timeout} = application:get_env(?APP_Name, http_worker_socket_timeout),
+
+    {ok, Cert} = application:get_env(?APP_Name, web_ssl_cert_path),
+
+    % Get REST port from env and setup dispatch opts for cowboy
+    {ok, RestPort} = application:get_env(?APP_Name, rest_port),
+
+    LocalPort = oneproxy:get_local_port(RestPort),
+    Pid = spawn_link(fun() -> oneproxy:start_rproxy(RestPort, LocalPort, Cert, verify_peer) end),
+    register(?ONEPROXY_REST, Pid),
+
+    RestDispatch = [
+        {'_', [
+            {"/rest/:version/[...]", opn_cowboy_bridge,
+                [
+                    {delegation, true},
+                    {handler_module, rest_handler},
+                    {handler_opts, []}
+                ]},
+            {"/cdmi/[...]", opn_cowboy_bridge,
+                [
+                    {delegation, true},
+                    {handler_module, cdmi_handler},
+                    {handler_opts, []}
+                ]}
+        ]}
+    ],
+
+    % Start the listener for REST handler
+    {ok, _} = cowboy:start_http(?rest_listener, NbAcceptors,
+        [
+            {ip, {127, 0, 0, 1}},
+            {port, LocalPort}
+        ],
+        [
+            {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
+            {max_keepalive, 1},
+            {timeout, Timeout}
+        ]),
+
+    ok.
 %%
 %% %% start_dns_listeners/0
 %% %% ====================================================================
@@ -252,18 +222,18 @@ start_dispatcher_listener() ->
 %% %% Internal functions
 %% %% ====================================================================
 %%
-%% %% static_dispatches/2
-%% %% ====================================================================
-%% %% @doc Generates static file routing rules for cowboy.
-%% %% @end
-%% -spec static_dispatches(DocRoot :: string(), StaticPaths :: [string()]) -> [term()].
-%% %% ====================================================================
-%% static_dispatches(DocRoot, StaticPaths) ->
-%%     _StaticDispatches = lists:map(fun(Dir) ->
-%%         {Dir ++ "[...]", opn_cowboy_bridge,
-%%             [
-%%                 {delegation, true},
-%%                 {handler_module, cowboy_static},
-%%                 {handler_opts, {dir, DocRoot ++ Dir}}
-%%             ]}
-%%     end, StaticPaths).
+%% static_dispatches/2
+%% ====================================================================
+%% @doc Generates static file routing rules for cowboy.
+%% @end
+-spec static_dispatches(DocRoot :: string(), StaticPaths :: [string()]) -> [term()].
+%% ====================================================================
+static_dispatches(DocRoot, StaticPaths) ->
+    _StaticDispatches = lists:map(fun(Dir) ->
+        {Dir ++ "[...]", opn_cowboy_bridge,
+            [
+                {delegation, true},
+                {handler_module, cowboy_static},
+                {handler_opts, {dir, DocRoot ++ Dir}}
+            ]}
+    end, StaticPaths).

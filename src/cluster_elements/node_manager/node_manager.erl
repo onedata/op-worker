@@ -86,7 +86,7 @@ check_vsn() ->
 init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
     case Type =/= ccm of
         true ->
-            node_manager_listeners:start_dispatcher_listener(),
+            node_manager_listener_starter:start_dispatcher_listener(),
             erlang:send_after(0, self(), {timer, init_listeners});
         false -> ok
     end,
@@ -158,10 +158,10 @@ handle_cast({dispatcher_updated, DispState}, State) ->
     {noreply, NewState};
 
 handle_cast(init_listeners, State) ->
-    node_manager_listeners:start_gui_listener(),
-    node_manager_listeners:start_rest_listener(),
-    node_manager_listeners:start_redirector_listener(),
-    node_manager_listeners:start_dns_listeners(),
+    node_manager_listener_starter:start_gui_listener(),
+    node_manager_listener_starter:start_rest_listener(),
+    node_manager_listener_starter:start_redirector_listener(),
+    node_manager_listener_starter:start_dns_listeners(),
     {noreply, State};
 
 handle_cast(stop, State) ->

@@ -56,14 +56,14 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
 
-%% handle(_ProtocolVersion, {spawn_handler, SocketPid}) ->
-%%     Pid = spawn(
-%%         fun() ->
-%%             erlang:monitor(process, SocketPid),
-%%             opn_cowboy_bridge:set_socket_pid(SocketPid),
-%%             opn_cowboy_bridge:request_processing_loop()
-%%         end),
-%%     Pid;
+handle(_ProtocolVersion, {spawn_handler, SocketPid}) ->
+    Pid = spawn(
+        fun() ->
+            erlang:monitor(process, SocketPid),
+            opn_cowboy_bridge:set_socket_pid(SocketPid),
+            opn_cowboy_bridge:request_processing_loop()
+        end),
+    Pid;
 
 handle(_ProtocolVersion, _Msg) ->
     ?warning("http server unknown message: ~p", [_Msg]).
