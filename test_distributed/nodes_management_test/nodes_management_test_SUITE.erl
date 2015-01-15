@@ -52,7 +52,8 @@ worker_code() ->
 %% ====================================================================
 one_node_test(Config) ->
     [Node] = ?config(nodes, Config),
-    ?assertMatch(worker, rpc:call(Node, gen_server, call, [?Node_Manager_Name, getNodeType])).
+    ?assertMatch(ccm, rpc:call(Node, gen_server, call, [?Node_Manager_Name, getNodeType])),
+    timer:sleep(10).
 
 main_test(Config) ->
   NodesUp = ?config(nodes, Config).
@@ -128,11 +129,11 @@ init_per_testcase(one_node_test, Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [Node] = test_node_starter:start_test_nodes(1),
+    [Node] = test_node_starter:start_test_nodes(1, true),
     DBNode = ?DB_NODE,
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, [Node], [
-        [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [Node]}, {db_nodes, [DBNode]}, {heart_beat, 1}]]),
+        [{node_type, ccm}, {dispatcher_port, 8888}, {ccm_nodes, [Node]}, {db_nodes, [DBNode]}, {heart_beat, 1}]]),
 
     lists:append([{nodes, [Node]}, {dbnode, DBNode}], Config);
 

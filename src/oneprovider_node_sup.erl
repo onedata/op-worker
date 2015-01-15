@@ -72,5 +72,6 @@ init([ccm_test]) ->
     ]}};
 init([ccm]) ->
     {ok, {?Sup_Flags, [
+        ?Sup_Child(cluster_manager, cluster_manager, permanent, []),
         ?Sup_Child(node_manager, node_manager, permanent, [ccm])
     ]}}.
