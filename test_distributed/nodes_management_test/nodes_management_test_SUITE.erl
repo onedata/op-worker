@@ -56,7 +56,15 @@ ccm_and_worker_test(Config) ->
     [Ccm, Worker] = ?config(nodes, Config),
     gen_server:call({?Node_Manager_Name, Ccm}, getNodeType),
     ?assertMatch(ccm, gen_server:call({?Node_Manager_Name, Ccm}, getNodeType)),
-    ?assertMatch(worker, gen_server:call({?Node_Manager_Name, Worker}, getNodeType)).
+    ?assertMatch(worker, gen_server:call({?Node_Manager_Name, Worker}, getNodeType)),
+
+    timer:sleep(10000), %todo reorganize cluster startup, so we don't have to wait
+
+    ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Ccm}, {http_worker, 1, self(), ping})),
+    ?assertEqual(pong, receive Msg -> Msg end),
+    ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Worker}, {http_worker, 1, self(), ping})),
+    ?assertEqual(pong, receive Msg -> Msg end).
+
 
 %% main_test(Config) ->
 %%   NodesUp = ?config(nodes, Config).
@@ -144,7 +152,7 @@ init_per_testcase(ccm_and_worker_test, Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    Nodes = [Ccm, _] = test_node_starter:start_test_nodes(2),
+    Nodes = [Ccm, _] = test_node_starter:start_test_nodes(2, true),
     DBNode = ?DB_NODE,
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes, [

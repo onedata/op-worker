@@ -196,30 +196,6 @@ handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
             end
     end;
 
-handle_call({node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId, FuseId}}, _From, State) ->
-    case State#dispatcher_state.asnych_mode of
-        true ->
-            forward_request(true, Task, Request, {asynch, ProtocolVersion, Request}, State);
-        false ->
-            Ans = check_worker_node(Task, Request, State),
-            case Ans of
-                {Node, NewState} ->
-                    case Node of
-                        non ->
-                            case Task of
-                                central_logger -> ok;
-                                _ ->
-                                    ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-                            end,
-                            {reply, worker_not_found, State};
-                        _N ->
-                            gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request, MsgId, FuseId}),
-                            {reply, ok, NewState}
-                    end;
-                Other -> {reply, Other, State}
-            end
-    end;
-
 handle_call({set_asnych_mode, AsnychMode}, _From, State) ->
     ?info("Asynch mode new value ~p", [AsnychMode]),
     {reply, ok, State#dispatcher_state{asnych_mode = AsnychMode}};
