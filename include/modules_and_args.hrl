@@ -13,8 +13,8 @@
 -ifndef(MODULES_AND_ARGS_HRL).
 -define(MODULES_AND_ARGS_HRL, 1).
 
--define(MODULES, []).
--define(MODULES_WITH_ARGS, []).
+-define(MODULES, [http_worker]).
+-define(MODULES_WITH_ARGS, [{http_worker, []}]).
 
 %% Modules that are present on all workers.
 -define(PERMANENT_MODULES, []).

@@ -9,7 +9,7 @@
 %% It is responsible for spawning processes which then process HTTP requests.
 %% @end
 %% ===================================================================
--module(http_server).
+-module(http_worker).
 -behaviour(worker_plugin_behaviour).
 
 -include("registered_names.hrl").

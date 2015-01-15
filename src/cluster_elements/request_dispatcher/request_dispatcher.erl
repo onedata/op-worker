@@ -286,10 +286,10 @@ handle_test_call(_Request, _From, State) ->
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 %% TODO: check dispatchers map
-handle_cast({update_state, NewStateNum, NewCallbacksNum}, State) ->
+handle_cast({update_state, NewStateNum}, State) ->
     case State#dispatcher_state.state_num >= NewStateNum of
         true ->
-            gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum, NewCallbacksNum});
+            gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum});
         false ->
             spawn(fun() ->
                 ?info("Dispatcher had old state number, starting update"),

@@ -153,6 +153,10 @@ handle_cast({heart_beat_ok, StateNum}, State) ->
 handle_cast(reset_ccm_connection, State) ->
     {noreply, heart_beat(not_connected, State)};
 
+handle_cast({dispatcher_updated, DispState}, State) ->
+    NewState = State#node_state{dispatcher_state = DispState},
+    {noreply, NewState};
+
 handle_cast(init_listeners, State) ->
     node_manager_listeners:start_gui_listener(),
     node_manager_listeners:start_rest_listener(),

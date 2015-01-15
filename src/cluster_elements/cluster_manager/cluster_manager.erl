@@ -17,10 +17,6 @@
 -include("cluster_elements/cluster_manager/cluster_manager.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-
--define(ACTION_START_WORKER, start_worker).
--define(ACTION_STOP_WORKER, stop_worker).
-
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -190,7 +186,7 @@ handle_test_call(_Request, _From, State) ->
 %% ====================================================================
 handle_cast({node_is_up, Node}, State = #cm_state{nodes = Nodes, state_loaded = StateLoaded, state_monitoring = StateMonitoring}) ->
     ?debug("Heartbeat from node: ~p", [Node]),
-    case lists:member(Node, Nodes) orelse Node =:= nodes() of
+    case lists:member(Node, Nodes) orelse Node =:= node() of
         true ->
             gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num}),
             {noreply, State};

@@ -8,7 +8,7 @@ compile:
 deps:
 	./rebar get-deps
 
-clean:
+clean: relclean testclean
 	./rebar clean
 
 distclean: clean
@@ -32,6 +32,9 @@ ct: generate
 	@for tout in `find distributed_tests_out -name "TEST-*.xml"`; do awk '/testcase/{gsub("<testcase name=\"[a-z]+_per_suite\"(([^/>]*/>)|([^>]*>[^<]*</testcase>))", "")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
 test: eunit ct
+
+testclean:
+	rm -rf distributed_tests_out
 
 ##
 ## Release targets
