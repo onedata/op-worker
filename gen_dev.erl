@@ -60,12 +60,12 @@ expand_full_list_of_nodes([Config | Rest]) ->
     case proplists:get_value(type, Config) of
         ccm_and_worker ->
             %prepare ccm config
-            CcmConfig = [{node_type, ccm} | proplists:delete(node_type, Config)],
+            CcmConfig = [{type, ccm} | proplists:delete(node_type, Config)],
 
             %prepare worker config
             CcmName = proplists:get_value(name, Config),
             WorkerName = extend_hostname_by_suffix(CcmName, ?worker_name_suffix),
-            WorkerConfig = [{node_type, worker}, {name, WorkerName} | proplists:delete(name, proplists:delete(node_type, Config))],
+            WorkerConfig = [{type, worker}, {name, WorkerName} | proplists:delete(name, proplists:delete(type, Config))],
 
             [CcmConfig, WorkerConfig | expand_full_list_of_nodes(Rest)];
         _ ->

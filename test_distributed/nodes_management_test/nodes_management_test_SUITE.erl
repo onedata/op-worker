@@ -19,8 +19,6 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
 
--define(ProtocolVersion, 1).
-
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([main_test/1, one_node_test/1]).
