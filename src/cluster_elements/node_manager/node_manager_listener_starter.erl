@@ -10,6 +10,7 @@
 -include("registered_names.hrl").
 -include("cluster_elements/node_manager/node_manager_listeners.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([start_dispatcher_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0, start_dns_listeners/0]).
@@ -19,7 +20,7 @@
 start_gui_listener() -> ok.
 start_redirector_listener() -> ok.
 %% start_rest_listener() -> ok.
-start_dns_listeners() -> ok.
+%% start_dns_listeners() -> ok.
 
 %% ====================================================================
 %% Cowboy listeners starting
@@ -201,23 +202,23 @@ start_rest_listener() ->
         ]),
 
     ok.
-%%
-%% %% start_dns_listeners/0
-%% %% ====================================================================
-%% %% @doc Starts DNS UDP and TCP listeners.
-%% %% @end
-%% -spec start_dns_listeners() -> ok | no_return().
-%% %% ====================================================================
-%% start_dns_listeners() ->
-%%     {ok, DNSPort} = application:get_env(?APP_Name, dns_port),
-%%     {ok, EdnsMaxUdpSize} = application:get_env(?APP_Name, edns_max_udp_size),
-%%     {ok, TCPNumAcceptors} = application:get_env(?APP_Name, dns_tcp_acceptor_pool_size),
-%%     {ok, TCPTImeout} = application:get_env(?APP_Name, dns_tcp_timeout),
-%%     OnFailureFun = fun() ->
-%%         ?error("Could not start DNS server on node ~p.", [node()])
-%%     end,
-%%     ok = dns_server:start(?Supervisor_Name, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
-%%
+
+%% start_dns_listeners/0
+%% ====================================================================
+%% @doc Starts DNS UDP and TCP listeners.
+%% @end
+-spec start_dns_listeners() -> ok | no_return().
+%% ====================================================================
+start_dns_listeners() ->
+    {ok, DNSPort} = application:get_env(?APP_Name, dns_port),
+    {ok, EdnsMaxUdpSize} = application:get_env(?APP_Name, edns_max_udp_size),
+    {ok, TCPNumAcceptors} = application:get_env(?APP_Name, dns_tcp_acceptor_pool_size),
+    {ok, TCPTImeout} = application:get_env(?APP_Name, dns_tcp_timeout),
+    OnFailureFun = fun() ->
+        ?error("Could not start DNS server on node ~p.", [node()])
+    end,
+    ok = dns_server:start(?Supervisor_Name, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
+
 %% %% ====================================================================
 %% %% Internal functions
 %% %% ====================================================================
