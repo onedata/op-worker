@@ -15,13 +15,6 @@
 %% API
 -export([start_dispatcher_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0, start_dns_listeners/0]).
 
-%todo remove those mocks
-%% start_dispatcher_listener() -> ok.
-start_gui_listener() -> ok.
-start_redirector_listener() -> ok.
-%% start_rest_listener() -> ok.
-%% start_dns_listeners() -> ok.
-
 %% ====================================================================
 %% Cowboy listeners starting
 %% ====================================================================
@@ -58,99 +51,99 @@ start_dispatcher_listener() ->
     ok.
 
 
-%% %% start_gui_listener/0
-%% %% ====================================================================
-%% %% @doc Starts a cowboy listener for n2o GUI.
-%% %% @end
-%% -spec start_gui_listener() -> ok | no_return().
-%% %% ====================================================================
-%% start_gui_listener() ->
-%%     % Get params from env for gui
-%%     {ok, DocRoot} = application:get_env(?APP_Name, http_worker_static_files_root),
-%%
-%%     {ok, Cert} = application:get_env(?APP_Name, web_ssl_cert_path),
-%%
-%%     {ok, GuiPort} = application:get_env(?APP_Name, http_worker_port),
-%%     {ok, GuiNbAcceptors} = application:get_env(?APP_Name, http_worker_number_of_acceptors),
-%%     {ok, MaxKeepAlive} = application:get_env(?APP_Name, http_worker_max_keepalive),
-%%     {ok, Timeout} = application:get_env(?APP_Name, http_worker_socket_timeout),
-%%
-%%     LocalPort = oneproxy:get_local_port(GuiPort),
-%%     spawn_link(fun() -> oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none) end),
-%%
-%%     % Setup GUI dispatch opts for cowboy
-%%     GUIDispatch = [
-%%         % Matching requests will be redirected to the same address without leading 'www.'
-%%         % Cowboy does not have a mechanism to match every hostname starting with 'www.'
-%%         % This will match hostnames with up to 6 segments
-%%         % e. g. www.seg2.seg3.seg4.seg5.com
-%%         {"www.:_[.:_[.:_[.:_[.:_]]]]", [{'_', opn_cowboy_bridge,
-%%             [
-%%                 {delegation, true},
-%%                 {handler_module, redirect_handler},
-%%                 {handler_opts, []}
-%%             ]}
-%%         ]},
-%%         % Proper requests are routed to handler modules
-%%         {'_', static_dispatches(DocRoot, ?static_paths) ++ [
-%%             {'_', opn_cowboy_bridge,
-%%                 [
-%%                     {delegation, true},
-%%                     {handler_module, n2o_handler},
-%%                     {handler_opts, []}
-%%                 ]}
-%%         ]}
-%%     ],
-%%
-%%     % Create ets tables and set envs needed by n2o
-%%     gui_utils:init_n2o_ets_and_envs(GuiPort, ?gui_routing_module, ?session_logic_module, ?cowboy_bridge_module),
-%%
-%%     % Start the listener for web gui and nagios handler
-%%     {ok, _} = cowboy:start_http(?https_listener, GuiNbAcceptors,
-%%         [
-%%             {ip, {127, 0, 0, 1}},
-%%             {port, LocalPort}
-%%         ],
-%%         [
-%%             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
-%%             {max_keepalive, MaxKeepAlive},
-%%             {timeout, Timeout},
-%%             % On every request, add headers that improve security to the response
-%%             {onrequest, fun gui_utils:onrequest_adjust_headers/1}
-%%         ]).
-%%
-%%
-%% %% start_redirector_listener/0
-%% %% ====================================================================
-%% %% @doc Starts a cowboy listener that will redirect all requests of http to https.
-%% %% @end
-%% -spec start_redirector_listener() -> ok | no_return().
-%% %% ====================================================================
-%% start_redirector_listener() ->
-%%     {ok, RedirectPort} = application:get_env(?APP_Name, http_worker_redirect_port),
-%%     {ok, RedirectNbAcceptors} = application:get_env(?APP_Name, http_worker_number_of_http_acceptors),
-%%     {ok, Timeout} = application:get_env(?APP_Name, http_worker_socket_timeout),
-%%
-%%     RedirectDispatch = [
-%%         {'_', [
-%%             {'_', opn_cowboy_bridge,
-%%                 [
-%%                     {delegation, true},
-%%                     {handler_module, opn_redirect_handler},
-%%                     {handler_opts, []}
-%%                 ]}
-%%         ]}
-%%     ],
-%%
-%%     {ok, _} = cowboy:start_http(?http_redirector_listener, RedirectNbAcceptors,
-%%         [
-%%             {port, RedirectPort}
-%%         ],
-%%         [
-%%             {env, [{dispatch, cowboy_router:compile(RedirectDispatch)}]},
-%%             {max_keepalive, 1},
-%%             {timeout, Timeout}
-%%         ]).
+%% start_gui_listener/0
+%% ====================================================================
+%% @doc Starts a cowboy listener for n2o GUI.
+%% @end
+-spec start_gui_listener() -> ok | no_return().
+%% ====================================================================
+start_gui_listener() ->
+    % Get params from env for gui
+    {ok, DocRoot} = application:get_env(?APP_Name, http_worker_static_files_root),
+
+    {ok, Cert} = application:get_env(?APP_Name, web_ssl_cert_path),
+
+    {ok, GuiPort} = application:get_env(?APP_Name, http_worker_port),
+    {ok, GuiNbAcceptors} = application:get_env(?APP_Name, http_worker_number_of_acceptors),
+    {ok, MaxKeepAlive} = application:get_env(?APP_Name, http_worker_max_keepalive),
+    {ok, Timeout} = application:get_env(?APP_Name, http_worker_socket_timeout),
+
+    LocalPort = oneproxy:get_local_port(GuiPort),
+    spawn_link(fun() -> oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none) end),
+
+    % Setup GUI dispatch opts for cowboy
+    GUIDispatch = [
+        % Matching requests will be redirected to the same address without leading 'www.'
+        % Cowboy does not have a mechanism to match every hostname starting with 'www.'
+        % This will match hostnames with up to 6 segments
+        % e. g. www.seg2.seg3.seg4.seg5.com
+        {"www.:_[.:_[.:_[.:_[.:_]]]]", [{'_', opn_cowboy_bridge,
+            [
+                {delegation, true},
+                {handler_module, redirect_handler},
+                {handler_opts, []}
+            ]}
+        ]},
+        % Proper requests are routed to handler modules
+        {'_', static_dispatches(DocRoot, ?static_paths) ++ [
+            {'_', opn_cowboy_bridge,
+                [
+                    {delegation, true},
+                    {handler_module, n2o_handler},
+                    {handler_opts, []}
+                ]}
+        ]}
+    ],
+
+    % Create ets tables and set envs needed by n2o
+    gui_utils:init_n2o_ets_and_envs(GuiPort, ?gui_routing_module, ?session_logic_module, ?cowboy_bridge_module),
+
+    % Start the listener for web gui and nagios handler
+    {ok, _} = cowboy:start_http(?https_listener, GuiNbAcceptors,
+        [
+            {ip, {127, 0, 0, 1}},
+            {port, LocalPort}
+        ],
+        [
+            {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
+            {max_keepalive, MaxKeepAlive},
+            {timeout, Timeout},
+            % On every request, add headers that improve security to the response
+            {onrequest, fun gui_utils:onrequest_adjust_headers/1}
+        ]).
+
+
+%% start_redirector_listener/0
+%% ====================================================================
+%% @doc Starts a cowboy listener that will redirect all requests of http to https.
+%% @end
+-spec start_redirector_listener() -> ok | no_return().
+%% ====================================================================
+start_redirector_listener() ->
+    {ok, RedirectPort} = application:get_env(?APP_Name, http_worker_redirect_port),
+    {ok, RedirectNbAcceptors} = application:get_env(?APP_Name, http_worker_number_of_http_acceptors),
+    {ok, Timeout} = application:get_env(?APP_Name, http_worker_socket_timeout),
+
+    RedirectDispatch = [
+        {'_', [
+            {'_', opn_cowboy_bridge,
+                [
+                    {delegation, true},
+                    {handler_module, opn_redirect_handler},
+                    {handler_opts, []}
+                ]}
+        ]}
+    ],
+
+    {ok, _} = cowboy:start_http(?http_redirector_listener, RedirectNbAcceptors,
+        [
+            {port, RedirectPort}
+        ],
+        [
+            {env, [{dispatch, cowboy_router:compile(RedirectDispatch)}]},
+            {max_keepalive, 1},
+            {timeout, Timeout}
+        ]).
 
 
 %% start_rest_listener/0

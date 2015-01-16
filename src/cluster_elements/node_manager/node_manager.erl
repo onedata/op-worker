@@ -158,10 +158,15 @@ handle_cast({dispatcher_updated, DispState}, State) ->
     {noreply, NewState};
 
 handle_cast(init_listeners, State) ->
-    node_manager_listener_starter:start_gui_listener(),
-    node_manager_listener_starter:start_rest_listener(),
-    node_manager_listener_starter:start_redirector_listener(),
-    node_manager_listener_starter:start_dns_listeners(),
+    try
+        node_manager_listener_starter:start_gui_listener(),
+        node_manager_listener_starter:start_rest_listener(),
+        node_manager_listener_starter:start_redirector_listener(),
+        node_manager_listener_starter:start_dns_listeners()
+    catch
+        _:Error  ->
+            ?error_stacktrace("Cannot initialize listeners: ~p", [Error])
+    end,
     {noreply, State};
 
 handle_cast(stop, State) ->
