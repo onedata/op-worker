@@ -1,11 +1,18 @@
 %%%-------------------------------------------------------------------
-%%% @author lichon
-%%% @copyright (C) 2015, <COMPANY>
-%%% @doc
-%%%
+%%% @author Rafal Slota
+%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
-%%% Created : 15. Jan 2015 21:13
 %%%-------------------------------------------------------------------
+%%% @doc
+%%% oneproxy definitions.
+%%% @end
+%%%-------------------------------------------------------------------
+-ifndef(ONEPROXY_HRL).
+-define(ONEPROXY_HRL, 1).
+
+-record(oneproxy_state, {timeout = timer:minutes(1), endpoint}).
 
 %% oneproxy listeners
 -define(ONEPROXY_DISPATCHER, oneproxy_dispatcher).
@@ -17,4 +24,5 @@
 -define(LOG_WARNING_PREFIX, "[ WARNING ] ").
 -define(LOG_ERROR_PREFIX,   "[ ERROR ] ").
 
--record(oneproxy_state, {timeout = timer:minutes(1), endpoint}).
+
+-endif.

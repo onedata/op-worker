@@ -1,15 +1,15 @@
-%% ===================================================================
-%% @author Michal Wrzeszcz
-%% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: This file contains definitions of macros that help during
-%% work with supervisor.
-%% @end
-%% ===================================================================
-
+%%%-------------------------------------------------------------------
+%%% @author Michal Wrzeszcz
+%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This file contains definitions of macros that help during
+%%% work with supervisor.
+%%% @end
+%%%-------------------------------------------------------------------
 -ifndef(SUPERVISION_MACROS_NAMES_HRL).
 -define(SUPERVISION_MACROS_NAMES_HRL, 1).
 

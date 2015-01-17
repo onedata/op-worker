@@ -1,15 +1,15 @@
-%% ===================================================================
-%% @author Michal Wrzeszcz
-%% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: This file contains definitions of names used to identify
-%% different parts of application (or whole application).
-%% @end
-%% ===================================================================
-
+%%%-------------------------------------------------------------------
+%%% @author Michal Wrzeszcz
+%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This file contains definitions of names used to identify
+%%% different parts of application (or whole application).
+%%% @end
+%%%-------------------------------------------------------------------
 -ifndef(REGISTERED_NAMES_HRL).
 -define(REGISTERED_NAMES_HRL, 1).
 

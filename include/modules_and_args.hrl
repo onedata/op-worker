@@ -1,15 +1,14 @@
-%% ===================================================================
-%% @author Michal Wrzeszcz
-%% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: This file defines modules used by system and their
-%% initial arguments.
-%% @end
-%% ===================================================================
-
+%%%-------------------------------------------------------------------
+%%% @author Michal Wrzeszcz
+%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This file defines modules used by system and their initial arguments.
+%%% @end
+%%%-------------------------------------------------------------------
 -ifndef(MODULES_AND_ARGS_HRL).
 -define(MODULES_AND_ARGS_HRL, 1).
 

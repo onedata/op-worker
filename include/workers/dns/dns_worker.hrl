@@ -1,14 +1,14 @@
-%% ===================================================================
-%% @author Bartosz Polnik
-%% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: This file contains definitions of state used by dns_worker module.
-%% @end
-%% ===================================================================
-
+%%%-------------------------------------------------------------------
+%%% @author Bartosz Polnik
+%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This file contains definitions of state used by dns_worker module.
+%%% @end
+%%%-------------------------------------------------------------------
 -ifndef(DNS_WORKER_HRL).
 -define(DNS_WORKER_HRL, 1).
 

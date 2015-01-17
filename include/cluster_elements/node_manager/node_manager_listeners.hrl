@@ -1,19 +1,20 @@
 %%%-------------------------------------------------------------------
-%%% @author lichon
-%%% @copyright (C) 2015, <COMPANY>
-%%% @doc
-%%%
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
-%%% Created : 12. Jan 2015 17:02
 %%%-------------------------------------------------------------------
--author("lichon").
+%%% @doc
+%%% Definitions common to listeners started by node_manager.
+%%% @end
+%%%-------------------------------------------------------------------
+-ifndef(CLUSTER_MANAGER_LISTENERS_HRL).
+-define(CLUSTER_MANAGER_LISTENERS_HRL, 1).
 
-%% Path (relative to domain) on which cowboy expects client's requests
+%% Path (relative to domain) on which cowboy expects incomming websocket connections with client and provider
 -define(ONECLIENT_URI_PATH, "/oneclient").
 -define(ONEPROVIDER_URI_PATH, "/oneprovider").
-
-%% ------------
-% GUI and cowboy related defines
 
 % Paths in gui static directory
 -define(static_paths, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
@@ -32,3 +33,5 @@
 -define(https_listener, https).
 -define(rest_listener, rest).
 -define(http_redirector_listener, http).
+
+-endif.
