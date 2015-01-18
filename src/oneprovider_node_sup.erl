@@ -63,19 +63,19 @@ start_link(NodeType) ->
     Modules :: [module()] | dynamic.
 %% ====================================================================
 init([worker]) ->
-    {ok, {?Sup_Flags, [
-        ?Sup_Child(request_dispatcher, request_dispatcher, permanent, []),
-        ?Sup_Child(node_manager, node_manager, permanent, [worker])
+    {ok, {?SUP_FLAGS, [
+        ?SUP_CHILD(request_dispatcher, request_dispatcher, permanent, []),
+        ?SUP_CHILD(node_manager, node_manager, permanent, [worker])
     ]}};
 init([ccm]) ->
-    {ok, {?Sup_Flags, [
-        ?Sup_Child(cluster_manager, cluster_manager, permanent, []),
-        ?Sup_Child(node_manager, node_manager, permanent, [ccm]),
-        ?Sup_Child(request_dispatcher, request_dispatcher, permanent, [])
+    {ok, {?SUP_FLAGS, [
+        ?SUP_CHILD(cluster_manager, cluster_manager, permanent, []),
+        ?SUP_CHILD(node_manager, node_manager, permanent, [ccm]),
+        ?SUP_CHILD(request_dispatcher, request_dispatcher, permanent, [])
     ]}};
 init([ccm_test]) ->
-    {ok, {?Sup_Flags, [
-        ?Sup_Child(cluster_manager, cluster_manager, permanent, [test]),
-        ?Sup_Child(node_manager, node_manager, permanent, [ccm_test]),
-        ?Sup_Child(request_dispatcher, request_dispatcher, permanent, [])
+    {ok, {?SUP_FLAGS, [
+        ?SUP_CHILD(cluster_manager, cluster_manager, permanent, [test]),
+        ?SUP_CHILD(node_manager, node_manager, permanent, [ccm_test]),
+        ?SUP_CHILD(request_dispatcher, request_dispatcher, permanent, [])
     ]}}.

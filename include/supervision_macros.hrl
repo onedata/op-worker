@@ -13,10 +13,10 @@
 -ifndef(SUPERVISION_MACROS_NAMES_HRL).
 -define(SUPERVISION_MACROS_NAMES_HRL, 1).
 
--define(Sup_Flags, {one_for_one, 5, 10}).
+-define(SUP_FLAGS, {one_for_one, 5, 10}).
 
 %% Macro that creates structure that identifies child of supervisor.
--define(Sup_Child(Name, Module, Restart, Args), {Name, {Module, start_link, Args}, Restart, 5000, worker, [Module]}).
--define(Sup_Child(Name, Module, Function, Restart, Args), {Name, {Module, Function, Args}, Restart, 5000, worker, [Module]}).
+-define(SUP_CHILD(Name, Module, Restart, Args), {Name, {Module, start_link, Args}, Restart, 5000, worker, [Module]}).
+-define(SUP_CHILD(Name, Module, Function, Restart, Args), {Name, {Module, Function, Args}, Restart, 5000, worker, [Module]}).
 
 -endif.

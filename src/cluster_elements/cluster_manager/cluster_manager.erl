@@ -452,7 +452,7 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 start_worker(Node, Module, WorkerArgs, State) ->
     try
         {ok, LoadMemorySize} = application:get_env(?APP_Name, worker_load_memory_size),
-        {ok, ChildPid} = supervisor:start_child({?SUPERVISOR_NAME, Node}, ?Sup_Child(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
+        {ok, ChildPid} = supervisor:start_child({?SUPERVISOR_NAME, Node}, ?SUP_CHILD(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
         Workers = State#cm_state.workers,
         ?info("Worker: ~s started at node: ~s", [Module, Node]),
         {ok, State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}}
