@@ -85,7 +85,7 @@ init_per_testcase(ccm_and_worker_test, Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    Nodes = [Ccm, _] = test_node_starter:start_test_nodes(2, true),
+    Nodes = [Ccm, _] = test_node_starter:start_test_nodes(2),
     DBNode = ?DB_NODE,
 
     test_node_starter:start_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes, [
