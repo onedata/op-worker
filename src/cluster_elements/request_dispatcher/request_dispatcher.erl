@@ -1,59 +1,67 @@
-%% ===================================================================
-%% @author Michal Wrzeszcz
-%% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc This module forwards client's requests to appropriate worker_hosts.
-%% @end %todo dispatcher should keep modules in ETS, and all clients should be able to read this ETS directly
-%% ===================================================================
-
+%%%-------------------------------------------------------------------
+%%% @author Michal Wrzeszcz
+%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module forwards client's requests to appropriate worker_hosts.
+%%% @end %todo dispatcher should keep modules in ETS, and all clients should be able to read this ETS directly
+%%%-------------------------------------------------------------------
 -module(request_dispatcher).
+-author("Tomasz Lichon").
+
 -behaviour(gen_server).
+
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
 -include("cluster_elements/request_dispatcher/request_dispatcher.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% ====================================================================
 %% API
-%% ====================================================================
 -export([start_link/0, stop/0]).
 
-%% ====================================================================
 %% gen_server callbacks
-%% ====================================================================
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
-%% ====================================================================
-%% API functions
-%% ====================================================================
+%%%===================================================================
+%%% API
+%%%===================================================================
 
-%% start_link/0
-%% ====================================================================
-%% @doc Starts the server
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts request_dispatcher
+%% @end
+%%--------------------------------------------------------------------
 -spec start_link() -> Result when
     Result :: {ok, Pid}
     | ignore
     | {error, Error},
     Pid :: pid(),
     Error :: {already_started, Pid} | term().
-%% ====================================================================
 start_link() ->
     gen_server:start_link({local, ?DISPATCHER_NAME}, ?MODULE, ?MODULES, []).
 
-%% stop/0
-%% ====================================================================
-%% @doc Stops the server
+%%--------------------------------------------------------------------
+%% @doc
+%% Stops request_dispatcher
+%% @end
+%%--------------------------------------------------------------------
 -spec stop() -> ok.
-%% ====================================================================
 stop() ->
     gen_server:cast(?DISPATCHER_NAME, stop).
 
-%% init/1
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:init-1">gen_server:init/1</a>
+%%%===================================================================
+%%% gen_server callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Initializes the server
+%% @end
+%%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State}
     | {ok, State, Timeout}
@@ -62,7 +70,6 @@ stop() ->
     | ignore,
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
-%% ====================================================================
 init(Modules) ->
     process_flag(trap_exit, true),
     catch gsi_handler:init(),   %% Failed initialization of GSI should not disturb dispacher's startup
@@ -72,9 +79,12 @@ init(Modules) ->
     end, NewState#dispatcher_state.modules),
     {ok, NewState#dispatcher_state{modules_const_list = ModulesConstList}}.
 
-%% handle_call/3
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_call-3">gen_server:handle_call/3</a>
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling call messages
+%% @end
+%%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result when
     Result :: {reply, Reply, NewState}
     | {reply, Reply, NewState, Timeout}
@@ -88,7 +98,6 @@ init(Modules) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
-%% ====================================================================
 handle_call({get_workers, Module}, _From, State) ->
     {reply, get_workers(Module, State), State};
 
@@ -220,40 +229,12 @@ handle_call(_Request, _From, State) ->
     ?warning("Wrong call: ~p", [_Request]),
     {reply, wrong_request, State}.
 
-%% handle_test_call/3
-%% ====================================================================
-%% @doc Handles calls used during tests
--spec handle_test_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result :: term().
-%% ====================================================================
--ifdef(TEST).
-handle_test_call({get_worker_node, {Request, Module}}, _From, State) ->
-    Ans = get_worker_node(Module, Request, State),
-    case Ans of
-        {Node, NewState} -> {reply, Node, NewState};
-        Other -> {reply, Other, State}
-    end;
-
-handle_test_call({get_worker_node, Module}, _From, State) ->
-    Ans = get_worker_node(Module, non, State),
-    case Ans of
-        {Node, NewState} -> {reply, Node, NewState};
-        Other -> {reply, Other, State}
-    end;
-
-handle_test_call({check_worker_node, Module}, _From, State) ->
-    Ans = check_worker_node(Module, non, State),
-    case Ans of
-        {Node, NewState} -> {reply, Node, NewState};
-        Other -> {reply, Other, State}
-    end.
--else.
-handle_test_call(_Request, _From, State) ->
-    {reply, not_supported_in_normal_mode, State}.
--endif.
-
-%% handle_cast/2
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_cast-2">gen_server:handle_cast/2</a>
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling cast messages
+%% @end
+%%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), State :: term()) -> Result when
     Result :: {noreply, NewState}
     | {noreply, NewState, Timeout}
@@ -261,8 +242,6 @@ handle_test_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
-%% ====================================================================
-%% TODO: check dispatchers map
 handle_cast({update_state, NewStateNum}, State) ->
     case State#dispatcher_state.state_num >= NewStateNum of
         true ->
@@ -312,9 +291,12 @@ handle_cast(_Msg, State) ->
     ?warning("Wrong cast: ~p", [_Msg]),
     {noreply, State}.
 
-%% handle_info/2
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_info-2">gen_server:handle_info/2</a>
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling all non call/cast messages
+%% @end
+%%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout | term(), State :: term()) -> Result when
     Result :: {noreply, NewState}
     | {noreply, NewState, Timeout}
@@ -322,7 +304,6 @@ handle_cast(_Msg, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
-%% ====================================================================
 handle_info({timer, Msg}, State) ->
     spawn(fun() -> gen_server:call(?DISPATCHER_NAME, Msg) end),
     {noreply, State};
@@ -330,35 +311,73 @@ handle_info(_Info, State) ->
     ?warning("Dispatcher wrong info: ~p", [_Info]),
     {noreply, State}.
 
-
-%% terminate/2
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:terminate-2">gen_server:terminate/2</a>
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is called by a gen_server when it is about to
+%% terminate. It should be the opposite of Module:init/1 and do any
+%% necessary cleaning up. When it returns, the gen_server terminates
+%% with Reason. The return value is ignored.
+%% @end
+%%--------------------------------------------------------------------
 -spec terminate(Reason, State :: term()) -> Any :: term() when
     Reason :: normal
     | shutdown
     | {shutdown, term()}
     | term().
-%% ====================================================================
 terminate(_Reason, _State) ->
     ok.
 
-
-%% code_change/3
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:code_change-3">gen_server:code_change/3</a>
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Convert process state when code is changed
+%% @end
+%%--------------------------------------------------------------------
 -spec code_change(OldVsn, State :: term(), Extra :: term()) -> Result when
     Result :: {ok, NewState :: term()} | {error, Reason :: term()},
     OldVsn :: Vsn | {down, Vsn},
     Vsn :: term().
-%% ====================================================================
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+%% todo REFACTOR ALL
 
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles calls used during tests
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_test_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result :: term().
+-ifdef(TEST).
+handle_test_call({get_worker_node, {Request, Module}}, _From, State) ->
+    Ans = get_worker_node(Module, Request, State),
+    case Ans of
+        {Node, NewState} -> {reply, Node, NewState};
+        Other -> {reply, Other, State}
+    end;
+
+handle_test_call({get_worker_node, Module}, _From, State) ->
+    Ans = get_worker_node(Module, non, State),
+    case Ans of
+        {Node, NewState} -> {reply, Node, NewState};
+        Other -> {reply, Other, State}
+    end;
+
+handle_test_call({check_worker_node, Module}, _From, State) ->
+    Ans = check_worker_node(Module, non, State),
+    case Ans of
+        {Node, NewState} -> {reply, Node, NewState};
+        Other -> {reply, Other, State}
+    end.
+-else.
+handle_test_call(_Request, _From, State) ->
+    {reply, not_supported_in_normal_mode, State}.
+-endif.
 
 handle_generic_request(Task, Request, State) ->
     case get_worker_node(Task, Request, State) of
