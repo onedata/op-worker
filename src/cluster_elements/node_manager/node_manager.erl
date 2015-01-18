@@ -244,14 +244,14 @@ code_change(_OldVsn, State, _Extra) ->
 heart_beat(Conn_status, State) ->
     New_conn_status = case Conn_status of
                           not_connected ->
-                              {ok, CCM_Nodes} = application:get_env(?APP_Name, ccm_nodes),
+                              {ok, CCM_Nodes} = application:get_env(?APP_NAME, ccm_nodes),
                               case catch init_net_connection(CCM_Nodes) of
                                   ok -> connected;
                                   _ -> not_connected
                               end;
                           Other -> Other
                       end,
-    {ok, Interval} = application:get_env(?APP_Name, heart_beat),
+    {ok, Interval} = application:get_env(?APP_NAME, heart_beat),
     case New_conn_status of
         connected ->
             gen_server:cast({global, ?CCM}, {node_is_up, node()}),
@@ -320,6 +320,6 @@ check_vsn([]) ->
     non;
 check_vsn([{Application, _Description, Vsn} | Apps]) ->
     case Application of
-        ?APP_Name -> Vsn;
+        ?APP_NAME -> Vsn;
         _Other -> check_vsn(Apps)
     end.

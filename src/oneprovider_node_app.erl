@@ -33,7 +33,7 @@
                 | {shutdown, term()}
                 | term().
 start(_StartType, _StartArgs) ->
-    {ok, NodeType} = application:get_env(?APP_Name, node_type),
+    {ok, NodeType} = application:get_env(?APP_NAME, node_type),
     oneprovider_node_sup:start_link(NodeType).
 
 %%--------------------------------------------------------------------

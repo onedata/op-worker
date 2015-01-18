@@ -76,7 +76,7 @@ init_per_testcase(one_node_test, Config) ->
     [Node] = test_node_starter:start_test_nodes(1),
     DBNode = ?DB_NODE,
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, [Node], [
+    test_node_starter:start_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, [Node], [
         [{node_type, ccm}, {dispatcher_port, 8888}, {ccm_nodes, [Node]}, {db_nodes, [DBNode]}, {heart_beat, 1}]]),
 
     lists:append([{nodes, [Node]}, {dbnode, DBNode}], Config);
@@ -88,7 +88,7 @@ init_per_testcase(ccm_and_worker_test, Config) ->
     Nodes = [Ccm, _] = test_node_starter:start_test_nodes(2, true),
     DBNode = ?DB_NODE,
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes, [
+    test_node_starter:start_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes, [
         [{node_type, ccm}, {dispatcher_port, 8888}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}, {heart_beat, 1}],
         [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}, {heart_beat, 1}]
     ]),
@@ -96,6 +96,6 @@ init_per_testcase(ccm_and_worker_test, Config) ->
     lists:append([{nodes, Nodes}, {dbnode, DBNode}], Config).
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?ONEPROVIDER_DEPS, Nodes),
+  test_node_starter:stop_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node().

@@ -31,14 +31,14 @@
 -spec init() -> ok.
 %% ====================================================================
 init() ->
-    case application:get_env(?APP_Name, node_type) of
+    case application:get_env(?APP_NAME, node_type) of
         {ok, ccm} -> throw(ccm_node);                     %% ccm node doesn't have socket interface, so GSI would be useless
         _ -> ok
     end,
     ?info("GSI Handler module is starting"),
     ets:new(gsi_state, [{read_concurrency, true}, public, ordered_set, named_table]),
 
-    {ok, CADir} = application:get_env(?APP_Name, ca_dir),
+    {ok, CADir} = application:get_env(?APP_NAME, ca_dir),
 
     {SSPid, _Ref} = spawn_monitor(fun() -> start_slaves(?GSI_SLAVE_COUNT) end),
 
@@ -49,7 +49,7 @@ init() ->
                 ok ->
                     update_crls(CADir),
                     catch oneproxy:ca_crl_to_der(oneproxy:get_der_certs_dir()),
-                    {ok, CRLUpdateInterval} = application:get_env(?APP_Name, crl_update_interval),
+                    {ok, CRLUpdateInterval} = application:get_env(?APP_NAME, crl_update_interval),
                     case timer:apply_interval(CRLUpdateInterval, ?MODULE, update_crls, [CADir]) of
                         {ok, _} -> ok;
                         {error, Reason} -> ?error("GSI Handler: Setting CLR auto-update failed (reason: ~p)", [Reason])
@@ -109,7 +109,7 @@ get_certs_from_req(OneProxyHandler, Req) ->
 -spec get_ca_certs_from_all_cert_dirs() -> [binary()] | no_return().
 %% ====================================================================
 get_ca_certs_from_all_cert_dirs() ->
-    {ok, CertDir1} = application:get_env(?APP_Name, certs_dir),
+    {ok, CertDir1} = application:get_env(?APP_NAME, certs_dir),
     CertDir = atom_to_list(CertDir1),
     get_ca_certs() ++ get_ca_certs_from_dir(CertDir).
 
@@ -120,7 +120,7 @@ get_ca_certs_from_all_cert_dirs() ->
 -spec get_ca_certs() -> [binary()] | no_return().
 %% ====================================================================
 get_ca_certs() ->
-    {ok, CADir} = application:get_env(?APP_Name, ca_dir),
+    {ok, CADir} = application:get_env(?APP_NAME, ca_dir),
     get_ca_certs_from_dir(CADir).
 
 %% get_ca_certs_from_dir/1

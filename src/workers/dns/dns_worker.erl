@@ -143,7 +143,7 @@ handle(_ProtocolVersion, {handle_a, Domain}) ->
         refused ->
             refused;
         _ ->
-            {ok, TTL} = application:get_env(?APP_Name, dns_a_response_ttl),
+            {ok, TTL} = application:get_env(?APP_NAME, dns_a_response_ttl),
             {ok,
                     [dns_server:answer_record(Domain, TTL, ?S_A, IP) || IP <- IPList] ++
                     [dns_server:authoritative_answer_flag(true)]
@@ -158,7 +158,7 @@ handle(_ProtocolVersion, {handle_ns, Domain}) ->
             % Accept all prefixes that consist of one part
             case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
                 true ->
-                    {ok, TTL} = application:get_env(?APP_Name, dns_ns_response_ttl),
+                    {ok, TTL} = application:get_env(?APP_NAME, dns_ns_response_ttl),
                     {ok,
                             [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP <- get_nodes()] ++
                             [dns_server:authoritative_answer_flag(true)]
@@ -203,7 +203,7 @@ parse_domain(DomainArg) ->
                  [$w, $w, $w, $. | Rest] -> Rest;
                  Other -> Other
              end,
-    {ok, ProviderHostnameWithoutDot} = application:get_env(?APP_Name, global_registry_hostname),
+    {ok, ProviderHostnameWithoutDot} = application:get_env(?APP_NAME, global_registry_hostname),
     case ProviderHostnameWithoutDot =:= Domain of
         true ->
             {"", ProviderHostnameWithoutDot};
@@ -494,7 +494,7 @@ handle_txt(_Domain) -> not_impl.
 %% ====================================================================
 call_dns_worker(Request) ->
     try
-        {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
+        {ok, DispatcherTimeout} = application:get_env(?APP_NAME, dispatcher_timeout),
         DispatcherAns = gen_server:call(?DISPATCHER_NAME, {dns_worker, 1, self(), Request}),
         case DispatcherAns of
             ok ->

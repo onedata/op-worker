@@ -14,7 +14,7 @@
 -define(REGISTERED_NAMES_HRL, 1).
 
 %% Name of the application.
--define(APP_Name, oneprovider_node).
+-define(APP_NAME, oneprovider_node).
 
 %% Global name of gen_server that provides ccm functionality.
 -define(CCM, central_cluster_manager).

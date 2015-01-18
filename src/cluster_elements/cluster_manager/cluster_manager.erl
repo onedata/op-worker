@@ -93,7 +93,7 @@ stop() ->
 %% ====================================================================
 init([normal]) ->
     process_flag(trap_exit, true),
-    {ok, Interval} = application:get_env(?APP_Name, initialization_time),
+    {ok, Interval} = application:get_env(?APP_NAME, initialization_time),
     Pid = self(),
     erlang:send_after(Interval * 1000, Pid, {timer, init_cluster}),
     {ok, #cm_state{}};
@@ -370,7 +370,7 @@ init_cluster(State) ->
 init_cluster(State = #cm_state{nodes = []}, false) ->
     State;
 init_cluster(State = #cm_state{nodes = []}, true) ->
-    {ok, Interval} = application:get_env(?APP_Name, initialization_time),
+    {ok, Interval} = application:get_env(?APP_NAME, initialization_time),
     erlang:send_after(1000 * Interval, self(), {timer, init_cluster}),
     State;
 init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}, _Repeat) ->
@@ -451,7 +451,7 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 %% ====================================================================
 start_worker(Node, Module, WorkerArgs, State) ->
     try
-        {ok, LoadMemorySize} = application:get_env(?APP_Name, worker_load_memory_size),
+        {ok, LoadMemorySize} = application:get_env(?APP_NAME, worker_load_memory_size),
         {ok, ChildPid} = supervisor:start_child({?SUPERVISOR_NAME, Node}, ?SUP_CHILD(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
         Workers = State#cm_state.workers,
         ?info("Worker: ~s started at node: ~s", [Module, Node]),
