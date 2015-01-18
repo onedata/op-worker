@@ -42,12 +42,12 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(Type) -> Result when
-      Type :: test_worker | worker | ccm | ccm_test,
-      Result :: {ok, Pid}
-              | ignore
-              | {error, Error},
-      Pid :: pid(),
-      Error :: {already_started, Pid} | term().
+    Type :: test_worker | worker | ccm | ccm_test,
+    Result :: {ok, Pid}
+    | ignore
+    | {error, Error},
+    Pid :: pid(),
+    Error :: {already_started, Pid} | term().
 start_link(Type) ->
     gen_server:start_link({local, ?NODE_MANAGER_NAME}, ?MODULE, [Type], []).
 
@@ -66,7 +66,7 @@ stop() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_vsn() -> Result when
-      Result :: term().
+    Result :: term().
 %% ====================================================================
 check_vsn() ->
     check_vsn(application:which_applications()).
@@ -82,13 +82,13 @@ check_vsn() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-      Result :: {ok, State}
-              | {ok, State, Timeout}
-              | {ok, State, hibernate}
-              | {stop, Reason :: term()}
-              | ignore,
-      State :: term(),
-      Timeout :: non_neg_integer() | infinity.
+    Result :: {ok, State}
+    | {ok, State, Timeout}
+    | {ok, State, hibernate}
+    | {stop, Reason :: term()}
+    | ignore,
+    State :: term(),
+    Timeout :: non_neg_integer() | infinity.
 init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
     case Type =/= ccm of
         true ->
@@ -111,18 +111,18 @@ init([_Type]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result when
-      Result :: {reply, Reply, NewState}
-              | {reply, Reply, NewState, Timeout}
-              | {reply, Reply, NewState, hibernate}
-              | {noreply, NewState}
-              | {noreply, NewState, Timeout}
-              | {noreply, NewState, hibernate}
-              | {stop, Reason, Reply, NewState}
-              | {stop, Reason, NewState},
-      Reply :: term(),
-      NewState :: term(),
-      Timeout :: non_neg_integer() | infinity,
-      Reason :: term().
+    Result :: {reply, Reply, NewState}
+    | {reply, Reply, NewState, Timeout}
+    | {reply, Reply, NewState, hibernate}
+    | {noreply, NewState}
+    | {noreply, NewState, Timeout}
+    | {noreply, NewState, hibernate}
+    | {stop, Reason, Reply, NewState}
+    | {stop, Reason, NewState},
+    Reply :: term(),
+    NewState :: term(),
+    Timeout :: non_neg_integer() | infinity,
+    Reason :: term().
 %% ====================================================================
 handle_call(getNodeType, _From, State) ->
     Reply = State#node_state.node_type,
@@ -149,12 +149,12 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), State :: term()) -> Result when
-      Result :: {noreply, NewState}
-              | {noreply, NewState, Timeout}
-              | {noreply, NewState, hibernate}
-              | {stop, Reason :: term(), NewState},
-      NewState :: term(),
-      Timeout :: non_neg_integer() | infinity.
+    Result :: {noreply, NewState}
+    | {noreply, NewState, Timeout}
+    | {noreply, NewState, hibernate}
+    | {stop, Reason :: term(), NewState},
+    NewState :: term(),
+    Timeout :: non_neg_integer() | infinity.
 handle_cast(do_heart_beat, State) ->
     {noreply, heart_beat(State#node_state.ccm_con_status, State)};
 
@@ -175,7 +175,7 @@ handle_cast(init_listeners, State) ->
         node_manager_listener_starter:start_redirector_listener(),
         node_manager_listener_starter:start_dns_listeners()
     catch
-        _:Error  ->
+        _:Error ->
             ?error_stacktrace("Cannot initialize listeners: ~p", [Error])
     end,
     {noreply, State};
@@ -194,12 +194,12 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout | term(), State :: term()) -> Result when
-      Result :: {noreply, NewState}
-              | {noreply, NewState, Timeout}
-              | {noreply, NewState, hibernate}
-              | {stop, Reason :: term(), NewState},
-      NewState :: term(),
-      Timeout :: non_neg_integer() | infinity.
+    Result :: {noreply, NewState}
+    | {noreply, NewState, Timeout}
+    | {noreply, NewState, hibernate}
+    | {stop, Reason :: term(), NewState},
+    NewState :: term(),
+    Timeout :: non_neg_integer() | infinity.
 handle_info({timer, Msg}, State) ->
     gen_server:cast(?NODE_MANAGER_NAME, Msg),
     {noreply, State};
@@ -223,10 +223,10 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason, State :: term()) -> Any :: term() when
-      Reason :: normal
-              | shutdown
-              | {shutdown, term()}
-              | term().
+    Reason :: normal
+    | shutdown
+    | {shutdown, term()}
+    | term().
 terminate(_Reason, _State) ->
     catch cowboy:stop_listener(?DISPATCHER_LISTENER),
     catch cowboy:stop_listener(?HTTP_REDIRECTOR_LISTENER),
@@ -242,9 +242,9 @@ terminate(_Reason, _State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec code_change(OldVsn, State :: term(), Extra :: term()) -> Result when
-      Result :: {ok, NewState :: term()} | {error, Reason :: term()},
-      OldVsn :: Vsn | {down, Vsn},
-      Vsn :: term().
+    Result :: {ok, NewState :: term()} | {error, Reason :: term()},
+    OldVsn :: Vsn | {down, Vsn},
+    Vsn :: term().
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -260,7 +260,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec heart_beat(Conn_status :: atom(), State :: term()) -> NewStatus when
-      NewStatus :: term().
+    NewStatus :: term().
 heart_beat(Conn_status, State) ->
     New_conn_status = case Conn_status of
                           not_connected ->
@@ -280,7 +280,7 @@ heart_beat(Conn_status, State) ->
     end,
 
     ?debug("Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p,  state_num: ~p, disp dispatcher_state: ~p",
-           [node(), New_conn_status, Conn_status, State#node_state.state_num, State#node_state.dispatcher_state]),
+        [node(), New_conn_status, Conn_status, State#node_state.state_num, State#node_state.dispatcher_state]),
     State#node_state{ccm_con_status = New_conn_status}.
 
 %%--------------------------------------------------------------------
@@ -290,7 +290,7 @@ heart_beat(Conn_status, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec heart_beat_response(New_state_num :: integer(), State :: term()) -> NewStatus when
-      NewStatus :: term().
+    NewStatus :: term().
 heart_beat_response(New_state_num, State) when (New_state_num == State#node_state.state_num) and (New_state_num == State#node_state.dispatcher_state) ->
     ?debug("Heart beat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), New_state_num]),
     State;
@@ -306,7 +306,7 @@ heart_beat_response(New_state_num, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_dispatcher(New_state_num :: integer(), Type :: atom()) -> Result when
-      Result :: atom().
+    Result :: atom().
 update_dispatcher(_New_state_num, ccm) ->
     ok;
 update_dispatcher(New_state_num, _Type) ->
@@ -321,7 +321,7 @@ update_dispatcher(New_state_num, _Type) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init_net_connection(Nodes :: list()) -> Result when
-      Result :: atom().
+    Result :: atom().
 init_net_connection([]) ->
     error;
 init_net_connection([Node | Nodes]) ->
@@ -343,7 +343,7 @@ init_net_connection([Node | Nodes]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_vsn(ApplicationData :: list()) -> Result when
-      Result :: term().
+    Result :: term().
 check_vsn([]) ->
     non;
 check_vsn([{Application, _Description, Vsn} | Apps]) ->

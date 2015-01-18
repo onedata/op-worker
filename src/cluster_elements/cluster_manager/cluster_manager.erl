@@ -41,11 +41,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link() -> Result when
-      Result :: {ok, Pid}
-              | ignore
-              | {error, Error},
-      Pid :: pid(),
-      Error :: {already_started, Pid} | term().
+    Result :: {ok, Pid}
+    | ignore
+    | {error, Error},
+    Pid :: pid(),
+    Error :: {already_started, Pid} | term().
 start_link() ->
     start_link(normal).
 
@@ -55,12 +55,12 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(Mode) -> Result when
-      Mode :: test | normal,
-      Result :: {ok, Pid}
-              | ignore
-              | {error, Error},
-      Pid :: pid(),
-      Error :: {already_started, Pid} | term().
+    Mode :: test | normal,
+    Result :: {ok, Pid}
+    | ignore
+    | {error, Error},
+    Pid :: pid(),
+    Error :: {already_started, Pid} | term().
 start_link(Mode) ->
     case gen_server:start_link(?MODULE, [Mode], []) of
         {ok, Pid} ->
@@ -90,13 +90,13 @@ stop() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-      Result :: {ok, State}
-              | {ok, State, Timeout}
-              | {ok, State, hibernate}
-              | {stop, Reason :: term()}
-              | ignore,
-      State :: term(),
-      Timeout :: non_neg_integer() | infinity.
+    Result :: {ok, State}
+    | {ok, State, Timeout}
+    | {ok, State, hibernate}
+    | {stop, Reason :: term()}
+    | ignore,
+    State :: term(),
+    Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([normal]) ->
     process_flag(trap_exit, true),
@@ -116,18 +116,18 @@ init([test]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result when
-      Result :: {reply, Reply, NewState}
-              | {reply, Reply, NewState, Timeout}
-              | {reply, Reply, NewState, hibernate}
-              | {noreply, NewState}
-              | {noreply, NewState, Timeout}
-              | {noreply, NewState, hibernate}
-              | {stop, Reason, Reply, NewState}
-              | {stop, Reason, NewState},
-      Reply :: term(),
-      NewState :: term(),
-      Timeout :: non_neg_integer() | infinity,
-      Reason :: term().
+    Result :: {reply, Reply, NewState}
+    | {reply, Reply, NewState, Timeout}
+    | {reply, Reply, NewState, hibernate}
+    | {noreply, NewState}
+    | {noreply, NewState, Timeout}
+    | {noreply, NewState, hibernate}
+    | {stop, Reason, Reply, NewState}
+    | {stop, Reason, NewState},
+    Reply :: term(),
+    NewState :: term(),
+    Timeout :: non_neg_integer() | infinity,
+    Reason :: term().
 handle_call(get_state_num, _From, State) ->
     {reply, State#cm_state.state_num, State};
 
@@ -169,12 +169,12 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), State :: term()) -> Result when
-      Result :: {noreply, NewState}
-              | {noreply, NewState, Timeout}
-              | {noreply, NewState, hibernate}
-              | {stop, Reason :: term(), NewState},
-      NewState :: term(),
-      Timeout :: non_neg_integer() | infinity.
+    Result :: {noreply, NewState}
+    | {noreply, NewState, Timeout}
+    | {noreply, NewState, hibernate}
+    | {stop, Reason :: term(), NewState},
+    NewState :: term(),
+    Timeout :: non_neg_integer() | infinity.
 handle_cast({node_is_up, Node}, State = #cm_state{nodes = Nodes, state_loaded = StateLoaded, state_monitoring = StateMonitoring}) ->
     ?debug("Heartbeat from node: ~p", [Node]),
     case lists:member(Node, Nodes) orelse Node =:= node() of
@@ -194,7 +194,8 @@ handle_cast({node_is_up, Node}, State = #cm_state{nodes = Nodes, state_loaded = 
                         off -> ok
                     end,
                     case StateLoaded of
-                        true -> gen_server:cast({global, ?CCM}, init_cluster_once); %todo check for race with update_dispatchers_and_dns
+                        true ->
+                            gen_server:cast({global, ?CCM}, init_cluster_once); %todo check for race with update_dispatchers_and_dns
                         _ -> ok
                     end,
                     case WorkersFound of
@@ -229,7 +230,7 @@ handle_cast({update_dispatchers_and_dns, UpdateDNS, IncreaseNum}, State) ->
 handle_cast({register_dispatcher_map, Module, Map, AnsPid}, State = #cm_state{dispatcher_maps = Maps}) ->
     case proplists:get_value(Module, Maps) =:= Map of
         true ->
-                                                % debug, because it is ok when more than one instance of worker exists
+            % debug, because it is ok when more than one instance of worker exists
             ?debug("Registration of existing disp map for module ~p", [Module]),
             AnsPid ! dispatcher_map_registered,
             {noreply, State};
@@ -290,12 +291,12 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout | term(), State :: term()) -> Result when
-      Result :: {noreply, NewState}
-              | {noreply, NewState, Timeout}
-              | {noreply, NewState, hibernate}
-              | {stop, Reason :: term(), NewState},
-      NewState :: term(),
-      Timeout :: non_neg_integer() | infinity.
+    Result :: {noreply, NewState}
+    | {noreply, NewState, Timeout}
+    | {noreply, NewState, hibernate}
+    | {stop, Reason :: term(), NewState},
+    NewState :: term(),
+    Timeout :: non_neg_integer() | infinity.
 handle_info({timer, Msg}, State) ->
     gen_server:cast({global, ?CCM}, Msg),
     {noreply, State};
@@ -320,10 +321,10 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason, State :: term()) -> Any :: term() when
-      Reason :: normal
-              | shutdown
-              | {shutdown, term()}
-              | term().
+    Reason :: normal
+    | shutdown
+    | {shutdown, term()}
+    | term().
 terminate(_Reason, _State) ->
     ok.
 
@@ -334,9 +335,9 @@ terminate(_Reason, _State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec code_change(OldVsn, State :: term(), Extra :: term()) -> Result when
-      Result :: {ok, NewState :: term()} | {error, Reason :: term()},
-      OldVsn :: Vsn | {down, Vsn},
-      Vsn :: term().
+    Result :: {ok, NewState :: term()} | {error, Reason :: term()},
+    OldVsn :: Vsn | {down, Vsn},
+    Vsn :: term().
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -373,7 +374,7 @@ handle_test_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init_cluster(State :: term()) -> NewState when
-      NewState :: term().
+    NewState :: term().
 init_cluster(State) ->
     init_cluster(State, true).
 
@@ -386,8 +387,8 @@ init_cluster(State) ->
 %% initiates checking of cluster state.
 %% @end
 %%--------------------------------------------------------------------
--spec init_cluster(State :: term(), Repeat:: boolean()) -> NewState when
-      NewState :: term().
+-spec init_cluster(State :: term(), Repeat :: boolean()) -> NewState when
+    NewState :: term().
 init_cluster(State = #cm_state{nodes = []}, false) ->
     State;
 init_cluster(State = #cm_state{nodes = []}, true) ->
@@ -398,24 +399,24 @@ init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}, _Repeat) ->
     JobsAndArgs = ?MODULES_WITH_ARGS,
 
     CreateRunningWorkersList = fun({_N, M, _Child}, WorkerList) ->
-                                       [M | WorkerList]
-                               end,
+        [M | WorkerList]
+    end,
     RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
 
     CreateJobsList = fun({Job, A}, {TmpJobs, TmpArgs}) ->
-                             case lists:member(Job, RunningWorkers) of
-                                 true -> {TmpJobs, TmpArgs};
-                                 false -> {[Job | TmpJobs], [A | TmpArgs]}
-                             end
-                     end,
+        case lists:member(Job, RunningWorkers) of
+            true -> {TmpJobs, TmpArgs};
+            false -> {[Job | TmpJobs], [A | TmpArgs]}
+        end
+    end,
     {Jobs, Args} = lists:foldl(CreateJobsList, {[], []}, JobsAndArgs),
 
     case length(Jobs) > 0 of
         true ->
             ?info("Initialization of jobs ~p using nodes ~p", [Jobs, Nodes]),
             NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
-                           true -> init_cluster_nodes_dominance(State , Nodes, Jobs, [], Args, []);
-                           false -> init_cluster_jobs_dominance(State , Jobs, Args, Nodes, [])
+                           true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
+                           false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
                        end,
 
             update_dispatchers_and_dns(NewState, true, true);
@@ -433,8 +434,8 @@ init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}, _Repeat) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init_cluster_nodes_dominance(State :: term(), Nodes :: list(), Jobs1 :: list(),
-                                   Jobs2 :: list(), Args1 :: list(), Args2 :: list()) -> NewState when
-      NewState :: term().
+    Jobs2 :: list(), Args1 :: list(), Args2 :: list()) -> NewState when
+    NewState :: term().
 init_cluster_nodes_dominance(State, [], _Jobs1, _Jobs2, _Args1, _Args2) ->
     State;
 init_cluster_nodes_dominance(State, Nodes, [], Jobs2, [], Args2) ->
@@ -450,8 +451,8 @@ init_cluster_nodes_dominance(State, [N | Nodes], [J | Jobs1], Jobs2, [A | Args1]
 %% @end
 %%--------------------------------------------------------------------
 -spec init_cluster_jobs_dominance(State :: term(), Jobs :: list(),
-                                  Args :: list(), Nodes1 :: list(), Nodes2 :: list()) -> NewState when
-      NewState :: term().
+    Args :: list(), Nodes1 :: list(), Nodes2 :: list()) -> NewState when
+    NewState :: term().
 init_cluster_jobs_dominance(State, [], [], _Nodes1, _Nodes2) ->
     State;
 init_cluster_jobs_dominance(State, Jobs, Args, [], Nodes2) ->
@@ -468,9 +469,9 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 %% @end
 %%--------------------------------------------------------------------
 -spec start_worker(Node :: atom(), Module :: atom(), WorkerArgs :: term(), State :: term()) -> Result when
-      Result :: {Answer, NewState},
-      Answer :: ok | error,
-      NewState :: term().
+    Result :: {Answer, NewState},
+    Answer :: ok | error,
+    NewState :: term().
 start_worker(Node, Module, WorkerArgs, State) ->
     try
         {ok, LoadMemorySize} = application:get_env(?APP_NAME, worker_load_memory_size),
@@ -492,16 +493,16 @@ start_worker(Node, Module, WorkerArgs, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stop_worker(Node :: atom(), Module :: atom(), State :: term()) -> Result when
-      Result :: {Answer, NewState},
-      Answer :: ok | child_does_not_exist | delete_error | termination_error,
-      NewState :: term().
+    Result :: {Answer, NewState},
+    Answer :: ok | child_does_not_exist | delete_error | termination_error,
+    NewState :: term().
 stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
     CreateNewWorkersList = fun({N, M, Child}, {WorkerList, ChosenChild}) ->
-                                   case {N, M} of
-                                       {Node, Module} -> {WorkerList, {N, Child}};
-                                       {_N2, _M2} -> {[{N, M, Child} | WorkerList], ChosenChild}
-                                   end
-                           end,
+        case {N, M} of
+            {Node, Module} -> {WorkerList, {N, Child}};
+            {_N2, _M2} -> {[{N, M, Child} | WorkerList], ChosenChild}
+        end
+    end,
     {NewWorkers, ChosenChild} = lists:foldl(CreateNewWorkersList, {[], non}, Workers),
     try
         {ChildNode, _ChildPid} = ChosenChild,
@@ -510,7 +511,7 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
         ?info("Worker: ~s stopped at node: ~s", [Module, Node]),
         {ok, State#cm_state{workers = NewWorkers}}
     catch
-        _:Error  ->
+        _:Error ->
             ?error("Worker: ~s not stopped at node: ~s, error ~p", [Module, Node, {delete_error, Error}]),
             {Error, State#cm_state{workers = NewWorkers}}
     end.
@@ -522,7 +523,7 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_node(Node :: atom(), State :: term()) -> NewState when
-      NewState :: term().
+    NewState :: term().
 check_node(Node, State = #cm_state{workers = Workers}) ->
     pong = net_adm:ping(Node),
     Children = supervisor:which_children({?SUPERVISOR_NAME, Node}),
@@ -537,7 +538,7 @@ check_node(Node, State = #cm_state{workers = Workers}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec add_children(Node :: atom(), Children :: list(), Workers :: term(), State :: term()) -> NewWorkersList when
-      NewWorkersList :: list().
+    NewWorkersList :: list().
 add_children(_Node, [], Workers, _State) ->
     {ok, Workers};
 add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers, State) ->
@@ -564,27 +565,27 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers, State)
 %% @end
 %%--------------------------------------------------------------------
 -spec node_down(Node :: atom(), State :: term()) -> {NewState, WorkersFound} when
-      NewState :: term(),
-      WorkersFound :: boolean().
+    NewState :: term(),
+    WorkersFound :: boolean().
 node_down(Node, State = #cm_state{workers = Workers, nodes = Nodes, state_loaded = StateLoaded}) ->
     CreateNewWorkersList = fun({N, M, Child}, {WorkerList, Found}) ->
-                                   case N of
-                                       Node -> {Workers, true};
-                                       _N2 -> {[{N, M, Child} | WorkerList], Found}
-                                   end
-                           end,
+        case N of
+            Node -> {Workers, true};
+            _N2 -> {[{N, M, Child} | WorkerList], Found}
+        end
+    end,
     {NewWorkers, WorkersFound} = lists:foldl(CreateNewWorkersList, {[], false}, Workers),
 
     CreateNewNodesList = fun(N, NodeList) ->
-                                 case N of
-                                     Node -> NodeList;
-                                     _N2 -> [N | NodeList]
-                                 end
-                         end,
+        case N of
+            Node -> NodeList;
+            _N2 -> [N | NodeList]
+        end
+    end,
     NewNodes = lists:foldl(CreateNewNodesList, [], Nodes),
 
     case StateLoaded of
-        true -> gen_server:cast({global,?CCM}, init_cluster_once);
+        true -> gen_server:cast({global, ?CCM}, init_cluster_once);
         _ -> ok
     end,
     {State#cm_state{workers = NewWorkers, nodes = NewNodes}, WorkersFound}.
@@ -597,7 +598,7 @@ node_down(Node, State = #cm_state{workers = Workers, nodes = Nodes, state_loaded
 %% @end
 %%--------------------------------------------------------------------
 -spec merge_state(State :: term(), SavedState :: term()) -> NewState when
-      NewState :: term().
+    NewState :: term().
 merge_state(State, SavedState) ->
     ?debug("Merging state, current: ~p, saved: ~p", [State, SavedState]),
     StateNum = erlang:max(State#cm_state.state_num, SavedState#cm_state.state_num) + 1,
@@ -606,24 +607,24 @@ merge_state(State, SavedState) ->
     NewNodes = lists:filter(fun(N) -> not lists:member(N, State1#cm_state.nodes) end, SavedState#cm_state.nodes),
 
     CreateNewState = fun(Node, {TmpState, TmpWorkersFound}) ->
-                             case State#cm_state.state_monitoring of
-                                 on ->
-                                     erlang:monitor_node(Node, true);
-                                 off -> ok
-                             end,
-                             case catch check_node(Node, TmpState) of
-                                 {ok, NewState, WorkersFound} ->
-                                     case State#cm_state.state_monitoring of
-                                         on ->
-                                             erlang:monitor_node(Node, true);
-                                         off -> ok
-                                     end,
-                                     {NewState#cm_state{nodes = [Node | NewState#cm_state.nodes]}, TmpWorkersFound orelse WorkersFound};
-                                 Error ->
-                                     ?warning_stacktrace("Checking node ~p error: ~p", [Node, Error]),
-                                     {State, TmpWorkersFound}
-                             end
-                     end,
+        case State#cm_state.state_monitoring of
+            on ->
+                erlang:monitor_node(Node, true);
+            off -> ok
+        end,
+        case catch check_node(Node, TmpState) of
+            {ok, NewState, WorkersFound} ->
+                case State#cm_state.state_monitoring of
+                    on ->
+                        erlang:monitor_node(Node, true);
+                    off -> ok
+                end,
+                {NewState#cm_state{nodes = [Node | NewState#cm_state.nodes]}, TmpWorkersFound orelse WorkersFound};
+            Error ->
+                ?warning_stacktrace("Checking node ~p error: ~p", [Node, Error]),
+                {State, TmpWorkersFound}
+        end
+    end,
     {MergedState, IncrementNum} = lists:foldl(CreateNewState, {State1, false}, NewNodes),
 
     MergedState2 = case IncrementNum of
@@ -640,11 +641,11 @@ merge_state(State, SavedState) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_workers_list(State :: term()) -> Workers when
-      Workers :: list().
+    Workers :: list().
 get_workers_list(State) ->
     ListWorkers = fun({Node, Module, _ChildPid}, Workers) ->
-                          [{Node, Module} | Workers]
-                  end,
+        [{Node, Module} | Workers]
+    end,
     lists:foldl(ListWorkers, [], State#cm_state.workers).
 
 %%--------------------------------------------------------------------
@@ -654,7 +655,7 @@ get_workers_list(State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_dispatchers_and_dns(State :: term(), UpdateDNS :: boolean(), IncreaseStateNum :: boolean()) -> NewState when
-      NewState :: term().
+    NewState :: term().
 update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
     ?debug("update_dispatchers_and_dns, state: ~p, dns: ~p, increase state num: ~p", [State, UpdateDNS, IncreaseStateNum]),
     case UpdateDNS of
@@ -685,16 +686,16 @@ update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_dispatcher_state(WorkersList, DispatcherMaps, Nodes, NewStateNum, Loads, AvgLoad) -> ok when
-      WorkersList :: list(),
-      DispatcherMaps :: list(),
-      Nodes :: list(),
-      NewStateNum :: integer(),
-      Loads :: list(),
-      AvgLoad :: integer().
+    WorkersList :: list(),
+    DispatcherMaps :: list(),
+    Nodes :: list(),
+    NewStateNum :: integer(),
+    Loads :: list(),
+    AvgLoad :: integer().
 update_dispatcher_state(WorkersList, DispatcherMaps, Nodes, NewStateNum, Loads, AvgLoad) ->
     UpdateNode = fun(Node) ->
-                         gen_server:cast({?DISPATCHER_NAME, Node}, {update_workers, WorkersList, DispatcherMaps, NewStateNum, proplists:get_value(Node, Loads, 0), AvgLoad})
-                 end,
+        gen_server:cast({?DISPATCHER_NAME, Node}, {update_workers, WorkersList, DispatcherMaps, NewStateNum, proplists:get_value(Node, Loads, 0), AvgLoad})
+    end,
     lists:foreach(UpdateNode, Nodes),
     gen_server:cast(?DISPATCHER_NAME, {update_workers, WorkersList, DispatcherMaps, NewStateNum, 0, 0}).
 
@@ -705,13 +706,13 @@ update_dispatcher_state(WorkersList, DispatcherMaps, Nodes, NewStateNum, Loads, 
 %% @end
 %%--------------------------------------------------------------------
 -spec update_dispatcher_state(Nodes, Loads, AvgLoad) -> ok when
-      Nodes :: list(),
-      Loads :: list(),
-      AvgLoad :: integer().
+    Nodes :: list(),
+    Loads :: list(),
+    AvgLoad :: integer().
 update_dispatcher_state(Nodes, Loads, AvgLoad) ->
     UpdateNode = fun(Node) ->
-                         gen_server:cast({?DISPATCHER_NAME, Node}, {update_loads, proplists:get_value(Node, Loads, 0), AvgLoad})
-                 end,
+        gen_server:cast({?DISPATCHER_NAME, Node}, {update_loads, proplists:get_value(Node, Loads, 0), AvgLoad})
+    end,
     lists:foreach(UpdateNode, Nodes).
 
 %%--------------------------------------------------------------------
@@ -721,89 +722,89 @@ update_dispatcher_state(Nodes, Loads, AvgLoad) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_dns_state(WorkersList, NodeToLoad, AvgLoad) -> ok when
-      WorkersList :: list(),
-      NodeToLoad :: list(),
-      AvgLoad :: number().
+    WorkersList :: list(),
+    NodeToLoad :: list(),
+    AvgLoad :: number().
 update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
     MergeByFirstElement = fun(List) -> lists:reverse(
-                                         lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
-                                                        ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
-                                                        ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
-                                                     end, [], lists:keysort(1, List)))
-                          end,
+        lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
+            ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
+            ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
+        end, [], lists:keysort(1, List)))
+    end,
 
     NodeToIPWithLogging = fun(Node) ->
-                                  case node_to_ip(Node) of
-                                      {ok, Address} -> Address;
-                                      {error, Error} ->
-                                          ?error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
-                                          unknownaddress
-                                  end
-                          end,
+        case node_to_ip(Node) of
+            {ok, Address} -> Address;
+            {error, Error} ->
+                ?error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
+                unknownaddress
+        end
+    end,
 
     ModuleToNode = [{Module, Node} || {Node, Module, _Pid} <- WorkersList],
 
     MergedByModule = MergeByFirstElement(ModuleToNode),
 
     ModulesToNodes = lists:map(fun({Module, Nodes}) ->
-                                       GetLoads = fun({Node, NodeLoad, ModulesLoads}, TmpAns) ->
-                                                          case lists:member(Node, Nodes) of
-                                                              true ->
-                                                                  ModuleTmpV = proplists:get_value(Module, ModulesLoads, error),
-                                                                  ModuleV = case ModuleTmpV of
-                                                                                error -> 0;
-                                                                                _ -> ModuleTmpV
-                                                                            end,
-                                                                  NodeV = case NodeLoad of
-                                                                              error -> 100000;
-                                                                              _ -> NodeLoad
-                                                                          end,
+        GetLoads = fun({Node, NodeLoad, ModulesLoads}, TmpAns) ->
+            case lists:member(Node, Nodes) of
+                true ->
+                    ModuleTmpV = proplists:get_value(Module, ModulesLoads, error),
+                    ModuleV = case ModuleTmpV of
+                                  error -> 0;
+                                  _ -> ModuleTmpV
+                              end,
+                    NodeV = case NodeLoad of
+                                error -> 100000;
+                                _ -> NodeLoad
+                            end,
 
-                                                                  case ModuleV > 0.5 of
-                                                                      true -> case (AvgLoad > 0) and (NodeV >= 2 * AvgLoad) of
-                                                                                  true ->
-                                                                                      V = erlang:min(10, erlang:round(NodeV / AvgLoad)),
-                                                                                      [{Node, V} | TmpAns];
-                                                                                  false -> [{Node, 1} | TmpAns]
-                                                                              end;
-                                                                      false -> [{Node, 1} | TmpAns]
-                                                                  end;
-                                                              false -> TmpAns
-                                                          end
-                                                  end,
+                    case ModuleV > 0.5 of
+                        true -> case (AvgLoad > 0) and (NodeV >= 2 * AvgLoad) of
+                                    true ->
+                                        V = erlang:min(10, erlang:round(NodeV / AvgLoad)),
+                                        [{Node, V} | TmpAns];
+                                    false -> [{Node, 1} | TmpAns]
+                                end;
+                        false -> [{Node, 1} | TmpAns]
+                    end;
+                false -> TmpAns
+            end
+        end,
 
-                                       FilteredNodeToLoad = lists:foldl(GetLoads, [], NodeToLoad),
+        FilteredNodeToLoad = lists:foldl(GetLoads, [], NodeToLoad),
 
-                                       case FilteredNodeToLoad of
-                                           [] -> {Module, []};
-                                           _ ->
-                                               MinV = lists:min([V || {_Node, V} <- FilteredNodeToLoad]),
-                                               FilteredNodeToLoad2 = case MinV of
-                                                                         1 -> FilteredNodeToLoad;
-                                                                         _ -> [{Node, erlang:round(V / MinV)} || {Node, V} <- FilteredNodeToLoad]
-                                                                     end,
+        case FilteredNodeToLoad of
+            [] -> {Module, []};
+            _ ->
+                MinV = lists:min([V || {_Node, V} <- FilteredNodeToLoad]),
+                FilteredNodeToLoad2 = case MinV of
+                                          1 -> FilteredNodeToLoad;
+                                          _ -> [{Node, erlang:round(V / MinV)} || {Node, V} <- FilteredNodeToLoad]
+                                      end,
 
-                                               IPs = [{NodeToIPWithLogging(Node), Param} || {Node, Param} <- FilteredNodeToLoad2],
+                IPs = [{NodeToIPWithLogging(Node), Param} || {Node, Param} <- FilteredNodeToLoad2],
 
-                                               FilteredIPs = [{IP, Param} || {IP, Param} <- IPs, IP =/= unknownaddress],
-                                               {Module, FilteredIPs}
-                                       end
-                               end, MergedByModule),
+                FilteredIPs = [{IP, Param} || {IP, Param} <- IPs, IP =/= unknownaddress],
+                {Module, FilteredIPs}
+        end
+    end, MergedByModule),
 
     FilteredModulesToNodes = [{Module, Nodes} || {Module, Nodes} <- ModulesToNodes, Nodes =/= []],
 
     NLoads = lists:map(
-               fun({Node, NodeLoad, _}) ->
-                       {NodeToIPWithLogging(Node), NodeLoad}
-               end, NodeToLoad),
+        fun({Node, NodeLoad, _}) ->
+            {NodeToIPWithLogging(Node), NodeLoad}
+        end, NodeToLoad),
     UpdateInfo = {update_state, FilteredModulesToNodes, [{N_IP, N_Load} || {N_IP, N_Load} <- NLoads, N_IP =/= unknownaddress], AvgLoad},
     ?debug("updating dns, update message: ~p", [UpdateInfo]),
     UpdateDnsWorker = fun({_Node, Module, Pid}) ->
-                              case Module of
-                                  dns_worker -> gen_server:cast(Pid, {asynch, 1, UpdateInfo});
-                                  _ -> ok
-                              end
-                      end,
+        case Module of
+            dns_worker -> gen_server:cast(Pid, {asynch, 1, UpdateInfo});
+            _ -> ok
+        end
+    end,
 
     lists:foreach(UpdateDnsWorker, WorkersList),
     ok.
@@ -815,9 +816,9 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec node_to_ip(Node) -> Result when
-      Result :: {ok, inet:ip4_address()}
-              | {error, inet:posix()},
-      Node :: atom().
+    Result :: {ok, inet:ip4_address()}
+    | {error, inet:posix()},
+    Node :: atom().
 node_to_ip(Node) ->
     StrNode = atom_to_list(Node),
     AddressWith@ = lists:dropwhile(fun(Char) -> Char =/= $@ end, StrNode),
@@ -832,8 +833,8 @@ node_to_ip(Node) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec change_monitoring(Nodes, Flag) -> ok when
-      Nodes :: list(),
-      Flag :: boolean().
+    Nodes :: list(),
+    Flag :: boolean().
 change_monitoring([], _Flag) ->
     ok;
 change_monitoring([Node | Nodes], Flag) ->
@@ -847,7 +848,7 @@ change_monitoring([Node | Nodes], Flag) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_version(State :: term()) -> Result when
-      Result :: list().
+    Result :: list().
 get_version(State) ->
     Workers = get_workers_list(State),
     get_workers_versions(Workers).
@@ -859,7 +860,7 @@ get_version(State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_workers_versions(Workers :: list()) -> Result when
-      Result :: list().
+    Result :: list().
 get_workers_versions(Workers) ->
     get_workers_versions(Workers, []).
 
@@ -870,7 +871,7 @@ get_workers_versions(Workers) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_workers_versions(Workers :: list(), TmpAnswer :: list()) -> Result when
-      Result :: list().
+    Result :: list().
 get_workers_versions([], Versions) ->
     Versions;
 get_workers_versions([{Node, Module} | Workers], Versions) ->
@@ -890,9 +891,9 @@ get_workers_versions([{Node, Module} | Workers], Versions) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec calculate_node_load(Nodes :: list(), Period :: atom()) -> Result when
-      Result :: list().
+    Result :: list().
 calculate_node_load(_Nodes, _Period) ->
-    {[],0}. %todo
+    {[], 0}. %todo
 
 %%--------------------------------------------------------------------
 %% @private
@@ -901,7 +902,7 @@ calculate_node_load(_Nodes, _Period) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec register_dispatcher_map(Module :: atom(), Map :: term(), MapsList :: list()) -> Result when
-      Result :: list().
+    Result :: list().
 register_dispatcher_map(Module, Map, MapsList) ->
     ?debug("dispatcher map saved: ~p", [{Module, Map, MapsList}]),
     [{Module, Map} | proplists:delete(Module, MapsList)].

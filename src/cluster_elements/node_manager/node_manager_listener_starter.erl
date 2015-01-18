@@ -1,12 +1,17 @@
 %%%-------------------------------------------------------------------
-%%% @author lichon
-%%% @copyright (C) 2015, <COMPANY>
-%%% @doc
-%%%
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
-%%% Created : 12. Jan 2015 16:59
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module provides functions allowing to start listeners
+%%% @end
 %%%-------------------------------------------------------------------
 -module(node_manager_listener_starter).
+-author("Tomasz Lichon").
+
 -include("registered_names.hrl").
 -include("cluster_elements/node_manager/node_manager_listeners.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
@@ -15,16 +20,16 @@
 %% API
 -export([start_dispatcher_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0, start_dns_listeners/0]).
 
-%% ====================================================================
-%% Cowboy listeners starting
-%% ====================================================================
+%%%===================================================================
+%%% API
+%%%===================================================================
 
-%% start_dispatcher_listener/0
-%% ====================================================================
-%% @doc Starts a cowboy listener for request_dispatcher.
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts a cowboy listener for request_dispatcher.
 %% @end
+%%--------------------------------------------------------------------
 -spec start_dispatcher_listener() -> ok | no_return().
-%% ====================================================================
 start_dispatcher_listener() ->
     catch cowboy:stop_listener(?DISPATCHER_LISTENER),
     {ok, Port} = application:get_env(?APP_NAME, dispatcher_port),
@@ -51,23 +56,20 @@ start_dispatcher_listener() ->
     ok.
 
 
-%% start_gui_listener/0
-%% ====================================================================
-%% @doc Starts a cowboy listener for n2o GUI.
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts a cowboy listener for n2o GUI.
 %% @end
+%%--------------------------------------------------------------------
 -spec start_gui_listener() -> ok | no_return().
-%% ====================================================================
 start_gui_listener() ->
     % Get params from env for gui
     {ok, DocRoot} = application:get_env(?APP_NAME, http_worker_static_files_root),
-
     {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
-
     {ok, GuiPort} = application:get_env(?APP_NAME, http_worker_https_port),
     {ok, GuiNbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_acceptors),
     {ok, MaxKeepAlive} = application:get_env(?APP_NAME, http_worker_max_keepalive),
     {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout),
-
     LocalPort = oneproxy:get_local_port(GuiPort),
     spawn_link(fun() -> oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none) end),
 
@@ -113,17 +115,16 @@ start_gui_listener() ->
         ]).
 
 
-%% start_redirector_listener/0
-%% ====================================================================
-%% @doc Starts a cowboy listener that will redirect all requests of http to https.
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts a cowboy listener that will redirect all requests of http to https.
 %% @end
+%%--------------------------------------------------------------------
 -spec start_redirector_listener() -> ok | no_return().
-%% ====================================================================
 start_redirector_listener() ->
     {ok, RedirectPort} = application:get_env(?APP_NAME, http_worker_redirect_port),
     {ok, RedirectNbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_http_acceptors),
     {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout),
-
     RedirectDispatch = [
         {'_', [
             {'_', opn_cowboy_bridge,
@@ -134,7 +135,6 @@ start_redirector_listener() ->
                 ]}
         ]}
     ],
-
     {ok, _} = cowboy:start_http(?HTTP_REDIRECTOR_LISTENER, RedirectNbAcceptors,
         [
             {port, RedirectPort}
@@ -145,22 +145,17 @@ start_redirector_listener() ->
             {timeout, Timeout}
         ]).
 
-
-%% start_rest_listener/0
-%% ====================================================================
-%% @doc Starts a cowboy listener for REST requests.
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts a cowboy listener for REST requests.
 %% @end
+%%--------------------------------------------------------------------
 -spec start_rest_listener() -> ok | no_return().
-%% ====================================================================
 start_rest_listener() ->
     {ok, NbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_acceptors),
     {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout),
-
     {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
-
-    % Get REST port from env and setup dispatch opts for cowboy
     {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
-
     LocalPort = oneproxy:get_local_port(RestPort),
     Pid = spawn_link(fun() -> oneproxy:start_rproxy(RestPort, LocalPort, Cert, verify_peer) end),
     register(?ONEPROXY_REST, Pid),
@@ -193,15 +188,14 @@ start_rest_listener() ->
             {max_keepalive, 1},
             {timeout, Timeout}
         ]),
-
     ok.
 
-%% start_dns_listeners/0
-%% ====================================================================
-%% @doc Starts DNS UDP and TCP listeners.
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts DNS UDP and TCP listeners.
 %% @end
+%%--------------------------------------------------------------------
 -spec start_dns_listeners() -> ok | no_return().
-%% ====================================================================
 start_dns_listeners() ->
     {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
     {ok, EdnsMaxUdpSize} = application:get_env(?APP_NAME, edns_max_udp_size),
@@ -212,16 +206,17 @@ start_dns_listeners() ->
     end,
     ok = dns_server:start(?SUPERVISOR_NAME, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
 
-%% %% ====================================================================
-%% %% Internal functions
-%% %% ====================================================================
-%%
-%% static_dispatches/2
-%% ====================================================================
-%% @doc Generates static file routing rules for cowboy.
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generates static file routing rules for cowboy.
 %% @end
+%%--------------------------------------------------------------------
 -spec static_dispatches(DocRoot :: string(), StaticPaths :: [string()]) -> [term()].
-%% ====================================================================
 static_dispatches(DocRoot, StaticPaths) ->
     _StaticDispatches = lists:map(fun(Dir) ->
         {Dir ++ "[...]", opn_cowboy_bridge,
