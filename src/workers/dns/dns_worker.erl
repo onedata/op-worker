@@ -181,7 +181,7 @@ handle(ProtocolVersion, Msg) ->
     Result :: ok.
 %% ====================================================================
 cleanup() ->
-    dns_server:stop(?Supervisor_Name).
+    dns_server:stop(?SUPERVISOR_NAME).
 
 
 %% ===================================================================
@@ -495,7 +495,7 @@ handle_txt(_Domain) -> not_impl.
 call_dns_worker(Request) ->
     try
         {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
-        DispatcherAns = gen_server:call(?Dispatcher_Name, {dns_worker, 1, self(), Request}),
+        DispatcherAns = gen_server:call(?DISPATCHER_NAME, {dns_worker, 1, self(), Request}),
         case DispatcherAns of
             ok ->
                 receive

@@ -46,7 +46,7 @@ distributed_test(Config) ->
   ?assertEqual(ok, rpc:call(Node1, ?MODULE, node1_code1, [])),
   test_utils:wait_for_cluster_cast(),
   ?assertEqual(ok, rpc:call(Node2, ?MODULE, node2_code, [])),
-  test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node2}),
+  test_utils:wait_for_cluster_cast({?NODE_MANAGER_NAME, Node2}),
   ?assertEqual(ok, rpc:call(Node1, ?MODULE, node1_code2, [])),
   test_utils:wait_for_cluster_init(DuplicatedPermanentNodes),
 
@@ -58,7 +58,7 @@ distributed_test(Config) ->
 
 %% Code of nodes used during the test
 node1_code1() ->
-  gen_server:cast(?Node_Manager_Name, do_heart_beat),
+  gen_server:cast(?NODE_MANAGER_NAME, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   ok.
 
@@ -67,7 +67,7 @@ node1_code2() ->
   ok.
 
 node2_code() ->
-  gen_server:cast(?Node_Manager_Name, do_heart_beat),
+  gen_server:cast(?NODE_MANAGER_NAME, do_heart_beat),
   ok.
 
 %% ====================================================================
@@ -77,7 +77,7 @@ node2_code() ->
 %% ====================================================================
 
 local_test(_Config) ->
-  gen_server:cast(?Node_Manager_Name, do_heart_beat),
+  gen_server:cast(?NODE_MANAGER_NAME, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),

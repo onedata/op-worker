@@ -605,7 +605,7 @@ get_file(Req, State) ->
 spawn_handling_process() ->
     SocketPid = self(),
     MsgID = 0, %% This can be 0 as one socket process sends only one request
-    gen_server:call(?Dispatcher_Name, {node_chosen, {http_worker, 1, SocketPid, MsgID, {spawn_handler, SocketPid}}}),
+    gen_server:call(?DISPATCHER_NAME, {node_chosen, {http_worker, 1, SocketPid, MsgID, {spawn_handler, SocketPid}}}),
     receive
         {worker_answer, MsgID, Resp} ->
             set_handler_pid(Resp),

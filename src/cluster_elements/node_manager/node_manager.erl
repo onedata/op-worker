@@ -48,14 +48,14 @@
     Pid :: pid(),
     Error :: {already_started, Pid} | term().
 start_link(Type) ->
-    gen_server:start_link({local, ?Node_Manager_Name}, ?MODULE, [Type], []).
+    gen_server:start_link({local, ?NODE_MANAGER_NAME}, ?MODULE, [Type], []).
 
 %% stop/0
 %% ====================================================================
 %% @doc Stops the server
 -spec stop() -> ok.
 stop() ->
-    gen_server:cast(?Node_Manager_Name, stop).
+    gen_server:cast(?NODE_MANAGER_NAME, stop).
 
 
 %% check_vsn/0
@@ -188,7 +188,7 @@ handle_cast(_Msg, State) ->
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_info({timer, Msg}, State) ->
-    gen_server:cast(?Node_Manager_Name, Msg),
+    gen_server:cast(?NODE_MANAGER_NAME, Msg),
     {noreply, State};
 
 handle_info({nodedown, _Node}, State) ->
@@ -211,12 +211,12 @@ handle_info(_Info, State) ->
 %% ====================================================================
 terminate(_Reason, _State) ->
     % Stop all listeners
-    catch cowboy:stop_listener(?dispatcher_listener),
-    catch cowboy:stop_listener(?http_redirector_listener),
-    catch cowboy:stop_listener(?rest_listener),
-    catch cowboy:stop_listener(?https_listener),
+    catch cowboy:stop_listener(?DISPATCHER_LISTENER),
+    catch cowboy:stop_listener(?HTTP_REDIRECTOR_LISTENER),
+    catch cowboy:stop_listener(?REST_LISTENER),
+    catch cowboy:stop_listener(?HTTPS_LISTENER),
     % Clean up after n2o.
-    catch gui_utils:cleanup_n2o(?session_logic_module),
+    catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE),
     ok.
 
 %% code_change/3
@@ -287,7 +287,7 @@ update_dispatcher(_New_state_num, ccm) ->
     ok;
 update_dispatcher(New_state_num, _Type) ->
     ?debug("Message sent to update dispatcher, state num: ~p", [New_state_num]),
-    gen_server:cast(?Dispatcher_Name, {update_state, New_state_num}).
+    gen_server:cast(?DISPATCHER_NAME, {update_state, New_state_num}).
 
 %% init_net_connection/1
 %% ====================================================================

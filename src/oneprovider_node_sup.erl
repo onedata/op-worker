@@ -39,7 +39,7 @@
     | {shutdown, term()}
     | term().
 start_link(NodeType) ->
-    supervisor:start_link({local, ?Supervisor_Name}, ?MODULE, [NodeType]).
+    supervisor:start_link({local, ?SUPERVISOR_NAME}, ?MODULE, [NodeType]).
 
 %% ===================================================================
 %% Supervisor callbacks

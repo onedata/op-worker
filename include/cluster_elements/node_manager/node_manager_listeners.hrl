@@ -17,21 +17,21 @@
 -define(ONEPROVIDER_URI_PATH, "/oneprovider").
 
 % Paths in gui static directory
--define(static_paths, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
+-define(STATIC_PATHS, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
 
 % Session logic module
--define(session_logic_module, session_logic).
+-define(SESSION_LOGIC_MODULE, session_logic).
 
 % GUI routing module
--define(gui_routing_module, gui_routes).
+-define(GUI_ROUTING_MODULE, gui_routes).
 
 % Custom cowboy bridge module
--define(cowboy_bridge_module, n2o_handler).
+-define(COWBOY_BRIDGE_MODULE, n2o_handler).
 
 % Cowboy listener references
--define(dispatcher_listener, dispatcher).
--define(https_listener, https).
--define(rest_listener, rest).
--define(http_redirector_listener, http).
+-define(DISPATCHER_LISTENER, dispatcher).
+-define(HTTPS_LISTENER, https).
+-define(REST_LISTENER, rest).
+-define(HTTP_REDIRECTOR_LISTENER, http).
 
 -endif.

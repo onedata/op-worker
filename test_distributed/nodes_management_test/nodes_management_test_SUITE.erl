@@ -33,7 +33,7 @@ all() -> [one_node_test, ccm_and_worker_test].
 %% ====================================================================
 
 ccm_code1() ->
-  gen_server:cast(?Node_Manager_Name, do_heart_beat),
+  gen_server:cast(?NODE_MANAGER_NAME, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   ok.
 
@@ -42,7 +42,7 @@ ccm_code2() ->
   ok.
 
 worker_code() ->
-  gen_server:cast(?Node_Manager_Name, do_heart_beat),
+  gen_server:cast(?NODE_MANAGER_NAME, do_heart_beat),
   ok.
 
 %% ====================================================================
@@ -50,19 +50,19 @@ worker_code() ->
 %% ====================================================================
 one_node_test(Config) ->
     [Node] = ?config(nodes, Config),
-    ?assertMatch(ccm, gen_server:call({?Node_Manager_Name, Node}, getNodeType)).
+    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Node}, getNodeType)).
 
 ccm_and_worker_test(Config) ->
     [Ccm, Worker] = ?config(nodes, Config),
-    gen_server:call({?Node_Manager_Name, Ccm}, getNodeType),
-    ?assertMatch(ccm, gen_server:call({?Node_Manager_Name, Ccm}, getNodeType)),
-    ?assertMatch(worker, gen_server:call({?Node_Manager_Name, Worker}, getNodeType)),
+    gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType),
+    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType)),
+    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker}, getNodeType)),
 
     timer:sleep(15000), %todo reorganize cluster startup, so we don't have to wait
 
-    ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Ccm}, {http_worker, 1, self(), ping})),
+    ?assertEqual(ok, gen_server:call({?DISPATCHER_NAME, Ccm}, {http_worker, 1, self(), ping})),
     ?assertEqual(pong, receive Msg -> Msg end),
-    ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Worker}, {http_worker, 1, self(), ping})),
+    ?assertEqual(ok, gen_server:call({?DISPATCHER_NAME, Worker}, {http_worker, 1, self(), ping})),
     ?assertEqual(pong, receive Msg -> Msg end).
 
 %% ====================================================================

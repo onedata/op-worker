@@ -188,7 +188,7 @@ handle_cast({node_is_up, Node}, State = #cm_state{nodes = Nodes, state_loaded = 
     ?debug("Heartbeat from node: ~p", [Node]),
     case lists:member(Node, Nodes) orelse Node =:= node() of
         true ->
-            gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num}),
+            gen_server:cast({?NODE_MANAGER_NAME, Node}, {heart_beat_ok, State#cm_state.state_num}),
             {noreply, State};
         false ->
             ?info("New node: ~p", [Node]),
@@ -210,11 +210,11 @@ handle_cast({node_is_up, Node}, State = #cm_state{nodes = Nodes, state_loaded = 
                         true -> gen_server:cast({global, ?CCM}, update_dispatchers_and_dns);
                         false -> ok
                     end,
-                    gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num}),
+                    gen_server:cast({?NODE_MANAGER_NAME, Node}, {heart_beat_ok, State#cm_state.state_num}),
                     {noreply, NewState#cm_state{nodes = [Node | Nodes]}};
                 Error ->
                     ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p", [Node, Error]),
-                    gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num}),
+                    gen_server:cast({?NODE_MANAGER_NAME, Node}, {heart_beat_ok, State#cm_state.state_num}),
                     {noreply, State}
             end
     end;
@@ -452,7 +452,7 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 start_worker(Node, Module, WorkerArgs, State) ->
     try
         {ok, LoadMemorySize} = application:get_env(?APP_Name, worker_load_memory_size),
-        {ok, ChildPid} = supervisor:start_child({?Supervisor_Name, Node}, ?Sup_Child(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
+        {ok, ChildPid} = supervisor:start_child({?SUPERVISOR_NAME, Node}, ?Sup_Child(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
         Workers = State#cm_state.workers,
         ?info("Worker: ~s started at node: ~s", [Module, Node]),
         {ok, State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}}
@@ -481,8 +481,8 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
     {NewWorkers, ChosenChild} = lists:foldl(CreateNewWorkersList, {[], non}, Workers),
     try
         {ChildNode, _ChildPid} = ChosenChild,
-        ok = supervisor:terminate_child({?Supervisor_Name, ChildNode}, Module),
-        ok = supervisor:delete_child({?Supervisor_Name, ChildNode}, Module),
+        ok = supervisor:terminate_child({?SUPERVISOR_NAME, ChildNode}, Module),
+        ok = supervisor:delete_child({?SUPERVISOR_NAME, ChildNode}, Module),
         ?info("Worker: ~s stopped at node: ~s", [Module, Node]),
         {ok, State#cm_state{workers = NewWorkers}}
     catch
@@ -499,7 +499,7 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
 %% ====================================================================
 check_node(Node, State = #cm_state{workers = Workers}) ->
         pong = net_adm:ping(Node),
-        Children = supervisor:which_children({?Supervisor_Name, Node}),
+        Children = supervisor:which_children({?SUPERVISOR_NAME, Node}),
         {ok, NewWorkers} = add_children(Node, Children, Workers, State),
         WorkersFound = length(NewWorkers) > length(Workers),
         {ok, State#cm_state{workers = NewWorkers}, WorkersFound}.
@@ -656,10 +656,10 @@ update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
 %% ====================================================================
 update_dispatcher_state(WorkersList, DispatcherMaps, Nodes, NewStateNum, Loads, AvgLoad) ->
     UpdateNode = fun(Node) ->
-        gen_server:cast({?Dispatcher_Name, Node}, {update_workers, WorkersList, DispatcherMaps, NewStateNum, proplists:get_value(Node, Loads, 0), AvgLoad})
+        gen_server:cast({?DISPATCHER_NAME, Node}, {update_workers, WorkersList, DispatcherMaps, NewStateNum, proplists:get_value(Node, Loads, 0), AvgLoad})
     end,
     lists:foreach(UpdateNode, Nodes),
-    gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, DispatcherMaps, NewStateNum, 0, 0}).
+    gen_server:cast(?DISPATCHER_NAME, {update_workers, WorkersList, DispatcherMaps, NewStateNum, 0, 0}).
 
 %% update_dispatcher_state/3
 %% ====================================================================
@@ -672,7 +672,7 @@ update_dispatcher_state(WorkersList, DispatcherMaps, Nodes, NewStateNum, Loads, 
 %% ====================================================================
 update_dispatcher_state(Nodes, Loads, AvgLoad) ->
     UpdateNode = fun(Node) ->
-        gen_server:cast({?Dispatcher_Name, Node}, {update_loads, proplists:get_value(Node, Loads, 0), AvgLoad})
+        gen_server:cast({?DISPATCHER_NAME, Node}, {update_loads, proplists:get_value(Node, Loads, 0), AvgLoad})
     end,
     lists:foreach(UpdateNode, Nodes).
 

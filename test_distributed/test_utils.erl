@@ -126,8 +126,8 @@ check_init(ModulesNum) ->
         Nodes = gen_server:call({global, ?CCM}, get_nodes, 1000),
         {_, CStateNum} = gen_server:call({global, ?CCM}, get_callbacks, 1000),
         CheckNode = fun(Node, TmpAns) ->
-          StateNum2 = gen_server:call({?Dispatcher_Name, Node}, get_state_num, 1000),
-          {_, CStateNum2} = gen_server:call({?Dispatcher_Name, Node}, get_callbacks, 1000),
+          StateNum2 = gen_server:call({?DISPATCHER_NAME, Node}, get_state_num, 1000),
+          {_, CStateNum2} = gen_server:call({?DISPATCHER_NAME, Node}, get_callbacks, 1000),
           case (StateNum == StateNum2) and (CStateNum == CStateNum2) of
             true -> TmpAns;
             false -> [{wrong_state_nums, Node, StateNum, StateNum2, CStateNum, CStateNum2} | TmpAns]

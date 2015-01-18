@@ -41,7 +41,7 @@
     Error :: {already_started, Pid} | term().
 %% ====================================================================
 start_link() ->
-    gen_server:start_link({local, ?Dispatcher_Name}, ?MODULE, ?MODULES, []).
+    gen_server:start_link({local, ?DISPATCHER_NAME}, ?MODULE, ?MODULES, []).
 
 %% stop/0
 %% ====================================================================
@@ -49,7 +49,7 @@ start_link() ->
 -spec stop() -> ok.
 %% ====================================================================
 stop() ->
-    gen_server:cast(?Dispatcher_Name, stop).
+    gen_server:cast(?DISPATCHER_NAME, stop).
 
 %% init/1
 %% ====================================================================
@@ -266,12 +266,12 @@ handle_test_call(_Request, _From, State) ->
 handle_cast({update_state, NewStateNum}, State) ->
     case State#dispatcher_state.state_num >= NewStateNum of
         true ->
-            gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum});
+            gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_updated, NewStateNum});
         false ->
             spawn(fun() ->
                 ?info("Dispatcher had old state number, starting update"),
                 {WorkersList, StateNum} = pull_state(State#dispatcher_state.state_num),
-                gen_server:cast(?Dispatcher_Name, {update_pulled_state, WorkersList, StateNum})
+                gen_server:cast(?DISPATCHER_NAME, {update_pulled_state, WorkersList, StateNum})
             end)
     end,
     {noreply, State};
@@ -289,7 +289,7 @@ handle_cast({update_pulled_state, WorkersList, StateNum}, State) ->
                        TmpState#dispatcher_state{state_num = StateNum}
                end,
 
-    gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num}),
+    gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_updated, NewState#dispatcher_state.state_num}),
     {noreply, NewState};
 
 handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad}, _) ->
@@ -324,7 +324,7 @@ handle_cast(_Msg, State) ->
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_info({timer, Msg}, State) ->
-    spawn(fun() -> gen_server:call(?Dispatcher_Name, Msg) end),
+    spawn(fun() -> gen_server:call(?DISPATCHER_NAME, Msg) end),
     {noreply, State};
 handle_info(_Info, State) ->
     ?warning("Dispatcher wrong info: ~p", [_Info]),

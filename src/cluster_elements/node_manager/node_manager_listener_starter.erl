@@ -26,7 +26,7 @@
 -spec start_dispatcher_listener() -> ok | no_return().
 %% ====================================================================
 start_dispatcher_listener() ->
-    catch cowboy:stop_listener(?dispatcher_listener),
+    catch cowboy:stop_listener(?DISPATCHER_LISTENER),
     {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
     {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
     {ok, CertFile} = application:get_env(?APP_Name, fuse_ssl_cert_path),
@@ -40,7 +40,7 @@ start_dispatcher_listener() ->
         {?ONEPROVIDER_URI_PATH, provider_handler, []}
     ]}]),
 
-    {ok, _} = cowboy:start_http(?dispatcher_listener, DispatcherPoolSize,
+    {ok, _} = cowboy:start_http(?DISPATCHER_LISTENER, DispatcherPoolSize,
         [
             {ip, {127, 0, 0, 1}},
             {port, LocalPort}
@@ -85,7 +85,7 @@ start_gui_listener() ->
             ]}
         ]},
         % Proper requests are routed to handler modules
-        {'_', static_dispatches(DocRoot, ?static_paths) ++ [
+        {'_', static_dispatches(DocRoot, ?STATIC_PATHS) ++ [
             {'_', opn_cowboy_bridge,
                 [
                     {delegation, true},
@@ -96,10 +96,10 @@ start_gui_listener() ->
     ],
 
     % Create ets tables and set envs needed by n2o
-    gui_utils:init_n2o_ets_and_envs(GuiPort, ?gui_routing_module, ?session_logic_module, ?cowboy_bridge_module),
+    gui_utils:init_n2o_ets_and_envs(GuiPort, ?GUI_ROUTING_MODULE, ?SESSION_LOGIC_MODULE, ?COWBOY_BRIDGE_MODULE),
 
     % Start the listener for web gui and nagios handler
-    {ok, _} = cowboy:start_http(?https_listener, GuiNbAcceptors,
+    {ok, _} = cowboy:start_http(?HTTPS_LISTENER, GuiNbAcceptors,
         [
             {ip, {127, 0, 0, 1}},
             {port, LocalPort}
@@ -135,7 +135,7 @@ start_redirector_listener() ->
         ]}
     ],
 
-    {ok, _} = cowboy:start_http(?http_redirector_listener, RedirectNbAcceptors,
+    {ok, _} = cowboy:start_http(?HTTP_REDIRECTOR_LISTENER, RedirectNbAcceptors,
         [
             {port, RedirectPort}
         ],
@@ -183,7 +183,7 @@ start_rest_listener() ->
     ],
 
     % Start the listener for REST handler
-    {ok, _} = cowboy:start_http(?rest_listener, NbAcceptors,
+    {ok, _} = cowboy:start_http(?REST_LISTENER, NbAcceptors,
         [
             {ip, {127, 0, 0, 1}},
             {port, LocalPort}
@@ -210,7 +210,7 @@ start_dns_listeners() ->
     OnFailureFun = fun() ->
         ?error("Could not start DNS server on node ~p.", [node()])
     end,
-    ok = dns_server:start(?Supervisor_Name, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
+    ok = dns_server:start(?SUPERVISOR_NAME, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
 
 %% %% ====================================================================
 %% %% Internal functions
