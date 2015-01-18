@@ -1,13 +1,14 @@
-%% ===================================================================
-%% @author Rafal Slota
-%% @copyright (C): 2014 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: Port driver for oneproxy module.
-%% @end
-%% ===================================================================
+%%%-------------------------------------------------------------------
+%%% @author Rafal Slota
+%%% @copyright (C) 2014 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Port driver for oneproxy module.
+%%% @end
+%%%-------------------------------------------------------------------
 -module(oneproxy).
 -author("Rafal Slota").
 
@@ -20,29 +21,28 @@
 -export([start/3, start_proxy/3, start_rproxy/4, start_rproxy/5, main_loop/2,
     get_session/2, get_local_port/1, get_der_certs_dir/0, ca_crl_to_der/1]).
 
+%%%===================================================================
+%%% API
+%%%===================================================================
 
-%% ====================================================================
-%% API functions
-%% ====================================================================
-
-%% get_session/2
-%% ====================================================================
-%% @doc Gets session data for given session ID. If session does not exists, returns empty data,
-%%      although caller shall always assume that the session exists and crash otherwise due to malformed data.
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets session data for given session ID. If session does not exists, returns empty data,
+%% although caller shall always assume that the session exists and crash otherwise due to malformed data.
 %% @end
+%%--------------------------------------------------------------------
 -spec get_session(OneProxyNameOrPid :: atom() | pid(), SessionId :: binary()) -> {ok, Data :: binary()} | {error, Reason :: any()}.
-%% ====================================================================
 get_session(OneProxyNameOrPid, SessionId) ->
     exec(OneProxyNameOrPid, <<"get_session">>, [<<(utils:ensure_binary(SessionId))/binary>>]).
 
 
-%% get_local_port/1
-%% ====================================================================
-%% @doc Maps TLS endpoint port to local TCP endpoint port.
-%% @end
+%%--------------------------------------------------------------------
+%% @doc
+%% Maps TLS endpoint port to local TCP endpoint port.
 %% @todo Solve potential conflict with user-defined ports.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_local_port(Port :: intet:port()) -> LocalPort :: non_neg_integer().
-%% ====================================================================
 get_local_port(443) ->
     12001;
 get_local_port(5555) ->
@@ -54,62 +54,57 @@ get_local_port(8877) ->
 get_local_port(Port) ->
     20000 + Port.
 
-
-%% start_proxy/3
-%% ====================================================================
-%% @doc Starts oneproxy in proxy mode. This function either does not return or throws exception.
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts oneproxy in proxy mode. This function either does not return or throws exception.
 %% @end
+%%--------------------------------------------------------------------
 -spec start_proxy(ListenerPort :: non_neg_integer(), CertFile :: string() | binary(),
     VerifyType :: verify_peer | verify_none) -> no_return().
-%% ====================================================================
 start_proxy(ListenerPort, CertFile, VerifyType) ->
     start("proxy", ListenerPort, [utils:ensure_list(CertFile),
         utils:ensure_list(VerifyType)]).
 
-
-%% start_rproxy/4
-%% ====================================================================
-%% @doc Starts oneproxy in reverse proxy mode with HTTP-based authentication
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts oneproxy in reverse proxy mode with HTTP-based authentication
 %% delegation. This function either does not return or throws exception.
 %% @end
+%%--------------------------------------------------------------------
 -spec start_rproxy(ListenerPort :: non_neg_integer(), ForwardPort :: non_neg_integer(),
-            CertFile :: string() | binary(), VerifyType :: verify_peer | verify_none) -> no_return().
-%% ====================================================================
+    CertFile :: string() | binary(), VerifyType :: verify_peer | verify_none) -> no_return().
 start_rproxy(ListenerPort, ForwardPort, CertFile, VerifyType) ->
     start_rproxy(ListenerPort, ForwardPort, CertFile, VerifyType, http).
 
-
-%% start_rproxy/5
-%% ====================================================================
-%% @doc Starts oneproxy in reverse proxy mode. This function either does not return or throws exception.
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts oneproxy in reverse proxy mode. This function either does not return or throws exception.
 %% @end
+%%--------------------------------------------------------------------
 -spec start_rproxy(ListenerPort :: non_neg_integer(), ForwardPort :: non_neg_integer(),
     CertFile :: string() | binary(), VerifyType :: verify_peer | verify_none,
     Http :: http | no_http) -> no_return().
-%% ====================================================================
 start_rproxy(ListenerPort, ForwardPort, CertFile, VerifyType, Http) ->
     start("reverse_proxy", ListenerPort, ["127.0.0.1",
         integer_to_list(ForwardPort), utils:ensure_list(CertFile),
         utils:ensure_list(VerifyType), utils:ensure_list(Http)]).
 
-
-%% get_der_certs_dir/0
-%% ====================================================================
-%% @doc Returns directory (path) used by oneproxy to save DER CAs and CRLs.
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns directory (path) used by oneproxy to save DER CAs and CRLs.
 %% @end
+%%--------------------------------------------------------------------
 -spec get_der_certs_dir() -> string().
-%% ====================================================================
 get_der_certs_dir() ->
     {ok, CertDir} = application:get_env(?APP_NAME, ca_dir),
     filename:join(CertDir, ?DER_CERTS_DIR).
 
-
-%% ca_crl_to_der/1
-%% ====================================================================
-%% @doc Save all CAs and CRLs from GSI state to given directory in DER format.
+%%--------------------------------------------------------------------
+%% @doc
+%% Save all CAs and CRLs from GSI state to given directory in DER format.
 %% @end
+%%--------------------------------------------------------------------
 -spec ca_crl_to_der(Dir :: string()) -> ok | {error, Reason :: any()}.
-%% ====================================================================
 ca_crl_to_der(Dir) ->
     case ets:info(gsi_state) of
         undefined ->
@@ -147,15 +142,16 @@ ca_crl_to_der(Dir) ->
             end
     end.
 
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
-
-%% exec/3
-%% ====================================================================
-%% @doc oneproxy port dirver's main loop.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% oneproxy port dirver's main loop.
 %% @end
+%%--------------------------------------------------------------------
 -spec exec(OneProxy :: pid() | atom(), CMD :: binary(), Args :: [binary()]) -> term().
 %% ====================================================================
 exec(OneProxy, CMD, Args) when is_atom(OneProxy) ->
@@ -169,13 +165,13 @@ exec(OneProxyPid, CMD, Args) when is_pid(OneProxyPid) ->
         {error, timeout}
     end.
 
-
-%% start/3
-%% ====================================================================
-%% @doc Starts oneproxy. This function either does not return or throws exception.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts oneproxy. This function either does not return or throws exception.
 %% @end
+%%--------------------------------------------------------------------
 -spec start(Mode :: string(), ListenerPort :: non_neg_integer(), Args :: list()) -> no_return().
-%% ====================================================================
 start(Mode, ListenerPort, Args) ->
     {ok, CWD} = file:get_cwd(),
     ExecPath = os:find_executable("oneproxy", filename:join(CWD, "c_lib")),
@@ -201,17 +197,17 @@ start(Mode, ListenerPort, Args) ->
             ?MODULE:start(Mode, ListenerPort, Args)
     end.
 
-
-%% main_loop/2
-%% ====================================================================
-%% @doc oneproxy port dirver's main loop.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% oneproxy port dirver's main loop.
 %% @end
+%%--------------------------------------------------------------------
 -spec main_loop(Port :: term(), State :: #oneproxy_state{}) -> no_return().
-%% ====================================================================
 main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = State) ->
     NewState =
         receive
-            %% Handle oneproxy logs
+        %% Handle oneproxy logs
             {Port, {data, {eol, <<?LOG_DEBUG_PREFIX, Log/binary>>}}} ->
                 ?debug("[ oneproxy ~p ] ~s", [EnpointPort, utils:ensure_list(Log)]),
                 State;
@@ -228,12 +224,12 @@ main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = Sta
                 ?error("oneproxy port terminated due to: ~p", [Reason]),
                 error({terminated, Reason});
 
-            %% Checks if port is still alive
+        %% Checks if port is still alive
             heartbeat ->
                 timer:send_after(timer:seconds(3), heartbeat),
                 port_command(Port, <<"heartbeat\n">>),
                 State;
-            %% Reloads GSI CAs and CRLs in oneproxy port
+        %% Reloads GSI CAs and CRLs in oneproxy port
             reload_certs ->
                 case ca_crl_to_der(get_der_certs_dir()) of
                     ok ->
@@ -245,7 +241,7 @@ main_loop(Port, #oneproxy_state{timeout = Timeout, endpoint = EnpointPort} = Sta
                         timer:send_after(500, reload_certs),
                         State
                 end;
-            %% Executes given command on oneproxy and replays with {ok, Response} or {error, Reason}
+        %% Executes given command on oneproxy and replays with {ok, Response} or {error, Reason}
             {{Pid, Id}, {command, CMD, Args}} ->
                 BinPid = base64:encode(term_to_binary(Pid)),
                 PidSize = size(BinPid),
