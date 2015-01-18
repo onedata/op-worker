@@ -9,8 +9,17 @@
 -module(configurator).
 
 %% API
--export([get_env/3, replace_env/4, replace_vm_arg/3, configure_release/8]).
+-export([configure_release/8, get_env/3, replace_env/4, replace_vm_arg/3]).
 
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Configure release stored at ReleaseRootPath, according to given parameters
+%% @end
+%%--------------------------------------------------------------------
 -spec configure_release(ReleaseRootPath :: string(), ApplicationName :: atom(), NodeName :: string(), Cookie :: string(), NodeType :: atom(),
     CcmNodes :: [atom()], DbNodes :: [atom()], DistributedAppFailoverTimeout :: integer()) -> ok | no_return().
 configure_release(ReleaseRootPath, ApplicationName, NodeName, Cookie, NodeType, CcmNodes, DbNodes, DistributedAppFailoverTimeout) ->
@@ -26,23 +35,47 @@ configure_release(ReleaseRootPath, ApplicationName, NodeName, Cookie, NodeType, 
     replace_env(SysConfigPath, "kernel", distributed, [{list_to_atom(NodeName), DistributedAppFailoverTimeout, CcmNodes}]),
     replace_env(SysConfigPath, "kernel", sync_nodes_mandatory, CcmNodes -- [list_to_atom(NodeName)]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Get env from sys.config file
+%% @end
+%%--------------------------------------------------------------------
 -spec get_env(string(), atom(), atom()) -> term() | no_return().
 get_env(SysConfigPath, ApplicationName, EnvName) ->
     {ok, [SysConfig]} = file:consult(SysConfigPath),
     AppEnvs = proplists:get_value(ApplicationName, SysConfig),
     proplists:get_value(EnvName, AppEnvs).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Replace env in sys.config file
+%% @end
+%%--------------------------------------------------------------------
 -spec replace_env(string(), atom(), atom(), term()) -> ok | no_return().
 replace_env(SysConfigPath, _ApplicationName, EnvName, EnvValue) ->
     [] = os:cmd("sed -i \"s#{" ++ atom_to_list(EnvName) ++ ",.*#{" ++ atom_to_list(EnvName) ++ ", " ++
-        term_to_bash_escaped_string(EnvValue) ++ "},#g\" \"" ++ SysConfigPath ++ "\""),
+        term_to_string(EnvValue) ++ "},#g\" \"" ++ SysConfigPath ++ "\""),
     ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Replace env in vm.args file
+%% @end
+%%--------------------------------------------------------------------
 -spec replace_vm_arg(string(), string(), string()) -> ok | no_return().
 replace_vm_arg(VMArgsPath, FullArgName, ArgValue) ->
     [] = os:cmd("sed -i \"s#" ++ FullArgName ++ " .*#" ++ FullArgName ++ " " ++
         ArgValue ++ "#g\" \"" ++ VMArgsPath ++ "\"").
 
--spec term_to_bash_escaped_string(term()) -> string().
-term_to_bash_escaped_string(Term) ->
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Convert erlang term to string
+%% @end
+%%--------------------------------------------------------------------
+-spec term_to_string(term()) -> string().
+term_to_string(Term) ->
     io_lib:fwrite("~p",[Term]).
