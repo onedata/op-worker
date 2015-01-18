@@ -19,10 +19,11 @@ main(_) ->
         {ok, [Args]} = file:consult(?args_file),
         NodesConfig = expand_full_list_of_nodes(Args),
         file:make_dir(?test_releases_directory),
-        create_releases(NodesConfig)
+        create_releases(NodesConfig),
+        cleanup()
     catch
         _Type:Error ->
-            file:delete("configurator.beam"),
+            cleanup(),
             print("Error: ~p",[Error]),
             print("Stacktrace: ~p",[erlang:get_stacktrace()])
     end.
@@ -103,3 +104,6 @@ print(Msg) ->
 print(Msg, Args) ->
     io:format(Msg ++ "~n",Args),
     Msg.
+
+cleanup() ->
+    file:delete("configurator.beam").
