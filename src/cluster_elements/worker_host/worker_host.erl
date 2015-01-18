@@ -39,11 +39,11 @@
     PlugIn :: atom(),
     PlugInArgs :: any(),
     LoadMemorySize :: integer(),
-    Result ::  {ok,Pid}
+    Result :: {ok, Pid}
     | ignore
-    | {error,Error},
+    | {error, Error},
     Pid :: pid(),
-    Error :: {already_started,Pid} | term().
+    Error :: {already_started, Pid} | term().
 start_link(PlugIn, PlugInArgs, LoadMemorySize) ->
     gen_server:start_link({local, PlugIn}, ?MODULE, [PlugIn, PlugInArgs, LoadMemorySize], []).
 
@@ -296,16 +296,16 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec proc_request(PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: term(), ReplyDisp :: term()) -> Result when
-    Result ::  atom().
+    Result :: atom().
 proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
     BeforeProcessingRequest = os:timestamp(),
-    Response = 	try
+    Response = try
         PlugIn:handle(ProtocolVersion, Msg)
-                  catch
-                      Type:Error ->
-                          ?error_stacktrace("Worker plug-in ~p error: ~p:~p", [PlugIn, Type, Error]),
-                          worker_plug_in_error
-                  end,
+               catch
+                   Type:Error ->
+                       ?error_stacktrace("Worker plug-in ~p error: ~p:~p", [PlugIn, Type, Error]),
+                       worker_plug_in_error
+               end,
     send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo).
 
 %%--------------------------------------------------------------------
@@ -315,7 +315,7 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_response(PlugIn :: atom(), BeforeProcessingRequest :: term(), Response :: term(), MsgId :: term(), ReplyDisp :: term()) -> Result when
-    Result ::  atom().
+    Result :: atom().
 send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo) ->
     case ReplyTo of
         non -> ok;
@@ -344,7 +344,7 @@ send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save_progress(Report :: term(), LoadInfo :: term()) -> NewLoadInfo when
-    NewLoadInfo ::  term().
+    NewLoadInfo :: term().
 save_progress(Report, {New, Old, NewListSize, Max}) ->
     case NewListSize + 1 of
         Max ->
@@ -360,15 +360,16 @@ save_progress(Report, {New, Old, NewListSize, Max}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec load_info(LoadInfo :: term()) -> Result when
-    Result ::  term().
+    Result :: term().
 load_info({New, Old, NewListSize, Max}) ->
-    Load = lists:sum(lists:map(fun({_Time, Load}) -> Load end, New)) + lists:sum(lists:map(fun({_Time, Load}) -> Load end, lists:sublist(Old, Max-NewListSize))),
+    Load = lists:sum(lists:map(fun({_Time, Load}) -> Load end, New)) + lists:sum(lists:map(fun({_Time, Load}) ->
+        Load end, lists:sublist(Old, Max - NewListSize))),
     {Time, _Load} = case {New, Old} of
                         {[], []} -> {os:timestamp(), []};
                         {_O, []} -> lists:last(New);
                         _L -> case NewListSize of
                                   Max -> lists:last(New);
-                                  _S -> lists:nth(Max-NewListSize, Old)
+                                  _S -> lists:nth(Max - NewListSize, Old)
                               end
                     end,
     {Time, Load}.
