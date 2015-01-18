@@ -1,88 +1,94 @@
-%% ===================================================================
-%% @author Michal Wrzeszcz
-%% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: This module is a gen_server that coordinates the
-%% life cycle of node. It starts/stops appropriate services (according
-%% to node type) and communicates with ccm (if node works as worker).
-%%
-%% Node can be ccm or worker. However, worker_hosts can be also
-%% started at ccm nodes.
-%% @end
-%% ===================================================================
-
+%%%-------------------------------------------------------------------
+%%% @author Michal Wrzeszcz
+%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module is a gen_server that coordinates the
+%%% life cycle of node. It starts/stops appropriate services (according
+%%% to node type) and communicates with ccm (if node works as worker).
+%%%
+%%% Node can be ccm or worker. However, worker_hosts can be also
+%%% started at ccm nodes.
+%%% @end
+%%%-------------------------------------------------------------------
 -module(node_manager).
+-author("Michal Wrzeszcz").
+
 -behaviour(gen_server).
+
 -include("registered_names.hrl").
 -include("supervision_macros.hrl").
 -include("cluster_elements/node_manager/node_manager.hrl").
 -include("cluster_elements/node_manager/node_manager_listeners.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% ====================================================================
 %% API
-%% ====================================================================
 -export([start_link/1, stop/0]).
 -export([check_vsn/0]).
 
-%% ====================================================================
 %% gen_server callbacks
-%% ====================================================================
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
-%% ====================================================================
-%% API functions
-%% ====================================================================
+%%%===================================================================
+%%% API
+%%%===================================================================
 
-%% start_link/1
-%% ====================================================================
-%% @doc Starts the server
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts cluster manager
+%% @end
+%%--------------------------------------------------------------------
 -spec start_link(Type) -> Result when
-    Type :: test_worker | worker | ccm | ccm_test,
-    Result :: {ok, Pid}
-    | ignore
-    | {error, Error},
-    Pid :: pid(),
-    Error :: {already_started, Pid} | term().
+      Type :: test_worker | worker | ccm | ccm_test,
+      Result :: {ok, Pid}
+              | ignore
+              | {error, Error},
+      Pid :: pid(),
+      Error :: {already_started, Pid} | term().
 start_link(Type) ->
     gen_server:start_link({local, ?NODE_MANAGER_NAME}, ?MODULE, [Type], []).
 
-%% stop/0
-%% ====================================================================
-%% @doc Stops the server
+%%--------------------------------------------------------------------
+%% @doc
+%% Stops the server
+%% @end
+%%--------------------------------------------------------------------
 -spec stop() -> ok.
 stop() ->
     gen_server:cast(?NODE_MANAGER_NAME, stop).
 
-
-%% check_vsn/0
-%% ====================================================================
-%% @doc Checks application version
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks application version
+%% @end
+%%--------------------------------------------------------------------
 -spec check_vsn() -> Result when
-    Result :: term().
+      Result :: term().
 %% ====================================================================
 check_vsn() ->
     check_vsn(application:which_applications()).
 
-%% ====================================================================
-%% gen_server callbacks functions
-%% ====================================================================
+%%%===================================================================
+%%% gen_server callbacks
+%%%===================================================================
 
-%% init/1
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:init-1">gen_server:init/1</a>
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Initializes the server
+%% @end
+%%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, State}
-    | {ok, State, Timeout}
-    | {ok, State, hibernate}
-    | {stop, Reason :: term()}
-    | ignore,
-    State :: term(),
-    Timeout :: non_neg_integer() | infinity.
-%% ====================================================================
+      Result :: {ok, State}
+              | {ok, State, Timeout}
+              | {ok, State, hibernate}
+              | {stop, Reason :: term()}
+              | ignore,
+      State :: term(),
+      Timeout :: non_neg_integer() | infinity.
 init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
     case Type =/= ccm of
         true ->
@@ -98,22 +104,25 @@ init([test_worker]) ->
 init([_Type]) ->
     {stop, wrong_type}.
 
-%% handle_call/3
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_call-3">gen_server:handle_call/3</a>
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling call messages
+%% @end
+%%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result when
-    Result :: {reply, Reply, NewState}
-    | {reply, Reply, NewState, Timeout}
-    | {reply, Reply, NewState, hibernate}
-    | {noreply, NewState}
-    | {noreply, NewState, Timeout}
-    | {noreply, NewState, hibernate}
-    | {stop, Reason, Reply, NewState}
-    | {stop, Reason, NewState},
-    Reply :: term(),
-    NewState :: term(),
-    Timeout :: non_neg_integer() | infinity,
-    Reason :: term().
+      Result :: {reply, Reply, NewState}
+              | {reply, Reply, NewState, Timeout}
+              | {reply, Reply, NewState, hibernate}
+              | {noreply, NewState}
+              | {noreply, NewState, Timeout}
+              | {noreply, NewState, hibernate}
+              | {stop, Reason, Reply, NewState}
+              | {stop, Reason, NewState},
+      Reply :: term(),
+      NewState :: term(),
+      Timeout :: non_neg_integer() | infinity,
+      Reason :: term().
 %% ====================================================================
 handle_call(getNodeType, _From, State) ->
     Reply = State#node_state.node_type,
@@ -133,17 +142,19 @@ handle_call(_Request, _From, State) ->
     ?warning("Wrong node_manager call: ~p", [_Request]),
     {reply, wrong_request, State}.
 
-%% handle_cast/2
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_cast-2">gen_server:handle_cast/2</a>
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling cast messages
+%% @end
+%%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), State :: term()) -> Result when
-    Result :: {noreply, NewState}
-    | {noreply, NewState, Timeout}
-    | {noreply, NewState, hibernate}
-    | {stop, Reason :: term(), NewState},
-    NewState :: term(),
-    Timeout :: non_neg_integer() | infinity.
-%% ====================================================================
+      Result :: {noreply, NewState}
+              | {noreply, NewState, Timeout}
+              | {noreply, NewState, hibernate}
+              | {stop, Reason :: term(), NewState},
+      NewState :: term(),
+      Timeout :: non_neg_integer() | infinity.
 handle_cast(do_heart_beat, State) ->
     {noreply, heart_beat(State#node_state.ccm_con_status, State)};
 
@@ -176,17 +187,19 @@ handle_cast(_Msg, State) ->
     ?warning("Wrong node_manager cast: ~p", [_Msg]),
     {noreply, State}.
 
-%% handle_info/2
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_info-2">gen_server:handle_info/2</a>
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling all non call/cast messages
+%% @end
+%%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout | term(), State :: term()) -> Result when
-    Result :: {noreply, NewState}
-    | {noreply, NewState, Timeout}
-    | {noreply, NewState, hibernate}
-    | {stop, Reason :: term(), NewState},
-    NewState :: term(),
-    Timeout :: non_neg_integer() | infinity.
-%% ====================================================================
+      Result :: {noreply, NewState}
+              | {noreply, NewState, Timeout}
+              | {noreply, NewState, hibernate}
+              | {stop, Reason :: term(), NewState},
+      NewState :: term(),
+      Timeout :: non_neg_integer() | infinity.
 handle_info({timer, Msg}, State) ->
     gen_server:cast(?NODE_MANAGER_NAME, Msg),
     {noreply, State};
@@ -200,47 +213,54 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 
-%% terminate/2
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:terminate-2">gen_server:terminate/2</a>
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is called by a gen_server when it is about to
+%% terminate. It should be the opposite of Module:init/1 and do any
+%% necessary cleaning up. When it returns, the gen_server terminates
+%% with Reason. The return value is ignored.
+%% @end
+%%--------------------------------------------------------------------
 -spec terminate(Reason, State :: term()) -> Any :: term() when
-    Reason :: normal
-    | shutdown
-    | {shutdown, term()}
-    | term().
-%% ====================================================================
+      Reason :: normal
+              | shutdown
+              | {shutdown, term()}
+              | term().
 terminate(_Reason, _State) ->
-    % Stop all listeners
     catch cowboy:stop_listener(?DISPATCHER_LISTENER),
     catch cowboy:stop_listener(?HTTP_REDIRECTOR_LISTENER),
     catch cowboy:stop_listener(?REST_LISTENER),
     catch cowboy:stop_listener(?HTTPS_LISTENER),
-    % Clean up after n2o.
     catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE),
     ok.
 
-%% code_change/3
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:code_change-3">gen_server:code_change/3</a>
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Convert process state when code is changed
+%% @end
+%%--------------------------------------------------------------------
 -spec code_change(OldVsn, State :: term(), Extra :: term()) -> Result when
-    Result :: {ok, NewState :: term()} | {error, Reason :: term()},
-    OldVsn :: Vsn | {down, Vsn},
-    Vsn :: term().
-%% ====================================================================
+      Result :: {ok, NewState :: term()} | {error, Reason :: term()},
+      OldVsn :: Vsn | {down, Vsn},
+      Vsn :: term().
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
-%% heart_beat/2
-%% ====================================================================
-%% @doc Connects with ccm and tells that the node is alive.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Connects with ccm and tells that the node is alive.
 %% First it establishes network connection, next sends message to ccm.
+%% @end
+%%--------------------------------------------------------------------
 -spec heart_beat(Conn_status :: atom(), State :: term()) -> NewStatus when
-    NewStatus :: term().
-%% ====================================================================
+      NewStatus :: term().
 heart_beat(Conn_status, State) ->
     New_conn_status = case Conn_status of
                           not_connected ->
@@ -260,15 +280,17 @@ heart_beat(Conn_status, State) ->
     end,
 
     ?debug("Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p,  state_num: ~p, disp dispatcher_state: ~p",
-        [node(), New_conn_status, Conn_status, State#node_state.state_num, State#node_state.dispatcher_state]),
+           [node(), New_conn_status, Conn_status, State#node_state.state_num, State#node_state.dispatcher_state]),
     State#node_state{ccm_con_status = New_conn_status}.
 
-%% heart_beat_response/2
-%% ====================================================================
-%% @doc Saves information about ccm connection when ccm answers to its request
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Saves information about ccm connection when ccm answers to its request
+%% @end
+%%--------------------------------------------------------------------
 -spec heart_beat_response(New_state_num :: integer(), State :: term()) -> NewStatus when
-    NewStatus :: term().
-%% ====================================================================
+      NewStatus :: term().
 heart_beat_response(New_state_num, State) when (New_state_num == State#node_state.state_num) and (New_state_num == State#node_state.dispatcher_state) ->
     ?debug("Heart beat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), New_state_num]),
     State;
@@ -277,25 +299,29 @@ heart_beat_response(New_state_num, State) ->
     update_dispatcher(New_state_num, State#node_state.node_type),
     State#node_state{state_num = New_state_num}.
 
-%% update_dispatcher/2
-%% ====================================================================
-%% @doc Tells dispatcher that cluster state has changed.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tells dispatcher that cluster state has changed.
+%% @end
+%%--------------------------------------------------------------------
 -spec update_dispatcher(New_state_num :: integer(), Type :: atom()) -> Result when
-    Result :: atom().
-%% ====================================================================
+      Result :: atom().
 update_dispatcher(_New_state_num, ccm) ->
     ok;
 update_dispatcher(New_state_num, _Type) ->
     ?debug("Message sent to update dispatcher, state num: ~p", [New_state_num]),
     gen_server:cast(?DISPATCHER_NAME, {update_state, New_state_num}).
 
-%% init_net_connection/1
-%% ====================================================================
-%% @doc Initializes network connection with cluster that contains nodes
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Initializes network connection with cluster that contains nodes
 %% given in argument.
+%% @end
+%%--------------------------------------------------------------------
 -spec init_net_connection(Nodes :: list()) -> Result when
-    Result :: atom().
-%% ====================================================================
+      Result :: atom().
 init_net_connection([]) ->
     error;
 init_net_connection([Node | Nodes]) ->
@@ -310,12 +336,14 @@ init_net_connection([Node | Nodes]) ->
             init_net_connection(Nodes)
     end.
 
-%% check_vsn/1
-%% ====================================================================
-%% @doc Checks application version
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks application version
+%% @end
+%%--------------------------------------------------------------------
 -spec check_vsn(ApplicationData :: list()) -> Result when
-    Result :: term().
-%% ====================================================================
+      Result :: term().
 check_vsn([]) ->
     non;
 check_vsn([{Application, _Description, Vsn} | Apps]) ->
