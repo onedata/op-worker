@@ -12,23 +12,24 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% ===================================================================
-%% @author Lukasz Opiola
-%% @copyright (C): 2014 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: Copy of n2o_bullet.erl from n2o.
-%% This is a cowboy handler module for handling websocket connections for n2o.
-%% Compared to original, this module has slight changes in the following functions:
-%% - init/3
-%% - handle/2
-%% - info/3
-%% @end
-%% ===================================================================
-
+%%%--------------------------------------------------------------------
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2014 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc Copy of n2o_bullet.erl from n2o.
+%%% This is a cowboy handler module for handling websocket connections for n2o.
+%%% Compared to original, this module has slight changes in the following functions:
+%%% - init/3
+%%% - handle/2
+%%% - info/3
+%%% @end
+%%%--------------------------------------------------------------------
 -module(opn_bullet_handler).
+-author("Lukasz Opiola").
+
 -behaviour(cowboy_http_handler).
 -behaviour(cowboy_websocket_handler).
 
@@ -42,8 +43,8 @@
 -export([websocket_terminate/3]).
 
 -record(state, {
-	handler :: module(),
-	handler_state :: term()
+    handler :: module(),
+    handler_state :: term()
 }).
 
 -define(TIMEOUT, 60000). %% @todo Configurable.
@@ -51,143 +52,143 @@
 %% HTTP.
 
 init(Transport, Req, Opts) ->
-	case cowboy_req:header(<<"upgrade">>, Req) of
-		{undefined, Req2} ->
-			{Method, Req3} = cowboy_req:method(Req2),
-			init(Transport, Req3, Opts, Method);
-		{Bin, Req2} when is_binary(Bin) ->
-			case cowboy_bstr:to_lower(Bin) of
-				<<"websocket">> ->
-					{upgrade, protocol, cowboy_websocket};
-				_Any ->
-					{ok, Req3} = opn_cowboy_bridge:apply(cowboy_req, reply, [501, [], [], Req2]),
-					{shutdown, Req3, undefined}
-			end
-	end.
+    case cowboy_req:header(<<"upgrade">>, Req) of
+        {undefined, Req2} ->
+            {Method, Req3} = cowboy_req:method(Req2),
+            init(Transport, Req3, Opts, Method);
+        {Bin, Req2} when is_binary(Bin) ->
+            case cowboy_bstr:to_lower(Bin) of
+                <<"websocket">> ->
+                    {upgrade, protocol, cowboy_websocket};
+                _Any ->
+                    {ok, Req3} = opn_cowboy_bridge:apply(cowboy_req, reply, [501, [], [], Req2]),
+                    {shutdown, Req3, undefined}
+            end
+    end.
 
 init(Transport, Req, Opts, <<"GET">>) ->
-	{handler, Handler} = lists:keyfind(handler, 1, Opts),
-	State = #state{handler=Handler},
-	case Handler:init(Transport, Req, Opts, once) of
-		{ok, Req2, HandlerState} ->
-			Req3 = cowboy_req:compact(Req2),
-			{loop, Req3, State#state{handler_state=HandlerState},
-				?TIMEOUT, hibernate};
-		{shutdown, Req2, HandlerState} ->
-			{shutdown, Req2, State#state{handler_state=HandlerState}}
-	end;
+    {handler, Handler} = lists:keyfind(handler, 1, Opts),
+    State = #state{handler = Handler},
+    case Handler:init(Transport, Req, Opts, once) of
+        {ok, Req2, HandlerState} ->
+            Req3 = cowboy_req:compact(Req2),
+            {loop, Req3, State#state{handler_state = HandlerState},
+                ?TIMEOUT, hibernate};
+        {shutdown, Req2, HandlerState} ->
+            {shutdown, Req2, State#state{handler_state = HandlerState}}
+    end;
 init(Transport, Req, Opts, <<"POST">>) ->
-	{handler, Handler} = lists:keyfind(handler, 1, Opts),
-	State = #state{handler=Handler},
-	case Handler:init(Transport, Req, Opts, false) of
-		{ok, Req2, HandlerState} ->
-			{ok, Req2, State#state{handler_state=HandlerState}};
-		{shutdown, Req2, HandlerState} ->
-			{shutdown, Req2, State#state{handler_state=HandlerState}}
-	end;
+    {handler, Handler} = lists:keyfind(handler, 1, Opts),
+    State = #state{handler = Handler},
+    case Handler:init(Transport, Req, Opts, false) of
+        {ok, Req2, HandlerState} ->
+            {ok, Req2, State#state{handler_state = HandlerState}};
+        {shutdown, Req2, HandlerState} ->
+            {shutdown, Req2, State#state{handler_state = HandlerState}}
+    end;
 init(Transport, Req, Opts, <<"OPTIONS">>) ->
-	{handler, Handler} = lists:keyfind(handler, 1, Opts),
-	State = #state{handler=Handler},
-	case Handler:init(Transport, Req, Opts, once) of
-		{ok, Req2, HandlerState} ->
-			{ok, cowboy_req:compact(Req2), State#state{handler_state=HandlerState}};
-	{shutdown, Req2, HandlerState} ->
-		{shutdown, Req2, State#state{handler_state=HandlerState}}
-	end;
+    {handler, Handler} = lists:keyfind(handler, 1, Opts),
+    State = #state{handler = Handler},
+    case Handler:init(Transport, Req, Opts, once) of
+        {ok, Req2, HandlerState} ->
+            {ok, cowboy_req:compact(Req2), State#state{handler_state = HandlerState}};
+        {shutdown, Req2, HandlerState} ->
+            {shutdown, Req2, State#state{handler_state = HandlerState}}
+    end;
 
 init(_Transport, Req, _Opts, _Method) ->
-	{ok, Req2} = opn_cowboy_bridge:apply(cowboy_req,reply,[405, [], [], Req]),
-	{shutdown, Req2, undefined}.
+    {ok, Req2} = opn_cowboy_bridge:apply(cowboy_req, reply, [405, [], [], Req]),
+    {shutdown, Req2, undefined}.
 
 handle(Req, State) ->
-	{Method, Req2} = cowboy_req:method(Req),
-	handle(Req2, State, Method).
-handle(Req, State, <<"OPTIONS">>)->
-       Headers = [
+    {Method, Req2} = cowboy_req:method(Req),
+    handle(Req2, State, Method).
+handle(Req, State, <<"OPTIONS">>) ->
+    Headers = [
         {<<"Content-Type">>, <<"text/html; charset=utf-8">>},
         {<<"Access-Control-Allow-Origin">>, <<"*">>},
         {<<"Access-Control-Allow-Headers">>, <<"X-Socket-Transport, Content-Type, x-requested-with, Accept">>},
         {<<"Access-Control-Allow-Methods">>, <<"GET, POST, PUT, DELETE, OPTIONS">>}
-       ],
-       {ok, Req1} = opn_cowboy_bridge:apply(cowboy_req,reply,[200, Headers, [], cowboy_req:compact(Req)]),
-       {ok, Req1, State};
-handle(Req, State=#state{handler=Handler, handler_state=HandlerState},
-		<<"POST">>) ->
-	case opn_cowboy_bridge:apply(cowboy_req,body,[Req]) of
-		{ok, Data, Req2} ->
-			case Handler:stream(Data, Req2, HandlerState) of
-				{ok, Req3, HandlerState2} ->
-					{ok, Req3, State#state{handler_state=HandlerState2}};
-				{reply, Reply, Req3, HandlerState2} ->
-					{ok, Req4} = opn_cowboy_bridge:apply(cowboy_req,reply,[200, [], Reply, Req3]),
-					{ok, Req4, State#state{handler_state=HandlerState2}}
-			end;
-		{error, _} ->
-			%% An error occurred, stop there.
-			{ok, Req, State}
-	end.
+    ],
+    {ok, Req1} = opn_cowboy_bridge:apply(cowboy_req, reply, [200, Headers, [], cowboy_req:compact(Req)]),
+    {ok, Req1, State};
+handle(Req, State = #state{handler = Handler, handler_state = HandlerState},
+    <<"POST">>) ->
+    case opn_cowboy_bridge:apply(cowboy_req, body, [Req]) of
+        {ok, Data, Req2} ->
+            case Handler:stream(Data, Req2, HandlerState) of
+                {ok, Req3, HandlerState2} ->
+                    {ok, Req3, State#state{handler_state = HandlerState2}};
+                {reply, Reply, Req3, HandlerState2} ->
+                    {ok, Req4} = opn_cowboy_bridge:apply(cowboy_req, reply, [200, [], Reply, Req3]),
+                    {ok, Req4, State#state{handler_state = HandlerState2}}
+            end;
+        {error, _} ->
+            %% An error occurred, stop there.
+            {ok, Req, State}
+    end.
 
 info(Message, Req,
-		State=#state{handler=Handler, handler_state=HandlerState}) ->
-	case Handler:info(Message, Req, HandlerState) of
-		{ok, Req2, HandlerState2} ->
-			{loop, Req2, State#state{handler_state=HandlerState2}, hibernate};
-		{reply, Data, Req2, HandlerState2} ->
-			{ok, Req3} = opn_cowboy_bridge:apply(cowboy_req,reply,[200, [], Data, Req2]),
-			{ok, Req3, State#state{handler_state=HandlerState2}}
-	end.
+    State = #state{handler = Handler, handler_state = HandlerState}) ->
+    case Handler:info(Message, Req, HandlerState) of
+        {ok, Req2, HandlerState2} ->
+            {loop, Req2, State#state{handler_state = HandlerState2}, hibernate};
+        {reply, Data, Req2, HandlerState2} ->
+            {ok, Req3} = opn_cowboy_bridge:apply(cowboy_req, reply, [200, [], Data, Req2]),
+            {ok, Req3, State#state{handler_state = HandlerState2}}
+    end.
 
 terminate(_Reason, _Req, undefined) ->
-        wf:info(?MODULE,"bullet_handler terminate",[]),
-	ok;
-terminate(_Reason, Req, #state{handler=Handler, handler_state=HandlerState}) ->
-        wf:info(?MODULE,"bullet_handler state terminate",[]),
-	Handler:terminate(Req, HandlerState).
+    wf:info(?MODULE, "bullet_handler terminate", []),
+    ok;
+terminate(_Reason, Req, #state{handler = Handler, handler_state = HandlerState}) ->
+    wf:info(?MODULE, "bullet_handler state terminate", []),
+    Handler:terminate(Req, HandlerState).
 
 %% Websocket.
 
 websocket_init(Transport, Req, Opts) ->
-	{handler, Handler} = lists:keyfind(handler, 1, Opts),
-	State = #state{handler=Handler},
-	case Handler:init(Transport, Req, Opts, true) of
-		{ok, Req2, HandlerState} ->
-			Req3 = cowboy_req:compact(Req2),
-			{ok, Req3, State#state{handler_state=HandlerState},
-				?TIMEOUT, hibernate};
-		{shutdown, Req2, _HandlerState} ->
-			{shutdown, Req2}
-	end.
+    {handler, Handler} = lists:keyfind(handler, 1, Opts),
+    State = #state{handler = Handler},
+    case Handler:init(Transport, Req, Opts, true) of
+        {ok, Req2, HandlerState} ->
+            Req3 = cowboy_req:compact(Req2),
+            {ok, Req3, State#state{handler_state = HandlerState},
+                ?TIMEOUT, hibernate};
+        {shutdown, Req2, _HandlerState} ->
+            {shutdown, Req2}
+    end.
 
 websocket_handle(Data, Req,
-		State=#state{handler=Handler, handler_state=HandlerState}) ->
-	case Handler:stream(Data, Req, HandlerState) of
-		{ok, Req2, HandlerState2} ->
-			{ok, Req2, State#state{handler_state=HandlerState2}, hibernate};
-		{reply, {binary, Reply}, Req2, HandlerState2} ->
+    State = #state{handler = Handler, handler_state = HandlerState}) ->
+    case Handler:stream(Data, Req, HandlerState) of
+        {ok, Req2, HandlerState2} ->
+            {ok, Req2, State#state{handler_state = HandlerState2}, hibernate};
+        {reply, {binary, Reply}, Req2, HandlerState2} ->
 %		        wf:info(?MODULE,"Bullet Handle Binary"),
-			{reply, {binary, Reply}, Req2,
-				State#state{handler_state=HandlerState2}, hibernate};
-		{reply, Reply, Req2, HandlerState2} ->
-			{reply, {text, Reply}, Req2,
-				State#state{handler_state=HandlerState2}, hibernate}
-	end.
+            {reply, {binary, Reply}, Req2,
+                State#state{handler_state = HandlerState2}, hibernate};
+        {reply, Reply, Req2, HandlerState2} ->
+            {reply, {text, Reply}, Req2,
+                State#state{handler_state = HandlerState2}, hibernate}
+    end.
 %websocket_handle(_Frame, Req, State) ->
 %	{ok, Req, State, hibernate}.
 
-websocket_info(Info, Req, State=#state{
-		handler=Handler, handler_state=HandlerState}) ->
-	case Handler:info(Info, Req, HandlerState) of
-		{ok, Req2, HandlerState2} ->
-			{ok, Req2, State#state{handler_state=HandlerState2}, hibernate};
-		{reply, {binary, Reply}, Req2, HandlerState2} ->
+websocket_info(Info, Req, State = #state{
+    handler = Handler, handler_state = HandlerState}) ->
+    case Handler:info(Info, Req, HandlerState) of
+        {ok, Req2, HandlerState2} ->
+            {ok, Req2, State#state{handler_state = HandlerState2}, hibernate};
+        {reply, {binary, Reply}, Req2, HandlerState2} ->
 %		        wf:info(?MODULE,"Bullet Handle Info"),
-			{reply, {binary, Reply}, Req2,
-				State#state{handler_state=HandlerState2}, hibernate};
-		{reply, Reply, Req2, HandlerState2} ->
-			{reply, {text, Reply}, Req2,
-				State#state{handler_state=HandlerState2}, hibernate}
-	end.
+            {reply, {binary, Reply}, Req2,
+                State#state{handler_state = HandlerState2}, hibernate};
+        {reply, Reply, Req2, HandlerState2} ->
+            {reply, {text, Reply}, Req2,
+                State#state{handler_state = HandlerState2}, hibernate}
+    end.
 
 websocket_terminate(_Reason, Req,
-		#state{handler=Handler, handler_state=HandlerState}) ->
-	Handler:terminate(Req, HandlerState).
+    #state{handler = Handler, handler_state = HandlerState}) ->
+    Handler:terminate(Req, HandlerState).
