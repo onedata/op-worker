@@ -1,38 +1,38 @@
-%% ===================================================================
-%% @author Tomasz Lichon
-%% @copyright (C): 2014 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc This is a cowboy handler module, implementing cowboy_rest interface.
-%% It handles cdmi object/container PUT, GET and DELETE requests
-%% @end
-%% ===================================================================
+%%%--------------------------------------------------------------------
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc This is a cowboy handler module, implementing cowboy_rest interface.
+%%% It handles cdmi object/container PUT, GET and DELETE requests
+%%% @end
+%%%--------------------------------------------------------------------
 -module(cdmi_handler).
 -author("Tomasz Lichon").
 
 -include("cluster_elements/oneproxy/oneproxy.hrl").
 -include("workers/http_worker/cdmi/cdmi.hrl").
 
-%% Callbacks
+%% API
 -export([init/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
+
 %% Content type routing functions
--export([get_cdmi_container/2]).
--export([put_cdmi_container/2]).
+-export([get_cdmi_container/2, put_cdmi_container/2]).
 
-%% ====================================================================
-%% Cowboy rest callbacks
-%% ====================================================================
+%%%===================================================================
+%%% API
+%%%===================================================================
 
-%% init/3
-%% ====================================================================
-%% @doc Cowboy callback function
+%%--------------------------------------------------------------------
+%% @doc
+%% Cowboy callback function
 %% Imposes a cowboy upgrade protocol to cowboy_rest - this module is
 %% now treated as REST module by cowboy.
 %% @end
+%%--------------------------------------------------------------------
 -spec init(any(), any(), any()) -> {upgrade, protocol, cowboy_rest}.
-%% ====================================================================
 init(_, Req, Opts) ->
     NewOpts =
         case gsi_handler:get_certs_from_req(?ONEPROXY_REST, Req) of
@@ -43,94 +43,93 @@ init(_, Req, Opts) ->
         end,
     {upgrade, protocol, cowboy_rest, Req, NewOpts ++ Opts}.
 
-%% rest_init/2
-%% ====================================================================
-%% @doc Cowboy callback function
+%%--------------------------------------------------------------------
+%% @doc
+%% Cowboy callback function
 %% Called right after protocol upgrade to init the request context.
 %% Will shut down the connection if the peer doesn't provide a valid
 %% proxy certificate.
 %% @end
+%%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-%% ====================================================================
 rest_init(Req, _Opts) ->
     {ok, Req, #state{}}.
 
-%% allowed_methods/2
-%% ====================================================================
-%% @doc Cowboy callback function
+%%--------------------------------------------------------------------
+%% @doc
+%% Cowboy callback function
 %% Returns methods that are allowed.
 %% @end
+%%--------------------------------------------------------------------
 -spec allowed_methods(req(), #state{} | {error, term()}) -> {[binary()], req(), #state{}}.
-%% ====================================================================
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
 
-%% malformed_request/2
-%% ====================================================================
-%% @doc Cowboy callback function
+%%--------------------------------------------------------------------
+%% @doc
+%% Cowboy callback function
 %% Checks if request contains all mandatory fields and their values are set properly
 %% depending on requested operation
 %% @end
+%%--------------------------------------------------------------------
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}}.
-%% ====================================================================
 malformed_request(Req, State) ->
     {false, Req, State}.
 
-%% resource_exists/2
-%% ====================================================================
-%% @doc Cowboy callback function
+%%--------------------------------------------------------------------
+%% @doc
+%% Cowboy callback function
 %% Determines if resource identified by Filepath exists.
 %% @end
+%%--------------------------------------------------------------------
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
-%% ====================================================================
 resource_exists(Req, State) ->
     {false, Req, State}.
 
-%% content_types_provided/2
-%% ====================================================================
-%% @doc Cowboy callback function
+%%--------------------------------------------------------------------
+%% @doc
+%% Cowboy callback function
 %% Returns content types that can be provided.
 %% @end
+%%--------------------------------------------------------------------
 -spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
-%% ====================================================================
 content_types_provided(Req, State) ->
     {[
         {<<"application/cdmi-container">>, get_cdmi_container}
     ], Req, State}.
 
-%% content_types_accepted/2
-%% ====================================================================
+%%--------------------------------------------------------------------
 %% @doc Cowboy callback function
 %% Returns content-types that are accepted by REST handler and what
 %% functions should be used to process the requests.
 %% @end
+%%--------------------------------------------------------------------
 -spec content_types_accepted(req(), #state{}) -> {term(), req(), #state{}}.
-%% ====================================================================
 content_types_accepted(Req, State) ->
     {[
         {<<"application/cdmi-container">>, put_cdmi_container}
     ], Req, State}.
 
 
-%% delete_resource/2
-%% ====================================================================
-%% @doc Cowboy callback function
+%%--------------------------------------------------------------------
+%% @doc
+%% Cowboy callback function
 %% Handles DELETE requests.
 %% @end
+%%--------------------------------------------------------------------
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
-%% ====================================================================
 delete_resource(Req, State) ->
     {true, Req, State}.
 
-%% ====================================================================
-%% Content type routing functions
-%% ====================================================================
+%%%===================================================================
+%%% Content type routing functions
+%%%===================================================================
 
-%% ====================================================================
+%%--------------------------------------------------------------------
 %% This functions are needed by cowboy for registration in
 %% content_types_accepted/content_types_provided methods and simply delegates
 %% their responsibility to adequate handler modules
-%% ====================================================================
+%%--------------------------------------------------------------------
 get_cdmi_container(Req,State) ->
     {<<"ok">>, Req, State}.
 put_cdmi_container(Req,State) ->
