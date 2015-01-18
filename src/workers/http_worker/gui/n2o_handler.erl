@@ -1,23 +1,23 @@
-%% ===================================================================
-%% @author Lukasz Opiola
-%% @copyright (C): 2014 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: Copy of n2o_cowboy.erl from n2o.
-%% This is a cowboy handler module for handling HTTP request with n2o engine.
-%% Compared to original, this module has slight changes in the following functions:
-%% - request_body/1
-%% - reply/2
-%% @end
-%% ===================================================================
-
+%%%--------------------------------------------------------------------
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2014 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc Copy of n2o_cowboy.erl from n2o.
+%%% This is a cowboy handler module for handling HTTP request with n2o engine.
+%%% Compared to original, this module has slight changes in the following functions:
+%%% - request_body/1
+%%% - reply/2
+%%% @end
+%%%--------------------------------------------------------------------
 -module(n2o_handler).
+-author("Lukasz Opiola").
+
 -behaviour(cowboy_http_handler).
 
-
-% Cowboy API
+% cowboy_http_handler callbacks
 -export([init/3, handle/2, terminate/3]).
 
 % Bridge abstraction
@@ -27,11 +27,9 @@
 % Handler state record
 -record(state, {headers, body}).
 
-
-%% ====================================================================
-%% cowboy_http_handler API
-%% ====================================================================
-
+%%%===================================================================
+%%% cowboy_http_handler callbacks
+%%%===================================================================
 init(_Transport, Req, _Opts) ->
     {ok, Req, #state{}}.
 
@@ -42,10 +40,9 @@ handle(Req, State) ->
 terminate(_Reason, _Req, _State) ->
     ok.
 
-
-%% ====================================================================
-%% Cowboy Bridge Abstraction
-%% ====================================================================
+%%%===================================================================
+%%% Cowboy Bridge Abstraction
+%%%===================================================================
 
 params(Req) -> {Params, _NewReq} = cowboy_req:qs_vals(Req), Params.
 path(Req) -> {Path, _NewReq} = cowboy_req:path(Req), Path.
