@@ -10,8 +10,8 @@
 %%% work with supervisor.
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(SUPERVISION_MACROS_NAMES_HRL).
--define(SUPERVISION_MACROS_NAMES_HRL, 1).
+-ifndef(SUPERVISION_MACROS_HRL).
+-define(SUPERVISION_MACROS_HRL, 1).
 
 -define(SUP_FLAGS, {one_for_one, 5, 10}).
 

@@ -9,8 +9,8 @@
 %%% Definitions common to listeners started by node_manager.
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(CLUSTER_MANAGER_LISTENERS_HRL).
--define(CLUSTER_MANAGER_LISTENERS_HRL, 1).
+-ifndef(NODE_MANAGER_LISTENERS_HRL).
+-define(NODE_MANAGER_LISTENERS_HRL, 1).
 
 %% Path (relative to domain) on which cowboy expects incomming websocket connections with client and provider
 -define(ONECLIENT_URI_PATH, "/oneclient").

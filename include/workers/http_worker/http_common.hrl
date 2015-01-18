@@ -9,8 +9,8 @@
 %%% Common definitions for http_worker modules.
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(CDMI_HRL).
--define(CDMI_HRL, 1).
+-ifndef(HTTP_COMMON_HRL).
+-define(HTTP_COMMON_HRL, 1).
 
 %% Includes from cowboy
 -type req() :: cowboy_req:req().

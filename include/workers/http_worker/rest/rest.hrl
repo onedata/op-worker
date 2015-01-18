@@ -15,3 +15,5 @@
 -include("workers/http_worker/http_common.hrl").
 
 -record(state, {}).
+
+-endif.
