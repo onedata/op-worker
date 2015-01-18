@@ -1,16 +1,16 @@
-%% ===================================================================
-%% @author Michal Wrzeszcz
-%% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: This test creates many Erlang virtual machines and uses them
+%%%--------------------------------------------------------------------
+%%% @author Michal Wrzeszcz
+%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc This test creates many Erlang virtual machines and uses them
 %% to test how ccm manages workers and monitors nodes.
-%% @end
-%% ===================================================================
-
+%%% @end
+%%%--------------------------------------------------------------------
 -module(nodes_management_test_SUITE).
+-author("Michal Wrzeszcz").
 
 -include("test_utils.hrl").
 -include("registered_names.hrl").
@@ -28,9 +28,9 @@
 
 all() -> [one_node_test, ccm_and_worker_test].
 
-%% ====================================================================
-%% Code of nodes used during the test
-%% ====================================================================
+%%%===================================================================
+%%% Code of nodes used during the test
+%%%===================================================================
 
 ccm_code1() ->
   gen_server:cast(?NODE_MANAGER_NAME, do_heart_beat),
@@ -45,8 +45,8 @@ worker_code() ->
   gen_server:cast(?NODE_MANAGER_NAME, do_heart_beat),
   ok.
 
-%% ====================================================================
-%% Test function
+%%%===================================================================
+%%% Test function
 %% ====================================================================
 one_node_test(Config) ->
     [Node] = ?config(nodes, Config),
@@ -65,9 +65,9 @@ ccm_and_worker_test(Config) ->
     ?assertEqual(ok, gen_server:call({?DISPATCHER_NAME, Worker}, {http_worker, 1, self(), ping})),
     ?assertEqual(pong, receive Msg -> Msg end).
 
-%% ====================================================================
-%% SetUp and TearDown functions
-%% ====================================================================
+%%%===================================================================
+%%% SetUp and TearDown functions
+%%%===================================================================
 
 init_per_testcase(one_node_test, Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,

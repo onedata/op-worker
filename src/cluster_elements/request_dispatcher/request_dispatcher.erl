@@ -10,7 +10,7 @@
 %%% @end %todo dispatcher should keep modules in ETS, and all clients should be able to read this ETS directly
 %%%-------------------------------------------------------------------
 -module(request_dispatcher).
--author("Tomasz Lichon").
+-author("Michal Wrzeszcz").
 
 -behaviour(gen_server).
 

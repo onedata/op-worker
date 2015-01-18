@@ -10,7 +10,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 -module(rest_handler).
--author("Tomasz Lichon").
+-author("Lukasz Opiola").
 
 -include("workers/http_worker/rest/rest.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
