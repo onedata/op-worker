@@ -1,22 +1,18 @@
-%% ===================================================================
-%% @author Tomasz Lichon
-%% @copyright (C): 2014 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: This file contains ct tests helper macros and defines.
-%% @end
-%% ===================================================================
-
+%%%--------------------------------------------------------------------
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2014 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc This file contains ct tests helper macros and definitions.
+%%% @end
+%%%--------------------------------------------------------------------
 -ifndef(TEST_UTILS_HRL).
 -define(TEST_UTILS_HRL, 1).
 
 -define(TEST, true).
 
-%% -include("oneprovider_modules/dao/dao_spaces.hrl").
-
-%% -include("oneprovider_modules/dao/dao_users.hrl").
 -include_lib("dao/include/common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").

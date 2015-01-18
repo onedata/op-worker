@@ -27,12 +27,12 @@
 %% @doc Starts application by supervisor initialization.
 %%--------------------------------------------------------------------
 -spec start(_StartType :: any(), _StartArgs :: any()) -> Result when
-	Result ::  {ok, pid()}
-                | ignore
-                | {error, Error},
-	Error :: {already_started, pid()}
-                | {shutdown, term()}
-                | term().
+    Result :: {ok, pid()}
+    | ignore
+    | {error, Error},
+    Error :: {already_started, pid()}
+    | {shutdown, term()}
+    | term().
 start(_StartType, _StartArgs) ->
     {ok, NodeType} = application:get_env(?APP_NAME, node_type),
     oneprovider_node_sup:start_link(NodeType).
@@ -41,6 +41,6 @@ start(_StartType, _StartArgs) ->
 %% @doc Stops application.
 %%--------------------------------------------------------------------
 -spec stop(_State :: any()) -> Result when
-	Result ::  ok.
+    Result :: ok.
 stop(_State) ->
-  ok.
+    ok.
