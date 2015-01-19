@@ -29,7 +29,6 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Starts the supervisor
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(Args :: term()) -> Result when
@@ -53,7 +52,6 @@ start_link(NodeType) ->
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
@@ -79,11 +77,5 @@ init([ccm]) ->
     {ok, {?SUP_FLAGS, [
         ?SUP_CHILD(cluster_manager, cluster_manager, permanent, []),
         ?SUP_CHILD(node_manager, node_manager, permanent, [ccm]),
-        ?SUP_CHILD(request_dispatcher, request_dispatcher, permanent, [])
-    ]}};
-init([ccm_test]) ->
-    {ok, {?SUP_FLAGS, [
-        ?SUP_CHILD(cluster_manager, cluster_manager, permanent, [test]),
-        ?SUP_CHILD(node_manager, node_manager, permanent, [ccm_test]),
         ?SUP_CHILD(request_dispatcher, request_dispatcher, permanent, [])
     ]}}.

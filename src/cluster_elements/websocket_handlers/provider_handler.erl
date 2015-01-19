@@ -91,6 +91,6 @@ websocket_info(_Msg, Req, State) ->
     when
     Req :: term(),
     State :: #handler_state{}.
-websocket_terminate(_Reason, _Req, State) ->
+websocket_terminate(_Reason, _Req, _State) ->
     ?info("WebSocket connection  terminate"),
     ok.
