@@ -53,9 +53,6 @@ handle(_ProtocolVersion, ping) ->
 handle(_ProtocolVersion, healthcheck) ->
     ok;
 
-handle(_ProtocolVersion, get_version) ->
-    node_manager:check_vsn();
-
 handle(_ProtocolVersion, {spawn_handler, SocketPid}) ->
     Pid = spawn(
         fun() ->

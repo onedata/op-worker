@@ -1,5 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
+%%% @author Tomasz Lichon
 %%% @copyright (C) 2013 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -11,6 +12,8 @@
 %%%-------------------------------------------------------------------
 -module(cluster_manager).
 -author("Michal Wrzeszcz").
+-author("Tomasz Lichon").
+
 
 -behaviour(gen_server).
 
@@ -21,7 +24,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0, start_link/1, stop/0]).
+-export([start_link/0, stop/0]).
 
 %% gen_event callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -37,7 +40,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv start_link(normal)
+%% Starts cluster manager
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link() -> Result when
@@ -47,22 +50,7 @@
     Pid :: pid(),
     Error :: {already_started, Pid} | term().
 start_link() ->
-    start_link(normal).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts cluster manager
-%% @end
-%%--------------------------------------------------------------------
--spec start_link(Mode) -> Result when
-    Mode :: test | normal,
-    Result :: {ok, Pid}
-    | ignore
-    | {error, Error},
-    Pid :: pid(),
-    Error :: {already_started, Pid} | term().
-start_link(Mode) ->
-    case gen_server:start_link(?MODULE, [Mode], []) of
+    case gen_server:start_link(?MODULE, [], []) of
         {ok, Pid} ->
             global:re_register_name(?CCM, Pid),
             {ok, Pid};
@@ -98,16 +86,11 @@ stop() ->
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-init([normal]) ->
+init(_) ->
     process_flag(trap_exit, true),
     {ok, Interval} = application:get_env(?APP_NAME, initialization_time),
-    Pid = self(),
-    erlang:send_after(Interval * 1000, Pid, {timer, init_cluster}),
-    {ok, #cm_state{}};
-
-init([test]) ->
-    process_flag(trap_exit, true),
-    {ok, #cm_state{nodes = [node()]}}.
+    erlang:send_after(Interval * 1000, self(), {timer, init_cluster}),
+    {ok, #cm_state{}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -138,26 +121,6 @@ handle_call(get_workers, _From, State) ->
     WorkersList = get_workers_list(State),
     {reply, {WorkersList, State#cm_state.state_num}, State};
 
-handle_call(get_state, _From, State) ->
-    {reply, State, State};
-
-handle_call(get_version, _From, State) ->
-    {reply, get_version(State), State};
-
-handle_call(get_ccm_node, _From, State) ->
-    {reply, node(), State};
-
-handle_call(check, _From, State) ->
-    {reply, ok, State};
-
-%% Test call
-handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
-    handle_test_call({start_worker, Node, Module, WorkerArgs}, _From, State);
-
-%% Test call
-handle_call(check_state_loaded, _From, State) ->
-    handle_test_call(check_state_loaded, _From, State);
-
 handle_call(_Request, _From, State) ->
     ?warning("Wrong call: ~p", [_Request]),
     {reply, wrong_request, State}.
@@ -175,56 +138,12 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
-handle_cast({node_is_up, Node}, State = #cm_state{nodes = Nodes, state_loaded = StateLoaded, state_monitoring = StateMonitoring}) ->
-    ?debug("Heartbeat from node: ~p", [Node]),
-    case lists:member(Node, Nodes) orelse Node =:= node() of
-        true ->
-            gen_server:cast({?NODE_MANAGER_NAME, Node}, {heart_beat_ok, State#cm_state.state_num}),
-            {noreply, State};
-        false ->
-            ?info("New node: ~p", [Node]),
-
-            %% This case checks if node state was analysed correctly.
-            %% If it was, it upgrades state number if necessary (workers
-            %% were running on node).
-            case catch check_node(Node, State) of
-                {ok, NewState, WorkersFound} ->
-                    case StateMonitoring of
-                        on -> erlang:monitor_node(Node, true);
-                        off -> ok
-                    end,
-                    case StateLoaded of
-                        true ->
-                            gen_server:cast({global, ?CCM}, init_cluster_once); %todo check for race with update_dispatchers_and_dns
-                        _ -> ok
-                    end,
-                    case WorkersFound of
-                        true -> gen_server:cast({global, ?CCM}, update_dispatchers_and_dns);
-                        false -> ok
-                    end,
-                    gen_server:cast({?NODE_MANAGER_NAME, Node}, {heart_beat_ok, State#cm_state.state_num}),
-                    {noreply, NewState#cm_state{nodes = [Node | Nodes]}};
-                Error ->
-                    ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p", [Node, Error]),
-                    gen_server:cast({?NODE_MANAGER_NAME, Node}, {heart_beat_ok, State#cm_state.state_num}),
-                    {noreply, State}
-            end
-    end;
+handle_cast({heart_beat, Node}, State) ->
+    NewState = heart_beat(State, Node),
+    {noreply, NewState};
 
 handle_cast(init_cluster, State) ->
     NewState = init_cluster(State),
-    {noreply, NewState};
-
-handle_cast(init_cluster_once, State) ->
-    NewState = init_cluster(State, false),
-    {noreply, NewState};
-
-handle_cast(update_dispatchers_and_dns, State) ->
-    NewState = update_dispatchers_and_dns(State, true, true),
-    {noreply, NewState};
-
-handle_cast({update_dispatchers_and_dns, UpdateDNS, IncreaseNum}, State) ->
-    NewState = update_dispatchers_and_dns(State, UpdateDNS, IncreaseNum),
     {noreply, NewState};
 
 handle_cast({register_dispatcher_map, Module, Map, AnsPid}, State = #cm_state{dispatcher_maps = Maps}) ->
@@ -242,39 +161,9 @@ handle_cast({register_dispatcher_map, Module, Map, AnsPid}, State = #cm_state{di
             {noreply, NewState}
     end;
 
-handle_cast({node_down, Node}, State) ->
-    ?error("Node down: ~p", [Node]),
-    {NewState, WorkersFound} = node_down(Node, State),
-
-    %% If workers were running on node that is down,
-    %% upgrade state.
-    NewState2 = case WorkersFound of
-                    true -> update_dispatchers_and_dns(NewState, true, true);
-                    false -> NewState
-                end,
-    {noreply, NewState2};
-
-handle_cast({set_monitoring, Flag}, State = #cm_state{state_monitoring = Flag}) ->
-    {noreply, State};
-handle_cast({set_monitoring, on}, State = #cm_state{state_monitoring = off, nodes = Nodes}) ->
-    change_monitoring(Nodes, true),
-    {noreply, State#cm_state{state_monitoring = on}};
-handle_cast({set_monitoring, off}, State = #cm_state{state_monitoring = on, nodes = Nodes}) ->
-    change_monitoring(Nodes, false),
-    {noreply, State#cm_state{state_monitoring = off}};
-
-handle_cast({worker_answer, cluster_state, {ok, SavedState}}, State) ->
-    ?debug("State read from DB: ~p", [SavedState]),
-    {noreply, merge_state(State, SavedState)};
-handle_cast({worker_answer, cluster_state, {error, {not_found, _}}}, State) ->
-    {noreply, State#cm_state{state_loaded = true}};
-handle_cast({worker_answer, cluster_state, Error}, State) ->
-    ?debug("State cannot be read from DB: ~p", [Error]), %% debug logging level because state may not be present in db and it's not an error
-    {noreply, State};
-
 handle_cast({stop_worker, Node, Module}, State) ->
-    {_Ans, New_State} = stop_worker(Node, Module, State),
-    {noreply, New_State};
+    NewState = stop_worker(Node, Module, State),
+    {noreply, NewState};
 
 handle_cast(stop, State) ->
     {stop, normal, State};
@@ -282,7 +171,6 @@ handle_cast(stop, State) ->
 handle_cast(_Msg, State) ->
     ?warning("Wrong cast: ~p", [_Msg]),
     {noreply, State}.
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -301,11 +189,9 @@ handle_info({timer, Msg}, State) ->
     gen_server:cast({global, ?CCM}, Msg),
     {noreply, State};
 
-handle_info({nodedown, Node}, State = #cm_state{state_monitoring = on}) ->
-    gen_server:cast({global, ?CCM}, {node_down, Node}),
-    {noreply, State};
-handle_info({nodedown, _Node}, State = #cm_state{state_monitoring = off}) ->
-    {noreply, State};
+handle_info({nodedown, Node}, State) ->
+    NewState = node_down(Node, State),
+    {noreply, NewState};
 
 handle_info(_Info, State) ->
     ?warning("CCM wrong info: ~p", [_Info]),
@@ -345,39 +231,37 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles calls used during tests
-%% @end
-%%--------------------------------------------------------------------
--spec handle_test_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result :: term().
--ifdef(TEST).
-handle_test_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
-    {Ans, NewState} = start_worker(Node, Module, WorkerArgs, State),
-    NewState2 = case Ans of
-                    ok -> update_dispatchers_and_dns(NewState, true, true);
-                    error -> NewState
-                end,
-    {reply, Ans, NewState2};
-handle_test_call(check_state_loaded, _From, State) ->
-    {reply, State#cm_state.state_loaded, State}.
--else.
-handle_test_call(_Request, _From, State) ->
-    {reply, not_supported_in_normal_mode, State}.
--endif.
+heart_beat(State = #cm_state{nodes = Nodes, state_loaded = StateLoaded}, Node) ->
+    ?debug("Heartbeat from node: ~p", [Node]),
+    case lists:member(Node, Nodes) orelse Node =:= node() of
+        true ->
+            gen_server:cast({?NODE_MANAGER_NAME, Node}, {heart_beat_ok, State#cm_state.state_num}),
+            State;
+        false ->
+            ?info("New node: ~p", [Node]),
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Triggers repeated cluster initialization.
-%% @end
-%%--------------------------------------------------------------------
--spec init_cluster(State :: term()) -> NewState when
-    NewState :: term().
-init_cluster(State) ->
-    init_cluster(State, true).
-
+            %% This case checks if node state was analysed correctly.
+            %% If it was, it upgrades state number if necessary (workers
+            %% were running on node).
+            case catch check_node(Node, State) of
+                {ok, {NewState, WorkersFound}} ->
+                    erlang:monitor_node(Node, true),
+                    case StateLoaded of
+                        true -> gen_server:cast({global, ?CCM}, init_cluster);
+                        _ -> ok
+                    end,
+                    case WorkersFound of
+                        true -> update_dispatchers_and_dns(NewState, true, true);
+                        false -> ok
+                    end,
+                    gen_server:cast({?NODE_MANAGER_NAME, Node}, {heart_beat_ok, State#cm_state.state_num}),
+                    NewState#cm_state{nodes = [Node | Nodes]};
+                Error ->
+                    ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p", [Node, Error]),
+                    gen_server:cast({?NODE_MANAGER_NAME, Node}, {heart_beat_ok, State#cm_state.state_num}),
+                    State
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -387,44 +271,40 @@ init_cluster(State) ->
 %% initiates checking of cluster state.
 %% @end
 %%--------------------------------------------------------------------
--spec init_cluster(State :: term(), Repeat :: boolean()) -> NewState when
-    NewState :: term().
-init_cluster(State = #cm_state{nodes = []}, false) ->
-    State;
-init_cluster(State = #cm_state{nodes = []}, true) ->
+-spec init_cluster(State :: #cm_state{}) -> #cm_state{}.
+init_cluster(State = #cm_state{nodes = []}) ->
     {ok, Interval} = application:get_env(?APP_NAME, initialization_time),
     erlang:send_after(1000 * Interval, self(), {timer, init_cluster}),
     State;
-init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}, _Repeat) ->
-    JobsAndArgs = ?MODULES_WITH_ARGS,
-
-    CreateRunningWorkersList = fun({_N, M, _Child}, WorkerList) ->
-        [M | WorkerList]
-    end,
+init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}) ->
+    CreateRunningWorkersList =
+        fun({_N, M, _Child}, WorkerList) ->
+            [M | WorkerList]
+        end,
     RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
 
-    CreateJobsList = fun({Job, A}, {TmpJobs, TmpArgs}) ->
-        case lists:member(Job, RunningWorkers) of
-            true -> {TmpJobs, TmpArgs};
-            false -> {[Job | TmpJobs], [A | TmpArgs]}
-        end
-    end,
-    {Jobs, Args} = lists:foldl(CreateJobsList, {[], []}, JobsAndArgs),
-
-    case length(Jobs) > 0 of
-        true ->
-            ?info("Initialization of jobs ~p using nodes ~p", [Jobs, Nodes]),
-            NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
-                           true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
-                           false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
-                       end,
-
-            update_dispatchers_and_dns(NewState, true, true);
-        false ->
-            case length(Workers) > 0 of
-                true -> update_dispatchers_and_dns(State, true, true);
-                _ -> State
+    CreateJobsList =
+        fun({Job, A}, {TmpJobs, TmpArgs}) ->
+            case lists:member(Job, RunningWorkers) of
+                true -> {TmpJobs, TmpArgs};
+                false -> {[Job | TmpJobs], [A | TmpArgs]}
             end
+        end,
+    {Jobs, Args} = lists:foldl(CreateJobsList, {[], []}, ?MODULES_WITH_ARGS),
+
+    case {Jobs, Workers} of
+        {[], []} ->
+            State;
+        {[], _} ->
+            update_dispatchers_and_dns(State, true, true);
+        {_, _} ->
+            ?info("Initialization of jobs ~p using nodes ~p", [Jobs, Nodes]),
+            NewState =
+                case erlang:length(Nodes) >= erlang:length(Jobs) of
+                    true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
+                    false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
+                end,
+            update_dispatchers_and_dns(NewState, true, true)
     end.
 
 %%--------------------------------------------------------------------
@@ -441,7 +321,7 @@ init_cluster_nodes_dominance(State, [], _Jobs1, _Jobs2, _Args1, _Args2) ->
 init_cluster_nodes_dominance(State, Nodes, [], Jobs2, [], Args2) ->
     init_cluster_nodes_dominance(State, Nodes, Jobs2, [], Args2, []);
 init_cluster_nodes_dominance(State, [N | Nodes], [J | Jobs1], Jobs2, [A | Args1], Args2) ->
-    {_Ans, NewState} = start_worker(N, J, A, State),
+    NewState = start_worker(N, J, A, State),
     init_cluster_nodes_dominance(NewState, Nodes, Jobs1, [J | Jobs2], Args1, [A | Args2]).
 
 %%--------------------------------------------------------------------
@@ -458,7 +338,7 @@ init_cluster_jobs_dominance(State, [], [], _Nodes1, _Nodes2) ->
 init_cluster_jobs_dominance(State, Jobs, Args, [], Nodes2) ->
     init_cluster_jobs_dominance(State, Jobs, Args, Nodes2, []);
 init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2) ->
-    {_Ans, NewState} = start_worker(N, J, A, State),
+    NewState = start_worker(N, J, A, State),
     init_cluster_jobs_dominance(NewState, Jobs, Args, Nodes1, [N | Nodes2]).
 
 %%--------------------------------------------------------------------
@@ -468,21 +348,18 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 %% it sends the answer to dispatcher and logs info about processing time.
 %% @end
 %%--------------------------------------------------------------------
--spec start_worker(Node :: atom(), Module :: atom(), WorkerArgs :: term(), State :: term()) -> Result when
-    Result :: {Answer, NewState},
-    Answer :: ok | error,
-    NewState :: term().
+-spec start_worker(Node :: atom(), Module :: atom(), WorkerArgs :: term(), State :: term()) -> #cm_state{}.
 start_worker(Node, Module, WorkerArgs, State) ->
     try
         {ok, LoadMemorySize} = application:get_env(?APP_NAME, worker_load_memory_size),
         {ok, ChildPid} = supervisor:start_child({?SUPERVISOR_NAME, Node}, ?SUP_CHILD(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
         Workers = State#cm_state.workers,
         ?info("Worker: ~s started at node: ~s", [Module, Node]),
-        {ok, State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}}
+        State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}
     catch
         _:Error ->
             ?error_stacktrace("Error: ~p during start of worker: ~s at node: ~s", [Error, Module, Node]),
-            {error, State}
+            State
     end.
 
 %%--------------------------------------------------------------------
@@ -492,10 +369,7 @@ start_worker(Node, Module, WorkerArgs, State) ->
 %% it sends the answer to dispatcher and logs info about processing time.
 %% @end
 %%--------------------------------------------------------------------
--spec stop_worker(Node :: atom(), Module :: atom(), State :: term()) -> Result when
-    Result :: {Answer, NewState},
-    Answer :: ok | child_does_not_exist | delete_error | termination_error,
-    NewState :: term().
+-spec stop_worker(Node :: atom(), Module :: atom(), State :: #cm_state{}) -> #cm_state{}.
 stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
     CreateNewWorkersList = fun({N, M, Child}, {WorkerList, ChosenChild}) ->
         case {N, M} of
@@ -509,11 +383,11 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
         ok = supervisor:terminate_child({?SUPERVISOR_NAME, ChildNode}, Module),
         ok = supervisor:delete_child({?SUPERVISOR_NAME, ChildNode}, Module),
         ?info("Worker: ~s stopped at node: ~s", [Module, Node]),
-        {ok, State#cm_state{workers = NewWorkers}}
+        State#cm_state{workers = NewWorkers}
     catch
         _:Error ->
             ?error("Worker: ~s not stopped at node: ~s, error ~p", [Module, Node, {delete_error, Error}]),
-            {Error, State#cm_state{workers = NewWorkers}}
+            State#cm_state{workers = NewWorkers}
     end.
 
 %%--------------------------------------------------------------------
@@ -522,14 +396,13 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
 %% Checks if any workers are running on node.
 %% @end
 %%--------------------------------------------------------------------
--spec check_node(Node :: atom(), State :: term()) -> NewState when
-    NewState :: term().
+-spec check_node(Node :: atom(), State :: term()) -> {ok, {NewState :: #cm_state{}, WorkersFound :: boolean()}} | no_return().
 check_node(Node, State = #cm_state{workers = Workers}) ->
     pong = net_adm:ping(Node),
     Children = supervisor:which_children({?SUPERVISOR_NAME, Node}),
     {ok, NewWorkers} = add_children(Node, Children, Workers, State),
     WorkersFound = length(NewWorkers) > length(Workers),
-    {ok, State#cm_state{workers = NewWorkers}, WorkersFound}.
+    {ok, {State#cm_state{workers = NewWorkers}, WorkersFound}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -564,10 +437,9 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers, State)
 %% Clears information about workers on node that is down.
 %% @end
 %%--------------------------------------------------------------------
--spec node_down(Node :: atom(), State :: term()) -> {NewState, WorkersFound} when
-    NewState :: term(),
-    WorkersFound :: boolean().
+-spec node_down(Node :: atom(), State :: #cm_state{}) -> #cm_state{}.
 node_down(Node, State = #cm_state{workers = Workers, nodes = Nodes, state_loaded = StateLoaded}) ->
+    ?error("Node down: ~p", [Node]),
     CreateNewWorkersList = fun({N, M, Child}, {WorkerList, Found}) ->
         case N of
             Node -> {Workers, true};
@@ -585,53 +457,15 @@ node_down(Node, State = #cm_state{workers = Workers, nodes = Nodes, state_loaded
     NewNodes = lists:foldl(CreateNewNodesList, [], Nodes),
 
     case StateLoaded of
-        true -> gen_server:cast({global, ?CCM}, init_cluster_once);
+        true -> gen_server:cast({global, ?CCM}, init_cluster);
         _ -> ok
     end,
-    {State#cm_state{workers = NewWorkers, nodes = NewNodes}, WorkersFound}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function updates cluster state on the basis of data read
-%% from DB.
-%% @end
-%%--------------------------------------------------------------------
--spec merge_state(State :: term(), SavedState :: term()) -> NewState when
-    NewState :: term().
-merge_state(State, SavedState) ->
-    ?debug("Merging state, current: ~p, saved: ~p", [State, SavedState]),
-    StateNum = erlang:max(State#cm_state.state_num, SavedState#cm_state.state_num) + 1,
-    State1 = State#cm_state{state_num = StateNum, state_loaded = true},
-
-    NewNodes = lists:filter(fun(N) -> not lists:member(N, State1#cm_state.nodes) end, SavedState#cm_state.nodes),
-
-    CreateNewState = fun(Node, {TmpState, TmpWorkersFound}) ->
-        case State#cm_state.state_monitoring of
-            on ->
-                erlang:monitor_node(Node, true);
-            off -> ok
-        end,
-        case catch check_node(Node, TmpState) of
-            {ok, NewState, WorkersFound} ->
-                case State#cm_state.state_monitoring of
-                    on ->
-                        erlang:monitor_node(Node, true);
-                    off -> ok
-                end,
-                {NewState#cm_state{nodes = [Node | NewState#cm_state.nodes]}, TmpWorkersFound orelse WorkersFound};
-            Error ->
-                ?warning_stacktrace("Checking node ~p error: ~p", [Node, Error]),
-                {State, TmpWorkersFound}
-        end
-    end,
-    {MergedState, IncrementNum} = lists:foldl(CreateNewState, {State1, false}, NewNodes),
-
-    MergedState2 = case IncrementNum of
-                       true -> update_dispatchers_and_dns(MergedState, true, true);
-                       false -> MergedState
-                   end,
-    MergedState2.
+    NewState = State#cm_state{workers = NewWorkers, nodes = NewNodes},
+    case WorkersFound of
+        true -> update_dispatchers_and_dns(NewState, true, true);
+        false -> NewState
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -726,11 +560,12 @@ update_dispatcher_state(Nodes, Loads, AvgLoad) ->
     NodeToLoad :: list(),
     AvgLoad :: number().
 update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
-    MergeByFirstElement = fun(List) -> lists:reverse(
-        lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
-            ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
-            ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
-        end, [], lists:keysort(1, List)))
+    MergeByFirstElement = fun(List) ->
+        lists:reverse(
+            lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
+                ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
+                ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
+            end, [], lists:keysort(1, List)))
     end,
 
     NodeToIPWithLogging = fun(Node) ->
@@ -761,12 +596,13 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
                             end,
 
                     case ModuleV > 0.5 of
-                        true -> case (AvgLoad > 0) and (NodeV >= 2 * AvgLoad) of
-                                    true ->
-                                        V = erlang:min(10, erlang:round(NodeV / AvgLoad)),
-                                        [{Node, V} | TmpAns];
-                                    false -> [{Node, 1} | TmpAns]
-                                end;
+                        true ->
+                            case (AvgLoad > 0) and (NodeV >= 2 * AvgLoad) of
+                                true ->
+                                    V = erlang:min(10, erlang:round(NodeV / AvgLoad)),
+                                    [{Node, V} | TmpAns];
+                                false -> [{Node, 1} | TmpAns]
+                            end;
                         false -> [{Node, 1} | TmpAns]
                     end;
                 false -> TmpAns
@@ -825,65 +661,6 @@ node_to_ip(Node) ->
     Address = lists:dropwhile(fun(Char) -> Char =:= $@ end, AddressWith@),
     inet:getaddr(Address, inet).
 
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts or stops monitoring of nodes.
-%% @end
-%%--------------------------------------------------------------------
--spec change_monitoring(Nodes, Flag) -> ok when
-    Nodes :: list(),
-    Flag :: boolean().
-change_monitoring([], _Flag) ->
-    ok;
-change_monitoring([Node | Nodes], Flag) ->
-    erlang:monitor_node(Node, Flag),
-    change_monitoring(Nodes, Flag).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Provides list of versions of system elements.
-%% @end
-%%--------------------------------------------------------------------
--spec get_version(State :: term()) -> Result when
-    Result :: list().
-get_version(State) ->
-    Workers = get_workers_list(State),
-    get_workers_versions(Workers).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Provides list of versions of workers.
-%% @end
-%%--------------------------------------------------------------------
--spec get_workers_versions(Workers :: list()) -> Result when
-    Result :: list().
-get_workers_versions(Workers) ->
-    get_workers_versions(Workers, []).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Provides list of versions of workers.
-%% @end
-%%--------------------------------------------------------------------
--spec get_workers_versions(Workers :: list(), TmpAnswer :: list()) -> Result when
-    Result :: list().
-get_workers_versions([], Versions) ->
-    Versions;
-get_workers_versions([{Node, Module} | Workers], Versions) ->
-    try
-        V = gen_server:call({Module, Node}, {test_call, 1, get_version}, 500),
-        get_workers_versions(Workers, [{Node, Module, V} | Versions])
-    catch
-        E1:E2 ->
-            ?error_stacktrace("get_workers_versions error: ~p:~p", [E1, E2]),
-            get_workers_versions(Workers, [{Node, Module, can_not_connect_with_worker} | Versions])
-    end.
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -893,7 +670,7 @@ get_workers_versions([{Node, Module} | Workers], Versions) ->
 -spec calculate_node_load(Nodes :: list(), Period :: atom()) -> Result when
     Result :: list().
 calculate_node_load(_Nodes, _Period) ->
-    {[], 0}. %todo
+    {[], 0}. %todo remove
 
 %%--------------------------------------------------------------------
 %% @private

@@ -75,9 +75,6 @@ handle(_ProtocolVersion, ping) ->
 handle(_ProtocolVersion, healthcheck) ->
     ok;
 
-handle(_ProtocolVersion, get_version) ->
-    node_manager:check_vsn();
-
 handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
     ?info("DNS state update: ~p", [{ModulesToNodes, NLoads, AvgLoad}]),
     try
@@ -493,5 +490,3 @@ call_dns_worker(Request) ->
             ?error_stacktrace("Dispatcher not responding ~p", [Error2]),
             serv_fail
     end.
-
-

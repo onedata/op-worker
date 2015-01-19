@@ -1,5 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
+%%% @author Tomasz Lichon
 %%% @copyright (C) 2013 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -16,6 +17,7 @@
 %%%-------------------------------------------------------------------
 -module(node_manager).
 -author("Michal Wrzeszcz").
+-author("Tomasz Lichon").
 
 -behaviour(gen_server).
 
@@ -27,7 +29,6 @@
 
 %% API
 -export([start_link/1, stop/0]).
--export([check_vsn/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -60,17 +61,6 @@ start_link(Type) ->
 stop() ->
     gen_server:cast(?NODE_MANAGER_NAME, stop).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks application version
-%% @end
-%%--------------------------------------------------------------------
--spec check_vsn() -> Result when
-    Result :: term().
-%% ====================================================================
-check_vsn() ->
-    check_vsn(application:which_applications()).
-
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -89,7 +79,7 @@ check_vsn() ->
     | ignore,
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
-init([worker])->
+init([worker]) ->
     try
         node_manager_listener_starter:start_dispatcher_listener(),
         node_manager_listener_starter:start_gui_listener(),
@@ -103,7 +93,7 @@ init([worker])->
             ?error_stacktrace("Cannot initialize listeners: ~p", [Error]),
             {stop, cannot_initialize_listeners}
     end;
-init([ccm])->
+init([ccm]) ->
     gen_server:cast(self(), do_heart_beat),
     {ok, #node_state{node_type = ccm, ccm_con_status = not_connected}};
 init([_Type]) ->
@@ -245,7 +235,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec do_heart_beat(State :: #node_state{}) -> #node_state{}.
 do_heart_beat(State = #node_state{ccm_con_status = connected}) ->
     {ok, Interval} = application:get_env(?APP_NAME, heart_beat_success_interval),
-    gen_server:cast({global, ?CCM}, {node_is_up, node()}), %todo we don't need that probably
+    gen_server:cast({global, ?CCM}, {heart_beat, node()}),
     erlang:send_after(Interval * 1000, self(), {timer, do_heart_beat}),
     State#node_state{ccm_con_status = connected};
 do_heart_beat(State = #node_state{ccm_con_status = not_connected}) ->
@@ -253,7 +243,7 @@ do_heart_beat(State = #node_state{ccm_con_status = not_connected}) ->
     case (catch init_net_connection(CcmNodes)) of
         ok ->
             {ok, Interval} = application:get_env(?APP_NAME, heart_beat_success_interval),
-            gen_server:cast({global, ?CCM}, {node_is_up, node()}),
+            gen_server:cast({global, ?CCM}, {heart_beat, node()}),
             erlang:send_after(Interval * 1000, self(), {timer, do_heart_beat}),
             State#node_state{ccm_con_status = connected};
         Err ->
@@ -312,20 +302,4 @@ init_net_connection([Node | Nodes]) ->
         pang ->
             ?error("Cannot connect to node ~p", [Node]),
             init_net_connection(Nodes)
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks application version
-%% @end
-%%--------------------------------------------------------------------
--spec check_vsn(ApplicationData :: list()) -> Result when
-    Result :: term().
-check_vsn([]) ->
-    non;
-check_vsn([{Application, _Description, Vsn} | Apps]) ->
-    case Application of
-        ?APP_NAME -> Vsn;
-        _Other -> check_vsn(Apps)
     end.

@@ -23,27 +23,7 @@
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([one_node_test/1, ccm_and_worker_test/1]).
 
-%% export nodes' codes
--export([ccm_code1/0, ccm_code2/0, worker_code/0]).
-
 all() -> [one_node_test, ccm_and_worker_test].
-
-%%%===================================================================
-%%% Code of nodes used during the test
-%%%===================================================================
-
-ccm_code1() ->
-  gen_server:cast(?NODE_MANAGER_NAME, do_heart_beat),
-  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  ok.
-
-ccm_code2() ->
-  gen_server:cast({global, ?CCM}, init_cluster),
-  ok.
-
-worker_code() ->
-  gen_server:cast(?NODE_MANAGER_NAME, do_heart_beat),
-  ok.
 
 %%%===================================================================
 %%% Test function

@@ -364,12 +364,12 @@ save_progress(Report, {New, Old, NewListSize, Max}) ->
 load_info({New, Old, NewListSize, Max}) ->
     Load = lists:sum(lists:map(fun({_Time, Load}) -> Load end, New)) + lists:sum(lists:map(fun({_Time, Load}) ->
         Load end, lists:sublist(Old, Max - NewListSize))),
-    {Time, _Load} = case {New, Old} of
-                        {[], []} -> {os:timestamp(), []};
-                        {_O, []} -> lists:last(New);
-                        _L -> case NewListSize of
-                                  Max -> lists:last(New);
-                                  _S -> lists:nth(Max - NewListSize, Old)
-                              end
-                    end,
-    {Time, Load}.
+    case {New, Old} of
+        {[], []} -> {os:timestamp(), []};
+        {_, []} -> lists:last(New);
+        _ ->
+            case NewListSize of
+                Max -> lists:last(New);
+                _S -> lists:nth(Max - NewListSize, Old)
+            end
+    end.

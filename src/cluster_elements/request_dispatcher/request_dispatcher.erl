@@ -473,12 +473,10 @@ check_worker_node(Module, Request, State) ->
                             case Check2 of
                                 true -> {ThisNode, State};
                                 false ->
-%%                ?debug("Load of node too high", [Module]),
                                     {N, NewLists} = choose_worker(L1, L2),
                                     {N, update_nodes(Module, NewLists, State)}
                             end;
                         false ->
-%%            ?debug("Module ~p does not work at this node", [Module]),
                             {N, NewLists} = choose_worker(L1, L2),
                             {N, update_nodes(Module, NewLists, State)}
                     end;
