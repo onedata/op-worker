@@ -237,7 +237,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec heart_beat(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
-heart_beat(State = #cm_state{nodes = Nodes, state_loaded = StateLoaded}, SenderNode) ->
+heart_beat(State = #cm_state{nodes = Nodes}, SenderNode) ->
     ?debug("Heartbeat from node: ~p", [SenderNode]),
     case lists:member(SenderNode, Nodes) orelse SenderNode =:= node() of
         true ->
@@ -252,10 +252,6 @@ heart_beat(State = #cm_state{nodes = Nodes, state_loaded = StateLoaded}, SenderN
             case catch check_node(SenderNode, State) of
                 {ok, {NewState, WorkersFound}} ->
                     erlang:monitor_node(SenderNode, true),
-                    case StateLoaded of
-                        true -> gen_server:cast({global, ?CCM}, init_cluster);
-                        _ -> ok
-                    end,
                     case WorkersFound of
                         true -> update_dispatchers_and_dns(NewState, true, true);
                         false -> ok
@@ -445,7 +441,7 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers, State)
 %% @end
 %%--------------------------------------------------------------------
 -spec node_down(Node :: atom(), State :: #cm_state{}) -> #cm_state{}.
-node_down(Node, State = #cm_state{workers = Workers, nodes = Nodes, state_loaded = StateLoaded}) ->
+node_down(Node, State = #cm_state{workers = Workers, nodes = Nodes}) ->
     ?error("Node down: ~p", [Node]),
     CreateNewWorkersList = fun({N, M, Child}, {WorkerList, Found}) ->
         case N of
@@ -462,11 +458,6 @@ node_down(Node, State = #cm_state{workers = Workers, nodes = Nodes, state_loaded
         end
     end,
     NewNodes = lists:foldl(CreateNewNodesList, [], Nodes),
-
-    case StateLoaded of
-        true -> gen_server:cast({global, ?CCM}, init_cluster);
-        _ -> ok
-    end,
 
     NewState = State#cm_state{workers = NewWorkers, nodes = NewNodes},
     case WorkersFound of
