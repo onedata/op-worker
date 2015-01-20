@@ -1,6 +1,6 @@
 
 
--module(mock_app_behaviour).
+-module(mock_app_description).
 
 -include("appmock.hrl").
 
