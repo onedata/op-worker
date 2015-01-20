@@ -14,7 +14,6 @@
 -author("Michal Wrzeszcz").
 -author("Tomasz Lichon").
 
-
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
@@ -231,21 +230,28 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-heart_beat(State = #cm_state{nodes = Nodes, state_loaded = StateLoaded}, Node) ->
-    ?debug("Heartbeat from node: ~p", [Node]),
-    case lists:member(Node, Nodes) orelse Node =:= node() of
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Receive heart_beat from node_manager
+%% @end
+%%--------------------------------------------------------------------
+-spec heart_beat(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
+heart_beat(State = #cm_state{nodes = Nodes, state_loaded = StateLoaded}, SenderNode) ->
+    ?debug("Heartbeat from node: ~p", [SenderNode]),
+    case lists:member(SenderNode, Nodes) orelse SenderNode =:= node() of
         true ->
-            gen_server:cast({?NODE_MANAGER_NAME, Node}, {heart_beat_ok, State#cm_state.state_num}),
+            gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heart_beat_ok, State#cm_state.state_num}),
             State;
         false ->
-            ?info("New node: ~p", [Node]),
+            ?info("New node: ~p", [SenderNode]),
 
             %% This case checks if node state was analysed correctly.
             %% If it was, it upgrades state number if necessary (workers
             %% were running on node).
-            case catch check_node(Node, State) of
+            case catch check_node(SenderNode, State) of
                 {ok, {NewState, WorkersFound}} ->
-                    erlang:monitor_node(Node, true),
+                    erlang:monitor_node(SenderNode, true),
                     case StateLoaded of
                         true -> gen_server:cast({global, ?CCM}, init_cluster);
                         _ -> ok
@@ -254,11 +260,11 @@ heart_beat(State = #cm_state{nodes = Nodes, state_loaded = StateLoaded}, Node) -
                         true -> update_dispatchers_and_dns(NewState, true, true);
                         false -> ok
                     end,
-                    gen_server:cast({?NODE_MANAGER_NAME, Node}, {heart_beat_ok, State#cm_state.state_num}),
-                    NewState#cm_state{nodes = [Node | Nodes]};
+                    gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heart_beat_ok, State#cm_state.state_num}),
+                    NewState#cm_state{nodes = [SenderNode | Nodes]};
                 Error ->
-                    ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p", [Node, Error]),
-                    gen_server:cast({?NODE_MANAGER_NAME, Node}, {heart_beat_ok, State#cm_state.state_num}),
+                    ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p", [SenderNode, Error]),
+                    gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heart_beat_ok, State#cm_state.state_num}),
                     State
             end
     end.
@@ -371,12 +377,13 @@ start_worker(Node, Module, WorkerArgs, State) ->
 %%--------------------------------------------------------------------
 -spec stop_worker(Node :: atom(), Module :: atom(), State :: #cm_state{}) -> #cm_state{}.
 stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
-    CreateNewWorkersList = fun({N, M, Child}, {WorkerList, ChosenChild}) ->
-        case {N, M} of
-            {Node, Module} -> {WorkerList, {N, Child}};
-            {_N2, _M2} -> {[{N, M, Child} | WorkerList], ChosenChild}
-        end
-    end,
+    CreateNewWorkersList =
+        fun({N, M, Child}, {WorkerList, ChosenChild}) ->
+            case {N, M} of
+                {Node, Module} -> {WorkerList, {N, Child}};
+                {_N2, _M2} -> {[{N, M, Child} | WorkerList], ChosenChild}
+            end
+        end,
     {NewWorkers, ChosenChild} = lists:foldl(CreateNewWorkersList, {[], non}, Workers),
     try
         {ChildNode, _ChildPid} = ChosenChild,
@@ -421,7 +428,7 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers, State)
         true ->
             ?info("Worker ~p found at node ~s", [Id, Node]),
 
-            case catch gen_server:call(ChildPid, dispatcher_map_unregistered, 500) of
+            case catch gen_server:call(ChildPid, dispatcher_map_unregistered) of
                 ok ->
                     {MapState2, Ans} = add_children(Node, Children, Workers, State),
                     {MapState2, [{Node, Id, ChildPid} | Ans]};

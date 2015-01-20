@@ -98,9 +98,6 @@ init(Modules) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
-handle_call({get_workers, Module}, _From, State) ->
-    {reply, get_workers(Module, State), State};
-
 handle_call({Task, ProtocolVersion, AnsPid, MsgId, Request}, _From, State = #dispatcher_state{asnych_mode = true}) ->
     forward_request(false, Task, Request, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}, State);
 
@@ -551,19 +548,6 @@ pull_state(CurrentStateNum) ->
         _:_ ->
             ?error("Dispatcher on node: ~p: can not pull workers list", [node()]),
             {error, CurrentStateNum}
-    end.
-
-%% get_workers/2
-%% ====================================================================
-%% @doc Returns information about nodes were module is working according
-%% to dispatcher knowledge.
--spec get_workers(Module :: atom, State :: term()) -> Result when
-    Result :: term().
-%% ====================================================================
-get_workers(Module, State) ->
-    case get_nodes(Module, State) of
-        {L1, L2} -> lists:flatten([L1, L2]);
-        _Other -> []
     end.
 
 %% initState/1
