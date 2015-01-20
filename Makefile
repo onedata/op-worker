@@ -1,4 +1,6 @@
-all: deps compile generate
+.PHONY: deps
+
+all: rel
 
 deps:
 	./rebar get-deps
@@ -6,10 +8,14 @@ deps:
 compile:
 	./rebar compile
 
-generate:
+rel: deps compile
 	./rebar generate
-
-rel: compile generate
 
 start:
 	rel/appmock/bin/appmock console
+
+clean:
+	./rebar clean
+
+distclean: clean
+	./rebar delete-deps
