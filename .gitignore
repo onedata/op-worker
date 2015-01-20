@@ -1,4 +1,6 @@
 .idea/
+.rebar/
+
 rel/appmock/
 ebin/
 deps/*/
