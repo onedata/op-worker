@@ -28,11 +28,6 @@
 %% gen_event callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
-%% TEST API
--ifdef(TEST).
--export([update_dns_state/3, update_dispatcher_state/6, calculate_node_load/2]).
--endif.
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -144,21 +139,6 @@ handle_cast({heart_beat, Node}, State) ->
 handle_cast(init_cluster, State) ->
     NewState = init_cluster(State),
     {noreply, NewState};
-
-handle_cast({register_dispatcher_map, Module, Map, AnsPid}, State = #cm_state{dispatcher_maps = Maps}) ->
-    case proplists:get_value(Module, Maps) =:= Map of
-        true ->
-            % debug, because it is ok when more than one instance of worker exists
-            ?debug("Registration of existing disp map for module ~p", [Module]),
-            AnsPid ! dispatcher_map_registered,
-            {noreply, State};
-        false ->
-            ?info("Registration of disp map for module ~p", [Module]),
-            NewMapsList = register_dispatcher_map(Module, Map, Maps),
-            NewState = update_dispatchers_and_dns(State#cm_state{dispatcher_maps = NewMapsList}, false, true),
-            AnsPid ! dispatcher_map_registered,
-            {noreply, NewState}
-    end;
 
 handle_cast({stop_worker, Node, Module}, State) ->
     NewState = stop_worker(Node, Module, State),
@@ -403,7 +383,7 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
 check_node(Node, State = #cm_state{workers = Workers}) ->
     pong = net_adm:ping(Node),
     Children = supervisor:which_children({?SUPERVISOR_NAME, Node}),
-    {ok, NewWorkers} = add_children(Node, Children, Workers, State),
+    NewWorkers = add_children(Node, Children, Workers, State),
     WorkersFound = length(NewWorkers) > length(Workers),
     {ok, {State#cm_state{workers = NewWorkers}, WorkersFound}}.
 
@@ -413,25 +393,15 @@ check_node(Node, State = #cm_state{workers = Workers}) ->
 %% Add workers that run on node to workers list.
 %% @end
 %%--------------------------------------------------------------------
--spec add_children(Node :: atom(), Children :: list(), Workers :: term(), State :: term()) -> NewWorkersList when
-    NewWorkersList :: list().
+-spec add_children(Node :: atom(), Children :: list(), Workers :: term(), State :: term()) -> list().
 add_children(_Node, [], Workers, _State) ->
-    {ok, Workers};
+    Workers;
 add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers, State) ->
-    Jobs = ?MODULES,
-    case lists:member(Id, Jobs) of
+    case lists:member(Id, ?MODULES) of
         false -> add_children(Node, Children, Workers, State);
         true ->
             ?info("Worker ~p found at node ~s", [Id, Node]),
-
-            case catch gen_server:call(ChildPid, dispatcher_map_unregistered) of
-                ok ->
-                    {MapState2, Ans} = add_children(Node, Children, Workers, State),
-                    {MapState2, [{Node, Id, ChildPid} | Ans]};
-                Error ->
-                    ?error_stacktrace("Error: ~p during contact with worker ~p found at node ~s", [Error, Id, Node]),
-                    {error, Workers}
-            end
+            [{Node, Id, ChildPid} | add_children(Node, Children, Workers, State)]
     end.
 
 %%--------------------------------------------------------------------
@@ -491,9 +461,7 @@ get_workers_list(State) ->
 update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
     ?debug("update_dispatchers_and_dns, state: ~p, dns: ~p, increase state num: ~p", [State, UpdateDNS, IncreaseStateNum]),
     case UpdateDNS of
-        true ->
-            {NodesLoad, AvgLoad} = calculate_node_load(State#cm_state.nodes, medium),
-            update_dns_state(State#cm_state.workers, NodesLoad, AvgLoad);
+        true -> update_dns_state(State#cm_state.workers);
         false -> ok
     end,
 
@@ -501,13 +469,9 @@ update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
         true ->
             NewStateNum = State#cm_state.state_num + 1,
             WorkersList = get_workers_list(State),
-            {NodesLoad2, AvgLoad2} = calculate_node_load(State#cm_state.nodes, short),
-            update_dispatcher_state(WorkersList, State#cm_state.dispatcher_maps, State#cm_state.nodes, NewStateNum, NodesLoad2, AvgLoad2),
+            update_dispatcher_state(WorkersList, State#cm_state.nodes, NewStateNum),
             State#cm_state{state_num = NewStateNum};
         false ->
-            {NodesLoad2, AvgLoad2} = calculate_node_load(State#cm_state.nodes, short),
-            ?debug("updating dispatcher, load info: ~p", [{NodesLoad2, AvgLoad2}]),
-            update_dispatcher_state(State#cm_state.nodes, NodesLoad2, AvgLoad2),
             State
     end.
 
@@ -517,35 +481,13 @@ update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
 %% Updates dispatchers' states.
 %% @end
 %%--------------------------------------------------------------------
--spec update_dispatcher_state(WorkersList, DispatcherMaps, Nodes, NewStateNum, Loads, AvgLoad) -> ok when
-    WorkersList :: list(),
-    DispatcherMaps :: list(),
-    Nodes :: list(),
-    NewStateNum :: integer(),
-    Loads :: list(),
-    AvgLoad :: integer().
-update_dispatcher_state(WorkersList, DispatcherMaps, Nodes, NewStateNum, Loads, AvgLoad) ->
+-spec update_dispatcher_state(WorkersList :: list(), Nodes :: list(), NewStateNum :: integer()) -> ok.
+update_dispatcher_state(WorkersList, Nodes, NewStateNum) ->
     UpdateNode = fun(Node) ->
-        gen_server:cast({?DISPATCHER_NAME, Node}, {update_workers, WorkersList, DispatcherMaps, NewStateNum, proplists:get_value(Node, Loads, 0), AvgLoad})
+        gen_server:cast({?DISPATCHER_NAME, Node}, {update_workers, WorkersList, NewStateNum})
     end,
     lists:foreach(UpdateNode, Nodes),
-    gen_server:cast(?DISPATCHER_NAME, {update_workers, WorkersList, DispatcherMaps, NewStateNum, 0, 0}).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updates dispatchers' states.
-%% @end
-%%--------------------------------------------------------------------
--spec update_dispatcher_state(Nodes, Loads, AvgLoad) -> ok when
-    Nodes :: list(),
-    Loads :: list(),
-    AvgLoad :: integer().
-update_dispatcher_state(Nodes, Loads, AvgLoad) ->
-    UpdateNode = fun(Node) ->
-        gen_server:cast({?DISPATCHER_NAME, Node}, {update_loads, proplists:get_value(Node, Loads, 0), AvgLoad})
-    end,
-    lists:foreach(UpdateNode, Nodes).
+    gen_server:cast(?DISPATCHER_NAME, {update_workers, WorkersList, NewStateNum}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -553,94 +495,34 @@ update_dispatcher_state(Nodes, Loads, AvgLoad) ->
 %% Updates dnses' states.
 %% @end
 %%--------------------------------------------------------------------
--spec update_dns_state(WorkersList, NodeToLoad, AvgLoad) -> ok when
-    WorkersList :: list(),
-    NodeToLoad :: list(),
-    AvgLoad :: number().
-update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
-    MergeByFirstElement = fun(List) ->
-        lists:reverse(
-            lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
-                ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
-                ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
-            end, [], lists:keysort(1, List)))
-    end,
+-spec update_dns_state(WorkersList :: list()) -> ok.
+update_dns_state(WorkersList) ->
+    %prepare worker IPs with loads info
+    Nodes = [Node || {Node, _, _} <- WorkersList],
+    UniqueNodes = sets:to_list(sets:from_list(Nodes)),
+    UniqueNodesIpToLoad = [{node_to_ip(Node), node_manager_monitoring:node_load(Node)} || Node <- UniqueNodes],
+    FilteredUniqueNodesIpToLoad = [{IP, Load} || {IP, Load} <- UniqueNodesIpToLoad, IP =/= unknownaddress],
 
-    NodeToIPWithLogging = fun(Node) ->
-        case node_to_ip(Node) of
-            {ok, Address} -> Address;
-            {error, Error} ->
-                ?error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
-                unknownaddress
-        end
-    end,
-
+    %prepare modules with their nodes and loads info
     ModuleToNode = [{Module, Node} || {Node, Module, _Pid} <- WorkersList],
-
-    MergedByModule = MergeByFirstElement(ModuleToNode),
-
-    ModulesToNodes = lists:map(fun({Module, Nodes}) ->
-        GetLoads = fun({Node, NodeLoad, ModulesLoads}, TmpAns) ->
-            case lists:member(Node, Nodes) of
-                true ->
-                    ModuleTmpV = proplists:get_value(Module, ModulesLoads, error),
-                    ModuleV = case ModuleTmpV of
-                                  error -> 0;
-                                  _ -> ModuleTmpV
-                              end,
-                    NodeV = case NodeLoad of
-                                error -> 100000;
-                                _ -> NodeLoad
-                            end,
-
-                    case ModuleV > 0.5 of
-                        true ->
-                            case (AvgLoad > 0) and (NodeV >= 2 * AvgLoad) of
-                                true ->
-                                    V = erlang:min(10, erlang:round(NodeV / AvgLoad)),
-                                    [{Node, V} | TmpAns];
-                                false -> [{Node, 1} | TmpAns]
-                            end;
-                        false -> [{Node, 1} | TmpAns]
-                    end;
-                false -> TmpAns
-            end
-        end,
-
-        FilteredNodeToLoad = lists:foldl(GetLoads, [], NodeToLoad),
-
-        case FilteredNodeToLoad of
-            [] -> {Module, []};
-            _ ->
-                MinV = lists:min([V || {_Node, V} <- FilteredNodeToLoad]),
-                FilteredNodeToLoad2 = case MinV of
-                                          1 -> FilteredNodeToLoad;
-                                          _ -> [{Node, erlang:round(V / MinV)} || {Node, V} <- FilteredNodeToLoad]
-                                      end,
-
-                IPs = [{NodeToIPWithLogging(Node), Param} || {Node, Param} <- FilteredNodeToLoad2],
-
-                FilteredIPs = [{IP, Param} || {IP, Param} <- IPs, IP =/= unknownaddress],
+    ModuleToNodeList = merge_by_first_element(ModuleToNode),
+    ModuleToNodeListWithLoad = lists:map(
+        fun
+            ({Module, []}) ->
+                {Module, []};
+            ({Module, Nodes}) ->
+                IPToLoad = [{node_to_ip(Node), node_manager_monitoring:node_load(Node)} || Node <- Nodes],
+                FilteredIPs = [{IP, Param} || {IP, Param} <- IPToLoad, IP =/= unknownaddress],
                 {Module, FilteredIPs}
-        end
-    end, MergedByModule),
+        end, ModuleToNodeList),
+    FilteredModuleToNodeListWithLoad = [{Module, Nodes} || {Module, Nodes} <- ModuleToNodeListWithLoad, Nodes =/= []],
 
-    FilteredModulesToNodes = [{Module, Nodes} || {Module, Nodes} <- ModulesToNodes, Nodes =/= []],
+    % prepare average load
+    LoadAverage = average([Load || {_, Load} <- FilteredUniqueNodesIpToLoad]),
 
-    NLoads = lists:map(
-        fun({Node, NodeLoad, _}) ->
-            {NodeToIPWithLogging(Node), NodeLoad}
-        end, NodeToLoad),
-    UpdateInfo = {update_state, FilteredModulesToNodes, [{N_IP, N_Load} || {N_IP, N_Load} <- NLoads, N_IP =/= unknownaddress], AvgLoad},
+    UpdateInfo = {update_state, FilteredModuleToNodeListWithLoad, FilteredUniqueNodesIpToLoad, LoadAverage},
     ?debug("updating dns, update message: ~p", [UpdateInfo]),
-    UpdateDnsWorker = fun({_Node, Module, Pid}) ->
-        case Module of
-            dns_worker -> gen_server:cast(Pid, {asynch, 1, UpdateInfo});
-            _ -> ok
-        end
-    end,
-
-    lists:foreach(UpdateDnsWorker, WorkersList),
+    [gen_server:cast(Pid, {asynch, 1, UpdateInfo}) || {_, dns_worker, Pid} <- WorkersList],
     ok.
 
 %%--------------------------------------------------------------------
@@ -649,35 +531,38 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
 %% Resolve ipv4 address of node.
 %% @end
 %%--------------------------------------------------------------------
--spec node_to_ip(Node) -> Result when
-    Result :: {ok, inet:ip4_address()}
-    | {error, inet:posix()},
-    Node :: atom().
+-spec node_to_ip(Node :: atom()) -> inet:ip4_address() | unknownaddress.
 node_to_ip(Node) ->
     StrNode = atom_to_list(Node),
     AddressWith@ = lists:dropwhile(fun(Char) -> Char =/= $@ end, StrNode),
     Address = lists:dropwhile(fun(Char) -> Char =:= $@ end, AddressWith@),
-    inet:getaddr(Address, inet).
+    case inet:getaddr(Address, inet) of
+        {ok, Ip} -> Ip;
+        {error, Error} ->
+            ?error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
+            unknownaddress
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Calculates load of all nodes in cluster
+%% aggregate list over first element of tuple
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_node_load(Nodes :: list(), Period :: atom()) -> Result when
-    Result :: list().
-calculate_node_load(_Nodes, _Period) ->
-    {[], 0}. %todo remove
+-spec merge_by_first_element(List :: [{K,V}]) -> [{K,[V]}].
+merge_by_first_element(List) ->
+    lists:reverse(
+        lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
+            ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
+            ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
+        end, [], lists:keysort(1, List))).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Registers information about map used by dispatcher
+%% Calculates average of listed numbers
 %% @end
 %%--------------------------------------------------------------------
--spec register_dispatcher_map(Module :: atom(), Map :: term(), MapsList :: list()) -> Result when
-    Result :: list().
-register_dispatcher_map(Module, Map, MapsList) ->
-    ?debug("dispatcher map saved: ~p", [{Module, Map, MapsList}]),
-    [{Module, Map} | proplists:delete(Module, MapsList)].
+-spec average(List :: list()) -> float().
+average(List) ->
+    lists:foldl(fun(N, Acc) -> N + Acc end, 0, List) / length(List).

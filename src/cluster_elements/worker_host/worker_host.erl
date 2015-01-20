@@ -79,21 +79,7 @@ init([PlugIn, PlugInArgs, LoadMemorySize]) ->
     process_flag(trap_exit, true),
     InitAns = PlugIn:init(PlugInArgs),
     ?debug("Plugin ~p initialized with args ~p and result ~p", [PlugIn, PlugInArgs, InitAns]),
-    case InitAns of
-        #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispReqMap} ->
-            DispatcherRequestMapState =
-                case RequestMap of
-                    non -> true;
-                    _ ->
-                        erlang:send_after(200, self, {timer, register_disp_map}),
-                        false
-                end,
-            {ok, #host_state{plug_in = PlugIn, request_map = RequestMap, dispatcher_request_map = DispReqMap,
-                dispatcher_request_map_ok = DispatcherRequestMapState,
-                plug_in_state = InitAns#initial_host_description.plug_in_state, load_info = {[], [], 0, LoadMemorySize}}};
-        _ ->
-            {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}
-    end.
+    {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -141,16 +127,6 @@ handle_call({test_call, ProtocolVersion, Msg}, _From, State) ->
     Reply = PlugIn:handle(ProtocolVersion, Msg),
     {reply, Reply, State};
 
-handle_call(dispatcher_map_unregistered, _From, State) ->
-    ?info("dispatcher_map_unregistered for plugin ~p", [State#host_state.plug_in]),
-    DMapState = case State#host_state.request_map of
-                    non -> true;
-                    _ ->
-                        erlang:send_after(200, self(), {timer, register_disp_map}),
-                        false
-                end,
-    {reply, ok, State#host_state{dispatcher_request_map_ok = DMapState}};
-
 handle_call({link_process, Pid}, _From, State) ->
     LinkAns = try
         link(Pid),
@@ -164,9 +140,6 @@ handle_call({link_process, Pid}, _From, State) ->
 handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
     %% that request was made, unlike cast because cast ignores state of node/gen_server
     {reply, gen_server:cast(State#host_state.plug_in, Request), State};
-
-handle_call(check, _From, State) ->
-    {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
     ?warning("Wrong call: ~p", [_Request]),
@@ -204,16 +177,6 @@ handle_cast({progress_report, Report}, State) ->
     NewLoadInfo = save_progress(Report, State#host_state.load_info),
     {noreply, State#host_state{load_info = NewLoadInfo}};
 
-handle_cast(register_disp_map, State) ->
-    case State#host_state.dispatcher_request_map_ok of
-        true -> ok;
-        _ ->
-            Pid = self(),
-            erlang:send_after(10000, Pid, {timer, register_disp_map}),
-            gen_server:cast({global, ?CCM}, {register_dispatcher_map, State#host_state.plug_in, State#host_state.dispatcher_request_map, Pid})
-    end,
-    {noreply, State};
-
 handle_cast(stop, State) ->
     {stop, normal, State};
 
@@ -245,13 +208,8 @@ handle_info({timer, Msg}, State) ->
     gen_server:cast(PlugIn, Msg),
     {noreply, State};
 
-handle_info(dispatcher_map_registered, State) ->
-    ?debug("dispatcher_map_registered"),
-    {noreply, State#host_state{dispatcher_request_map_ok = true}};
-
 handle_info(Msg, State) ->
     handle_cast({asynch, 1, Msg}, State).
-
 
 %%--------------------------------------------------------------------
 %% @private
