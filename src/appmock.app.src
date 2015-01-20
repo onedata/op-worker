@@ -1,12 +1,13 @@
 {application, appmock,
- [
-  {description, ""},
-  {vsn, "1"},
-  {registered, []},
-  {applications, [
-                  kernel,
-                  stdlib
-                 ]},
-  {mod, { appmock_app, []}},
-  {env, []}
- ]}.
+    [
+        {description, ""},
+        {vsn, "1"},
+        {registered, []},
+        {applications, [
+            kernel,
+            stdlib,
+            cowboy
+        ]},
+        {mod, {appmock_app, []}},
+        {env, []}
+    ]}.

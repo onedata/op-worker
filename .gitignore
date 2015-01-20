@@ -1,0 +1,4 @@
+.idea/
+rel/appmock/
+ebin/
+deps/*/
