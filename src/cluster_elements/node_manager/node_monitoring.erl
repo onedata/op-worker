@@ -7,10 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module provides functions for gathering and calculating
-%%% statistical data
+%%% statistical data. They are invoked by node_manager
 %%% @end
 %%%-------------------------------------------------------------------
--module(node_manager_monitoring).
+-module(node_monitoring).
 -author("Tomasz Lichon").
 
 %% API

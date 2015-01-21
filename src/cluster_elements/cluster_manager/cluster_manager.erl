@@ -229,11 +229,11 @@ heart_beat(State = #cm_state{nodes = Nodes}, SenderNode) ->
             %% This case checks if node state was analysed correctly.
             %% If it was, it upgrades state number if necessary (workers
             %% were running on node).
-            case catch check_node(SenderNode, State) of
+            case catch join_new_node(SenderNode, State) of
                 {ok, {NewState, WorkersFound}} ->
                     erlang:monitor_node(SenderNode, true),
                     case WorkersFound of
-                        true -> update_dispatchers_and_dns(NewState, true, true);
+                        true -> update_dispatchers_and_dns(NewState);
                         false -> ok
                     end,
                     gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heart_beat_ok, State#cm_state.state_num}),
@@ -278,7 +278,7 @@ init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}) ->
         {[], []} ->
             State;
         {[], _} ->
-            update_dispatchers_and_dns(State, true, true);
+            update_dispatchers_and_dns(State);
         {_, _} ->
             ?info("Initialization of jobs ~p using nodes ~p", [Jobs, Nodes]),
             NewState =
@@ -286,7 +286,7 @@ init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}) ->
                     true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
                     false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
                 end,
-            update_dispatchers_and_dns(NewState, true, true)
+            update_dispatchers_and_dns(NewState)
     end.
 
 %%--------------------------------------------------------------------
@@ -362,11 +362,13 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
         end,
     {NewWorkers, ChosenChild} = lists:foldl(CreateNewWorkersList, {[], non}, Workers),
     try
+        NewState = State#cm_state{workers = NewWorkers},
         {ChildNode, _ChildPid} = ChosenChild,
+        update_dispatchers_and_dns(NewState),
         ok = supervisor:terminate_child({?SUPERVISOR_NAME, ChildNode}, Module),
         ok = supervisor:delete_child({?SUPERVISOR_NAME, ChildNode}, Module),
         ?info("Worker: ~s stopped at node: ~s", [Module, Node]),
-        State#cm_state{workers = NewWorkers}
+        NewState
     catch
         _:Error ->
             ?error("Worker: ~s not stopped at node: ~s, error ~p", [Module, Node, {delete_error, Error}]),
@@ -376,11 +378,13 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks if any workers are running on node.
+%% Checks if node can be connected and if any workers are running on it.
+%% Returns updated ccm state and a flag that indicates if new node
+%% contains workers.
 %% @end
 %%--------------------------------------------------------------------
--spec check_node(Node :: atom(), State :: term()) -> {ok, {NewState :: #cm_state{}, WorkersFound :: boolean()}} | no_return().
-check_node(Node, State = #cm_state{workers = Workers}) ->
+-spec join_new_node(Node :: atom(), State :: term()) -> {ok, {NewState :: #cm_state{}, WorkersFound :: boolean()}} | no_return().
+join_new_node(Node, State = #cm_state{workers = Workers}) ->
     pong = net_adm:ping(Node),
     Children = supervisor:which_children({?SUPERVISOR_NAME, Node}),
     NewWorkers = add_children(Node, Children, Workers, State),
@@ -431,7 +435,7 @@ node_down(Node, State = #cm_state{workers = Workers, nodes = Nodes}) ->
 
     NewState = State#cm_state{workers = NewWorkers, nodes = NewNodes},
     case WorkersFound of
-        true -> update_dispatchers_and_dns(NewState, true, true);
+        true -> update_dispatchers_and_dns(NewState);
         false -> NewState
     end.
 
@@ -456,24 +460,16 @@ get_workers_list(State) ->
 %% This function updates all dispatchers and dnses.
 %% @end
 %%--------------------------------------------------------------------
--spec update_dispatchers_and_dns(State :: term(), UpdateDNS :: boolean(), IncreaseStateNum :: boolean()) -> NewState when
+-spec update_dispatchers_and_dns(State :: term()) -> NewState when
     NewState :: term().
-update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
-    ?debug("update_dispatchers_and_dns, state: ~p, dns: ~p, increase state num: ~p", [State, UpdateDNS, IncreaseStateNum]),
-    case UpdateDNS of
-        true -> update_dns_state(State#cm_state.workers);
-        false -> ok
-    end,
+update_dispatchers_and_dns(State) ->
+    ?debug("update_dispatchers_and_dns, state: ~p", [State]),
+    NewStateNum = State#cm_state.state_num + 1,
+    WorkersList = get_workers_list(State),
+    update_dns_state(State#cm_state.workers),
+    update_dispatcher_state(WorkersList, State#cm_state.nodes, NewStateNum),
+    State#cm_state{state_num = NewStateNum}.
 
-    case IncreaseStateNum of
-        true ->
-            NewStateNum = State#cm_state.state_num + 1,
-            WorkersList = get_workers_list(State),
-            update_dispatcher_state(WorkersList, State#cm_state.nodes, NewStateNum),
-            State#cm_state{state_num = NewStateNum};
-        false ->
-            State
-    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -484,10 +480,10 @@ update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
 -spec update_dispatcher_state(WorkersList :: list(), Nodes :: list(), NewStateNum :: integer()) -> ok.
 update_dispatcher_state(WorkersList, Nodes, NewStateNum) ->
     UpdateNode = fun(Node) ->
-        gen_server:cast({?DISPATCHER_NAME, Node}, {update_workers, WorkersList, NewStateNum})
+        gen_server:cast({?DISPATCHER_NAME, Node}, {update_state, WorkersList, NewStateNum})
     end,
     lists:foreach(UpdateNode, Nodes),
-    gen_server:cast(?DISPATCHER_NAME, {update_workers, WorkersList, NewStateNum}).
+    gen_server:cast(?DISPATCHER_NAME, {update_state, WorkersList, NewStateNum}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -500,69 +496,27 @@ update_dns_state(WorkersList) ->
     %prepare worker IPs with loads info
     Nodes = [Node || {Node, _, _} <- WorkersList],
     UniqueNodes = sets:to_list(sets:from_list(Nodes)),
-    UniqueNodesIpToLoad = [{node_to_ip(Node), node_manager_monitoring:node_load(Node)} || Node <- UniqueNodes],
+    UniqueNodesIpToLoad = [{cluster_manager_utils:node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- UniqueNodes],
     FilteredUniqueNodesIpToLoad = [{IP, Load} || {IP, Load} <- UniqueNodesIpToLoad, IP =/= unknownaddress],
 
     %prepare modules with their nodes and loads info
     ModuleToNode = [{Module, Node} || {Node, Module, _Pid} <- WorkersList],
-    ModuleToNodeList = merge_by_first_element(ModuleToNode),
+    ModuleToNodeList = cluster_manager_utils:aggregate_over_first_element(ModuleToNode),
     ModuleToNodeListWithLoad = lists:map(
         fun
             ({Module, []}) ->
                 {Module, []};
             ({Module, Nodes}) ->
-                IPToLoad = [{node_to_ip(Node), node_manager_monitoring:node_load(Node)} || Node <- Nodes],
+                IPToLoad = [{cluster_manager_utils:node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- Nodes],
                 FilteredIPs = [{IP, Param} || {IP, Param} <- IPToLoad, IP =/= unknownaddress],
                 {Module, FilteredIPs}
         end, ModuleToNodeList),
     FilteredModuleToNodeListWithLoad = [{Module, Nodes} || {Module, Nodes} <- ModuleToNodeListWithLoad, Nodes =/= []],
 
     % prepare average load
-    LoadAverage = average([Load || {_, Load} <- FilteredUniqueNodesIpToLoad]),
+    LoadAverage = cluster_manager_utils:average([Load || {_, Load} <- FilteredUniqueNodesIpToLoad]),
 
     UpdateInfo = {update_state, FilteredModuleToNodeListWithLoad, FilteredUniqueNodesIpToLoad, LoadAverage},
     ?debug("updating dns, update message: ~p", [UpdateInfo]),
     [gen_server:cast(Pid, {asynch, 1, UpdateInfo}) || {_, dns_worker, Pid} <- WorkersList],
     ok.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Resolve ipv4 address of node.
-%% @end
-%%--------------------------------------------------------------------
--spec node_to_ip(Node :: atom()) -> inet:ip4_address() | unknownaddress.
-node_to_ip(Node) ->
-    StrNode = atom_to_list(Node),
-    AddressWith@ = lists:dropwhile(fun(Char) -> Char =/= $@ end, StrNode),
-    Address = lists:dropwhile(fun(Char) -> Char =:= $@ end, AddressWith@),
-    case inet:getaddr(Address, inet) of
-        {ok, Ip} -> Ip;
-        {error, Error} ->
-            ?error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
-            unknownaddress
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% aggregate list over first element of tuple
-%% @end
-%%--------------------------------------------------------------------
--spec merge_by_first_element(List :: [{K,V}]) -> [{K,[V]}].
-merge_by_first_element(List) ->
-    lists:reverse(
-        lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
-            ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
-            ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
-        end, [], lists:keysort(1, List))).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Calculates average of listed numbers
-%% @end
-%%--------------------------------------------------------------------
--spec average(List :: list()) -> float().
-average(List) ->
-    lists:foldl(fun(N, Acc) -> N + Acc end, 0, List) / length(List).

@@ -41,7 +41,7 @@
     Pid :: pid(),
     Error :: {already_started, Pid} | term().
 start_link() ->
-    gen_server:start_link({local, ?DISPATCHER_NAME}, ?MODULE, ?MODULES, []).
+    gen_server:start_link({local, ?DISPATCHER_NAME}, ?MODULE, [], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -70,10 +70,11 @@ stop() ->
     | ignore,
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
-init(Modules) ->
+init(_) ->
     process_flag(trap_exit, true),
     catch gsi_handler:init(),   %% Failed initialization of GSI should not disturb dispacher's startup
-    {ok, initState(Modules)}.
+    worker_map:init(),
+    {ok, #dispatcher_state{}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -122,56 +123,44 @@ handle_call({Task, ProtocolVersion, Request}, _From, State) ->
     end;
 
 handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, Request}}, _From, State) ->
-    case get_worker_node_prefering_local(Task, State) of
-        {Node, NewState} ->
-            case Node of
-                non ->
-                    case Task of
-                        central_logger -> ok;
-                        _ ->
-                            ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-                    end,
-                    {reply, worker_not_found, State};
-                _N ->
-                    gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
-                    {reply, ok, NewState}
-            end;
+    case worker_map:get_worker_node_prefering_local(Task) of
+        {ok, Node} ->
+            gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
+            {reply, ok, State};
+        {error, not_found} ->
+            case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+            end,
+            {reply, worker_not_found, State};
         Other -> {reply, Other, State}
     end;
 
 handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, MsgId, Request}}, _From, State) ->
-    case get_worker_node_prefering_local(Task, State) of
-        {Node, NewState} ->
-            case Node of
-                non ->
-                    case Task of
-                        central_logger -> ok;
-                        _ ->
-                            ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-                    end,
-                    {reply, worker_not_found, State};
-                _N ->
-                    gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
-                    {reply, ok, NewState}
-            end;
+    case worker_map:get_worker_node_prefering_local(Task) of
+        {ok, Node} ->
+            gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
+            {reply, ok, State};
+        {error, not_found} ->
+            case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+            end,
+            {reply, worker_not_found, State};
         Other -> {reply, Other, State}
     end;
 
 handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
-    case get_worker_node_prefering_local(Task, State) of
-        {Node, NewState} ->
-            case Node of
-                non ->
-                    case Task of
-                        central_logger -> ok;
-                        _ ->
-                            ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-                    end,
-                    {reply, worker_not_found, State};
-                _N ->
-                    gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
-                    {reply, ok, NewState}
-            end;
+    case worker_map:get_worker_node_prefering_local(Task) of
+        {ok, Node} ->
+            gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
+            {reply, ok, State};
+        {error, not_found} ->
+            case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+            end,
+            {reply, worker_not_found, State};
         Other -> {reply, Other, State}
     end;
 
@@ -192,14 +181,14 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
-handle_cast({update_state, NewStateNum}, State) ->
-    NewState = update_state(State, NewStateNum),
+handle_cast({check_state, NewStateNum}, State) ->
+    NewState = check_state(State, NewStateNum),
     {noreply, NewState};
 
-handle_cast({update_workers, WorkersList, NewStateNum}, _) ->
+handle_cast({update_state, WorkersList, NewStateNum}, State) ->
     ?info("Dispatcher state updated, state num: ~p", [NewStateNum]),
-    NewState = update_workers(WorkersList, NewStateNum, ?MODULES),
-    {noreply, NewState};
+    worker_map:update_workers(WorkersList),
+    {noreply, State#dispatcher_state{state_num = NewStateNum}};
 
 handle_cast(stop, State) ->
     {stop, normal, State};
@@ -243,6 +232,7 @@ handle_info(_Info, State) ->
     | {shutdown, term()}
     | term().
 terminate(_Reason, _State) ->
+    worker_map:terminate(),
     ok.
 
 %%--------------------------------------------------------------------
@@ -265,176 +255,40 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Convert process state when code is changed
+%% Checks whether dispatcher state is up to date, if not - fetches
+%% worker list from ccm and updates it.
 %% @end
 %%--------------------------------------------------------------------
--spec update_state(State :: #dispatcher_state{}, NewStateNum :: integer()) -> #dispatcher_state{}.
-update_state(State = #dispatcher_state{state_num = StateNum}, NewStateNum) when StateNum >= NewStateNum ->
-    gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_updated, NewStateNum}),
+-spec check_state(State :: #dispatcher_state{}, NewStateNum :: integer()) -> #dispatcher_state{}.
+check_state(State = #dispatcher_state{state_num = StateNum}, NewStateNum) when StateNum >= NewStateNum ->
+    gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_up_to_date, NewStateNum}),
     State;
-update_state(State, _) ->
+check_state(State, _) ->
     ?info("Dispatcher had old state number, starting update"),
-    {WorkersList, StateNum} = gen_server:call({global, ?CCM}, get_workers),
     NewState =
-        case WorkersList of
-            non ->
+        case gen_server:call({global, ?CCM}, get_workers) of
+            {non, _} ->
                 State;
-            error ->
+            {error, _} ->
                 ?error("Dispatcher had old state number but could not update data"),
                 State;
-            _ ->
-                TmpState = update_workers(WorkersList, State#dispatcher_state.state_num, ?MODULES),
+            {WorkersList, StateNum} ->
+                worker_map:update_workers(WorkersList),
                 ?info("Dispatcher state updated, state num: ~p", [StateNum]),
-                TmpState#dispatcher_state{state_num = StateNum}
+                State#dispatcher_state{state_num = StateNum}
         end,
-    gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_updated, NewState#dispatcher_state.state_num}),
+    gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_up_to_date, NewState#dispatcher_state.state_num}),
     NewState.
 
 handle_generic_request(Task, Request, State) ->
-    case get_worker_node(Task, State) of
-        {non, _} ->
-            case Task of % todo beautify
+    case worker_map:get_worker_node(Task) of
+        {ok, Node} ->
+            {{reply, ok, State}, Node};
+        {error, not_found} ->
+            case Task of
                 central_logger -> ok;
                 _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
             end,
             {{reply, worker_not_found, State}, undefined};
-        {Node, NewState} ->
-            {{reply, ok, NewState}, Node};
-        Other ->
-            {{reply, Other, State}, undefined}
+        Other -> {{reply, Other, State}, undefined}
     end.
-
-%% get_nodes/2
-%% ====================================================================
-%% @doc Gets nodes where module is working.
--spec get_nodes(Module :: atom(), State :: term()) -> {list(), list()}.
-%% ====================================================================
-get_nodes(Module, #dispatcher_state{modules = Modules}) ->
-    get_nodes(Module, Modules);
-get_nodes(_, []) ->
-    wrong_worker_type;
-get_nodes(Module, [{M, N} | T]) ->
-    case M =:= Module of
-        true -> N;
-        false -> get_nodes(Module, T)
-    end.
-
-%% update_nodes/3
-%% ====================================================================
-%% @doc Updates information about nodes (were modules are working).
--spec update_nodes(Module :: atom(), NewNodes :: term(), State :: term()) -> Result when
-    Result :: term().
-%% ====================================================================
-update_nodes(Module, NewNodes, State) ->
-    Modules = State#dispatcher_state.modules,
-    NewModules = update_nodes_list(Module, NewNodes, Modules, []),
-    State#dispatcher_state{modules = NewModules}.
-
-%% update_nodes_list/4
-%% ====================================================================
-%% @doc Updates information about nodes (were modules are working).
--spec update_nodes_list(Module :: atom(), NewNodes :: term(), Modules :: list(), TmpList :: list()) -> Result when
-    Result :: term().
-%% ====================================================================
-update_nodes_list(_Module, _NewNodes, [], Ans) ->
-    Ans;
-update_nodes_list(Module, NewNodes, [{M, N} | T], Ans) ->
-    case M =:= Module of
-        true -> update_nodes_list(Module, NewNodes, T, [{M, NewNodes} | Ans]);
-        false -> update_nodes_list(Module, NewNodes, T, [{M, N} | Ans])
-    end.
-
-%% ====================================================================
-%% @doc Chooses one from nodes where module is working.
--spec get_worker_node(Module :: atom(), State :: term()) -> Result when
-    Result :: term().
-get_worker_node(Module, State) ->
-    case get_nodes(Module, State) of
-        {L1, L2} ->
-            {N, NewLists} = choose_worker(L1, L2),
-            {N, update_nodes(Module, NewLists, State)};
-        Other -> Other
-    end.
-
-%% ====================================================================
-%% @doc Checks if module is working on this node. If not, chooses other
-%% node from nodes where module is working.
--spec get_worker_node_prefering_local(Module :: atom(), State :: term()) -> Result when
-    Result :: term().
-get_worker_node_prefering_local(Module, State) ->
-    case get_nodes(Module, State) of
-        {L1, L2} ->
-            case lists:member(node(), lists:flatten([L1, L2])) of
-                true ->
-                    {node(), State};
-                false ->
-                    {N, NewLists} = choose_worker(L1, L2),
-                    {N, update_nodes(Module, NewLists, State)}
-            end;
-        Other -> Other
-    end.
-
-%% ====================================================================
-%% @doc Helper function used by get_worker_node/3. It chooses node and
-%% put it on recently used nodes list.
--spec choose_worker(L1 :: term(), L2 :: term()) -> Result when
-    Result :: term().
-%% ====================================================================
-choose_worker([], []) ->
-    {non, {[], []}};
-choose_worker([], L2) ->
-    choose_worker(L2, []);
-choose_worker([N | L1], L2) ->
-    {N, {L1, [N | L2]}}.
-
-%% add_worker/3
-%% ====================================================================
-%% @doc Adds nodes to list that describes module.
--spec add_worker(Module :: atom(), Node :: term(), State :: term()) -> Result when
-    Result :: {ok, NewState} | Error,
-    Error :: term(),
-    NewState :: term().
-%% ====================================================================
-add_worker(Module, Node, State) ->
-    case get_nodes(Module, State) of
-        {L1, L2} ->
-            {ok, update_nodes(Module, {[Node | L1], L2}, State)};
-        Other -> Other
-    end.
-
-%% update_workers/6
-%% ====================================================================
-%% @doc Updates dispatcher state when new workers list appears.
--spec update_workers(WorkersList :: term(), SNum :: integer(), Modules :: list()) -> #dispatcher_state{}.
-update_workers(WorkersList, SNum, Modules) ->
-    Update =
-        fun({Node, Module}, TmpState) ->
-            case add_worker(Module, Node, TmpState) of
-                {ok, NewState} -> NewState;
-                _Other -> TmpState
-            end
-        end,
-    lists:foldl(Update, initState(SNum, Modules), WorkersList).
-
-%% initState/1
-%% ====================================================================
-%% @doc Initializes new record #dispatcher_state
--spec initState(Modules :: list()) -> Result when
-    Result :: record().
-%% ====================================================================
-initState(Modules) ->
-    CreateModules = fun(Module, TmpList) ->
-        [{Module, {[], []}} | TmpList]
-    end,
-    NewModules = lists:foldl(CreateModules, [], Modules),
-    #dispatcher_state{modules = NewModules}.
-
-%% initState/5
-%% ====================================================================
-%% @doc Initializes new record #dispatcher_state
--spec initState(SNum :: integer(), Modules :: list()) -> Result when
-    Result :: record().
-%% ====================================================================
-initState(SNum, Modules) ->
-    NewState = initState(Modules),
-    NewState#dispatcher_state{state_num = SNum}.

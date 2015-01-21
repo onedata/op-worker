@@ -24,7 +24,7 @@ main(_) ->
     catch
         _Type:Error ->
             cleanup(),
-            print("Error: ~p",[Error]),
+            print("Error: ~ts",[Error]),
             print("Stacktrace: ~p",[erlang:get_stacktrace()])
     end.
 

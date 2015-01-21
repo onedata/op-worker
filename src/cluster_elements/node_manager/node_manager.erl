@@ -81,11 +81,11 @@ stop() ->
     Timeout :: non_neg_integer() | infinity.
 init([worker]) ->
     try
-        node_manager_listener_starter:start_dispatcher_listener(),
-        node_manager_listener_starter:start_gui_listener(),
-        node_manager_listener_starter:start_rest_listener(),
-        node_manager_listener_starter:start_redirector_listener(),
-        node_manager_listener_starter:start_dns_listeners(),
+        listener_starter:start_dispatcher_listener(),
+        listener_starter:start_gui_listener(),
+        listener_starter:start_rest_listener(),
+        listener_starter:start_redirector_listener(),
+        listener_starter:start_dns_listeners(),
         gen_server:cast(self(), do_heart_beat),
         {ok, #node_state{node_type = worker, ccm_con_status = not_connected}}
     catch
@@ -150,7 +150,7 @@ handle_cast(do_heart_beat, State) ->
 handle_cast({heart_beat_ok, StateNum}, State) ->
     {noreply, heart_beat_ok(StateNum, State)};
 
-handle_cast({dispatcher_updated, DispState}, State) ->
+handle_cast({dispatcher_up_to_date, DispState}, State) ->
     NewState = State#node_state{dispatcher_state = DispState},
     {noreply, NewState};
 
@@ -280,7 +280,7 @@ heart_beat_ok(NewStateNum, State = #node_state{node_type = worker}) ->
 -spec update_dispatcher(New_state_num :: integer()) -> atom().
 update_dispatcher(New_state_num) ->
     ?debug("Message sent to update dispatcher, state num: ~p", [New_state_num]),
-    gen_server:cast(?DISPATCHER_NAME, {update_state, New_state_num}).
+    gen_server:cast(?DISPATCHER_NAME, {check_state, New_state_num}).
 
 %%--------------------------------------------------------------------
 %% @private

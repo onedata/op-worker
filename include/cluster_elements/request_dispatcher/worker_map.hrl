@@ -6,13 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% request_dispatcher definitions.
+%%% Definitions connected to map of running workers
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(REQUEST_DISPATCHER_HRL).
--define(REQUEST_DISPATCHER, 1).
+-author("Tomasz Lichon").
 
-%% This record is used by requests_dispatcher (it contains its state).
--record(dispatcher_state, {state_num = 0}).
-
--endif.
+-define(worker_map_ets, workers_ets).

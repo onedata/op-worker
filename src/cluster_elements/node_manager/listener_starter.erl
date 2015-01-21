@@ -9,7 +9,7 @@
 %%% This module provides functions allowing to start listeners
 %%% @end
 %%%-------------------------------------------------------------------
--module(node_manager_listener_starter).
+-module(listener_starter).
 -author("Tomasz Lichon").
 
 -include("registered_names.hrl").
