@@ -1,4 +1,6 @@
--record(reponse, {
+-define(APP_NAME, appmock).
+
+-record(response, {
     code = 200 :: integer(),
     content_type = <<"application/json">>,
     headers = [],
@@ -11,8 +13,16 @@
     % cowboy_router compatible path on which requests will be accepted
     path = "/" :: string(),
     % explicit binary or a 2 argument function
-    % fun(Req, Counter) -> #reponse{}
+    % fun(Req, State) -> #reponse{}
     % Req - cowboy #req{} record, read only
-    % Counter - increments with every request that matches this mapping
-    response = #reponse{} :: #reponse{} | function()
+    % State - carries state between consecutive requests on the same stub
+    response = #response{} :: #response{} | function(),
+    % Initial state of the stub
+    initial_state = []
+}).
+
+-record(mapping_state, {
+    response = #response{} :: #response{} | function(),
+    % Used to remember state between requests on the same stub
+    state = []
 }).

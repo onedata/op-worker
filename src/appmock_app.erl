@@ -2,6 +2,9 @@
 
 -behaviour(application).
 
+-include("appmock.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 %% Application callbacks
 -export([start/2, stop/1]).
 
@@ -10,15 +13,8 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    Dispatch = cowboy_router:compile([
-        {'_', [
-            {"/[...]", request_handler, []}
-        ]}
-    ]),
-    {ok, _} = cowboy:start_http(http, 100, [{port, 8080}], [
-        {env, [{dispatch, Dispatch}]}
-    ]),
+    appmock_logic:initialize("/root/appmock/suite_desc.erl"),
     appmock_sup:start_link().
 
 stop(_State) ->
-    ok.
+    appmock_logic:terminate().

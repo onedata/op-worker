@@ -20,5 +20,9 @@
             cowboy
         ]},
         {mod, {appmock_app, []}},
-        {env, []}
+        {env, [
+            {ca_cert_file, "cacerts/ca.crt"},
+            {cert_file, "cacerts/server.crt"},
+            {key_file, "cacerts/server.key"}
+        ]}
     ]}.

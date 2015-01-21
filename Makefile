@@ -16,6 +16,7 @@ start:
 
 clean:
 	./rebar clean
+	rm -rf rel/appmock
 
 distclean: clean
 	./rebar delete-deps
