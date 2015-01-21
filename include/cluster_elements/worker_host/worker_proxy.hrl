@@ -6,12 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Definitions connected to map of running workers
+%%% The protocol between worker_host and the rest of the world
 %%% @end
 %%%-------------------------------------------------------------------
 -author("Tomasz Lichon").
 
--define(worker_map_ets, workers_ets).
-
--define(default_worker_selection_type, random).
--type(selection_type() :: random | prefere_local).
+-record(worker_request, {id = undefined, req = undefined, reply_to = undefined}).
+-record(worker_answer, {id = undefined, response = undefined}).

@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/1, cleanup/0]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -35,36 +35,33 @@
 init(_Args) ->
     ok.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% @end
 %%--------------------------------------------------------------------
--spec handle(ProtocolVersion :: term(), Request) -> Result when
-    Request :: ping | healthcheck | get_version,
-    Result :: ok | {ok, Response} | {error, Error} | pong | Version,
+-spec handle(Request) -> Result when
+    Request :: ping | healthcheck | {spawn_handler, SocketPid :: pid()},
+    Result :: ok | {ok, Response} | {error, Error} | pong,
     Response :: term(),
-    Version :: term(),
     Error :: term().
-handle(_ProtocolVersion, ping) ->
+handle(ping) ->
     pong;
 
-handle(_ProtocolVersion, healthcheck) ->
+handle(healthcheck) ->
     ok;
 
-handle(_ProtocolVersion, {spawn_handler, SocketPid}) ->
+handle({spawn_handler, SocketPid}) ->
     Pid = spawn(
         fun() ->
             erlang:monitor(process, SocketPid),
             opn_cowboy_bridge:set_socket_pid(SocketPid),
             opn_cowboy_bridge:request_processing_loop()
         end),
-    Pid;
+    {ok, Pid};
 
-handle(_ProtocolVersion, _Msg) ->
+handle(_Msg) ->
     ?warning("http server unknown message: ~p", [_Msg]).
-
 
 %%--------------------------------------------------------------------
 %% @doc

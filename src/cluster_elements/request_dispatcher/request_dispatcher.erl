@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module forwards client's requests to appropriate worker_hosts.
-%%% @end %todo dispatcher should keep modules in ETS, and all clients should be able to read this ETS directly
+%%% This module updates worker_map on cluster state change
+%%% @end
 %%%-------------------------------------------------------------------
 -module(request_dispatcher).
 -author("Michal Wrzeszcz").
@@ -98,72 +98,6 @@ init(_) ->
 handle_call(get_state_num, _From, State) ->
     {reply, State#dispatcher_state.state_num, State};
 
-handle_call({Task, ProtocolVersion, AnsPid, MsgId, Request}, _From, State) ->
-    case handle_generic_request(Task, Request, State) of
-        {Response, undefined} -> Response;
-        {Response, Node} ->
-            gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
-            Response
-    end;
-
-handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
-    case handle_generic_request(Task, Request, State) of
-        {Response, undefined} -> Response;
-        {Response, Node} ->
-            gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
-            Response
-    end;
-
-handle_call({Task, ProtocolVersion, Request}, _From, State) ->
-    case handle_generic_request(Task, Request, State) of
-        {Response, undefined} -> Response;
-        {Response, Node} ->
-            gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
-            Response
-    end;
-
-handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, Request}}, _From, State) ->
-    case worker_map:get_worker_node_prefering_local(Task) of
-        {ok, Node} ->
-            gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
-            {reply, ok, State};
-        {error, not_found} ->
-            case Task of
-                central_logger -> ok;
-                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-            end,
-            {reply, worker_not_found, State};
-        Other -> {reply, Other, State}
-    end;
-
-handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, MsgId, Request}}, _From, State) ->
-    case worker_map:get_worker_node_prefering_local(Task) of
-        {ok, Node} ->
-            gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
-            {reply, ok, State};
-        {error, not_found} ->
-            case Task of
-                central_logger -> ok;
-                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-            end,
-            {reply, worker_not_found, State};
-        Other -> {reply, Other, State}
-    end;
-
-handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
-    case worker_map:get_worker_node_prefering_local(Task) of
-        {ok, Node} ->
-            gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
-            {reply, ok, State};
-        {error, not_found} ->
-            case Task of
-                central_logger -> ok;
-                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-            end,
-            {reply, worker_not_found, State};
-        Other -> {reply, Other, State}
-    end;
-
 handle_call(_Request, _From, State) ->
     ?warning("Wrong call: ~p", [_Request]),
     {reply, wrong_request, State}.
@@ -211,7 +145,7 @@ handle_cast(_Msg, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 handle_info({timer, Msg}, State) ->
-    spawn(fun() -> gen_server:call(?DISPATCHER_NAME, Msg) end),
+    gen_server:cast(?DISPATCHER_NAME, Msg),
     {noreply, State};
 handle_info(_Info, State) ->
     ?warning("Dispatcher wrong info: ~p", [_Info]),
@@ -279,16 +213,3 @@ check_state(State, _) ->
         end,
     gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_up_to_date, NewState#dispatcher_state.state_num}),
     NewState.
-
-handle_generic_request(Task, Request, State) ->
-    case worker_map:get_worker_node(Task) of
-        {ok, Node} ->
-            {{reply, ok, State}, Node};
-        {error, not_found} ->
-            case Task of
-                central_logger -> ok;
-                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-            end,
-            {{reply, worker_not_found, State}, undefined};
-        Other -> {{reply, Other, State}, undefined}
-    end.

@@ -20,6 +20,7 @@
 -include("supervision_macros.hrl").
 -include("modules_and_args.hrl").
 -include("cluster_elements/cluster_manager/cluster_manager.hrl").
+-include("cluster_elements/worker_host/worker_proxy.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -506,17 +507,17 @@ update_dns_state(WorkersList) ->
         fun
             ({Module, []}) ->
                 {Module, []};
-            ({Module, Nodes}) ->
-                IPToLoad = [{cluster_manager_utils:node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- Nodes],
+            ({Module, NodeList}) ->
+                IPToLoad = [{cluster_manager_utils:node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- NodeList],
                 FilteredIPs = [{IP, Param} || {IP, Param} <- IPToLoad, IP =/= unknownaddress],
                 {Module, FilteredIPs}
         end, ModuleToNodeList),
-    FilteredModuleToNodeListWithLoad = [{Module, Nodes} || {Module, Nodes} <- ModuleToNodeListWithLoad, Nodes =/= []],
+    FilteredModuleToNodeListWithLoad = [{Module, NodeList} || {Module, NodeList} <- ModuleToNodeListWithLoad, NodeList =/= []],
 
     % prepare average load
     LoadAverage = cluster_manager_utils:average([Load || {_, Load} <- FilteredUniqueNodesIpToLoad]),
 
     UpdateInfo = {update_state, FilteredModuleToNodeListWithLoad, FilteredUniqueNodesIpToLoad, LoadAverage},
     ?debug("updating dns, update message: ~p", [UpdateInfo]),
-    [gen_server:cast(Pid, {asynch, 1, UpdateInfo}) || {_, dns_worker, Pid} <- WorkersList],
+    [gen_server:cast(Pid, #worker_request{req = UpdateInfo}) || {_, dns_worker, Pid} <- WorkersList],
     ok.

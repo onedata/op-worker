@@ -565,16 +565,11 @@ get_file(Req, State) ->
 %%--------------------------------------------------------------------
 -spec spawn_handling_process() -> ok | {error, timeout}.
 spawn_handling_process() ->
-    SocketPid = self(),
-    MsgID = 0, %% This can be 0 as one socket process sends only one request
-    gen_server:call(?DISPATCHER_NAME, {node_chosen, {http_worker, 1, SocketPid, MsgID, {spawn_handler, SocketPid}}}),
-    receive
-        {worker_answer, MsgID, Resp} ->
-            set_handler_pid(Resp),
-            ok
-    after ?handling_process_spawn_timeout ->
-        ?error("Cannot spawn handling process, timeout"),
-        {error, timeout}
+    case worker_proxy:call(http_worker, {spawn_handler, self()}, ?handling_process_spawn_timeout, prefere_local) of
+        {ok, Pid} -> set_handler_pid(Pid);
+        {error, Error} ->
+            ?error("Cannot spawn handling process, error: ~p", [Error]),
+            Error
     end.
 
 %%--------------------------------------------------------------------

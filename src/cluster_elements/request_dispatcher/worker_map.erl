@@ -16,9 +16,8 @@
 -include("cluster_elements/request_dispatcher/worker_map.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-
 %% API
--export([init/0, terminate/0, get_worker_node/1, get_worker_node_prefering_local/1, update_workers/1]).
+-export([init/0, terminate/0, get_worker_node/1, get_worker_node/2, update_workers/1]).
 
 %%%===================================================================
 %%% API
@@ -46,28 +45,28 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Chooses one of nodes where worker is working.
+%% @equiv get_worker_node(WorkerName, any).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_worker_node(WorkerName :: atom()) -> {ok, node()} | {error, term()}.
 get_worker_node(WorkerName) ->
+    get_worker_node(WorkerName, ?default_worker_selection_type).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Chooses one of nodes where worker is working. The second argument
+%% determines selection type
+%% @end
+%%--------------------------------------------------------------------
+-spec get_worker_node(WorkerName :: atom(), SelectionType :: selection_type()) -> {ok, node()} | {error, term()}.
+get_worker_node(WorkerName, random) ->
+    get_worker_node_prefering_local(WorkerName);
+get_worker_node(WorkerName, prefere_local) ->
     get_random_worker_node(WorkerName).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Chooses one of nodes where worker is working. Preferes local node.
-%% @end
-%%--------------------------------------------------------------------
--spec get_worker_node_prefering_local(WorkerName :: atom()) -> {ok, node()} | {error, term()}.
-get_worker_node_prefering_local(WorkerName) ->
-    MyNode = node(),
-    case ets:match(?worker_map_ets, {WorkerName, MyNode}) of
-        [] -> get_random_worker_node(WorkerName);
-        [{_, MyNode}] -> {ok, MyNode}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
+%% INVOKE ONLY IN REQUEST DISPATCHER PROCESS!
 %% Updates ets when new workers list appears.
 %% @end
 %%--------------------------------------------------------------------
@@ -82,6 +81,21 @@ update_workers(WorkersList) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Chooses one of nodes where worker is working. Preferes local node.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_worker_node_prefering_local(WorkerName :: atom()) -> {ok, node()} | {error, term()}.
+get_worker_node_prefering_local(WorkerName) ->
+    MyNode = node(),
+    case ets:match(?worker_map_ets, {WorkerName, MyNode}) of
+        [] -> get_random_worker_node(WorkerName);
+        [{_, MyNode}] -> {ok, MyNode}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Chooses random node where worker is working
 %% @end
@@ -97,6 +111,7 @@ get_random_worker_node(WorkerName) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Updates location of given worker (nodes where it is running) in worker map
 %% @end

@@ -40,10 +40,8 @@ ccm_and_worker_test(Config) ->
 
     timer:sleep(15000), %todo reorganize cluster startup, so we don't have to wait
 
-    ?assertEqual(ok, gen_server:call({?DISPATCHER_NAME, Ccm}, {http_worker, 1, self(), ping})),
-    ?assertEqual(pong, receive Msg -> Msg end),
-    ?assertEqual(ok, gen_server:call({?DISPATCHER_NAME, Worker}, {http_worker, 1, self(), ping})),
-    ?assertEqual(pong, receive Msg -> Msg end).
+    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping])),
+    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

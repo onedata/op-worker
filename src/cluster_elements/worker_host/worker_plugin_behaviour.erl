@@ -25,8 +25,8 @@
 %% Do your work.
 %% @end
 %%--------------------------------------------------------------------
--callback handle(ProtocolVersion :: term(), Request :: term()) ->
-    {ok, Ans :: term()} | {error, Error :: any()}.
+-callback handle(Request :: term()) ->
+    ok | {ok, Ans :: term()} | {error, Error :: any()}.
 
 %%--------------------------------------------------------------------
 %% @doc

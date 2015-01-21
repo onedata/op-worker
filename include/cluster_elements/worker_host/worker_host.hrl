@@ -12,6 +12,8 @@
 -ifndef(WORKER_HOST_HRL).
 -define(WORKER_HOST_HRL, 1).
 
+-include("cluster_elements/worker_host/worker_proxy.hrl").
+
 %% This record is used by worker_host (it contains its state). It describes
 %% plug_in that is used and state of this plug_in. It contains also
 %% information about time of requests processing (used by ccm during
