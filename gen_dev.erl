@@ -15,8 +15,7 @@
 main(_) ->
     try
         prepare_helper_modules(),
-        {ok, [Args]} = file:consult(?args_file),
-        NodesConfig = expand_full_list_of_nodes(Args),
+        {ok, [NodesConfig]} = file:consult(?args_file),
         create_releases(NodesConfig),
         cleanup()
     catch
@@ -46,7 +45,7 @@ create_releases([Config | Rest]) ->
     print("cookie - ~p", [Cookie]),
     TargetDir = proplists:get_value(target_dir, Config),
     ReleaseDirectory = filename:join(TargetDir, get_name(FullName)),
-    print("release_dir - ~p", [ReleaseDirectory]),
+    print("target_dir - ~p", [ReleaseDirectory]),
 
     file:make_dir(TargetDir),
     remove_dir(ReleaseDirectory),
@@ -56,24 +55,6 @@ create_releases([Config | Rest]) ->
     print("Release configured sucessfully!"),
     print("==================================~n"),
     create_releases(Rest).
-
-expand_full_list_of_nodes([]) ->
-    [];
-expand_full_list_of_nodes([Config | Rest]) ->
-    case proplists:get_value(type, Config) of
-        ccm_and_worker ->
-            %prepare ccm config
-            CcmConfig = [{type, ccm} | proplists:delete(node_type, Config)],
-
-            %prepare worker config
-            CcmName = proplists:get_value(name, Config),
-            WorkerName = extend_hostname_by_suffix(CcmName, ?worker_name_suffix),
-            WorkerConfig = [{type, worker}, {name, WorkerName} | proplists:delete(name, proplists:delete(type, Config))],
-
-            [CcmConfig, WorkerConfig | expand_full_list_of_nodes(Rest)];
-        _ ->
-            [Config | expand_full_list_of_nodes(Rest)]
-    end.
 
 remove_dir(Path) ->
     case os:cmd("rm -rf '" ++ Path ++ "'") of
