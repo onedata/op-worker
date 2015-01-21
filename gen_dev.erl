@@ -8,7 +8,6 @@
 -define(args_file, atom_to_list(?MODULE) ++ ".args").
 -define(releases_directory, "rel").
 -define(fresh_release_directory, filename:join(?releases_directory, ?app_name)).
--define(test_releases_directory, filename:join(?releases_directory, "test_cluster")).
 
 -define(worker_name_suffix, "_worker").
 -define(dist_app_failover_timeout, 5000).
@@ -18,7 +17,6 @@ main(_) ->
         prepare_helper_modules(),
         {ok, [Args]} = file:consult(?args_file),
         NodesConfig = expand_full_list_of_nodes(Args),
-        file:make_dir(?test_releases_directory),
         create_releases(NodesConfig),
         cleanup()
     catch
@@ -36,8 +34,8 @@ create_releases([Config | Rest]) ->
     % prepare configuration
     print("=================================="),
     print("Configuring new release"),
-    Name = proplists:get_value(name, Config),
-    print("name - ~p", [Name]),
+    FullName = proplists:get_value(name, Config),
+    print("name - ~p", [FullName]),
     Type = proplists:get_value(type, Config),
     print("type - ~p", [Type]),
     CcmNodesList = proplists:get_value(ccm_nodes, Config),
@@ -46,13 +44,15 @@ create_releases([Config | Rest]) ->
     print("db_nodes - ~p", [DbNodesList]),
     Cookie = proplists:get_value(cookie, Config),
     print("cookie - ~p", [Cookie]),
-    ReleaseDirectory = get_release_location(Name),
+    TargetDir = proplists:get_value(target_dir, Config),
+    ReleaseDirectory = filename:join(TargetDir, get_name(FullName)),
     print("release_dir - ~p", [ReleaseDirectory]),
 
+    file:make_dir(TargetDir),
     remove_dir(ReleaseDirectory),
     copy_dir(?fresh_release_directory, ReleaseDirectory),
     print("Fresh release copied to ~p", [ReleaseDirectory]),
-    configurator:configure_release(ReleaseDirectory, ?app_name, Name, Cookie, Type, CcmNodesList, DbNodesList, ?dist_app_failover_timeout),
+    configurator:configure_release(ReleaseDirectory, ?app_name, FullName, Cookie, Type, CcmNodesList, DbNodesList, ?dist_app_failover_timeout),
     print("Release configured sucessfully!"),
     print("==================================~n"),
     create_releases(Rest).
@@ -89,9 +89,9 @@ copy_dir(From, To) ->
 prepare_helper_modules() ->
     compile:file(filename:join([?releases_directory, "files", "configurator.erl"])).
 
-get_release_location(Hostname) ->
+get_name(Hostname) ->
     [Name, _] = string:tokens(Hostname, "@"),
-    filename:join(?test_releases_directory, Name).
+    Name.
 
 extend_hostname_by_suffix(Hostname, Suffix) ->
     [Name, Host] = string:tokens(Hostname, "@"),
