@@ -24,7 +24,9 @@ main(_) ->
     catch
         _Type:Error ->
             cleanup(),
-            print("Error: ~p",[Error]),
+            try print("Error: ~ts",[Error])
+            catch _:_  -> print("Error: ~p",[Error])
+            end,
             print("Stacktrace: ~p",[erlang:get_stacktrace()])
     end.
 
@@ -42,7 +44,7 @@ create_releases([Config | Rest]) ->
     print("ccm_nodes - ~p", [CcmNodesList]),
     DbNodesList = proplists:get_value(db_nodes, Config),
     print("db_nodes - ~p", [DbNodesList]),
-    Cookie = get_host(Name),
+    Cookie = proplists:get_value(cookie, Config),
     print("cookie - ~p", [Cookie]),
     ReleaseDirectory = get_release_location(Name),
     print("release_dir - ~p", [ReleaseDirectory]),
