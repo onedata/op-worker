@@ -74,14 +74,6 @@ get_name(Hostname) ->
     [Name, _] = string:tokens(Hostname, "@"),
     Name.
 
-extend_hostname_by_suffix(Hostname, Suffix) ->
-    [Name, Host] = string:tokens(Hostname, "@"),
-    Name ++ Suffix ++ "@" ++ Host.
-
-get_host(Hostname) ->
-    [_, Host] = string:tokens(Hostname, "@"),
-    Host.
-
 print(Msg) ->
     print(Msg,[]).
 print(Msg, Args) ->
