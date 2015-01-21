@@ -8,6 +8,12 @@
 %%%-------------------------------------------------------------------
 -module(configurator).
 
+-define(SED_COMMAND,
+    case os:type() of
+        {unix, darwin}  -> "sed -i '' -e ";
+        _               -> "sed -i "
+    end).
+
 %% API
 -export([configure_release/8, get_env/3, replace_env/4, replace_vm_arg/3]).
 
@@ -53,7 +59,7 @@ get_env(SysConfigPath, ApplicationName, EnvName) ->
 %%--------------------------------------------------------------------
 -spec replace_env(string(), atom(), atom(), term()) -> ok | no_return().
 replace_env(SysConfigPath, _ApplicationName, EnvName, EnvValue) ->
-    [] = os:cmd("sed -i \"s#{" ++ atom_to_list(EnvName) ++ ",.*#{" ++ atom_to_list(EnvName) ++ ", " ++
+    [] = os:cmd(?SED_COMMAND ++ "\"s#{" ++ atom_to_list(EnvName) ++ ",.*#{" ++ atom_to_list(EnvName) ++ ", " ++
         term_to_string(EnvValue) ++ "},#g\" \"" ++ SysConfigPath ++ "\""),
     ok.
 
@@ -64,7 +70,7 @@ replace_env(SysConfigPath, _ApplicationName, EnvName, EnvValue) ->
 %%--------------------------------------------------------------------
 -spec replace_vm_arg(string(), string(), string()) -> ok | no_return().
 replace_vm_arg(VMArgsPath, FullArgName, ArgValue) ->
-    [] = os:cmd("sed -i \"s#" ++ FullArgName ++ " .*#" ++ FullArgName ++ " " ++
+    [] = os:cmd(?SED_COMMAND ++ "\"s#" ++ FullArgName ++ " .*#" ++ FullArgName ++ " " ++
         ArgValue ++ "#g\" \"" ++ VMArgsPath ++ "\"").
 
 %%%===================================================================
