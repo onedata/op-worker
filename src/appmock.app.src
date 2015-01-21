@@ -23,6 +23,8 @@
         {env, [
             {ca_cert_file, "cacerts/ca.crt"},
             {cert_file, "cacerts/server.crt"},
-            {key_file, "cacerts/server.key"}
+            {key_file, "cacerts/server.key"},
+
+            {remote_control_port, 9999}
         ]}
     ]}.

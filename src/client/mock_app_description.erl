@@ -4,4 +4,4 @@
 
 -include("appmock.hrl").
 
--callback request_mappings() -> [#mapping{}].
+-callback response_mocks() -> [#mock_resp_mapping{}].

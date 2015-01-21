@@ -4,16 +4,20 @@
 -include("appmock.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([request_mappings/0]).
+-export([response_mocks/0]).
 
-request_mappings() -> [
-    #mapping{port = 8080, path = "/path80801", response = #response{body = <<"path80801">>}},
-    #mapping{port = 8080, path = "/path80802", response = #response{body = <<"path80802">>}},
-    #mapping{port = 8080, path = "/path80803", response = #response{body = <<"path80803">>}},
-    #mapping{port = 8080, path = "/path80804", response = #response{body = <<"path80804">>}},
-    #mapping{port = 9090, path = "/path9090",
+response_mocks() -> [
+    #mock_resp_mapping{port = 8080, path = "/path80801", response = #mock_resp{body = <<"path80801">>}},
+
+    #mock_resp_mapping{port = 8080, path = "/path80802", response = #mock_resp{body = <<"path80802">>}},
+
+    #mock_resp_mapping{port = 8080, path = "/path80803", response = #mock_resp{body = <<"path80803">>}},
+
+    #mock_resp_mapping{port = 8080, path = "/path80804", response = #mock_resp{body = <<"path80804">>}},
+
+    #mock_resp_mapping{port = 9090, path = "/path9090",
         response = fun(_Req, State) ->
-            R = #response{body = <<"Counter: ", (integer_to_binary(State))/binary>>},
+            R = #mock_resp{body = <<"Counter: ", (integer_to_binary(State))/binary>>},
             {R, State + 1}
         end,
     initial_state = 0}
