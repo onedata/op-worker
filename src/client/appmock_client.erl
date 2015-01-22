@@ -9,7 +9,7 @@
 
 verify_mock(Hostname, Port, Path, NumberOfCalls) ->
     try
-        JSON = appmock_utils:encode_to_json(?VERIFY_MOCK_REQUEST(Port, Path, NumberOfCalls)),
+        JSON = appmock_utils:encode_to_json(?VERIFY_MOCK_PACK_REQUEST(Port, Path, NumberOfCalls)),
         {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
         {200, _, RespBodyJSON} = appmock_utils:https_request(Hostname, RemoteControlPort,
             ?VERIFY_MOCK_PATH, post, [], JSON),
@@ -19,7 +19,7 @@ verify_mock(Hostname, Port, Path, NumberOfCalls) ->
             ?OK_RESULT ->
                 ok;
             _ ->
-                Number = ?GET_MESSAGE_VERIFY_MOCK_ERROR(RespBody),
+                Number = ?VERIFY_MOCK_UNPACK_ERROR(RespBody),
                 {different, Number}
         end
     catch T:M ->
@@ -30,7 +30,7 @@ verify_mock(Hostname, Port, Path, NumberOfCalls) ->
 
 verify_all_mocks(Hostname, VerificationList) ->
     try
-        JSON = appmock_utils:encode_to_json(?VERIFY_ALL_REQUEST(VerificationList)),
+        JSON = appmock_utils:encode_to_json(?VERIFY_ALL_PACK_REQUEST(VerificationList)),
         {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
         {200, _, RespBodyJSON} = appmock_utils:https_request(Hostname, RemoteControlPort,
             ?VERIFY_ALL_PATH, post, [], JSON),
@@ -39,7 +39,7 @@ verify_all_mocks(Hostname, VerificationList) ->
             ?OK_RESULT ->
                 ok;
             _ ->
-                HistoryBin = ?GET_MESSAGE_VERIFY_ALL_ERROR(RespBody),
+                HistoryBin = ?VERIFY_ALL_UNPACK_ERROR(RespBody),
                 History = [{binary_to_integer(Port), Path} || {Port, Path} <- HistoryBin],
                 {different, History}
         end

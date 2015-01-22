@@ -66,7 +66,7 @@ produce_mock_resp(Req, ETSKey) ->
 verify_mock(Req) ->
     {ok, JSONBody, _} = cowboy_req:body(Req),
     Body = appmock_utils:decode_from_json(JSONBody),
-    {Port, Path, Number} = ?VERIFY_MOCK_PARAMS(Body),
+    {Port, Path, Number} = ?VERIFY_MOCK_UNPACK_REQUEST(Body),
     ?dump({Port, Path, Number}),
     [{?HISTORY_KEY, History}] = ets:lookup(?MAPPINGS_ETS, ?HISTORY_KEY),
     ?dump(History),
@@ -81,7 +81,7 @@ verify_mock(Req) ->
                 Number ->
                     appmock_utils:encode_to_json(?OK_RESULT);
                 _ ->
-                    appmock_utils:encode_to_json(?VERIFY_MOCK_ERROR(ActualNumber))
+                    appmock_utils:encode_to_json(?VERIFY_MOCK_PACK_ERROR(ActualNumber))
             end,
     {ok, _NewReq} = cowboy_req:reply(200, [{<<"content-type">>, <<"application/json">>}], Reply, Req).
 
@@ -90,14 +90,14 @@ verify_mock(Req) ->
 verify_all_mocks(Req) ->
     {ok, JSONBody, _} = cowboy_req:body(Req),
     BodyStruct = appmock_utils:decode_from_json(JSONBody),
-    Body = ?VERIFY_ALL_PARAMS(BodyStruct),
+    Body = ?VERIFY_ALL_UNPACK_REQUEST(BodyStruct),
     ?dump(Body),
     [{?HISTORY_KEY, History}] = ets:lookup(?MAPPINGS_ETS, ?HISTORY_KEY),
     Reply = case Body of
                 History ->
                     appmock_utils:encode_to_json(?OK_RESULT);
                 _ ->
-                    appmock_utils:encode_to_json(?VERIFY_ALL_ERROR(History))
+                    appmock_utils:encode_to_json(?VERIFY_ALL_PACK_ERROR(History))
             end,
     {ok, _NewReq} = cowboy_req:reply(200, [{<<"content-type">>, <<"application/json">>}], Reply, Req).
 
