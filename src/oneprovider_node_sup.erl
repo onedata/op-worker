@@ -70,8 +70,8 @@ start_link(NodeType) ->
     Modules :: [module()] | dynamic.
 init([worker]) ->
     {ok, {{one_for_one, 5, 10}, [
-        {node_manager, {node_manager, start_link, [worker]}, permanent, 5000, worker, [node_manager]},
-        {request_dispatcher, {request_dispatcher, start_link, []}, permanent, 5000, worker, [request_dispatcher]}
+        {request_dispatcher, {request_dispatcher, start_link, []}, permanent, 5000, worker, [request_dispatcher]},
+        {node_manager, {node_manager, start_link, [worker]}, permanent, 5000, worker, [node_manager]}
     ]}};
 init([ccm]) ->
     {ok, {{one_for_one, 5, 10}, [
@@ -83,5 +83,5 @@ init([ccm_test]) ->
     {ok, {{one_for_one, 5, 10}, [
         {cluster_manager, {cluster_manager, start_link, [test]}, permanent, 5000, worker, [cluster_manager]},
         {node_manager, {node_manager, start_link, [ccm_test]}, permanent, 5000, worker, [node_manager]},
-        {request_dispatcher, {request_dispatcher, start_link, [test]}, permanent, 5000, worker, [request_dispatcher]}
+        {request_dispatcher, {request_dispatcher, start_link, []}, permanent, 5000, worker, [request_dispatcher]}
     ]}}.
