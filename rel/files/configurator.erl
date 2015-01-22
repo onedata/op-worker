@@ -1,12 +1,17 @@
 %%%-------------------------------------------------------------------
-%%% @author lichon
-%%% @copyright (C) 2015, <COMPANY>
-%%% @doc
-%%%
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
-%%% Created : 13. Jan 2015 15:56
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module provides functions that configure oneprovider_node release
+%%% by replacing envs in vm.args and sys.config
+%%% @end
 %%%-------------------------------------------------------------------
 -module(configurator).
+-author("Tomasz Lichon").
 
 %% API
 -export([configure_release/8, get_env/3, replace_env/4, replace_vm_arg/3]).
