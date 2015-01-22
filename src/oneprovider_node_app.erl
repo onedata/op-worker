@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc It is the main module of application. It lunches
-%% supervisor which then initializes appropriate components of node.
+%%% supervisor which then initializes appropriate components of node.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(oneprovider_node_app).

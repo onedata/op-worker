@@ -77,6 +77,5 @@ handle(_ProtocolVersion, _Msg) ->
 -spec cleanup() -> Result when
     Result :: ok | {error, Error},
     Error :: timeout | term().
-%% ====================================================================
 cleanup() ->
     ok.

@@ -12,6 +12,7 @@
 -module(cdmi_handler).
 -author("Tomasz Lichon").
 
+-include("workers/http_worker/http_common.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
 
 -record(state, {}).

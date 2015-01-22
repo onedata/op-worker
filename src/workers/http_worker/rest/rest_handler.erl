@@ -13,6 +13,7 @@
 -author("Lukasz Opiola").
 
 -include("cluster_elements/oneproxy/oneproxy.hrl").
+-include("workers/http_worker/http_common.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
