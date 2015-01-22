@@ -1,8 +1,18 @@
 [
     [
         {name, "ccm1@127.0.0.1"},
-        {type, ccm_and_worker},  % ccm | worker | ccm_and_worker
+        {type, ccm},  % ccm | worker
         {ccm_nodes, ['ccm1@127.0.0.1']},
-        {db_nodes, ['db@127.0.0.1']}
+        {db_nodes, ['db@127.0.0.1']},
+        {cookie, "127.0.0.1"},
+        {target_dir, "rel/test_cluster/ccm1"}
+    ],
+    [
+        {name, "worker@127.0.0.1"},
+        {type, worker},  % ccm | worker
+        {ccm_nodes, ['ccm1@127.0.0.1']},
+        {db_nodes, ['db@127.0.0.1']},
+        {cookie, "127.0.0.1"},
+        {target_dir, "rel/test_cluster/worker"}
     ]
 ].

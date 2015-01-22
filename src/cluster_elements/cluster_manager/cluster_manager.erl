@@ -23,6 +23,11 @@
 -include("cluster_elements/worker_host/worker_proxy.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% This record is used by ccm (it contains its state). It describes
+%% nodes, dispatchers and workers in cluster. It also contains reference
+%% to process used to monitor if nodes are alive.
+-record(cm_state, {nodes = [], workers = [], state_num = 1}).
+
 %% API
 -export([start_link/0, stop/0]).
 
