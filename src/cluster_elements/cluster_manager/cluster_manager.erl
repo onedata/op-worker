@@ -17,8 +17,12 @@
 -include("registered_names.hrl").
 -include("supervision_macros.hrl").
 -include("modules_and_args.hrl").
--include("cluster_elements/cluster_manager/cluster_manager.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+%% This record is used by ccm (it contains its state). It describes
+%% nodes, dispatchers and workers in cluster. It also contains reference
+%% to process used to monitor if nodes are alive.
+-record(cm_state, {nodes = [], workers = [], dispatcher_maps = [], state_num = 1, cluster_check_num = 0, state_loaded = false, state_monitoring = on}).
 
 %% API
 -export([start_link/0, start_link/1, stop/0]).
