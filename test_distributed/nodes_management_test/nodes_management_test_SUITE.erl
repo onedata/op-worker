@@ -67,8 +67,8 @@ init_per_testcase(ccm_and_worker_test, Config) ->
     DBNode = ?DB_NODE,
 
     test_node_starter:start_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes, [
-        [{node_type, ccm}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}, {heart_beat_success_interval, 1}],
-        [{node_type, worker}, {dns_port, 1300}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}, {heart_beat_success_interval, 1}]
+        [{node_type, ccm}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}, {workers_to_trigger_init, 1}],
+        [{node_type, worker}, {dns_port, 1300}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}]
     ]),
 
     lists:append([{nodes, Nodes}, {dbnode, DBNode}], Config).

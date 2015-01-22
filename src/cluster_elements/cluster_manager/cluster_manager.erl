@@ -236,9 +236,16 @@ heart_beat(State = #cm_state{nodes = Nodes}, SenderNode) ->
             case catch join_new_node(SenderNode, State) of
                 {ok, {NewState, WorkersFound}} ->
                     erlang:monitor_node(SenderNode, true),
+                    % update dispatcher if new workers were found
                     case WorkersFound of
                         true -> update_dispatchers_and_dns(NewState);
                         false -> ok
+                    end,
+                    %trigger cluster init if  number of connected nodes exceedes 'workers_to_trigger_init' var
+                    case application:get_env(?APP_NAME, workers_to_trigger_init) of
+                        N when is_integer(N) andalso N =< length(Nodes) + 1 ->
+                            gen_server:cast(self(), init_cluster);
+                        _ -> ok
                     end,
                     gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heart_beat_ok, State#cm_state.state_num}),
                     NewState#cm_state{nodes = [SenderNode | Nodes]};
@@ -276,19 +283,19 @@ init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}) ->
                 false -> {[Job | TmpJobs], [A | TmpArgs]}
             end
         end,
-    {Jobs, Args} = lists:foldl(CreateJobsList, {[], []}, ?MODULES_WITH_ARGS),
+    {JobsTodo, Args} = lists:foldl(CreateJobsList, {[], []}, ?MODULES_WITH_ARGS),
 
-    case {Jobs, Workers} of
+    case {JobsTodo, Workers} of
         {[], []} ->
             State;
         {[], _} ->
             update_dispatchers_and_dns(State);
         {_, _} ->
-            ?info("Initialization of jobs ~p using nodes ~p", [Jobs, Nodes]),
+            ?info("Initialization of jobs ~p using nodes ~p", [JobsTodo, Nodes]),
             NewState =
-                case erlang:length(Nodes) >= erlang:length(Jobs) of
-                    true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
-                    false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
+                case erlang:length(Nodes) >= erlang:length(JobsTodo) of
+                    true -> init_cluster_nodes_dominance(State, Nodes, JobsTodo, [], Args, []);
+                    false -> init_cluster_jobs_dominance(State, JobsTodo, Args, Nodes, [])
                 end,
             update_dispatchers_and_dns(NewState)
     end.
