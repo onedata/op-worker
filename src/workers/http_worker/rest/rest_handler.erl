@@ -12,10 +12,11 @@
 -module(rest_handler).
 -author("Lukasz Opiola").
 
--include("workers/http_worker/rest/rest.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+-record(state, {}).
 
 %% API
 -export([init/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).

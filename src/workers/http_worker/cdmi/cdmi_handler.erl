@@ -13,7 +13,8 @@
 -author("Tomasz Lichon").
 
 -include("cluster_elements/oneproxy/oneproxy.hrl").
--include("workers/http_worker/cdmi/cdmi.hrl").
+
+-record(state, {}).
 
 %% API
 -export([init/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
