@@ -228,7 +228,7 @@ handle_info(_Info, State) ->
     | {shutdown, term()}
     | term().
 terminate(_Reason, _State) ->
-    catch cowboy:stop_listener(?DISPATCHER_LISTENER),
+    catch cowboy:stop_listener(?WEBSOCKET_LISTENER),
     catch cowboy:stop_listener(?HTTP_REDIRECTOR_LISTENER),
     catch cowboy:stop_listener(?REST_LISTENER),
     catch cowboy:stop_listener(?HTTPS_LISTENER),

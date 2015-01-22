@@ -29,7 +29,7 @@
 -define(COWBOY_BRIDGE_MODULE, n2o_handler).
 
 % Cowboy listener references
--define(DISPATCHER_LISTENER, dispatcher).
+-define(WEBSOCKET_LISTENER, websocket).
 -define(HTTPS_LISTENER, https).
 -define(REST_LISTENER, rest).
 -define(HTTP_REDIRECTOR_LISTENER, http).

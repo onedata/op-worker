@@ -31,7 +31,7 @@
 %%--------------------------------------------------------------------
 -spec start_dispatcher_listener() -> ok | no_return().
 start_dispatcher_listener() ->
-    catch cowboy:stop_listener(?DISPATCHER_LISTENER),
+    catch cowboy:stop_listener(?WEBSOCKET_LISTENER),
     {ok, Port} = application:get_env(?APP_NAME, dispatcher_port),
     {ok, DispatcherPoolSize} = application:get_env(?APP_NAME, dispatcher_pool_size),
     {ok, CertFile} = application:get_env(?APP_NAME, fuse_ssl_cert_path),
@@ -45,7 +45,7 @@ start_dispatcher_listener() ->
         {?ONEPROVIDER_URI_PATH, provider_handler, []}
     ]}]),
 
-    {ok, _} = cowboy:start_http(?DISPATCHER_LISTENER, DispatcherPoolSize,
+    {ok, _} = cowboy:start_http(?WEBSOCKET_LISTENER, DispatcherPoolSize,
         [
             {ip, {127, 0, 0, 1}},
             {port, LocalPort}
