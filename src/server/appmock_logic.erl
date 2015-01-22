@@ -1,21 +1,49 @@
+%%%-------------------------------------------------------------------
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module is the heart of appmock application. It's job is to:
+%%% - initialize and cleanup after cowboy listeners
+%%% - keep the application state in ETS
+%%% - handle incoming requests
+%%% @end
+%%%-------------------------------------------------------------------
 -module(appmock_logic).
 
 -include_lib("ctool/include/logging.hrl").
 -include("appmock_internal.hrl").
 
-%% API
--export([]).
 
 %% API
--export([initialize/1, terminate/0, produce_mock_resp/2]).
--export([verify_mock/1, verify_all_mocks/1]).
+-export([initialize/1, terminate/0]).
+-export([produce_mock_resp/2, verify_mock/1, verify_all_mocks/1]).
 
+% ETS identifier
 -define(MAPPINGS_ETS, mapping_ets).
+% ETS key, under which list of all started listeners is remembered
 -define(LISTENERS_KEY, listener_ids).
+% ETS key, under which full history of incoming requests is remembered
 -define(HISTORY_KEY, history).
+% Identifier of cowboy listener that handles all remote control requests.
 -define(REMOTE_CONTROL_LISTENER, remote_control).
+% Number of acceptors in cowboy listeners
+-define(NUMBER_OF_ACCEPTORS, 30).
 
+%%%===================================================================
+%%% API
+%%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes the appmock application by creating an ETS table, inserting some records to it,
+%% loading given mock app description module and starting cowboy listener.
+%% @end
+%%--------------------------------------------------------------------
+-spec initialize(FilePath :: string()) -> ok.
 initialize(FilePath) ->
     % Initialize an ETS table to store states and counters of certain stubs
     ets:new(?MAPPINGS_ETS, [set, named_table, public]),
@@ -25,9 +53,16 @@ initialize(FilePath) ->
     ets:insert(?MAPPINGS_ETS, {?HISTORY_KEY, []}),
     DescriptionModule = load_description_module(FilePath),
     start_remote_control_listener(),
-    start_listeners_for_mappings(DescriptionModule).
+    start_listeners_for_mappings(DescriptionModule),
+    ok.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Cleans up by stopping previously started cowboy listeners and deleting the ETS table.
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate() -> ok.
 terminate() ->
     % Stop all previously started cowboy listeners
     [{?LISTENERS_KEY, ListenersList}] = ets:lookup(?MAPPINGS_ETS, ?LISTENERS_KEY),
@@ -40,6 +75,13 @@ terminate() ->
     ok.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles a request on a mocked endpoint. The endpoint is uniquely recognized by a pair {Port, Path}.
+%% If the endpoint had a responding function defined, the state is set to the state returned by the function.
+%% @end
+%%--------------------------------------------------------------------
+-spec produce_mock_resp(Req :: term(), ETSKey :: {Port :: integer(), Path :: binary()}) -> ok.
 produce_mock_resp(Req, ETSKey) ->
     % Append the request to history
     [{?HISTORY_KEY, History}] = ets:lookup(?MAPPINGS_ETS, ?HISTORY_KEY),
@@ -63,6 +105,14 @@ produce_mock_resp(Req, ETSKey) ->
     {ok, _NewReq} = cowboy_req:reply(Code, [{<<"content-type">>, CType}] ++ Headers, Body, Req).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles requests to verify if certain endpoint had been requested given amount of times.
+%% Input args are in request body JSON.
+%% Returned body is encoded to JSON.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_mock(Req :: term()) -> {ok, term()}.
 verify_mock(Req) ->
     {ok, JSONBody, _} = cowboy_req:body(Req),
     Body = appmock_utils:decode_from_json(JSONBody),
@@ -86,12 +136,18 @@ verify_mock(Req) ->
     {ok, _NewReq} = cowboy_req:reply(200, [{<<"content-type">>, <<"application/json">>}], Reply, Req).
 
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles requests to verify if all endpoints have been requested in expected order.
+%% Input args are in request body JSON.
+%% Returned body is encoded to JSON.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_all_mocks(Req :: term()) -> {ok, term()}.
 verify_all_mocks(Req) ->
     {ok, JSONBody, _} = cowboy_req:body(Req),
     BodyStruct = appmock_utils:decode_from_json(JSONBody),
     Body = ?VERIFY_ALL_UNPACK_REQUEST(BodyStruct),
-    ?dump(Body),
     [{?HISTORY_KEY, History}] = ets:lookup(?MAPPINGS_ETS, ?HISTORY_KEY),
     Reply = case Body of
                 History ->
@@ -102,6 +158,16 @@ verify_all_mocks(Req) ->
     {ok, _NewReq} = cowboy_req:reply(200, [{<<"content-type">>, <<"application/json">>}], Reply, Req).
 
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Compiles and loads a given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec load_description_module(FilePath :: binary()) -> atom().
 load_description_module(FilePath) ->
     FileName = filename:basename(FilePath),
     {ok, ModuleName} = compile:file(FilePath),
@@ -110,6 +176,13 @@ load_description_module(FilePath) ->
     ModuleName.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Decides on which port should the application listen based on mappings
+%% in description module and starts the listeners.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_listeners_for_mappings(ModuleName :: atom()) -> ok.
 start_listeners_for_mappings(ModuleName) ->
     % Get all mappings by calling request_mappings/0 function
     Mappings = ModuleName:response_mocks(),
@@ -117,12 +190,12 @@ start_listeners_for_mappings(ModuleName) ->
     PortList = lists:foldl(
         fun(#mock_resp_mapping{port = Port, path = Path, response = Response, initial_state = InitialState}, UniquePorts) ->
             % Remember a mapping in process dictionary
-            add_mapping(Port, Path, Response, InitialState),
+            add_endpoint(Port, Path, Response, InitialState),
             % Add the port to port list (uniquely)
             (UniquePorts -- [Port]) ++ [Port]
         end, [], Mappings),
     % Create pairs {Port, CowboyDispatch} for every port, where CowboyDispatch
-    % includes all mappings for a certain port
+    % includes all enpoints for a certain port
     Listeners = lists:map(
         fun(Port) ->
             Dispatch = cowboy_router:compile([
@@ -132,7 +205,7 @@ start_listeners_for_mappings(ModuleName) ->
                         ets:insert(?MAPPINGS_ETS,
                             {ETSKey, #mapping_state{response = Response, state = InitialState}}),
                         {binary_to_list(Path), mock_resp_handler, [ETSKey]}
-                    end, get_mappings(Port))
+                    end, get_endpoints(Port))
                 }
             ]),
             {Port, Dispatch}
@@ -142,9 +215,16 @@ start_listeners_for_mappings(ModuleName) ->
             % Generate listener name
             ListenerID = "https" ++ integer_to_list(Port),
             start_listener(ListenerID, Port, Dispatch)
-        end, Listeners).
+        end, Listeners),
+    ok.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts a single cowboy https listener.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_listener(ListenerID :: term(), Port :: integer(), Dispatch :: term()) -> ok.
 start_listener(ListenerID, Port, Dispatch) ->
     % Save started listener in ETS
     [{?LISTENERS_KEY, ListenersList}] = ets:lookup(?MAPPINGS_ETS, ?LISTENERS_KEY),
@@ -158,7 +238,7 @@ start_listener(ListenerID, Port, Dispatch) ->
     ?info("Starting cowboy listener: ~p (~p)", [ListenerID, Port]),
     {ok, _} = cowboy:start_https(
         ListenerID,
-        100,
+        ?NUMBER_OF_ACCEPTORS,
         [
             {port, Port},
             {cacertfile, CaCertFile},
@@ -167,10 +247,17 @@ start_listener(ListenerID, Port, Dispatch) ->
         ],
         [
             {env, [{dispatch, Dispatch}]}
-        ]).
+        ]),
+    ok.
 
 
-add_mapping(Port, Path, Response, InitialState) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Convenience function to save which enpoints should be hosted on which port.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_endpoint(Port :: integer(), Path :: binary(), Response :: term(), InitialState :: term()) -> term().
+add_endpoint(Port, Path, Response, InitialState) ->
     CurrentList = case get(Port) of
                       undefined -> [];
                       Other -> Other
@@ -178,10 +265,22 @@ add_mapping(Port, Path, Response, InitialState) ->
     put(Port, CurrentList ++ [{Path, Response, InitialState}]).
 
 
-get_mappings(Port) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Convenience function to retrieve which enpoints should be hosted on which port.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_endpoints(Port :: integer()) -> [{Path :: binary(), Response :: term(), InitialState :: term()}].
+get_endpoints(Port) ->
     get(Port).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts a cowboy listener that handles all remote control requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_remote_control_listener() -> ok.
 start_remote_control_listener() ->
     {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
     Dispatch = cowboy_router:compile([

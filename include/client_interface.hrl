@@ -32,12 +32,12 @@
 ).
 % Produces an error message if verification fails (server side).
 -define(VERIFY_ALL_PACK_ERROR(_History),
-    [{<<"result">>, <<"error">>}, {<<"history">>, _History}]).
+    [{<<"result">>, <<"error">>}, {<<"history">>, ?VERIFY_ALL_PACK_REQUEST(_History)}]).
 % Retrieves the error details from verify_all error (actual request history) (client side).
 -define(VERIFY_ALL_UNPACK_ERROR(_RespBody),
     begin
-        [{<<"result">>, <<"error">>}, {<<"history">>, _History}] = _RespBody,
-        _History
+        [{<<"result">>, <<"error">>}, {<<"history">>, _Struct}] = _RespBody,
+        ?VERIFY_ALL_UNPACK_REQUEST(_Struct)
     end
 ).
 

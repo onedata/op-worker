@@ -1,4 +1,14 @@
-
+%%%-------------------------------------------------------------------
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module implements OTP supervisor behaviour.
+%%% @end
+%%%-------------------------------------------------------------------
 -module(appmock_sup).
 
 -behaviour(supervisor).
