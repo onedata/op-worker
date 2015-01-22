@@ -21,9 +21,13 @@
 
 -include("registered_names.hrl").
 -include("supervision_macros.hrl").
--include("cluster_elements/node_manager/node_manager.hrl").
 -include("cluster_elements/node_manager/node_manager_listeners.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+%% This record is used by node_manager (it contains its state).
+%% It describes node type (ccm or worker) and status of connection
+%% with ccm (connected or not_connected).
+-record(node_state, {node_type = worker, ccm_con_status = not_connected, state_num = 0, dispatcher_state = 0}).
 
 %% API
 -export([start_link/1, stop/0]).
