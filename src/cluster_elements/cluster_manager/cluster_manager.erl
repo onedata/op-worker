@@ -19,7 +19,6 @@
 -include("registered_names.hrl").
 -include("supervision_macros.hrl").
 -include("modules_and_args.hrl").
--include("cluster_elements/cluster_manager/cluster_manager.hrl").
 -include("cluster_elements/worker_host/worker_proxy.hrl").
 -include_lib("ctool/include/logging.hrl").
 
