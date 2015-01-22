@@ -8,6 +8,7 @@
 %%% @doc This module provides mapping of gui paths to modules that will
 %%% render the pages.
 %%% @end
+%%% @todo function headers
 %%%--------------------------------------------------------------------
 -module(gui_routes).
 -author("Lukasz Opiola").

@@ -26,6 +26,7 @@
 %%% - handle/2
 %%% - info/3
 %%% @end
+%%% @todo function headers
 %%%--------------------------------------------------------------------
 -module(opn_bullet_handler).
 -author("Lukasz Opiola").

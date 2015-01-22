@@ -58,12 +58,17 @@ create_releases([Config | Rest]) ->
     TargetDir = proplists:get_value(target_dir, Config),
     ReleaseDirectory = filename:join(TargetDir, get_name(FullName)),
     print("target_dir - ~p", [ReleaseDirectory]),
+    WorkersToTriggerInit = proplists:get_value(workers_to_trigger_init, Config, infinity),
+    case Type of
+        ccm -> print("workers_to_trigger_init - ~p", [ReleaseDirectory]);
+        _ -> ok
+    end,
 
     file:make_dir(TargetDir),
     remove_dir(ReleaseDirectory),
     copy_dir(?FRESH_RELEASE_DIRECTORY, ReleaseDirectory),
     print("Fresh release copied to ~p", [ReleaseDirectory]),
-    configurator:configure_release(ReleaseDirectory, ?APP_NAME, FullName, Cookie, Type, CcmNodesList, DbNodesList, ?DIST_APP_FAILOVER_TIMEOUT),
+    configurator:configure_release(ReleaseDirectory, ?APP_NAME, FullName, Cookie, Type, CcmNodesList, DbNodesList, WorkersToTriggerInit, ?DIST_APP_FAILOVER_TIMEOUT),
     print("Release configured sucessfully!"),
     print("==================================~n"),
     create_releases(Rest).
