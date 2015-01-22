@@ -20,7 +20,11 @@
 
 -define(ARGS_FILE, atom_to_list(?MODULE) ++ ".args").
 -define(RELEASES_DIRECTORY, "rel").
--define(FRESH_RELEASE_DIRECTORY, filename:join(?RELEASES_DIRECTORY, ?APP_NAME)).
+
+%% Default input args
+-define(DEFAULT_INPUT_DIR, filename:join(?RELEASES_DIRECTORY, ?APP_NAME)).
+-define(DEFAULT_TARGET_DIR, filename:join(?RELEASES_DIRECTORY, "test_cluster")).
+-define(DEFAULT_WORKERS_TO_TRIGGER_INIT, infinity).
 
 -define(DIST_APP_FAILOVER_TIMEOUT, 5000).
 
@@ -45,29 +49,39 @@ create_releases([Config | Rest]) ->
     % prepare configuration
     print("=================================="),
     print("Configuring new release"),
+
     FullName = proplists:get_value(name, Config),
     print("name - ~p", [FullName]),
+
     Type = proplists:get_value(type, Config),
     print("type - ~p", [Type]),
+
     CcmNodesList = proplists:get_value(ccm_nodes, Config),
     print("ccm_nodes - ~p", [CcmNodesList]),
+
     DbNodesList = proplists:get_value(db_nodes, Config),
     print("db_nodes - ~p", [DbNodesList]),
+
     Cookie = proplists:get_value(cookie, Config),
     print("cookie - ~p", [Cookie]),
-    TargetDir = proplists:get_value(target_dir, Config),
+
+    InputDir = proplists:get_value(input_dir, Config, ?DEFAULT_INPUT_DIR),
+    print("input_dir - ~p", [InputDir]),
+
+    TargetDir = proplists:get_value(target_dir, Config, ?DEFAULT_TARGET_DIR),
     ReleaseDirectory = filename:join(TargetDir, get_name(FullName)),
-    print("target_dir - ~p", [ReleaseDirectory]),
-    WorkersToTriggerInit = proplists:get_value(workers_to_trigger_init, Config, infinity),
+    print("release_dir - ~p", [ReleaseDirectory]),
+
+    WorkersToTriggerInit = proplists:get_value(workers_to_trigger_init, Config, ?DEFAULT_WORKERS_TO_TRIGGER_INIT),
     case Type of
-        ccm -> print("workers_to_trigger_init - ~p", [ReleaseDirectory]);
+        ccm -> print("workers_to_trigger_init - ~p", [WorkersToTriggerInit]);
         _ -> ok
     end,
 
     file:make_dir(TargetDir),
     remove_dir(ReleaseDirectory),
-    copy_dir(?FRESH_RELEASE_DIRECTORY, ReleaseDirectory),
-    print("Fresh release copied to ~p", [ReleaseDirectory]),
+    copy_dir(InputDir, ReleaseDirectory),
+    print("Fresh release copied from ~p to ~p", [InputDir, ReleaseDirectory]),
     configurator:configure_release(ReleaseDirectory, ?APP_NAME, FullName, Cookie, Type, CcmNodesList, DbNodesList, WorkersToTriggerInit, ?DIST_APP_FAILOVER_TIMEOUT),
     print("Release configured sucessfully!"),
     print("==================================~n"),
