@@ -69,13 +69,13 @@ start_link(NodeType) ->
     Modules :: [module()] | dynamic.
 %% ====================================================================
 init([worker]) ->
-    {ok, {?SUP_FLAGS, [
-        ?SUP_CHILD(request_dispatcher, request_dispatcher, permanent, []),
-        ?SUP_CHILD(node_manager, node_manager, permanent, [worker])
+    {ok, {{one_for_one, 5, 10}, [
+        {node_manager, {node_manager, start_link, [worker]}, permanent, 5000, worker, [node_manager]},
+        {request_dispatcher, {request_dispatcher, start_link, []}, permanent, 5000, worker, [request_dispatcher]}
     ]}};
 init([ccm]) ->
-    {ok, {?SUP_FLAGS, [
-        ?SUP_CHILD(cluster_manager, cluster_manager, permanent, []),
-        ?SUP_CHILD(node_manager, node_manager, permanent, [ccm]),
-        ?SUP_CHILD(request_dispatcher, request_dispatcher, permanent, [])
+    {ok, {{one_for_one, 5, 10}, [
+        {cluster_manager, {cluster_manager, start_link, []}, permanent, 5000, worker, [cluster_manager]},
+        {node_manager, {node_manager, start_link, [ccm]}, permanent, 5000, worker, [node_manager]},
+        {request_dispatcher, {request_dispatcher, start_link, []}, permanent, 5000, worker, [request_dispatcher]}
     ]}}.

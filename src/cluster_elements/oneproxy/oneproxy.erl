@@ -17,6 +17,12 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
+-define(DER_CERTS_DIR,      "der_certs").
+-define(LOG_DEBUG_PREFIX,   "[ DEBUG ] ").
+-define(LOG_INFO_PREFIX,    "[ INFO ] ").
+-define(LOG_WARNING_PREFIX, "[ WARNING ] ").
+-define(LOG_ERROR_PREFIX,   "[ ERROR ] ").
+
 %% API
 -export([start/3, start_proxy/3, start_rproxy/4, start_rproxy/5, main_loop/2,
     get_session/2, get_local_port/1, get_der_certs_dir/0, ca_crl_to_der/1]).

@@ -17,7 +17,6 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
--include("supervision_macros.hrl").
 -include("modules_and_args.hrl").
 -include("cluster_elements/worker_host/worker_proxy.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -339,7 +338,10 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 start_worker(Node, Module, WorkerArgs, State) ->
     try
         {ok, LoadMemorySize} = application:get_env(?APP_NAME, worker_load_memory_size),
-        {ok, ChildPid} = supervisor:start_child({?SUPERVISOR_NAME, Node}, ?SUP_CHILD(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
+        {ok, ChildPid} = supervisor:start_child(
+            {?SUPERVISOR_NAME, Node},
+            {Module, {worker_host, start_link, [Module, WorkerArgs, LoadMemorySize]}, transient, 5000, worker, [worker_host]}
+        ),
         Workers = State#cm_state.workers,
         ?info("Worker: ~s started at node: ~s", [Module, Node]),
         State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}
