@@ -68,7 +68,6 @@ start_link(NodeType) ->
     | transient
     | temporary,
     Modules :: [module()] | dynamic.
-%% ====================================================================
 init([worker]) ->
     {ok, {{one_for_one, 5, 10}, [
         {node_manager, {node_manager, start_link, [worker]}, permanent, 5000, worker, [node_manager]},
