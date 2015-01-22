@@ -13,6 +13,7 @@
 -author("Lukasz Opiola").
 
 -include("cluster_elements/oneproxy/oneproxy.hrl").
+-include("workers/http_worker/http_common.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -127,13 +128,26 @@ delete_resource(Req, State) ->
 %%%===================================================================
 %%% Content type routing functions
 %%%===================================================================
-
 %%--------------------------------------------------------------------
 %% This functions are needed by cowboy for registration in
 %% content_types_accepted/content_types_provided methods and simply delegates
 %% their responsibility to adequate handler modules
 %%--------------------------------------------------------------------
-get_json(Req,State) ->
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles GET with "application/json" content-type
+%% @end
+%%--------------------------------------------------------------------
+-spec get_json(req(), #state{}) -> {term(), req(), #state{}}.
+get_json(Req, State) ->
     {<<"ok">>, Req, State}.
-put_json(Req,State) ->
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT with "application/json" content-type
+%% @end
+%%--------------------------------------------------------------------
+-spec put_json(req(), #state{}) -> {term(), req(), #state{}}.
+put_json(Req, State) ->
     {true, Req, State}.

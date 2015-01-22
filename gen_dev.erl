@@ -1,21 +1,33 @@
 #!/usr/bin/env escript
-
+%%%-------------------------------------------------------------------
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% gen_dev script uses configurator.erl to configure release according to
+%%% given gen_dev.args configuration. For each entry in gen_dev.args, the
+%%% fresh release is copied from rel/?APP_NAME to 'target_dir', and
+%%% vm.args/sys.config are configured properly.
+%%% @end
+%%%-------------------------------------------------------------------
 -module(gen_dev).
 -export([main/1]).
 
--define(app_name, "oneprovider_node").
+-define(APP_NAME, "oneprovider_node").
 
--define(args_file, atom_to_list(?MODULE) ++ ".args").
--define(releases_directory, "rel").
--define(fresh_release_directory, filename:join(?releases_directory, ?app_name)).
+-define(ARGS_FILE, atom_to_list(?MODULE) ++ ".args").
+-define(RELEASES_DIRECTORY, "rel").
+-define(FRESH_RELEASE_DIRECTORY, filename:join(?RELEASES_DIRECTORY, ?APP_NAME)).
 
--define(worker_name_suffix, "_worker").
--define(dist_app_failover_timeout, 5000).
+-define(DIST_APP_FAILOVER_TIMEOUT, 5000).
 
 main(_) ->
     try
         prepare_helper_modules(),
-        {ok, [NodesConfig]} = file:consult(?args_file),
+        {ok, [NodesConfig]} = file:consult(?ARGS_FILE),
         create_releases(NodesConfig),
         cleanup()
     catch
@@ -46,12 +58,17 @@ create_releases([Config | Rest]) ->
     TargetDir = proplists:get_value(target_dir, Config),
     ReleaseDirectory = filename:join(TargetDir, get_name(FullName)),
     print("target_dir - ~p", [ReleaseDirectory]),
+    WorkersToTriggerInit = proplists:get_value(workers_to_trigger_init, Config, infinity),
+    case Type of
+        ccm -> print("workers_to_trigger_init - ~p", [ReleaseDirectory]);
+        _ -> ok
+    end,
 
     file:make_dir(TargetDir),
     remove_dir(ReleaseDirectory),
-    copy_dir(?fresh_release_directory, ReleaseDirectory),
+    copy_dir(?FRESH_RELEASE_DIRECTORY, ReleaseDirectory),
     print("Fresh release copied to ~p", [ReleaseDirectory]),
-    configurator:configure_release(ReleaseDirectory, ?app_name, FullName, Cookie, Type, CcmNodesList, DbNodesList, ?dist_app_failover_timeout),
+    configurator:configure_release(ReleaseDirectory, ?APP_NAME, FullName, Cookie, Type, CcmNodesList, DbNodesList, WorkersToTriggerInit, ?DIST_APP_FAILOVER_TIMEOUT),
     print("Release configured sucessfully!"),
     print("==================================~n"),
     create_releases(Rest).
@@ -68,7 +85,7 @@ copy_dir(From, To) ->
     end.
 
 prepare_helper_modules() ->
-    compile:file(filename:join([?releases_directory, "files", "configurator.erl"])).
+    compile:file(filename:join([?RELEASES_DIRECTORY, "files", "configurator.erl"])).
 
 get_name(Hostname) ->
     [Name, _] = string:tokens(Hostname, "@"),

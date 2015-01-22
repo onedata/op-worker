@@ -18,9 +18,7 @@
 -behaviour(worker_plugin_behaviour).
 -behaviour(dns_query_handler_behaviour).
 
--include("workers/dns/dns_worker.hrl").
 -include("registered_names.hrl").
--include("supervision_macros.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/dns/dns.hrl").
 
