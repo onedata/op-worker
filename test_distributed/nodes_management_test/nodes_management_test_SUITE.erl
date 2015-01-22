@@ -33,15 +33,17 @@ one_node_test(Config) ->
     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Node}, getNodeType)).
 
 ccm_and_worker_test(Config) ->
-    [Ccm, Worker] = ?config(nodes, Config),
+    [Ccm, Worker1] = ?config(nodes, Config),
     gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType),
     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType)),
-    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker}, getNodeType)),
+    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, getNodeType)),
 
     timer:sleep(15000), %todo reorganize cluster startup, so we don't have to wait
 
     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping])),
-    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])).
+    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
