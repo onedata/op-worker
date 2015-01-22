@@ -15,7 +15,6 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
--include("supervision_macros.hrl").
 -include("modules_and_args.hrl").
 -include_lib("ctool/include/logging.hrl").
 

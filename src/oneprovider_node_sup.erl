@@ -13,7 +13,6 @@
 -author("Michal Wrzeszcz").
 
 -include("registered_names.hrl").
--include("supervision_macros.hrl").
 -behaviour(supervisor).
 
 %% API

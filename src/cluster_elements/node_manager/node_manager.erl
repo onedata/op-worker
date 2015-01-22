@@ -20,7 +20,6 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
--include("supervision_macros.hrl").
 -include("cluster_elements/node_manager/node_manager_listeners.hrl").
 -include_lib("ctool/include/logging.hrl").
 
