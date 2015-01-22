@@ -17,7 +17,7 @@ handle(Req, [ETSKey]) ->
             {ok, _NewReq} = appmock_logic:produce_mock_resp(Req, ETSKey)
         catch T:M ->
             {Port, Path} = ETSKey,
-            ?error_stacktrace("Error handling a request. Path: ~p. Port: ~p. ~p:~p.",
+            ?error_stacktrace("Error in mock_resp_handler. Path: ~p. Port: ~p. ~p:~p.",
                 [Path, Port, T, M]),
             {ok, _ErrorReq} = cowboy_req:reply(500, Req)
         end,

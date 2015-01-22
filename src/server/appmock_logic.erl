@@ -7,7 +7,8 @@
 -export([]).
 
 %% API
--export([initialize/1, terminate/0, produce_mock_resp/2, verify_mocks/1]).
+-export([initialize/1, terminate/0, produce_mock_resp/2]).
+-export([verify_mock/1, verify_all_mocks/1]).
 
 -define(MAPPINGS_ETS, mapping_ets).
 -define(LISTENERS_KEY, listener_ids).
@@ -44,7 +45,6 @@ produce_mock_resp(Req, ETSKey) ->
     [{?HISTORY_KEY, History}] = ets:lookup(?MAPPINGS_ETS, ?HISTORY_KEY),
     ets:delete_object(?MAPPINGS_ETS, {?HISTORY_KEY, History}),
     ets:insert(?MAPPINGS_ETS, {?HISTORY_KEY, History ++ [ETSKey]}),
-    ?dump(History ++ [ETSKey]),
     % Get the response term and current state by {Port, Path} key
     [{ETSKey, MappingState}] = ets:lookup(?MAPPINGS_ETS, ETSKey),
     ets:delete_object(?MAPPINGS_ETS, {ETSKey, MappingState}),
@@ -63,10 +63,43 @@ produce_mock_resp(Req, ETSKey) ->
     {ok, _NewReq} = cowboy_req:reply(Code, [{<<"content-type">>, CType}] ++ Headers, Body, Req).
 
 
-verify_mocks(Req) ->
-    {ok, Body, _} = cowboy_req:body(Req),
+verify_mock(Req) ->
+    {ok, JSONBody, _} = cowboy_req:body(Req),
+    Body = appmock_utils:decode_from_json(JSONBody),
+    {Port, Path, Number} = ?VERIFY_MOCK_PARAMS(Body),
+    ?dump({Port, Path, Number}),
+    [{?HISTORY_KEY, History}] = ets:lookup(?MAPPINGS_ETS, ?HISTORY_KEY),
+    ?dump(History),
+    ActualNumber = lists:foldl(
+        fun({HPort, HPath}, Acc) ->
+            case {HPort, HPath} of
+                {Port, Path} -> Acc + 1;
+                _ -> Acc
+            end
+        end, 0, History),
+    Reply = case ActualNumber of
+                Number ->
+                    appmock_utils:encode_to_json(?OK_RESULT);
+                _ ->
+                    appmock_utils:encode_to_json(?VERIFY_MOCK_ERROR(ActualNumber))
+            end,
+    {ok, _NewReq} = cowboy_req:reply(200, [{<<"content-type">>, <<"application/json">>}], Reply, Req).
+
+
+
+verify_all_mocks(Req) ->
+    {ok, JSONBody, _} = cowboy_req:body(Req),
+    BodyStruct = appmock_utils:decode_from_json(JSONBody),
+    Body = ?VERIFY_ALL_PARAMS(BodyStruct),
     ?dump(Body),
-    {ok, _NewReq} = cowboy_req:reply(200, [{<<"content-type">>, <<"application/json">>}], <<"ok">>, Req).
+    [{?HISTORY_KEY, History}] = ets:lookup(?MAPPINGS_ETS, ?HISTORY_KEY),
+    Reply = case Body of
+                History ->
+                    appmock_utils:encode_to_json(?OK_RESULT);
+                _ ->
+                    appmock_utils:encode_to_json(?VERIFY_ALL_ERROR(History))
+            end,
+    {ok, _NewReq} = cowboy_req:reply(200, [{<<"content-type">>, <<"application/json">>}], Reply, Req).
 
 
 load_description_module(FilePath) ->
@@ -98,7 +131,7 @@ start_listeners_for_mappings(ModuleName) ->
                         ETSKey = {Port, Path},
                         ets:insert(?MAPPINGS_ETS,
                             {ETSKey, #mapping_state{response = Response, state = InitialState}}),
-                        {Path, mock_resp_handler, [ETSKey]}
+                        {binary_to_list(Path), mock_resp_handler, [ETSKey]}
                     end, get_mappings(Port))
                 }
             ]),
@@ -153,7 +186,8 @@ start_remote_control_listener() ->
     {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
     Dispatch = cowboy_router:compile([
         {'_', [
-            {?REMOTE_CONTROL_VERIFY_PATH, remote_control_handler, [verify]}
+            {?VERIFY_ALL_PATH, remote_control_handler, [?VERIFY_ALL_PATH]},
+            {?VERIFY_MOCK_PATH, remote_control_handler, [?VERIFY_MOCK_PATH]}
         ]}
     ]),
     start_listener(?REMOTE_CONTROL_LISTENER, RemoteControlPort, Dispatch).

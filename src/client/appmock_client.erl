@@ -4,15 +4,46 @@
 -include("appmock_internal.hrl").
 
 %% API
--export([verify_mocks/2]).
+-export([verify_mock/4, verify_all_mocks/2]).
 
-verify_mocks(Hostname, VerificationList) ->
-    VerificationListBin = lists:map(
-        fun({Port, Path}) ->
-            {Port, list_to_binary(Path)}
-        end, VerificationList),
-    JSON = appmock_utils:encode_to_json(VerificationListBin),
-    {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
-    {Code, RespHeaders, RespBody} = appmock_utils:https_request(Hostname, RemoteControlPort,
-        ?REMOTE_CONTROL_VERIFY_PATH, post, [], JSON),
-    ?dump({Code, RespHeaders, RespBody}).
+
+verify_mock(Hostname, Port, Path, NumberOfCalls) ->
+    try
+        JSON = appmock_utils:encode_to_json(?VERIFY_MOCK_REQUEST(Port, Path, NumberOfCalls)),
+        {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
+        {200, _, RespBodyJSON} = appmock_utils:https_request(Hostname, RemoteControlPort,
+            ?VERIFY_MOCK_PATH, post, [], JSON),
+        RespBody = appmock_utils:decode_from_json(RespBodyJSON),
+        ?dump(RespBody),
+        case RespBody of
+            ?OK_RESULT ->
+                ok;
+            _ ->
+                Number = ?GET_MESSAGE_VERIFY_MOCK_ERROR(RespBody),
+                {different, Number}
+        end
+    catch T:M ->
+        ?error("Error in verify_mock - ~p:~p", [T, M]),
+        {error, M}
+    end.
+
+
+verify_all_mocks(Hostname, VerificationList) ->
+    try
+        JSON = appmock_utils:encode_to_json(?VERIFY_ALL_REQUEST(VerificationList)),
+        {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
+        {200, _, RespBodyJSON} = appmock_utils:https_request(Hostname, RemoteControlPort,
+            ?VERIFY_ALL_PATH, post, [], JSON),
+        RespBody = appmock_utils:decode_from_json(RespBodyJSON),
+        case RespBody of
+            ?OK_RESULT ->
+                ok;
+            _ ->
+                HistoryBin = ?GET_MESSAGE_VERIFY_ALL_ERROR(RespBody),
+                History = [{binary_to_integer(Port), Path} || {Port, Path} <- HistoryBin],
+                {different, History}
+        end
+    catch T:M ->
+        ?error("Error in verify_all_mocks - ~p:~p", [T, M]),
+        {error, M}
+    end.

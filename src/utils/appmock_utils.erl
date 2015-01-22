@@ -6,11 +6,12 @@
 
 
 % Performs a single request using ibrowse
-https_request(Hostname, Port, Path, Method, Headers, Body) ->
+https_request(HostnameBin, Port, Path, Method, Headers, Body) ->
+    Hostname = gui_str:to_list(HostnameBin),
     {ok, Code, RespHeaders, RespBody} = ibrowse:send_req(
         "https://" ++ Hostname ++ ":" ++ integer_to_list(Port) ++ Path,
         Headers, Method, Body),
-    {Code, RespHeaders, RespBody}.
+    {list_to_integer(Code), RespHeaders, RespBody}.
 
 
 %% encode_to_json/1
