@@ -31,20 +31,17 @@
 main(Args) ->
     try
         ArgsFile = get_args_file(Args),
-        prepare_helper_modules(),
         {ok, [NodesConfig]} = file:consult(ArgsFile),
-        create_releases(NodesConfig),
-        cleanup()
+        create_releases(NodesConfig)
     catch
         _Type:Error ->
-            cleanup(),
             print("Stacktrace: ~p~n", [erlang:get_stacktrace()]),
             try print("Error: ~ts", [Error])
             catch _:_ -> print("Error: ~p", [Error])
             end
     end.
 
-get_args_file([_, ConfigFilePath | _]) ->
+get_args_file([ConfigFilePath | _]) ->
     ConfigFilePath;
 get_args_file(_) ->
     ?ARGS_FILE.
@@ -85,10 +82,12 @@ create_releases([Config | Rest]) ->
     end,
 
     file:make_dir(TargetDir),
+    prepare_helper_modules(TargetDir),
     remove_dir(ReleaseDirectory),
     copy_dir(InputDir, ReleaseDirectory),
     print("Fresh release copied from ~p to ~p", [InputDir, ReleaseDirectory]),
     configurator:configure_release(ReleaseDirectory, ?APP_NAME, FullName, Cookie, Type, CcmNodesList, DbNodesList, WorkersToTriggerInit, ?DIST_APP_FAILOVER_TIMEOUT),
+    cleanup(TargetDir),
     print("Release configured sucessfully!"),
     print("==================================~n"),
     create_releases(Rest).
@@ -104,8 +103,9 @@ copy_dir(From, To) ->
         Err -> throw(Err)
     end.
 
-prepare_helper_modules() ->
-    compile:file(filename:join([?RELEASES_DIRECTORY, "files", "configurator.erl"])).
+prepare_helper_modules(TargetDir) ->
+    code:add_path(TargetDir),
+    compile:file(filename:join([?RELEASES_DIRECTORY, "files", "configurator.erl"]), [{outdir, TargetDir}]).
 
 get_name(Hostname) ->
     [Name, _] = string:tokens(Hostname, "@"),
@@ -117,5 +117,5 @@ print(Msg, Args) ->
     io:format(Msg ++ "~n", Args),
     Msg.
 
-cleanup() ->
-    file:delete("configurator.beam").
+cleanup(TargetDir) ->
+    file:delete(filename:join(TargetDir,"configurator.beam")).
