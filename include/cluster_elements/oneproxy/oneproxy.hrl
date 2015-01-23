@@ -12,8 +12,6 @@
 -ifndef(ONEPROXY_HRL).
 -define(ONEPROXY_HRL, 1).
 
--record(oneproxy_state, {timeout = timer:minutes(1), endpoint}).
-
 %% oneproxy listeners
 -define(ONEPROXY_DISPATCHER, oneproxy_dispatcher).
 -define(ONEPROXY_REST, oneproxy_rest).
