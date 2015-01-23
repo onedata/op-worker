@@ -41,6 +41,3 @@ ENV PATH /opt/elixir/bin:$PATH
 # Set up the environment
 ENV CC clang
 ENV CXX clang++
-VOLUME /root/ssh /root/src
-WORKDIR /root/src
-CMD cp -R /root/{,.}ssh && chown root:root /root/.ssh && make
