@@ -104,6 +104,7 @@ copy_dir(From, To) ->
     end.
 
 prepare_helper_modules(TargetDir) ->
+    code:add_path(TargetDir),
     compile:file(filename:join([?RELEASES_DIRECTORY, "files", "configurator.erl"]), [{outdir, TargetDir}]).
 
 get_name(Hostname) ->
