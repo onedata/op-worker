@@ -33,7 +33,7 @@ one_node_test(Config) ->
     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Node}, getNodeType)).
 
 ccm_and_worker_test(Config) ->
-    [Ccm, Worker1] = ?config(nodes, Config),
+    [Ccm, Worker1, Worker2] = ?config(nodes, Config),
     gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType),
     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType)),
     ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, getNodeType)),
@@ -43,7 +43,9 @@ ccm_and_worker_test(Config) ->
     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping])),
     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])),
     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping])),
-    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])).
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])),
+    ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [http_worker, ping])),
+    ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [dns_worker, ping])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -65,12 +67,13 @@ init_per_testcase(ccm_and_worker_test, Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    Nodes = [Ccm, _] = test_node_starter:start_test_nodes(2, true),
+    Nodes = [Ccm | _] = test_node_starter:start_test_nodes(3, true),
     DBNode = ?DB_NODE,
 
     test_node_starter:start_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes, [
-        [{node_type, ccm}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}, {workers_to_trigger_init, 1}],
-        [{node_type, worker}, {dns_port, 1300}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}]
+        [{node_type, ccm}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}, {workers_to_trigger_init, 2}],
+        [{node_type, worker}, {dns_port, 1301}, {dispatcher_port, 2001}, {http_worker_https_port, 3001}, {http_worker_redirect_port, 4001}, {http_worker_rest_port, 5001}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}],
+        [{node_type, worker}, {dns_port, 1302}, {dispatcher_port, 2002}, {http_worker_https_port, 3002}, {http_worker_redirect_port, 4002}, {http_worker_rest_port, 5002}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}]
     ]),
 
     lists:append([{nodes, Nodes}, {dbnode, DBNode}], Config).

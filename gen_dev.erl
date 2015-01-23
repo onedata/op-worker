@@ -27,6 +27,7 @@
 -define(DEFAULT_WORKERS_TO_TRIGGER_INIT, infinity).
 
 -define(DIST_APP_FAILOVER_TIMEOUT, 5000).
+-define(SYNC_NODES_TIMEOUT, 60000).
 
 main(Args) ->
     try
@@ -86,7 +87,7 @@ create_releases([Config | Rest]) ->
     remove_dir(ReleaseDirectory),
     copy_dir(InputDir, ReleaseDirectory),
     print("Fresh release copied from ~p to ~p", [InputDir, ReleaseDirectory]),
-    configurator:configure_release(ReleaseDirectory, ?APP_NAME, FullName, Cookie, Type, CcmNodesList, DbNodesList, WorkersToTriggerInit, ?DIST_APP_FAILOVER_TIMEOUT),
+    configurator:configure_release(ReleaseDirectory, ?APP_NAME, FullName, Cookie, Type, CcmNodesList, DbNodesList, WorkersToTriggerInit, ?DIST_APP_FAILOVER_TIMEOUT, ?SYNC_NODES_TIMEOUT),
     cleanup(TargetDir),
     print("Release configured sucessfully!"),
     print("==================================~n"),
