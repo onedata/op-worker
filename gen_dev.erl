@@ -41,7 +41,7 @@ main(Args) ->
             print("Stacktrace: ~p", [erlang:get_stacktrace()])
     end.
 
-get_args_file([_, ConfigFilePath | _]) ->
+get_args_file([ConfigFilePath | _]) ->
     ConfigFilePath;
 get_args_file(_) ->
     ?ARGS_FILE.
