@@ -43,18 +43,23 @@
 %% loading given mock app description module and starting cowboy listener.
 %% @end
 %%--------------------------------------------------------------------
--spec initialize(FilePath :: string()) -> ok.
+-spec initialize(FilePath :: string()) -> ok | error.
 initialize(FilePath) ->
-    % Initialize an ETS table to store states and counters of certain stubs
-    ets:new(?MAPPINGS_ETS, [set, named_table, public]),
-    % Insert a tuple in ETS which will keep track of all started cowboy listeners
-    ets:insert(?MAPPINGS_ETS, {?LISTENERS_KEY, []}),
-    % Insert a tuple in ETS which will remember the history of requests
-    ets:insert(?MAPPINGS_ETS, {?HISTORY_KEY, []}),
-    DescriptionModule = load_description_module(FilePath),
-    start_remote_control_listener(),
-    start_listeners_for_mappings(DescriptionModule),
-    ok.
+    try
+        % Initialize an ETS table to store states and counters of certain stubs
+        ets:new(?MAPPINGS_ETS, [set, named_table, public]),
+        % Insert a tuple in ETS which will keep track of all started cowboy listeners
+        ets:insert(?MAPPINGS_ETS, {?LISTENERS_KEY, []}),
+        % Insert a tuple in ETS which will remember the history of requests
+        ets:insert(?MAPPINGS_ETS, {?HISTORY_KEY, []}),
+        DescriptionModule = load_description_module(FilePath),
+        start_remote_control_listener(),
+        start_listeners_for_mappings(DescriptionModule),
+        ok
+    catch T:M ->
+        ?error_stacktrace("Cannot initialize appmock application - ~p:~p", [T, M]),
+        error
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -101,6 +106,8 @@ produce_mock_resp(Req, ETSKey) ->
     % Put new state in the ETS
     ets:insert(?MAPPINGS_ETS, {ETSKey, MappingState#mapping_state{state = NewState}}),
     #mock_resp{code = Code, body = Body, content_type = CType, headers = Headers} = Response,
+    {Port, Path} = ETSKey,
+    ?debug("Got request at :~p~s~nResponding~n  Code: ~p~n  Headers: ~p~n  Body: ~s", [Port, Path, Code, Headers, Body]),
     % Respond
     {ok, _NewReq} = cowboy_req:reply(Code, [{<<"content-type">>, CType}] ++ Headers, Body, Req).
 
@@ -117,9 +124,7 @@ verify_mock(Req) ->
     {ok, JSONBody, _} = cowboy_req:body(Req),
     Body = appmock_utils:decode_from_json(JSONBody),
     {Port, Path, Number} = ?VERIFY_MOCK_UNPACK_REQUEST(Body),
-    ?dump({Port, Path, Number}),
     [{?HISTORY_KEY, History}] = ets:lookup(?MAPPINGS_ETS, ?HISTORY_KEY),
-    ?dump(History),
     ActualNumber = lists:foldl(
         fun({HPort, HPath}, Acc) ->
             case {HPort, HPath} of
@@ -167,13 +172,17 @@ verify_all_mocks(Req) ->
 %% Compiles and loads a given file.
 %% @end
 %%--------------------------------------------------------------------
--spec load_description_module(FilePath :: binary()) -> atom().
+-spec load_description_module(FilePath :: binary()) -> atom() | no_return.
 load_description_module(FilePath) ->
-    FileName = filename:basename(FilePath),
-    {ok, ModuleName} = compile:file(FilePath),
-    {ok, Bin} = file:read_file(filename:rootname(FileName) ++ ".beam"),
-    erlang:load_module(ModuleName, Bin),
-    ModuleName.
+    try
+        FileName = filename:basename(FilePath),
+        {ok, ModuleName} = compile:file(FilePath),
+        {ok, Bin} = file:read_file(filename:rootname(FileName) ++ ".beam"),
+        erlang:load_module(ModuleName, Bin),
+        ModuleName
+    catch _:_ ->
+        throw(invalid_app_description_module)
+    end.
 
 
 %%--------------------------------------------------------------------

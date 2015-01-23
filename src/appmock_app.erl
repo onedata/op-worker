@@ -24,7 +24,7 @@
 
 start(_StartType, _StartArgs) ->
     {ok, AppDescriptionFile} = application:get_env(?APP_NAME, app_description_file),
-    appmock_logic:initialize(AppDescriptionFile),
+    ok = appmock_logic:initialize(AppDescriptionFile),
     appmock_sup:start_link().
 
 stop(_State) ->
