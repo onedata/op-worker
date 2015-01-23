@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# This script is used to start an appmock instance with given app description.
+
 # Check if there is a file in args
 if [[ ! -f "$1" ]]; then
     echo "Please provide path to app description file (.erl) in the first argument."
