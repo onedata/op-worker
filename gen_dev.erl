@@ -28,20 +28,26 @@
 
 -define(DIST_APP_FAILOVER_TIMEOUT, 5000).
 
-main(_) ->
+main(Args) ->
     try
+        ArgsFile = get_args_file(Args),
         prepare_helper_modules(),
-        {ok, [NodesConfig]} = file:consult(?ARGS_FILE),
+        {ok, [NodesConfig]} = file:consult(ArgsFile),
         create_releases(NodesConfig),
         cleanup()
     catch
         _Type:Error ->
             cleanup(),
-            try print("Error: ~ts",[Error])
-            catch _:_  -> print("Error: ~p",[Error])
+            try print("Error: ~ts", [Error])
+            catch _:_ -> print("Error: ~p", [Error])
             end,
-            print("Stacktrace: ~p",[erlang:get_stacktrace()])
+            print("Stacktrace: ~p", [erlang:get_stacktrace()])
     end.
+
+get_args_file([_, ConfigFilePath | _]) ->
+    ConfigFilePath;
+get_args_file(_) ->
+    ?ARGS_FILE.
 
 create_releases([]) ->
     ok;
@@ -106,9 +112,9 @@ get_name(Hostname) ->
     Name.
 
 print(Msg) ->
-    print(Msg,[]).
+    print(Msg, []).
 print(Msg, Args) ->
-    io:format(Msg ++ "~n",Args),
+    io:format(Msg ++ "~n", Args),
     Msg.
 
 cleanup() ->
