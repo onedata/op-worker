@@ -31,7 +31,6 @@
 main(Args) ->
     try
         ArgsFile = get_args_file(Args),
-        prepare_helper_modules(),
         {ok, [NodesConfig]} = file:consult(ArgsFile),
         create_releases(NodesConfig),
         cleanup()
@@ -85,10 +84,12 @@ create_releases([Config | Rest]) ->
     end,
 
     file:make_dir(TargetDir),
+    prepare_helper_modules(TargetDir),
     remove_dir(ReleaseDirectory),
     copy_dir(InputDir, ReleaseDirectory),
     print("Fresh release copied from ~p to ~p", [InputDir, ReleaseDirectory]),
     configurator:configure_release(ReleaseDirectory, ?APP_NAME, FullName, Cookie, Type, CcmNodesList, DbNodesList, WorkersToTriggerInit, ?DIST_APP_FAILOVER_TIMEOUT),
+    cleanup(TargetDir),
     print("Release configured sucessfully!"),
     print("==================================~n"),
     create_releases(Rest).
@@ -104,8 +105,8 @@ copy_dir(From, To) ->
         Err -> throw(Err)
     end.
 
-prepare_helper_modules() ->
-    compile:file(filename:join([?RELEASES_DIRECTORY, "files", "configurator.erl"])).
+prepare_helper_modules(TargetDir) ->
+    compile:file(filename:join([?RELEASES_DIRECTORY, "files", "configurator.erl"]), [{outdir, TargetDir}]).
 
 get_name(Hostname) ->
     [Name, _] = string:tokens(Hostname, "@"),
@@ -117,5 +118,5 @@ print(Msg, Args) ->
     io:format(Msg ++ "~n", Args),
     Msg.
 
-cleanup() ->
-    file:delete("configurator.beam").
+cleanup(TargetDir) ->
+    file:delete(filename:join(TargetDir,"configurator.beam")).
