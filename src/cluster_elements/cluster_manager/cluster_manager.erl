@@ -18,7 +18,7 @@
 
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
--include("cluster_elements/worker_host/worker_proxy.hrl").
+-include("cluster_elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% This record is used by ccm (it contains its state). It describes

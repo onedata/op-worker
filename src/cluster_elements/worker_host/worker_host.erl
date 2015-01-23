@@ -17,8 +17,14 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
--include("cluster_elements/worker_host/worker_host.hrl").
+-include("cluster_elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+%% This record is used by worker_host (it contains its state). It describes
+%% plug_in that is used and state of this plug_in. It contains also
+%% information about time of requests processing (used by ccm during
+%% load balancing).
+-record(host_state, {plug_in = non, plug_in_state = [], load_info = []}).
 
 %% API
 -export([start_link/3, stop/1]).
