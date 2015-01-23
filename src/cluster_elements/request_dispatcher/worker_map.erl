@@ -74,7 +74,7 @@ get_worker_node(WorkerName, prefere_local) ->
 update_workers(WorkersList) ->
     WorkersListInverted = lists:map(fun({Node, WorkerName}) -> {WorkerName, Node} end, WorkersList),
     ModuleToNodes = cluster_manager_utils:aggregate_over_first_element(WorkersListInverted),
-    lists:map(fun update_worker/1, ModuleToNodes).
+    lists:foreach(fun update_worker/1, ModuleToNodes).
 
 %%%===================================================================
 %%% Internal functions
@@ -91,7 +91,7 @@ get_worker_node_prefering_local(WorkerName) ->
     MyNode = node(),
     case ets:match(?worker_map_ets, {WorkerName, MyNode}) of
         [] -> get_random_worker_node(WorkerName);
-        [{_, MyNode}] -> {ok, MyNode}
+        [[]] -> {ok, MyNode}
     end.
 
 %%--------------------------------------------------------------------
@@ -126,7 +126,7 @@ update_worker({WorkerName, Nodes}) ->
             CurrentNodes =
                 case cluster_manager_utils:aggregate_over_first_element(Entries) of
                     [] -> [];
-                    {_, AggregatedNodes} -> AggregatedNodes
+                    [{_, AggregatedNodes}] -> AggregatedNodes
                 end,
             CurrentNodesSet = sets:from_list(CurrentNodes),
             NewNodesSet = sets:from_list(Nodes),

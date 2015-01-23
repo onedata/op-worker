@@ -243,7 +243,7 @@ heart_beat(State = #cm_state{nodes = Nodes}, SenderNode) ->
                     end,
                     %trigger cluster init if  number of connected nodes exceedes 'workers_to_trigger_init' var
                     case application:get_env(?APP_NAME, workers_to_trigger_init) of
-                        N when is_integer(N) andalso N =< length(Nodes) + 1 ->
+                        {ok, N} when is_integer(N) andalso N =< length(Nodes) + 1 ->
                             gen_server:cast(self(), init_cluster);
                         _ -> ok
                     end,

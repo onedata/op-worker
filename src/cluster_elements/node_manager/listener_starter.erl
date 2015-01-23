@@ -29,7 +29,7 @@
 %% Starts a cowboy listener for request_dispatcher.
 %% @end
 %%--------------------------------------------------------------------
--spec start_dispatcher_listener() -> ok | no_return().
+-spec start_dispatcher_listener() -> {ok, pid()} | no_return().
 start_dispatcher_listener() ->
     catch cowboy:stop_listener(?WEBSOCKET_LISTENER),
     {ok, Port} = application:get_env(?APP_NAME, dispatcher_port),
@@ -52,8 +52,7 @@ start_dispatcher_listener() ->
         ],
         [
             {env, [{dispatch, Dispatch}]}
-        ]),
-    ok.
+        ]).
 
 
 %%--------------------------------------------------------------------
@@ -61,7 +60,7 @@ start_dispatcher_listener() ->
 %% Starts a cowboy listener for n2o GUI.
 %% @end
 %%--------------------------------------------------------------------
--spec start_gui_listener() -> ok | no_return().
+-spec start_gui_listener() -> {ok, pid()} | no_return().
 start_gui_listener() ->
     % Get params from env for gui
     {ok, DocRoot} = application:get_env(?APP_NAME, http_worker_static_files_root),
@@ -120,7 +119,7 @@ start_gui_listener() ->
 %% Starts a cowboy listener that will redirect all requests of http to https.
 %% @end
 %%--------------------------------------------------------------------
--spec start_redirector_listener() -> ok | no_return().
+-spec start_redirector_listener() -> {ok, pid()} | no_return().
 start_redirector_listener() ->
     {ok, RedirectPort} = application:get_env(?APP_NAME, http_worker_redirect_port),
     {ok, RedirectNbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_http_acceptors),
@@ -150,7 +149,7 @@ start_redirector_listener() ->
 %% Starts a cowboy listener for REST requests.
 %% @end
 %%--------------------------------------------------------------------
--spec start_rest_listener() -> ok | no_return().
+-spec start_rest_listener() -> {ok, pid()} | no_return().
 start_rest_listener() ->
     {ok, NbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_acceptors),
     {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout),
@@ -187,8 +186,7 @@ start_rest_listener() ->
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
             {max_keepalive, 1},
             {timeout, Timeout}
-        ]),
-    ok.
+        ]).
 
 %%--------------------------------------------------------------------
 %% @doc
