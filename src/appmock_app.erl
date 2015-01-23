@@ -12,7 +12,7 @@
 -module(appmock_app).
 -behaviour(application).
 
--include("appmock.hrl").
+-include("appmock_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Application behaviour callbacks
@@ -23,7 +23,8 @@
 %%%===================================================================
 
 start(_StartType, _StartArgs) ->
-    appmock_logic:initialize("/root/appmock/suite_desc.erl"),
+    {ok, AppDescriptionFile} = application:get_env(?APP_NAME, app_description_file),
+    appmock_logic:initialize(AppDescriptionFile),
     appmock_sup:start_link().
 
 stop(_State) ->
