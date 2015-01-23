@@ -14,7 +14,7 @@
 -author("Tomasz Lichon").
 
 %% API
--export([configure_release/10, get_env/3, replace_env/4, replace_vm_arg/3]).
+-export([configure_release/6, get_env/3, replace_env/4, replace_vm_arg/3]).
 
 %%%===================================================================
 %%% API
@@ -25,22 +25,22 @@
 %% Configure release stored at ReleaseRootPath, according to given parameters
 %% @end
 %%--------------------------------------------------------------------
--spec configure_release(ReleaseRootPath :: string(), ApplicationName :: string(), NodeName :: string(),
-    Cookie :: string(), NodeType :: atom(), CcmNodes :: [atom()], DbNodes :: [atom()],
-    WorkersToTriggerInit :: integer() | infinity, DistributedAppFailoverTimeout :: integer(),
-    SyncNodesTimeout :: integer()) -> ok | no_return().
-configure_release(ReleaseRootPath, ApplicationName, NodeName, Cookie, NodeType, CcmNodes,
-    DbNodes, WorkersToTriggerInit, DistributedAppFailoverTimeout, SyncNodesTimeout) ->
+-spec configure_release(ReleaseRootPath :: string(), ApplicationName :: string(), SysConfig :: list(), VmArgs :: list(),
+    DistributedAppFailoverTimeout :: integer(), SyncNodesTimeout :: integer()) -> ok | no_return().
+configure_release(ReleaseRootPath, ApplicationName, SysConfig, VmArgs, DistributedAppFailoverTimeout, SyncNodesTimeout) ->
+    % find config location
     {ok,[[{release, ApplicationName, AppVsn, _, _, _}]]} = file:consult(filename:join([ReleaseRootPath, "releases", "RELEASES"])),
     SysConfigPath = filename:join([ReleaseRootPath, "releases", AppVsn, "sys.config"]),
     VmArgsPath = filename:join([ReleaseRootPath, "releases", AppVsn, "vm.args"]),
 
-    replace_vm_arg(VmArgsPath, "-name", NodeName),
-    replace_vm_arg(VmArgsPath, "-setcookie", Cookie),
-    replace_env(SysConfigPath, ApplicationName, node_type, NodeType),
-    replace_env(SysConfigPath, ApplicationName, ccm_nodes, CcmNodes),
-    replace_env(SysConfigPath, ApplicationName, db_nodes, DbNodes),
-    replace_env(SysConfigPath, ApplicationName, workers_to_trigger_init, WorkersToTriggerInit),
+    % configure user defined envs
+    lists:foreach(fun({Key, Value}) -> replace_vm_arg(VmArgsPath, "-" ++ atom_to_list(Key), Value) end, VmArgs),
+    lists:foreach(fun({Key, Value}) -> replace_env(SysConfigPath, ApplicationName, Key, Value) end, SysConfig),
+
+    % configure kernel distributed erlang app
+    NodeName = proplists:get_value(name, VmArgs),
+    NodeType = proplists:get_value(type, SysConfig),
+    CcmNodes = proplists:get_value(ccm_nodes, SysConfig),
     case NodeType =:= ccm andalso length(CcmNodes) > 1 of
         true ->
             OptCcms = CcmNodes -- [list_to_atom(NodeName)],
