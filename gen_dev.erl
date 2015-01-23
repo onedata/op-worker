@@ -32,11 +32,9 @@ main(Args) ->
     try
         ArgsFile = get_args_file(Args),
         {ok, [NodesConfig]} = file:consult(ArgsFile),
-        create_releases(NodesConfig),
-        cleanup()
+        create_releases(NodesConfig)
     catch
         _Type:Error ->
-            cleanup(),
             try print("Error: ~ts", [Error])
             catch _:_ -> print("Error: ~p", [Error])
             end,
