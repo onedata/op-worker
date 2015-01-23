@@ -38,10 +38,10 @@ main(Args) ->
     catch
         _Type:Error ->
             cleanup(),
+            print("Stacktrace: ~p~n", [erlang:get_stacktrace()]),
             try print("Error: ~ts", [Error])
             catch _:_ -> print("Error: ~p", [Error])
-            end,
-            print("Stacktrace: ~p", [erlang:get_stacktrace()])
+            end
     end.
 
 get_args_file([_, ConfigFilePath | _]) ->
