@@ -10,47 +10,7 @@
 ## ===================================================================
 
 umask 0
-
-rm -rf /tmp/onedata
-rm -rf /tmp/onedata2
-rm -rf /tmp/onedata3
-mkdir /tmp/onedata
-mkdir /tmp/onedata2
-mkdir /tmp/onedata3
-
-userdel -r onedatatestuser 2>/dev/null
-userdel -r onedatatestuser2 2>/dev/null
-groupdel onedatatestgroup 2>/dev/null
-groupdel onedatatestgroup2 2>/dev/null
-groupdel onedatatestgroup3 2>/dev/null
-groupdel onedatatestuser 2>/dev/null
-groupdel onedatatestuser2 2>/dev/null
-rm -rf /home/onedatatestuser
-rm -rf /home/onedatatestuser2
-
-# User 1
-groupadd onedatatestgroup
-useradd onedatatestuser
-usermod -a -G onedatatestgroup onedatatestuser
-
-# User 2
-groupadd onedatatestgroup2
-useradd onedatatestuser2
-usermod -a -G onedatatestgroup2 onedatatestuser2
-usermod -a -G onedatatestgroup onedatatestuser2
-
-# Group 3
-groupadd onedatatestgroup3
-
-mkdir -p distributed_tests_out
-cp -R test_distributed/* distributed_tests_out
 cd distributed_tests_out
-cp -R ../cacerts .
-cp -R ../certs .
-cp -R ../c_lib/ .
-#cp -R ../src/oneprovider_modules/dao/views .
-#cp -R ../src/gui_static .
-cp -R ../rel/sys.config .
 
 if [ $# -gt 0 ]
 then
@@ -65,9 +25,6 @@ then
 else
     TESTS=$(find . -name "*.spec")
 fi
-erl -make
-
-COOKIE=`hostname -f`
 
 for TEST in $TESTS
 do
@@ -76,15 +33,10 @@ do
         TEST_NAME=`basename "$TEST" ".spec"`
         echo "{ct_hooks, [{cth_surefire, [{path,\"TEST-$TEST_NAME-report.xml\"}]}]}." >> $TEST
     fi
-    rm -rf /tmp/onedata
-    rm -rf /tmp/onedata2
-    rm -rf /tmp/onedata3
-    mkdir /tmp/onedata
-    mkdir /tmp/onedata2
-    mkdir /tmp/onedata3
-    ct_run -pa ../deps/**/ebin -pa ../ebin -pa ./ -noshell -name tester -setcookie $COOKIE -spec  $TEST
+    ct_run -pa ../deps/**/ebin -pa ../ebin -pa ./ -noshell -name tester -spec  $TEST
 done
 
+## Clean
 find . -name "*.beam" -exec rm -rf {} \;
 find . -name "*.erl" -exec rm -rf {} \;
 find . -name "*.hrl" -exec rm -rf {} \;
@@ -94,21 +46,12 @@ for TEST in $TESTS
 do
     rm -f $TEST
 done
-rm -f Emakefile
 rm -f *.sh
 rm -rf cacerts
 rm -rf certs
 rm -rf c_lib
-rm -rf views
-rm -rf gui_static
+#rm -rf gui_static
 rm -f sys.config
 
-userdel -r onedatatestuser
-userdel -r onedatatestuser2
-groupdel onedatatestgroup
-groupdel onedatatestgroup2
-groupdel onedatatestgroup3
-rm -rf /home/onedatatestuser
-rm -rf /home/onedatatestuser2
-
 cd ..
+for tout in `find distributed_tests_out -name "TEST-*.xml"`; do awk '/testcase/{gsub("<testcase name=\"[a-z]+_per_suite\"(([^/>]*/>)|([^>]*>[^<]*</testcase>))", "")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done

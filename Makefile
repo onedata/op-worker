@@ -5,6 +5,7 @@ all: rel
 compile:
 	cp -R c_src/oneproxy/proto src
 	./rebar compile
+	rm -rf src/proto
 
 deps:
 	./rebar get-deps
@@ -22,15 +23,16 @@ generate: deps compile
 ## Testing
 ##
 
+ctbuild: deps compile
+	./test_distributed/build_distributed_test.sh
+
 eunit: deps compile
 	./rebar eunit skip_deps=true suites=${SUITES}
   ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
-ct: generate
+ct: ctbuild
 	./test_distributed/start_distributed_test.sh ${SUITE} ${CASE}
-  ## Remove *_per_suite result from CT test results
-	@for tout in `find distributed_tests_out -name "TEST-*.xml"`; do awk '/testcase/{gsub("<testcase name=\"[a-z]+_per_suite\"(([^/>]*/>)|([^>]*>[^<]*</testcase>))", "")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
 test: eunit ct
 
