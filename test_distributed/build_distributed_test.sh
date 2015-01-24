@@ -20,15 +20,11 @@ rm -rf src/proto
 mkdir -p distributed_tests_out
 cp -R test_distributed/* distributed_tests_out
 cd distributed_tests_out
-cp -R ../cacerts .
-cp -R ../certs .
-cp -R ../c_lib/ .
-#cp -R ../src/gui_static .
-cp -R ../rel/sys.config .
 
 ## Compile utils
 erl -make
 
 ## Clean
 rm -f Emakefile
+rm -f *.sh
 cd ..

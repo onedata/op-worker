@@ -11,6 +11,11 @@
 
 umask 0
 cd distributed_tests_out
+cp -R ../cacerts .
+cp -R ../certs .
+cp -R ../c_lib/ .
+#cp -R ../src/gui_static .
+cp -R ../rel/sys.config .
 
 if [ $# -gt 0 ]
 then
@@ -46,7 +51,7 @@ for TEST in $TESTS
 do
     rm -f $TEST
 done
-rm -f *.sh
+
 rm -rf cacerts
 rm -rf certs
 rm -rf c_lib

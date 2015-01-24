@@ -23,16 +23,22 @@ generate: deps compile
 ## Testing
 ##
 
-ctbuild: deps compile
+ctbuild_local: deps compile
 	./test_distributed/build_distributed_test.sh
+
+ctbuild:
+	../bamboos/docker/make.py ctbuild_local
 
 eunit: deps compile
 	./rebar eunit skip_deps=true suites=${SUITES}
   ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
-ct: ctbuild
+ct_local:
 	./test_distributed/start_distributed_test.sh ${SUITE} ${CASE}
+
+ct: ctbuild
+	docker run -rm -it -v /home/michal/oneprovider:/root/oneprovider -h d1.local onedata/worker cd /root/oneprovider ; make ct_local
 
 test: eunit ct
 
