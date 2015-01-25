@@ -12,9 +12,9 @@ src/gui_static/n2o
 *.iml
 *.sublime*
 
-releases/oneprovider_node
-releases/test_cluster
-releases/*.rpm
+rel/oneprovider_node
+rel/test_cluster
+rel/*.rpm
 
 include/*_pb.hrl
 test/eunit_results

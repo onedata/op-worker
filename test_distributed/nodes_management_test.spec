@@ -16,6 +16,6 @@
 {logdir, all_nodes, "./nodes_management_test"}.
 {include, ["../include", "."]}.
 
-%% test castes to be run
+%% test cases to be run
 {alias, nodes_management_test, "./nodes_management_test"}.
 {suites, nodes_management_test, all}.

@@ -1,22 +1,18 @@
-%% ===================================================================
-%% @author Tomasz Lichon
-%% @copyright (C): 2014 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: This file contains ct tests helper macros and defines.
-%% @end
-%% ===================================================================
-
+%%%--------------------------------------------------------------------
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2014 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc This file contains ct tests helper macros and definitions.
+%%% @end
+%%%--------------------------------------------------------------------
 -ifndef(TEST_UTILS_HRL).
 -define(TEST_UTILS_HRL, 1).
 
 -define(TEST, true).
 
--include("oneprovider_modules/dao/dao_spaces.hrl").
-
--include("oneprovider_modules/dao/dao_users.hrl").
 -include_lib("dao/include/common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
@@ -60,13 +56,5 @@
 -define(TEST_GROUP_EXTENDED, "onedatatestgroup(Grp)").
 -define(TEST_GROUP2_EXTENDED, "onedatatestgroup2(Grp2)").
 -define(TEST_GROUP3_EXTENDED, "onedatatestgroup3(Grp3)").
-
--define(LOCAL_PROVIDER_ID, <<"providerId">>).
--define(ENABLE_PROVIDER(__CONFIG), ?ENABLE_PROVIDER(__CONFIG, ?LOCAL_PROVIDER_ID)).
--define(ENABLE_PROVIDER(__CONFIG, __PROVIDER_ID),
-  begin
-    test_utils:ct_mock(__CONFIG, cluster_manager_lib, get_provider_id, fun() -> __PROVIDER_ID end),
-    __CONFIG
-  end).
 
 -endif.

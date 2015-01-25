@@ -1,18 +1,19 @@
 %%%-------------------------------------------------------------------
-%%% @author Michal Wrzeszcz
-%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file defines modules used by system and their initial arguments.
+%%% Common definitions for http_worker modules.
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(MODULES_AND_ARGS_HRL).
--define(MODULES_AND_ARGS_HRL, 1).
+-ifndef(HTTP_COMMON_HRL).
+-define(HTTP_COMMON_HRL, 1).
 
--define(MODULES, [http_worker, dns_worker]).
--define(MODULES_WITH_ARGS, [{http_worker, []}, {dns_worker, []}]).
+%% Includes from cowboy
+-type req() :: cowboy_req:req().
+-export_type([req/0]).
 
 -endif.
