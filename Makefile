@@ -38,7 +38,7 @@ ct_local:
 	./test_distributed/start_distributed_test.sh ${SUITE} ${CASE}
 
 ct: ctbuild
-	docker run -rm -it -v /home/michal/oneprovider:/root/oneprovider -h d1.local onedata/worker cd /root/oneprovider ; make ct_local
+	docker run --rm -it  -w /root/oneprovider -v /home/michal/oneprovider:/root/oneprovider -h d1.local onedata/worker make ct_local
 
 test: eunit ct
 

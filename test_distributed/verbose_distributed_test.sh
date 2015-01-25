@@ -10,6 +10,7 @@
 ## ===================================================================
 
 umask 0
+cp -R test_distributed/* distributed_tests_out
 cd distributed_tests_out
 cp -R ../cacerts .
 cp -R ../certs .
@@ -57,6 +58,8 @@ rm -rf certs
 rm -rf c_lib
 #rm -rf gui_static
 rm -f sys.config
+rm -f Emakefile
+rm -f *.sh
 
 cd ..
 for tout in `find distributed_tests_out -name "TEST-*.xml"`; do awk '/testcase/{gsub("<testcase name=\"[a-z]+_per_suite\"(([^/>]*/>)|([^>]*>[^<]*</testcase>))", "")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
