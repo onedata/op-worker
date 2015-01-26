@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 
 import argparse
-import sys
 import os
-import uuid
-import re
 import time
 import docker
 import json
 import copy
+import tempfile
 
 def parse_config(path):
   with open(path, 'r') as f:
@@ -34,11 +32,13 @@ def tweak_config(config, name):
 
   return cfg
 
-COMMAND = re.sub(r'\s+', ' ',
-  '''echo "{config}" > /tmp/gen_dev.args &&
-     cd /root/build &&
-     escript gen_dev.erl /tmp/gen_dev.args &&
-     /root/bin/node/bin/oneprovider_node foreground''')
+def pull_image(name):
+  try:
+    client.inspect_image(name)
+  except docker.errors.APIError:
+    print('Pulling image {name}'.format(name=name))
+    client.pull(name)
+
 
 parser = argparse.ArgumentParser(
   formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -71,38 +71,55 @@ config = parse_config(args.config_path)
 config['config']['target_dir'] = '/root/bin'
 configs = [tweak_config(config, node) for node in config['nodes']]
 
-skydns = client.create_container(image='crosbymichael/skydns',
-                                 detach=True,
-                                 name='skydns_'+cookie,
-                                 command='-nameserver 8.8.8.8:53 -domain docker')
+pull_image(args.image)
+pull_image('crosbymichael/skydns')
+pull_image('crosbymichael/skydock')
+
+skydns = client.create_container(
+  image='crosbymichael/skydns',
+  detach=True,
+  name='skydns_{cookie}'.format(cookie=cookie),
+  command='-nameserver 8.8.8.8:53 -domain docker')
 client.start(container=skydns)
 
 createServicePath = os.path.dirname(os.path.realpath(__file__)) + '/createService.js'
 
-skydock = client.create_container(image='crosbymichael/skydock',
-                                  detach=True,
-                                  name='skydock_'+cookie,
-                                  volumes=['/myplugins.js', '/docker.sock'],
-                                  command='-ttl 30 -environment dev -s /docker.sock -domain docker -name skydns_'+cookie+' -plugins /myplugins.js')
+skydock = client.create_container(
+  image='crosbymichael/skydock',
+  detach=True,
+  name='skydock_{cookie}'.format(cookie=cookie),
+  volumes=['/createService.js', '/docker.sock'],
+  command='-ttl 30 -environment dev -s /docker.sock -domain docker -name \
+           skydns_{cookie} -plugins /createService.js'.format(cookie=cookie))
 
-client.start(container=skydock,
-             binds={ createServicePath: { 'bind': '/myplugins.js', 'ro': True },
-                     '/var/run/docker.sock': { 'bind': '/docker.sock', 'ro': False } })
+client.start(
+  container=skydock,
+  binds={ createServicePath: { 'bind': '/createService.js', 'ro': True },
+          '/var/run/docker.sock': { 'bind': '/docker.sock', 'ro': False } })
 
-config = client.inspect_container(skydns)
-dns = config['NetworkSettings']['IPAddress']
+skydns_config = client.inspect_container(skydns)
+dns = skydns_config['NetworkSettings']['IPAddress']
 
 for cfg in configs:
   (name, sep, hostname) = cfg['nodes']['node']['vm.args']['name'].partition('@')
+  temp = tempfile.NamedTemporaryFile()
+  temp.write(json.dumps(cfg))
+
   container = client.create_container(
     image=args.image,
-    command=['bash', '-c', COMMAND.format(config=json.dumps(cfg).replace('"', r'\"'))],
     hostname= hostname,
     detach=True,
+    stdin_open=True,
+    tty=True,
+    working_dir='/root/build',
     name='{name}_{cookie}'.format(name=name, cookie=cookie),
-    volumes='/root/build')
+    volumes=['/root/build', '/tmp/gen_dev_args.json'],
+    command=['bash', '-c', 'escript gen_dev.erl /tmp/gen_dev_args.json && \
+                            /root/bin/node/bin/oneprovider_node console'])
 
   client.start(
     container=container,
-    binds={ args.bin: { 'bind': '/root/build', 'ro': True } },
+    binds={
+      args.bin:  { 'bind': '/root/build', 'ro': True },
+      temp.name: { 'bind': '/tmp/gen_dev_args.json', 'ro': True } },
     dns=[dns])
