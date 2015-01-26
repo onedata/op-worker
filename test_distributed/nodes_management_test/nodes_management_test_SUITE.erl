@@ -30,13 +30,13 @@ all() -> [one_node_test, ccm_and_worker_test].
 %% ====================================================================
 one_node_test(Config) ->
     [Node] = ?config(nodes, Config),
-    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Node}, getNodeType)).
+    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Node}, get_node_type)).
 
 ccm_and_worker_test(Config) ->
     [Ccm, Worker1, Worker2] = ?config(nodes, Config),
-    gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType),
-    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType)),
-    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, getNodeType)),
+    gen_server:call({?NODE_MANAGER_NAME, Ccm}, get_node_type),
+    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, get_node_type)),
+    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, get_node_type)),
 
     timer:sleep(15000), %todo reorganize cluster startup, so we don't have to wait
 
