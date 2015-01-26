@@ -33,7 +33,8 @@ one_node_test(Config) ->
     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Node}, getNodeType)).
 
 ccm_and_worker_test(Config) ->
-    [Ccm, Worker] = ?config(nodes, Config),
+    [Ccm] = ?config(op_ccm_nodes, Config),
+    [Worker] = ?config(op_worker_nodes, Config),
     gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType),
     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType)),
     ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker}, getNodeType)),
@@ -60,18 +61,7 @@ init_per_testcase(one_node_test, Config) ->
     lists:append([{nodes, [Node]}, {dbnode, DBNode}], Config);
 
 init_per_testcase(ccm_and_worker_test, Config) ->
-    ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
-    test_node_starter:start_deps_for_tester_node(),
-
-    Nodes = [Ccm, _] = test_node_starter:start_test_nodes(2, true),
-    DBNode = ?DB_NODE,
-
-    test_node_starter:start_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes, [
-        [{node_type, ccm}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}, {workers_to_trigger_init, 1}],
-        [{node_type, worker}, {dns_port, 1300}, {ccm_nodes, [Ccm]}, {db_nodes, [DBNode]}]
-    ]),
-
-    lists:append([{nodes, Nodes}, {dbnode, DBNode}], Config).
+    test_node_starter:prepare_test_environment(Config, {?APP_NAME, ?ONEPROVIDER_DEPS}).
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   test_node_starter:stop_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes),
