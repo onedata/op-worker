@@ -102,6 +102,8 @@ skydns_config = client.inspect_container(skydns)
 dns = skydns_config['NetworkSettings']['IPAddress']
 
 output = collections.defaultdict(list)
+output['cookie'] = cookie
+
 for cfg in configs:
   node_type = cfg['nodes']['node']['sys.config']['node_type']
   node_name = cfg['nodes']['node']['vm.args']['name']
