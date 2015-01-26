@@ -36,6 +36,7 @@ eunit: deps compile
 
 ct_local:
 	./test_distributed/start_distributed_test.sh ${SUITE} ${CASE}
+	@for tout in `find distributed_tests_out -name "TEST-*.xml"`; do awk '/testcase/{gsub("<testcase name=\"[a-z]+_per_suite\"(([^/>]*/>)|([^>]*>[^<]*</testcase>))", "")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
 ct: ctbuild
 	docker run --rm -it  -w /root/oneprovider -v /home/michal/oneprovider:/root/oneprovider -h d1.local onedata/worker make ct_local
