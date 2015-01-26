@@ -13,6 +13,8 @@
 -module(worker_map).
 -author("Tomasz Lichon").
 
+-define(worker_map_ets, workers_ets).
+
 -include("cluster_elements/request_dispatcher/worker_map.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -73,7 +75,7 @@ get_worker_node(WorkerName, prefere_local) ->
 -spec update_workers(WorkersList :: [{Node :: node(), WorkerName :: atom()}]) -> ok.
 update_workers(WorkersList) ->
     WorkersListInverted = lists:map(fun({Node, WorkerName}) -> {WorkerName, Node} end, WorkersList),
-    ModuleToNodes = cluster_manager_utils:aggregate_over_first_element(WorkersListInverted),
+    ModuleToNodes = utils:aggregate_over_first_element(WorkersListInverted),
     lists:foreach(fun update_worker/1, ModuleToNodes).
 
 %%%===================================================================
@@ -124,7 +126,7 @@ update_worker({WorkerName, Nodes}) ->
             ok;
         Entries ->
             CurrentNodes =
-                case cluster_manager_utils:aggregate_over_first_element(Entries) of
+                case utils:aggregate_over_first_element(Entries) of
                     [] -> [];
                     [{_, AggregatedNodes}] -> AggregatedNodes
                 end,

@@ -392,7 +392,7 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
         NewState
     catch
         _:Error ->
-            ?error("Worker: ~s not stopped at node: ~s, error ~p", [Module, Node, {delete_error, Error}]),
+            ?error_stacktrace("Worker: ~s not stopped at node: ~s, error ~p", [Module, Node, {delete_error, Error}]),
             State#cm_state{workers = NewWorkers}
     end.
 
@@ -517,27 +517,49 @@ update_dns_state(WorkersList) ->
     %prepare worker IPs with loads info
     Nodes = [Node || {Node, _, _} <- WorkersList],
     UniqueNodes = sets:to_list(sets:from_list(Nodes)),
-    UniqueNodesIpToLoad = [{cluster_manager_utils:node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- UniqueNodes],
+    UniqueNodesIpToLoad = [{node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- UniqueNodes],
     FilteredUniqueNodesIpToLoad = [{IP, Load} || {IP, Load} <- UniqueNodesIpToLoad, IP =/= unknownaddress],
 
     %prepare modules with their nodes and loads info
     ModuleToNode = [{Module, Node} || {Node, Module, _Pid} <- WorkersList],
-    ModuleToNodeList = cluster_manager_utils:aggregate_over_first_element(ModuleToNode),
+    ModuleToNodeList = utils:aggregate_over_first_element(ModuleToNode),
     ModuleToNodeListWithLoad = lists:map(
         fun
             ({Module, []}) ->
                 {Module, []};
             ({Module, NodeList}) ->
-                IPToLoad = [{cluster_manager_utils:node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- NodeList],
+                IPToLoad = [{node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- NodeList],
                 FilteredIPs = [{IP, Param} || {IP, Param} <- IPToLoad, IP =/= unknownaddress],
                 {Module, FilteredIPs}
         end, ModuleToNodeList),
     FilteredModuleToNodeListWithLoad = [{Module, NodeList} || {Module, NodeList} <- ModuleToNodeListWithLoad, NodeList =/= []],
 
     % prepare average load
-    LoadAverage = cluster_manager_utils:average([Load || {_, Load} <- FilteredUniqueNodesIpToLoad]),
+    LoadAverage = utils:average([Load || {_, Load} <- FilteredUniqueNodesIpToLoad]),
 
     UpdateInfo = {update_state, FilteredModuleToNodeListWithLoad, FilteredUniqueNodesIpToLoad, LoadAverage},
     ?debug("updating dns, update message: ~p", [UpdateInfo]),
     [gen_server:cast(Pid, #worker_request{req = UpdateInfo}) || {_, dns_worker, Pid} <- WorkersList],
     ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Resolve ipv4 address of node.
+%% @end
+%%--------------------------------------------------------------------
+-spec node_to_ip(Node :: atom()) -> inet:ip4_address() | unknownaddress.
+node_to_ip(Node) ->
+    StrNode = atom_to_list(Node),
+    AddressWith@ = lists:dropwhile(fun(Char) -> Char =/= $@ end, StrNode),
+    Address = lists:dropwhile(fun(Char) -> Char =:= $@ end, AddressWith@),
+    case inet:getaddr(Address, inet) of
+        {ok, Ip} -> Ip;
+        {error, Error} ->
+            ?error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
+            unknownaddress
+    end.
