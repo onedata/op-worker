@@ -1,34 +1,50 @@
 #!/usr/bin/env escript
-
+%%%-------------------------------------------------------------------
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% gen_dev script uses configurator.erl to configure release according to
+%%% given gen_dev.args configuration. For each entry in gen_dev.args, the
+%%% fresh release is copied from rel/?APP_NAME to 'target_dir', and
+%%% vm.args/sys.config are configured properly.
+%%% @end
+%%%-------------------------------------------------------------------
 -module(gen_dev).
 -export([main/1]).
 
--define(app_name, "oneprovider_node").
+-define(APP_NAME, "oneprovider_node").
 
--define(args_file, atom_to_list(?MODULE) ++ ".args").
--define(releases_directory, "rel").
--define(fresh_release_directory, filename:join(?releases_directory, ?app_name)).
--define(test_releases_directory, filename:join(?releases_directory, "test_cluster")).
+-define(ARGS_FILE, atom_to_list(?MODULE) ++ ".args").
+-define(RELEASES_DIRECTORY, "rel").
 
--define(worker_name_suffix, "_worker").
--define(dist_app_failover_timeout, 5000).
+%% Default input args
+-define(DEFAULT_INPUT_DIR, filename:join(?RELEASES_DIRECTORY, ?APP_NAME)).
+-define(DEFAULT_TARGET_DIR, filename:join(?RELEASES_DIRECTORY, "test_cluster")).
+-define(DEFAULT_WORKERS_TO_TRIGGER_INIT, infinity).
 
-main(_) ->
+-define(DIST_APP_FAILOVER_TIMEOUT, 5000).
+
+main(Args) ->
     try
-        prepare_helper_modules(),
-        {ok, [Args]} = file:consult(?args_file),
-        NodesConfig = expand_full_list_of_nodes(Args),
-        file:make_dir(?test_releases_directory),
-        create_releases(NodesConfig),
-        cleanup()
+        ArgsFile = get_args_file(Args),
+        {ok, [NodesConfig]} = file:consult(ArgsFile),
+        create_releases(NodesConfig)
     catch
         _Type:Error ->
-            cleanup(),
-            try print("Error: ~ts",[Error])
-            catch _:_  -> print("Error: ~p",[Error])
+            try print("Error: ~ts", [Error])
+            catch _:_ -> print("Error: ~p", [Error])
             end,
-            print("Stacktrace: ~p",[erlang:get_stacktrace()])
+            print("Stacktrace: ~p", [erlang:get_stacktrace()])
     end.
+
+get_args_file([ConfigFilePath | _]) ->
+    ConfigFilePath;
+get_args_file(_) ->
+    ?ARGS_FILE.
 
 create_releases([]) ->
     ok;
@@ -36,44 +52,45 @@ create_releases([Config | Rest]) ->
     % prepare configuration
     print("=================================="),
     print("Configuring new release"),
-    Name = proplists:get_value(name, Config),
-    print("name - ~p", [Name]),
+
+    FullName = proplists:get_value(name, Config),
+    print("name - ~p", [FullName]),
+
     Type = proplists:get_value(type, Config),
     print("type - ~p", [Type]),
+
     CcmNodesList = proplists:get_value(ccm_nodes, Config),
     print("ccm_nodes - ~p", [CcmNodesList]),
+
     DbNodesList = proplists:get_value(db_nodes, Config),
     print("db_nodes - ~p", [DbNodesList]),
+
     Cookie = proplists:get_value(cookie, Config),
     print("cookie - ~p", [Cookie]),
-    ReleaseDirectory = get_release_location(Name),
+
+    InputDir = proplists:get_value(input_dir, Config, ?DEFAULT_INPUT_DIR),
+    print("input_dir - ~p", [InputDir]),
+
+    TargetDir = proplists:get_value(target_dir, Config, ?DEFAULT_TARGET_DIR),
+    ReleaseDirectory = filename:join(TargetDir, get_name(FullName)),
     print("release_dir - ~p", [ReleaseDirectory]),
 
+    WorkersToTriggerInit = proplists:get_value(workers_to_trigger_init, Config, ?DEFAULT_WORKERS_TO_TRIGGER_INIT),
+    case Type of
+        ccm -> print("workers_to_trigger_init - ~p", [WorkersToTriggerInit]);
+        _ -> ok
+    end,
+
+    file:make_dir(TargetDir),
+    prepare_helper_modules(TargetDir),
     remove_dir(ReleaseDirectory),
-    copy_dir(?fresh_release_directory, ReleaseDirectory),
-    print("Fresh release copied to ~p", [ReleaseDirectory]),
-    configurator:configure_release(ReleaseDirectory, ?app_name, Name, Cookie, Type, CcmNodesList, DbNodesList, ?dist_app_failover_timeout),
+    copy_dir(InputDir, ReleaseDirectory),
+    print("Fresh release copied from ~p to ~p", [InputDir, ReleaseDirectory]),
+    configurator:configure_release(ReleaseDirectory, ?APP_NAME, FullName, Cookie, Type, CcmNodesList, DbNodesList, WorkersToTriggerInit, ?DIST_APP_FAILOVER_TIMEOUT),
+    cleanup(TargetDir),
     print("Release configured sucessfully!"),
     print("==================================~n"),
     create_releases(Rest).
-
-expand_full_list_of_nodes([]) ->
-    [];
-expand_full_list_of_nodes([Config | Rest]) ->
-    case proplists:get_value(type, Config) of
-        ccm_and_worker ->
-            %prepare ccm config
-            CcmConfig = [{type, ccm} | proplists:delete(node_type, Config)],
-
-            %prepare worker config
-            CcmName = proplists:get_value(name, Config),
-            WorkerName = extend_hostname_by_suffix(CcmName, ?worker_name_suffix),
-            WorkerConfig = [{type, worker}, {name, WorkerName} | proplists:delete(name, proplists:delete(type, Config))],
-
-            [CcmConfig, WorkerConfig | expand_full_list_of_nodes(Rest)];
-        _ ->
-            [Config | expand_full_list_of_nodes(Rest)]
-    end.
 
 remove_dir(Path) ->
     case os:cmd("rm -rf '" ++ Path ++ "'") of
@@ -86,26 +103,19 @@ copy_dir(From, To) ->
         Err -> throw(Err)
     end.
 
-prepare_helper_modules() ->
-    compile:file(filename:join([?releases_directory, "files", "configurator.erl"])).
+prepare_helper_modules(TargetDir) ->
+    code:add_path(TargetDir),
+    compile:file(filename:join([?RELEASES_DIRECTORY, "files", "configurator.erl"]), [{outdir, TargetDir}]).
 
-get_release_location(Hostname) ->
+get_name(Hostname) ->
     [Name, _] = string:tokens(Hostname, "@"),
-    filename:join(?test_releases_directory, Name).
-
-extend_hostname_by_suffix(Hostname, Suffix) ->
-    [Name, Host] = string:tokens(Hostname, "@"),
-    Name ++ Suffix ++ "@" ++ Host.
-
-get_host(Hostname) ->
-    [_, Host] = string:tokens(Hostname, "@"),
-    Host.
+    Name.
 
 print(Msg) ->
-    print(Msg,[]).
+    print(Msg, []).
 print(Msg, Args) ->
-    io:format(Msg ++ "~n",Args),
+    io:format(Msg ++ "~n", Args),
     Msg.
 
-cleanup() ->
-    file:delete("configurator.beam").
+cleanup(TargetDir) ->
+    file:delete(filename:join(TargetDir,"configurator.beam")).

@@ -15,10 +15,4 @@
 -define(MODULES, [http_worker, dns_worker]).
 -define(MODULES_WITH_ARGS, [{http_worker, []}, {dns_worker, []}]).
 
-%% Modules that are present on all workers.
--define(PERMANENT_MODULES, []).
-
-%% Singleton modules are modules which are supposed to have only one instance.
--define(SINGLETON_MODULES, []).
-
 -endif.

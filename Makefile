@@ -1,4 +1,4 @@
-.PHONY: releases deps test
+.PHONY: deps test
 
 all: rel
 

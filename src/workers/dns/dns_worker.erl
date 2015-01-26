@@ -18,12 +18,22 @@
 -behaviour(worker_plugin_behaviour).
 -behaviour(dns_query_handler_behaviour).
 
--include("workers/dns/dns_worker.hrl").
 -include("registered_names.hrl").
--include("supervision_macros.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/dns/dns.hrl").
 
+%% This record is used by dns_worker (it contains its state). The first element of
+%% a tuple is a name of a module and the second is a list of ip addresses of nodes
+%% sorted ascending by load.
+%%
+%% Example:
+%%     Assuming that dns_worker plugin works on node1@127.0.0.1 and node2@192.168.0.1,
+%%     (load on node1 < load on node2) and control_panel works on node3@127.0.0.1,
+%%     dns_worker state will look like this:
+%%     {dns_state, [{dns_worker, [{127,0,0,1}, {192,168,0,1}]}, {control_panel, [{127,0,0,1}]}]}
+-record(dns_worker_state, {workers_list = [] :: [{atom(),  [{inet:ip4_address(), integer(), integer()}]}], nodes_list = [] :: [{inet:ip4_address(),  number()}], avg_load = 0 :: number()}).
+
+-define(EXTERNALLY_VISIBLE_MODULES, [http_worker, dns_worker]).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/2, cleanup/0]).

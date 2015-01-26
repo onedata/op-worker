@@ -12,8 +12,11 @@
 -module(cdmi_handler).
 -author("Tomasz Lichon").
 
+-include("workers/http_worker/http_common.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
--include("workers/http_worker/cdmi/cdmi.hrl").
+
+% the state of request, it is created in rest_init function, and passed to every cowboy callback functions
+-record(state, {}).
 
 %% API
 -export([init/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
@@ -124,13 +127,26 @@ delete_resource(Req, State) ->
 %%%===================================================================
 %%% Content type routing functions
 %%%===================================================================
-
 %%--------------------------------------------------------------------
 %% This functions are needed by cowboy for registration in
 %% content_types_accepted/content_types_provided methods and simply delegates
 %% their responsibility to adequate handler modules
+%%-------------------------------------------------------------------
+
 %%--------------------------------------------------------------------
-get_cdmi_container(Req,State) ->
+%% @doc
+%% Handles GET with "application/cdmi-container" content-type
+%% @end
+%%--------------------------------------------------------------------
+-spec get_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
+get_cdmi_container(Req, State) ->
     {<<"ok">>, Req, State}.
-put_cdmi_container(Req,State) ->
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT with "application/cdmi-container" content-type
+%% @end
+%%--------------------------------------------------------------------
+-spec put_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
+put_cdmi_container(Req, State) ->
     {true, Req, State}.

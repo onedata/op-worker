@@ -15,10 +15,13 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
--include("supervision_macros.hrl").
 -include("modules_and_args.hrl").
--include("cluster_elements/cluster_manager/cluster_manager.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+%% This record is used by ccm (it contains its state). It describes
+%% nodes, dispatchers and workers in cluster. It also contains reference
+%% to process used to monitor if nodes are alive.
+-record(cm_state, {nodes = [], workers = [], dispatcher_maps = [], state_num = 1, cluster_check_num = 0, state_loaded = false, state_monitoring = on}).
 
 %% API
 -export([start_link/0, start_link/1, stop/0]).
@@ -475,7 +478,10 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 start_worker(Node, Module, WorkerArgs, State) ->
     try
         {ok, LoadMemorySize} = application:get_env(?APP_NAME, worker_load_memory_size),
-        {ok, ChildPid} = supervisor:start_child({?SUPERVISOR_NAME, Node}, ?SUP_CHILD(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
+        {ok, ChildPid} = supervisor:start_child(
+            {?SUPERVISOR_NAME, Node},
+            {Module, {worker_host, start_link, [Module, WorkerArgs, LoadMemorySize]}, transient, 5000, worker, [worker_host]}
+        ),
         Workers = State#cm_state.workers,
         ?info("Worker: ~s started at node: ~s", [Module, Node]),
         {ok, State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}}
@@ -726,11 +732,12 @@ update_dispatcher_state(Nodes, Loads, AvgLoad) ->
     NodeToLoad :: list(),
     AvgLoad :: number().
 update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
-    MergeByFirstElement = fun(List) -> lists:reverse(
-        lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
-            ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
-            ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
-        end, [], lists:keysort(1, List)))
+    MergeByFirstElement = fun(List) ->
+        lists:reverse(
+            lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
+                ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
+                ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
+            end, [], lists:keysort(1, List)))
     end,
 
     NodeToIPWithLogging = fun(Node) ->
@@ -761,12 +768,13 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
                             end,
 
                     case ModuleV > 0.5 of
-                        true -> case (AvgLoad > 0) and (NodeV >= 2 * AvgLoad) of
-                                    true ->
-                                        V = erlang:min(10, erlang:round(NodeV / AvgLoad)),
-                                        [{Node, V} | TmpAns];
-                                    false -> [{Node, 1} | TmpAns]
-                                end;
+                        true ->
+                            case (AvgLoad > 0) and (NodeV >= 2 * AvgLoad) of
+                                true ->
+                                    V = erlang:min(10, erlang:round(NodeV / AvgLoad)),
+                                    [{Node, V} | TmpAns];
+                                false -> [{Node, 1} | TmpAns]
+                            end;
                         false -> [{Node, 1} | TmpAns]
                     end;
                 false -> TmpAns

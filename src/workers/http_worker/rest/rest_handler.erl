@@ -12,10 +12,13 @@
 -module(rest_handler).
 -author("Lukasz Opiola").
 
--include("workers/http_worker/rest/rest.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
+-include("workers/http_worker/http_common.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+% the state of request, it is created in rest_init function, and passed to every cowboy callback functions
+-record(state, {}).
 
 %% API
 -export([init/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
@@ -126,13 +129,26 @@ delete_resource(Req, State) ->
 %%%===================================================================
 %%% Content type routing functions
 %%%===================================================================
-
 %%--------------------------------------------------------------------
 %% This functions are needed by cowboy for registration in
 %% content_types_accepted/content_types_provided methods and simply delegates
 %% their responsibility to adequate handler modules
 %%--------------------------------------------------------------------
-get_json(Req,State) ->
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles GET with "application/json" content-type
+%% @end
+%%--------------------------------------------------------------------
+-spec get_json(req(), #state{}) -> {term(), req(), #state{}}.
+get_json(Req, State) ->
     {<<"ok">>, Req, State}.
-put_json(Req,State) ->
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT with "application/json" content-type
+%% @end
+%%--------------------------------------------------------------------
+-spec put_json(req(), #state{}) -> {term(), req(), #state{}}.
+put_json(Req, State) ->
     {true, Req, State}.

@@ -20,10 +20,13 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
--include("supervision_macros.hrl").
--include("cluster_elements/node_manager/node_manager.hrl").
 -include("cluster_elements/node_manager/node_manager_listeners.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+%% This record is used by node_manager (it contains its state).
+%% It describes node type (ccm or worker) and status of connection
+%% with ccm (connected or not_connected).
+-record(node_state, {node_type = worker, ccm_con_status = not_connected, state_num = 0, dispatcher_state = 0}).
 
 %% API
 -export([start_link/1, stop/0]).
@@ -228,7 +231,7 @@ handle_info(_Info, State) ->
     | {shutdown, term()}
     | term().
 terminate(_Reason, _State) ->
-    catch cowboy:stop_listener(?DISPATCHER_LISTENER),
+    catch cowboy:stop_listener(?WEBSOCKET_LISTENER),
     catch cowboy:stop_listener(?HTTP_REDIRECTOR_LISTENER),
     catch cowboy:stop_listener(?REST_LISTENER),
     catch cowboy:stop_listener(?HTTPS_LISTENER),

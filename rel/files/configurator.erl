@@ -1,12 +1,17 @@
 %%%-------------------------------------------------------------------
-%%% @author lichon
-%%% @copyright (C) 2015, <COMPANY>
-%%% @doc
-%%%
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
-%%% Created : 13. Jan 2015 15:56
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module provides functions that configure oneprovider_node release
+%%% by replacing envs in vm.args and sys.config
+%%% @end
 %%%-------------------------------------------------------------------
 -module(configurator).
+-author("Tomasz Lichon").
 
 -define(SED_COMMAND,
     case os:type() of
@@ -15,7 +20,7 @@
     end).
 
 %% API
--export([configure_release/8, get_env/3, replace_env/4, replace_vm_arg/3]).
+-export([configure_release/9, get_env/3, replace_env/4, replace_vm_arg/3]).
 
 %%%===================================================================
 %%% API
@@ -27,8 +32,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec configure_release(ReleaseRootPath :: string(), ApplicationName :: atom(), NodeName :: string(), Cookie :: string(), NodeType :: atom(),
-    CcmNodes :: [atom()], DbNodes :: [atom()], DistributedAppFailoverTimeout :: integer()) -> ok | no_return().
-configure_release(ReleaseRootPath, ApplicationName, NodeName, Cookie, NodeType, CcmNodes, DbNodes, DistributedAppFailoverTimeout) ->
+    CcmNodes :: [atom()], DbNodes :: [atom()], WorkersToTriggerInit :: integer() | infinity, DistributedAppFailoverTimeout :: integer()) -> ok | no_return().
+configure_release(ReleaseRootPath, ApplicationName, NodeName, Cookie, NodeType, CcmNodes, DbNodes, WorkersToTriggerInit, DistributedAppFailoverTimeout) ->
     {ok,[[{release, ApplicationName, AppVsn, _, _, _}]]} = file:consult(filename:join([ReleaseRootPath, "releases", "RELEASES"])),
     SysConfigPath = filename:join([ReleaseRootPath, "releases", AppVsn, "sys.config"]),
     VmArgsPath = filename:join([ReleaseRootPath, "releases", AppVsn, "vm.args"]),
@@ -38,6 +43,7 @@ configure_release(ReleaseRootPath, ApplicationName, NodeName, Cookie, NodeType, 
     replace_env(SysConfigPath, ApplicationName, node_type, NodeType),
     replace_env(SysConfigPath, ApplicationName, ccm_nodes, CcmNodes),
     replace_env(SysConfigPath, ApplicationName, db_nodes, DbNodes),
+    replace_env(SysConfigPath, ApplicationName, workers_to_trigger_init, WorkersToTriggerInit),
     replace_env(SysConfigPath, "kernel", distributed, [{list_to_atom(NodeName), DistributedAppFailoverTimeout, CcmNodes}]),
     replace_env(SysConfigPath, "kernel", sync_nodes_mandatory, CcmNodes -- [list_to_atom(NodeName)]).
 
