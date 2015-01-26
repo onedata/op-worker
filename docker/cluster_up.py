@@ -7,73 +7,69 @@ import uuid
 import re
 import time
 import docker
+import json
+import copy
 
-CONFIG = re.sub(r'\s', '',
-   '''[
-        [
-          {name, "%(name)s"},
-          {type, %(typ)s},
-          {ccm_nodes, %(ccm_nodes)s},
-          {cookie, "%(cookie)s"},
-          {db_nodes, []},
-          {workers_to_trigger_init, %(workers)i},
-          {target_dir, "/root/bin"}
-        ]
-      ].''').replace('"', r'\"')
+def parse_config(path):
+  with open(path, 'r') as f:
+    data = f.read()
+    return json.loads(data)
+
+def set_hostname(node, cookie):
+  parts = list(node.partition('@'))
+  parts[2] = '{name}.{cookie}.dev.docker'.format(name=parts[0], cookie=cookie)
+  return ''.join(parts)
+
+def tweak_config(config, name):
+  cfg = copy.deepcopy(config)
+  cfg['nodes'] = { 'node': cfg['nodes'][name] }
+
+  sys_config = cfg['nodes']['node']['sys.config']
+  sys_config['ccm_nodes'] = [set_hostname(n, cookie) for n in sys_config['ccm_nodes']]
+  sys_config['db_nodes']  = [set_hostname(n, cookie) for n in sys_config['db_nodes']]
+
+  vm_args = cfg['nodes']['node']['vm.args']
+  vm_args['cookie'] = cookie
+  vm_args['name'] = set_hostname(vm_args['name'], cookie)
+
+  return cfg
 
 COMMAND = re.sub(r'\s+', ' ',
-  '''echo "%(config)s" > /tmp/gen_dev.args &&
+  '''echo "{config}" > /tmp/gen_dev.args &&
      cd /root/build &&
      escript gen_dev.erl /tmp/gen_dev.args &&
-     /root/bin/%(typ)s/bin/oneprovider_node foreground''')
+     /root/bin/node/bin/oneprovider_node foreground''')
 
-def hostname(typ, num, cookie):
-  return '{typ}{num}.{cookie}.dev.docker'.format(typ=typ, num=num, cookie=cookie)
+parser = argparse.ArgumentParser(
+  formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+  description='Bring up onedata cluster.')
 
-def node(typ, num, cookie):
-  hname = hostname(typ, num, cookie)
-  return '{typ}@{hostname}'.format(typ=typ, hostname=hname)
+parser.add_argument(
+  '--image', '-i',
+  action='store',
+  default='onedata/worker',
+  help='the image to use for the container',
+  dest='image')
 
-def command(typ, num, workers_no, ccms, cookie):
-  cfg = CONFIG % { 'name': node(typ, i, cookie), 'typ': typ,
-                   'ccm_nodes': ccms, 'cookie': cookie, 'workers': workers_no }
-  cmd = COMMAND % { 'config': cfg, 'typ': typ }
-  return ['bash', '-c', cmd]
+parser.add_argument(
+  '--bin', '-b',
+  action='store',
+  default=os.getcwd(),
+  help='the path to onedata repository (precompiled)',
+  dest='bin')
 
-def container_name(typ, num, cookie):
-  return '{typ}{num}_{cookie}'.format(typ=typ, num=num, cookie=cookie)
+parser.add_argument(
+  'config_path',
+  action='store',
+  help='path to gen_dev_args.json that will be used to configure the cluster')
 
-def create_container(client, image, typ, num, workers_no, ccms, cookie):
-  return client.create_container(image=image,
-                                 command=command(typ, num, workers_no, ccms, cookie),
-                                 hostname=hostname(typ, num, cookie),
-                                 detach=True,
-                                 name=container_name(typ, num, cookie),
-                                 volumes='/root/build')
-
-def ccm_link(cookie):
-  return { container_name('ccm', 0, cookie): hostname('ccm', 0) }
-
-def start_container(container, bindir, dns):
-  return client.start(container=container,
-                      binds={ bindir: { 'bind': '/root/build', 'ro': True } },
-                      dns=[dns])
-
-parser = argparse.ArgumentParser(description='Bring up onedata cluster.')
-parser.add_argument('--image', '-i', action='store', default='onedata/worker',
-                    help='the image to use for the container', dest='image')
-parser.add_argument('--bin', '-b', action='store', default=os.getcwd(),
-                    help='the path to onedata repository (precompiled)', dest='bin')
-parser.add_argument('--ccms', '-c', action='store', type=int, default=1,
-                    help='the number of ccm nodes to spin up', dest='ccms')
-parser.add_argument('--workers', '-w', action='store', type=int, default=1,
-                    help='the number of worker nodes to spin up', dest='workers')
 args = parser.parse_args()
-
-
 client = docker.Client()
 cookie = str(int(time.time()))
-ccms = str([node('ccm', i, cookie) for i in xrange(args.ccms)])
+
+config = parse_config(args.config_path)
+config['config']['target_dir'] = '/root/bin'
+configs = [tweak_config(config, node) for node in config['nodes']]
 
 skydns = client.create_container(image='crosbymichael/skydns',
                                  detach=True,
@@ -96,10 +92,17 @@ client.start(container=skydock,
 config = client.inspect_container(skydns)
 dns = config['NetworkSettings']['IPAddress']
 
-for i in xrange(args.ccms):
-  container = create_container(client, args.image, 'ccm', i, args.workers, ccms, cookie)
-  start_container(container, args.bin, dns)
+for cfg in configs:
+  (name, sep, hostname) = cfg['nodes']['node']['vm.args']['name'].partition('@')
+  container = client.create_container(
+    image=args.image,
+    command=['bash', '-c', COMMAND.format(config=json.dumps(cfg).replace('"', r'\"'))],
+    hostname= hostname,
+    detach=True,
+    name='{name}_{cookie}'.format(name=name, cookie=cookie),
+    volumes='/root/build')
 
-for i in xrange(args.workers):
-  container = create_container(client, args.image, 'worker', i,  args.workers, ccms, cookie)
-  start_container(container, args.bin, dns)
+  client.start(
+    container=container,
+    binds={ args.bin: { 'bind': '/root/build', 'ro': True } },
+    dns=[dns])
