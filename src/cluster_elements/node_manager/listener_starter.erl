@@ -202,7 +202,7 @@ start_dns_listeners() ->
     OnFailureFun = fun() ->
         ?error("Could not start DNS server on node ~p.", [node()])
     end,
-    ok = dns_server:start(?SUPERVISOR_NAME, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
+    ok = dns_server:start(?APPLICATION_SUPERVISOR_NAME, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
 
 %%%===================================================================
 %%% Internal functions

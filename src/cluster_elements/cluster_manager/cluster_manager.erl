@@ -345,9 +345,14 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 start_worker(Node, Module, WorkerArgs, State) ->
     try
         {ok, LoadMemorySize} = application:get_env(?APP_NAME, worker_load_memory_size),
+        WorkerSupervisorName = ?WORKER_HOST_SUPERVISOR_NAME(Module),
         {ok, ChildPid} = supervisor:start_child(
-            {?SUPERVISOR_NAME, Node},
+            {?MAIN_WORKER_SUPERVISOR_NAME, Node},
             {Module, {worker_host, start_link, [Module, WorkerArgs, LoadMemorySize]}, transient, 5000, worker, [worker_host]}
+        ),
+        {ok, _} = supervisor:start_child(
+            {?MAIN_WORKER_SUPERVISOR_NAME, Node},
+            {WorkerSupervisorName, {worker_host_sup, start_link, [WorkerSupervisorName]}, transient, infinity, supervisor, [worker_host_sup]}
         ),
         Workers = State#cm_state.workers,
         ?info("Worker: ~s started at node: ~s", [Module, Node]),
@@ -379,8 +384,10 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
         NewState = State#cm_state{workers = NewWorkers},
         {ChildNode, _ChildPid} = ChosenChild,
         update_dispatchers_and_dns(NewState),
-        ok = supervisor:terminate_child({?SUPERVISOR_NAME, ChildNode}, Module),
-        ok = supervisor:delete_child({?SUPERVISOR_NAME, ChildNode}, Module),
+        ok = supervisor:terminate_child({?MAIN_WORKER_SUPERVISOR_NAME, ChildNode}, Module),
+        ok = supervisor:terminate_child({?MAIN_WORKER_SUPERVISOR_NAME, ChildNode}, ?WORKER_HOST_SUPERVISOR_NAME(Module)),
+        ok = supervisor:delete_child({?MAIN_WORKER_SUPERVISOR_NAME, ChildNode}, Module),
+        ok = supervisor:delete_child({?MAIN_WORKER_SUPERVISOR_NAME, ChildNode}, ?WORKER_HOST_SUPERVISOR_NAME(Module)),
         ?info("Worker: ~s stopped at node: ~s", [Module, Node]),
         NewState
     catch
@@ -400,7 +407,7 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
 -spec join_new_node(Node :: atom(), State :: term()) -> {ok, {NewState :: #cm_state{}, WorkersFound :: boolean()}} | no_return().
 join_new_node(Node, State = #cm_state{workers = Workers}) ->
     pong = net_adm:ping(Node),
-    Children = supervisor:which_children({?SUPERVISOR_NAME, Node}),
+    Children = supervisor:which_children({?MAIN_WORKER_SUPERVISOR_NAME, Node}),
     NewWorkers = add_children(Node, Children, Workers, State),
     WorkersFound = length(NewWorkers) > length(Workers),
     {ok, {State#cm_state{workers = NewWorkers}, WorkersFound}}.
