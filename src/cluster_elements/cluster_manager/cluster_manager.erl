@@ -63,7 +63,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 -spec stop() -> ok.
 stop() ->
-    gen_server:cast(?CCM, stop).
+    gen_server:cast({global, ?CCM}, stop).
 
 %%%===================================================================
 %%% gen_server callbacks

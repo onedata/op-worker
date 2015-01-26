@@ -162,7 +162,7 @@ handle_cast(stop, State) ->
 
 handle_cast(_Msg, State) ->
     ?warning("Wrong node_manager cast: ~p", [_Msg]),
-    {noreply, State}.
+    {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
 %% @private
