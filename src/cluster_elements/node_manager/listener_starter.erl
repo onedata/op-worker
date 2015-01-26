@@ -13,12 +13,35 @@
 -author("Tomasz Lichon").
 
 -include("registered_names.hrl").
--include("cluster_elements/node_manager/node_manager_listeners.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% Path (relative to domain) on which cowboy expects incomming websocket connections with client and provider
+-define(ONECLIENT_URI_PATH, "/oneclient").
+-define(ONEPROVIDER_URI_PATH, "/oneprovider").
+
+% Custom cowboy bridge module
+-define(COWBOY_BRIDGE_MODULE, n2o_handler).
+
+% Session logic module
+-define(SESSION_LOGIC_MODULE, session_logic).
+
+% GUI routing module
+-define(GUI_ROUTING_MODULE, gui_routes).
+
+% Paths in gui static directory
+-define(STATIC_PATHS, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
+-define(ONEPROXY_DISPATCHER, oneproxy_dispatcher).
+
+% Cowboy listener references
+-define(WEBSOCKET_LISTENER, websocket).
+-define(HTTPS_LISTENER, https).
+-define(REST_LISTENER, rest).
+-define(HTTP_REDIRECTOR_LISTENER, http).
+
 %% API
--export([start_dispatcher_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0, start_dns_listeners/0]).
+-export([start_dispatcher_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0,
+    start_dns_listeners/0, stop_listeners/0]).
 
 %%%===================================================================
 %%% API
@@ -203,6 +226,19 @@ start_dns_listeners() ->
         ?error("Could not start DNS server on node ~p.", [node()])
     end,
     ok = dns_server:start(?APPLICATION_SUPERVISOR_NAME, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Stops all listeners defined in this module
+%% @end
+%%--------------------------------------------------------------------
+-spec stop_listeners() -> ok.
+stop_listeners() ->
+    catch cowboy:stop_listener(?WEBSOCKET_LISTENER),
+    catch cowboy:stop_listener(?HTTP_REDIRECTOR_LISTENER),
+    catch cowboy:stop_listener(?REST_LISTENER),
+    catch cowboy:stop_listener(?HTTPS_LISTENER),
+    catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE).
 
 %%%===================================================================
 %%% Internal functions

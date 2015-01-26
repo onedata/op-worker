@@ -22,7 +22,6 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
--include("cluster_elements/node_manager/node_manager_listeners.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% This record is used by node_manager (it contains its state).
@@ -204,11 +203,7 @@ handle_info(_Info, State) ->
     | {shutdown, term()}
     | term().
 terminate(_Reason, _State) ->
-    catch cowboy:stop_listener(?WEBSOCKET_LISTENER),
-    catch cowboy:stop_listener(?HTTP_REDIRECTOR_LISTENER),
-    catch cowboy:stop_listener(?REST_LISTENER),
-    catch cowboy:stop_listener(?HTTPS_LISTENER),
-    catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE),
+    catch listener_starter:stop_listeners(),
     ok.
 
 %%--------------------------------------------------------------------

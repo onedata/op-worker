@@ -12,8 +12,7 @@
 -ifndef(ONEPROXY_HRL).
 -define(ONEPROXY_HRL, 1).
 
-%% oneproxy listeners
--define(ONEPROXY_DISPATCHER, oneproxy_dispatcher).
+%% oneproxy rest listener
 -define(ONEPROXY_REST, oneproxy_rest).
 
 -endif.
