@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import collections
 import argparse
 import os
 import time
@@ -100,8 +101,13 @@ client.start(
 skydns_config = client.inspect_container(skydns)
 dns = skydns_config['NetworkSettings']['IPAddress']
 
+output = collections.defaultdict(list)
 for cfg in configs:
-  (name, sep, hostname) = cfg['nodes']['node']['vm.args']['name'].partition('@')
+  node_type = cfg['nodes']['node']['sys.config']['node_type']
+  node_name = cfg['nodes']['node']['vm.args']['name']
+  output[node_type].append(node_name)
+
+  (name, sep, hostname) = node_name.partition('@')
   temp = tempfile.NamedTemporaryFile()
   temp.write(json.dumps(cfg))
 
@@ -123,3 +129,5 @@ for cfg in configs:
       args.bin:  { 'bind': '/root/build', 'ro': True },
       temp.name: { 'bind': '/tmp/gen_dev_args.json', 'ro': True } },
     dns=[dns])
+
+print(json.dumps(output))
