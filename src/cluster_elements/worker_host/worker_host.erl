@@ -106,6 +106,9 @@ init([PlugIn, PlugInArgs, LoadMemorySize]) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
+handle_call({updatePlugInState, StateTransformFun}, _From, State#host_state{plug_in_state = PluginState}) when is_function(StateTransformFun) ->
+    {reply, ok, State#host_state{plug_in_state =  StateTransformFun(PluginState)}};
+
 handle_call({updatePlugInState, NewPlugInState}, _From, State) ->
     {reply, ok, State#host_state{plug_in_state = NewPlugInState}};
 
