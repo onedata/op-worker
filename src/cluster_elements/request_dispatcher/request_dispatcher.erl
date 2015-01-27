@@ -16,10 +16,9 @@
 
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
+-include("cluster_elements/request_dispatcher/request_dispatcher_state.hrl").
 -include_lib("ctool/include/logging.hrl").
-
-%% This record is used by requests_dispatcher (it contains its state).
--record(dispatcher_state, {state_num = 0}).
+-include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([start_link/0, stop/0]).
@@ -117,6 +116,7 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
+-notify_state_change(dispatcher).
 handle_cast({check_state, NewStateNum}, State) ->
     NewState = check_state(State, NewStateNum),
     {noreply, NewState};

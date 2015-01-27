@@ -43,7 +43,7 @@
 init() ->
     case application:get_env(?APP_NAME, node_type) of
         {ok, ccm} ->
-            throw(ccm_node);                     %% ccm node doesn't have socket interface, so GSI would be useless
+            throw(ccm_node); % ccm node doesn't have socket interface, so GSI would be useless
         _ -> ok
     end,
     ?info("GSI Handler module is starting"),
