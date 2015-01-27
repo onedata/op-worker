@@ -20,7 +20,7 @@ RUN yum install -y globus-toolkit-repo-latest.noarch.rpm && \
 RUN yum install -y git clang-analyzer botan-devel boost-devel tbb-devel \
                    cmake ninja-build subversion fuse-devel protobuf-devel \
                    libtool-ltdl-devel clang boost-static rpm-build \
-                   python-sphinx && \
+                   python-sphinx libstdc++-static && \
     ln -s /usr/bin/ninja{-build,} && \
     yum clean all
 

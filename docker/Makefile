@@ -1,3 +1,5 @@
+.PHONY: all builder worker master
+
 all: builder worker master
 
 builder: builder/Dockerfile
