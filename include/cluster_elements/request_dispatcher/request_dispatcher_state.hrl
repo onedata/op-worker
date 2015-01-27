@@ -6,10 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% worker_map external parameters, used to customize worker map queries
+%%% The state of request dispatcher
 %%% @end
 %%%-------------------------------------------------------------------
--author("Tomasz Lichon").
 
--define(default_worker_selection_type, random).
--type(selection_type() :: random | prefere_local).
+%% This record is used by requests_dispatcher (it contains its state).
+-record(dispatcher_state, {state_num = 0}).

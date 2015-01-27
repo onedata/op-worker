@@ -14,7 +14,7 @@
 -module(worker_proxy).
 -author("Tomasz Lichon").
 
--include("cluster_elements/worker_host/worker_proxy.hrl").
+-include("cluster_elements/worker_host/worker_protocol.hrl").
 -include("cluster_elements/request_dispatcher/worker_map.hrl").
 -include_lib("ctool/include/logging.hrl").
 

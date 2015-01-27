@@ -38,7 +38,7 @@
     | {shutdown, term()}
     | term().
 start_link(NodeType) ->
-    supervisor:start_link({local, ?SUPERVISOR_NAME}, ?MODULE, [NodeType]).
+    supervisor:start_link({local, ?APPLICATION_SUPERVISOR_NAME}, ?MODULE, [NodeType]).
 
 %%%===================================================================
 %% Supervisor callbacks
@@ -68,12 +68,19 @@ start_link(NodeType) ->
     Modules :: [module()] | dynamic.
 init([worker]) ->
     {ok, {{one_for_one, 5, 10}, [
-        {node_manager, {node_manager, start_link, [worker]}, permanent, 5000, worker, [node_manager]},
-        {request_dispatcher, {request_dispatcher, start_link, []}, permanent, 5000, worker, [request_dispatcher]}
+        {main_worker_sup, {main_worker_sup, start_link, []}, permanent, infinity, supervisor, [main_worker_sup]},
+        {request_dispatcher, {request_dispatcher, start_link, []}, permanent, 5000, worker, [request_dispatcher]},
+        {node_manager, {node_manager, start_link, [worker]}, permanent, 5000, worker, [node_manager]}
     ]}};
 init([ccm]) ->
-    {ok, {{one_for_one, 5, 10}, [
+    Notifier =
+        case application:get_env(?APP_NAME, notify_state_changes) of
+            {ok, true} -> [{cluster_state_notifier, {cluster_state_notifier, start_link, []}, permanent, 5000, worker, [cluster_state_notifier]}];
+            _ -> []
+        end,
+    {ok, {{one_for_one, 5, 10},  Notifier ++ [
         {cluster_manager, {cluster_manager, start_link, []}, permanent, 5000, worker, [cluster_manager]},
+        {main_worker_sup, {main_worker_sup, start_link, []}, permanent, infinity, supervisor, [main_worker_sup]},
         {node_manager, {node_manager, start_link, [ccm]}, permanent, 5000, worker, [node_manager]},
         {request_dispatcher, {request_dispatcher, start_link, []}, permanent, 5000, worker, [request_dispatcher]}
     ]}}.

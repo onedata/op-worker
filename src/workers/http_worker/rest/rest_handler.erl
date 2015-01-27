@@ -17,6 +17,7 @@
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+% the state of request, it is created in rest_init function, and passed to every cowboy callback functions
 -record(state, {}).
 
 %% API
@@ -36,7 +37,7 @@
 %% now treated as REST module by cowboy.
 %% @end
 %%--------------------------------------------------------------------
--spec init(any(), any(), any()) -> {upgrade, protocol, cowboy_rest}.
+-spec init(any(), any(), any()) -> {upgrade, protocol, cowboy_rest, req(), term()}.
 init(_, Req, Opts) ->
     NewOpts =
         case gsi_handler:get_certs_from_req(?ONEPROXY_REST, Req) of
@@ -96,7 +97,7 @@ resource_exists(Req, State) ->
 %% Returns content types that can be provided.
 %% @end
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
+-spec content_types_provided(req(), #state{}) -> {[{binary(), atom()}], req(), #state{}}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/cdmi-container">>, get_cdmi_container}
@@ -108,7 +109,7 @@ content_types_provided(Req, State) ->
 %% functions should be used to process the requests.
 %% @end
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), #state{}) -> {term(), req(), #state{}}.
+-spec content_types_accepted(req(), #state{}) -> {{binary(), atom()}, req(), #state{}}.
 content_types_accepted(Req, State) ->
     {[
         {<<"application/cdmi-container">>, put_cdmi_container}

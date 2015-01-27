@@ -178,7 +178,7 @@ handle(Msg) ->
 -spec cleanup() -> Result when
     Result :: ok.
 cleanup() ->
-    dns_server:stop(?SUPERVISOR_NAME).
+    dns_server:stop(?APPLICATION_SUPERVISOR_NAME).
 
 
 %%%===================================================================

@@ -6,10 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% worker_map external parameters, used to customize worker map queries
+%%% The state of cluster manager
 %%% @end
 %%%-------------------------------------------------------------------
--author("Tomasz Lichon").
 
--define(default_worker_selection_type, random).
--type(selection_type() :: random | prefere_local).
+%% This record is used by ccm (it contains its state). It describes
+%% nodes, dispatchers and workers in cluster. It also contains reference
+%% to process used to monitor if nodes are alive.
+-record(cm_state, {nodes = [], workers = [], state_num = 1}).

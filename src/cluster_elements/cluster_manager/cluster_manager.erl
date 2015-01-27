@@ -18,13 +18,10 @@
 
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
--include("cluster_elements/worker_host/worker_proxy.hrl").
+-include("cluster_elements/worker_host/worker_protocol.hrl").
+-include("cluster_elements/cluster_manager/cluster_manager_state.hrl").
 -include_lib("ctool/include/logging.hrl").
-
-%% This record is used by ccm (it contains its state). It describes
-%% nodes, dispatchers and workers in cluster. It also contains reference
-%% to process used to monitor if nodes are alive.
--record(cm_state, {nodes = [], workers = [], state_num = 1}).
+-include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([start_link/0, stop/0]).
@@ -63,7 +60,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 -spec stop() -> ok.
 stop() ->
-    gen_server:cast(?CCM, stop).
+    gen_server:cast({global, ?CCM}, stop).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -136,6 +133,7 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
+-notify_state_change(ccm).
 handle_cast({heart_beat, Node}, State) ->
     NewState = heart_beat(State, Node),
     {noreply, NewState};
@@ -243,7 +241,7 @@ heart_beat(State = #cm_state{nodes = Nodes}, SenderNode) ->
                     end,
                     %trigger cluster init if  number of connected nodes exceedes 'workers_to_trigger_init' var
                     case application:get_env(?APP_NAME, workers_to_trigger_init) of
-                        N when is_integer(N) andalso N =< length(Nodes) + 1 ->
+                        {ok, N} when is_integer(N) andalso N =< length(Nodes) + 1 ->
                             gen_server:cast(self(), init_cluster);
                         _ -> ok
                     end,
@@ -345,9 +343,14 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 start_worker(Node, Module, WorkerArgs, State) ->
     try
         {ok, LoadMemorySize} = application:get_env(?APP_NAME, worker_load_memory_size),
+        WorkerSupervisorName = ?WORKER_HOST_SUPERVISOR_NAME(Module),
         {ok, ChildPid} = supervisor:start_child(
-            {?SUPERVISOR_NAME, Node},
+            {?MAIN_WORKER_SUPERVISOR_NAME, Node},
             {Module, {worker_host, start_link, [Module, WorkerArgs, LoadMemorySize]}, transient, 5000, worker, [worker_host]}
+        ),
+        {ok, _} = supervisor:start_child(
+            {?MAIN_WORKER_SUPERVISOR_NAME, Node},
+            {WorkerSupervisorName, {worker_host_sup, start_link, [WorkerSupervisorName]}, transient, infinity, supervisor, [worker_host_sup]}
         ),
         Workers = State#cm_state.workers,
         ?info("Worker: ~s started at node: ~s", [Module, Node]),
@@ -379,13 +382,15 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
         NewState = State#cm_state{workers = NewWorkers},
         {ChildNode, _ChildPid} = ChosenChild,
         update_dispatchers_and_dns(NewState),
-        ok = supervisor:terminate_child({?SUPERVISOR_NAME, ChildNode}, Module),
-        ok = supervisor:delete_child({?SUPERVISOR_NAME, ChildNode}, Module),
+        ok = supervisor:terminate_child({?MAIN_WORKER_SUPERVISOR_NAME, ChildNode}, Module),
+        ok = supervisor:terminate_child({?MAIN_WORKER_SUPERVISOR_NAME, ChildNode}, ?WORKER_HOST_SUPERVISOR_NAME(Module)),
+        ok = supervisor:delete_child({?MAIN_WORKER_SUPERVISOR_NAME, ChildNode}, Module),
+        ok = supervisor:delete_child({?MAIN_WORKER_SUPERVISOR_NAME, ChildNode}, ?WORKER_HOST_SUPERVISOR_NAME(Module)),
         ?info("Worker: ~s stopped at node: ~s", [Module, Node]),
         NewState
     catch
         _:Error ->
-            ?error("Worker: ~s not stopped at node: ~s, error ~p", [Module, Node, {delete_error, Error}]),
+            ?error_stacktrace("Worker: ~s not stopped at node: ~s, error ~p", [Module, Node, {delete_error, Error}]),
             State#cm_state{workers = NewWorkers}
     end.
 
@@ -400,7 +405,7 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
 -spec join_new_node(Node :: atom(), State :: term()) -> {ok, {NewState :: #cm_state{}, WorkersFound :: boolean()}} | no_return().
 join_new_node(Node, State = #cm_state{workers = Workers}) ->
     pong = net_adm:ping(Node),
-    Children = supervisor:which_children({?SUPERVISOR_NAME, Node}),
+    Children = supervisor:which_children({?MAIN_WORKER_SUPERVISOR_NAME, Node}),
     NewWorkers = add_children(Node, Children, Workers, State),
     WorkersFound = length(NewWorkers) > length(Workers),
     {ok, {State#cm_state{workers = NewWorkers}, WorkersFound}}.
@@ -510,27 +515,49 @@ update_dns_state(WorkersList) ->
     %prepare worker IPs with loads info
     Nodes = [Node || {Node, _, _} <- WorkersList],
     UniqueNodes = sets:to_list(sets:from_list(Nodes)),
-    UniqueNodesIpToLoad = [{cluster_manager_utils:node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- UniqueNodes],
+    UniqueNodesIpToLoad = [{node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- UniqueNodes],
     FilteredUniqueNodesIpToLoad = [{IP, Load} || {IP, Load} <- UniqueNodesIpToLoad, IP =/= unknownaddress],
 
     %prepare modules with their nodes and loads info
     ModuleToNode = [{Module, Node} || {Node, Module, _Pid} <- WorkersList],
-    ModuleToNodeList = cluster_manager_utils:aggregate_over_first_element(ModuleToNode),
+    ModuleToNodeList = utils:aggregate_over_first_element(ModuleToNode),
     ModuleToNodeListWithLoad = lists:map(
         fun
             ({Module, []}) ->
                 {Module, []};
             ({Module, NodeList}) ->
-                IPToLoad = [{cluster_manager_utils:node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- NodeList],
+                IPToLoad = [{node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- NodeList],
                 FilteredIPs = [{IP, Param} || {IP, Param} <- IPToLoad, IP =/= unknownaddress],
                 {Module, FilteredIPs}
         end, ModuleToNodeList),
     FilteredModuleToNodeListWithLoad = [{Module, NodeList} || {Module, NodeList} <- ModuleToNodeListWithLoad, NodeList =/= []],
 
     % prepare average load
-    LoadAverage = cluster_manager_utils:average([Load || {_, Load} <- FilteredUniqueNodesIpToLoad]),
+    LoadAverage = utils:average([Load || {_, Load} <- FilteredUniqueNodesIpToLoad]),
 
     UpdateInfo = {update_state, FilteredModuleToNodeListWithLoad, FilteredUniqueNodesIpToLoad, LoadAverage},
     ?debug("updating dns, update message: ~p", [UpdateInfo]),
     [gen_server:cast(Pid, #worker_request{req = UpdateInfo}) || {_, dns_worker, Pid} <- WorkersList],
     ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Resolve ipv4 address of node.
+%% @end
+%%--------------------------------------------------------------------
+-spec node_to_ip(Node :: atom()) -> inet:ip4_address() | unknownaddress.
+node_to_ip(Node) ->
+    StrNode = atom_to_list(Node),
+    AddressWith@ = lists:dropwhile(fun(Char) -> Char =/= $@ end, StrNode),
+    Address = lists:dropwhile(fun(Char) -> Char =:= $@ end, AddressWith@),
+    case inet:getaddr(Address, inet) of
+        {ok, Ip} -> Ip;
+        {error, Error} ->
+            ?error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
+            unknownaddress
+    end.

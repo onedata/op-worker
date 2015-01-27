@@ -22,7 +22,6 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
--include("cluster_elements/node_manager/node_manager_listeners.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% This record is used by node_manager (it contains its state).
@@ -122,13 +121,11 @@ init([_Type]) ->
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
 %% ====================================================================
-handle_call(getNodeType, _From, State) ->
-    Reply = State#node_state.node_type,
-    {reply, Reply, State};
+handle_call(get_node_type, _From, State = #node_state{node_type = NodeType}) ->
+    {reply, NodeType, State};
 
-handle_call(get_state_num, _From, State) ->
-    Reply = State#node_state.state_num,
-    {reply, Reply, State};
+handle_call(get_state_num, _From, State = #node_state{state_num = StateNum}) ->
+    {reply, StateNum, State};
 
 handle_call(_Request, _From, State) ->
     ?warning("Wrong node_manager call: ~p", [_Request]),
@@ -148,10 +145,12 @@ handle_call(_Request, _From, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 handle_cast(do_heart_beat, State) ->
-    {noreply, do_heart_beat(State)};
+    NewState = do_heart_beat(State),
+    {noreply, NewState};
 
 handle_cast({heart_beat_ok, StateNum}, State) ->
-    {noreply, heart_beat_ok(StateNum, State)};
+    NewState = heart_beat_ok(StateNum, State),
+    {noreply, NewState};
 
 handle_cast({dispatcher_up_to_date, DispState}, State) ->
     NewState = State#node_state{dispatcher_state = DispState},
@@ -162,7 +161,7 @@ handle_cast(stop, State) ->
 
 handle_cast(_Msg, State) ->
     ?warning("Wrong node_manager cast: ~p", [_Msg]),
-    {noreply, State}.
+    {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -204,11 +203,7 @@ handle_info(_Info, State) ->
     | {shutdown, term()}
     | term().
 terminate(_Reason, _State) ->
-    catch cowboy:stop_listener(?WEBSOCKET_LISTENER),
-    catch cowboy:stop_listener(?HTTP_REDIRECTOR_LISTENER),
-    catch cowboy:stop_listener(?REST_LISTENER),
-    catch cowboy:stop_listener(?HTTPS_LISTENER),
-    catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE),
+    catch listener_starter:stop_listeners(),
     ok.
 
 %%--------------------------------------------------------------------
