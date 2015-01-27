@@ -62,7 +62,7 @@ cp -RTf /root/keys /root/.ssh
 chown -R root:root /root/.ssh
 eval $(ssh-agent)
 ssh-add
-rsync -rog --exclude=.git /root/src/ /root/bin
+rsync -rogl --exclude=.git /root/src/ /root/bin
 make {params}
 find . -user root -exec chown --reference /root/bin/[Mm]akefile -- '{{}}' +
 '''
