@@ -25,6 +25,7 @@ generate: deps compile
 
 ctbuild_local: deps compile
 	./test_distributed/build_distributed_test.sh
+	./rebar generate
 
 ctbuild:
 	../bamboos/docker/make.py ctbuild_local
@@ -39,7 +40,7 @@ ct_local:
 	@for tout in `find distributed_tests_out -name "TEST-*.xml"`; do awk '/testcase/{gsub("<testcase name=\"[a-z]+_per_suite\"(([^/>]*/>)|([^>]*>[^<]*</testcase>))", "")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
 ct: ctbuild
-	docker run --rm -it  -w /root/oneprovider -v /home/michal/oneprovider:/root/oneprovider -h d1.local onedata/worker make ct_local
+	docker run --rm -it  -w /root/oneprovider -v /home/michal/oneprovider:/root/oneprovider  -v /var/run/docker.sock:/var/run/docker.sock -v /home/michal/bamboos/docker:/root/docker -h d1.local onedata/worker make ct_local
 
 test: eunit ct
 

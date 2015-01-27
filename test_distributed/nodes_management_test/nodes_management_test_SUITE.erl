@@ -23,7 +23,8 @@
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([one_node_test/1, ccm_and_worker_test/1]).
 
-all() -> [one_node_test, ccm_and_worker_test].
+%% all() -> [one_node_test, ccm_and_worker_test].
+all() -> [ccm_and_worker_test].
 
 %%%===================================================================
 %%% Test function
@@ -33,16 +34,17 @@ one_node_test(Config) ->
     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Node}, getNodeType)).
 
 ccm_and_worker_test(Config) ->
-    [Ccm] = ?config(op_ccm_nodes, Config),
-    [Worker] = ?config(op_worker_nodes, Config),
-    gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType),
-    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType)),
-    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker}, getNodeType)),
-
-    timer:sleep(15000), %todo reorganize cluster startup, so we don't have to wait
-
-    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping])),
-    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])).
+%%     [Ccm] = ?config(op_ccm_nodes, Config),
+%%     [Worker] = ?config(op_worker_nodes, Config),
+%%     gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType),
+%%     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType)),
+%%     ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker}, getNodeType)),
+%%
+%%     timer:sleep(15000), %todo reorganize cluster startup, so we don't have to wait
+%%
+%%     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping])),
+%%     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])).
+    ct:print("~p", [os:cmd("../../../../docker/cluster_up.py ../env_desc.json")]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -61,7 +63,8 @@ init_per_testcase(one_node_test, Config) ->
     lists:append([{nodes, [Node]}, {dbnode, DBNode}], Config);
 
 init_per_testcase(ccm_and_worker_test, Config) ->
-    test_node_starter:prepare_test_environment(Config, {?APP_NAME, ?ONEPROVIDER_DEPS}).
+%%     test_node_starter:prepare_test_environment(Config, {?APP_NAME, ?ONEPROVIDER_DEPS}).
+    Config.
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   test_node_starter:stop_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes),
