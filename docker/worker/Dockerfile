@@ -1,14 +1,15 @@
-FROM fedora:21
+FROM ubuntu:14.10
 MAINTAINER Konrad Zemek <konrad.zemek@gmail.com>
 
 # Get the image up to date
-RUN yum update -y && \
-    yum clean all
+RUN apt-get update && \
+    apt-get dist-upgrade -y && \
+    apt-get clean all
 
 # Install Erlang & Elixir build dependencies
-RUN yum install -y gcc gcc-c++ glibc-devel make ncurses-devel openssl-devel \
-                   autoconf java-1.8.0-openjdk-devel tar unzip && \
-    yum clean all
+RUN apt-get install -y curl git build-essential libncurses5-dev openssl \
+                       libssl-dev fop xsltproc unixodbc-dev unzip && \
+    apt-get clean all
 
 # Build and install Erlang
 ADD https://raw.githubusercontent.com/spawngrid/kerl/master/kerl kerl
@@ -18,9 +19,9 @@ RUN ./kerl build 17.4 17.4 && \
     ./kerl cleanup all
 ENV PATH /opt/erlang/bin:$PATH
 
-# Runtime dependencies
-RUN yum install -y protobuf && \
-    yum clean all
+# Install runtime dependencies
+RUN apt-get install -y python-pip
+RUN pip install docker-py
 
 # Set up the environment
 ENV HOME /root

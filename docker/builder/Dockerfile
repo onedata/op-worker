@@ -1,28 +1,15 @@
-FROM fedora:21
+FROM ubuntu:14.10
 MAINTAINER Konrad Zemek <konrad.zemek@gmail.com>
 
 # Get the image up to date
-RUN yum update -y && \
-    yum clean all
+RUN apt-get update && \
+    apt-get dist-upgrade -y && \
+    apt-get clean all
 
 # Install Erlang & Elixir build dependencies
-RUN yum install -y gcc gcc-c++ glibc-devel make ncurses-devel openssl-devel \
-                   autoconf java-1.8.0-openjdk-devel tar unzip && \
-    yum clean all
-
-# Install Globus
-ADD http://toolkit.globus.org/ftppub/gt6/installers/repo/globus-toolkit-repo-latest.noarch.rpm globus-toolkit-repo-latest.noarch.rpm
-RUN yum install -y globus-toolkit-repo-latest.noarch.rpm && \
-    yum install -y globus-common-devel globus-gsi-callback-devel && \
-    yum clean all
-
-# Install other onedata build deps
-RUN yum install -y git clang-analyzer botan-devel boost-devel tbb-devel \
-                   cmake ninja-build subversion fuse-devel protobuf-devel \
-                   libtool-ltdl-devel clang boost-static rpm-build \
-                   python-sphinx libstdc++-static && \
-    ln -s /usr/bin/ninja{-build,} && \
-    yum clean all
+RUN apt-get install -y curl git build-essential libncurses5-dev openssl \
+                       libssl-dev fop xsltproc unixodbc-dev unzip && \
+    apt-get clean all
 
 # Build and install Erlang
 ADD https://raw.githubusercontent.com/spawngrid/kerl/master/kerl kerl
@@ -39,6 +26,22 @@ RUN curl -LO https://github.com/elixir-lang/elixir/releases/download/v1.0.2/Prec
     rm Precompiled.zip
 ENV PATH /opt/elixir/bin:$PATH
 
+# Install Globus
+ADD http://toolkit.globus.org/ftppub/gt6/installers/repo/globus-toolkit-repo_latest_all.deb globus-toolkit-repo_latest_all.deb
+RUN dpkg -i globus-toolkit-repo_latest_all.deb && \
+    apt-get update && \
+    apt-get install -y libglobus-common-dev libglobus-gsi-callback-dev && \
+    apt-get clean all
+
+# Install other onedata build deps
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 828AB726
+RUN echo 'deb http://ppa.launchpad.net/george-edison55/cmake-3.1/ubuntu utopic main' >> /etc/apt/sources.list
+RUN apt-get update && \
+    apt-get install -y clang libbotan1.10-dev libboost-all-dev libtbb-dev \
+                       cmake ninja-build subversion libfuse-dev pkg-config \
+                       libltdl-dev rpm python-sphinx libstdc++-4.9-dev \
+                       libprotobuf-dev protobuf-compiler && \
+    apt-get clean all
+
 # Set up the environment
-ENV CC clang
-ENV CXX clang++
+ENV CC=clang CXX=clang++

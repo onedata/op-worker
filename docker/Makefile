@@ -1,12 +1,9 @@
-.PHONY: all builder worker master
+.PHONY: all builder worker
 
-all: builder worker master
+all: builder worker
 
 builder: builder/Dockerfile
 	docker build -t onedata/builder builder/
 
 worker: worker/Dockerfile
 	docker build -t onedata/worker worker/
-
-master: master/Dockerfile
-	docker build -t onedata/master master/

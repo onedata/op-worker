@@ -111,7 +111,7 @@ for cfg in configs:
 
   (name, sep, hostname) = node_name.partition('@')
   temp = tempfile.NamedTemporaryFile()
-  temp.write(json.dumps(cfg))
+  temp.write(json.dumps(cfg).encode('utf-8'))
 
   container = client.create_container(
     image=args.image,
