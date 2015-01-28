@@ -44,4 +44,5 @@ RUN apt-get update && \
     apt-get clean all
 
 # Set up the environment
-ENV CC=clang CXX=clang++
+ENV CC clang
+ENV CXX clang++

@@ -58,24 +58,18 @@ except subprocess.CalledProcessError:
   subprocess.check_call(['docker', 'pull', args.image])
 
 command = '''
-cp -RTf /root/keys /root/.ssh
-chown -R root:root /root/.ssh
-eval $(ssh-agent)
-ssh-add
-rsync -rogl --exclude=.git /root/src/ /root/bin
-make {params}
-find . -user root -exec chown --reference /root/bin/[Mm]akefile -- '{{}}' +
-'''
+  cp -RTf /root/keys /root/.ssh
+  chown -R root:root /root/.ssh
+  eval $(ssh-agent)
+  ssh-add
+  rsync -rogl /root/src/ /root/bin
+  make {params};
+  find . -user root -exec chown --reference /root/bin/[Mm]akefile -- '{{}}' +
+  '''.format(params=' '.join(args.params))
 
-make_params = ' '.join(args.params)
-with tempfile.NamedTemporaryFile() as temp:
-  temp.write(command.format(params=make_params).encode('utf-8'))
-  temp.flush()
-
-  subprocess.call(['docker', 'run', '--rm', '-ti',
-                   '-v', '{src}:/root/src'.format(src=args.src),
-                   '-v', '{dst}:/root/bin'.format(dst=args.dst),
-                   '-v', '{keys}:/root/keys'.format(keys=args.keys),
-                   '-v', '{cmd}:/root/cmd.sh'.format(cmd=temp.name),
-                   '-w', '/root/bin',
-                   args.image, 'sh', '/root/cmd.sh'])
+subprocess.call(['docker', 'run', '--rm', '-ti',
+                 '-v', '{src}:/root/src'.format(src=args.src),
+                 '-v', '{dst}:/root/bin'.format(dst=args.dst),
+                 '-v', '{keys}:/root/keys'.format(keys=args.keys),
+                 '-w', '/root/bin',
+                 args.image, 'sh', '-c', command])
