@@ -2,9 +2,7 @@
 
 import argparse
 import os
-import re
 import subprocess
-import sys
 
 from os.path import expanduser
 

@@ -6,8 +6,6 @@ import copy
 import docker
 import json
 import os
-import re
-import tempfile
 import time
 
 def parse_config(path):
@@ -127,7 +125,7 @@ escript gen_dev.erl /tmp/gen_dev_args.json
 
   container = client.create_container(
     image=args.image,
-    hostname= hostname,
+    hostname=hostname,
     detach=True,
     stdin_open=True,
     tty=True,

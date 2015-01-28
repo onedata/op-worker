@@ -1,13 +1,9 @@
 #!/usr/bin/env python
 
-import collections
 import argparse
 import os
 import time
 import docker
-import json
-import copy
-
 
 def pull_image(name):
   try:
