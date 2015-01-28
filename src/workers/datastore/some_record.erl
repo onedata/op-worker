@@ -16,7 +16,7 @@
 
 
 %% API
--export([save/0, get/0, exists/0, delete/0, update/0, create/0, list/0, model_init/0, 'after'/0, before/0]).
+-export([save/0, get/0, exists/0, delete/0, update/0, create/0, list/0, model_init/0, 'after'/5, before/4]).
 
 
 save() ->
@@ -44,8 +44,8 @@ model_init() ->
     #model_config{name = ?MODULE, size = record_info(size, ?MODULE), fields = record_info(fields, ?MODULE), defaults = #?MODULE{},
         bucket = test_bucket, hooks = []}.
 
-'after'() ->
+'after'(ModelName, Method, Level, Context, Return) ->
     erlang:error(not_implemented).
 
-before() ->
+before(ModelName, Method, Level, Context) ->
     erlang:error(not_implemented).
