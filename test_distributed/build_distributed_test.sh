@@ -10,11 +10,12 @@
 ## ===================================================================
 
 ## Build with "TEST"
-if [ ! -f ebin/.test ]; then rm -rf ebin; fi
-mkdir -p ebin ; touch ebin/.test
-cp -R c_src/oneproxy/proto src
-./rebar -D TEST compile skip_deps=true
-rm -rf src/proto
+## Uncomment when you need recompilation with "TEST" flag before execution
+#if [ ! -f ebin/.test ]; then rm -rf ebin; fi
+#mkdir -p ebin ; touch ebin/.test
+#cp -R c_src/oneproxy/proto src
+#./rebar -D TEST compile skip_deps=true
+#rm -rf src/proto
 
 ## Prepre test dir
 mkdir -p distributed_tests_out

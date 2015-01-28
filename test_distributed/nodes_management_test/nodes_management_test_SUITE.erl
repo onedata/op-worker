@@ -34,34 +34,25 @@ one_node_test(Config) ->
     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Node}, get_node_type)).
 
 ccm_and_worker_test(Config) ->
-    [Ccm, Worker1, Worker2] = Nodes = ?config(nodes, Config),
-    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, get_node_type)),
-    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, get_node_type)),
-%%     [Ccm] = ?config(op_ccm_nodes, Config),
-%%     [Worker] = ?config(op_worker_nodes, Config),
-%%     gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType),
-%%     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, getNodeType)),
-%%     ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker}, getNodeType)),
+%%     [Ccm, Worker1, Worker2] = Nodes = ?config(nodes, Config),
+%%     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, get_node_type)),
+%%     ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, get_node_type)),
 %%
-%%     timer:sleep(15000), %todo reorganize cluster startup, so we don't have to wait
-%%
+%%     %todo integrate with test_utils
+%%     cluster_state_notifier:cast({subscribe_for_init, self(), length(Nodes) - 1}),
+%%     receive
+%%         init_finished -> ok
+%%     after
+%%         15000 -> throw(timeout)
+%%     end,
 %%     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping])),
-%%     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])).
-    ct:print("~p", [os:cmd("../../../../docker/cluster_up.py ../env_desc.json")]).
-
-    %todo integrate with test_utils
-    cluster_state_notifier:cast({subscribe_for_init, self(), length(Nodes) - 1}),
-    receive
-        init_finished -> ok
-    after
-        15000 -> throw(timeout)
-    end,
-    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping])),
-    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])),
-    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping])),
-    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])),
-    ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [http_worker, ping])),
-    ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [dns_worker, ping])).
+%%     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])),
+%%     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping])),
+%%     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])),
+%%     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [http_worker, ping])),
+%%     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [dns_worker, ping])).
+  ct:print("~ts", [os:cmd("ls -l ..")]),
+    ct:print("~ts", [os:cmd("../../../../docker/provider_up.py -b /home/michal/oneprovider -c /home/michal/bamboos/docker/createService.js ../env_desc.json")]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -79,18 +70,18 @@ init_per_testcase(one_node_test, Config) ->
     lists:append([{nodes, [Node]}], Config);
 
 init_per_testcase(ccm_and_worker_test, Config) ->
-    ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
-    test_node_starter:start_deps_for_tester_node(),
-
-    Nodes = [Ccm | _] = test_node_starter:start_test_nodes(3, true),
-
-    test_node_starter:start_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes, [
-        [{node_type, ccm}, {ccm_nodes, [Ccm]}, {notify_state_changes, true}, {workers_to_trigger_init, 2}],
-        [{node_type, worker}, {ccm_nodes, [Ccm]}, {notify_state_changes, true}, {dns_port, 1301}, {dispatcher_port, 2001}, {http_worker_https_port, 3001}, {http_worker_redirect_port, 4001}, {http_worker_rest_port, 5001}],
-        [{node_type, worker}, {ccm_nodes, [Ccm]}, {notify_state_changes, true}, {dns_port, 1302}, {dispatcher_port, 2002}, {http_worker_https_port, 3002}, {http_worker_redirect_port, 4002}, {http_worker_rest_port, 5002}]
-    ]),
-
-    lists:append([{nodes, Nodes}], Config).
+%%     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+%%     test_node_starter:start_deps_for_tester_node(),
+%%
+%%     Nodes = [Ccm | _] = test_node_starter:start_test_nodes(3, true),
+%%
+%%     test_node_starter:start_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes, [
+%%         [{node_type, ccm}, {ccm_nodes, [Ccm]}, {notify_state_changes, true}, {workers_to_trigger_init, 2}],
+%%         [{node_type, worker}, {ccm_nodes, [Ccm]}, {notify_state_changes, true}, {dns_port, 1301}, {dispatcher_port, 2001}, {http_worker_https_port, 3001}, {http_worker_redirect_port, 4001}, {http_worker_rest_port, 5001}],
+%%         [{node_type, worker}, {ccm_nodes, [Ccm]}, {notify_state_changes, true}, {dns_port, 1302}, {dispatcher_port, 2002}, {http_worker_https_port, 3002}, {http_worker_redirect_port, 4002}, {http_worker_rest_port, 5002}]
+%%     ]),
+%%
+%%     lists:append([{nodes, Nodes}], Config).
 %%     test_node_starter:prepare_test_environment(Config, {?APP_NAME, ?ONEPROVIDER_DEPS}).
     Config.
 end_per_testcase(_, Config) ->
