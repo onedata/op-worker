@@ -121,9 +121,7 @@ for cfg in configs:
     echo '{gen_dev_args}' > /tmp/gen_dev_args.json &&
     escript gen_dev.erl /tmp/gen_dev_args.json &&
     /root/bin/node/bin/oneprovider_node console
-    '''
-  command = re.sub(r'\s+', ' ', command).format(
-    gen_dev_args=json.dumps(cfg).replace("'", r"\'"))
+    '''.format(gen_dev_args=json.dumps(cfg).replace("'", r"\'"))
 
   container = client.create_container(
     image=args.image,
