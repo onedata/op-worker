@@ -36,7 +36,7 @@
 -define(EXTERNALLY_VISIBLE_MODULES, [http_worker, dns_worker]).
 
 %% worker_plugin_behaviour callbacks
--export([init/1, handle/1, cleanup/0]).
+-export([init/1, handle/2, cleanup/0]).
 
 %% dns_query_handler_behaviour callbacks
 -export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1, handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
@@ -51,16 +51,16 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: #dns_worker_state{} | {error, Error},
+    Result :: {ok, #dns_worker_state{}} | {error, Error},
     Error :: term().
 init([]) ->
-    #dns_worker_state{};
+    {ok, #dns_worker_state{}};
 
 init(InitialState) when is_record(InitialState, dns_worker_state) ->
-    InitialState;
+    {ok, InitialState};
 
 init(test) ->
-    #dns_worker_state{};
+    {ok, #dns_worker_state{}};
 
 init(_) ->
     throw(unknown_initial_state).
@@ -70,7 +70,7 @@ init(_) ->
 %% {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Request) -> Result when
+-spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck |
     {update_state, list(), list()} |
     {get_worker, atom()} |
@@ -78,13 +78,13 @@ init(_) ->
     Result :: ok | {ok, Response} | {error, Error} | pong,
     Response :: [inet:ip4_address()],
     Error :: term().
-handle(ping) ->
+handle(ping, _) ->
     pong;
 
-handle(healthcheck) ->
+handle(healthcheck, _) ->
     ok;
 
-handle({update_state, ModulesToNodes, NLoads, AvgLoad}) ->
+handle({update_state, ModulesToNodes, NLoads, AvgLoad}, _) ->
     ?info("DNS state update: ~p", [{ModulesToNodes, NLoads, AvgLoad}]),
     try
         ModulesToNodes2 = lists:map(fun({Module, Nodes}) ->
@@ -107,7 +107,7 @@ handle({update_state, ModulesToNodes, NLoads, AvgLoad}) ->
             udpate_error
     end;
 
-handle({handle_a, Domain}) ->
+handle({handle_a, Domain}, _) ->
     IPList = case parse_domain(Domain) of
                  unknown_domain ->
                      refused;
@@ -148,7 +148,7 @@ handle({handle_a, Domain}) ->
             }
     end;
 
-handle({handle_ns, Domain}) ->
+handle({handle_ns, Domain}, _) ->
     case parse_domain(Domain) of
         unknown_domain ->
             refused;
@@ -166,7 +166,7 @@ handle({handle_ns, Domain}) ->
             end
     end;
 
-handle(Msg) ->
+handle(Msg, _) ->
     ?warning("Wrong request: ~p", [Msg]),
     throw({unsupported_request, Msg}).
 
