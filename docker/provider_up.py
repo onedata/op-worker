@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 
-import collections
 import argparse
-import os
-import time
+import collections
+import copy
 import docker
 import json
-import copy
+import os
+import re
 import tempfile
+import time
 
 def parse_config(path):
   with open(path, 'r') as f:
@@ -60,6 +61,13 @@ parser.add_argument(
   dest='bin')
 
 parser.add_argument(
+  '--create-service', '-c',
+  action='store',
+  default='{dir}/createService.js'.format(dir=os.path.dirname(os.path.realpath(__file__))),
+  help='the path to createService.js plugin',
+  dest='create_service')
+
+parser.add_argument(
   'config_path',
   action='store',
   help='path to gen_dev_args.json that will be used to configure the cluster')
@@ -83,8 +91,6 @@ skydns = client.create_container(
   command='-nameserver 8.8.8.8:53 -domain docker')
 client.start(container=skydns)
 
-createServicePath = os.path.dirname(os.path.realpath(__file__)) + '/createService.js'
-
 skydock = client.create_container(
   image='crosbymichael/skydock',
   detach=True,
@@ -95,7 +101,7 @@ skydock = client.create_container(
 
 client.start(
   container=skydock,
-  binds={ createServicePath: { 'bind': '/createService.js', 'ro': True },
+  binds={ args.create_service: { 'bind': '/createService.js', 'ro': True },
           '/var/run/docker.sock': { 'bind': '/docker.sock', 'ro': False } })
 
 skydns_config = client.inspect_container(skydns)
@@ -110,8 +116,14 @@ for cfg in configs:
   output[node_type].append(node_name)
 
   (name, sep, hostname) = node_name.partition('@')
-  temp = tempfile.NamedTemporaryFile()
-  temp.write(json.dumps(cfg).encode('utf-8'))
+
+  command = '''
+    echo '{gen_dev_args}' > /tmp/gen_dev_args.json &&
+    escript gen_dev.erl /tmp/gen_dev_args.json &&
+    /root/bin/node/bin/oneprovider_node console
+    '''
+  command = re.sub(r'\s+', ' ', command).format(
+    gen_dev_args=json.dumps(cfg).replace("'", r"\'"))
 
   container = client.create_container(
     image=args.image,
@@ -121,15 +133,12 @@ for cfg in configs:
     tty=True,
     working_dir='/root/build',
     name='{name}_{cookie}'.format(name=name, cookie=cookie),
-    volumes=['/root/build', '/tmp/gen_dev_args.json'],
-    command=['bash', '-c', 'escript gen_dev.erl /tmp/gen_dev_args.json && \
-                            /root/bin/node/bin/oneprovider_node console'])
+    volumes=['/root/build'],
+    command=['bash', '-c', command])
 
   client.start(
     container=container,
-    binds={
-      args.bin:  { 'bind': '/root/build', 'ro': True },
-      temp.name: { 'bind': '/tmp/gen_dev_args.json', 'ro': True } },
+    binds={ args.bin:  { 'bind': '/root/build', 'ro': True } },
     dns=[dns])
 
 print(json.dumps(output))
