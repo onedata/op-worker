@@ -51,8 +51,32 @@ ccm_and_worker_test(Config) ->
 %%     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])),
 %%     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [http_worker, ping])),
 %%     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [dns_worker, ping])).
-  ct:print("~ts", [os:cmd("ls -l ..")]),
-    ct:print("~ts", [os:cmd("../../../../docker/provider_up.py -b /home/michal/oneprovider -c /home/michal/bamboos/docker/createService.js ../env_desc.json")]).
+    StartLog = os:cmd("../../../../docker/provider_up.py -b /home/michal/oneprovider -c /home/michal/bamboos/docker/createService.js ../env_desc.json"),
+    ct:print("~ts", [StartLog]),
+  Config2 = parse_json_binary_to_atom_proplist(StartLog),
+    ct:print("~p", [Config2]),
+
+
+  Dns = ?config(op_dns, Config2),
+  [Worker] = ?config(op_worker_nodes, Config2),
+  [Ccm] = ?config(op_ccm_nodes, Config2),
+
+  erlang:set_cookie(node(), oneprovider_node),
+  ct:print("~p", [os:cmd("echo \"nameserver " ++ atom_to_list(Dns) ++ "\" > /etc/resolv.conf")]),
+  ct:print("~p", [os:cmd("cat /etc/resolv.conf")]),
+
+  timer:sleep(60000),
+
+  ct:print("~p ~p", [Worker, net_adm:ping(Worker)]),
+  ct:print("~p ~p", [Ccm, net_adm:ping(Ccm)]),
+  ct:print("~p ~p", [Worker, net_adm:ping(Worker)]),
+  ct:print("~p ~p", [Ccm, net_adm:ping(Ccm)]),
+  ct:print("~p ~p", [Worker, net_adm:ping(Worker)]),
+  ct:print("~p ~p", [Ccm, net_adm:ping(Ccm)]),
+  ct:print("~p ~p", [Worker, net_adm:ping(Worker)]),
+  ct:print("~p ~p", [Ccm, net_adm:ping(Ccm)]),
+  ct:print("~p ~p", [Worker, net_adm:ping(Worker)]),
+  ct:print("~p ~p", [Ccm, net_adm:ping(Ccm)]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -89,3 +113,39 @@ end_per_testcase(_, Config) ->
   test_node_starter:stop_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node().
+
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parse json binary as proplist of atoms
+%% i. e.
+%% json binary: {"a": ["a1"], "b": ["b1", "b2"]}
+%% is converted to erlang proplist: [{a, [a1]}, {b, [b1, b2]}]
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_json_binary_to_atom_proplist(JsonBinary :: binary()) -> list() | no_return().
+parse_json_binary_to_atom_proplist(JsonBinary) ->
+  Json = mochijson2:decode(JsonBinary, [{format, proplist}]),
+  convert_to_atoms(Json).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parse proplist containing binaries to proplist containing atoms
+%% @end
+%%--------------------------------------------------------------------
+-spec convert_to_atoms(List :: list()) -> list() | no_return().
+convert_to_atoms([]) ->
+  [];
+convert_to_atoms({K, V}) ->
+  {binary_to_atom(K, unicode), convert_to_atoms(V)};
+convert_to_atoms([Head | Tail]) ->
+  [convert_to_atoms(Head) | convert_to_atoms(Tail)];
+convert_to_atoms(Binary) when is_binary(Binary) ->
+  binary_to_atom(Binary, unicode);
+convert_to_atoms(Other) ->
+  Other.
