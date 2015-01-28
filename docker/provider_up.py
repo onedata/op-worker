@@ -107,6 +107,7 @@ skydns_config = client.inspect_container(skydns)
 dns = skydns_config['NetworkSettings']['IPAddress']
 
 output = collections.defaultdict(list)
+output['op_dns'] = dns
 
 for cfg in configs:
   node_type = cfg['nodes']['node']['sys.config']['node_type']
@@ -115,11 +116,14 @@ for cfg in configs:
 
   (name, sep, hostname) = node_name.partition('@')
 
-  command = '''
-    echo '{gen_dev_args}' > /tmp/gen_dev_args.json &&
-    escript gen_dev.erl /tmp/gen_dev_args.json &&
-    /root/bin/node/bin/oneprovider_node console
-    '''.format(gen_dev_args=json.dumps(cfg).replace("'", r"\'"))
+  command = \
+  '''set -e
+cat <<"EOF" > /tmp/gen_dev_args.json
+{gen_dev_args}
+EOF
+escript gen_dev.erl /tmp/gen_dev_args.json
+/root/bin/node/bin/oneprovider_node console'''
+  command = command.format(gen_dev_args=json.dumps(cfg))
 
   container = client.create_container(
     image=args.image,

@@ -5,7 +5,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 
 from os.path import expanduser
 
@@ -57,15 +56,15 @@ except subprocess.CalledProcessError:
   print('Pulling image {name}'.format(name=args.image))
   subprocess.check_call(['docker', 'pull', args.image])
 
-command = '''
-  cp -RTf /root/keys /root/.ssh
-  chown -R root:root /root/.ssh
-  eval $(ssh-agent)
-  ssh-add
-  rsync -rogl /root/src/ /root/bin
-  make {params};
-  find . -user root -exec chown --reference /root/bin/[Mm]akefile -- '{{}}' +
-  '''.format(params=' '.join(args.params))
+command = \
+'''cp -RTf /root/keys /root/.ssh
+chown -R root:root /root/.ssh
+eval $(ssh-agent)
+ssh-add
+rsync -rogl /root/src/ /root/bin
+make {params};
+find . -user root -exec chown --reference /root/bin/[Mm]akefile -- '{{}}' +'''
+command = command.format(params=' '.join(args.params))
 
 subprocess.call(['docker', 'run', '--rm', '-ti',
                  '-v', '{src}:/root/src'.format(src=args.src),
