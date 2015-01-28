@@ -27,8 +27,8 @@ ctbuild_local: deps compile
 	./test_distributed/build_distributed_test.sh
 	./rebar generate
 
-ctbuild:
-	../bamboos/docker/make.py ctbuild_local
+ctbuild: deps
+	./deps/bamboos/docker/make.py ctbuild_local
 
 eunit: deps compile
 	./rebar eunit skip_deps=true suites=${SUITES}

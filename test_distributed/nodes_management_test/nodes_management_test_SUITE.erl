@@ -51,7 +51,6 @@ ccm_and_worker_test(Config) ->
 %%     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])),
 %%     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [http_worker, ping])),
 %%     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [dns_worker, ping])).
-  ct:print("~ts", [os:cmd("ls -l ..")]),
     ct:print("~ts", [os:cmd("../../../../docker/provider_up.py -b /home/michal/oneprovider -c /home/michal/bamboos/docker/createService.js ../env_desc.json")]).
 
 %%%===================================================================
