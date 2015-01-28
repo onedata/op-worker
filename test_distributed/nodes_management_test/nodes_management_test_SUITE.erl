@@ -51,32 +51,7 @@ ccm_and_worker_test(Config) ->
 %%     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])),
 %%     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [http_worker, ping])),
 %%     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [dns_worker, ping])).
-    StartLog = os:cmd("../../../../docker/provider_up.py -b /home/michal/oneprovider -c /home/michal/bamboos/docker/createService.js ../env_desc.json"),
-    ct:print("~ts", [StartLog]),
-  Config2 = parse_json_binary_to_atom_proplist(StartLog),
-    ct:print("~p", [Config2]),
-
-
-  Dns = ?config(op_dns, Config2),
-  [Worker] = ?config(op_worker_nodes, Config2),
-  [Ccm] = ?config(op_ccm_nodes, Config2),
-
-  erlang:set_cookie(node(), oneprovider_node),
-  ct:print("~p", [os:cmd("echo \"nameserver " ++ atom_to_list(Dns) ++ "\" > /etc/resolv.conf")]),
-  ct:print("~p", [os:cmd("cat /etc/resolv.conf")]),
-
-  timer:sleep(60000),
-
-  ct:print("~p ~p", [Worker, net_adm:ping(Worker)]),
-  ct:print("~p ~p", [Ccm, net_adm:ping(Ccm)]),
-  ct:print("~p ~p", [Worker, net_adm:ping(Worker)]),
-  ct:print("~p ~p", [Ccm, net_adm:ping(Ccm)]),
-  ct:print("~p ~p", [Worker, net_adm:ping(Worker)]),
-  ct:print("~p ~p", [Ccm, net_adm:ping(Ccm)]),
-  ct:print("~p ~p", [Worker, net_adm:ping(Worker)]),
-  ct:print("~p ~p", [Ccm, net_adm:ping(Ccm)]),
-  ct:print("~p ~p", [Worker, net_adm:ping(Worker)]),
-  ct:print("~p ~p", [Ccm, net_adm:ping(Ccm)]).
+    ok.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -94,58 +69,9 @@ init_per_testcase(one_node_test, Config) ->
     lists:append([{nodes, [Node]}], Config);
 
 init_per_testcase(ccm_and_worker_test, Config) ->
-%%     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
-%%     test_node_starter:start_deps_for_tester_node(),
-%%
-%%     Nodes = [Ccm | _] = test_node_starter:start_test_nodes(3, true),
-%%
-%%     test_node_starter:start_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes, [
-%%         [{node_type, ccm}, {ccm_nodes, [Ccm]}, {notify_state_changes, true}, {workers_to_trigger_init, 2}],
-%%         [{node_type, worker}, {ccm_nodes, [Ccm]}, {notify_state_changes, true}, {dns_port, 1301}, {dispatcher_port, 2001}, {http_worker_https_port, 3001}, {http_worker_redirect_port, 4001}, {http_worker_rest_port, 5001}],
-%%         [{node_type, worker}, {ccm_nodes, [Ccm]}, {notify_state_changes, true}, {dns_port, 1302}, {dispatcher_port, 2002}, {http_worker_https_port, 3002}, {http_worker_redirect_port, 4002}, {http_worker_rest_port, 5002}]
-%%     ]),
-%%
-%%     lists:append([{nodes, Nodes}], Config).
-%%     test_node_starter:prepare_test_environment(Config, {?APP_NAME, ?ONEPROVIDER_DEPS}).
-    Config.
+  test_node_starter:prepare_test_environment(Config, "").
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   test_node_starter:stop_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node().
-
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Parse json binary as proplist of atoms
-%% i. e.
-%% json binary: {"a": ["a1"], "b": ["b1", "b2"]}
-%% is converted to erlang proplist: [{a, [a1]}, {b, [b1, b2]}]
-%% @end
-%%--------------------------------------------------------------------
--spec parse_json_binary_to_atom_proplist(JsonBinary :: binary()) -> list() | no_return().
-parse_json_binary_to_atom_proplist(JsonBinary) ->
-  Json = mochijson2:decode(JsonBinary, [{format, proplist}]),
-  convert_to_atoms(Json).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Parse proplist containing binaries to proplist containing atoms
-%% @end
-%%--------------------------------------------------------------------
--spec convert_to_atoms(List :: list()) -> list() | no_return().
-convert_to_atoms([]) ->
-  [];
-convert_to_atoms({K, V}) ->
-  {binary_to_atom(K, unicode), convert_to_atoms(V)};
-convert_to_atoms([Head | Tail]) ->
-  [convert_to_atoms(Head) | convert_to_atoms(Tail)];
-convert_to_atoms(Binary) when is_binary(Binary) ->
-  binary_to_atom(Binary, unicode);
-convert_to_atoms(Other) ->
-  Other.

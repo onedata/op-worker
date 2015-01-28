@@ -16,9 +16,20 @@
         "workers_to_trigger_init": 1
       }
     },
-    "worker": {
+    "worker1": {
       "vm.args": {
-        "name": "worker@",
+        "name": "worker1@",
+        "cookie": "xyz"
+      },
+      "sys.config": {
+        "node_type": "worker",
+        "ccm_nodes": [ "ccm@"],
+        "db_nodes": [ "db@" ]
+      }
+    },
+    "worker2": {
+      "vm.args": {
+        "name": "worker2@",
         "cookie": "xyz"
       },
       "sys.config": {
