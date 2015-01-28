@@ -34,12 +34,15 @@ one_node_test(Config) ->
     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Node}, get_node_type)).
 
 ccm_and_worker_test(Config) ->
-%%     [Ccm, Worker1, Worker2] = Nodes = ?config(nodes, Config),
-%%     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, get_node_type)),
-%%     ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, get_node_type)),
-%%
-%%     %todo integrate with test_utils
-%%     cluster_state_notifier:cast({subscribe_for_init, self(), length(Nodes) - 1}),
+    [Ccm] = ?config(op_ccm_nodes, Config),
+    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
+
+    timer:sleep(15000),
+    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, get_node_type)),
+    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, get_node_type)).
+
+    %todo integrate with test_utils
+%%     cluster_state_notifier:cast({subscribe_for_init, self(), length(Workers)}),
 %%     receive
 %%         init_finished -> ok
 %%     after
@@ -51,7 +54,6 @@ ccm_and_worker_test(Config) ->
 %%     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])),
 %%     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [http_worker, ping])),
 %%     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [dns_worker, ping])).
-    ok.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -69,7 +71,8 @@ init_per_testcase(one_node_test, Config) ->
     lists:append([{nodes, [Node]}], Config);
 
 init_per_testcase(ccm_and_worker_test, Config) ->
-  test_node_starter:prepare_test_environment(Config, "").
+  ?INIT_CODE_PATH,
+  test_node_starter:prepare_test_environment(Config, ?TEST_FILE("env_desc.json")).
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   test_node_starter:stop_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes),
