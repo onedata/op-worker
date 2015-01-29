@@ -37,9 +37,6 @@ ccm_and_worker_test(Config) ->
     [Ccm] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
 
-    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, get_node_type)),
-    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, get_node_type)),
-
     %todo integrate with test_utils
     cluster_state_notifier:cast({subscribe_for_init, self(), length(Workers)}),
     receive
@@ -47,6 +44,9 @@ ccm_and_worker_test(Config) ->
     after
         50000 -> throw(timeout)
     end,
+
+    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, get_node_type)),
+    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, get_node_type)),
 
     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping])),
     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])),

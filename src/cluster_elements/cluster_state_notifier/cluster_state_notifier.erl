@@ -14,6 +14,7 @@
 
 -behaviour(gen_server).
 
+-include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -100,12 +101,12 @@ handle_cast({subscribe_for_init, AnswerPid, HowManyWorkerNodes}, State = #state{
     {noreply, NewState};
 handle_cast({ccm_state_updated, Nodes, NewStateNumber}, State) ->
     NewState = State#state{ccm_nodes_connected = Nodes, ccm_state_number = NewStateNumber},
-    try_notify_subscribers(NewState),
-    {noreply, NewState};
+    NewState2 = try_notify_subscribers(NewState),
+    {noreply, NewState2};
 handle_cast({dispatcher_state_updated, Node, NewStateNumber}, State = #state{node_state_numbers = StateNumbers}) ->
     NewState = State#state{node_state_numbers = [{Node, NewStateNumber} | proplists:delete(Node, StateNumbers)]},
-    try_notify_subscribers(NewState),
-    {noreply, NewState};
+    NewState2 = try_notify_subscribers(NewState),
+    {noreply, NewState2};
 handle_cast(_Request, State) ->
     ?warning("cluster_state_notifier unknown cast: ~p", [_Request]),
     {noreply, State}.
@@ -164,7 +165,7 @@ try_notify_subscribers(State = #state{init_subscribers = []}) ->
     State;
 try_notify_subscribers(State = #state{node_state_numbers = StateNumbers, ccm_nodes_connected = AllNodes, ccm_state_number = CcmStateNum, init_subscribers = [{AnsPid, HowManyNodes} | Rest]}) ->
     case CcmStateNum > 1
-        andalso HowManyNodes =< length(AllNodes)
+        andalso HowManyNodes < length(AllNodes)
         andalso length(AllNodes) == length(StateNumbers)
         andalso lists:all(fun({_, StateNum}) -> StateNum =:= CcmStateNum end, StateNumbers)
     of
