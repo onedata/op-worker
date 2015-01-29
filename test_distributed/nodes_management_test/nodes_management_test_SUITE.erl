@@ -72,7 +72,7 @@ init_per_testcase(one_node_test, Config) ->
 
 init_per_testcase(ccm_and_worker_test, Config) ->
   ?INIT_CODE_PATH,
-  prepare_test_environment(Config, ?TEST_FILE("env_desc.json")).
+  test_node_starter:prepare_test_environment(Config, ?TEST_FILE("env_desc.json")).
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   test_node_starter:stop_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes),
