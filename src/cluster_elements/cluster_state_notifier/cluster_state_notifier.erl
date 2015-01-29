@@ -26,7 +26,7 @@
 -define(SERVER, ?MODULE).
 
 %% gen_server state
--record(state, {node_state_numbers = [], ccm_state_number = 0, ccm_nodes_connected = 0, init_subscribers = []}).
+-record(state, {node_state_numbers = [], ccm_state_number = 0, ccm_nodes_connected = [], init_subscribers = []}).
 
 %%%===================================================================
 %%% API

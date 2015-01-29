@@ -39,21 +39,21 @@ ccm_and_worker_test(Config) ->
 
     timer:sleep(15000),
     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, get_node_type)),
-    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, get_node_type)).
+    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, get_node_type)),
 
-%%     %todo integrate with test_utils
-%%     cluster_state_notifier:cast({subscribe_for_init, self(), length(Workers)}),
-%%     receive
-%%         init_finished -> ok
-%%     after
-%%         15000 -> throw(timeout)
-%%     end,
-%%     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping])),
-%%     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])),
-%%     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping])),
-%%     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])),
-%%     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [http_worker, ping])),
-%%     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [dns_worker, ping])).
+    %todo integrate with test_utils
+    cluster_state_notifier:cast({subscribe_for_init, self(), length(Workers)}),
+    receive
+        init_finished -> ok
+    after
+        15000 -> throw(timeout)
+    end,
+    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping])),
+    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])),
+    ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [http_worker, ping])),
+    ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [dns_worker, ping])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

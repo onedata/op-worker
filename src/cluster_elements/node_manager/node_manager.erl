@@ -120,7 +120,6 @@ init([_Type]) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
-%% ====================================================================
 handle_call(get_node_type, _From, State = #node_state{node_type = NodeType}) ->
     {reply, NodeType, State};
 
