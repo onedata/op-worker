@@ -114,7 +114,7 @@ eunit:
 	./deps/bamboos/docker/make.py eunit_local
 
 ct: ctbuild
-	docker run --rm -it  -w /root/oneprovider -v $(CURDIR):/root/oneprovider  -v /var/run/docker.sock:/var/run/docker.sock -h d1.local onedata/worker make ct_local
+	docker run --rm -it  -w $(CURDIR) -v $(CURDIR):$(CURDIR)  -v /var/run/docker.sock:/var/run/docker.sock -h d1.local onedata/worker make ct_local
 
 test: eunit ct
 
