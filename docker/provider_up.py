@@ -105,7 +105,8 @@ skydns_config = client.inspect_container(skydns)
 dns = skydns_config['NetworkSettings']['IPAddress']
 
 output = collections.defaultdict(list)
-output['op_dns'] = dns
+output['dns'] = dns
+output['docker_ids'] = [skydns.get('Id'), skydock.get('Id')]
 
 for cfg in configs:
   node_type = cfg['nodes']['node']['sys.config']['node_type']
@@ -138,5 +139,7 @@ escript gen_dev.erl /tmp/gen_dev_args.json
     container=container,
     binds={ args.bin:  { 'bind': '/root/build', 'ro': True } },
     dns=[dns])
+
+  output['docker_ids'].append(container.get('Id'))
 
 print(json.dumps(output))
