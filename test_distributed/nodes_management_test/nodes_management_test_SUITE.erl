@@ -37,7 +37,6 @@ ccm_and_worker_test(Config) ->
     [Ccm] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
 
-    timer:sleep(15000),
     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, get_node_type)),
     ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, get_node_type)),
 
