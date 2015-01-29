@@ -19,3 +19,6 @@
 %% test cases to be run
 {alias, nodes_management_test, "./nodes_management_test"}.
 {suites, nodes_management_test, all}.
+{ct_hooks, [{cth_surefire, [{path,"TEST-nodes_management_test-report.xml"}]}]}.
+
+{ct_hooks, [{cth_surefire, [{path,"TEST-nodes_management_test-report.xml"}]}]}.
