@@ -72,8 +72,15 @@ init_per_testcase(one_node_test, Config) ->
 init_per_testcase(ccm_and_worker_test, Config) ->
   ?INIT_CODE_PATH,
   test_node_starter:prepare_test_environment(Config, ?TEST_FILE("env_desc.json")).
+end_per_testcase(ccm_and_worker_test, Config) ->
+  Dockers = ?config(docker_ids, Config),
+  lists:foreach(fun(D) ->
+      os:cmd("docker kill " ++ D),
+      os:cmd("docker rm " ++ D)
+  end, Dockers),
+  test_node_starter:stop_deps_for_tester_node();
 end_per_testcase(_, Config) ->
-  Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes),
-  test_node_starter:stop_test_nodes(Nodes),
-  test_node_starter:stop_deps_for_tester_node().
+    Nodes = ?config(nodes, Config),
+    test_node_starter:stop_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes),
+    test_node_starter:stop_test_nodes(Nodes),
+    test_node_starter:stop_deps_for_tester_node().
