@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
 import argparse
 import collections
 import copy
 import docker
 import json
 import os
+import sys
 import time
 
 def parse_config(path):
@@ -35,7 +37,7 @@ def pull_image(name):
   try:
     client.inspect_image(name)
   except docker.errors.APIError:
-    print('Pulling image {name}'.format(name=name))
+    print('Pulling image {name}'.format(name=name), file=sys.stderr)
     client.pull(name)
 
 
