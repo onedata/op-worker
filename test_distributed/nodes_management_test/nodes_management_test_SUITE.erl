@@ -45,8 +45,9 @@ ccm_and_worker_test(Config) ->
     receive
         init_finished -> ok
     after
-        15000 -> throw(timeout)
+        50000 -> throw(timeout)
     end,
+
     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping])),
     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [dns_worker, ping])),
     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping])),
@@ -73,12 +74,7 @@ init_per_testcase(ccm_and_worker_test, Config) ->
   ?INIT_CODE_PATH,
   test_node_starter:prepare_test_environment(Config, ?TEST_FILE("env_desc.json")).
 end_per_testcase(ccm_and_worker_test, Config) ->
-  Dockers = ?config(docker_ids, Config),
-  lists:foreach(fun(D) ->
-      os:cmd("docker kill " ++ D),
-      os:cmd("docker rm " ++ D)
-  end, Dockers),
-  test_node_starter:stop_deps_for_tester_node();
+  test_node_starter:clean_environment(Config);
 end_per_testcase(_, Config) ->
     Nodes = ?config(nodes, Config),
     test_node_starter:stop_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes),
