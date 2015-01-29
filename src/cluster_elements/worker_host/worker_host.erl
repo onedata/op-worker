@@ -83,7 +83,7 @@ stop(PlugIn) ->
     Timeout :: non_neg_integer() | infinity.
 init([PlugIn, PlugInArgs, LoadMemorySize]) ->
     process_flag(trap_exit, true),
-    InitAns = PlugIn:init(PlugInArgs),
+    {ok, InitAns} = PlugIn:init(PlugInArgs),
     ?debug("Plugin ~p initialized with args ~p and result ~p", [PlugIn, PlugInArgs, InitAns]),
     {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}.
 
@@ -132,9 +132,8 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
-handle_cast(#worker_request{} = Req, State) ->
-    PlugIn = State#host_state.plug_in,
-    spawn(fun() -> proc_request(PlugIn, Req) end),
+handle_cast(#worker_request{} = Req, State = #host_state{plug_in = PlugIn, plug_in_state = PluginState}) ->
+    spawn(fun() -> proc_request(PlugIn, Req, PluginState) end),
     {noreply, State};
 
 handle_cast({progress_report, Report}, State) ->
@@ -217,13 +216,13 @@ code_change(_OldVsn, State, _Extra) ->
 %% it sends the answer to dispatcher and logs info about processing time.
 %% @end
 %%--------------------------------------------------------------------
--spec proc_request(PlugIn :: atom(), Request :: #worker_request{}) -> Result when
+-spec proc_request(PlugIn :: atom(), Request :: #worker_request{}, PluginState :: term()) -> Result when
     Result :: atom().
-proc_request(PlugIn, Request = #worker_request{req = Msg}) ->
+proc_request(PlugIn, Request = #worker_request{req = Msg}, PluginState) ->
     BeforeProcessingRequest = os:timestamp(),
     Response =
         try
-            PlugIn:handle(Msg)
+            PlugIn:handle(Msg, PluginState)
         catch
             Type:Error ->
                 ?error_stacktrace("Worker plug-in ~p error: ~p:~p, on request: ~p", [PlugIn, Type, Error, Request]),
