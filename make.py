@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import __main__
 import argparse
 import os
 import subprocess
@@ -39,6 +40,13 @@ parser.add_argument(
     dest='keys')
 
 parser.add_argument(
+    '--reflect-volume', '-r',
+    action='append',
+    default=[],
+    help='path to file which will be directly reflected in docker\'s filesystem',
+    dest='reflect')
+
+parser.add_argument(
     'params',
     action='store',
     nargs='*',
@@ -56,9 +64,19 @@ make {params};
 find . -user root -exec chown --reference /root/bin/[Mm]akefile -- '{{}}' +'''
 command = command.format(params=' '.join(args.params))
 
-subprocess.call(['docker', 'run', '--rm', '-ti',
+additional_run_params = []
+if not hasattr(__main__, '__file__'):
+    additional_run_params.append('-it')
+
+additional_volumes=[]
+for path in args.reflect:
+  additional_volumes.append('-v')
+  additional_volumes.append('{vol}:{vol}'.format(vol=path))
+
+subprocess.call(['docker', 'run', '--rm'] + additional_run_params + [
                  '-v', '{src}:/root/src'.format(src=args.src),
                  '-v', '{dst}:/root/bin'.format(dst=args.dst),
-                 '-v', '{keys}:/root/keys'.format(keys=args.keys),
+                 '-v', '{keys}:/root/keys'.format(keys=args.keys)] +
+                 additional_volumes + [
                  '-w', '/root/bin',
                  args.image, 'sh', '-c', command])

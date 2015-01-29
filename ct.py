@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import __main__
 import argparse
 import os
 import sys
@@ -29,13 +30,17 @@ if args.case and not args.suite:
     print('--case can only be used together with --suite')
     sys.exit()
 
+additional_run_params = []
+if not hasattr(__main__, '__file__'):
+    additional_run_params.append('-it')
+
 additional_args = []
 if args.suite:
 	additional_args.append(args.suite)
 if args.case:
 	additional_args.append(args.case)
 
-subprocess.call(['docker', 'run', '--rm', '-it',
+subprocess.call(['docker', 'run', '--rm'] + additional_run_params + [
 	             '-w', script_dir,
 	             '-v', '{dir}:{dir}'.format(dir=script_dir),
 	             '-v', '{sock}:{sock}'.format(sock=docker_sock),
