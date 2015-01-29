@@ -8,7 +8,7 @@
 %%% @doc @todo: Write me!
 %%% @end
 %%%-------------------------------------------------------------------
--module(local_cache_driver).
+-module(ets_cache_driver).
 -author("Rafal Slota").
 
 -include("workers/datastore/datastore.hrl").

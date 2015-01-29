@@ -8,7 +8,7 @@
 %%% @doc @todo: Write me!
 %%% @end
 %%%-------------------------------------------------------------------
--module(distributed_cache_driver).
+-module(mnesia_cache_driver).
 -author("Rafal Slota").
 
 -include("workers/datastore/datastore.hrl").

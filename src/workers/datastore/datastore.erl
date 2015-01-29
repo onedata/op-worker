@@ -12,8 +12,7 @@
 -author("Rafal Slota").
 
 -include("workers/datastore/datastore.hrl").
-
--define(PERSISTANCE_DRIVER, riak_datastore_driver).
+-include("workers/datastore/datastore_internal.hrl").
 
 -type key() :: term().
 -type value() :: #document{}.
@@ -120,42 +119,42 @@ run_posthooks(#model_config{name = ModelName}, Method, Level, Context, Return) -
 
 
 load_local_state(Models) ->
-    ets:new(datastore_local_state, [named_table, public, bag]),
+    ets:new(?LOCAL_STATE, [named_table, public, bag]),
     lists:foreach(
         fun(ModelName) ->
             #model_config{hooks = Hooks} = ModelName:model_init(),
             lists:foreach(
                 fun(Hook) ->
-                    ets:insert(datastore_local_state, {Hook, ModelName})
+                    ets:insert(?LOCAL_STATE, {Hook, ModelName})
                 end, Hooks)
         end, Models),
     ok.
 
 ensure_state_loaded() ->
-    case ets:info(datastore_local_state) of
+    case ets:info(?LOCAL_STATE) of
         undefined ->
             load_local_state(?MODELS);
         _ -> ok
     end.
 
 
-level_to_driver(persistance, _) ->
-    ?PERSISTANCE_DRIVER;
+level_to_driver(persistence, _) ->
+    ?PERSISTENCE_DRIVER;
 level_to_driver(l_cache, _) ->
-    local_cache_driver;
+    ?LOCAL_CACHE_DRIVER;
 level_to_driver(d_cache, _) ->
-    distributed_cache_driver;
+    ?DISTRIBUTED_CACHE_DRIVER;
 level_to_driver(cache, _) ->
-    [local_cache_driver, distributed_cache_driver];
+    [?LOCAL_CACHE_DRIVER, ?DISTRIBUTED_CACHE_DRIVER];
 level_to_driver(all, _) ->
-    [local_cache_driver, distributed_cache_driver, ?PERSISTANCE_DRIVER].
+    [?LOCAL_CACHE_DRIVER, ?DISTRIBUTED_CACHE_DRIVER, ?PERSISTENCE_DRIVER].
 
 
-driver_to_level(?PERSISTANCE_DRIVER) ->
-    persistance;
-driver_to_level(local_cache_driver) ->
+driver_to_level(?PERSISTENCE_DRIVER) ->
+    persistence;
+driver_to_level(?LOCAL_CACHE_DRIVER) ->
     l_cache;
-driver_to_level(distributed_cache_driver) ->
+driver_to_level(?DISTRIBUTED_CACHE_DRIVER) ->
     d_cache.
 
 

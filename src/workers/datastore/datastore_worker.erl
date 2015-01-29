@@ -23,6 +23,7 @@
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/2, cleanup/0]).
+-export([state_get/1, state_put/2]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -38,6 +39,21 @@
       Error :: term().
 init(_Args) ->
     ets:new(datastore_state, [named_table, public, set]),
+
+    RiakNodes =
+        case application:get_env(?APP_NAME, riak_nodes) of
+            {ok, Nodes} ->
+                lists:map(
+                    fun(NodeString) ->
+                        [HostName, Port] = string:tokens(NodeString, ":"),
+                        {list_to_binary(HostName), list_to_integer(Port)}
+                    end, Nodes);
+            _ ->
+                []
+        end,
+
+    state_put(riak_nodes, RiakNodes),
+
     Buckets = lists:foldl(
       fun(Model, Acc) ->
           #model_config{name = RecordName, bucket = Bucket} = ModelConfig = Model:model_init(),
@@ -98,5 +114,5 @@ state_put(Key, Value) ->
 state_get(Key) ->
     case ets:lookup(datastore_state, Key) of
         [{Key, Value}] -> Value;
-        _ -> undefinded
+        _ -> undefined
     end.
