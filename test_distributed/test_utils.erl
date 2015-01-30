@@ -21,7 +21,7 @@
 
 %% API
 -export([ct_mock/4, wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0,
-    wait_for_cluster_init/1, wait_for_state_loading/0]).
+    wait_for_cluster_init/1]).
 
 %%%===================================================================
 %%% API
@@ -181,46 +181,4 @@ wait_for_cluster_init(ModulesNum, TriesNum, Errors) ->
         E ->
             timer:sleep(1000),
             wait_for_cluster_init(ModulesNum, TriesNum - 1, [E | Errors])
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check if state is loaded from DB.
-%% @end
-%%--------------------------------------------------------------------
--spec check_state_loading() -> Ans when
-    Ans :: boolean() | {exception, E1, E2},
-    E1 :: term(),
-    E2 :: term().
-check_state_loading() ->
-    try
-        gen_server:call({global, ?CCM}, check_state_loaded, ?GEN_SERV_CALL_TIMEOUT)
-    catch
-        E1:E2 ->
-            {exception, E1, E2}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Wait until state is loaded from DB.
-%% @end
-%%--------------------------------------------------------------------
--spec wait_for_state_loading() -> ok | no_return().
-wait_for_state_loading() ->
-    wait_for_state_loading(20).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Wait until state is loaded from DB.
-%% @end
-%%--------------------------------------------------------------------
--spec wait_for_state_loading(TriesNum :: integer()) -> ok | no_return().
-wait_for_state_loading(0) ->
-    ?assert(check_state_loading());
-wait_for_state_loading(TriesNum) ->
-    case check_state_loading() of
-        true -> true;
-        _ ->
-            timer:sleep(500),
-            wait_for_state_loading(TriesNum - 1)
     end.

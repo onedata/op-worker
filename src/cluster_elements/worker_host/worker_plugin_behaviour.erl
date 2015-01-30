@@ -18,15 +18,15 @@
 %% Initialize module
 %% @end
 %%--------------------------------------------------------------------
--callback init(Args :: term()) -> ok | {error, Error :: any()}.
+-callback init(Args :: term()) -> {ok, State :: term()} | {error, Error :: any()}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Do your work.
 %% @end
 %%--------------------------------------------------------------------
--callback handle(ProtocolVersion :: term(), Request :: term()) ->
-    {ok, Ans :: term()} | {error, Error :: any()}.
+-callback handle(Request :: term(), State :: term()) ->
+    ok | {ok, Ans :: term()} | {error, Error :: any()}.
 
 %%--------------------------------------------------------------------
 %% @doc

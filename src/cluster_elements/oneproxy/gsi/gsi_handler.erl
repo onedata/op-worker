@@ -14,10 +14,15 @@
 -author("Rafal Slota").
 -author("Konrad Zemek").
 
--include("cluster_elements/oneproxy/gsi/gsi_handler.hrl").
 -include("registered_names.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+%% How many slave nodes that loads GSI NIF has to be started
+-define(GSI_SLAVE_COUNT, 2).
+
+%% Proxy Certificate Extension ID
+-define(PROXY_CERT_EXT, {1,3,6,1,5,5,7,1,14}).
 
 -deprecated([proxy_subject/1]).
 
@@ -38,7 +43,7 @@
 init() ->
     case application:get_env(?APP_NAME, node_type) of
         {ok, ccm} ->
-            throw(ccm_node);                     %% ccm node doesn't have socket interface, so GSI would be useless
+            throw(ccm_node); % ccm node doesn't have socket interface, so GSI would be useless
         _ -> ok
     end,
     ?info("GSI Handler module is starting"),

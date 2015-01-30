@@ -9,16 +9,39 @@
 %%% This module provides functions allowing to start listeners
 %%% @end
 %%%-------------------------------------------------------------------
--module(node_manager_listener_starter).
+-module(listener_starter).
 -author("Tomasz Lichon").
 
 -include("registered_names.hrl").
--include("cluster_elements/node_manager/node_manager_listeners.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% Path (relative to domain) on which cowboy expects incomming websocket connections with client and provider
+-define(ONECLIENT_URI_PATH, "/oneclient").
+-define(ONEPROVIDER_URI_PATH, "/oneprovider").
+
+% Custom cowboy bridge module
+-define(COWBOY_BRIDGE_MODULE, n2o_handler).
+
+% Session logic module
+-define(SESSION_LOGIC_MODULE, session_logic).
+
+% GUI routing module
+-define(GUI_ROUTING_MODULE, gui_routes).
+
+% Paths in gui static directory
+-define(STATIC_PATHS, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
+-define(ONEPROXY_DISPATCHER, oneproxy_dispatcher).
+
+% Cowboy listener references
+-define(WEBSOCKET_LISTENER, websocket).
+-define(HTTPS_LISTENER, https).
+-define(REST_LISTENER, rest).
+-define(HTTP_REDIRECTOR_LISTENER, http).
+
 %% API
--export([start_dispatcher_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0, start_dns_listeners/0]).
+-export([start_dispatcher_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0,
+    start_dns_listeners/0, stop_listeners/0]).
 
 %%%===================================================================
 %%% API
@@ -29,7 +52,7 @@
 %% Starts a cowboy listener for request_dispatcher.
 %% @end
 %%--------------------------------------------------------------------
--spec start_dispatcher_listener() -> ok | no_return().
+-spec start_dispatcher_listener() -> {ok, pid()} | no_return().
 start_dispatcher_listener() ->
     catch cowboy:stop_listener(?WEBSOCKET_LISTENER),
     {ok, Port} = application:get_env(?APP_NAME, dispatcher_port),
@@ -52,8 +75,7 @@ start_dispatcher_listener() ->
         ],
         [
             {env, [{dispatch, Dispatch}]}
-        ]),
-    ok.
+        ]).
 
 
 %%--------------------------------------------------------------------
@@ -61,7 +83,7 @@ start_dispatcher_listener() ->
 %% Starts a cowboy listener for n2o GUI.
 %% @end
 %%--------------------------------------------------------------------
--spec start_gui_listener() -> ok | no_return().
+-spec start_gui_listener() -> {ok, pid()} | no_return().
 start_gui_listener() ->
     % Get params from env for gui
     {ok, DocRoot} = application:get_env(?APP_NAME, http_worker_static_files_root),
@@ -120,7 +142,7 @@ start_gui_listener() ->
 %% Starts a cowboy listener that will redirect all requests of http to https.
 %% @end
 %%--------------------------------------------------------------------
--spec start_redirector_listener() -> ok | no_return().
+-spec start_redirector_listener() -> {ok, pid()} | no_return().
 start_redirector_listener() ->
     {ok, RedirectPort} = application:get_env(?APP_NAME, http_worker_redirect_port),
     {ok, RedirectNbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_http_acceptors),
@@ -150,7 +172,7 @@ start_redirector_listener() ->
 %% Starts a cowboy listener for REST requests.
 %% @end
 %%--------------------------------------------------------------------
--spec start_rest_listener() -> ok | no_return().
+-spec start_rest_listener() -> {ok, pid()} | no_return().
 start_rest_listener() ->
     {ok, NbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_acceptors),
     {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout),
@@ -187,8 +209,7 @@ start_rest_listener() ->
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
             {max_keepalive, 1},
             {timeout, Timeout}
-        ]),
-    ok.
+        ]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -204,7 +225,20 @@ start_dns_listeners() ->
     OnFailureFun = fun() ->
         ?error("Could not start DNS server on node ~p.", [node()])
     end,
-    ok = dns_server:start(?SUPERVISOR_NAME, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
+    ok = dns_server:start(?APPLICATION_SUPERVISOR_NAME, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Stops all listeners defined in this module
+%% @end
+%%--------------------------------------------------------------------
+-spec stop_listeners() -> ok.
+stop_listeners() ->
+    catch cowboy:stop_listener(?WEBSOCKET_LISTENER),
+    catch cowboy:stop_listener(?HTTP_REDIRECTOR_LISTENER),
+    catch cowboy:stop_listener(?REST_LISTENER),
+    catch cowboy:stop_listener(?HTTPS_LISTENER),
+    catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE).
 
 %%%===================================================================
 %%% Internal functions

@@ -1,18 +1,14 @@
 %%%-------------------------------------------------------------------
-%%% @author Rafal Slota
-%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% oneproxy definitions.
+%%% The state of request dispatcher
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(ONEPROXY_HRL).
--define(ONEPROXY_HRL, 1).
 
-%% oneproxy rest listener
--define(ONEPROXY_REST, oneproxy_rest).
-
--endif.
+%% This record is used by requests_dispatcher (it contains its state).
+-record(dispatcher_state, {state_num = 0}).

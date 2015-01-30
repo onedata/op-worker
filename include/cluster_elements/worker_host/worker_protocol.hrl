@@ -1,18 +1,15 @@
 %%%-------------------------------------------------------------------
-%%% @author Rafal Slota
-%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% oneproxy definitions.
+%%% The protocol between worker_host and the rest of the world
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(ONEPROXY_HRL).
--define(ONEPROXY_HRL, 1).
+-author("Tomasz Lichon").
 
-%% oneproxy rest listener
--define(ONEPROXY_REST, oneproxy_rest).
-
--endif.
+-record(worker_request, {id = undefined, req = undefined, reply_to = undefined}).
+-record(worker_answer, {id = undefined, response = undefined}).

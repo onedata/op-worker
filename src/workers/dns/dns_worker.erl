@@ -51,16 +51,16 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: #dns_worker_state{} | {error, Error},
+    Result :: {ok, #dns_worker_state{}} | {error, Error},
     Error :: term().
 init([]) ->
-    #dns_worker_state{};
+    {ok, #dns_worker_state{}};
 
 init(InitialState) when is_record(InitialState, dns_worker_state) ->
-    InitialState;
+    {ok, InitialState};
 
 init(test) ->
-    #dns_worker_state{};
+    {ok, #dns_worker_state{}};
 
 init(_) ->
     throw(unknown_initial_state).
@@ -70,25 +70,21 @@ init(_) ->
 %% {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% @end
 %%--------------------------------------------------------------------
--spec handle(ProtocolVersion :: term(), Request) -> Result when
-    Request :: ping | healthcheck | get_version |
+-spec handle(Request, State :: term()) -> Result when
+    Request :: ping | healthcheck |
     {update_state, list(), list()} |
     {get_worker, atom()} |
     get_nodes,
-    Result :: ok | {ok, Response} | {error, Error} | pong | Version,
+    Result :: ok | {ok, Response} | {error, Error} | pong,
     Response :: [inet:ip4_address()],
-    Version :: term(),
     Error :: term().
-handle(_ProtocolVersion, ping) ->
+handle(ping, _) ->
     pong;
 
-handle(_ProtocolVersion, healthcheck) ->
+handle(healthcheck, _) ->
     ok;
 
-handle(_ProtocolVersion, get_version) ->
-    node_manager:check_vsn();
-
-handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
+handle({update_state, ModulesToNodes, NLoads, AvgLoad}, _) ->
     ?info("DNS state update: ~p", [{ModulesToNodes, NLoads, AvgLoad}]),
     try
         ModulesToNodes2 = lists:map(fun({Module, Nodes}) ->
@@ -111,7 +107,7 @@ handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
             udpate_error
     end;
 
-handle(_ProtocolVersion, {handle_a, Domain}) ->
+handle({handle_a, Domain}, _) ->
     IPList = case parse_domain(Domain) of
                  unknown_domain ->
                      refused;
@@ -152,7 +148,7 @@ handle(_ProtocolVersion, {handle_a, Domain}) ->
             }
     end;
 
-handle(_ProtocolVersion, {handle_ns, Domain}) ->
+handle({handle_ns, Domain}, _) ->
     case parse_domain(Domain) of
         unknown_domain ->
             refused;
@@ -170,9 +166,9 @@ handle(_ProtocolVersion, {handle_ns, Domain}) ->
             end
     end;
 
-handle(ProtocolVersion, Msg) ->
+handle(Msg, _) ->
     ?warning("Wrong request: ~p", [Msg]),
-    throw({unsupported_request, ProtocolVersion, Msg}).
+    throw({unsupported_request, Msg}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -182,7 +178,7 @@ handle(ProtocolVersion, Msg) ->
 -spec cleanup() -> Result when
     Result :: ok.
 cleanup() ->
-    dns_server:stop(?SUPERVISOR_NAME).
+    dns_server:stop(?APPLICATION_SUPERVISOR_NAME).
 
 
 %%%===================================================================
@@ -478,30 +474,4 @@ make_ans_random(Result) ->
 %%--------------------------------------------------------------------
 -spec call_dns_worker(Request :: term()) -> term() | serv_fail.
 call_dns_worker(Request) ->
-    try
-        {ok, DispatcherTimeout} = application:get_env(?APP_NAME, dispatcher_timeout),
-        DispatcherAns = gen_server:call(?DISPATCHER_NAME, {dns_worker, 1, self(), Request}),
-        case DispatcherAns of
-            ok ->
-                receive
-                    {error, Error} ->
-                        ?error("Unexpected dispatcher error ~p", [Error]),
-                        serv_fail;
-                    Answer ->
-                        Answer
-                after
-                    DispatcherTimeout ->
-                        ?error("Unexpected dispatcher timeout"),
-                        serv_fail
-                end;
-            worker_not_found ->
-                ?error("Dispatcher error - worker not found"),
-                serv_fail
-        end
-    catch
-        _:Error2 ->
-            ?error_stacktrace("Dispatcher not responding ~p", [Error2]),
-            serv_fail
-    end.
-
-
+    worker_proxy:call(dns_worker, Request).
