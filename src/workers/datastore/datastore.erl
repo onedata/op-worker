@@ -15,11 +15,12 @@
 -include("workers/datastore/datastore_internal.hrl").
 
 -type key() :: term().
--type value() :: #document{}.
+-type document() :: #document{}.
+-type value() :: term().
 
 %% API
--export_type([key/0, value/0]).
--export([save/2, update/2, create/2, get/3, delete/3, exists/3]).
+-export_type([key/0, value/0, document/0]).
+-export([save/2, update/4, create/2, get/3, delete/3, exists/3]).
 
 
 %%--------------------------------------------------------------------
@@ -37,9 +38,8 @@ save(Level, #document{} = Document) ->
 %% @todo: Write me!
 %% @end
 %%--------------------------------------------------------------------
-update(Level, #document{} = Document) ->
-    ModelName = model_name(Document),
-    exec_driver(ModelName, level_to_driver(Level, write), update, [Document], Document).
+update(Level, ModelName, Key, Diff) ->
+    exec_driver(ModelName, level_to_driver(Level, write), update, [Key, Diff], {Key, Diff}).
 
 
 %%--------------------------------------------------------------------
@@ -98,7 +98,7 @@ run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
     Hooked = ets:lookup(datastore_local_state, {ModelName, Method}),
     HooksRes =
         lists:map(
-            fun(HookedModule) ->
+            fun({_, HookedModule}) ->
                 HookedModule:before(ModelName, Method, Level, Context)
             end, Hooked),
     case HooksRes -- [ok] of
@@ -112,7 +112,7 @@ run_posthooks(#model_config{name = ModelName}, Method, Level, Context, Return) -
     ensure_state_loaded(),
     Hooked = ets:lookup(datastore_local_state, {ModelName, Method}),
     lists:foreach(
-            fun(HookedModule) ->
+            fun({_, HookedModule}) ->
                 spawn(fun() -> HookedModule:'after'(ModelName, Method, Level, Context, Return) end)
             end, Hooked),
     Return.
@@ -125,6 +125,7 @@ load_local_state(Models) ->
             #model_config{hooks = Hooks} = ModelName:model_init(),
             lists:foreach(
                 fun(Hook) ->
+
                     ets:insert(?LOCAL_STATE, {Hook, ModelName})
                 end, Hooks)
         end, Models),

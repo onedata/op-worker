@@ -22,7 +22,7 @@
 %% @todo: Write me!
 %% @end
 %%--------------------------------------------------------------------
--callback save() -> ok | {error, Error :: any()}.
+-callback save(datastore:document()) -> {ok, datastore:key()} | {error, Error :: any()}.
 
 
 %%--------------------------------------------------------------------
@@ -30,7 +30,7 @@
 %% @todo: Write me!
 %% @end
 %%--------------------------------------------------------------------
--callback update() -> ok | {error, Error :: any()}.
+-callback update(datastore:key()) -> {ok, datastore:key()} | {error, Error :: any()}.
 
 
 %%--------------------------------------------------------------------
@@ -38,7 +38,7 @@
 %% @todo: Write me!
 %% @end
 %%--------------------------------------------------------------------
--callback create() -> ok | {error, Error :: any()}.
+-callback create(datastore:document()) -> {ok, datastore:key()} | {error, Error :: any()}.
 
 
 %%--------------------------------------------------------------------
@@ -46,7 +46,7 @@
 %% @todo: Write me!
 %% @end
 %%--------------------------------------------------------------------
--callback get() -> ok | {error, Error :: any()}.
+-callback get(datastore:document()) -> ok | {error, Error :: any()}.
 
 
 %%--------------------------------------------------------------------

@@ -10,7 +10,12 @@
 %%%-------------------------------------------------------------------
 -author("Rafal Slota").
 
--record(document, {key, rev, value}).
+-record(document, {
+    key     :: datastore:key(),
+    rev     :: term(),
+    value   :: datastore:value()
+}).
+
 -record(model_config, {name, size = 0, fields = [], defaults = {}, hooks = [], bucket}).
 
 -record(some_record, {field1, field2, field3}).

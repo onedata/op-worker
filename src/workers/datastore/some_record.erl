@@ -16,36 +16,37 @@
 
 
 %% API
--export([save/0, get/0, exists/0, delete/0, update/0, create/0, list/0, model_init/0, 'after'/5, before/4]).
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1, list/0, model_init/0, 'after'/5, before/4]).
 
 
-save() ->
-    erlang:error(not_implemented).
+save(Document) ->
+    datastore:save(all, Document).
 
-update() ->
-    erlang:error(not_implemented).
+update(Key, Diff) ->
+    datastore:update(all, ?MODULE, Key, Diff).
 
-create() ->
-    erlang:error(not_implemented).
+create(Document) ->
+    datastore:create(all, Document).
 
-exists() ->
-    erlang:error(not_implemented).
+exists(Key) ->
+    datastore:exists(l_cache, ?MODULE, Key).
 
-get() ->
-    erlang:error(not_implemented).
+get(Key) ->
+    datastore:get(l_cache, ?MODULE, Key).
 
-delete() ->
-    erlang:error(not_implemented).
+delete(Key) ->
+    datastore:delete(l_cache, ?MODULE, Key).
 
 list() ->
     erlang:error(not_implemented).
 
 model_init() ->
-    #model_config{name = ?MODULE, size = record_info(size, ?MODULE), fields = record_info(fields, ?MODULE), defaults = #?MODULE{},
-        bucket = test_bucket, hooks = []}.
+    #model_config{
+        name = ?MODULE, size = record_info(size, ?MODULE), fields = record_info(fields, ?MODULE), defaults = #?MODULE{},
+        bucket = test_bucket, hooks = [{some_record, update}]}.
 
 'after'(ModelName, Method, Level, Context, Return) ->
-    erlang:error(not_implemented).
+    ok.
 
 before(ModelName, Method, Level, Context) ->
-    erlang:error(not_implemented).
+    ok.

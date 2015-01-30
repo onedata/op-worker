@@ -27,8 +27,9 @@ init_bucket(Bucket) ->
 
     ok.
 
-save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value = Value}) ->
-    RiakOP = riakc_map:to_op(to_riak_obj(Value)),
+save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = Rev, value = Value}) ->
+    RiakObj = to_riak_obj(Value, Rev),
+    RiakOP = riakc_map:to_op(RiakObj),
     Key1 = maybe_generate_key(Key),
     case call(riakc_pb_socket, update_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key1), RiakOP]) of
         ok -> {ok, Key1};
@@ -37,14 +38,24 @@ save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value =
     end.
 
 
-update(#model_config{} = ModelConfig, Key, Diff) when is_map(Diff) ->
-    case ets:lookup(table_name(ModelConfig), Key) of
-        [] ->
-            {error, {not_found, missing_or_deleted}};
-        [{_, Value}] ->
-            NewValue = maps:merge(datastore_utils:shallow_to_map(Value), Diff),
-            true = ets:insert(table_name(ModelConfig), {Key, datastore_utils:shallow_to_record(NewValue)}),
-            {ok, Key}
+update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Diff) ->
+    case call(riakc_pb_socket, fetch_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key)]) of
+        {ok, Result} ->
+            NewRMap =
+                maps:fold(
+                    fun(K, V, Acc) ->
+                        RiakObj = to_riak_obj(V),
+                        Module = riakc_datatype:module_for_term(RiakObj),
+                        Type = Module:type(),
+                        riakc_map:update({to_binary(K), Type}, fun(_) -> RiakObj end, Acc)
+                    end, Result, Diff),
+            case call(riakc_pb_socket, update_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key), riakc_map:to_op(NewRMap)]) of
+                ok -> {ok, Key};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 
@@ -73,7 +84,8 @@ exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
 get(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key)]) of
         {ok, Result} ->
-            {ok, #document{key = Key, value = datastore_utils:shallow_to_record(form_riak_obj(map, Result))}};
+            {ok, #document{key = Key, rev = Result,
+                value = datastore_utils:shallow_to_record(form_riak_obj(map, Result))}};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -110,16 +122,21 @@ form_riak_obj(register, Obj) when is_binary(Obj) ->
 form_riak_obj(register, Obj) ->
     from_binary(riakc_register:value(Obj)).
 
-to_riak_obj(Term) when is_tuple(Term) ->
+to_riak_obj(Term, undefined) when is_tuple(Term) ->
+    to_riak_obj(Term);
+to_riak_obj(Term, Rev) when is_tuple(Term) ->
     Map = datastore_utils:shallow_to_map(Term),
-    RMap0 = riakc_map:new(),
+    RMap0 = Rev,
     RMap1 = maps:fold(
                 fun(K, V, Acc) ->
                     RiakObj = to_riak_obj(V),
                     Module = riakc_datatype:module_for_term(RiakObj),
                     Type = Module:type(),
                     riakc_map:update({to_binary(K), Type}, fun(_) -> RiakObj end, Acc)
-                end, RMap0, Map);
+                end, RMap0, Map).
+
+to_riak_obj(Term) when is_tuple(Term) ->
+    to_riak_obj(Term, riakc_map:new());
 to_riak_obj(Int) when is_integer(Int) ->
     Counter = riakc_counter:new(),
     riakc_counter:increment(Int, Counter);
@@ -129,7 +146,11 @@ to_riak_obj(Bin) when is_binary(Bin) ->
 to_riak_obj(Atom) when is_atom(Atom) ->
     Register = riakc_register:new(),
     Bin = atom_to_binary(Atom, utf8),
-    riakc_register:set(<<"ATOM::", Bin/binary>>, Register).
+    riakc_register:set(<<"ATOM::", Bin/binary>>, Register);
+to_riak_obj(Term) ->
+    Register = riakc_register:new(),
+    Bin = to_binary(Term),
+    riakc_register:set(Bin, Register).
 
 
 table_name(#model_config{name = ModelName}) ->
@@ -187,13 +208,8 @@ to_binary(Term) when is_binary(Term) ->
     Term;
 to_binary(Term) when is_atom(Term) ->
     <<"ATOM::", (atom_to_binary(Term, utf8))/binary>>;
-to_binary(Term) when is_list(Term) ->
-    list_to_binary(Term);
 to_binary(Term) ->
     term_to_base64(Term).
-
-to_key(Term) ->
-    {to_binary(Term), register}.
 
 
 term_to_base64(Term) ->
