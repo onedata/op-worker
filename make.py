@@ -55,14 +55,16 @@ parser.add_argument(
 args = parser.parse_args()
 
 command = \
-'''cp -RTf /root/keys /root/.ssh
-chown -R root:root /root/.ssh
+'''cp --recursive --no-target-directory --force /root/keys /root/.ssh
+chown --recursive root:root /root/.ssh
+chmod 700 /root/.ssh
+chmod 600 /root/.ssh/*
 eval $(ssh-agent)
 ssh-add
-rsync -rogl /root/src/ /root/bin
+rsync --archive /root/src/ /root/bin
 make {params};
-find . -user root -exec chown --reference /root/bin/[Mm]akefile -- '{{}}' +'''
-command = command.format(params=' '.join(args.params))
+chown --recursive --from=root {uid}:{gid} .'''
+command = command.format(params=' '.join(args.params), uid=os.getuid(), gid=os.getgid())
 
 additional_run_params = []
 if not hasattr(__main__, '__file__'):
@@ -71,12 +73,12 @@ if not hasattr(__main__, '__file__'):
 additional_volumes=[]
 for path in args.reflect:
   additional_volumes.append('-v')
-  additional_volumes.append('{vol}:{vol}'.format(vol=path))
+  additional_volumes.append('{vol}:{vol}:rw'.format(vol=path))
 
 subprocess.call(['docker', 'run', '--rm'] + additional_run_params + [
-                 '-v', '{src}:/root/src'.format(src=args.src),
-                 '-v', '{dst}:/root/bin'.format(dst=args.dst),
-                 '-v', '{keys}:/root/keys'.format(keys=args.keys)] +
+                 '-v', '{src}:/root/src:ro'.format(src=args.src),
+                 '-v', '{dst}:/root/bin:rw'.format(dst=args.dst),
+                 '-v', '{keys}:/root/keys:ro'.format(keys=args.keys)] +
                  additional_volumes + [
                  '-w', '/root/bin',
                  args.image, 'sh', '-c', command])
