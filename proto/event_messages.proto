@@ -1,0 +1,69 @@
+package one.clproto;
+
+import "common_messages.proto";
+
+// Event messages
+
+message ReadEvent {
+    required uint64    seq_num = 1; // unique per client event sequence number
+    required uint32    counter = 2; // amount of aggregated events
+    required bytes     file_id = 3; // ID of file associated with an event
+    required uint64    size    = 4; // amount of read bytes
+    repeated FileBlock blocks  = 5; // list of read blocks
+}
+
+message WriteEvent {
+    required uint64    seq_num   = 1; // unique per client event sequence number
+    required uint32    counter   = 2; // amount of aggregated events
+    required bytes     file_id   = 3; // ID of file associated with an event
+    required uint64    file_size = 4; // size of file associated with an event
+    required uint64    size      = 5; // amount of written bytes
+    repeated FileBlock blocks    = 6; // list of written blocks
+}
+
+message SubscriptionEvent {
+    required uint64 seq_num = 1; // unique per client event sequence number
+    required uint64 id      = 2; // ID of created subscription
+}
+
+message SubscriptionCancellationEvent {
+    required uint64 seq_num = 1; // unique per client event sequence number
+    required uint64 id      = 2; // ID of cancelled subscription
+}
+
+// Subscription messages
+
+message ReadEventSubscription {
+    required uint64 id                = 1; // unique subscription ID
+    optional uint32 counter_threshold = 2; // maximal amount of aggregated
+                                           // events before emission
+    optional uint32 time_threshold    = 3; // maximal delay in milliseconds
+                                           // between successive events emission
+    optional uint32 size_threshold    = 4; // maximal amount of read bytes
+                                           // before emission
+}
+
+message WriteEventSubscription {
+    required uint64 id                = 1; // unique subscription ID
+    optional uint32 counter_threshold = 2; // maximal amount of aggregated
+                                           // events before emission
+    optional uint32 time_threshold    = 3; // maximal delay in milliseconds
+                                           // between successive events emission
+    optional uint32 size_threshold    = 4; // maximal amount of written bytes
+                                           // before emission
+}
+
+message SubscriptionCancellation {
+    required uint64 id = 1; // ID of subscription to be cancelled
+}
+
+// Management messages
+
+message EventRequest {
+    required uint64 seq_num = 1; // sequence number of a requested event
+}
+
+message EventAcknowledgement {
+    required uint64 seq_num = 1; // sequence number of a last successfully
+                                 // processed event
+}

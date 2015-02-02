@@ -1,0 +1,24 @@
+package one.clproto;
+
+import "handshake_messages.proto";
+import "common_messages.proto";
+import "event_messages.proto";
+
+message ClientMessage {
+    optional uint64 response_id = 1;
+    oneof message {
+        // handshake_messages.proto
+        HandshakeRequest              handshake_request               = 2;
+        HandshakeAck                  handshake_ack                   = 3;
+
+        // common_messages.proto
+        Error                         error                           = 4;
+
+        // event_messages.proto
+        ReadEvent                     read_event                      = 5;
+        WriteEvent                    write_event                     = 6;
+        SubscriptionEvent             subscription_event              = 7;
+        SubscriptionCancellationEvent subscription_cancellation_event = 8;
+
+    }
+}
