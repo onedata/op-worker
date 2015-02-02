@@ -17,7 +17,7 @@ def parse_config(path):
 
 def set_hostname(node, uid):
     parts = list(node.partition('@'))
-    parts[2] = '{name}.{uid}.dev.docker'.format(name=parts[0], uid=uid)
+    parts[2] = '{0}.{1}.dev.docker'.format(parts[0], uid)
     return ''.join(parts)
 
 def tweak_config(config, name, uid):
@@ -66,7 +66,6 @@ parser.add_argument(
 
 args = parser.parse_args()
 uid = str(int(time.time()))
-docker_host = os.getenv('DOCKER_HOST', 'unix:///var/run/docker.sock')
 
 config = parse_config(args.config_path)
 config['config']['target_dir'] = '/root/bin'
@@ -84,7 +83,7 @@ skydock = docker.run(
     name='skydock_{0}'.format(uid),
     reflect=['/var/run/docker.sock'],
     volumes=[(args.create_service, '/createService.js', 'ro')],
-    command=['-ttl', '30', '-environment', 'dev', '-s', docker_host,
+    command=['-ttl', '30', '-environment', 'dev', '-s', '/var/run/docker.sock',
              '-domain', 'docker', '-name', 'skydns_{0}'.format(uid), '-plugins',
              '/createService.js'])
 
@@ -98,7 +97,6 @@ output['docker_ids'] = [skydns, skydock]
 for cfg in configs:
     node_type = cfg['nodes']['node']['sys.config']['node_type']
     node_name = cfg['nodes']['node']['vm.args']['name']
-    output['op_{type}_nodes'.format(type=node_type)].append(node_name)
 
     (name, sep, hostname) = node_name.partition('@')
 
@@ -124,5 +122,6 @@ escript gen_dev.erl /tmp/gen_dev_args.json
         command=command)
 
     output['docker_ids'].append(container)
+    output['op_{type}_nodes'.format(type=node_type)].append(node_name)
 
 print(json.dumps(output))

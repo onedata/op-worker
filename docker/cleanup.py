@@ -14,7 +14,5 @@ parser.add_argument(
   help='IDs of dockers to be cleaned up')
 
 args = parser.parse_args()
-client = docker.Client()
 
-for docker_id in args.docker_ids:
-	client.remove_container(container=docker_id, v=True, force=True)
+docker.remove(args.docker_ids, volumes=True, force=True)

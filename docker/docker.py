@@ -4,7 +4,7 @@ import os
 import subprocess
 
 def run(image, docker_host=None, detach=False, dns=[], hostname=None,
-        interactive=False, link=[], tty=False, rm=False, reflect=[],
+        interactive=False, link={}, tty=False, rm=False, reflect=[],
         volumes=[], name=None, workdir=None, run_params=[], command=None):
 
     cmd = ['docker']
@@ -23,18 +23,17 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
     if hostname:
         cmd.extend(['-h', hostname])
 
-    # if not hasattr(__main__, '__file__'):
-    if interactive:
-        cmd.append('-i')
+    if detach or not hasattr(__main__, '__file__'):
+        if interactive:
+            cmd.append('-i')
+        if tty:
+            cmd.append('-t')
 
-    for name in link:
-        cmd.extend(['--link', name])
+    for container, alias in link.iteritems():
+        cmd.extend(['--link', '{0}:{1}'.format(container, alias)])
 
     if name:
         cmd.extend(['--name', name])
-
-    if tty:
-        cmd.append('-t')
 
     if rm:
         cmd.append('--rm')
@@ -63,12 +62,35 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
     else:
         subprocess.check_call(cmd)
 
-def inspect(id, docker_host=None):
+
+def inspect(container, docker_host=None):
     cmd = ['docker']
     
     if docker_host:
         cmd.extend(['-H', docker_host])
 
-    cmd.extend(['inspect', id])
+    cmd.extend(['inspect', container])
     out = subprocess.check_output(cmd, universal_newlines=True)
     return json.loads(out)[0]
+
+
+def remove(containers, docker_host=None, force=False,
+           link=False, volumes=False):
+    cmd = ['docker']
+
+    if docker_host:
+        cmd.extend(['-H', docker_host])
+
+    cmd.append('rm')
+
+    if force:
+        cmd.append('-f')
+
+    if link:
+        cmd.append('-l')
+
+    if volumes:
+        cmd.append('-v')
+
+    cmd.extend(containers)
+    subprocess.check_call(cmd)

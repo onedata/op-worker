@@ -1,51 +1,50 @@
 #!/usr/bin/env python
 
 from __future__ import print_function
+
 import argparse
+import collections
+import json
 import os
 import sys
 import time
 import docker
 
 def pull_image(name):
-  try:
-    client.inspect_image(name)
-  except docker.errors.APIError:
-    print('Pulling image {name}'.format(name=name), file=sys.stderr)
-    client.pull(name)
+    try:
+        client.inspect_image(name)
+    except docker.errors.APIError:
+        print('Pulling image {name}'.format(name=name), file=sys.stderr)
+        client.pull(name)
 
 
 parser = argparse.ArgumentParser(
-  formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-  description='Bring up globalregistry.')
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    description='Bring up globalregistry.')
 
 parser.add_argument(
-  '--image', '-i',
-  action='store',
-  default='onedata/worker',
-  help='the image to use for the container',
-  dest='image')
+    '--image', '-i',
+    action='store',
+    default='onedata/worker',
+    help='docker image to use as a container',
+    dest='image')
 
 parser.add_argument(
-  '--bin', '-b',
-  action='store',
-  default=os.getcwd(),
-  help='the path to globalregistry repository (precompiled)',
-  dest='bin')
+    '--bin', '-b',
+    action='store',
+    default=os.getcwd(),
+    help='path to globalregistry directory (precompiled)',
+    dest='bin')
 
 args = parser.parse_args()
-client = docker.Client()
 cookie = str(int(time.time()))
 
 db_name = 'bigcouch'
-db_host = '{name}.{cookie}.dev.docker'.format(name=db_name, cookie=cookie)
-db_dockername = '{name}_{cookie}'.format(name=db_name, cookie=cookie)
+db_host = '{0}.{1}.dev.docker'.format(db_name, cookie)
+db_dockername = '{0}_{1}'.format(db_name, cookie)
 gr_name = 'globalregistry'
-gr_host = '{name}.{cookie}.dev.docker'.format(name=gr_name, cookie=cookie)
-gr_dockername = '{name}_{cookie}'.format(name=gr_name, cookie=cookie)
-
-pull_image(args.image)
-pull_image('onedata/bigcouch')
+gr_host = '{0}.{1}.dev.docker'.format(gr_name, cookie)
+gr_dockername = '{0}_{1}'.format(gr_name, cookie)
 
 db_command = \
 '''echo '[httpd]' > /opt/bigcouch/etc/local.ini
@@ -76,25 +75,27 @@ cat rel/vars.config
 rel/globalregistry/bin/globalregistry console'''
 gr_command = gr_command.format(cfg=gr_config)
 
-bigcouch = client.create_container(
-  image='onedata/bigcouch',
-  detach=True,
-  name=db_dockername,
-  hostname=db_host,
-  command=['sh', '-c', db_command])
-client.start(container=bigcouch)
+bigcouch = docker.run(
+    image='onedata/bigcouch',
+    detach=True,
+    name=db_dockername,
+    hostname=db_host,
+    command=db_command)
 
-gr = client.create_container(
-  image=args.image,
-  hostname=gr_host,
-  detach=True,
-  stdin_open=True,
-  tty=True,
-  name=gr_dockername,
-  volumes=['/root/bin'],
-  command=['bash', '-c', gr_command])
+gr = docker.run(
+    image=args.image,
+    hostname=gr_host,
+    detach=True,
+    interactive=True,
+    tty=True,
+    name=gr_dockername,
+    volumes=[(args.bin, '/root/bin', 'ro')],
+    link={db_dockername: db_host},
+    command=gr_command)
 
-client.start(
-  container=gr,
-  binds={ args.bin: { 'bind': '/root/bin', 'ro': True } },
-  links={ db_dockername: db_host })
+output = collections.defaultdict(list)
+output['docker_ids'] = [bigcouch, gr]
+output['gr_db_nodes'] = ['{0}@{1}'.format(db_name, db_host)]
+output['gr_worker_nodes'] = ['{0}@{1}'.format(gr_name, gr_host)]
+
+print(json.dumps(output))
