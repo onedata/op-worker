@@ -6,7 +6,7 @@ import "event_messages.proto";
 
 message ServerMessage {
     optional uint64 response_id = 1;
-    oneof message {
+    oneof server_message {
         // handshake_messages.proto
         HandshakeResponse        handshake_response        = 2;
 

@@ -6,10 +6,10 @@ import "event_messages.proto";
 
 message ClientMessage {
     optional uint64 response_id = 1;
-    oneof message {
+    oneof client_message {
         // handshake_messages.proto
         HandshakeRequest              handshake_request               = 2;
-        HandshakeAck                  handshake_ack                   = 3;
+        HandshakeAcknowledgement      handshake_acknowledgement       = 3;
 
         // common_messages.proto
         Error                         error                           = 4;
@@ -19,6 +19,5 @@ message ClientMessage {
         WriteEvent                    write_event                     = 6;
         SubscriptionEvent             subscription_event              = 7;
         SubscriptionCancellationEvent subscription_cancellation_event = 8;
-
     }
 }

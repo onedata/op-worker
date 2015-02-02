@@ -17,6 +17,6 @@ message HandshakeResponse {
     required bytes fuse_id = 1;
 }
 
-message HandshakeAck {
+message HandshakeAcknowledgement {
     required bytes fuse_id = 1;
 }

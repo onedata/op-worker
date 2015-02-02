@@ -12,5 +12,5 @@ message EnvironmentVariable {
 
 message Error {
     required int32 code        = 1;
-    optional bytes description = 2 [default = ""];
+    optional bytes description = 2;
 }
