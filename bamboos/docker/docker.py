@@ -1,6 +1,6 @@
-import __main__
 import json
 import os
+import sys
 import subprocess
 
 def run(image, docker_host=None, detach=False, dns=[], hostname=None,
@@ -23,13 +23,13 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
     if hostname:
         cmd.extend(['-h', hostname])
 
-    if detach or not hasattr(__main__, '__file__'):
+    if detach or sys.__stdin__.isatty():
         if interactive:
             cmd.append('-i')
         if tty:
             cmd.append('-t')
 
-    for container, alias in link.iteritems():
+    for container, alias in link.items():
         cmd.extend(['--link', '{0}:{1}'.format(container, alias)])
 
     if name:
@@ -58,14 +58,14 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
         cmd.extend(command)
 
     if detach:
-        return subprocess.check_output(cmd).strip()
+        return subprocess.check_output(cmd).decode('utf-8').strip()
     else:
         subprocess.check_call(cmd)
 
 
 def inspect(container, docker_host=None):
     cmd = ['docker']
-    
+
     if docker_host:
         cmd.extend(['-H', docker_host])
 
