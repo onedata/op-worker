@@ -1,147 +1,128 @@
 #!/usr/bin/env python
 
 from __future__ import print_function
+
 import argparse
 import collections
 import copy
 import docker
 import json
 import os
-import sys
 import time
 
 def parse_config(path):
-  with open(path, 'r') as f:
-    data = f.read()
-    return json.loads(data)
+    with open(path, 'r') as f:
+        data = f.read()
+        return json.loads(data)
 
 def set_hostname(node, uid):
-  parts = list(node.partition('@'))
-  parts[2] = '{name}.{uid}.dev.docker'.format(name=parts[0], uid=uid)
-  return ''.join(parts)
+    parts = list(node.partition('@'))
+    parts[2] = '{name}.{uid}.dev.docker'.format(name=parts[0], uid=uid)
+    return ''.join(parts)
 
 def tweak_config(config, name, uid):
-  cfg = copy.deepcopy(config)
-  cfg['nodes'] = { 'node': cfg['nodes'][name] }
+    cfg = copy.deepcopy(config)
+    cfg['nodes'] = { 'node': cfg['nodes'][name] }
 
-  sys_config = cfg['nodes']['node']['sys.config']
-  sys_config['ccm_nodes'] = [set_hostname(n, uid) for n in sys_config['ccm_nodes']]
-  sys_config['db_nodes']  = [set_hostname(n, uid) for n in sys_config['db_nodes']]
+    sys_config = cfg['nodes']['node']['sys.config']
+    sys_config['ccm_nodes'] = [set_hostname(n, uid) for n in sys_config['ccm_nodes']]
+    sys_config['db_nodes']  = [set_hostname(n, uid) for n in sys_config['db_nodes']]
 
-  vm_args = cfg['nodes']['node']['vm.args']
-  vm_args['name'] = set_hostname(vm_args['name'], uid)
+    vm_args = cfg['nodes']['node']['vm.args']
+    vm_args['name'] = set_hostname(vm_args['name'], uid)
 
-  return cfg
-
-def pull_image(name):
-  try:
-    client.inspect_image(name)
-  except docker.errors.APIError:
-    print('Pulling image {name}'.format(name=name), file=sys.stderr)
-    client.pull(name)
+    return cfg
 
 
 parser = argparse.ArgumentParser(
-  formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-  description='Bring up onedata cluster.')
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    description='Bring up oneprovider cluster.')
 
 parser.add_argument(
-  '--image', '-i',
-  action='store',
-  default='onedata/worker',
-  help='the image to use for the container',
-  dest='image')
+    '--image', '-i',
+    action='store',
+    default='onedata/worker',
+    help='docker image to use as a container',
+    dest='image')
 
 parser.add_argument(
-  '--bin', '-b',
-  action='store',
-  default=os.getcwd(),
-  help='the path to onedata repository (precompiled)',
-  dest='bin')
+    '--bin', '-b',
+    action='store',
+    default=os.getcwd(),
+    help='path to oneprovider directory (precompiled)',
+    dest='bin')
 
 parser.add_argument(
-  '--create-service', '-c',
-  action='store',
-  default='{dir}/createService.js'.format(dir=os.path.dirname(os.path.realpath(__file__))),
-  help='the path to createService.js plugin',
-  dest='create_service')
+    '--create-service', '-c',
+    action='store',
+    default='{0}/createService.js'.format(os.path.dirname(os.path.realpath(__file__))),
+    help='path to createService.js plugin',
+    dest='create_service')
 
 parser.add_argument(
-  'config_path',
-  action='store',
-  help='path to gen_dev_args.json that will be used to configure the cluster')
+    'config_path',
+    action='store',
+    help='path to gen_dev_args.json that will be used to configure the cluster')
 
 args = parser.parse_args()
-client = docker.Client()
 uid = str(int(time.time()))
+docker_host = os.getenv('DOCKER_HOST', 'unix:///var/run/docker.sock')
 
 config = parse_config(args.config_path)
 config['config']['target_dir'] = '/root/bin'
 configs = [tweak_config(config, node, uid) for node in config['nodes']]
 
-pull_image(args.image)
-pull_image('crosbymichael/skydns')
-pull_image('crosbymichael/skydock')
+skydns = docker.run(
+    image='crosbymichael/skydns',
+    detach=True,
+    name='skydns_{0}'.format(uid),
+    command=['-nameserver', '8.8.8.8:53', '-domain', 'docker'])
 
-skydns = client.create_container(
-  image='crosbymichael/skydns',
-  detach=True,
-  name='skydns_{uid}'.format(uid=uid),
-  command='-nameserver 8.8.8.8:53 -domain docker')
-client.start(container=skydns)
+skydock = docker.run(
+    image='crosbymichael/skydock',
+    detach=True,
+    name='skydock_{0}'.format(uid),
+    reflect=['/var/run/docker.sock'],
+    volumes=[(args.create_service, '/createService.js', 'ro')],
+    command=['-ttl', '30', '-environment', 'dev', '-s', docker_host,
+             '-domain', 'docker', '-name', 'skydns_{0}'.format(uid), '-plugins',
+             '/createService.js'])
 
-skydock = client.create_container(
-  image='crosbymichael/skydock',
-  detach=True,
-  name='skydock_{uid}'.format(uid=uid),
-  volumes=['/createService.js', '/docker.sock'],
-  command='-ttl 30 -environment dev -s /docker.sock -domain docker -name \
-           skydns_{uid} -plugins /createService.js'.format(uid=uid))
-
-client.start(
-  container=skydock,
-  binds={ args.create_service: { 'bind': '/createService.js', 'ro': True },
-          '/var/run/docker.sock': { 'bind': '/docker.sock', 'ro': False } })
-
-skydns_config = client.inspect_container(skydns)
+skydns_config = docker.inspect(skydns)
 dns = skydns_config['NetworkSettings']['IPAddress']
 
 output = collections.defaultdict(list)
 output['dns'] = dns
-output['docker_ids'] = [skydns.get('Id'), skydock.get('Id')]
+output['docker_ids'] = [skydns, skydock]
 
 for cfg in configs:
-  node_type = cfg['nodes']['node']['sys.config']['node_type']
-  node_name = cfg['nodes']['node']['vm.args']['name']
-  output['op_{type}_nodes'.format(type=node_type)].append(node_name)
+    node_type = cfg['nodes']['node']['sys.config']['node_type']
+    node_name = cfg['nodes']['node']['vm.args']['name']
+    output['op_{type}_nodes'.format(type=node_type)].append(node_name)
 
-  (name, sep, hostname) = node_name.partition('@')
+    (name, sep, hostname) = node_name.partition('@')
 
-  command = \
-  '''set -e
+    command = \
+    '''set -e
 cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
 escript gen_dev.erl /tmp/gen_dev_args.json
 /root/bin/node/bin/oneprovider_node console'''
-  command = command.format(gen_dev_args=json.dumps(cfg))
+    command = command.format(gen_dev_args=json.dumps(cfg))
 
-  container = client.create_container(
-    image=args.image,
-    hostname=hostname,
-    detach=True,
-    stdin_open=True,
-    tty=True,
-    working_dir='/root/build',
-    name='{name}_{uid}'.format(name=name, uid=uid),
-    volumes=['/root/build'],
-    command=['bash', '-c', command])
+    container = docker.run(
+        image=args.image,
+        hostname=hostname,
+        detach=True,
+        interactive=True,
+        tty=True,
+        workdir='/root/build',
+        name='{0}_{1}'.format(name, uid),
+        volumes=[(args.bin, '/root/build', 'ro')],
+        dns=[dns],
+        command=command)
 
-  client.start(
-    container=container,
-    binds={ args.bin:  { 'bind': '/root/build', 'ro': True } },
-    dns=[dns])
-
-  output['docker_ids'].append(container.get('Id'))
+    output['docker_ids'].append(container)
 
 print(json.dumps(output))

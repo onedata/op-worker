@@ -17,7 +17,7 @@ def pull_image(name):
 
 parser = argparse.ArgumentParser(
   formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-  description='Bring up onedata cluster.')
+  description='Bring up globalregistry.')
 
 parser.add_argument(
   '--image', '-i',

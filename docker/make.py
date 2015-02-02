@@ -1,82 +1,78 @@
 #!/usr/bin/env python
 
-import __main__
 import argparse
+import docker
 import os
-import subprocess
 
 from os.path import expanduser
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    description='Run make in the full development environment.')
+    description='Run make inside a dockerized development environment.')
 
 parser.add_argument(
     '--image', '-i',
     action='store',
     default='onedata/builder',
-    help='the image to use for building',
+    help='docker image to use for building',
     dest='image')
 
 parser.add_argument(
     '--src', '-s',
     action='store',
     default=os.getcwd(),
-    help='the source directry to run make from',
+    help='source directory to run make from',
     dest='src')
 
 parser.add_argument(
     '--dst', '-d',
     action='store',
     default=os.getcwd(),
-    help='the directory to store the build in',
+    help='destination directory where the build will be stored',
     dest='dst')
 
 parser.add_argument(
     '--keys', '-k',
     action='store',
     default=expanduser("~/.ssh"),
-    help='the ssh keys directory needed for dependency fetching',
+    help='directory of ssh keys used for dependency fetching',
     dest='keys')
 
 parser.add_argument(
     '--reflect-volume', '-r',
     action='append',
     default=[],
-    help='path to file which will be directly reflected in docker\'s filesystem',
+    help="host's paths that will be directly reflected in container's filesystem",
     dest='reflect')
 
 parser.add_argument(
     'params',
     action='store',
     nargs='*',
-    help='parameters that will be passed to `make`')
+    help='parameters passed to `make`')
 
 args = parser.parse_args()
 
 command = \
-'''cp -RTf /root/keys /root/.ssh
-chown -R root:root /root/.ssh
+'''cp --recursive --no-target-directory --force /root/keys /root/.ssh
+chown --recursive root:root /root/.ssh
+chmod 700 /root/.ssh
+chmod 600 /root/.ssh/*
 eval $(ssh-agent)
 ssh-add
-rsync -rogl /root/src/ /root/bin
+rsync --archive /root/src/ /root/bin
 make {params};
-find . -user root -exec chown --reference /root/bin/[Mm]akefile -- '{{}}' +'''
-command = command.format(params=' '.join(args.params))
+chown --recursive --from=root {uid}:{gid} .'''
+command = command.format(
+    params=' '.join(args.params),
+    uid=os.getuid(),
+    gid=os.getgid())
 
-additional_run_params = []
-if not hasattr(__main__, '__file__'):
-    additional_run_params.append('-it')
+volumes = [
+    (args.src, '/root/src', 'ro'),
+    (args.dst, '/root/bin', 'rw'),
+    (args.keys, '/root/keys', 'ro')]
 
-additional_volumes=[]
-for path in args.reflect:
-  additional_volumes.append('-v')
-  additional_volumes.append('{vol}:{vol}'.format(vol=path))
-
-subprocess.call(['docker', 'run', '--rm'] + additional_run_params + [
-                 '-v', '{src}:/root/src'.format(src=args.src),
-                 '-v', '{dst}:/root/bin'.format(dst=args.dst),
-                 '-v', '{keys}:/root/keys'.format(keys=args.keys)] +
-                 additional_volumes + [
-                 '-w', '/root/bin',
-                 args.image, 'sh', '-c', command])
+docker.run(tty=True, interactive=True, rm=True, reflect=args.reflect,
+           volumes=volumes, workdir='/root/bin', image=args.image,
+           command=command)
