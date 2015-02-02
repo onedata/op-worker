@@ -16,12 +16,12 @@
 -module(gen_dev).
 -export([main/1]).
 
--define(APP_NAME, "oneprovider_node").
-
 -define(ARGS_FILE, atom_to_list(?MODULE) ++ "_args.json").
 -define(RELEASES_DIRECTORY, "rel").
 -define(JSON_PARSER_DIR, "deps/mochiweb/ebin").
 
+% oneprovider specific config
+-define(ONEPROVIDER_APP_NAME, oneprovider_node).
 -define(DIST_APP_FAILOVER_TIMEOUT, 5000).
 -define(SYNC_NODES_TIMEOUT, 60000).
 
@@ -32,19 +32,188 @@ main(Args) ->
         ArgsFile = get_args_file(Args),
         {ok, FileContent} = file:read_file(ArgsFile),
         ParsedJson = parse_config_file(FileContent),
-        Config = proplists:get_value(config, ParsedJson),
-        Nodes = proplists:get_value(nodes, ParsedJson),
-        create_releases(Nodes, Config)
+        configure_apps(ParsedJson)
     catch
         _Type:Error ->
-            print("Stacktrace: ~p~n", [erlang:get_stacktrace()]),
+            Stacktrace = erlang:get_stacktrace(),
             try print("Error: ~ts", [Error])
             catch _:_ -> print("Error: ~p", [Error])
-            end
+            end,
+            print("Stacktrace: ~p~n", [Stacktrace])
     end.
 
+%%%===================================================================
+%%% Application configuration
+%%%===================================================================
+configure_apps([]) ->
+    [];
+configure_apps([{AppName, ApplicationJson} | Rest]) ->
+    Config = proplists:get_value(config, ApplicationJson),
+    Nodes = proplists:get_value(nodes, ApplicationJson),
+    [create_releases(AppName, Config, Nodes) | configure_apps(Rest)].
+
+create_releases(_, _, []) ->
+    ok;
+create_releases(AppName, Config, [{Name, NodeConfig} | Rest]) ->
+    {InputDir, TargetDir} = prepare_neccessary_paths(Config),
+    ReleaseDir = prepare_fresh_release(InputDir, TargetDir, Name),
+    {SysConfig, VmArgs} = prepare_and_print_configuration(InputDir, ReleaseDir, NodeConfig),
+    configure_release(AppName, ReleaseDir, SysConfig, VmArgs),
+    create_releases(AppName, Config, Rest).
+
+prepare_neccessary_paths(Config) ->
+    InputDir = proplists:get_value(input_dir, Config),
+    TargetDir = proplists:get_value(target_dir, Config),
+    make_dir(TargetDir),
+    {InputDir, TargetDir}.
+
+prepare_and_print_configuration(InputDir, ReleaseDir, NodeConfig) ->
+    print("================ Configuring release ===================="),
+    preety_print_entry({input_dir, InputDir}),
+    preety_print_entry({release_dir, ReleaseDir}),
+    print("====================== vm.args =========================="),
+    VmArgs = proplists:get_value('vm.args', NodeConfig),
+    lists:foreach(fun(X) -> preety_print_entry(X) end, VmArgs),
+    print("===================== sys.config ========================"),
+    SysConfig = proplists:get_value('sys.config', NodeConfig),
+    lists:foreach(fun(X) -> preety_print_entry(X) end, SysConfig),
+    print("========================================================="),
+    print(""),
+    {SysConfig, VmArgs}.
+
+prepare_fresh_release(InputDir, TargetDir, Name) ->
+    ReleaseDir = filename:join(TargetDir, atom_to_list(Name)),
+    remove_dir(ReleaseDir),
+    copy_dir(InputDir, ReleaseDir),
+    ReleaseDir.
+
+%%%===================================================================
+%%% Release configuration
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Configure release stored at ReleaseRootPath, according to given parameters
+%% @end
+%%--------------------------------------------------------------------
+-spec configure_release(ApplicationName :: atom(), ReleaseRootPath :: string(), SysConfig :: list(), VmArgs :: list()) ->
+    ok | no_return().
+configure_release(?ONEPROVIDER_APP_NAME, ReleaseRootPath, SysConfig, VmArgs) ->
+    {SysConfigPath, VmArgsPath} = find_config_location(?ONEPROVIDER_APP_NAME, ReleaseRootPath),
+    lists:foreach(fun({Key, Value}) -> replace_vm_arg(VmArgsPath, "-" ++ atom_to_list(Key), Value) end, VmArgs),
+    lists:foreach(fun({Key, Value}) -> replace_env(SysConfigPath, ?ONEPROVIDER_APP_NAME, Key, Value) end, SysConfig),
+
+    % configure kernel distributed erlang app
+    NodeName = proplists:get_value(name, VmArgs),
+    NodeType = proplists:get_value(type, SysConfig),
+    CcmNodes = proplists:get_value(ccm_nodes, SysConfig),
+    case NodeType =:= ccm andalso length(CcmNodes) > 1 of
+        true ->
+            OptCcms = CcmNodes -- [list_to_atom(NodeName)],
+            replace_application_config(SysConfigPath, kernel,
+                [
+                    {distributed, [{?ONEPROVIDER_APP_NAME, ?DIST_APP_FAILOVER_TIMEOUT, [list_to_atom(NodeName), list_to_tuple(OptCcms)]}]},
+                    {sync_nodes_mandatory, OptCcms},
+                    {sync_nodes_timeout, ?SYNC_NODES_TIMEOUT}
+                ]);
+        false -> ok
+    end;
+configure_release(ApplicationName, ReleaseRootPath, SysConfig, VmArgs) ->
+    {SysConfigPath, VmArgsPath} = find_config_location(ApplicationName, ReleaseRootPath),
+    lists:foreach(fun({Key, Value}) -> replace_vm_arg(VmArgsPath, "-" ++ atom_to_list(Key), Value) end, VmArgs),
+    lists:foreach(fun({Key, Value}) -> replace_env(SysConfigPath, ApplicationName, Key, Value) end, SysConfig).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reads erlang 'RELEASES' file in order to find where vm.args and
+%% sys.config are located
+%% @end
+%%--------------------------------------------------------------------
+-spec find_config_location(ApplicationName :: atom(), ReleaseRootPath :: atom()) ->
+    {SysConfigPath :: string(), VmArgsPath :: string()}.
+find_config_location(ApplicationName, ReleaseRootPath) ->
+    ApplicationNameString = atom_to_list(ApplicationName),
+    {ok,[[{release, ApplicationNameString, AppVsn, _, _, _}]]} = file:consult(filename:join([ReleaseRootPath, "releases", "RELEASES"])),
+    SysConfigPath = filename:join([ReleaseRootPath, "releases", AppVsn, "sys.config"]),
+    VmArgsPath = filename:join([ReleaseRootPath, "releases", AppVsn, "vm.args"]),
+    {SysConfigPath, VmArgsPath}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Replace env in sys.config file
+%% @end
+%%--------------------------------------------------------------------
+-spec replace_env(string(), atom(), atom(), term()) -> ok | no_return().
+replace_env(SysConfigPath, ApplicationName, EnvName, EnvValue) ->
+    {ok, [SysConfig]} = file:consult(SysConfigPath),
+    ApplicationEnvs = proplists:get_value(ApplicationName, SysConfig),
+    UpdatedApplicationEnvs = [{EnvName, EnvValue} | proplists:delete(EnvName, ApplicationEnvs)],
+    replace_application_config(SysConfigPath, ApplicationName, UpdatedApplicationEnvs).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Replace whole application config in sys.config file
+%% @end
+%%--------------------------------------------------------------------
+-spec replace_application_config(string(), atom(), list()) -> ok | no_return().
+replace_application_config(SysConfigPath, ApplicationName, ApplicationEnvs) ->
+    {ok, [SysConfig]} = file:consult(SysConfigPath),
+    UpdatedSysConfig = [{ApplicationName, ApplicationEnvs} | proplists:delete(ApplicationName, SysConfig)],
+    ok = file:write_file(SysConfigPath, term_to_string(UpdatedSysConfig) ++ ".").
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Replace env in vm.args file
+%% @end
+%%--------------------------------------------------------------------
+-spec replace_vm_arg(string(), string(), string()) -> ok | no_return().
+replace_vm_arg(VMArgsPath, FullArgName, ArgValue) ->
+    [] = os:cmd("sed -i \"s#" ++ FullArgName ++ " .*#" ++ FullArgName ++ " " ++
+        ArgValue ++ "#g\" \"" ++ VMArgsPath ++ "\"").
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Convert erlang term to string
+%% @end
+%%--------------------------------------------------------------------
+-spec term_to_string(term()) -> string().
+term_to_string(Term) ->
+    io_lib:fwrite("~p",[Term]).
+
+%%%===================================================================
+%%% Filesystem operations
+%%%===================================================================
+make_dir(Path) ->
+    case os:cmd("mkdir -p '" ++ Path ++ "'") of
+        [] -> ok;
+        Err -> throw(Err)
+    end.
+remove_dir(Path) ->
+    case os:cmd("rm -rf '" ++ Path ++ "'") of
+        [] -> ok;
+        Err -> throw(Err)
+    end.
+copy_dir(From, To) ->
+    case os:cmd("cp -R '" ++ From ++ "' '" ++ To ++ "'") of
+        [] -> ok;
+        Err -> throw(Err)
+    end.
+
+%%%===================================================================
+%%% Args Parsing
+%%%===================================================================
+get_args_file([ConfigFilePath | _]) ->
+    ConfigFilePath;
+get_args_file(_) ->
+    ?ARGS_FILE.
+
+parse_config_file(FileContent) ->
+    code:add_path(?JSON_PARSER_DIR),
+    Json = mochijson2:decode(FileContent, [{format, proplist}]),
+    json_proplist_to_term(Json).
+
 json_proplist_to_term(Json) ->
-    json_proplist_to_term(Json, undefined).
+    json_proplist_to_term(Json, atom).
 
 json_proplist_to_term([], _) ->
     [];
@@ -69,65 +238,10 @@ json_proplist_to_term(Binary, string) when is_binary(Binary) ->
 json_proplist_to_term(Other, _) ->
     Other.
 
-parse_config_file(FileContent) ->
-    code:add_path(?JSON_PARSER_DIR),
-    Json = mochijson2:decode(FileContent, [{format, proplist}]),
-    json_proplist_to_term(Json).
 
-
-get_args_file([ConfigFilePath | _]) ->
-    ConfigFilePath;
-get_args_file(_) ->
-    ?ARGS_FILE.
-
-create_releases([], _) ->
-    ok;
-create_releases([{Name, NodeConfig} | Rest], Config) ->
-    % prepare neccessary paths
-    InputDir = proplists:get_value(input_dir, Config),
-    TargetDir = proplists:get_value(target_dir, Config),
-    ReleaseDirectory = filename:join(TargetDir, atom_to_list(Name)),
-
-    % prepare and print configuration
-    print("================ Configuring release ===================="),
-    preety_print_entry({input_dir, InputDir}),
-    preety_print_entry({output_dir, ReleaseDirectory}),
-    print("====================== vm.args =========================="),
-    VmArgs = proplists:get_value('vm.args', NodeConfig),
-    lists:foreach(fun(X) -> preety_print_entry(X) end, VmArgs),
-    print("===================== sys.config ========================"),
-    SysConfig = proplists:get_value('sys.config', NodeConfig),
-    lists:foreach(fun(X) -> preety_print_entry(X) end, SysConfig),
-    print("========================================================="),
-    print(""),
-
-    % copy fresh release
-    file:make_dir(TargetDir),
-    remove_dir(ReleaseDirectory),
-    copy_dir(InputDir, ReleaseDirectory),
-
-    % configure
-    prepare_helper_modules(TargetDir),
-    configurator:configure_release(ReleaseDirectory, ?APP_NAME, SysConfig, VmArgs, ?DIST_APP_FAILOVER_TIMEOUT, ?SYNC_NODES_TIMEOUT),
-    cleanup_helper_modules(TargetDir),
-
-    create_releases(Rest, Config).
-
-remove_dir(Path) ->
-    case os:cmd("rm -rf '" ++ Path ++ "'") of
-        [] -> ok;
-        Err -> throw(Err)
-    end.
-copy_dir(From, To) ->
-    case os:cmd("cp -R '" ++ From ++ "' '" ++ To ++ "'") of
-        [] -> ok;
-        Err -> throw(Err)
-    end.
-
-prepare_helper_modules(TargetDir) ->
-    code:add_path(TargetDir),
-    compile:file(filename:join([?RELEASES_DIRECTORY, "files", "configurator.erl"]), [{outdir, TargetDir}]).
-
+%%%===================================================================
+%%% Logging
+%%%===================================================================
 preety_print_entry({Key, Value}) ->
     print("~*s~p", [-?PRINTING_WIDTH, atom_to_list(Key), Value]).
 
@@ -136,6 +250,3 @@ print(Msg) ->
 print(Msg, Args) ->
     io:format(Msg ++ "~n", Args),
     Msg.
-
-cleanup_helper_modules(TargetDir) ->
-    file:delete(filename:join(TargetDir,"configurator.beam")).
