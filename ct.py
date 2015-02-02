@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from distutils.spawn import find_executable
 import __main__
 import argparse
 import os
@@ -36,14 +37,15 @@ if not hasattr(__main__, '__file__'):
 
 additional_args = []
 if args.suite:
-	additional_args.append(args.suite)
+    additional_args.append(args.suite)
 if args.case:
-	additional_args.append(args.case)
+    additional_args.append(args.case)
 
 subprocess.call(['docker', 'run', '--rm'] + additional_run_params + [
-	             '-w', script_dir,
-	             '-v', '{dir}:{dir}'.format(dir=script_dir),
-	             '-v', '{sock}:{sock}'.format(sock=docker_sock),
-	             '-h', 'd1.local',
-	             'onedata/worker', 'sh',
-	             './test_distributed/start_distributed_test.sh'] + additional_args)
+                 '-w', script_dir,
+                 '-v', '{dir}:{dir}'.format(dir=script_dir),
+                 '-v', '{sock}:{sock}'.format(sock=docker_sock),
+                 '-v', '/usr/bin/docker:/usr/bin/docker',
+                 '-h', 'd1.local',
+                 'onedata/worker', 'sh',
+                 './test_distributed/start_distributed_test.sh'] + additional_args)
