@@ -57,7 +57,7 @@ create_releases(_, _, []) ->
 create_releases(AppName, Config, [{Name, NodeConfig} | Rest]) ->
     {InputDir, TargetDir} = prepare_neccessary_paths(Config),
     ReleaseDir = prepare_fresh_release(InputDir, TargetDir, Name),
-    {SysConfig, VmArgs} = prepare_and_print_configuration(InputDir, ReleaseDir, NodeConfig),
+    {SysConfig, VmArgs} = prepare_and_print_configuration(InputDir, ReleaseDir, AppName, NodeConfig),
     configure_release(AppName, ReleaseDir, SysConfig, VmArgs),
     create_releases(AppName, Config, Rest).
 
@@ -67,8 +67,9 @@ prepare_neccessary_paths(Config) ->
     make_dir(TargetDir),
     {InputDir, TargetDir}.
 
-prepare_and_print_configuration(InputDir, ReleaseDir, NodeConfig) ->
+prepare_and_print_configuration(InputDir, ReleaseDir, AppName, NodeConfig) ->
     print("================ Configuring release ===================="),
+    preety_print_entry({application, AppName}),
     preety_print_entry({input_dir, InputDir}),
     preety_print_entry({release_dir, ReleaseDir}),
     print("====================== vm.args =========================="),
@@ -237,7 +238,6 @@ json_proplist_to_term(Binary, string) when is_binary(Binary) ->
     binary_to_list(Binary);
 json_proplist_to_term(Other, _) ->
     Other.
-
 
 %%%===================================================================
 %%% Logging
