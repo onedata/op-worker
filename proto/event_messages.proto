@@ -29,7 +29,7 @@ message WriteEvent {
 // Subscription messages
 
 message EventSubscription {
-    oneof subscription {
+    oneof event_subscription {
         ReadEventSubscription         read         = 1;
         WriteEventSubscription        write        = 2;
         EventSubscriptionCancellation cancellation = 3;

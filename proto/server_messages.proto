@@ -16,6 +16,6 @@ message ServerMessage {
         Status                   status                    = 5;
 
         // event_messages.proto
-        Event                    event                     = 6;
+        EventSubscription        event_subscription        = 6;
     }
 }
