@@ -116,6 +116,10 @@ handle_call(get_workers, _From, State) ->
     WorkersList = get_workers_list(State),
     {reply, {WorkersList, State#cm_state.state_num}, State};
 
+handle_call(healthcheck, _From, State) ->
+    WorkersList = get_workers_list(State),
+    {reply, {State#cm_state.nodes, WorkersList, State#cm_state.state_num}, State};
+
 handle_call(_Request, _From, State) ->
     ?warning("Wrong call: ~p", [_Request]),
     {reply, wrong_request, State}.

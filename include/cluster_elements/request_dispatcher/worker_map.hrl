@@ -13,3 +13,4 @@
 
 -define(default_worker_selection_type, random).
 -type(selection_type() :: random | prefere_local).
+-type(worker_ref() :: atom() | {atom(), node()}).

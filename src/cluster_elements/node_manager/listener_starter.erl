@@ -92,6 +92,7 @@ start_gui_listener() ->
     {ok, GuiNbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_acceptors),
     {ok, MaxKeepAlive} = application:get_env(?APP_NAME, http_worker_max_keepalive),
     {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout),
+
     LocalPort = oneproxy:get_local_port(GuiPort),
     spawn_link(fun() -> oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none) end),
 
@@ -110,6 +111,12 @@ start_gui_listener() ->
         ]},
         % Proper requests are routed to handler modules
         {'_', static_dispatches(DocRoot, ?STATIC_PATHS) ++ [
+            {"/nagios/[...]", opn_cowboy_bridge,
+                [
+                    {delegation, true},
+                    {handler_module, nagios_handler},
+                    {handler_opts, []}
+                ]},
             {'_', opn_cowboy_bridge,
                 [
                     {delegation, true},

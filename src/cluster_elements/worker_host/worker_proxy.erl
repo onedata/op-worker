@@ -28,65 +28,66 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Call with default timeout
-%% @equiv call(WorkerName, Request, 10000)
+%% @equiv call(WorkerRef, Request, 10000)
 %% @end
 %%--------------------------------------------------------------------
--spec call(WorkerName :: atom(), Request :: term()) -> ok | {ok, term()} | {error, term()}.
-call(WorkerName, Request) ->
-    call(WorkerName, Request, 10000).
+-spec call(WorkerRef :: worker_ref(), Request :: term()) -> ok | {ok, term()} | {error, term()}.
+call(WorkerRef, Request) ->
+    call(WorkerRef, Request, 10000).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Call with default worker selection type
-%% @equiv call(WorkerName, Request, Timeout, ?default_worker_selection_type)
+%% @equiv call(WorkerRef, Request, Timeout, ?default_worker_selection_type)
 %% @end
 %%--------------------------------------------------------------------
--spec call(WorkerName :: atom(), Request :: term(), Timeout :: integer()) -> ok | {ok, term()} | {error, term()}.
-call(WorkerName, Request, Timeout) ->
-    call(WorkerName, Request, Timeout, ?default_worker_selection_type).
+-spec call(WorkerRef :: worker_ref(), Request :: term(), Timeout :: integer()) -> ok | {ok, term()} | {error, term()}.
+call(WorkerRef, Request, Timeout) ->
+    call(WorkerRef, Request, Timeout, ?default_worker_selection_type).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Call worker node, selected by given 'SelectionType' algorithm, with given timeout
 %% @end
 %%--------------------------------------------------------------------
--spec call(WorkerName :: atom(), Request :: term(), Timeout :: integer(), SelectionType :: selection_type()) ->
+-spec call(WorkerRef :: worker_ref(), Request :: term(), Timeout :: integer(), SelectionType :: selection_type()) ->
     ok | {ok, term()} | {error, term()}.
-call(WorkerName, Request, Timeout, SelectionType) ->
+call(WorkerRef, Request, Timeout, SelectionType) ->
     MsgId = make_ref(),
-    case worker_map:get_worker_node(WorkerName, SelectionType) of
-        {ok, Node} ->
-            gen_server:cast({WorkerName, Node}, #worker_request{req = Request, id = MsgId, reply_to = {proc, self()}}),
+    case choose_node(WorkerRef, SelectionType) of
+        {ok, Name, Node} ->
+            gen_server:cast({Name, Node}, #worker_request{req = Request, id = MsgId, reply_to = {proc, self()}}),
             receive
                 #worker_answer{id = MsgId, response = Response} -> Response
             after Timeout ->
-                ?error("Worker: ~p, request: ~p exceeded timeout of ~p ms",[WorkerName, Request, Timeout]),
+                ?error("Worker: ~p, request: ~p exceeded timeout of ~p ms", [WorkerRef, Request, Timeout]),
                 {error, timeout}
             end;
-        Error -> Error
+        Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Asynchronously send request to worker
-%% @equiv cast(WorkerName, Request, undefined).
+%% @equiv cast(WorkerRef, Request, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec cast(WorkerName :: atom(), Request :: term()) -> ok | {error, term()}.
-cast(WorkerName, Request) ->
-    cast(WorkerName, Request, undefined).
+-spec cast(WorkerRef :: worker_ref(), Request :: term()) -> ok | {error, term()}.
+cast(WorkerRef, Request) ->
+    cast(WorkerRef, Request, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Asynchronously send request to worker, answer is expected at ReplyTo
 %% process/gen_server
-%% @equiv cast(WorkerName, Request, ReplyTo, undefined).
+%% @equiv cast(WorkerRef, Request, ReplyTo, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec cast(WorkerName :: atom(), Request :: term(), ReplyTo :: {proc, pid()} | {gen_serv, atom() | pid()}) ->
+-spec cast(WorkerRef :: worker_ref(), Request :: term(), ReplyTo :: {proc, pid()} | {gen_serv, atom() | pid()}) ->
     ok | {error, term()}.
-cast(WorkerName, Request, ReplyTo) ->
-    cast(WorkerName, Request, ReplyTo, undefined).
+cast(WorkerRef, Request, ReplyTo) ->
+    cast(WorkerRef, Request, ReplyTo, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -94,13 +95,13 @@ cast(WorkerName, Request, ReplyTo) ->
 %% Asynchronously send request to worker, answer with given MsgId is
 %% expected at ReplyTo process/gen_server. The answer would be
 %% 'worker_answer' record
-%% @equiv cast(WorkerName, Request, ReplyTo, MsgId, ?default_worker_selection_type).
+%% @equiv cast(WorkerRef, Request, ReplyTo, MsgId, ?default_worker_selection_type).
 %% @end
 %%--------------------------------------------------------------------
--spec cast(WorkerName :: atom(), Request :: term(), ReplyTo :: {proc, pid()} | {gen_serv, atom() | pid()}, MsgId :: term() | undefined) ->
+-spec cast(WorkerRef :: worker_ref(), Request :: term(), ReplyTo :: {proc, pid()} | {gen_serv, atom() | pid()}, MsgId :: term() | undefined) ->
     ok | {error, term()}.
-cast(WorkerName, Request, ReplyTo, MsgId) ->
-    cast(WorkerName, Request, ReplyTo, MsgId, ?default_worker_selection_type).
+cast(WorkerRef, Request, ReplyTo, MsgId) ->
+    cast(WorkerRef, Request, ReplyTo, MsgId, ?default_worker_selection_type).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -110,16 +111,39 @@ cast(WorkerName, Request, ReplyTo, MsgId) ->
 %% 'worker_answer' record
 %% @end
 %%--------------------------------------------------------------------
--spec cast(WorkerName :: atom(), Request :: term(), ReplyTo :: {proc, pid()} | {gen_serv, atom() | pid()},
+-spec cast(WorkerRef :: worker_ref(), Request :: term(), ReplyTo :: {proc, pid()} | {gen_serv, atom() | pid()},
     MsgId :: term() | undefined, SelectionType :: selection_type()) ->
     ok | {error, term()}.
-cast(WorkerName, Request, ReplyTo, MsgId, SelectionType) ->
-    case worker_map:get_worker_node(WorkerName, SelectionType) of
-        {ok, Node} ->
-            gen_server:cast({WorkerName, Node}, #worker_request{req = Request, id = MsgId, reply_to = ReplyTo});
-        Error -> Error
+cast(WorkerRef, Request, ReplyTo, MsgId, SelectionType) ->
+    MsgId = make_ref(),
+    case choose_node(WorkerRef, SelectionType) of
+        {ok, Name, Node} ->
+            gen_server:cast({Name, Node}, #worker_request{req = Request, id = MsgId, reply_to = ReplyTo});
+        Error ->
+            Error
     end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Chooses a node to send a worker request to.
+%% @end
+%%--------------------------------------------------------------------
+-spec choose_node(WorkerRef :: worker_ref(), SelectionType :: selection_type()) -> {ok, WorkerName :: atom(), WorkerNode :: atom()} | {error, term()}.
+choose_node(WorkerRef, SelectionType) ->
+    case WorkerRef of
+        {WName, WNode} ->
+            {ok, WName, WNode};
+        WName ->
+            case worker_map:get_worker_node(WName, SelectionType) of
+                {ok, WNode} ->
+                    {ok, WName, WNode};
+                {error, Error} ->
+                    {error, Error}
+            end
+    end.

@@ -9,7 +9,7 @@
 %%% Gen server which handles notifications of cluster state changes
 %%% @end
 %%%-------------------------------------------------------------------
--module(cluster_state_notifier).
+-module(cluster_state_monitor).
 -author("Tomasz Lichon").
 
 -behaviour(gen_server).
@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0, cast/1]).
+-export([start_link/0, cast/1, call/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -41,6 +41,15 @@
 -spec cast(Req :: term()) -> ok.
 cast(Req) ->
     gen_server:cast({global, ?SERVER}, Req).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv gen_server:call({global, ?SERVER}, Req).
+%% @end
+%%--------------------------------------------------------------------
+-spec call(Req :: term()) -> ok.
+call(Req) ->
+    gen_server:call({global, ?SERVER}, Req).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -82,6 +91,9 @@ init([]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_call(get_cluster_health, _From, State) ->
+    ?dump("hoho"),
+    {reply, "hoho", State};
 handle_call(_Request, _From, State) ->
     ?warning("cluster_state_notifier unknown call: ~p", [_Request]),
     {reply, ok, State}.

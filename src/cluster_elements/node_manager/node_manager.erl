@@ -126,6 +126,9 @@ handle_call(get_node_type, _From, State = #node_state{node_type = NodeType}) ->
 handle_call(get_state_num, _From, State = #node_state{state_num = StateNum}) ->
     {reply, StateNum, State};
 
+handle_call(healthcheck, _From, State = #node_state{state_num = StateNum}) ->
+    {reply, {ok, StateNum}, State};
+
 handle_call(_Request, _From, State) ->
     ?warning("Wrong node_manager call: ~p", [_Request]),
     {reply, wrong_request, State}.

@@ -96,8 +96,11 @@ init(_) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
-handle_call(get_state_num, _From, State) ->
-    {reply, State#dispatcher_state.state_num, State};
+handle_call(get_state_num, _From, #dispatcher_state{state_num = StateNum} = State) ->
+    {reply, StateNum, State};
+
+handle_call(healthcheck, _From, #dispatcher_state{state_num = StateNum} = State) ->
+    {reply, {ok, StateNum}, State};
 
 handle_call(_Request, _From, State) ->
     ?warning("Wrong call: ~p", [_Request]),
