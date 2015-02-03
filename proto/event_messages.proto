@@ -4,34 +4,37 @@ import "common_messages.proto";
 
 // Event messages
 
+message Event {
+    oneof event {
+        ReadEvent  read  = 1;
+        WriteEvent write = 2;
+    }
+}
+
 message ReadEvent {
-    required uint64    seq_num = 1; // unique per client event sequence number
-    required uint32    counter = 2; // amount of aggregated events
-    required bytes     file_id = 3; // ID of file associated with an event
-    required uint64    size    = 4; // amount of read bytes
-    repeated FileBlock blocks  = 5; // list of read blocks
+    required uint32    counter = 1; // amount of aggregated events
+    required bytes     file_id = 2; // ID of file associated with an event
+    required uint64    size    = 3; // amount of read bytes
+    repeated FileBlock blocks  = 4; // list of read blocks
 }
 
 message WriteEvent {
-    required uint64    seq_num   = 1; // unique per client event sequence number
-    required uint32    counter   = 2; // amount of aggregated events
-    required bytes     file_id   = 3; // ID of file associated with an event
-    required uint64    file_size = 4; // size of file associated with an event
-    required uint64    size      = 5; // amount of written bytes
-    repeated FileBlock blocks    = 6; // list of written blocks
-}
-
-message SubscriptionEvent {
-    required uint64 seq_num = 1; // unique per client event sequence number
-    required uint64 id      = 2; // ID of created subscription
-}
-
-message SubscriptionCancellationEvent {
-    required uint64 seq_num = 1; // unique per client event sequence number
-    required uint64 id      = 2; // ID of cancelled subscription
+    required uint32    counter   = 1; // amount of aggregated events
+    required bytes     file_id   = 2; // ID of file associated with an event
+    required uint64    file_size = 3; // size of file associated with an event
+    required uint64    size      = 4; // amount of written bytes
+    repeated FileBlock blocks    = 5; // list of written blocks
 }
 
 // Subscription messages
+
+message EventSubscription {
+    oneof subscription {
+        ReadEventSubscription         read         = 1;
+        WriteEventSubscription        write        = 2;
+        EventSubscriptionCancellation cancellation = 3;
+    }
+}
 
 message ReadEventSubscription {
     required uint64 id                = 1; // unique subscription ID
@@ -53,17 +56,6 @@ message WriteEventSubscription {
                                            // before emission
 }
 
-message SubscriptionCancellation {
+message EventSubscriptionCancellation {
     required uint64 id = 1; // ID of subscription to be cancelled
-}
-
-// Management messages
-
-message EventRequest {
-    required uint64 seq_num = 1; // sequence number of a requested event
-}
-
-message EventAcknowledgement {
-    required uint64 seq_num = 1; // sequence number of a last successfully
-                                 // processed event
 }

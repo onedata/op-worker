@@ -5,27 +5,18 @@ import "common_messages.proto";
 import "event_messages.proto";
 
 message ClientMessage {
-    message PartialMessage {
-        required uint64 message_id            = 1;
-        required uint32 seq_num               = 2;
-        required ClientMessage client_message = 3;
-    }
-
-    optional uint64 response_id = 1;
+    optional uint64 response_id  = 1;
+    optional uint64 seq_num      = 2;
+    optional bool   last_message = 3;
     oneof client_message {
-        PartialMessage                partial_message                 = 2;
-
         // handshake_messages.proto
-        HandshakeRequest              handshake_request               = 3;
-        HandshakeAcknowledgement      handshake_acknowledgement       = 4;
+        HandshakeRequest              handshake_request               = 4;
+        HandshakeAcknowledgement      handshake_acknowledgement       = 5;
 
         // common_messages.proto
-        Error                         error                           = 5;
+        Status                        status                          = 6;
 
         // event_messages.proto
-        ReadEvent                     read_event                      = 6;
-        WriteEvent                    write_event                     = 7;
-        SubscriptionEvent             subscription_event              = 8;
-        SubscriptionCancellationEvent subscription_cancellation_event = 9;
+        Event                         event                           = 7;
     }
 }
