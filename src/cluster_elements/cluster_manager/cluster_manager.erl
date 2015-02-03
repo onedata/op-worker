@@ -117,7 +117,7 @@ handle_call(get_workers, _From, State) ->
     {reply, {WorkersList, State#cm_state.state_num}, State};
 
 handle_call(_Request, _From, State) ->
-    ?warning("Wrong call: ~p", [_Request]),
+    ?warning("CCM wrong call: ~p", [_Request]),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -150,7 +150,7 @@ handle_cast(stop, State) ->
     {stop, normal, State};
 
 handle_cast(_Msg, State) ->
-    ?warning("Wrong cast: ~p", [_Msg]),
+    ?warning("CCM wrong cast: ~p", [_Msg]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -231,7 +231,7 @@ heart_beat(State = #cm_state{nodes = Nodes}, SenderNode) ->
             %% This case checks if node state was analysed correctly.
             %% If it was, it upgrades state number if necessary (workers
             %% were running on node).
-            case catch join_new_node(SenderNode, State) of
+            try join_new_node(SenderNode, State) of
                 {ok, {NewState, WorkersFound}} ->
                     erlang:monitor_node(SenderNode, true),
                     % update dispatcher if new workers were found
@@ -246,9 +246,10 @@ heart_beat(State = #cm_state{nodes = Nodes}, SenderNode) ->
                         _ -> ok
                     end,
                     gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heart_beat_ok, State#cm_state.state_num}),
-                    NewState#cm_state{nodes = [SenderNode | Nodes]};
-                Error ->
-                    ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p", [SenderNode, Error]),
+                    NewState#cm_state{nodes = [SenderNode | Nodes]}
+            catch
+                _:Reason ->
+                    ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p", [SenderNode, Reason]),
                     gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heart_beat_ok, State#cm_state.state_num}),
                     State
             end
