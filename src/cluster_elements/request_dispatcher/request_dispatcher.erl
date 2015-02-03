@@ -201,17 +201,14 @@ check_state(State = #dispatcher_state{state_num = StateNum}, NewStateNum) when S
     State;
 check_state(State, _) ->
     ?info("Dispatcher had old state number, starting update"),
-    NewState =
-        case gen_server:call({global, ?CCM}, get_workers) of
-            {non, _} ->
-                State;
-            {error, _} ->
-                ?error("Dispatcher had old state number but could not update data"),
-                State;
-            {WorkersList, StateNum} ->
-                worker_map:update_workers(WorkersList),
-                ?info("Dispatcher state updated, state num: ~p", [StateNum]),
-                State#dispatcher_state{state_num = StateNum}
-        end,
-    gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_up_to_date, NewState#dispatcher_state.state_num}),
-    NewState.
+    try gen_server:call({global, ?CCM}, get_workers) of
+        {WorkersList, StateNum} ->
+            worker_map:update_workers(WorkersList),
+            gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_up_to_date, StateNum}),
+            ?info("Dispatcher state updated, state num: ~p", [StateNum]),
+            State#dispatcher_state{state_num = StateNum}
+    catch
+        _:Error ->
+        ?error("Dispatcher had old state number but could not update data, error: ~p",[Error]),
+        State
+    end.
