@@ -174,7 +174,7 @@ init(Type, Req, Opts) ->
                 ok ->
                     DoDelegate();
                 _ ->
-                    {shutdown, Req}
+                    {shutdown, Req, no_state}
             end;
         false ->
             DoDelegate()
@@ -566,7 +566,9 @@ get_file(Req, State) ->
 -spec spawn_handling_process() -> ok | {error, timeout}.
 spawn_handling_process() ->
     case worker_proxy:call(http_worker, {spawn_handler, self()}, ?handling_process_spawn_timeout, prefer_local) of
-        {ok, Pid} -> set_handler_pid(Pid);
+        {ok, Pid} ->
+            set_handler_pid(Pid),
+            ok;
         {error, Error} ->
             ?error("Cannot spawn handling process, error: ~p", [Error]),
             Error
