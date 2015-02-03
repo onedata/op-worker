@@ -12,7 +12,6 @@
 -module(args_parser).
 -author("Tomasz Lichon").
 
--define(ARGS_FILE, "gen_dev_args.json").
 -define(JSON_PARSER_DIR, "deps/mochiweb/ebin").
 
 %% API
@@ -27,9 +26,7 @@
 %% Parses given json arg file to erlang proplist format
 %% @end
 %%--------------------------------------------------------------------
--spec parse_config_file(ArgsFile :: string() | default) -> list().
-parse_config_file(default) ->
-    parse_config_file(?ARGS_FILE);
+-spec parse_config_file(ArgsFile :: string()) -> list().
 parse_config_file(ArgsFile) ->
     {ok, FileContent} = file:read_file(ArgsFile),
     code:add_path(?JSON_PARSER_DIR),
