@@ -334,8 +334,8 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Processes client request using PlugIn:handle function. Afterwards,
-%% it sends the answer to dispatcher and logs info about processing time.
+%% Starts worker node with dedicated supervisor as brother. Both entities
+%% are started under MAIN_WORKER_SUPERVISOR supervision.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_worker(Node :: atom(), Module :: atom(), WorkerArgs :: term(), State :: term()) -> #cm_state{}.
@@ -363,8 +363,7 @@ start_worker(Node, Module, WorkerArgs, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Processes client request using PlugIn:handle function. Afterwards,
-%% it sends the answer to dispatcher and logs info about processing time.
+%% Stops worker node and its supervisor.
 %% @end
 %%--------------------------------------------------------------------
 -spec stop_worker(Node :: atom(), Module :: atom(), State :: #cm_state{}) -> #cm_state{}.
@@ -442,15 +441,7 @@ node_down(Node, State = #cm_state{workers = Workers, nodes = Nodes}) ->
         end
     end,
     {NewWorkers, WorkersFound} = lists:foldl(CreateNewWorkersList, {[], false}, Workers),
-
-    CreateNewNodesList = fun(N, NodeList) ->
-        case N of
-            Node -> NodeList;
-            _N2 -> [N | NodeList]
-        end
-    end,
-    NewNodes = lists:foldl(CreateNewNodesList, [], Nodes),
-
+    NewNodes = Nodes -- [Node],
     NewState = State#cm_state{workers = NewWorkers, nodes = NewNodes},
     case WorkersFound of
         true -> update_dispatchers_and_dns(NewState);
