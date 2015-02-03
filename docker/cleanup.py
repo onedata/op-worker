@@ -15,4 +15,4 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-docker.remove(args.docker_ids, volumes=True, force=True)
+docker.remove(args.docker_ids, force=True)
