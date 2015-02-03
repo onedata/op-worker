@@ -284,12 +284,10 @@ init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}) ->
         end,
     {JobsTodo, Args} = lists:foldl(CreateJobsList, {[], []}, ?MODULES_WITH_ARGS),
 
-    case {JobsTodo, Workers} of
-        {[], []} ->
+    case JobsTodo of
+        [] ->
             State;
-        {[], _} ->
-            update_dispatchers_and_dns(State);
-        {_, _} ->
+        _ ->
             ?info("Initialization of jobs ~p using nodes ~p", [JobsTodo, Nodes]),
             NewState =
                 case erlang:length(Nodes) >= erlang:length(JobsTodo) of
