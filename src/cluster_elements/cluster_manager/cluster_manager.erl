@@ -117,7 +117,7 @@ handle_call(get_workers, _From, State) ->
     {reply, {WorkersList, State#cm_state.state_num}, State};
 
 handle_call(_Request, _From, State) ->
-    ?warning("Wrong call: ~p", [_Request]),
+    ?warning("CCM wrong call: ~p", [_Request]),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -150,7 +150,7 @@ handle_cast(stop, State) ->
     {stop, normal, State};
 
 handle_cast(_Msg, State) ->
-    ?warning("Wrong cast: ~p", [_Msg]),
+    ?warning("CCM wrong cast: ~p", [_Msg]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -231,7 +231,7 @@ heart_beat(State = #cm_state{nodes = Nodes}, SenderNode) ->
             %% This case checks if node state was analysed correctly.
             %% If it was, it upgrades state number if necessary (workers
             %% were running on node).
-            case catch join_new_node(SenderNode, State) of
+            try join_new_node(SenderNode, State) of
                 {ok, {NewState, WorkersFound}} ->
                     erlang:monitor_node(SenderNode, true),
                     % update dispatcher if new workers were found
@@ -246,9 +246,10 @@ heart_beat(State = #cm_state{nodes = Nodes}, SenderNode) ->
                         _ -> ok
                     end,
                     gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heart_beat_ok, State#cm_state.state_num}),
-                    NewState#cm_state{nodes = [SenderNode | Nodes]};
-                Error ->
-                    ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p", [SenderNode, Error]),
+                    NewState#cm_state{nodes = [SenderNode | Nodes]}
+            catch
+                _:Reason ->
+                    ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p", [SenderNode, Reason]),
                     gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heart_beat_ok, State#cm_state.state_num}),
                     State
             end
@@ -283,12 +284,10 @@ init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}) ->
         end,
     {JobsTodo, Args} = lists:foldl(CreateJobsList, {[], []}, ?MODULES_WITH_ARGS),
 
-    case {JobsTodo, Workers} of
-        {[], []} ->
+    case JobsTodo of
+        [] ->
             State;
-        {[], _} ->
-            update_dispatchers_and_dns(State);
-        {_, _} ->
+        _ ->
             ?info("Initialization of jobs ~p using nodes ~p", [JobsTodo, Nodes]),
             NewState =
                 case erlang:length(Nodes) >= erlang:length(JobsTodo) of
@@ -335,8 +334,8 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Processes client request using PlugIn:handle function. Afterwards,
-%% it sends the answer to dispatcher and logs info about processing time.
+%% Starts worker node with dedicated supervisor as brother. Both entities
+%% are started under MAIN_WORKER_SUPERVISOR supervision.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_worker(Node :: atom(), Module :: atom(), WorkerArgs :: term(), State :: term()) -> #cm_state{}.
@@ -364,8 +363,7 @@ start_worker(Node, Module, WorkerArgs, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Processes client request using PlugIn:handle function. Afterwards,
-%% it sends the answer to dispatcher and logs info about processing time.
+%% Stops worker node and its supervisor.
 %% @end
 %%--------------------------------------------------------------------
 -spec stop_worker(Node :: atom(), Module :: atom(), State :: #cm_state{}) -> #cm_state{}.
@@ -443,15 +441,7 @@ node_down(Node, State = #cm_state{workers = Workers, nodes = Nodes}) ->
         end
     end,
     {NewWorkers, WorkersFound} = lists:foldl(CreateNewWorkersList, {[], false}, Workers),
-
-    CreateNewNodesList = fun(N, NodeList) ->
-        case N of
-            Node -> NodeList;
-            _N2 -> [N | NodeList]
-        end
-    end,
-    NewNodes = lists:foldl(CreateNewNodesList, [], Nodes),
-
+    NewNodes = Nodes -- [Node],
     NewState = State#cm_state{workers = NewWorkers, nodes = NewNodes},
     case WorkersFound of
         true -> update_dispatchers_and_dns(NewState);

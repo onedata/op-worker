@@ -203,8 +203,7 @@ handle_info(_Info, State) ->
     | {shutdown, term()}
     | term().
 terminate(_Reason, _State) ->
-    catch listener_starter:stop_listeners(),
-    ok.
+    listener_starter:stop_listeners().
 
 %%--------------------------------------------------------------------
 %% @private
@@ -261,10 +260,7 @@ do_heart_beat(State = #node_state{ccm_con_status = not_connected}) ->
 heart_beat_ok(NewStateNum, State = #node_state{state_num = NewStateNum, dispatcher_state = NewStateNum}) ->
     ?debug("Heart beat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
     State;
-heart_beat_ok(NewStateNum, State = #node_state{node_type = ccm}) ->
-    ?debug("Heart beat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
-    State#node_state{state_num = NewStateNum};
-heart_beat_ok(NewStateNum, State = #node_state{node_type = worker}) ->
+heart_beat_ok(NewStateNum, State) ->
     ?debug("Heart beat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
     update_dispatcher(NewStateNum),
     State#node_state{state_num = NewStateNum}.

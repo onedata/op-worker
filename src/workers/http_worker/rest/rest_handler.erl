@@ -21,7 +21,7 @@
 -record(state, {}).
 
 %% API
--export([init/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
+-export([init/3, terminate/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
 -export([get_json/2, put_json/2]).
@@ -47,6 +47,16 @@ init(_, Req, Opts) ->
                 []
         end,
     {upgrade, protocol, cowboy_rest, Req, NewOpts ++ Opts}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Cowboy callback function
+%% Handles cleanup
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate(Reason :: term(), req(), #state{}) -> ok.
+terminate(_, _, _) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
