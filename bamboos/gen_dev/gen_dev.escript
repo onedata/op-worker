@@ -16,6 +16,7 @@
 %%%-------------------------------------------------------------------
 -module(gen_dev).
 
+-define(ARGS_FILE, "gen_dev_args.json").
 -define(HELPER_MODULES, [args_parser, filesystem_operations, logger, mochijson2, release_configurator]).
 -define(EXIT_FAILURE_CODE, 1).
 
@@ -33,7 +34,7 @@
 %%--------------------------------------------------------------------
 -spec main(Args :: [string()]) -> no_return().
 main([]) ->
-    main([default]);
+    main([filename:join(get_escript_dir(), ?ARGS_FILE)]);
 main([ArgsFile]) ->
     try
         helpers_init(),
@@ -152,7 +153,10 @@ prepare_fresh_release(InputDir, TargetDir, Name) ->
 %%--------------------------------------------------------------------
 -spec helpers_init() -> ok.
 helpers_init() ->
-    lists:foreach(fun(Module) -> compile:file(Module) end, ?HELPER_MODULES).
+    GenDevDir = get_escript_dir(),
+    true = code:add_path(GenDevDir),
+    lists:foreach(fun(Module) -> compile:file(filename:join(GenDevDir, atom_to_list(Module) ++ ".erl"),
+        [{outdir, GenDevDir}]) end, ?HELPER_MODULES).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -161,4 +165,14 @@ helpers_init() ->
 %%--------------------------------------------------------------------
 -spec helpers_cleanup() -> ok.
 helpers_cleanup() ->
-    lists:foreach(fun(Module) -> file:delete(atom_to_list(Module)++".beam") end, ?HELPER_MODULES).
+    GenDevDir = get_escript_dir(),
+    lists:foreach(fun(Module) -> file:delete(filename:join(GenDevDir, atom_to_list(Module)++".beam")) end, ?HELPER_MODULES).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get path of current escript dir
+%% @end
+%%--------------------------------------------------------------------
+-spec get_escript_dir() -> string().
+get_escript_dir() ->
+    filename:dirname(escript:script_name()).
