@@ -100,7 +100,7 @@ handle_call(get_state_num, _From, State) ->
     {reply, State#dispatcher_state.state_num, State};
 
 handle_call(_Request, _From, State) ->
-    ?warning("Wrong call: ~p", [_Request]),
+    ?warning("Dispatcher wrong call: ~p", [_Request]),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -130,7 +130,7 @@ handle_cast(stop, State) ->
     {stop, normal, State};
 
 handle_cast(_Msg, State) ->
-    ?warning("Wrong cast: ~p", [_Msg]),
+    ?warning("Dispatcher wrong cast: ~p", [_Msg]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

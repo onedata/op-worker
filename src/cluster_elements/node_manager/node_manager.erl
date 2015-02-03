@@ -203,8 +203,7 @@ handle_info(_Info, State) ->
     | {shutdown, term()}
     | term().
 terminate(_Reason, _State) ->
-    catch listener_starter:stop_listeners(),
-    ok.
+    listener_starter:stop_listeners().
 
 %%--------------------------------------------------------------------
 %% @private
