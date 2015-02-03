@@ -63,7 +63,7 @@ get_worker_node(WorkerName) ->
 -spec get_worker_node(WorkerName :: atom(), SelectionType :: selection_type()) -> {ok, node()} | {error, term()}.
 get_worker_node(WorkerName, random) ->
     get_random_worker_node(WorkerName);
-get_worker_node(WorkerName, prefere_local) ->
+get_worker_node(WorkerName, prefer_local) ->
     get_worker_node_prefering_local(WorkerName).
 
 %%--------------------------------------------------------------------

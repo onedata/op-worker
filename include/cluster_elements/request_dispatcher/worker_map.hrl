@@ -12,4 +12,4 @@
 -author("Tomasz Lichon").
 
 -define(default_worker_selection_type, random).
--type(selection_type() :: random | prefere_local).
+-type(selection_type() :: random | prefer_local).
