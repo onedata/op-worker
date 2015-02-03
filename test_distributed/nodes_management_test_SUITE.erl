@@ -60,7 +60,7 @@ ccm_and_worker_test(Config) ->
 %%%===================================================================
 
 init_per_testcase(one_node_test, Config) ->
-    ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+    ?INIT_CODE_PATH(Config),?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
     [Node] = test_node_starter:start_test_nodes(1),
@@ -71,8 +71,8 @@ init_per_testcase(one_node_test, Config) ->
     lists:append([{nodes, [Node]}], Config);
 
 init_per_testcase(ccm_and_worker_test, Config) ->
-  ?INIT_CODE_PATH,
-  test_node_starter:prepare_test_environment(Config, ?TEST_FILE("env_desc.json")).
+  ?INIT_CODE_PATH(Config),
+  test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json")).
 end_per_testcase(ccm_and_worker_test, Config) ->
   test_node_starter:clean_environment(Config);
 end_per_testcase(_, Config) ->
