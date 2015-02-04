@@ -15,8 +15,8 @@
 
 % oneprovider specific config
 -define(ONEPROVIDER_APP_NAME, oneprovider_node).
--define(DIST_APP_FAILOVER_TIMEOUT, 5000).
--define(SYNC_NODES_TIMEOUT, 60000).
+-define(DIST_APP_FAILOVER_TIMEOUT, timer:seconds(5)).
+-define(SYNC_NODES_TIMEOUT, timer:minutes(1)).
 
 %% API
 -export([configure_release/4]).
