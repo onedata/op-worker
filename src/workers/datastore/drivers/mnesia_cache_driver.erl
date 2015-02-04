@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Riak database driver.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(mnesia_cache_driver).
@@ -171,10 +171,10 @@ table_name(TabName) when is_atom(TabName) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets Mnesia table name for given model.
+%% Inserts given key as second element of given tuple.
 %% @end
 %%--------------------------------------------------------------------
--spec table_name(model_behaviour:model_config() | atom()) -> atom().
+-spec inject_key(Key :: datastore:key(), Tuple :: tuple()) -> NewTuple :: tuple().
 inject_key(Key, Tuple) when is_tuple(Tuple) ->
     [RecordName | Fields] = tuple_to_list(Tuple),
     list_to_tuple([RecordName, Key] ++ Fields).
@@ -182,10 +182,10 @@ inject_key(Key, Tuple) when is_tuple(Tuple) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets Mnesia table name for given model.
+%% Strips second element of given tuple (reverses inject_key/2).
 %% @end
 %%--------------------------------------------------------------------
--spec table_name(model_behaviour:model_config() | atom()) -> atom().
+-spec strip_key(Tuple :: tuple()) -> NewTuple :: tuple().
 strip_key(Tuple) when is_tuple(Tuple) ->
     [RecordName, _Key | Fields] = tuple_to_list(Tuple),
     list_to_tuple([RecordName | Fields]).

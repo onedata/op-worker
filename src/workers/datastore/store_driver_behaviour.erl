@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Mnesia database driver.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(store_driver_behaviour).

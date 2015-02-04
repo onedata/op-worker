@@ -80,7 +80,7 @@ handle(healthcheck, _State) ->
     ok;
 
 %% Proxy call to given datastore driver
-handle({driver_call, Module, Method, Args}, State) ->
+handle({driver_call, Module, Method, Args}, _State) ->
     erlang:apply(Module, Method, Args);
 
 %% Unknown request
