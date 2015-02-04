@@ -9,7 +9,11 @@
 %%% The protocol between worker_host and the rest of the world
 %%% @end
 %%%-------------------------------------------------------------------
--author("Tomasz Lichon").
+
+-ifndef(WORKER_PROTOCOL_HRL).
+-define(WORKER_PROTOCOL_HRL, 1).
 
 -record(worker_request, {id = undefined, req = undefined, reply_to = undefined}).
 -record(worker_answer, {id = undefined, response = undefined}).
+
+-endif.

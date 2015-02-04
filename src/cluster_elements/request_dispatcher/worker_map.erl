@@ -52,7 +52,7 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec get_worker_node(WorkerName :: atom()) -> {ok, node()} | {error, term()}.
 get_worker_node(WorkerName) ->
-    get_worker_node(WorkerName, ?default_worker_selection_type).
+    get_worker_node(WorkerName, ?DEFAULT_WORKER_SELECTION_TYPE).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -85,7 +85,7 @@ update_workers(WorkersList) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Chooses one of nodes where worker is working. Preferes local node.
+%% Chooses one of nodes where worker is working. Prefers local node.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_worker_node_prefering_local(WorkerName :: atom()) -> {ok, node()} | {error, term()}.

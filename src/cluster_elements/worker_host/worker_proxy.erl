@@ -45,7 +45,7 @@ call(WorkerName, Request) ->
 %%--------------------------------------------------------------------
 -spec call(WorkerName :: atom(), Request :: term(), Timeout :: integer()) -> ok | {ok, term()} | {error, term()}.
 call(WorkerName, Request, Timeout) ->
-    call(WorkerName, Request, Timeout, ?default_worker_selection_type).
+    call(WorkerName, Request, Timeout, ?DEFAULT_WORKER_SELECTION_TYPE).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,7 +102,7 @@ cast(WorkerName, Request, ReplyTo) ->
 -spec cast(WorkerName :: atom(), Request :: term(), ReplyTo :: {proc, pid()} | {gen_serv, atom() | pid()}, MsgId :: term() | undefined) ->
     ok | {error, term()}.
 cast(WorkerName, Request, ReplyTo, MsgId) ->
-    cast(WorkerName, Request, ReplyTo, MsgId, ?default_worker_selection_type).
+    cast(WorkerName, Request, ReplyTo, MsgId, ?DEFAULT_WORKER_SELECTION_TYPE).
 
 %%--------------------------------------------------------------------
 %% @doc

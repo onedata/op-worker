@@ -233,7 +233,7 @@ code_change(_OldVsn, State, _Extra) ->
 do_heart_beat(State = #node_state{ccm_con_status = connected}) ->
     {ok, Interval} = application:get_env(?APP_NAME, heart_beat_success_interval),
     gen_server:cast({global, ?CCM}, {heart_beat, node()}),
-    erlang:send_after(Interval * 1000, self(), {timer, do_heart_beat}),
+    erlang:send_after(Interval, self(), {timer, do_heart_beat}),
     State#node_state{ccm_con_status = connected};
 do_heart_beat(State = #node_state{ccm_con_status = not_connected}) ->
     {ok, CcmNodes} = application:get_env(?APP_NAME, ccm_nodes),
