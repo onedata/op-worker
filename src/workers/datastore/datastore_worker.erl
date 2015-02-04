@@ -18,8 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 -define(PERSISTENCE_DRIVER, riak_datastore_driver).
--define(LOCAL_CACHE_DRIVER, local_cache_driver).
--define(DISTRIBUTED_CACHE_DRIVER, distributed_cache_driver).
+-define(LOCAL_CACHE_DRIVER, ets_cache_driver).
+-define(DISTRIBUTED_CACHE_DRIVER, mnesia_cache_driver).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/2, cleanup/0]).
@@ -35,11 +35,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-      Result :: ok | {error, Error},
-      Error :: term().
+    Result :: {ok, #{term() => term()}} | {error, Error},
+    Error :: term().
 init(_Args) ->
-    ets:new(datastore_state, [named_table, public, set]),
-
     RiakNodes =
         case application:get_env(?APP_NAME, riak_nodes) of
             {ok, Nodes} ->
@@ -52,14 +50,14 @@ init(_Args) ->
                 []
         end,
 
-    state_put(riak_nodes, RiakNodes),
-
-    Buckets = lists:foldl(
+    {State, Buckets} = lists:foldl(
       fun(Model, Acc) ->
           #model_config{name = RecordName, bucket = Bucket} = ModelConfig = Model:model_init(),
-          state_put(RecordName, ModelConfig),
-          maps:put(Bucket, [ModelConfig | maps:get(Bucket, Acc, [])], Acc)
-      end, #{}, ?MODELS),
+          {
+              maps:put(RecordName, ModelConfig),
+              maps:put(Bucket, [ModelConfig | maps:get(Bucket, Acc, [])], Acc)
+          }
+      end, {#{}, #{}}, ?MODELS),
 
     lists:foreach(
         fun(Bucket) ->
@@ -68,7 +66,7 @@ init(_Args) ->
             ok = ?LOCAL_CACHE_DRIVER:init_bucket(Bucket),
             ok = ?DISTRIBUTED_CACHE_DRIVER:init_bucket(Bucket)
         end, maps:to_list(Buckets)),
-    ok.
+    {ok, State#{riak_nodes => RiakNodes}}.
 
 
 %%--------------------------------------------------------------------
@@ -76,21 +74,20 @@ init(_Args) ->
 %% {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% @end
 %%--------------------------------------------------------------------
--spec handle(ProtocolVersion :: term(), Request) -> Result when
-      Request :: ping | healthcheck | get_version,
-      Result :: ok | {ok, Response} | {error, Error} | pong | Version,
-      Response :: term(),
-      Version :: term(),
-      Error :: term().
+-spec handle(Request, State :: term()) -> Result when
+    Request :: ping | healthcheck |
+    {update_state, list(), list()} |
+    {get_worker, atom()} |
+    get_nodes,
+    Result :: ok | {ok, Response} | {error, Error} | pong,
+    Response :: [inet:ip4_address()],
+    Error :: term().
 handle(_ProtocolVersion, ping) ->
     pong;
-
 handle(_ProtocolVersion, healthcheck) ->
     ok;
-
-handle(_ProtocolVersion, get_version) ->
-    node_manager:check_vsn();
-
+handle(_ProtocolVersion, {driver_call, Module, Method, Args}) ->
+    erlang:apply(Module, Method, Args);
 handle(_ProtocolVersion, _Msg) ->
     ?warning("datastore worker unknown message: ~p", [_Msg]).
 
@@ -101,18 +98,16 @@ handle(_ProtocolVersion, _Msg) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cleanup() -> Result when
-      Result :: ok | {error, Error},
-      Error :: timeout | term().
-%% ====================================================================
+    Result :: ok.
 cleanup() ->
     ok.
 
 
 state_put(Key, Value) ->
-    ets:insert(datastore_state, {Key, Value}).
+    gen_server:call(?MODULE, {updatePlugInState,
+        fun(State) ->
+            maps:put(Key, Value, State)
+        end}).
 
 state_get(Key) ->
-    case ets:lookup(datastore_state, Key) of
-        [{Key, Value}] -> Value;
-        _ -> undefined
-    end.
+    maps:get(Key, gen_server:call(?MODULE, getPlugInState)).

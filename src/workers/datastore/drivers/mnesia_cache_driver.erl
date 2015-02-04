@@ -10,18 +10,25 @@
 %%%-------------------------------------------------------------------
 -module(mnesia_cache_driver).
 -author("Rafal Slota").
+-behaviour(store_driver_behaviour).
 
 -include("workers/datastore/datastore.hrl").
 
 %% API
--export([init_bucket/1]).
+-export([init_bucket/2]).
 -export([save/2, update/3, create/2, exists/2, get/2, delete/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-init_bucket({_BucketName, Models}) ->
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback init_bucket/2.
+%% @end
+%%--------------------------------------------------------------------
+init_bucket(_BucketName, Models) ->
     lists:foreach(
         fun(#model_config{name = ModelName, fields = Fields}) ->
             {atomic, ok} = mnesia:create_table(table_name(ModelName), [{record_name, ModelName}, {attributes, [key | Fields]},
@@ -30,6 +37,11 @@ init_bucket({_BucketName, Models}) ->
     ok.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback save/2.
+%% @end
+%%--------------------------------------------------------------------
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = Document) ->
     transaction(fun() ->
         case mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write) of
@@ -40,6 +52,11 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = Docume
     end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback update/2.
+%% @end
+%%--------------------------------------------------------------------
 update(#model_config{} = ModelConfig, Key, Diff) when is_map(Diff) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key, write) of
@@ -55,6 +72,11 @@ update(#model_config{} = ModelConfig, Key, Diff) when is_map(Diff) ->
     end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback create/2.
+%% @end
+%%--------------------------------------------------------------------
 create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
@@ -69,6 +91,11 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback exists/2.
+%% @end
+%%--------------------------------------------------------------------
 exists(#model_config{} = ModelConfig, Key) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
@@ -78,6 +105,11 @@ exists(#model_config{} = ModelConfig, Key) ->
     end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback get/2.
+%% @end
+%%--------------------------------------------------------------------
 get(#model_config{} = ModelConfig, Key) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
@@ -91,6 +123,11 @@ get(#model_config{} = ModelConfig, Key) ->
     end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback delete/2.
+%% @end
+%%--------------------------------------------------------------------
 delete(#model_config{} = ModelConfig, Key) ->
     transaction(fun() ->
         case mnesia:delete(table_name(ModelConfig), Key, write) of
@@ -102,15 +139,17 @@ delete(#model_config{} = ModelConfig, Key) ->
     end).
 
 
-list(#model_config{} = ModelConfig) ->
-    erlang:error(not_implemented).
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets Mnesia table name for given model.
+%% @end
+%%--------------------------------------------------------------------
+-spec table_name(model_behaviour:model_config() | atom()) -> atom().
 table_name(#model_config{name = ModelName}) ->
     table_name(ModelName);
 table_name(TabName) when is_atom(TabName) ->

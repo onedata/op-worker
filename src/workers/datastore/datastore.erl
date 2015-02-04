@@ -17,10 +17,25 @@
 -type key() :: term().
 -type document() :: #document{}.
 -type value() :: term().
+-type document_diff() :: #{term() => term()}.
+-type bucket() :: atom().
+
+
+-type generic_error() :: {error, Reason :: any()}.
+-type not_found_error(Reason) :: {error, {not_found, Reason}}.
+-type update_error() :: not_found_error(any()) | generic_error().
+-type create_error() :: generic_error() | {error, already_exists}.
+-type get_error() :: not_found_error(any()) | generic_error().
 
 %% API
--export_type([key/0, value/0, document/0]).
+-export_type([key/0, value/0, document/0, document_diff/0, bucket/0]).
+-export_type([generic_error/0, not_found_error/1, update_error/0, create_error/0, get_error/0]).
 -export([save/2, update/4, create/2, get/3, delete/3, exists/3]).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 
 %%--------------------------------------------------------------------
@@ -79,12 +94,9 @@ exists(Level, ModelName, Key) ->
     exec_driver(ModelName, level_to_driver(Level, read), exists, [Key], Key).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @todo: Write me!
-%% @end
-%%--------------------------------------------------------------------
-list() -> ok.
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 
 model_name(#document{value = Record}) ->
@@ -151,6 +163,7 @@ level_to_driver(all, _) ->
     [?LOCAL_CACHE_DRIVER, ?DISTRIBUTED_CACHE_DRIVER, ?PERSISTENCE_DRIVER].
 
 
+
 driver_to_level(?PERSISTENCE_DRIVER) ->
     persistence;
 driver_to_level(?LOCAL_CACHE_DRIVER) ->
@@ -173,7 +186,13 @@ exec_driver(ModelName, Driver, Method, Args, Context) when is_atom(Driver) ->
     Return =
         case run_prehooks(ModelConfig, Method, driver_to_level(Driver), Context) of
             ok ->
-                erlang:apply(Driver, Method, [ModelConfig | Args]);
+                FullArgs = [ModelConfig | Args],
+                case Driver of
+                    ?PERSISTENCE_DRIVER ->
+                        worker_proxy:call(datastore_worker, {driver_call, Driver, Method, FullArgs});
+                    _ ->
+                        erlang:apply(Driver, Method, FullArgs)
+                end;
             {error, Reason} ->
                 {error, Reason}
         end,

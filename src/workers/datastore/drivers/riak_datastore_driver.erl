@@ -10,23 +10,34 @@
 %%%-------------------------------------------------------------------
 -module(riak_datastore_driver).
 -author("Rafal Slota").
+-behaviour(store_driver_behaviour).
 
 -include("workers/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_bucket/1, connect/1, call/3]).
+-export([init_bucket/2]).
 -export([save/2, create/2, update/3, exists/2, get/2, delete/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-init_bucket(Bucket) ->
-    ?info("Riak init with nodes: ~p", [datastore_worker:state_get(riak_nodes)]),
-
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback init_bucket/2.
+%% @end
+%%--------------------------------------------------------------------
+init_bucket(_Bucket, _Models) ->
+    ?debug("Riak init with nodes: ~p", [datastore_worker:state_get(riak_nodes)]),
     ok.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback init_bucket/2.
+%% @end
+%%--------------------------------------------------------------------
 save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = Rev, value = Value}) ->
     RiakObj = to_riak_obj(Value, Rev),
     RiakOP = riakc_map:to_op(RiakObj),
@@ -38,6 +49,11 @@ save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = R
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback update/3.
+%% @end
+%%--------------------------------------------------------------------
 update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Diff) ->
     case call(riakc_pb_socket, fetch_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key)]) of
         {ok, Result} ->
@@ -59,6 +75,11 @@ update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Dif
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback create/2.
+%% @end
+%%--------------------------------------------------------------------
 create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value = Value}) ->
     RiakOP = riakc_map:to_op(to_riak_obj(Value)),
     Key1 = maybe_generate_key(Key),
@@ -69,6 +90,11 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback exists/2.
+%% @end
+%%--------------------------------------------------------------------
 exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key)]) of
         {ok, {notfound, _}} ->
@@ -81,6 +107,11 @@ exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback get/2.
+%% @end
+%%--------------------------------------------------------------------
 get(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key)]) of
         {ok, Result} ->
@@ -91,6 +122,11 @@ get(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback delete/2.
+%% @end
+%%--------------------------------------------------------------------
 delete(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, delete, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key)]) of
         ok ->
@@ -98,10 +134,6 @@ delete(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
         {error, Reason} ->
             {error, Reason}
     end.
-
-
-list(#model_config{} = _ModelConfig) ->
-    erlang:error(not_implemented).
 
 
 %%%===================================================================

@@ -8,89 +8,91 @@
 %%% @doc @todo: Write me!
 %%% @end
 %%%-------------------------------------------------------------------
--module(model_behaviour).
+-module(some_record).
 -author("Rafal Slota").
+-behaviour(model_behaviour).
 
 -include("workers/datastore/datastore.hrl").
 
--type model_action() :: save | get | delete | update | create | exists.
--type model_type() :: atom().
--type model_config() :: #model_config{}.
 
--export_type([model_config/0]).
+%% API
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0, 'after'/5, before/4]).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves the document
+%% {@link model_behaviour} callback save/1. <br/>
 %% @end
 %%--------------------------------------------------------------------
--callback save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
+save(Document) ->
+    datastore:save(all, Document).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% {@link model_behaviour} callback update/2. <br/>
 %% @end
 %%--------------------------------------------------------------------
--callback update(datastore:key(), Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
+update(Key, Diff) ->
+    datastore:update(all, ?MODULE, Key, Diff).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% {@link model_behaviour} callback create/1. <br/>
 %% @end
 %%--------------------------------------------------------------------
--callback create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
+create(Document) ->
+    datastore:create(all, Document).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% {@link model_behaviour} callback exists/1. <br/>
 %% @end
 %%--------------------------------------------------------------------
--callback get(datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
+exists(Key) ->
+    datastore:exists(l_cache, ?MODULE, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback get/1. <br/>
+%% @end
+%%--------------------------------------------------------------------
+get(Key) ->
+    datastore:get(l_cache, ?MODULE, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback delete/1. <br/>
+%% @end
+%%--------------------------------------------------------------------
+delete(Key) ->
+    datastore:delete(l_cache, ?MODULE, Key).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% {@link model_behaviour} callback model_init/0. <br/>
 %% @end
 %%--------------------------------------------------------------------
--callback delete(datastore:key()) -> ok | datastore:generic_error().
+model_init() ->
+        ?MODEL_CONFIG(test_bucket, [{some_record, update}]).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% {@link model_behaviour} callback 'after'/5. <br/>
 %% @end
 %%--------------------------------------------------------------------
--callback exists(datastore:key()) -> true | false | datastore:generic_error().
-
+'after'(_ModelName, _Method, _Level, _Context, _Return) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% {@link model_behaviour} callback before/4. <br/>
 %% @end
 %%--------------------------------------------------------------------
--callback model_init() -> datastore:model_init().
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @todo: Write me!
-%% @end
-%%--------------------------------------------------------------------
--callback 'after'(ModelName :: model_type(), Method :: model_action(),
-                    Level :: datastore:store_level(), Context :: term(),
-                    ReturnValue :: term()) -> ok.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @todo: Write me!
-%% @end
-%%--------------------------------------------------------------------
--callback before(ModelName :: model_type(), Method :: model_action(),
-                    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+before(_ModelName, _Method, _Level, _Context) ->
+    ok.

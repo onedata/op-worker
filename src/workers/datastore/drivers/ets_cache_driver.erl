@@ -10,18 +10,25 @@
 %%%-------------------------------------------------------------------
 -module(ets_cache_driver).
 -author("Rafal Slota").
+-behaviour(store_driver_behaviour).
 
 -include("workers/datastore/datastore.hrl").
 
 %% API
--export([init_bucket/1]).
+-export([init_bucket/2]).
 -export([save/2, update/3, create/2, exists/2, get/2, delete/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-init_bucket({_Bucket, Models}) ->
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback init_bucket/2.
+%% @end
+%%--------------------------------------------------------------------
+init_bucket(_Bucket, Models) ->
     lists:foreach(
         fun(#model_config{} = ModelConfig) ->
             ets:new(table_name(ModelConfig), [named_table, public, set])
@@ -29,11 +36,21 @@ init_bucket({_Bucket, Models}) ->
     ok.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback save/2.
+%% @end
+%%--------------------------------------------------------------------
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     true = ets:insert(table_name(ModelConfig), {Key, Value}),
     {ok, Key}.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback update/3.
+%% @end
+%%--------------------------------------------------------------------
 update(#model_config{} = ModelConfig, Key, Diff) when is_map(Diff) ->
     case ets:lookup(table_name(ModelConfig), Key) of
         [] ->
@@ -45,6 +62,11 @@ update(#model_config{} = ModelConfig, Key, Diff) when is_map(Diff) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback create/2.
+%% @end
+%%--------------------------------------------------------------------
 create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     case ets:insert_new(table_name(ModelConfig), {Key, Value}) of
         false -> {error, already_exists};
@@ -52,10 +74,20 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback exists/2.
+%% @end
+%%--------------------------------------------------------------------
 exists(#model_config{} = ModelConfig, Key) ->
     ets:member(table_name(ModelConfig), Key).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback get/2.
+%% @end
+%%--------------------------------------------------------------------
 get(#model_config{} = ModelConfig, Key) ->
     case ets:lookup(table_name(ModelConfig), Key) of
         [{_, Value}] ->
@@ -65,18 +97,26 @@ get(#model_config{} = ModelConfig, Key) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback delete/2.
+%% @end
+%%--------------------------------------------------------------------
 delete(#model_config{} = ModelConfig, Key) ->
     true = ets:delete(table_name(ModelConfig), Key),
     ok.
-
-
-list(#model_config{} = _ModelConfig) ->
-    erlang:error(not_implemented).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets ETS table name for given model.
+%% @end
+%%--------------------------------------------------------------------
+-spec table_name(model_behaviour:model_config() | atom()) -> atom().
 table_name(#model_config{name = ModelName}) ->
     table_name(ModelName);
 table_name(TabName) when is_atom(TabName) ->
