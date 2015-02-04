@@ -4,6 +4,7 @@ import "handshake_messages.proto";
 import "common_messages.proto";
 import "event_messages.proto";
 
+// list of messages that can be sent from the server to the client
 message ServerMessage {
     optional uint64 response_id  = 1;
     optional uint64 seq_num      = 2;
