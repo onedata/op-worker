@@ -151,16 +151,16 @@ ensure_state_loaded() ->
     end.
 
 
-level_to_driver(persistence, _) ->
+level_to_driver(disk_only, _) ->
     ?PERSISTENCE_DRIVER;
-level_to_driver(l_cache, _) ->
+level_to_driver(local_only, _) ->
     ?LOCAL_CACHE_DRIVER;
-level_to_driver(d_cache, _) ->
+level_to_driver(global_only, _) ->
     ?DISTRIBUTED_CACHE_DRIVER;
-level_to_driver(cache, _) ->
-    [?LOCAL_CACHE_DRIVER, ?DISTRIBUTED_CACHE_DRIVER];
-level_to_driver(all, _) ->
-    [?LOCAL_CACHE_DRIVER, ?DISTRIBUTED_CACHE_DRIVER, ?PERSISTENCE_DRIVER].
+level_to_driver(locally_cached, _) ->
+    [?LOCAL_CACHE_DRIVER, ?PERSISTENCE_DRIVER];
+level_to_driver(globally_cached, _) ->
+    [?DISTRIBUTED_CACHE_DRIVER, ?PERSISTENCE_DRIVER].
 
 
 
