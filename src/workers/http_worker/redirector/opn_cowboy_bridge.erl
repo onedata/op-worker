@@ -25,7 +25,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 % Max time (ms) to wait for worker_host to reply
--define(handling_process_spawn_timeout, 5000).
+-define(handling_process_spawn_timeout, timer:seconds(5)).
 
 %% Interaction between socket process and handling process
 -export([apply/3, request_processing_loop/0, set_socket_pid/1, get_socket_pid/0]).
@@ -174,7 +174,7 @@ init(Type, Req, Opts) ->
                 ok ->
                     DoDelegate();
                 _ ->
-                    {shutdown, Req}
+                    {shutdown, Req, no_state}
             end;
         false ->
             DoDelegate()
@@ -563,11 +563,13 @@ get_file(Req, State) ->
 %% later communication.
 %% @end
 %%--------------------------------------------------------------------
--spec spawn_handling_process() -> ok | {error, timeout}.
+-spec spawn_handling_process() -> ok | {error, term()}.
 spawn_handling_process() ->
-    case worker_proxy:call(http_worker, {spawn_handler, self()}, ?handling_process_spawn_timeout, prefere_local) of
-        {ok, Pid} -> set_handler_pid(Pid);
-        {error, Error} ->
+    case worker_proxy:call(http_worker, {spawn_handler, self()}, ?handling_process_spawn_timeout, prefer_local) of
+        {ok, Pid} ->
+            set_handler_pid(Pid),
+            ok;
+        Error ->
             ?error("Cannot spawn handling process, error: ~p", [Error]),
             Error
     end.

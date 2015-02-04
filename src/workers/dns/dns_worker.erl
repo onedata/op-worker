@@ -31,7 +31,11 @@
 %%     (load on node1 < load on node2) and control_panel works on node3@127.0.0.1,
 %%     dns_worker state will look like this:
 %%     {dns_state, [{dns_worker, [{127,0,0,1}, {192,168,0,1}]}, {control_panel, [{127,0,0,1}]}]}
--record(dns_worker_state, {workers_list = [] :: [{atom(),  [{inet:ip4_address(), integer(), integer()}]}], nodes_list = [] :: [{inet:ip4_address(),  number()}], avg_load = 0 :: number()}).
+-record(dns_worker_state, {
+    workers_list = [] :: [{atom(),  [{inet:ip4_address(), integer(), integer()}]}],
+    nodes_list = [] :: [{inet:ip4_address(),  number()}],
+    avg_load = 0 :: number()
+}).
 
 -define(EXTERNALLY_VISIBLE_MODULES, [http_worker, dns_worker]).
 
@@ -94,7 +98,7 @@ handle({update_state, ModulesToNodes, NLoads, AvgLoad}, _) ->
             {Module, lists:map(GetLoads, Nodes)}
         end, ModulesToNodes),
         New_DNS_State = #dns_worker_state{workers_list = ModulesToNodes2, nodes_list = NLoads, avg_load = AvgLoad},
-        case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
+        case gen_server:call(?MODULE, {update_plugin_state, New_DNS_State}) of
             ok ->
                 ok;
             UpdateError ->
@@ -166,9 +170,9 @@ handle({handle_ns, Domain}, _) ->
             end
     end;
 
-handle(Msg, _) ->
-    ?warning("Wrong request: ~p", [Msg]),
-    throw({unsupported_request, Msg}).
+handle(_Request, _) ->
+    ?log_bad_request(_Request),
+    throw({unsupported_request, _Request}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -329,7 +333,7 @@ parse_domain(DomainArg) ->
 -spec get_workers(Module :: atom()) -> list() | serv_fail.
 get_workers(Module) ->
     try
-        DNSState = gen_server:call(?MODULE, getPlugInState),
+        DNSState = gen_server:call(?MODULE, get_plugin_state),
         WorkerList = DNSState#dns_worker_state.workers_list,
         NodesList = DNSState#dns_worker_state.nodes_list,
         Result = proplists:get_value(Module, WorkerList, []),
@@ -357,7 +361,7 @@ get_workers(Module) ->
 
         New_DNS_State = DNSState#dns_worker_state{workers_list = NewWorkersList},
 
-        case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
+        case gen_server:call(?MODULE, {update_plugin_state, New_DNS_State}) of
             ok ->
                 random:seed(now()),
                 Result3 = make_ans_random(Result2),
@@ -386,7 +390,7 @@ get_workers(Module) ->
 -spec get_nodes() -> list() | serv_fail.
 get_nodes() ->
     try
-        DNSState = gen_server:call(?MODULE, getPlugInState),
+        DNSState = gen_server:call(?MODULE, get_plugin_state),
         NodesList = DNSState#dns_worker_state.nodes_list,
         AvgLoad = DNSState#dns_worker_state.avg_load,
 
