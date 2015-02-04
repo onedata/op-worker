@@ -94,7 +94,7 @@ handle({update_state, ModulesToNodes, NLoads, AvgLoad}, _) ->
             {Module, lists:map(GetLoads, Nodes)}
         end, ModulesToNodes),
         New_DNS_State = #dns_worker_state{workers_list = ModulesToNodes2, nodes_list = NLoads, avg_load = AvgLoad},
-        case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
+        case gen_server:call(?MODULE, {update_plugin_state, New_DNS_State}) of
             ok ->
                 ok;
             UpdateError ->
@@ -329,7 +329,7 @@ parse_domain(DomainArg) ->
 -spec get_workers(Module :: atom()) -> list() | serv_fail.
 get_workers(Module) ->
     try
-        DNSState = gen_server:call(?MODULE, getPlugInState),
+        DNSState = gen_server:call(?MODULE, get_plugin_state),
         WorkerList = DNSState#dns_worker_state.workers_list,
         NodesList = DNSState#dns_worker_state.nodes_list,
         Result = proplists:get_value(Module, WorkerList, []),
@@ -357,7 +357,7 @@ get_workers(Module) ->
 
         New_DNS_State = DNSState#dns_worker_state{workers_list = NewWorkersList},
 
-        case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
+        case gen_server:call(?MODULE, {update_plugin_state, New_DNS_State}) of
             ok ->
                 random:seed(now()),
                 Result3 = make_ans_random(Result2),
@@ -386,7 +386,7 @@ get_workers(Module) ->
 -spec get_nodes() -> list() | serv_fail.
 get_nodes() ->
     try
-        DNSState = gen_server:call(?MODULE, getPlugInState),
+        DNSState = gen_server:call(?MODULE, get_plugin_state),
         NodesList = DNSState#dns_worker_state.nodes_list,
         AvgLoad = DNSState#dns_worker_state.avg_load,
 
