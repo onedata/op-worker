@@ -258,10 +258,10 @@ do_heartbeat(State = #node_state{ccm_con_status = not_connected}) ->
 %%--------------------------------------------------------------------
 -spec heartbeat_ok(NewStateNum :: integer(), State :: term()) -> #node_state{}.
 heartbeat_ok(NewStateNum, State = #node_state{state_num = NewStateNum, dispatcher_state = NewStateNum}) ->
-    ?debug("Heart beat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
+    ?debug("heartbeat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
     State;
 heartbeat_ok(NewStateNum, State) ->
-    ?debug("Heart beat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
+    ?debug("heartbeat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
     update_dispatcher(NewStateNum),
     State#node_state{state_num = NewStateNum}.
 
