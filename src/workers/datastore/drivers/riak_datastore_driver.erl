@@ -18,6 +18,12 @@
 %% Bukcet type that is defined in database and configured to store "map" data type
 -define(RIAK_BUCKET_TYPE, <<"maps">>).
 
+%% Encoded object prefix
+-define(OBJ_PREFIX, "OBJ::").
+
+%% Encoded atom prefix
+-define(ATOM_PREFIX, "ATOM::").
+
 
 %% API
 -export([init_bucket/2]).
@@ -194,12 +200,6 @@ to_riak_obj(Term) ->
     riakc_register:set(Bin, Register).
 
 
-table_name(#model_config{name = ModelName}) ->
-    table_name(ModelName);
-table_name(TabName) when is_atom(TabName) ->
-    erlang:atom_to_binary(TabName, utf8).
-
-
 call(Module, Method, Args) ->
     call(Module, Method, Args, 3).
 
@@ -248,21 +248,21 @@ connect([]) ->
 to_binary(Term) when is_binary(Term) ->
     Term;
 to_binary(Term) when is_atom(Term) ->
-    <<"ATOM::", (atom_to_binary(Term, utf8))/binary>>;
+    <<?ATOM_PREFIX, (atom_to_binary(Term, utf8))/binary>>;
 to_binary(Term) ->
     term_to_base64(Term).
 
 
 term_to_base64(Term) ->
     Base = base64:encode(term_to_binary(Term)),
-    <<"OBJ::", Base/binary>>.
+    <<?OBJ_PREFIX, Base/binary>>.
 
-base64_to_term(<<"OBJ::", Base/binary>>) ->
+base64_to_term(<<?OBJ_PREFIX, Base/binary>>) ->
     binary_to_term(base64:decode(Base)).
 
-from_binary(<<"OBJ::", _>> = Bin) ->
+from_binary(<<?OBJ_PREFIX, _>> = Bin) ->
     base64_to_term(Bin);
-from_binary(<<"ATOM::", Atom/binary>>) ->
+from_binary(<<?ATOM_PREFIX, Atom/binary>>) ->
     binary_to_atom(Atom, utf8);
 from_binary(Bin) ->
     Bin.

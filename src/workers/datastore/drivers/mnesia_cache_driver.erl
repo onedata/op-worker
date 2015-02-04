@@ -196,7 +196,7 @@ strip_key(Tuple) when is_tuple(Tuple) ->
 %% Convinience function for executing transaction within Mnesia
 %% @end
 %%--------------------------------------------------------------------
--spec transaction(Fun :: fun() -> term()) -> atom().
+-spec transaction(Fun :: fun(() -> term())) -> atom().
 transaction(Fun) ->
     case mnesia:transaction(Fun) of
         {atomic, Res} -> Res;
