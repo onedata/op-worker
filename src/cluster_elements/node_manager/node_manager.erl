@@ -88,7 +88,7 @@ init([worker]) ->
         listener_starter:start_rest_listener(),
         listener_starter:start_redirector_listener(),
         listener_starter:start_dns_listeners(),
-        gen_server:cast(self(), do_heart_beat),
+        gen_server:cast(self(), do_heartbeat),
         {ok, #node_state{node_type = worker, ccm_con_status = not_connected}}
     catch
         _:Error ->
@@ -96,7 +96,7 @@ init([worker]) ->
             {stop, cannot_initialize_listeners}
     end;
 init([ccm]) ->
-    gen_server:cast(self(), do_heart_beat),
+    gen_server:cast(self(), do_heartbeat),
     {ok, #node_state{node_type = ccm, ccm_con_status = not_connected}};
 init([_Type]) ->
     {stop, wrong_type}.
@@ -144,12 +144,12 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
-handle_cast(do_heart_beat, State) ->
-    NewState = do_heart_beat(State),
+handle_cast(do_heartbeat, State) ->
+    NewState = do_heartbeat(State),
     {noreply, NewState};
 
-handle_cast({heart_beat_ok, StateNum}, State) ->
-    NewState = heart_beat_ok(StateNum, State),
+handle_cast({heartbeat_ok, StateNum}, State) ->
+    NewState = heartbeat_ok(StateNum, State),
     {noreply, NewState};
 
 handle_cast({dispatcher_up_to_date, DispState}, State) ->
@@ -229,24 +229,24 @@ code_change(_OldVsn, State, _Extra) ->
 %% First it establishes network connection, next sends message to ccm.
 %% @end
 %%--------------------------------------------------------------------
--spec do_heart_beat(State :: #node_state{}) -> #node_state{}.
-do_heart_beat(State = #node_state{ccm_con_status = connected}) ->
-    {ok, Interval} = application:get_env(?APP_NAME, heart_beat_success_interval),
-    gen_server:cast({global, ?CCM}, {heart_beat, node()}),
-    erlang:send_after(Interval, self(), {timer, do_heart_beat}),
+-spec do_heartbeat(State :: #node_state{}) -> #node_state{}.
+do_heartbeat(State = #node_state{ccm_con_status = connected}) ->
+    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_success_interval),
+    gen_server:cast({global, ?CCM}, {heartbeat, node()}),
+    erlang:send_after(Interval, self(), {timer, do_heartbeat}),
     State#node_state{ccm_con_status = connected};
-do_heart_beat(State = #node_state{ccm_con_status = not_connected}) ->
+do_heartbeat(State = #node_state{ccm_con_status = not_connected}) ->
     {ok, CcmNodes} = application:get_env(?APP_NAME, ccm_nodes),
     case (catch init_net_connection(CcmNodes)) of
         ok ->
-            {ok, Interval} = application:get_env(?APP_NAME, heart_beat_success_interval),
-            gen_server:cast({global, ?CCM}, {heart_beat, node()}),
-            erlang:send_after(Interval * 1000, self(), {timer, do_heart_beat}),
+            {ok, Interval} = application:get_env(?APP_NAME, heartbeat_success_interval),
+            gen_server:cast({global, ?CCM}, {heartbeat, node()}),
+            erlang:send_after(Interval * 1000, self(), {timer, do_heartbeat}),
             State#node_state{ccm_con_status = connected};
         Err ->
-            {ok, Interval} = application:get_env(?APP_NAME, heart_beat_fail_interval),
+            {ok, Interval} = application:get_env(?APP_NAME, heartbeat_fail_interval),
             ?debug("No connection with CCM: ~p, retrying in ~p s", [Err, Interval]),
-            erlang:send_after(Interval * 1000, self(), {timer, do_heart_beat}),
+            erlang:send_after(Interval * 1000, self(), {timer, do_heartbeat}),
             State#node_state{ccm_con_status = not_connected}
     end.
 
@@ -256,11 +256,11 @@ do_heart_beat(State = #node_state{ccm_con_status = not_connected}) ->
 %% Saves information about ccm connection when ccm answers to its request
 %% @end
 %%--------------------------------------------------------------------
--spec heart_beat_ok(NewStateNum :: integer(), State :: term()) -> #node_state{}.
-heart_beat_ok(NewStateNum, State = #node_state{state_num = NewStateNum, dispatcher_state = NewStateNum}) ->
+-spec heartbeat_ok(NewStateNum :: integer(), State :: term()) -> #node_state{}.
+heartbeat_ok(NewStateNum, State = #node_state{state_num = NewStateNum, dispatcher_state = NewStateNum}) ->
     ?debug("Heart beat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
     State;
-heart_beat_ok(NewStateNum, State) ->
+heartbeat_ok(NewStateNum, State) ->
     ?debug("Heart beat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
     update_dispatcher(NewStateNum),
     State#node_state{state_num = NewStateNum}.

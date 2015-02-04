@@ -62,7 +62,7 @@ init_per_testcase(one_node_test, Config) ->
     [Node] = test_node_starter:start_test_nodes(1),
 
     test_node_starter:start_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, [Node], [
-        [{node_type, ccm}, {dispatcher_port, 8888}, {ccm_nodes, [Node]}, {heart_beat_success_interval, 1000}]]),
+        [{node_type, ccm}, {dispatcher_port, 8888}, {ccm_nodes, [Node]}, {heartbeat_success_interval, 1000}]]),
 
     lists:append([{nodes, [Node]}], Config);
 

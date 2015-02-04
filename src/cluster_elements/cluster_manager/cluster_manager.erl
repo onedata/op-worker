@@ -134,8 +134,8 @@ handle_call(_Request, _From, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 -notify_state_change(ccm).
-handle_cast({heart_beat, Node}, State) ->
-    NewState = heart_beat(State, Node),
+handle_cast({heartbeat, Node}, State) ->
+    NewState = heartbeat(State, Node),
     {noreply, NewState};
 
 handle_cast(init_cluster, State) ->
@@ -215,15 +215,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Receive heart_beat from node_manager
+%% Receive heartbeat from node_manager
 %% @end
 %%--------------------------------------------------------------------
--spec heart_beat(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
-heart_beat(State = #cm_state{nodes = Nodes}, SenderNode) ->
+-spec heartbeat(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
+heartbeat(State = #cm_state{nodes = Nodes}, SenderNode) ->
     ?debug("Heartbeat from node: ~p", [SenderNode]),
     case lists:member(SenderNode, Nodes) orelse SenderNode =:= node() of
         true ->
-            gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heart_beat_ok, State#cm_state.state_num}),
+            gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heartbeat_ok, State#cm_state.state_num}),
             State;
         false ->
             ?info("New node: ~p", [SenderNode]),
@@ -245,12 +245,12 @@ heart_beat(State = #cm_state{nodes = Nodes}, SenderNode) ->
                             gen_server:cast(self(), init_cluster);
                         _ -> ok
                     end,
-                    gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heart_beat_ok, State#cm_state.state_num}),
+                    gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heartbeat_ok, State#cm_state.state_num}),
                     NewState#cm_state{nodes = [SenderNode | Nodes]}
             catch
                 _:Reason ->
                     ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p", [SenderNode, Reason]),
-                    gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heart_beat_ok, State#cm_state.state_num}),
+                    gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heartbeat_ok, State#cm_state.state_num}),
                     State
             end
     end.
