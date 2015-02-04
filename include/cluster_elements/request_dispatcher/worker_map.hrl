@@ -14,6 +14,6 @@
 -define(WORKER_MAP_HRL, 1).
 
 -define(DEFAULT_WORKER_SELECTION_TYPE, random).
--type(selection_type() :: random | prefer_local).
+-type selection_type() :: random | prefer_local.
 
 -endif.

@@ -13,7 +13,16 @@
 -ifndef(WORKER_PROTOCOL_HRL).
 -define(WORKER_PROTOCOL_HRL, 1).
 
--record(worker_request, {id = undefined, req = undefined, reply_to = undefined}).
--record(worker_answer, {id = undefined, response = undefined}).
+-type process_ref() :: {proc, pid()} | {gen_serv, pid() | atom()}.
+
+-record(worker_request, {
+    id = undefined :: term(),
+    req = undefined :: term(),
+    reply_to = undefined :: process_ref()
+}).
+-record(worker_answer, {
+    id = undefined :: term(),
+    response = undefined :: term()
+}).
 
 -endif.

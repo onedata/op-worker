@@ -13,7 +13,7 @@
 -module(worker_map).
 -author("Tomasz Lichon").
 
--define(worker_map_ets, workers_ets).
+-define(WORKER_MAP_ETS, workers_ets).
 
 -include("cluster_elements/request_dispatcher/worker_map.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -32,7 +32,7 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    ets:new(?worker_map_ets, [bag, protected, named_table, {read_concurrency, true}]),
+    ets:new(?WORKER_MAP_ETS, [bag, protected, named_table, {read_concurrency, true}]),
     ok.
 
 %%--------------------------------------------------------------------
@@ -42,7 +42,7 @@ init() ->
 %%--------------------------------------------------------------------
 -spec terminate() -> ok.
 terminate() ->
-    ets:delete(?worker_map_ets),
+    ets:delete(?WORKER_MAP_ETS),
     ok.
 
 %%--------------------------------------------------------------------
@@ -91,7 +91,7 @@ update_workers(WorkersList) ->
 -spec get_worker_node_prefering_local(WorkerName :: atom()) -> {ok, node()} | {error, term()}.
 get_worker_node_prefering_local(WorkerName) ->
     MyNode = node(),
-    case ets:match(?worker_map_ets, {WorkerName, MyNode}) of
+    case ets:match(?WORKER_MAP_ETS, {WorkerName, MyNode}) of
         [] -> get_random_worker_node(WorkerName);
         [[]] -> {ok, MyNode}
     end.
@@ -104,7 +104,7 @@ get_worker_node_prefering_local(WorkerName) ->
 %%--------------------------------------------------------------------
 -spec get_random_worker_node(WorkerName :: atom()) -> {ok, node()} | {error, term()}.
 get_random_worker_node(WorkerName) ->
-    case ets:lookup(?worker_map_ets, WorkerName) of
+    case ets:lookup(?WORKER_MAP_ETS, WorkerName) of
         [] -> {error, not_found};
         Entries ->
             RandomIndex = random:uniform(length(Entries)),
@@ -120,9 +120,9 @@ get_random_worker_node(WorkerName) ->
 %%--------------------------------------------------------------------
 -spec update_worker({WorkerName :: atom(), Nodes :: [node()]}) -> ok.
 update_worker({WorkerName, Nodes}) ->
-    case ets:lookup(?worker_map_ets, WorkerName) of
+    case ets:lookup(?WORKER_MAP_ETS, WorkerName) of
         [] ->
-            lists:foreach(fun(Node) -> true = ets:insert(?worker_map_ets, {WorkerName, Node}) end, Nodes),
+            lists:foreach(fun(Node) -> true = ets:insert(?WORKER_MAP_ETS, {WorkerName, Node}) end, Nodes),
             ok;
         Entries ->
             CurrentNodes =
@@ -130,11 +130,11 @@ update_worker({WorkerName, Nodes}) ->
                     [] -> [];
                     [{_, AggregatedNodes}] -> AggregatedNodes
                 end,
-            CurrentNodesSet = sets:from_list(CurrentNodes),
-            NewNodesSet = sets:from_list(Nodes),
-            ToDelete = sets:to_list(sets:subtract(CurrentNodesSet, NewNodesSet)),
-            ToCreate = sets:to_list(sets:subtract(NewNodesSet, CurrentNodesSet)),
-            lists:foreach(fun(Node) -> true = ets:delete_object(?worker_map_ets, {WorkerName, Node}) end, ToDelete),
-            lists:foreach(fun(Node) -> true = ets:insert(?worker_map_ets, {WorkerName, Node}) end, ToCreate),
+            CurrentNodesSet = ordsets:from_list(CurrentNodes),
+            NewNodesSet = ordsets:from_list(Nodes),
+            ToDelete = ordsets:to_list(ordsets:subtract(CurrentNodesSet, NewNodesSet)),
+            ToCreate = ordsets:to_list(ordsets:subtract(NewNodesSet, CurrentNodesSet)),
+            lists:foreach(fun(Node) -> true = ets:delete_object(?WORKER_MAP_ETS, {WorkerName, Node}) end, ToDelete),
+            lists:foreach(fun(Node) -> true = ets:insert(?WORKER_MAP_ETS, {WorkerName, Node}) end, ToCreate),
             ok
     end.

@@ -31,7 +31,11 @@
 %%     (load on node1 < load on node2) and control_panel works on node3@127.0.0.1,
 %%     dns_worker state will look like this:
 %%     {dns_state, [{dns_worker, [{127,0,0,1}, {192,168,0,1}]}, {control_panel, [{127,0,0,1}]}]}
--record(dns_worker_state, {workers_list = [] :: [{atom(),  [{inet:ip4_address(), integer(), integer()}]}], nodes_list = [] :: [{inet:ip4_address(),  number()}], avg_load = 0 :: number()}).
+-record(dns_worker_state, {
+    workers_list = [] :: [{atom(),  [{inet:ip4_address(), integer(), integer()}]}],
+    nodes_list = [] :: [{inet:ip4_address(),  number()}],
+    avg_load = 0 :: number()
+}).
 
 -define(EXTERNALLY_VISIBLE_MODULES, [http_worker, dns_worker]).
 

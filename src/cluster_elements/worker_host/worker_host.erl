@@ -21,10 +21,21 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% This record is used by worker_host (it contains its state). It describes
-%% plug_in that is used and state of this plug_in. It contains also
+%% plugin that is used and state of this plugin. It contains also
 %% information about time of requests processing (used by ccm during
-%% load balancing).
--record(host_state, {plug_in = non, plug_in_state = [], load_info = []}).
+%% load balancing). The two list of Loads are accessible, When second list
+%% becomes full, it overrides first list . Loads storing works similarly to
+%% round robin databases
+-record(host_state, {
+    plugin = non :: module(),
+    plugin_state = [] :: term(),
+    load_info = []
+    :: [{
+        Loads1 :: list(),
+        Loads2 :: list(),
+        NumberOfLoads :: integer(),
+        LoadMemorySize :: integer()
+    }]}).
 
 %% API
 -export([start_link/3, stop/1]).
@@ -41,27 +52,27 @@
 %% Starts host with apropriate plug-in
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(PlugIn, PlugInArgs, LoadMemorySize) -> Result when
-    PlugIn :: atom(),
-    PlugInArgs :: any(),
+-spec start_link(Plugin, PluginArgs, LoadMemorySize) -> Result when
+    Plugin :: atom(),
+    PluginArgs :: any(),
     LoadMemorySize :: integer(),
     Result :: {ok, Pid}
     | ignore
     | {error, Error},
     Pid :: pid(),
     Error :: {already_started, Pid} | term().
-start_link(PlugIn, PlugInArgs, LoadMemorySize) ->
-    gen_server:start_link({local, PlugIn}, ?MODULE, [PlugIn, PlugInArgs, LoadMemorySize], []).
+start_link(Plugin, PluginArgs, LoadMemorySize) ->
+    gen_server:start_link({local, Plugin}, ?MODULE, [Plugin, PluginArgs, LoadMemorySize], []).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Stops the server
 %% @end
 %%--------------------------------------------------------------------
--spec stop(PlugIn) -> ok when
-    PlugIn :: atom().
-stop(PlugIn) ->
-    gen_server:cast(PlugIn, stop).
+-spec stop(Plugin) -> ok when
+    Plugin :: atom().
+stop(Plugin) ->
+    gen_server:cast(Plugin, stop).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -81,11 +92,11 @@ stop(PlugIn) ->
     | ignore,
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
-init([PlugIn, PlugInArgs, LoadMemorySize]) ->
+init([Plugin, PluginArgs, LoadMemorySize]) ->
     process_flag(trap_exit, true),
-    {ok, InitAns} = PlugIn:init(PlugInArgs),
-    ?debug("Plugin ~p initialized with args ~p and result ~p", [PlugIn, PlugInArgs, InitAns]),
-    {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}.
+    {ok, InitAns} = Plugin:init(PluginArgs),
+    ?debug("Plugin ~p initialized with args ~p and result ~p", [Plugin, PluginArgs, InitAns]),
+    {ok, #host_state{plugin = Plugin, plugin_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -106,14 +117,14 @@ init([PlugIn, PlugInArgs, LoadMemorySize]) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
-handle_call({update_plugin_state, StateTransformFun}, _From, State = #host_state{plug_in_state = PluginState}) when is_function(StateTransformFun) ->
-    {reply, ok, State#host_state{plug_in_state =  StateTransformFun(PluginState)}};
+handle_call({update_plugin_state, StateTransformFun}, _From, State = #host_state{plugin_state = PluginState}) when is_function(StateTransformFun) ->
+    {reply, ok, State#host_state{plugin_state = StateTransformFun(PluginState)}};
 
-handle_call({update_plugin_state, NewPlugInState}, _From, State) ->
-    {reply, ok, State#host_state{plug_in_state = NewPlugInState}};
+handle_call({update_plugin_state, NewPluginState}, _From, State) ->
+    {reply, ok, State#host_state{plugin_state = NewPluginState}};
 
 handle_call(get_plugin_state, _From, State) ->
-    {reply, State#host_state.plug_in_state, State};
+    {reply, State#host_state.plugin_state, State};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -132,8 +143,8 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
-handle_cast(#worker_request{} = Req, State = #host_state{plug_in = PlugIn, plug_in_state = PluginState}) ->
-    spawn(fun() -> proc_request(PlugIn, Req, PluginState) end),
+handle_cast(#worker_request{} = Req, State = #host_state{plugin = Plugin, plugin_state = PluginState}) ->
+    spawn(fun() -> proc_request(Plugin, Req, PluginState) end),
     {noreply, State};
 
 handle_cast({progress_report, Report}, State) ->
@@ -162,8 +173,8 @@ handle_cast(_Request, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 handle_info({'EXIT', Pid, Reason}, State) ->
-    PlugIn = State#host_state.plug_in,
-    gen_server:cast(PlugIn, #worker_request{req = {'EXIT', Pid, Reason}}),
+    Plugin = State#host_state.plugin,
+    gen_server:cast(Plugin, #worker_request{req = {'EXIT', Pid, Reason}}),
     {noreply, State};
 
 handle_info({timer, Msg}, State) ->
@@ -188,8 +199,8 @@ handle_info(Msg, State) ->
     | shutdown
     | {shutdown, term()}
     | term().
-terminate(_Reason, #host_state{plug_in = PlugIn}) ->
-    PlugIn:cleanup(),
+terminate(_Reason, #host_state{plugin = Plugin}) ->
+    Plugin:cleanup(),
     ok.
 
 %%--------------------------------------------------------------------
@@ -212,23 +223,23 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Processes client request using PlugIn:handle function. Afterwards,
+%% Processes client request using Plugin:handle function. Afterwards,
 %% it sends the answer to dispatcher and logs info about processing time.
 %% @end
 %%--------------------------------------------------------------------
--spec proc_request(PlugIn :: atom(), Request :: #worker_request{}, PluginState :: term()) -> Result when
+-spec proc_request(Plugin :: atom(), Request :: #worker_request{}, PluginState :: term()) -> Result when
     Result :: atom().
-proc_request(PlugIn, Request = #worker_request{req = Msg}, PluginState) ->
+proc_request(Plugin, Request = #worker_request{req = Msg}, PluginState) ->
     BeforeProcessingRequest = os:timestamp(),
     Response =
         try
-            PlugIn:handle(Msg, PluginState)
+            Plugin:handle(Msg, PluginState)
         catch
             Type:Error ->
-                ?error_stacktrace("Worker plug-in ~p error: ~p:~p, on request: ~p", [PlugIn, Type, Error, Request]),
-                worker_plug_in_error
+                ?error_stacktrace("Worker plug-in ~p error: ~p:~p, on request: ~p", [Plugin, Type, Error, Request]),
+                worker_plugin_error
         end,
-    send_response(PlugIn, BeforeProcessingRequest, Request, Response).
+    send_response(Plugin, BeforeProcessingRequest, Request, Response).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -236,14 +247,15 @@ proc_request(PlugIn, Request = #worker_request{req = Msg}, PluginState) ->
 %% Sends responce to client
 %% @end
 %%--------------------------------------------------------------------
--spec send_response(PlugIn :: atom(), BeforeProcessingRequest :: term(), Request :: #worker_request{}, Response :: term()) -> atom().
-send_response(PlugIn, BeforeProcessingRequest, #worker_request{id = MsgId, reply_to = ReplyTo}, Response) ->
+-spec send_response(Plugin :: atom(), BeforeProcessingRequest :: term(), Request :: #worker_request{}, Response :: term()) -> atom().
+send_response(Plugin, BeforeProcessingRequest, #worker_request{id = MsgId, reply_to = ReplyTo}, Response) ->
     case ReplyTo of
         undefined -> ok;
         {gen_serv, Serv} ->
             case MsgId of
                 undefined -> gen_server:cast(Serv, Response);
-                Id -> gen_server:cast(Serv, #worker_answer{id = Id, response = Response})
+                Id ->
+                    gen_server:cast(Serv, #worker_answer{id = Id, response = Response})
             end;
         {proc, Pid} ->
             case MsgId of
@@ -255,7 +267,7 @@ send_response(PlugIn, BeforeProcessingRequest, #worker_request{id = MsgId, reply
 
     AfterProcessingRequest = os:timestamp(),
     Time = timer:now_diff(AfterProcessingRequest, BeforeProcessingRequest),
-    gen_server:cast(PlugIn, {progress_report, {BeforeProcessingRequest, Time}}).
+    gen_server:cast(Plugin, {progress_report, {BeforeProcessingRequest, Time}}).
 
 %%--------------------------------------------------------------------
 %% @private

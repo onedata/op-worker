@@ -27,7 +27,12 @@
 %% This record is used by node_manager (it contains its state).
 %% It describes node type (ccm or worker) and status of connection
 %% with ccm (connected or not_connected).
--record(node_state, {node_type = worker, ccm_con_status = not_connected, state_num = 0, dispatcher_state = 0}).
+-record(node_state, {
+    node_type = worker :: worker | ccm,
+    ccm_con_status = not_connected :: not_connected | connected,
+    state_num = 0 :: integer(),
+    dispatcher_state = 0 :: integer()
+}).
 
 %% API
 -export([start_link/1, stop/0]).
@@ -271,10 +276,10 @@ heartbeat_ok(NewStateNum, State) ->
 %% Tells dispatcher that cluster state has changed.
 %% @end
 %%--------------------------------------------------------------------
--spec update_dispatcher(New_state_num :: integer()) -> atom().
-update_dispatcher(New_state_num) ->
-    ?debug("Message sent to update dispatcher, state num: ~p", [New_state_num]),
-    gen_server:cast(?DISPATCHER_NAME, {check_state, New_state_num}).
+-spec update_dispatcher(NewStateNum :: integer()) -> atom().
+update_dispatcher(NewStateNum) ->
+    ?debug("Message sent to update dispatcher, state num: ~p", [NewStateNum]),
+    gen_server:cast(?DISPATCHER_NAME, {check_state, NewStateNum}).
 
 %%--------------------------------------------------------------------
 %% @private
