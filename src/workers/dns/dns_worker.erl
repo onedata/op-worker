@@ -31,7 +31,11 @@
 %%     (load on node1 < load on node2) and control_panel works on node3@127.0.0.1,
 %%     dns_worker state will look like this:
 %%     {dns_state, [{dns_worker, [{127,0,0,1}, {192,168,0,1}]}, {control_panel, [{127,0,0,1}]}]}
--record(dns_worker_state, {workers_list = [] :: [{atom(),  [{inet:ip4_address(), integer(), integer()}]}], nodes_list = [] :: [{inet:ip4_address(),  number()}], avg_load = 0 :: number()}).
+-record(dns_worker_state, {
+    workers_list = [] :: [{atom(),  [{inet:ip4_address(), integer(), integer()}]}],
+    nodes_list = [] :: [{inet:ip4_address(),  number()}],
+    avg_load = 0 :: number()
+}).
 
 -define(EXTERNALLY_VISIBLE_MODULES, [http_worker, dns_worker]).
 
@@ -51,16 +55,16 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: #dns_worker_state{} | {error, Error},
+    Result :: {ok, #dns_worker_state{}} | {error, Error},
     Error :: term().
 init([]) ->
-    #dns_worker_state{};
+    {ok, #dns_worker_state{}};
 
 init(InitialState) when is_record(InitialState, dns_worker_state) ->
-    InitialState;
+    {ok, InitialState};
 
 init(test) ->
-    #dns_worker_state{};
+    {ok, #dns_worker_state{}};
 
 init(_) ->
     throw(unknown_initial_state).
@@ -70,25 +74,21 @@ init(_) ->
 %% {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% @end
 %%--------------------------------------------------------------------
--spec handle(ProtocolVersion :: term(), Request) -> Result when
-    Request :: ping | healthcheck | get_version |
+-spec handle(Request, State :: term()) -> Result when
+    Request :: ping | healthcheck |
     {update_state, list(), list()} |
     {get_worker, atom()} |
     get_nodes,
-    Result :: ok | {ok, Response} | {error, Error} | pong | Version,
+    Result :: ok | {ok, Response} | {error, Error} | pong,
     Response :: [inet:ip4_address()],
-    Version :: term(),
     Error :: term().
-handle(_ProtocolVersion, ping) ->
+handle(ping, _) ->
     pong;
 
-handle(_ProtocolVersion, healthcheck) ->
+handle(healthcheck, _) ->
     ok;
 
-handle(_ProtocolVersion, get_version) ->
-    node_manager:check_vsn();
-
-handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
+handle({update_state, ModulesToNodes, NLoads, AvgLoad}, _) ->
     ?info("DNS state update: ~p", [{ModulesToNodes, NLoads, AvgLoad}]),
     try
         ModulesToNodes2 = lists:map(fun({Module, Nodes}) ->
@@ -98,7 +98,7 @@ handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
             {Module, lists:map(GetLoads, Nodes)}
         end, ModulesToNodes),
         New_DNS_State = #dns_worker_state{workers_list = ModulesToNodes2, nodes_list = NLoads, avg_load = AvgLoad},
-        case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
+        case gen_server:call(?MODULE, {update_plugin_state, New_DNS_State}) of
             ok ->
                 ok;
             UpdateError ->
@@ -111,7 +111,7 @@ handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
             udpate_error
     end;
 
-handle(_ProtocolVersion, {handle_a, Domain}) ->
+handle({handle_a, Domain}, _) ->
     IPList = case parse_domain(Domain) of
                  unknown_domain ->
                      refused;
@@ -152,7 +152,7 @@ handle(_ProtocolVersion, {handle_a, Domain}) ->
             }
     end;
 
-handle(_ProtocolVersion, {handle_ns, Domain}) ->
+handle({handle_ns, Domain}, _) ->
     case parse_domain(Domain) of
         unknown_domain ->
             refused;
@@ -170,9 +170,9 @@ handle(_ProtocolVersion, {handle_ns, Domain}) ->
             end
     end;
 
-handle(ProtocolVersion, Msg) ->
-    ?warning("Wrong request: ~p", [Msg]),
-    throw({unsupported_request, ProtocolVersion, Msg}).
+handle(_Request, _) ->
+    ?log_bad_request(_Request),
+    throw({unsupported_request, _Request}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -182,7 +182,7 @@ handle(ProtocolVersion, Msg) ->
 -spec cleanup() -> Result when
     Result :: ok.
 cleanup() ->
-    dns_server:stop(?SUPERVISOR_NAME).
+    dns_server:stop(?APPLICATION_SUPERVISOR_NAME).
 
 
 %%%===================================================================
@@ -333,7 +333,7 @@ parse_domain(DomainArg) ->
 -spec get_workers(Module :: atom()) -> list() | serv_fail.
 get_workers(Module) ->
     try
-        DNSState = gen_server:call(?MODULE, getPlugInState),
+        DNSState = gen_server:call(?MODULE, get_plugin_state),
         WorkerList = DNSState#dns_worker_state.workers_list,
         NodesList = DNSState#dns_worker_state.nodes_list,
         Result = proplists:get_value(Module, WorkerList, []),
@@ -361,7 +361,7 @@ get_workers(Module) ->
 
         New_DNS_State = DNSState#dns_worker_state{workers_list = NewWorkersList},
 
-        case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
+        case gen_server:call(?MODULE, {update_plugin_state, New_DNS_State}) of
             ok ->
                 random:seed(now()),
                 Result3 = make_ans_random(Result2),
@@ -390,7 +390,7 @@ get_workers(Module) ->
 -spec get_nodes() -> list() | serv_fail.
 get_nodes() ->
     try
-        DNSState = gen_server:call(?MODULE, getPlugInState),
+        DNSState = gen_server:call(?MODULE, get_plugin_state),
         NodesList = DNSState#dns_worker_state.nodes_list,
         AvgLoad = DNSState#dns_worker_state.avg_load,
 
@@ -478,30 +478,4 @@ make_ans_random(Result) ->
 %%--------------------------------------------------------------------
 -spec call_dns_worker(Request :: term()) -> term() | serv_fail.
 call_dns_worker(Request) ->
-    try
-        {ok, DispatcherTimeout} = application:get_env(?APP_NAME, dispatcher_timeout),
-        DispatcherAns = gen_server:call(?DISPATCHER_NAME, {dns_worker, 1, self(), Request}),
-        case DispatcherAns of
-            ok ->
-                receive
-                    {error, Error} ->
-                        ?error("Unexpected dispatcher error ~p", [Error]),
-                        serv_fail;
-                    Answer ->
-                        Answer
-                after
-                    DispatcherTimeout ->
-                        ?error("Unexpected dispatcher timeout"),
-                        serv_fail
-                end;
-            worker_not_found ->
-                ?error("Dispatcher error - worker not found"),
-                serv_fail
-        end
-    catch
-        _:Error2 ->
-            ?error_stacktrace("Dispatcher not responding ~p", [Error2]),
-            serv_fail
-    end.
-
-
+    worker_proxy:call(dns_worker, Request).

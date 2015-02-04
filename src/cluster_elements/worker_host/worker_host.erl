@@ -17,8 +17,25 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
--include("cluster_elements/worker_host/worker_host.hrl").
+-include("cluster_elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+%% This record is used by worker_host (it contains its state). It describes
+%% plugin that is used and state of this plugin. It contains also
+%% information about time of requests processing (used by ccm during
+%% load balancing). The two list of Loads are accessible, When second list
+%% becomes full, it overrides first list . Loads storing works similarly to
+%% round robin databases
+-record(host_state, {
+    plugin = non :: module(),
+    plugin_state = [] :: term(),
+    load_info = []
+    :: [{
+        Loads1 :: list(),
+        Loads2 :: list(),
+        NumberOfLoads :: integer(),
+        LoadMemorySize :: integer()
+    }]}).
 
 %% API
 -export([start_link/3, stop/1]).
@@ -35,27 +52,27 @@
 %% Starts host with apropriate plug-in
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(PlugIn, PlugInArgs, LoadMemorySize) -> Result when
-    PlugIn :: atom(),
-    PlugInArgs :: any(),
+-spec start_link(Plugin, PluginArgs, LoadMemorySize) -> Result when
+    Plugin :: atom(),
+    PluginArgs :: any(),
     LoadMemorySize :: integer(),
     Result :: {ok, Pid}
     | ignore
     | {error, Error},
     Pid :: pid(),
     Error :: {already_started, Pid} | term().
-start_link(PlugIn, PlugInArgs, LoadMemorySize) ->
-    gen_server:start_link({local, PlugIn}, ?MODULE, [PlugIn, PlugInArgs, LoadMemorySize], []).
+start_link(Plugin, PluginArgs, LoadMemorySize) ->
+    gen_server:start_link({local, Plugin}, ?MODULE, [Plugin, PluginArgs, LoadMemorySize], []).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Stops the server
 %% @end
 %%--------------------------------------------------------------------
--spec stop(PlugIn) -> ok when
-    PlugIn :: atom().
-stop(PlugIn) ->
-    gen_server:cast(PlugIn, stop).
+-spec stop(Plugin) -> ok when
+    Plugin :: atom().
+stop(Plugin) ->
+    gen_server:cast(Plugin, stop).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -75,25 +92,11 @@ stop(PlugIn) ->
     | ignore,
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
-init([PlugIn, PlugInArgs, LoadMemorySize]) ->
+init([Plugin, PluginArgs, LoadMemorySize]) ->
     process_flag(trap_exit, true),
-    InitAns = PlugIn:init(PlugInArgs),
-    ?debug("Plugin ~p initialized with args ~p and result ~p", [PlugIn, PlugInArgs, InitAns]),
-    case InitAns of
-        #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispReqMap} ->
-            DispatcherRequestMapState =
-                case RequestMap of
-                    non -> true;
-                    _ ->
-                        erlang:send_after(200, self, {timer, register_disp_map}),
-                        false
-                end,
-            {ok, #host_state{plug_in = PlugIn, request_map = RequestMap, dispatcher_request_map = DispReqMap,
-                dispatcher_request_map_ok = DispatcherRequestMapState,
-                plug_in_state = InitAns#initial_host_description.plug_in_state, load_info = {[], [], 0, LoadMemorySize}}};
-        _ ->
-            {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}
-    end.
+    {ok, InitAns} = Plugin:init(PluginArgs),
+    ?debug("Plugin ~p initialized with args ~p and result ~p", [Plugin, PluginArgs, InitAns]),
+    {ok, #host_state{plugin = Plugin, plugin_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -114,62 +117,17 @@ init([PlugIn, PlugInArgs, LoadMemorySize]) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
-handle_call(getPlugIn, _From, State) ->
-    Reply = State#host_state.plug_in,
-    {reply, Reply, State};
+handle_call({update_plugin_state, StateTransformFun}, _From, State = #host_state{plugin_state = PluginState}) when is_function(StateTransformFun) ->
+    {reply, ok, State#host_state{plugin_state = StateTransformFun(PluginState)}};
 
-handle_call({updatePlugInState, NewPlugInState}, _From, State) ->
-    {reply, ok, State#host_state{plug_in_state = NewPlugInState}};
+handle_call({update_plugin_state, NewPluginState}, _From, State) ->
+    {reply, ok, State#host_state{plugin_state = NewPluginState}};
 
-handle_call(getPlugInState, _From, State) ->
-    {reply, State#host_state.plug_in_state, State};
-
-handle_call(getLoadInfo, _From, State) ->
-    Reply = load_info(State#host_state.load_info),
-    {reply, Reply, State};
-
-handle_call(getFullLoadInfo, _From, State) ->
-    {reply, State#host_state.load_info, State};
-
-handle_call(clearLoadInfo, _From, State) ->
-    {_New, _Old, _NewListSize, Max} = State#host_state.load_info,
-    Reply = ok,
-    {reply, Reply, State#host_state{load_info = {[], [], 0, Max}}};
-
-handle_call({test_call, ProtocolVersion, Msg}, _From, State) ->
-    PlugIn = State#host_state.plug_in,
-    Reply = PlugIn:handle(ProtocolVersion, Msg),
-    {reply, Reply, State};
-
-handle_call(dispatcher_map_unregistered, _From, State) ->
-    ?info("dispatcher_map_unregistered for plugin ~p", [State#host_state.plug_in]),
-    DMapState = case State#host_state.request_map of
-                    non -> true;
-                    _ ->
-                        erlang:send_after(200, self(), {timer, register_disp_map}),
-                        false
-                end,
-    {reply, ok, State#host_state{dispatcher_request_map_ok = DMapState}};
-
-handle_call({link_process, Pid}, _From, State) ->
-    LinkAns = try
-        link(Pid),
-        ok
-              catch
-                  _:Reason ->
-                      {error, Reason}
-              end,
-    {reply, LinkAns, State};
-
-handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
-    %% that request was made, unlike cast because cast ignores state of node/gen_server
-    {reply, gen_server:cast(State#host_state.plug_in, Request), State};
-
-handle_call(check, _From, State) ->
-    {reply, ok, State};
+handle_call(get_plugin_state, _From, State) ->
+    {reply, State#host_state.plugin_state, State};
 
 handle_call(_Request, _From, State) ->
-    ?warning("Wrong call: ~p", [_Request]),
+    ?log_bad_request(_Request),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -185,40 +143,19 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
-handle_cast({synch, ProtocolVersion, Msg, MsgId, ReplyTo}, State) ->
-    PlugIn = State#host_state.plug_in,
-    spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) end),
-    {noreply, State};
-
-handle_cast({synch, ProtocolVersion, Msg, ReplyTo}, State) ->
-    PlugIn = State#host_state.plug_in,
-    spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, non, ReplyTo) end),
-    {noreply, State};
-
-handle_cast({asynch, ProtocolVersion, Msg}, State) ->
-    PlugIn = State#host_state.plug_in,
-    spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, non, non) end),
+handle_cast(#worker_request{} = Req, State = #host_state{plugin = Plugin, plugin_state = PluginState}) ->
+    spawn(fun() -> proc_request(Plugin, Req, PluginState) end),
     {noreply, State};
 
 handle_cast({progress_report, Report}, State) ->
     NewLoadInfo = save_progress(Report, State#host_state.load_info),
     {noreply, State#host_state{load_info = NewLoadInfo}};
 
-handle_cast(register_disp_map, State) ->
-    case State#host_state.dispatcher_request_map_ok of
-        true -> ok;
-        _ ->
-            Pid = self(),
-            erlang:send_after(10000, Pid, {timer, register_disp_map}),
-            gen_server:cast({global, ?CCM}, {register_dispatcher_map, State#host_state.plug_in, State#host_state.dispatcher_request_map, Pid})
-    end,
-    {noreply, State};
-
 handle_cast(stop, State) ->
     {stop, normal, State};
 
-handle_cast(_Msg, State) ->
-    ?warning("Wrong cast: ~p", [_Msg]),
+handle_cast(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 
@@ -236,22 +173,17 @@ handle_cast(_Msg, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 handle_info({'EXIT', Pid, Reason}, State) ->
-    PlugIn = State#host_state.plug_in,
-    gen_server:cast(PlugIn, {asynch, 1, {'EXIT', Pid, Reason}}),
+    Plugin = State#host_state.plugin,
+    gen_server:cast(Plugin, #worker_request{req = {'EXIT', Pid, Reason}}),
     {noreply, State};
 
 handle_info({timer, Msg}, State) ->
-    PlugIn = State#host_state.plug_in,
-    gen_server:cast(PlugIn, Msg),
+    gen_server:cast(self(), Msg),
     {noreply, State};
 
-handle_info(dispatcher_map_registered, State) ->
-    ?debug("dispatcher_map_registered"),
-    {noreply, State#host_state{dispatcher_request_map_ok = true}};
-
 handle_info(Msg, State) ->
-    handle_cast({asynch, 1, Msg}, State).
-
+    gen_server:cast(self(), Msg),
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -267,8 +199,8 @@ handle_info(Msg, State) ->
     | shutdown
     | {shutdown, term()}
     | term().
-terminate(_Reason, #host_state{plug_in = PlugIn}) ->
-    PlugIn:cleanup(),
+terminate(_Reason, #host_state{plugin = Plugin}) ->
+    Plugin:cleanup(),
     ok.
 
 %%--------------------------------------------------------------------
@@ -291,22 +223,23 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Processes client request using PlugIn:handle function. Afterwards,
+%% Processes client request using Plugin:handle function. Afterwards,
 %% it sends the answer to dispatcher and logs info about processing time.
 %% @end
 %%--------------------------------------------------------------------
--spec proc_request(PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: term(), ReplyDisp :: term()) -> Result when
+-spec proc_request(Plugin :: atom(), Request :: #worker_request{}, PluginState :: term()) -> Result when
     Result :: atom().
-proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
+proc_request(Plugin, Request = #worker_request{req = Msg}, PluginState) ->
     BeforeProcessingRequest = os:timestamp(),
-    Response = try
-        PlugIn:handle(ProtocolVersion, Msg)
-               catch
-                   Type:Error ->
-                       ?error_stacktrace("Worker plug-in ~p error: ~p:~p", [PlugIn, Type, Error]),
-                       worker_plug_in_error
-               end,
-    send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo).
+    Response =
+        try
+            Plugin:handle(Msg, PluginState)
+        catch
+            Type:Error ->
+                ?error_stacktrace("Worker plug-in ~p error: ~p:~p, on request: ~p", [Plugin, Type, Error, Request]),
+                worker_plugin_error
+        end,
+    send_response(Plugin, BeforeProcessingRequest, Request, Response).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -314,27 +247,27 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
 %% Sends responce to client
 %% @end
 %%--------------------------------------------------------------------
--spec send_response(PlugIn :: atom(), BeforeProcessingRequest :: term(), Response :: term(), MsgId :: term(), ReplyDisp :: term()) -> Result when
-    Result :: atom().
-send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo) ->
+-spec send_response(Plugin :: atom(), BeforeProcessingRequest :: term(), Request :: #worker_request{}, Response :: term()) -> atom().
+send_response(Plugin, BeforeProcessingRequest, #worker_request{id = MsgId, reply_to = ReplyTo}, Response) ->
     case ReplyTo of
-        non -> ok;
+        undefined -> ok;
         {gen_serv, Serv} ->
             case MsgId of
-                non -> gen_server:cast(Serv, Response);
-                Id -> gen_server:cast(Serv, {worker_answer, Id, Response})
+                undefined -> gen_server:cast(Serv, Response);
+                Id ->
+                    gen_server:cast(Serv, #worker_answer{id = Id, response = Response})
             end;
         {proc, Pid} ->
             case MsgId of
-                non -> Pid ! Response;
-                Id -> Pid ! {worker_answer, Id, Response}
+                undefined -> Pid ! Response;
+                Id -> Pid ! #worker_answer{id = Id, response = Response}
             end;
         Other -> ?error("Wrong reply type: ~p", [Other])
     end,
 
     AfterProcessingRequest = os:timestamp(),
     Time = timer:now_diff(AfterProcessingRequest, BeforeProcessingRequest),
-    gen_server:cast(PlugIn, {progress_report, {BeforeProcessingRequest, Time}}).
+    gen_server:cast(Plugin, {progress_report, {BeforeProcessingRequest, Time}}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -353,23 +286,3 @@ save_progress(Report, {New, Old, NewListSize, Max}) ->
             {[Report | New], Old, S, Max}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Provides averaged information about last requests.
-%% @end
-%%--------------------------------------------------------------------
--spec load_info(LoadInfo :: term()) -> Result when
-    Result :: term().
-load_info({New, Old, NewListSize, Max}) ->
-    Load = lists:sum(lists:map(fun({_Time, Load}) -> Load end, New)) + lists:sum(lists:map(fun({_Time, Load}) ->
-        Load end, lists:sublist(Old, Max - NewListSize))),
-    {Time, _Load} = case {New, Old} of
-                        {[], []} -> {os:timestamp(), []};
-                        {_O, []} -> lists:last(New);
-                        _L -> case NewListSize of
-                                  Max -> lists:last(New);
-                                  _S -> lists:nth(Max - NewListSize, Old)
-                              end
-                    end,
-    {Time, Load}.

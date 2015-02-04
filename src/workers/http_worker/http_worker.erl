@@ -30,44 +30,37 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: ok | {error, Error},
-    Error :: term().
+    Result :: {ok, State :: term()} | {error, Error :: term()}.
 init(_Args) ->
-    ok.
-
+    {ok, undefined}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% @end
 %%--------------------------------------------------------------------
--spec handle(ProtocolVersion :: term(), Request) -> Result when
-    Request :: ping | healthcheck | get_version,
-    Result :: ok | {ok, Response} | {error, Error} | pong | Version,
+-spec handle(Request, State :: term()) -> Result when
+    Request :: ping | healthcheck | {spawn_handler, SocketPid :: pid()},
+    Result :: ok | {ok, Response} | {error, Error} | pong,
     Response :: term(),
-    Version :: term(),
     Error :: term().
-handle(_ProtocolVersion, ping) ->
+handle(ping, _) ->
     pong;
 
-handle(_ProtocolVersion, healthcheck) ->
+handle(healthcheck, _) ->
     ok;
 
-handle(_ProtocolVersion, get_version) ->
-    node_manager:check_vsn();
-
-handle(_ProtocolVersion, {spawn_handler, SocketPid}) ->
+handle({spawn_handler, SocketPid}, _) ->
     Pid = spawn(
         fun() ->
             erlang:monitor(process, SocketPid),
             opn_cowboy_bridge:set_socket_pid(SocketPid),
             opn_cowboy_bridge:request_processing_loop()
         end),
-    Pid;
+    {ok, Pid};
 
-handle(_ProtocolVersion, _Msg) ->
-    ?warning("http server unknown message: ~p", [_Msg]).
-
+handle(_Request, _) ->
+    ?log_bad_request(_Request).
 
 %%--------------------------------------------------------------------
 %% @doc

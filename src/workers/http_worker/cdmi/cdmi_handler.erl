@@ -19,7 +19,7 @@
 -record(state, {}).
 
 %% API
--export([init/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
+-export([init/3, terminate/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
 -export([get_cdmi_container/2, put_cdmi_container/2]).
@@ -35,7 +35,7 @@
 %% now treated as REST module by cowboy.
 %% @end
 %%--------------------------------------------------------------------
--spec init(any(), any(), any()) -> {upgrade, protocol, cowboy_rest}.
+-spec init(any(), any(), any()) -> {upgrade, protocol, cowboy_rest, req(), term()}.
 init(_, Req, Opts) ->
     NewOpts =
         case gsi_handler:get_certs_from_req(?ONEPROXY_REST, Req) of
@@ -45,6 +45,16 @@ init(_, Req, Opts) ->
                 []
         end,
     {upgrade, protocol, cowboy_rest, Req, NewOpts ++ Opts}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Cowboy callback function
+%% Handles cleanup
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate(Reason :: term(), req(), #state{}) -> ok.
+terminate(_, _, _) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -95,7 +105,7 @@ resource_exists(Req, State) ->
 %% Returns content types that can be provided.
 %% @end
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
+-spec content_types_provided(req(), #state{}) -> {{binary(), atom()}, req(), #state{}}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/cdmi-container">>, get_cdmi_container}
@@ -107,7 +117,7 @@ content_types_provided(Req, State) ->
 %% functions should be used to process the requests.
 %% @end
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), #state{}) -> {term(), req(), #state{}}.
+-spec content_types_accepted(req(), #state{}) -> {{binary(), atom()}, req(), #state{}}.
 content_types_accepted(Req, State) ->
     {[
         {<<"application/cdmi-container">>, put_cdmi_container}

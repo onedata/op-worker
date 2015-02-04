@@ -12,9 +12,7 @@
 -module(client_handler).
 -author("Michal Wrzeszcz").
 
--include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("public_key/include/public_key.hrl").
 
 -record(handler_state, {}).
 
@@ -90,6 +88,6 @@ websocket_info(_Msg, Req, State) ->
     when
     Req :: term(),
     State :: #handler_state{}.
-websocket_terminate(_Reason, _Req, State) ->
+websocket_terminate(_Reason, _Req, _State) ->
     ?info("WebSocket connection  terminate"),
     ok.
