@@ -165,11 +165,11 @@ level_to_driver(globally_cached, _) ->
 
 
 driver_to_level(?PERSISTENCE_DRIVER) ->
-    persistence;
+    disk_only;
 driver_to_level(?LOCAL_CACHE_DRIVER) ->
-    l_cache;
+    local_only;
 driver_to_level(?DISTRIBUTED_CACHE_DRIVER) ->
-    d_cache.
+    global_only.
 
 
 exec_driver(ModelName, [Driver], Method, Args, Context) when is_atom(Driver) ->

@@ -25,7 +25,7 @@
 %% @end
 %%--------------------------------------------------------------------
 save(Document) ->
-    datastore:save(all, Document).
+    datastore:save(globally_cached, Document).
 
 
 %%--------------------------------------------------------------------
@@ -34,7 +34,7 @@ save(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 update(Key, Diff) ->
-    datastore:update(all, ?MODULE, Key, Diff).
+    datastore:update(globally_cached, ?MODULE, Key, Diff).
 
 
 %%--------------------------------------------------------------------
@@ -43,7 +43,7 @@ update(Key, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 create(Document) ->
-    datastore:create(all, Document).
+    datastore:create(globally_cached, Document).
 
 
 %%--------------------------------------------------------------------
@@ -52,7 +52,7 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 exists(Key) ->
-    datastore:exists(l_cache, ?MODULE, Key).
+    datastore:exists(local_only, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -60,7 +60,7 @@ exists(Key) ->
 %% @end
 %%--------------------------------------------------------------------
 get(Key) ->
-    datastore:get(l_cache, ?MODULE, Key).
+    datastore:get(local_only, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -68,7 +68,7 @@ get(Key) ->
 %% @end
 %%--------------------------------------------------------------------
 delete(Key) ->
-    datastore:delete(l_cache, ?MODULE, Key).
+    datastore:delete(local_only, ?MODULE, Key).
 
 
 %%--------------------------------------------------------------------
