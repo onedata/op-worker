@@ -13,24 +13,29 @@
 
 -include("workers/datastore/datastore.hrl").
 -include("workers/datastore/datastore_internal.hrl").
+-include_lib("ctool/include/logging.hrl").
 
--type key() :: term().
+
+%% #document types
+-type key() :: undefined | term().
 -type document() :: #document{}.
 -type value() :: term().
 -type document_diff() :: #{term() => term()}.
 -type bucket() :: atom().
 
-
+%% Error types
 -type generic_error() :: {error, Reason :: any()}.
 -type not_found_error(Reason) :: {error, {not_found, Reason}}.
 -type update_error() :: not_found_error(any()) | generic_error().
 -type create_error() :: generic_error() | {error, already_exists}.
 -type get_error() :: not_found_error(any()) | generic_error().
 
-%% API
 -export_type([key/0, value/0, document/0, document_diff/0, bucket/0]).
 -export_type([generic_error/0, not_found_error/1, update_error/0, create_error/0, get_error/0]).
+
+%% API
 -export([save/2, update/4, create/2, get/3, delete/3, exists/3]).
+-export([configs_per_bucket/1]).
 
 
 %%%===================================================================
@@ -43,9 +48,10 @@
 %% @todo: Write me!
 %% @end
 %%--------------------------------------------------------------------
+
 save(Level, #document{} = Document) ->
     ModelName = model_name(Document),
-    exec_driver(ModelName, level_to_driver(Level, write), save, [Document], Document).
+    exec_driver(ModelName, level_to_driver(Level, write), save, [maybe_gen_uuid(Document)], Document).
 
 
 %%--------------------------------------------------------------------
@@ -64,7 +70,7 @@ update(Level, ModelName, Key, Diff) ->
 %%--------------------------------------------------------------------
 create(Level, #document{} = Document) ->
     ModelName = model_name(Document),
-    exec_driver(ModelName, level_to_driver(Level, write), create, [Document], Document).
+    exec_driver(ModelName, level_to_driver(Level, write), create, [maybe_gen_uuid(Document)], Document).
 
 
 %%--------------------------------------------------------------------
@@ -97,6 +103,11 @@ exists(Level, ModelName, Key) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+maybe_gen_uuid(#document{key = undefined} = Doc) ->
+    Doc#document{key = datastore_utils:gen_uuid()};
+maybe_gen_uuid(#document{} = Doc) ->
+    Doc.
 
 
 model_name(#document{value = Record}) ->
@@ -132,21 +143,39 @@ run_posthooks(#model_config{name = ModelName}, Method, Level, Context, Return) -
 
 load_local_state(Models) ->
     ets:new(?LOCAL_STATE, [named_table, public, bag]),
-    lists:foreach(
+    lists:map(
         fun(ModelName) ->
-            #model_config{hooks = Hooks} = ModelName:model_init(),
+            Config = #model_config{hooks = Hooks} = ModelName:model_init(),
             lists:foreach(
                 fun(Hook) ->
-
                     ets:insert(?LOCAL_STATE, {Hook, ModelName})
-                end, Hooks)
-        end, Models),
-    ok.
+                end, Hooks),
+            Config
+        end, Models).
+
+
+configs_per_bucket(Configs) ->
+    lists:foldl(
+        fun(ModelConfig, Acc) ->
+            #model_config{bucket = Bucket} = ModelConfig,
+            maps:put(Bucket, [ModelConfig | maps:get(Bucket, Acc, [])], Acc)
+        end, #{}, Configs).
+
+
+init_drivers(Configs) ->
+    lists:foreach(
+        fun({Bucket, Models}) ->
+            ok = ?PERSISTENCE_DRIVER:init_bucket(Bucket, Models),
+            ok = ?LOCAL_CACHE_DRIVER:init_bucket(Bucket, Models),
+            ok = ?DISTRIBUTED_CACHE_DRIVER:init_bucket(Bucket, Models)
+        end, maps:to_list(configs_per_bucket(Configs))).
+
 
 ensure_state_loaded() ->
     case ets:info(?LOCAL_STATE) of
         undefined ->
-            load_local_state(?MODELS);
+            Configs = load_local_state(?MODELS),
+            init_drivers(Configs);
         _ -> ok
     end.
 

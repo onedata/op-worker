@@ -15,6 +15,10 @@
 -include("workers/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% Bukcet type that is defined in database and configured to store "map" data type
+-define(RIAK_BUCKET_TYPE, <<"maps">>).
+
+
 %% API
 -export([init_bucket/2]).
 -export([save/2, create/2, update/3, exists/2, get/2, delete/2]).
@@ -28,6 +32,7 @@
 %% {@link store_driver_behaviour} callback init_bucket/2.
 %% @end
 %%--------------------------------------------------------------------
+-spec init_bucket(Bucket :: datastore:bucket(), Models :: [model_behaviour:model_config()]) -> ok.
 init_bucket(_Bucket, _Models) ->
     ?debug("Riak init with nodes: ~p", [datastore_worker:state_get(riak_nodes)]),
     ok.
@@ -38,12 +43,12 @@ init_bucket(_Bucket, _Models) ->
 %% {@link store_driver_behaviour} callback init_bucket/2.
 %% @end
 %%--------------------------------------------------------------------
+-spec save(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = Rev, value = Value}) ->
     RiakObj = to_riak_obj(Value, Rev),
     RiakOP = riakc_map:to_op(RiakObj),
-    Key1 = maybe_generate_key(Key),
-    case call(riakc_pb_socket, update_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key1), RiakOP]) of
-        ok -> {ok, Key1};
+    case call(riakc_pb_socket, update_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key), RiakOP]) of
+        ok -> {ok, Key};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -54,8 +59,10 @@ save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = R
 %% {@link store_driver_behaviour} callback update/3.
 %% @end
 %%--------------------------------------------------------------------
+-spec update(model_behaviour:model_config(), datastore:key(),
+    Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
 update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Diff) ->
-    case call(riakc_pb_socket, fetch_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key)]) of
+    case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         {ok, Result} ->
             NewRMap =
                 maps:fold(
@@ -65,7 +72,7 @@ update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Dif
                         Type = Module:type(),
                         riakc_map:update({to_binary(K), Type}, fun(_) -> RiakObj end, Acc)
                     end, Result, Diff),
-            case call(riakc_pb_socket, update_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key), riakc_map:to_op(NewRMap)]) of
+            case call(riakc_pb_socket, update_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key), riakc_map:to_op(NewRMap)]) of
                 ok -> {ok, Key};
                 {error, Reason} ->
                     {error, Reason}
@@ -80,30 +87,13 @@ update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Dif
 %% {@link store_driver_behaviour} callback create/2.
 %% @end
 %%--------------------------------------------------------------------
+-spec create(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value = Value}) ->
     RiakOP = riakc_map:to_op(to_riak_obj(Value)),
-    Key1 = maybe_generate_key(Key),
-    case call(riakc_pb_socket, update_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key1), RiakOP]) of
-        ok -> {ok, Key1};
+    case call(riakc_pb_socket, update_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key), RiakOP]) of
+        ok -> {ok, Key};
         {error, Reason} ->
             {error, Reason}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link store_driver_behaviour} callback exists/2.
-%% @end
-%%--------------------------------------------------------------------
-exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
-    case call(riakc_pb_socket, fetch_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key)]) of
-        {ok, {notfound, _}} ->
-            false;
-        {error, _Reason} ->
-            %% @todo: log
-            false;
-        {ok, _} ->
-            true
     end.
 
 
@@ -112,8 +102,9 @@ exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
 %% {@link store_driver_behaviour} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
+-spec get(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
 get(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
-    case call(riakc_pb_socket, fetch_type, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key)]) of
+    case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         {ok, Result} ->
             {ok, #document{key = Key, rev = Result,
                 value = datastore_utils:shallow_to_record(form_riak_obj(map, Result))}};
@@ -127,12 +118,30 @@ get(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
+-spec delete(model_behaviour:model_config(), datastore:key()) -> ok | datastore:generic_error().
 delete(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
-    case call(riakc_pb_socket, delete, [{<<"maps">>, to_binary(Bucket)}, to_binary(Key)]) of
+    case call(riakc_pb_socket, delete, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         ok ->
             ok;
         {error, Reason} ->
             {error, Reason}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback exists/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec exists(model_behaviour:model_config(), datastore:key()) -> true | false | datastore:generic_error().
+exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
+    case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
+        {ok, {notfound, _}} ->
+            false;
+        {error, Reason} ->
+            {error, Reason};
+        {ok, _} ->
+            true
     end.
 
 
@@ -159,13 +168,13 @@ to_riak_obj(Term, undefined) when is_tuple(Term) ->
 to_riak_obj(Term, Rev) when is_tuple(Term) ->
     Map = datastore_utils:shallow_to_map(Term),
     RMap0 = Rev,
-    RMap1 = maps:fold(
-                fun(K, V, Acc) ->
-                    RiakObj = to_riak_obj(V),
-                    Module = riakc_datatype:module_for_term(RiakObj),
-                    Type = Module:type(),
-                    riakc_map:update({to_binary(K), Type}, fun(_) -> RiakObj end, Acc)
-                end, RMap0, Map).
+    maps:fold(
+        fun(K, V, Acc) ->
+            RiakObj = to_riak_obj(V),
+            Module = riakc_datatype:module_for_term(RiakObj),
+            Type = Module:type(),
+            riakc_map:update({to_binary(K), Type}, fun(_) -> RiakObj end, Acc)
+        end, RMap0, Map).
 
 to_riak_obj(Term) when is_tuple(Term) ->
     to_riak_obj(Term, riakc_map:new());
@@ -259,7 +268,7 @@ from_binary(Bin) ->
     Bin.
 
 
-maybe_generate_key(undefined) ->
-    base64:encode(crypto:rand_bytes(32));
-maybe_generate_key(Key) ->
-    Key.
+bucket_encode(Bucket) when is_atom(Bucket) ->
+    atom_to_binary(Bucket, utf8);
+bucket_encode(Bucket) when is_binary(Bucket) ->
+    Bucket.

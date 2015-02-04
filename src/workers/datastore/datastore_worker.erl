@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc datastore worker's implementation
 %%% @end
 %%%--------------------------------------------------------------------
 -module(datastore_worker).
@@ -38,6 +38,8 @@
     Result :: {ok, #{term() => term()}} | {error, Error},
     Error :: term().
 init(_Args) ->
+
+    %% Get Riak nodes
     RiakNodes =
         case application:get_env(?APP_NAME, riak_nodes) of
             {ok, Nodes} ->
@@ -50,22 +52,12 @@ init(_Args) ->
                 []
         end,
 
-    {State, Buckets} = lists:foldl(
-      fun(Model, Acc) ->
-          #model_config{name = RecordName, bucket = Bucket} = ModelConfig = Model:model_init(),
-          {
-              maps:put(RecordName, ModelConfig),
-              maps:put(Bucket, [ModelConfig | maps:get(Bucket, Acc, [])], Acc)
-          }
-      end, {#{}, #{}}, ?MODELS),
+    State = lists:foldl(
+      fun(Model, StateAcc) ->
+          #model_config{name = RecordName} = ModelConfig = Model:model_init(),
+          maps:put(RecordName, ModelConfig, StateAcc)
+      end, #{}, ?MODELS),
 
-    lists:foreach(
-        fun(Bucket) ->
-            ?info("Initializing bucket ~p", [Bucket]),
-            ok = ?PERSISTENCE_DRIVER:init_bucket(Bucket),
-            ok = ?LOCAL_CACHE_DRIVER:init_bucket(Bucket),
-            ok = ?DISTRIBUTED_CACHE_DRIVER:init_bucket(Bucket)
-        end, maps:to_list(Buckets)),
     {ok, State#{riak_nodes => RiakNodes}}.
 
 
@@ -82,13 +74,17 @@ init(_Args) ->
     Result :: ok | {ok, Response} | {error, Error} | pong,
     Response :: [inet:ip4_address()],
     Error :: term().
-handle(_ProtocolVersion, ping) ->
+handle(ping, _State) ->
     pong;
-handle(_ProtocolVersion, healthcheck) ->
+handle(healthcheck, _State) ->
     ok;
-handle(_ProtocolVersion, {driver_call, Module, Method, Args}) ->
+
+%% Proxy call to given datastore driver
+handle({driver_call, Module, Method, Args}, State) ->
     erlang:apply(Module, Method, Args);
-handle(_ProtocolVersion, _Msg) ->
+
+%% Unknown request
+handle(_Msg, _State) ->
     ?warning("datastore worker unknown message: ~p", [_Msg]).
 
 
@@ -103,11 +99,24 @@ cleanup() ->
     ok.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Puts given Value in datastore worker's state
+%% @end
+%%--------------------------------------------------------------------
+-spec state_put(Key :: term(), Value :: term()) -> ok.
 state_put(Key, Value) ->
     gen_server:call(?MODULE, {updatePlugInState,
         fun(State) ->
             maps:put(Key, Value, State)
         end}).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Puts Value from datastore worker's state
+%% @end
+%%--------------------------------------------------------------------
+-spec state_get(Key :: term()) -> Value :: term().
 state_get(Key) ->
     maps:get(Key, gen_server:call(?MODULE, getPlugInState)).

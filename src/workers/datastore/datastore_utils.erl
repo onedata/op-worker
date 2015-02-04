@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Utility and common functions for datastore module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(datastore_utils).
@@ -13,8 +13,10 @@
 
 -include("workers/datastore/datastore.hrl").
 
+-define(KEY_LEN, 32).
+
 %% API
--export([shallow_to_map/1, shallow_to_record/1]).
+-export([shallow_to_map/1, shallow_to_record/1, gen_uuid/0]).
 
 %%%===================================================================
 %%% API
@@ -29,6 +31,7 @@ shallow_to_map(Record) when is_tuple(Record) ->
     Map = maps:from_list(lists:zip(Fields, Values1)),
     Map#{'$record' => ModelName}.
 
+
 shallow_to_record(Record) when is_tuple(Record) ->
     Record;
 shallow_to_record(#{'$record' := ModelName} = Map) ->
@@ -42,6 +45,17 @@ shallow_to_record(#{'$record' := ModelName} = Map) ->
             end, Defaults1),
 
     list_to_tuple([ModelName | Values]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates random UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_uuid() -> binary().
+gen_uuid() ->
+    base64:encode(crypto:rand_bytes(?KEY_LEN)).
+
 
 %%%===================================================================
 %%% Internal functions
