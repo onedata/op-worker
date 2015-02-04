@@ -120,15 +120,13 @@ calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatus
                 % error - if the component is unreachable
                 NodeManagerStatus =
                     case proplists:get_value(Node, NodeManagerStatuses) of
-%%                         {ok, StateNum} -> ok;
-                        {ok, StateNum} -> lists:nth(random:uniform(3), [ok, out_of_sync, error]);
+                        {ok, StateNum} -> ok;
                         {ok, _} -> out_of_sync;
                         _ -> error
                     end,
                 RequestDistpatcherStatus =
                     case proplists:get_value(Node, DistpatcherStatuses) of
-%%                         {ok, StateNum} -> ok;
-                        {ok, StateNum} -> lists:nth(random:uniform(3), [ok, out_of_sync, error]);
+                        {ok, StateNum} -> ok;
                         {ok, _} -> out_of_sync;
                         _ -> error
                     end,
