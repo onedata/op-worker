@@ -128,7 +128,7 @@ handle_call(get_state_num, _From, State = #node_state{state_num = StateNum}) ->
     {reply, StateNum, State};
 
 handle_call(_Request, _From, State) ->
-    ?warning("Wrong node_manager call: ~p", [_Request]),
+    ?log_bad_request(_Request),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -159,8 +159,8 @@ handle_cast({dispatcher_up_to_date, DispState}, State) ->
 handle_cast(stop, State) ->
     {stop, normal, State};
 
-handle_cast(_Msg, State) ->
-    ?warning("Wrong node_manager cast: ~p", [_Msg]),
+handle_cast(_Request, State) ->
+    ?log_bad_request(_Request),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -184,8 +184,8 @@ handle_info({nodedown, _Node}, State) ->
     ?warning("Connection to CCM lost, node~p", [node()]),
     {noreply, State#node_state{ccm_con_status = not_connected}};
 
-handle_info(_Info, State) ->
-    ?warning("Wrong node_manager info: ~p", [_Info]),
+handle_info(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

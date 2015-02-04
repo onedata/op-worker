@@ -117,7 +117,7 @@ handle_call(get_workers, _From, State) ->
     {reply, {WorkersList, State#cm_state.state_num}, State};
 
 handle_call(_Request, _From, State) ->
-    ?warning("CCM wrong call: ~p", [_Request]),
+    ?log_bad_request(_Request),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -149,8 +149,8 @@ handle_cast({stop_worker, Node, Module}, State) ->
 handle_cast(stop, State) ->
     {stop, normal, State};
 
-handle_cast(_Msg, State) ->
-    ?warning("CCM wrong cast: ~p", [_Msg]),
+handle_cast(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -174,8 +174,8 @@ handle_info({nodedown, Node}, State) ->
     NewState = node_down(Node, State),
     {noreply, NewState};
 
-handle_info(_Info, State) ->
-    ?warning("CCM wrong info: ~p", [_Info]),
+handle_info(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

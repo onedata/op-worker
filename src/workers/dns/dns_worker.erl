@@ -166,9 +166,9 @@ handle({handle_ns, Domain}, _) ->
             end
     end;
 
-handle(Msg, _) ->
-    ?warning("Wrong request: ~p", [Msg]),
-    throw({unsupported_request, Msg}).
+handle(_Request, _) ->
+    ?log_bad_request(_Request),
+    throw({unsupported_request, _Request}).
 
 %%--------------------------------------------------------------------
 %% @doc

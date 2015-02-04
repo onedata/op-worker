@@ -59,8 +59,8 @@ handle({spawn_handler, SocketPid}, _) ->
         end),
     {ok, Pid};
 
-handle(_Msg, _) ->
-    ?warning("http server unknown message: ~p", [_Msg]).
+handle(_Request, _) ->
+    ?log_bad_request(_Request).
 
 %%--------------------------------------------------------------------
 %% @doc
