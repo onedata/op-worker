@@ -5,7 +5,8 @@ import subprocess
 
 def run(image, docker_host=None, detach=False, dns=[], hostname=None,
         interactive=False, link={}, tty=False, rm=False, reflect=[],
-        volumes=[], name=None, workdir=None, run_params=[], command=None):
+        volumes=[], name=None, workdir=None, user=None, run_params=[],
+        command=None):
 
     cmd = ['docker']
 
@@ -42,12 +43,19 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
         vol = '{0}:{0}:rw'.format(os.path.abspath(path))
         cmd.extend(['-v', vol])
 
-    for path, bind, readable in volumes:
-        vol = '{0}:{1}:{2}'.format(os.path.abspath(path), bind, readable)
-        cmd.extend(['-v', vol])
+    for entry in volumes:
+        if isinstance(entry, tuple):
+            path, bind, readable = entry
+            vol = '{0}:{1}:{2}'.format(os.path.abspath(path), bind, readable)
+            cmd.extend(['-v', vol])
+        else:
+            cmd.extend(['-v', entry])
 
     if workdir:
         cmd.extend(['-w', workdir])
+
+    if user:
+        cmd.extend(['-u', user])
 
     cmd.extend(run_params)
     cmd.append(image)
@@ -60,7 +68,7 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
     if detach:
         return subprocess.check_output(cmd).decode('utf-8').strip()
     else:
-        subprocess.check_call(cmd)
+        return subprocess.call(cmd)
 
 
 def inspect(container, docker_host=None):
