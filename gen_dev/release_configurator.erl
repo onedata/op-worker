@@ -34,8 +34,14 @@
     ok | no_return().
 configure_release(?ONEPROVIDER_APP_NAME, ReleaseRootPath, SysConfig, VmArgs) ->
     {SysConfigPath, VmArgsPath} = find_config_location(?ONEPROVIDER_APP_NAME, ReleaseRootPath),
-    lists:foreach(fun({Key, Value}) -> replace_vm_arg(VmArgsPath, "-" ++ atom_to_list(Key), Value) end, VmArgs),
-    lists:foreach(fun({Key, Value}) -> replace_env(SysConfigPath, ?ONEPROVIDER_APP_NAME, Key, Value) end, SysConfig),
+    lists:foreach(
+        fun({Key, Value}) -> replace_vm_arg(VmArgsPath, "-" ++ atom_to_list(Key), Value) end, 
+        VmArgs
+    ),
+    lists:foreach(
+        fun({Key, Value}) -> replace_env(SysConfigPath, ?ONEPROVIDER_APP_NAME, Key, Value) end, 
+        SysConfig
+    ),
 
     % configure kernel distributed erlang app
     NodeName = proplists:get_value(name, VmArgs),
@@ -46,7 +52,12 @@ configure_release(?ONEPROVIDER_APP_NAME, ReleaseRootPath, SysConfig, VmArgs) ->
             OptCcms = CcmNodes -- [list_to_atom(NodeName)],
             replace_application_config(SysConfigPath, kernel,
                 [
-                    {distributed, [{?ONEPROVIDER_APP_NAME, ?DIST_APP_FAILOVER_TIMEOUT, [list_to_atom(NodeName), list_to_tuple(OptCcms)]}]},
+                    {distributed, [{
+                        ?ONEPROVIDER_APP_NAME, 
+                        ?DIST_APP_FAILOVER_TIMEOUT, 
+                        [list_to_atom(NodeName), 
+                            list_to_tuple(OptCcms)]
+                    }]},
                     {sync_nodes_mandatory, OptCcms},
                     {sync_nodes_timeout, ?SYNC_NODES_TIMEOUT}
                 ]);
