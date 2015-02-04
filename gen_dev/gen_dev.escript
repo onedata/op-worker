@@ -109,22 +109,22 @@ prepare_neccessary_paths(Config) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Extracts sys.config and vm.args configuration from 'NodeConfig'.
-%% Additionally, function preety prints summary of release configuration.
+%% Additionally, function pretty prints summary of release configuration.
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_and_print_configuration(AppName :: atom(), InputDir :: string(),
     ReleaseDir :: string(), NodeConfig :: list()) -> {SysConfig :: list(), VmArgs :: list()}.
 prepare_and_print_configuration(AppName, InputDir, ReleaseDir, NodeConfig) ->
     logger:print("================ Configuring release ===================="),
-    logger:preety_print_entry({application, AppName}),
-    logger:preety_print_entry({input_dir, InputDir}),
-    logger:preety_print_entry({release_dir, ReleaseDir}),
+    logger:pretty_print_entry({application, AppName}),
+    logger:pretty_print_entry({input_dir, InputDir}),
+    logger:pretty_print_entry({release_dir, ReleaseDir}),
     logger:print("====================== vm.args =========================="),
     VmArgs = proplists:get_value('vm.args', NodeConfig),
-    lists:foreach(fun(X) -> logger:preety_print_entry(X) end, VmArgs),
+    lists:foreach(fun(X) -> logger:pretty_print_entry(X) end, VmArgs),
     logger:print("===================== sys.config ========================"),
     SysConfig = proplists:get_value('sys.config', NodeConfig),
-    lists:foreach(fun(X) -> logger:preety_print_entry(X) end, SysConfig),
+    lists:foreach(fun(X) -> logger:pretty_print_entry(X) end, SysConfig),
     logger:print("========================================================="),
     logger:print(""),
     {SysConfig, VmArgs}.
