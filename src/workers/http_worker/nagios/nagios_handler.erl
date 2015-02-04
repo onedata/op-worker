@@ -16,7 +16,11 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([init/3, handle/2, terminate/3]).
--export([get_cluster_state/1]).
+-export([get_cluster_status/1]).
+
+-ifdef(TEST).
+-compile(export_all).
+-endif.
 
 
 %% init/3
@@ -37,38 +41,33 @@ init(_Type, Req, _Opts) ->
 handle(Req, State) ->
     {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
 
-    case get_cluster_state(Timeout) of
+    case get_cluster_status(Timeout) of
         error ->
             opn_cowboy_bridge:apply(cowboy_req, reply, [500, Req]);
-        {ok, ClusterState} ->
-            ?dump(ClusterState)
-    end,
+        {ok, {?APP_NAME, AppStatus, NodeStatuses}} ->
+            MappedClusterState = lists:map(
+                fun({Node, NodeStatus, NodeComponents}) ->
+                    NodeDetails = lists:map(
+                        fun({Component, Status}) ->
+                            {Component, [{status, atom_to_list(Status)}], []}
+                        end, NodeComponents),
+                    {?APP_NAME, [{name, atom_to_list(Node)}, {status, atom_to_list(NodeStatus)}], NodeDetails}
+                end, NodeStatuses),
 
-%%
-%%     %check if errors occured
-%%     {HealthStatus, HttpStatusCode} =
-%%         case CcmConnError /= none of
-%%             true ->
-%%                 ErrorString = io_lib:format("~p", [{error, CcmConnError}]),
-%%                 {ErrorString, 500};
-%%             false ->
-%%                 case contains_errors(NodesStatus) or contains_errors(WorkersStatus) of
-%%                     true -> {"{error,unhealthy_member}", 500};
-%%                     false -> {"ok", 200}
-%%                 end
-%%         end,
-%%
-%%     %prepare current date
-%%     {{YY, MM, DD}, {Hour, Min, Sec}} = calendar:now_to_local_time(now()),
-%%     DateString = io_lib:format("~4..0w/~2..0w/~2..0w ~2..0w:~2..0w:~2..0w", [YY, MM, DD, Hour, Min, Sec]),
-%%
-%%     %parse reply
-%%     Healthdata = {healthdata, [{date, DateString}, {status, HealthStatus}], NodesStatus ++ WorkersStatus},
-%%     Content = lists:flatten([Healthdata]),
-%%     Export = xmerl:export_simple(Content, xmerl_xml),
-%%     Reply = io_lib:format("~s", [lists:flatten(Export)]),
-    {ok, Req2} = opn_cowboy_bridge:apply(cowboy_req, reply, [200, [{<<"content-type">>, <<"application/json">>}], <<"juhuhu">>, Req]),
-    {ok, Req2, State}.
+            {{YY, MM, DD}, {Hour, Min, Sec}} = calendar:now_to_local_time(now()),
+            DateString = gui_str:format("~4..0w/~2..0w/~2..0w ~2..0w:~2..0w:~2..0w", [YY, MM, DD, Hour, Min, Sec]),
+
+            % Create the reply
+            Healthdata = {healthdata, [{date, DateString}, {status, atom_to_list(AppStatus)}], MappedClusterState},
+            Content = lists:flatten([Healthdata]),
+            Export = xmerl:export_simple(Content, xmerl_xml),
+            Reply = io_lib:format("~s", [lists:flatten(Export)]),
+
+            % Send the reply
+            {ok, Req2} = opn_cowboy_bridge:apply(cowboy_req, reply,
+                [200, [{<<"content-type">>, <<"application/xml">>}], Reply, Req]),
+            {ok, Req2, State}
+    end.
 
 
 %% terminate/3
@@ -90,153 +89,147 @@ terminate(_Reason, _Req, _State) ->
 %% Get from ccm: nodes, workers, state number, callbak state number,
 %% error (if error occured, 'none' otherwise)
 %% @end
--spec get_cluster_state(Timeout :: integer()) -> term().
+-spec get_cluster_status(Timeout :: integer()) -> term().
 %% ====================================================================
-get_cluster_state(Timeout) ->
+get_cluster_status(Timeout) ->
+    case check_ccm(Timeout) of
+        error ->
+            error;
+        {Nodes, Workers, StateNum} ->
+            try
+                NodeManagerStatuses = check_node_managers(Nodes, Timeout),
+                DistpatcherStatuses = check_dispatchers(Nodes, Timeout),
+                WorkerStatuses = check_workers(Workers, Timeout),
+                {ok, _} = calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses)
+            catch
+                Type:Error ->
+                    ?error_stacktrace("Unexpected error during healthcheck: ~p:~p", [Type, Error]),
+                    error
+            end
+    end.
+
+
+calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses) ->
+    random:seed(now()),
+    NodeStatuses =
+        lists:map(
+            fun(Node) ->
+                % Calculate node manager and dispatcher statuses
+                % ok - if the state num is the same as in the CCM
+                % out_of_sync - if the state num is other than in the CCM
+                % error - if the component is unreachable
+                NodeManagerStatus =
+                    case proplists:get_value(Node, NodeManagerStatuses) of
+%%                         {ok, StateNum} -> ok;
+                        {ok, StateNum} -> lists:nth(random:uniform(3), [ok, out_of_sync, error]);
+                        {ok, _} -> out_of_sync;
+                        _ -> error
+                    end,
+                RequestDistpatcherStatus =
+                    case proplists:get_value(Node, DistpatcherStatuses) of
+%%                         {ok, StateNum} -> ok;
+                        {ok, StateNum} -> lists:nth(random:uniform(3), [ok, out_of_sync, error]);
+                        {ok, _} -> out_of_sync;
+                        _ -> error
+                    end,
+                % The list for each node contains:
+                % node_manager status
+                % request_dispatcher status
+                % workers' statuses, alphabetically
+                ComponentStatuses = [
+                    {?NODE_MANAGER_NAME, NodeManagerStatus},
+                    {?DISPATCHER_NAME, RequestDistpatcherStatus} |
+                    lists:usort(proplists:get_value(Node, WorkerStatuses))
+                ],
+                % Calculate status of the whole node - it's the same as the worst status of any child
+                % ok > out_of_sync > error
+                NodeStatus = lists:foldl(
+                    fun({_, CurrentStatus}, Acc) ->
+                        case {Acc, CurrentStatus} of
+                            {ok, Any} -> Any;
+                            {out_of_sync, ok} -> out_of_sync;
+                            {out_of_sync, Any} -> Any;
+                            {error, _} -> error
+                        end
+                    end, ok, ComponentStatuses),
+                {Node, NodeStatus, ComponentStatuses}
+            end, Nodes),
+    % Calculate status of the whole application - it's the same as the worst status of any node
+    % ok > out_of_sync > error
+    AppStatus = lists:foldl(
+        fun({_, CurrentStatus, _}, Acc) ->
+            case {Acc, CurrentStatus} of
+                {ok, Any} -> Any;
+                {out_of_sync, ok} -> out_of_sync;
+                {out_of_sync, Any} -> Any;
+                {error, _} -> error
+            end
+        end, ok, NodeStatuses),
+    % Sort node statuses by node name
+    {ok, {?APP_NAME, AppStatus, lists:usort(NodeStatuses)}}.
+
+
+check_ccm(Timeout) ->
     try
-        {Nodes, Workers, StateNum} = gen_server:call({global, ?CCM}, healthcheck, Timeout),
-
-        WorkerStatuses = pmap(
-            fun({WNode, WName}) ->
-                worker_proxy:call({WName, WNode}, healthcheck, Timeout)
-            end, Workers),
-
-        NodeManagerStatuses = pmap(
-            fun(Node) ->
-                gen_server:call({?NODE_MANAGER_NAME, Node}, healthcheck, timeout)
-            end, Nodes),
-
-        RequestDistpatcherStatuses = pmap(
-            fun(Node) ->
-                gen_server:call({?DISPATCHER_NAME, Node}, healthcheck, timeout)
-            end, Nodes),
-        ClusterState = {WorkerStatuses,NodeManagerStatuses,RequestDistpatcherStatuses},
-%%         ClusterState =
-%%             pmap(fun(Node) ->
-%%                 NodeManagerStatus =
-%%                     case gen_server:call({?NODE_MANAGER_NAME, Node}, healthcheck, timeout) of
-%%                         {ok, StateNum} -> ok;
-%%                         {ok, _} -> out_of_sync;
-%%                         _ -> error
-%%                     end,
-%%                 RequestDistpatcherStatus =
-%%                     case gen_server:call({?DISPATCHER_NAME, Node}, healthcheck, timeout) of
-%%                         {ok, StateNum} -> ok;
-%%                         {ok, _} -> out_of_sync;
-%%                         _ -> error
-%%                     end,
-%%                 WorkerStatuses = [{'worker@127.0.0.1', dns_worker}, {'worker@127.0.0.1', http_worker}],
-%%                 {Node, [
-%%                     {node_manager, NodeManagerStatus},
-%%                     {request_dispatcher, RequestDistpatcherStatus} |
-%%                     WorkerStatuses
-%%                 ]}
-%%             end, Nodes),
-
-%%         WorkersStatus = pmap(fun(Worker) -> worker_status(Worker, Timeout) end, Workers),
-%%         NodesStatus = pmap(fun(Node) -> node_status(Node, StateNum, Timeout) end, Nodes)
-        {ok, ClusterState}
+        {_Nodes, _Workers, _StateNum} = gen_server:call({global, ?CCM}, healthcheck, Timeout)
     catch
         Type:Error ->
             ?error("CCM connection error during healthcheck: ~p:~p", [Type, Error]),
             error
     end.
 
-%% node_status/5
-%% ====================================================================
-%% @doc Checks if callbacks num and state num on dispatcher and node manager are same as in ccm,
-%% returns xmerl simple_xml output describing node health status. If state numbers don't match - assume "initializing"
-%% @end
--spec node_status(Node :: atom(), CcmStateNum :: integer(), CcmCStateNum :: integer(), Timeout :: integer()) -> Result when
-    Result :: {?APP_NAME, Attrs :: list(Atribute), []},
-    Atribute :: {Name :: atom(), Value :: string()}.
-%% ====================================================================
-node_status(Node, CcmStateNum, CcmCStateNum, Timeout) ->
-    ?debug("Healthcheck on node:~p", [Node]),
-    try
-        %get state nuber and callback number from node manager and dispatcher
-        {_, DispCStateNum} = gen_server:call({?DISPATCHER_NAME, Node}, get_callbacks, Timeout),
-        DispStateNum = gen_server:call({?DISPATCHER_NAME, Node}, get_state_num, Timeout),
-        {ManagerCStateNum, ManagerStateNum} = gen_server:call({?NODE_MANAGER_NAME, Node}, get_callback_and_state_num, Timeout),
 
-        %compare them with numbers from ccm and prepare result
-        AllStateNumbersOk = (CcmStateNum == DispStateNum) and (CcmCStateNum == DispCStateNum) and (CcmStateNum == ManagerStateNum) and (CcmCStateNum == ManagerCStateNum),
-        case AllStateNumbersOk of
-            true ->
-                {?APP_NAME, [{name, atom_to_list(Node)}, {status, "ok"}], []};
-            false ->
-                %log
-                ?warning("Healthcheck on node ~p, callbacks/state number of ccm doesn't match values from node_manager", [Node]),
-                ?warning("ccm_state_num: ~p, ccm_callback_num: ~p,disp_state_num: ~p, disp_callback_num: ~p,manager_state_num: ~p, manager_callback_num: ~p",
-                    [CcmStateNum, CcmCStateNum, DispStateNum, DispCStateNum, ManagerStateNum, ManagerCStateNum]),
-                %return
-                {?APP_NAME, [{name, atom_to_list(Node)}, {status, "out_of_sync"}], []}
-        end
-    catch
-        Type:Error ->
-            ?error("Node ~p connection error: ~p:~p", [Node, Type, Error]),
-            ErrorString2 = io_lib:format("~p", [{error, Error}]),
-            {?APP_NAME, [{name, atom_to_list(Node)}, {status, ErrorString2}], []}
-    end.
-
-%% worker_status/2
-%% ====================================================================
-%% @doc Calls healthcheck method on selected worker and returns xmerl
-%% simple_xml output describing worker health status
-%% @end
--spec worker_status(Worker, Timeout :: integer()) -> Result when
-    Worker :: {WorkerNode :: atom(), WorkerName :: atom()},
-    Result :: {worker, Attrs :: list(Atribute), []},
-    Atribute :: {Name :: atom(), Value :: string()}.
-%% ====================================================================
-worker_status(Worker, Timeout) ->
-    ?debug("Healthcheck on worker: ~p", [Worker]),
-    {WorkerNode, WorkerName} = Worker,
-    NameString = atom_to_list(WorkerName),
-    NodeString = atom_to_list(WorkerNode),
-    try
-        %do healthcheck
-        gen_server:call({?DISPATCHER_NAME, WorkerNode}, {WorkerName, 1, self(), healthcheck}, Timeout),
-        Ans = receive
-                  Any -> Any
-              after Timeout ->
-                  {error, worker_response_timeout}
-              end,
-
-        %check healthcheck answer and prepare result
-        case Ans of
-            ok ->
-                {worker, [{name, NameString}, {node, NodeString}, {status, "ok"}], []};
-            ErrorAns ->
-                ?error("Healthcheck on worker ~p failed with error: ~p", [Worker, ErrorAns]),
-                ErrorAnsString = io_lib:format("~p", [ErrorAns]),
-                {worker, [{name, NameString}, {node, NodeString}, {status, ErrorAnsString}], []}
-        end
-    catch
-        Type:Error ->
-            ?error("Worker ~p connection error: ~p:~p", [Worker, Type, Error]),
-            ErrorString = io_lib:format("~p", [{error, Error}]),
-            {worker, [{name, NameString}, {node, NodeString}, {status, ErrorString}], []}
-    end.
-
-%% contains_errors/1
-%% ====================================================================
-%% @doc Checks if given list of health statuses (in xmerl simple_xml format)
-%% contains error status
-%% @end
--spec contains_errors(StatusList :: list(Status)) -> Result when
-    Status :: {Tag :: atom(), Attrs :: list(Atribute), Content :: list()},
-    Atribute :: {Name :: atom(), Value :: string()},
-    Result :: true | false.
-%% ====================================================================
-contains_errors(StatusList) ->
-    Errors = [Status || {_Tag, Attrs, _Content} <- StatusList, {status, Status} <- Attrs, Status /= "ok", Status /= "out_of_sync"],
-    Errors /= [].
+check_node_managers(Nodes, Timeout) ->
+    pmap(
+        fun(Node) ->
+            Result =
+                try
+                    gen_server:call({?NODE_MANAGER_NAME, Node}, healthcheck, Timeout)
+                catch T:M ->
+                    ?error("Connection error to ~p at ~p: ~p:~p", [?NODE_MANAGER_NAME, Node, T, M]),
+                    error
+                end,
+            {Node, Result}
+        end, Nodes).
 
 
-%% ====================================================================
+check_dispatchers(Nodes, Timeout) ->
+    pmap(
+        fun(Node) ->
+            Result =
+                try
+                    gen_server:call({?DISPATCHER_NAME, Node}, healthcheck, Timeout)
+                catch T:M ->
+                    ?error("Connection error to ~p at ~p: ~p:~p", [?DISPATCHER_NAME, Node, T, M]),
+                    error
+                end,
+            {Node, Result}
+        end, Nodes).
+
+
+check_workers(Workers, Timeout) ->
+    WorkerStatuses = pmap(
+        fun({WNode, WName}) ->
+            Result =
+                try
+                    worker_proxy:call({WName, WNode}, healthcheck, Timeout)
+                catch T:M ->
+                    ?error("Connection error to ~p at ~p: ~p:~p", [?DISPATCHER_NAME, WNode, T, M]),
+                    error
+                end,
+            {WNode, WName, Result}
+        end, Workers),
+
+    lists:foldl(
+        fun({WNode, WName, Status}, Proplist) ->
+            NewWorkerList = [{WName, Status} | proplists:get_value(WNode, Proplist, [])],
+            [{WNode, NewWorkerList} | proplists:delete(WNode, Proplist)]
+        end, [], WorkerStatuses).
+
+
+%%%====================================================================
 %% Paralel Map Function
-%% ====================================================================
+%%%====================================================================
 
 %%--------------------------------------------------------------------
 %% @private

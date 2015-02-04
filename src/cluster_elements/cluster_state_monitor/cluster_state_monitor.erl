@@ -91,9 +91,6 @@ init([]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_call(get_cluster_health, _From, State) ->
-    ?dump("hoho"),
-    {reply, "hoho", State};
 handle_call(_Request, _From, State) ->
     ?warning("cluster_state_notifier unknown call: ~p", [_Request]),
     {reply, ok, State}.
