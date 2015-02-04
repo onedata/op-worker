@@ -269,21 +269,9 @@ init_cluster(State = #cm_state{nodes = []}) ->
     erlang:send_after(Interval, self(), {timer, init_cluster}),
     State;
 init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}) ->
-    CreateRunningWorkersList =
-        fun({_N, M, _Child}, WorkerList) ->
-            [M | WorkerList]
-        end,
-    RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
-
-    CreateJobsList =
-        fun({Job, A}, {TmpJobs, TmpArgs}) ->
-            case lists:member(Job, RunningWorkers) of
-                true -> {TmpJobs, TmpArgs};
-                false -> {[Job | TmpJobs], [A | TmpArgs]}
-            end
-        end,
-    {JobsTodo, Args} = lists:foldl(CreateJobsList, {[], []}, ?MODULES_WITH_ARGS),
-
+    {_, RunningWorkers, _} = lists:unzip3(Workers),
+    JobsTodoWithArgs = lists:filter(fun({Job, _}) -> not lists:member(Job, RunningWorkers) end, ?MODULES_WITH_ARGS),
+    {JobsTodo, Args} = lists:unzip(JobsTodoWithArgs),
     case JobsTodo of
         [] ->
             State;
