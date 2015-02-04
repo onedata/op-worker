@@ -34,13 +34,12 @@
 -define(ONEPROXY_DISPATCHER, oneproxy_dispatcher).
 
 % Cowboy listener references
--define(WEBSOCKET_LISTENER, websocket).
 -define(HTTPS_LISTENER, https).
 -define(REST_LISTENER, rest).
 -define(HTTP_REDIRECTOR_LISTENER, http).
 
 %% API
--export([start_dispatcher_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0,
+-export([start_protocol_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0,
     start_dns_listeners/0, stop_listeners/0]).
 
 %%%===================================================================
@@ -52,9 +51,8 @@
 %% Starts a cowboy listener for request_dispatcher.
 %% @end
 %%--------------------------------------------------------------------
--spec start_dispatcher_listener() -> {ok, pid()} | no_return().
-start_dispatcher_listener() ->
-    catch cowboy:stop_listener(?WEBSOCKET_LISTENER),
+-spec start_protocol_listener() -> {ok, pid()} | no_return().
+start_protocol_listener() ->
     {ok, Port} = application:get_env(?APP_NAME, dispatcher_port),
     {ok, DispatcherPoolSize} = application:get_env(?APP_NAME, dispatcher_pool_size),
     {ok, CertFile} = application:get_env(?APP_NAME, fuse_ssl_cert_path),
@@ -63,19 +61,10 @@ start_dispatcher_listener() ->
     Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_none) end),
     register(?ONEPROXY_DISPATCHER, Pid),
 
-    Dispatch = cowboy_router:compile([{'_', [
-        {?ONECLIENT_URI_PATH, client_handler, []},
-        {?ONEPROVIDER_URI_PATH, provider_handler, []}
-    ]}]),
-
-    {ok, _} = cowboy:start_http(?WEBSOCKET_LISTENER, DispatcherPoolSize,
-        [
-            {ip, {127, 0, 0, 1}},
-            {port, LocalPort}
-        ],
-        [
-            {env, [{dispatch, Dispatch}]}
-        ]).
+    {ok, _} = ranch:start_listener(tcp_echo, DispatcherPoolSize,
+        ranch_tcp, [{ip, {127, 0, 0, 1}}, {port, 5555}],
+        protocol_handler, []
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -234,7 +223,7 @@ start_dns_listeners() ->
 %%--------------------------------------------------------------------
 -spec stop_listeners() -> ok.
 stop_listeners() ->
-    Listeners = [?WEBSOCKET_LISTENER, ?HTTP_REDIRECTOR_LISTENER, ?REST_LISTENER, ?HTTPS_LISTENER, ?SESSION_LOGIC_MODULE],
+    Listeners = [?HTTP_REDIRECTOR_LISTENER, ?REST_LISTENER, ?HTTPS_LISTENER, ?SESSION_LOGIC_MODULE],
     Results = lists:map(
         fun (?SESSION_LOGIC_MODULE) -> catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE);
             (X) ->{X, catch cowboy:stop_listener(X)}

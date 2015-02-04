@@ -88,7 +88,7 @@ stop() ->
     Timeout :: non_neg_integer() | infinity.
 init([worker]) ->
     try
-        listener_starter:start_dispatcher_listener(),
+        listener_starter:start_client_listener(),
         listener_starter:start_gui_listener(),
         listener_starter:start_rest_listener(),
         listener_starter:start_redirector_listener(),
