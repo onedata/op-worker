@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0, cast/1, call/1]).
+-export([start_link/0, cast/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -41,15 +41,6 @@
 -spec cast(Req :: term()) -> ok.
 cast(Req) ->
     gen_server:cast({global, ?SERVER}, Req).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv gen_server:call({global, ?SERVER}, Req).
-%% @end
-%%--------------------------------------------------------------------
--spec call(Req :: term()) -> ok.
-call(Req) ->
-    gen_server:call({global, ?SERVER}, Req).
 
 %%--------------------------------------------------------------------
 %% @doc
