@@ -1,3 +1,5 @@
+"""A custom library for interacting with Docker through command-line tool."""
+
 import json
 import os
 import sys
@@ -67,8 +69,8 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
 
     if detach:
         return subprocess.check_output(cmd).decode('utf-8').strip()
-    else:
-        return subprocess.call(cmd)
+
+    return subprocess.call(cmd)
 
 
 def inspect(container, docker_host=None):

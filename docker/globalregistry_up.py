@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+"""
+Brings up a Global Registry cluster along with a database.
+Run the script with -h flag to learn about script's running options.
+"""
+
 from __future__ import print_function
 
 import argparse

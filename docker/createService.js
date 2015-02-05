@@ -1,3 +1,5 @@
+// createService is a plugin for SkyDock that customizes the way container
+// data is translated to a DNS entry.
 function createService(container) {
     return {
         Port: 80,
