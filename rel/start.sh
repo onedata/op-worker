@@ -31,4 +31,4 @@ echo "Starting appmock with configuration from: ${ABS_FILE_PATH}"
 sed $SED_OPTS "s|{appmock,.*|{appmock, [{app_description_file, \"${ABS_FILE_PATH}\"}]}|g" releases/$APP_VSN/sys.config
 
 # Start the application
-./bin/appmock start
+./bin/appmock console
