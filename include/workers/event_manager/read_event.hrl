@@ -28,7 +28,8 @@
         (_) -> false
     end :: event_stream:admission_rule(),
     aggregation_rule = fun(_, _) ->
-        {error, disparate} end :: event_stream:aggregation_rule(),
+        {error, disparate}
+    end :: event_stream:aggregation_rule(),
     emission_rule = fun(_) -> true end :: event_stream:emission_rule(),
     callbacks = [] :: [event_stream:event_callback()]
 }).
