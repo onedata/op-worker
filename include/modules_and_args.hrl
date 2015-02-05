@@ -12,7 +12,8 @@
 -ifndef(MODULES_AND_ARGS_HRL).
 -define(MODULES_AND_ARGS_HRL, 1).
 
--define(MODULES, [http_worker, dns_worker]).
--define(MODULES_WITH_ARGS, [{http_worker, []}, {dns_worker, []}]).
+-define(MODULES, [http_worker, dns_worker, event_manager_worker]).
+-define(MODULES_WITH_ARGS, [{http_worker, []}, {dns_worker, []},
+  {event_manager_worker, []}]).
 
 -endif.
