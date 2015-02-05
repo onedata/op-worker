@@ -13,6 +13,7 @@ src/proto
 *.iml
 *.sublime*
 *.beam
+*.pyc
 
 rel/oneprovider_node
 rel/test_cluster
