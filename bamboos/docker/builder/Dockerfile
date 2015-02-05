@@ -34,8 +34,9 @@ RUN dpkg -i globus-toolkit-repo_latest_all.deb && \
     apt-get clean all
 
 # Install other onedata build deps
-RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 828AB726
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 828AB726 D73BB29D
 RUN echo 'deb http://ppa.launchpad.net/george-edison55/cmake-3.x/ubuntu utopic main' >> /etc/apt/sources.list
+RUN echo 'deb http://ppa.launchpad.net/lengau/protobuf/ubuntu utopic main' >> /etc/apt/sources.list
 RUN apt-get update && \
     apt-get install -y clang libbotan1.10-dev libboost-all-dev libtbb-dev \
                        cmake ninja-build subversion libfuse-dev pkg-config \
