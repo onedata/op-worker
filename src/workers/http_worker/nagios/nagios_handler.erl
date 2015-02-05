@@ -1,14 +1,17 @@
-%% ===================================================================
-%% @author Lukasz Opiola
-%% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: This module handles Nagios monitoring requests.
-%% @end
-%% ===================================================================
+%%%--------------------------------------------------------------------
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc
+%%% This module handles Nagios monitoring requests.
+%%% @end
+%%%--------------------------------------------------------------------
 -module(nagios_handler).
+-author("Lukasz Opiola").
+
 -behaviour(cowboy_http_handler).
 
 -include("registered_names.hrl").
@@ -22,22 +25,26 @@
 -compile(export_all).
 -endif.
 
+%%%===================================================================
+%%% API
+%%%===================================================================
 
-%% init/3
-%% ====================================================================
-%% @doc Cowboy handler callback, no state is required
--spec init(any(), term(), any()) -> {ok, term(), []}.
-%% ====================================================================
+%%--------------------------------------------------------------------
+%% @doc
+%% Cowboy handler callback, no state is required
+%% @end
+%%--------------------------------------------------------------------
+-spec init(term(), term(), term()) -> {ok, term(), []}.
 init(_Type, Req, _Opts) ->
     {ok, Req, []}.
 
 
-%% handle/2
-%% ====================================================================
-%% @doc Handles a request producing an XML response
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles a request producing an XML response.
 %% @end
+%%--------------------------------------------------------------------
 -spec handle(term(), term()) -> {ok, term(), term()}.
-%% ====================================================================
 handle(Req, State) ->
     {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
 
@@ -73,11 +80,12 @@ handle(Req, State) ->
     {ok, NewReq, State}.
 
 
-%% terminate/3
-%% ====================================================================
-%% @doc Cowboy handler callback, no cleanup needed
+%%--------------------------------------------------------------------
+%% @doc
+%% Cowboy handler callback, no cleanup needed.
+%% @end
+%%--------------------------------------------------------------------
 -spec terminate(term(), term(), term()) -> ok.
-%% ====================================================================
 terminate(_Reason, _Req, _State) ->
     ok.
 
@@ -86,14 +94,26 @@ terminate(_Reason, _Req, _State) ->
 %% Internal Functions
 %% ====================================================================
 
-%% get_cluster_state/1
-%% ====================================================================
+%%--------------------------------------------------------------------
 %% @doc
-%% Get from ccm: nodes, workers, state number, callbak state number,
-%% error (if error occured, 'none' otherwise)
+%% Contacts all components of the cluster and produces a healthcheck report
+%% in following form:
+%% {oneprovider_node, AppStatus, [
+%%     {Node1, Node1Status, [
+%%         {node_manager, NodeManStatus},
+%%         {request_dispatcher, DispStatus},
+%%         {Worker1, W1Status},
+%%         {Worker2, W2Status},
+%%         {Worker3, W3Status},
+%%     ]},
+%%     {Node2, Node2Status, [
+%%         ...
+%%     ]}
+%% ]}
+%% Status can be: ok | error | out_of_sync
 %% @end
+%%--------------------------------------------------------------------
 -spec get_cluster_status(Timeout :: integer()) -> term().
-%% ====================================================================
 get_cluster_status(Timeout) ->
     case check_ccm(Timeout) of
         error ->
@@ -112,6 +132,15 @@ get_cluster_status(Timeout) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a proper term expressing cluster health,
+%% constructing it from statuses of all components.
+%% @end
+%%--------------------------------------------------------------------
+-spec calculate_cluster_status(Nodes :: [Node], StateNum :: integer(), NodeManagerStatuses :: [{Node, Status}],
+    DistpatcherStatuses :: [{Node, Status}], WorkerStatuses :: [{Node, [{Worker :: atom(), Status}]}]) -> term()
+    when Node :: atom(), Status :: ok | out_of_sync | error.
 calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses) ->
     NodeStatuses =
         lists:map(
@@ -169,6 +198,13 @@ calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatus
     {ok, {?APP_NAME, AppStatus, lists:usort(NodeStatuses)}}.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Contacts CCM for healthcheck and gathers information about cluster state.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_ccm(Timeout :: integer()) -> {Nodes :: [Node], Workers :: [{Node, WorkerName :: atom()}], StateNum :: integer()} | error
+    when Node :: atom().
 check_ccm(Timeout) ->
     try
         {_Nodes, _Workers, _StateNum} = gen_server:call({global, ?CCM}, healthcheck, Timeout)
@@ -179,12 +215,18 @@ check_ccm(Timeout) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Contacts node managers on given nodes for healthcheck. The check is performed in parallel (one proces per node).
+%% @end
+%%--------------------------------------------------------------------
+-spec check_node_managers(Nodes :: [atom()], Timeout :: integer()) -> {ok, StateNum :: integer()} | error.
 check_node_managers(Nodes, Timeout) ->
     pmap(
         fun(Node) ->
             Result =
                 try
-                    gen_server:call({?NODE_MANAGER_NAME, Node}, healthcheck, Timeout)
+                    {ok, _StateNum} = gen_server:call({?NODE_MANAGER_NAME, Node}, healthcheck, Timeout)
                 catch T:M ->
                     ?error("Connection error to ~p at ~p: ~p:~p", [?NODE_MANAGER_NAME, Node, T, M]),
                     error
@@ -193,12 +235,18 @@ check_node_managers(Nodes, Timeout) ->
         end, Nodes).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Contacts request dispatchers on given nodes for healthcheck. The check is performed in parallel (one proces per node).
+%% @end
+%%--------------------------------------------------------------------
+-spec check_dispatchers(Nodes :: [atom()], Timeout :: integer()) -> {ok, StateNum :: integer()} | error.
 check_dispatchers(Nodes, Timeout) ->
     pmap(
         fun(Node) ->
             Result =
                 try
-                    gen_server:call({?DISPATCHER_NAME, Node}, healthcheck, Timeout)
+                    {ok, _StateNum} = gen_server:call({?DISPATCHER_NAME, Node}, healthcheck, Timeout)
                 catch T:M ->
                     ?error("Connection error to ~p at ~p: ~p:~p", [?DISPATCHER_NAME, Node, T, M]),
                     error
@@ -207,12 +255,19 @@ check_dispatchers(Nodes, Timeout) ->
         end, Nodes).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Contacts request dispatchers on given nodes for healthcheck. The check is performed in parallel (one proces per node).
+%% @end
+%%--------------------------------------------------------------------
+-spec check_workers(Nodes :: [atom()], Workers :: [{Node :: atom(), WorkerName :: atom()}], Timeout :: integer()) ->
+    [{Node :: atom(), [{Worker :: atom(), Status :: ok | error}]}].
 check_workers(Nodes, Workers, Timeout) ->
     WorkerStatuses = pmap(
         fun({WNode, WName}) ->
             Result =
                 try
-                    worker_proxy:call({WName, WNode}, healthcheck, Timeout)
+                    ok = worker_proxy:call({WName, WNode}, healthcheck, Timeout)
                 catch T:M ->
                     ?error("Connection error to ~p at ~p: ~p:~p", [?DISPATCHER_NAME, WNode, T, M]),
                     error

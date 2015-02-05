@@ -24,14 +24,16 @@
 
 all() -> [nagios_test].
 
-% How many retries sohuld be performed if nagios endpoint is not responding
+% Path to nagios endpoint
+-define(HEALTHCHECK_PATH, "https://127.0.0.1:443/nagios").
+% How many retries should be performed if nagios endpoint is not responding
 -define(HEALTHCHECK_RETRIES, 10).
 % How often should the retries be performed
 -define(HEALTHCHECK_RETRY_PERIOD, 500).
 
 %%%===================================================================
 %%% Test function
-%%%====================================================================
+%%%===================================================================
 nagios_test(Config) ->
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
 
@@ -81,14 +83,20 @@ nagios_test(Config) ->
         end, NodeStatuses).
 
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+% Tries to get health report from nagios endpoint. Retries several times
+% if the endpoint is unreachable.
 perform_nagios_healthcheck(Node) ->
     perform_nagios_healthcheck(Node, ?HEALTHCHECK_RETRIES).
 
 perform_nagios_healthcheck(_, 0) ->
-    {error, max_retries_reached};
+    {error, max_retries_to_nagios_reached};
 
 perform_nagios_healthcheck(Node, Retries) ->
-    case rpc:call(Node, ibrowse, send_req, ["https://127.0.0.1:443/nagios", [], get]) of
+    case rpc:call(Node, ibrowse, send_req, [?HEALTHCHECK_PATH, [], get]) of
         {ok, "200", _, Response} ->
             {ok, Response};
         {ok, OtherCode, Headers, Response} ->
@@ -111,5 +119,4 @@ init_per_testcase(nagios_test, Config) ->
     test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_testcase(nagios_test, Config) ->
-    ok.
-%%     test_node_starter:clean_environment(Config).
+    test_node_starter:clean_environment(Config).

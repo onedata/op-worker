@@ -24,7 +24,7 @@
 -define(WORKER_4, another_worker).
 
 % ClusterStatus is in form:
-% {oneprovider, Status1, [
+% {oneprovider_node, Status1, [
 %     {Node1, Status2, [
 %         {node_manager, Status3},
 %         {request_dispatcher, Status4},
