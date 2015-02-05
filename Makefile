@@ -8,7 +8,6 @@ all: rel
 
 compile:
 	./rebar compile
-	rm -rf src/proto
 
 deps:
 	./rebar get-deps
