@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Mnesia database driver.
+%%% @doc Behaviour for datastore drivers for databases and memory stores.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(store_driver_behaviour).
