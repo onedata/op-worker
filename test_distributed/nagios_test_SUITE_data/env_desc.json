@@ -13,7 +13,8 @@
                 "node_type": "ccm",
                 "ccm_nodes": [ "ccm@" ],
                 "db_nodes": [ "db@" ],
-                "workers_to_trigger_init": 2
+                "workers_to_trigger_init": 3,
+                "notify_state_changes": true
             }
         },
         "worker1": {
@@ -24,7 +25,8 @@
             "sys.config": {
                 "node_type": "worker",
                 "ccm_nodes": [ "ccm@"],
-                "db_nodes": [ "db@" ]
+                "db_nodes": [ "db@" ],
+                "notify_state_changes": true
             }
         },
         "worker2": {
@@ -35,7 +37,20 @@
             "sys.config": {
                 "node_type": "worker",
                 "ccm_nodes": [ "ccm@"],
-                "db_nodes": [ "db@" ]
+                "db_nodes": [ "db@" ],
+                "notify_state_changes": true
+            }
+        },
+        "worker3": {
+            "vm.args": {
+                "name": "worker3@",
+                "setcookie": "oneprovider_node"
+            },
+            "sys.config": {
+                "node_type": "worker",
+                "ccm_nodes": [ "ccm@"],
+                "db_nodes": [ "db@" ],
+                "notify_state_changes": true
             }
         }
     }

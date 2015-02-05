@@ -41,33 +41,36 @@ init(_Type, Req, _Opts) ->
 handle(Req, State) ->
     {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
 
-    case get_cluster_status(Timeout) of
-        error ->
-            opn_cowboy_bridge:apply(cowboy_req, reply, [500, Req]);
-        {ok, {?APP_NAME, AppStatus, NodeStatuses}} ->
-            MappedClusterState = lists:map(
-                fun({Node, NodeStatus, NodeComponents}) ->
-                    NodeDetails = lists:map(
-                        fun({Component, Status}) ->
-                            {Component, [{status, atom_to_list(Status)}], []}
-                        end, NodeComponents),
-                    {?APP_NAME, [{name, atom_to_list(Node)}, {status, atom_to_list(NodeStatus)}], NodeDetails}
-                end, NodeStatuses),
+    NewReq =
+        case get_cluster_status(Timeout) of
+            error ->
+                {ok, Req2} = opn_cowboy_bridge:apply(cowboy_req, reply, [500, Req]),
+                Req2;
+            {ok, {?APP_NAME, AppStatus, NodeStatuses}} ->
+                MappedClusterState = lists:map(
+                    fun({Node, NodeStatus, NodeComponents}) ->
+                        NodeDetails = lists:map(
+                            fun({Component, Status}) ->
+                                {Component, [{status, atom_to_list(Status)}], []}
+                            end, NodeComponents),
+                        {?APP_NAME, [{name, atom_to_list(Node)}, {status, atom_to_list(NodeStatus)}], NodeDetails}
+                    end, NodeStatuses),
 
-            {{YY, MM, DD}, {Hour, Min, Sec}} = calendar:now_to_local_time(now()),
-            DateString = gui_str:format("~4..0w/~2..0w/~2..0w ~2..0w:~2..0w:~2..0w", [YY, MM, DD, Hour, Min, Sec]),
+                {{YY, MM, DD}, {Hour, Min, Sec}} = calendar:now_to_local_time(now()),
+                DateString = gui_str:format("~4..0w/~2..0w/~2..0w ~2..0w:~2..0w:~2..0w", [YY, MM, DD, Hour, Min, Sec]),
 
-            % Create the reply
-            Healthdata = {healthdata, [{date, DateString}, {status, atom_to_list(AppStatus)}], MappedClusterState},
-            Content = lists:flatten([Healthdata]),
-            Export = xmerl:export_simple(Content, xmerl_xml),
-            Reply = io_lib:format("~s", [lists:flatten(Export)]),
+                % Create the reply
+                Healthdata = {healthdata, [{date, DateString}, {status, atom_to_list(AppStatus)}], MappedClusterState},
+                Content = lists:flatten([Healthdata]),
+                Export = xmerl:export_simple(Content, xmerl_xml),
+                Reply = io_lib:format("~s", [lists:flatten(Export)]),
 
-            % Send the reply
-            {ok, Req2} = opn_cowboy_bridge:apply(cowboy_req, reply,
-                [200, [{<<"content-type">>, <<"application/xml">>}], Reply, Req]),
-            {ok, Req2, State}
-    end.
+                % Send the reply
+                {ok, Req2} = opn_cowboy_bridge:apply(cowboy_req, reply,
+                    [200, [{<<"content-type">>, <<"application/xml">>}], Reply, Req]),
+                Req2
+        end,
+    {ok, NewReq, State}.
 
 
 %% terminate/3
@@ -99,7 +102,7 @@ get_cluster_status(Timeout) ->
             try
                 NodeManagerStatuses = check_node_managers(Nodes, Timeout),
                 DistpatcherStatuses = check_dispatchers(Nodes, Timeout),
-                WorkerStatuses = check_workers(Workers, Timeout),
+                WorkerStatuses = check_workers(Nodes, Workers, Timeout),
                 {ok, _} = calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses)
             catch
                 Type:Error ->
@@ -110,7 +113,6 @@ get_cluster_status(Timeout) ->
 
 
 calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses) ->
-    random:seed(now()),
     NodeStatuses =
         lists:map(
             fun(Node) ->
@@ -205,7 +207,7 @@ check_dispatchers(Nodes, Timeout) ->
         end, Nodes).
 
 
-check_workers(Workers, Timeout) ->
+check_workers(Nodes, Workers, Timeout) ->
     WorkerStatuses = pmap(
         fun({WNode, WName}) ->
             Result =
@@ -218,11 +220,21 @@ check_workers(Workers, Timeout) ->
             {WNode, WName, Result}
         end, Workers),
 
-    lists:foldl(
+    WorkersByNode = lists:foldl(
         fun({WNode, WName, Status}, Proplist) ->
             NewWorkerList = [{WName, Status} | proplists:get_value(WNode, Proplist, [])],
             [{WNode, NewWorkerList} | proplists:delete(WNode, Proplist)]
-        end, [], WorkerStatuses).
+        end, [], WorkerStatuses),
+
+    % If a node hosts no workers, it won't be on the WorkersByNode list, so lets add it.
+    EmptyNodes = lists:foldl(
+        fun(Node, Acc) ->
+            case proplists:get_value(Node, WorkersByNode) of
+                undefined -> [{Node, []} | Acc];
+                _ -> Acc
+            end
+        end, [], Nodes),
+    WorkersByNode ++ EmptyNodes.
 
 
 %%%====================================================================

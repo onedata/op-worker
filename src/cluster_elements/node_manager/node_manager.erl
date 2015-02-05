@@ -159,6 +159,10 @@ handle_cast({heartbeat_ok, StateNum}, State) ->
     NewState = heartbeat_ok(StateNum, State),
     {noreply, NewState};
 
+handle_cast({update_state, NewStateNum}, State) ->
+    ?info("Node manager state updated, state num: ~p", [NewStateNum]),
+    {noreply, State#node_state{state_num = NewStateNum}};
+
 handle_cast({dispatcher_up_to_date, DispState}, State) ->
     NewState = State#node_state{dispatcher_state = DispState},
     {noreply, NewState};

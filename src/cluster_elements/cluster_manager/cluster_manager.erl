@@ -469,6 +469,7 @@ update_dispatchers_and_dns(State) ->
     WorkersList = get_workers_list(State),
     update_dns_state(State#cm_state.workers),
     update_dispatcher_state(WorkersList, State#cm_state.nodes, NewStateNum),
+    update_node_manager_state(State#cm_state.nodes, NewStateNum),
     State#cm_state{state_num = NewStateNum}.
 
 
@@ -485,6 +486,22 @@ update_dispatcher_state(WorkersList, Nodes, NewStateNum) ->
     end,
     lists:foreach(UpdateNode, Nodes),
     gen_server:cast(?DISPATCHER_NAME, {update_state, WorkersList, NewStateNum}).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates node managers' states.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_node_manager_state(Nodes :: list(), NewStateNum :: integer()) -> ok.
+update_node_manager_state(Nodes, NewStateNum) ->
+    UpdateNode = fun(Node) ->
+        gen_server:cast({?NODE_MANAGER_NAME, Node}, {update_state, NewStateNum})
+    end,
+    lists:foreach(UpdateNode, Nodes),
+    gen_server:cast(?NODE_MANAGER_NAME, {update_state, NewStateNum}).
+
 
 %%--------------------------------------------------------------------
 %% @private

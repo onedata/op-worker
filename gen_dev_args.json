@@ -13,7 +13,8 @@
                 "node_type": "ccm",
                 "ccm_nodes": [ "ccm1@127.0.0.1" ],
                 "db_nodes": [ "db@127.0.0.1" ],
-                "workers_to_trigger_init": 1
+                "workers_to_trigger_init": 1,
+                "notify_state_changes": true
             }
         },
         "worker": {
