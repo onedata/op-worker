@@ -1,0 +1,53 @@
+{
+    "config": {
+        "input_dir": "rel/oneprovider_node",
+        "target_dir": "rel/test_cluster"
+    },
+    "nodes": {
+        "ccm": {
+            "vm.args": {
+                "name": "ccm@",
+                "setcookie": "oneprovider_node"
+            },
+            "sys.config": {
+                "node_type": "ccm",
+                "ccm_nodes": [ "ccm@" ],
+                "db_nodes": [ "db@" ],
+                "workers_to_trigger_init": 2
+            }
+        },
+        "worker1": {
+            "vm.args": {
+                "name": "worker1@",
+                "setcookie": "oneprovider_node"
+            },
+            "sys.config": {
+                "node_type": "worker",
+                "ccm_nodes": [ "ccm@"],
+                "db_nodes": [ "db@" ]
+            }
+        },
+        "worker2": {
+            "vm.args": {
+                "name": "worker2@",
+                "setcookie": "oneprovider_node"
+            },
+            "sys.config": {
+                "node_type": "worker",
+                "ccm_nodes": [ "ccm@"],
+                "db_nodes": [ "db@" ]
+            }
+        },
+        "worker3": {
+            "vm.args": {
+                "name": "worker3@",
+                "setcookie": "oneprovider_node"
+            },
+            "sys.config": {
+                "node_type": "worker",
+                "ccm_nodes": [ "ccm@"],
+                "db_nodes": [ "db@" ]
+            }
+        }
+    }
+}

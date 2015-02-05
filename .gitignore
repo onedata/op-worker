@@ -12,6 +12,7 @@ src/proto
 
 *.iml
 *.sublime*
+*.beam
 
 rel/oneprovider_node
 rel/test_cluster
