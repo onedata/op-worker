@@ -13,9 +13,10 @@
 -author("Krzysztof Trzepla").
 
 -include("workers/event_manager/events.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([emit/1, subscribe/1]).
+-export([emit/1, subscribe/1, handle/1]).
 
 -define(EVENT_MANAGER_WORKER, event_manager_worker).
 
@@ -42,8 +43,19 @@ emit(Event) ->
 subscribe(Subscription) ->
     worker_proxy:call(?EVENT_MANAGER_WORKER, {subscription, Subscription}).
 
-%% handle(Message) ->
-%%     case event_translator
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles producers messages.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle(Request :: client_message()) -> ok.
+handle(Request) ->
+    case event_translator:translate_client_message(Request) of
+        {ok, Event} ->
+            emit(Event);
+        {error, Reason} ->
+            ?warning("~p:~p - handle error: ~p", [?MODULE, ?LINE, Reason])
+    end.
 
 %%%===================================================================
 %%% Internal functions

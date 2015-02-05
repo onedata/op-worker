@@ -18,63 +18,63 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([translate/1]).
+-export([translate_client_message/1, translate_server_message/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-translate(#read_event{} = Record) ->
-    {ok, #'ReadEvent'{
-        counter = Record#read_event.counter,
-        file_id = Record#read_event.file_id,
-        size = Record#read_event.size,
-        blocks = Record#read_event.blocks
-    }};
-
-translate(#'ReadEvent'{} = Record) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates messages from the client to the server.
+%% @end
+%%--------------------------------------------------------------------
+-spec translate_client_message(Message :: client_message()) ->
+    {ok, Event :: event()} | {error, Reason :: term()}.
+translate_client_message(#'ReadEvent'{} = Message) ->
     {ok, #write_event{
-        counter = Record#read_event.counter,
-        file_id = Record#read_event.file_id,
-        size = Record#read_event.size,
-        blocks = Record#read_event.blocks
+        counter = Message#read_event.counter,
+        file_id = Message#read_event.file_id,
+        size = Message#read_event.size,
+        blocks = Message#read_event.blocks
     }};
 
-translate(#read_event_subscription{} = Record) ->
-    {ok, #'ReadEventSubscription'{
-        id = Record#read_event_subscription.id,
-        counter_threshold = Record#read_event_subscription.counter_threshold,
-        time_threshold = Record#read_event_subscription.time_threshold,
-        size_threshold = Record#read_event_subscription.size_threshold
-    }};
-
-translate(#write_event{} = Record) ->
+translate_client_message(#write_event{} = Message) ->
     {ok, #'WriteEvent'{
-        counter = Record#write_event.counter,
-        file_id = Record#write_event.file_id,
-        size = Record#write_event.size,
-        blocks = Record#write_event.blocks
+        counter = Message#write_event.counter,
+        file_id = Message#write_event.file_id,
+        size = Message#write_event.size,
+        blocks = Message#write_event.blocks
     }};
 
-translate(#'WriteEvent'{} = Record) ->
-    {ok, #write_event{
-        counter = Record#write_event.counter,
-        file_id = Record#write_event.file_id,
-        size = Record#write_event.size,
-        blocks = Record#write_event.blocks
+translate_client_message(Message) ->
+    {error, {unknown_message, Message}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates messages from the server to the client.
+%% @end
+%%--------------------------------------------------------------------
+-spec translate_server_message(Subscription :: event_subscription()) ->
+    {ok, Message :: server_message()} | {error, Reason :: term()}.
+translate_server_message(#read_event_subscription{} = Message) ->
+    {ok, #'ReadEventSubscription'{
+        id = Message#read_event_subscription.id,
+        counter_threshold = Message#read_event_subscription.counter_threshold,
+        time_threshold = Message#read_event_subscription.time_threshold,
+        size_threshold = Message#read_event_subscription.size_threshold
     }};
 
-translate(#write_event_subscription{} = Record) ->
+translate_server_message(#write_event_subscription{} = Message) ->
     {ok, #'WriteEventSubscription'{
-        id = Record#write_event_subscription.id,
-        counter_threshold = Record#write_event_subscription.counter_threshold,
-        time_threshold = Record#write_event_subscription.time_threshold,
-        size_threshold = Record#write_event_subscription.size_threshold
+        id = Message#write_event_subscription.id,
+        counter_threshold = Message#write_event_subscription.counter_threshold,
+        time_threshold = Message#write_event_subscription.time_threshold,
+        size_threshold = Message#write_event_subscription.size_threshold
     }};
 
-translate(Record) ->
-    ?warning("~p:~p - bad record ~p", [?MODULE, ?LINE, Record]),
-    {error, {unknown_record, Record}}.
+translate_server_message(Message) ->
+    {error, {unknown_message, Message}}.
 
 
 %%%===================================================================
