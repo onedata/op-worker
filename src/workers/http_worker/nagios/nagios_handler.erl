@@ -257,7 +257,8 @@ check_dispatchers(Nodes, Timeout) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Contacts request dispatchers on given nodes for healthcheck. The check is performed in parallel (one proces per node).
+%% Contacts workers on given nodes for healthcheck. The check is performed in parallel (one proces per worker).
+%% Workers are grouped into one list per each node. Nodes without workers will have empty lists.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_workers(Nodes :: [atom()], Workers :: [{Node :: atom(), WorkerName :: atom()}], Timeout :: integer()) ->

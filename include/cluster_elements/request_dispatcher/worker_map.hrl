@@ -9,6 +9,7 @@
 %%% worker_map external parameters, used to customize worker map queries
 %%% @end
 %%%-------------------------------------------------------------------
+
 -ifndef(WORKER_MAP_HRL).
 -define(WORKER_MAP_HRL, 1).
 
