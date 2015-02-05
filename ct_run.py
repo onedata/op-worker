@@ -1,6 +1,17 @@
 #!/usr/bin/env python
 
+"""
+Runs oneprovider integration tests, providing Erlang's ct_run with every
+environmental argument it needs for successful run. The output is put into
+'test_distributed/logs'. The (init|end)_per_suite "testcases" are removed from
+the surefire.xml output.
+
+All paths used are relative to script's path, not to the running user's CWD.
+Run the script with -h flag to learn about script's running options.
+"""
+
 import argparse
+import glob
 import os
 import sys
 sys.path.insert(0, 'bamboos/docker')
@@ -37,7 +48,12 @@ ct_command = ['ct_run',
               '-logdir', './logs/',
               '-ct_hooks', 'cth_surefire', '[{path, "surefire.xml"}]',
               '-noshell',
-              '-name', 'tester']
+              '-name', 'tester',
+              '-include', '../include', '../deps']
+
+code_paths = ['-pa', os.path.join(script_dir, 'ebin')]
+code_paths.extend(glob.glob(os.path.join(script_dir, 'deps', '*', 'ebin')))
+ct_command.extend(code_paths)
 
 if args.suites:
     ct_command.append('-suite')
