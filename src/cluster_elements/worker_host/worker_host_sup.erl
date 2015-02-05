@@ -7,10 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This is the supervisor for worker_host usage. It is started as a brother
-%%% of worker_host , under main_worker_sup. All permanent processes
+%%% of worker_host, under main_worker_sup. All permanent processes
 %%% started by worker_host should be children of this supervisor.
-%%% Every worker has it's own supervisor, registered as ${worker_name}_sup,
-%%% i. e. dns_worker <-> dns_worker_sup
+%%% Every worker has its own supervisor, registered as ${worker_name}_sup,
+%%% i.e. dns_worker <-> dns_worker_sup
 %%% @end
 %%%-------------------------------------------------------------------
 -module(worker_host_sup).
@@ -61,9 +61,9 @@ start_link(Name) ->
 init([]) ->
     RestartStrategy = one_for_one,
     MaxRestarts = 1000,
-    MaxSecondsBetweenRestarts = 3600,
+    RestartTimeWindow = 3600,
 
-    SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
+    SupFlags = {RestartStrategy, MaxRestarts, RestartTimeWindow},
 
     {ok, {SupFlags, []}}.
 

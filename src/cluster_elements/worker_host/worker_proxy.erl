@@ -18,6 +18,8 @@
 -include("cluster_elements/request_dispatcher/worker_map.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-define(DEFAULT_REQUEST_TIMEOUT, timer:seconds(10)).
+
 %% API
 -export([call/2, call/3, call/4, cast/2, cast/3, cast/4, cast/5]).
 
@@ -28,12 +30,12 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Call with default timeout
-%% @equiv call(WorkerName, Request, 10000)
+%% @equiv call(WorkerName, Request, ?DEFAULT_REQUEST_TIMEOUT)
 %% @end
 %%--------------------------------------------------------------------
 -spec call(WorkerName :: atom(), Request :: term()) -> ok | {ok, term()} | {error, term()}.
 call(WorkerName, Request) ->
-    call(WorkerName, Request, 10000).
+    call(WorkerName, Request, ?DEFAULT_REQUEST_TIMEOUT).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -43,7 +45,7 @@ call(WorkerName, Request) ->
 %%--------------------------------------------------------------------
 -spec call(WorkerName :: atom(), Request :: term(), Timeout :: integer()) -> ok | {ok, term()} | {error, term()}.
 call(WorkerName, Request, Timeout) ->
-    call(WorkerName, Request, Timeout, ?default_worker_selection_type).
+    call(WorkerName, Request, Timeout, ?DEFAULT_WORKER_SELECTION_TYPE).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -100,7 +102,7 @@ cast(WorkerName, Request, ReplyTo) ->
 -spec cast(WorkerName :: atom(), Request :: term(), ReplyTo :: {proc, pid()} | {gen_serv, atom() | pid()}, MsgId :: term() | undefined) ->
     ok | {error, term()}.
 cast(WorkerName, Request, ReplyTo, MsgId) ->
-    cast(WorkerName, Request, ReplyTo, MsgId, ?default_worker_selection_type).
+    cast(WorkerName, Request, ReplyTo, MsgId, ?DEFAULT_WORKER_SELECTION_TYPE).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -27,7 +27,12 @@
 %% This record is used by node_manager (it contains its state).
 %% It describes node type (ccm or worker) and status of connection
 %% with ccm (connected or not_connected).
--record(node_state, {node_type = worker, ccm_con_status = not_connected, state_num = 0, dispatcher_state = 0}).
+-record(node_state, {
+    node_type = worker :: worker | ccm,
+    ccm_con_status = not_connected :: not_connected | connected,
+    state_num = 0 :: integer(),
+    dispatcher_state = 0 :: integer()
+}).
 
 %% API
 -export([start_link/1, stop/0]).
@@ -88,7 +93,7 @@ init([worker]) ->
         listener_starter:start_rest_listener(),
         listener_starter:start_redirector_listener(),
         listener_starter:start_dns_listeners(),
-        gen_server:cast(self(), do_heart_beat),
+        gen_server:cast(self(), do_heartbeat),
         {ok, #node_state{node_type = worker, ccm_con_status = not_connected}}
     catch
         _:Error ->
@@ -96,7 +101,7 @@ init([worker]) ->
             {stop, cannot_initialize_listeners}
     end;
 init([ccm]) ->
-    gen_server:cast(self(), do_heart_beat),
+    gen_server:cast(self(), do_heartbeat),
     {ok, #node_state{node_type = ccm, ccm_con_status = not_connected}};
 init([_Type]) ->
     {stop, wrong_type}.
@@ -127,7 +132,7 @@ handle_call(get_state_num, _From, State = #node_state{state_num = StateNum}) ->
     {reply, StateNum, State};
 
 handle_call(_Request, _From, State) ->
-    ?warning("Wrong node_manager call: ~p", [_Request]),
+    ?log_bad_request(_Request),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -143,12 +148,12 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
-handle_cast(do_heart_beat, State) ->
-    NewState = do_heart_beat(State),
+handle_cast(do_heartbeat, State) ->
+    NewState = do_heartbeat(State),
     {noreply, NewState};
 
-handle_cast({heart_beat_ok, StateNum}, State) ->
-    NewState = heart_beat_ok(StateNum, State),
+handle_cast({heartbeat_ok, StateNum}, State) ->
+    NewState = heartbeat_ok(StateNum, State),
     {noreply, NewState};
 
 handle_cast({dispatcher_up_to_date, DispState}, State) ->
@@ -158,8 +163,8 @@ handle_cast({dispatcher_up_to_date, DispState}, State) ->
 handle_cast(stop, State) ->
     {stop, normal, State};
 
-handle_cast(_Msg, State) ->
-    ?warning("Wrong node_manager cast: ~p", [_Msg]),
+handle_cast(_Request, State) ->
+    ?log_bad_request(_Request),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -183,8 +188,8 @@ handle_info({nodedown, _Node}, State) ->
     ?warning("Connection to CCM lost, node~p", [node()]),
     {noreply, State#node_state{ccm_con_status = not_connected}};
 
-handle_info(_Info, State) ->
-    ?warning("Wrong node_manager info: ~p", [_Info]),
+handle_info(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -202,8 +207,7 @@ handle_info(_Info, State) ->
     | {shutdown, term()}
     | term().
 terminate(_Reason, _State) ->
-    catch listener_starter:stop_listeners(),
-    ok.
+    listener_starter:stop_listeners().
 
 %%--------------------------------------------------------------------
 %% @private
@@ -229,24 +233,24 @@ code_change(_OldVsn, State, _Extra) ->
 %% First it establishes network connection, next sends message to ccm.
 %% @end
 %%--------------------------------------------------------------------
--spec do_heart_beat(State :: #node_state{}) -> #node_state{}.
-do_heart_beat(State = #node_state{ccm_con_status = connected}) ->
-    {ok, Interval} = application:get_env(?APP_NAME, heart_beat_success_interval),
-    gen_server:cast({global, ?CCM}, {heart_beat, node()}),
-    erlang:send_after(Interval * 1000, self(), {timer, do_heart_beat}),
+-spec do_heartbeat(State :: #node_state{}) -> #node_state{}.
+do_heartbeat(State = #node_state{ccm_con_status = connected}) ->
+    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_success_interval),
+    gen_server:cast({global, ?CCM}, {heartbeat, node()}),
+    erlang:send_after(Interval, self(), {timer, do_heartbeat}),
     State#node_state{ccm_con_status = connected};
-do_heart_beat(State = #node_state{ccm_con_status = not_connected}) ->
+do_heartbeat(State = #node_state{ccm_con_status = not_connected}) ->
     {ok, CcmNodes} = application:get_env(?APP_NAME, ccm_nodes),
     case (catch init_net_connection(CcmNodes)) of
         ok ->
-            {ok, Interval} = application:get_env(?APP_NAME, heart_beat_success_interval),
-            gen_server:cast({global, ?CCM}, {heart_beat, node()}),
-            erlang:send_after(Interval * 1000, self(), {timer, do_heart_beat}),
+            {ok, Interval} = application:get_env(?APP_NAME, heartbeat_success_interval),
+            gen_server:cast({global, ?CCM}, {heartbeat, node()}),
+            erlang:send_after(Interval * 1000, self(), {timer, do_heartbeat}),
             State#node_state{ccm_con_status = connected};
         Err ->
-            {ok, Interval} = application:get_env(?APP_NAME, heart_beat_fail_interval),
+            {ok, Interval} = application:get_env(?APP_NAME, heartbeat_fail_interval),
             ?debug("No connection with CCM: ~p, retrying in ~p s", [Err, Interval]),
-            erlang:send_after(Interval * 1000, self(), {timer, do_heart_beat}),
+            erlang:send_after(Interval * 1000, self(), {timer, do_heartbeat}),
             State#node_state{ccm_con_status = not_connected}
     end.
 
@@ -256,15 +260,12 @@ do_heart_beat(State = #node_state{ccm_con_status = not_connected}) ->
 %% Saves information about ccm connection when ccm answers to its request
 %% @end
 %%--------------------------------------------------------------------
--spec heart_beat_ok(NewStateNum :: integer(), State :: term()) -> #node_state{}.
-heart_beat_ok(NewStateNum, State = #node_state{state_num = NewStateNum, dispatcher_state = NewStateNum}) ->
-    ?debug("Heart beat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
+-spec heartbeat_ok(NewStateNum :: integer(), State :: term()) -> #node_state{}.
+heartbeat_ok(NewStateNum, State = #node_state{state_num = NewStateNum, dispatcher_state = NewStateNum}) ->
+    ?debug("heartbeat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
     State;
-heart_beat_ok(NewStateNum, State = #node_state{node_type = ccm}) ->
-    ?debug("Heart beat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
-    State#node_state{state_num = NewStateNum};
-heart_beat_ok(NewStateNum, State = #node_state{node_type = worker}) ->
-    ?debug("Heart beat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
+heartbeat_ok(NewStateNum, State) ->
+    ?debug("heartbeat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
     update_dispatcher(NewStateNum),
     State#node_state{state_num = NewStateNum}.
 
@@ -274,10 +275,10 @@ heart_beat_ok(NewStateNum, State = #node_state{node_type = worker}) ->
 %% Tells dispatcher that cluster state has changed.
 %% @end
 %%--------------------------------------------------------------------
--spec update_dispatcher(New_state_num :: integer()) -> atom().
-update_dispatcher(New_state_num) ->
-    ?debug("Message sent to update dispatcher, state num: ~p", [New_state_num]),
-    gen_server:cast(?DISPATCHER_NAME, {check_state, New_state_num}).
+-spec update_dispatcher(NewStateNum :: integer()) -> atom().
+update_dispatcher(NewStateNum) ->
+    ?debug("Message sent to update dispatcher, state num: ~p", [NewStateNum]),
+    gen_server:cast(?DISPATCHER_NAME, {check_state, NewStateNum}).
 
 %%--------------------------------------------------------------------
 %% @private

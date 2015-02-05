@@ -12,10 +12,7 @@
 -module(provider_handler).
 -author("Rafal Slota").
 
--include("registered_names.hrl").
--include("cluster_elements/oneproxy/oneproxy.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("public_key/include/public_key.hrl").
 
 -record(handler_state, {}).
 
