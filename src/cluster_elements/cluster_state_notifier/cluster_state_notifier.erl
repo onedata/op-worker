@@ -82,7 +82,7 @@ init([]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_call(_Request, _From, State) ->
-    ?warning("cluster_state_notifier unknown call: ~p", [_Request]),
+    ?log_bad_request(_Request),
     {reply, ok, State}.
 
 %%--------------------------------------------------------------------
@@ -107,7 +107,7 @@ handle_cast({dispatcher_state_updated, Node, NewStateNumber}, State = #state{nod
     try_notify_subscribers(NewState),
     {noreply, NewState};
 handle_cast(_Request, State) ->
-    ?warning("cluster_state_notifier unknown cast: ~p", [_Request]),
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -120,8 +120,8 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_info(_Info, State) ->
-    ?warning("cluster_state_notifier unknown info: ~p", [_Info]),
+handle_info(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

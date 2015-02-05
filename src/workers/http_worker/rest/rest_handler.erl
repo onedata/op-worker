@@ -14,7 +14,6 @@
 
 -include("cluster_elements/oneproxy/oneproxy.hrl").
 -include("workers/http_worker/http_common.hrl").
--include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % the state of request, it is created in rest_init function, and passed to every cowboy callback functions

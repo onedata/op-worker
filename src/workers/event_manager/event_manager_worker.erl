@@ -54,17 +54,14 @@ handle(ping, _) ->
 handle(healthcheck, _) ->
     ok;
 
-handle({event, Event}, State) ->
-    ?dump(Event),
-    ?dump(State),
+handle({event, _Event}, _) ->
     ok;
 
-handle({subscription, Subscription}, _) ->
-    ?dump(Subscription),
+handle({subscription, _Subscription}, _) ->
     ok;
 
-handle(Msg, _) ->
-    ?warning("Event Manager received unknown message: ~p", [Msg]).
+handle(_Request, _) ->
+    ?log_bad_request(_Request).
 
 %%--------------------------------------------------------------------
 %% @doc

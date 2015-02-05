@@ -9,7 +9,11 @@
 %%% worker_map external parameters, used to customize worker map queries
 %%% @end
 %%%-------------------------------------------------------------------
--author("Tomasz Lichon").
 
--define(default_worker_selection_type, random).
--type(selection_type() :: random | prefer_local | {node, Node :: node()}).
+-ifndef(WORKER_MAP_HRL).
+-define(WORKER_MAP_HRL, 1).
+
+-define(DEFAULT_WORKER_SELECTION_TYPE, random).
+-type selection_type() :: random | prefer_local | {node, Node :: node()}.
+
+-endif.

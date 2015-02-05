@@ -25,17 +25,23 @@
 %% Configure release stored at ReleaseRootPath, according to given parameters
 %% @end
 %%--------------------------------------------------------------------
--spec configure_release(ReleaseRootPath :: string(), ApplicationName :: string(), SysConfig :: list(), VmArgs :: list(),
-    DistributedAppFailoverTimeout :: integer(), SyncNodesTimeout :: integer()) -> ok | no_return().
-configure_release(ReleaseRootPath, ApplicationName, SysConfig, VmArgs, DistributedAppFailoverTimeout, SyncNodesTimeout) ->
+-spec configure_release(ReleaseRootPath :: string(), ApplicationName :: string(), SysConfig :: list(),
+    VmArgs :: list(), DistributedAppFailoverTimeout :: integer(), SyncNodesTimeout :: integer()) -> ok | no_return().
+configure_release(ReleaseRootPath, ApplicationName, SysConfig,
+    VmArgs, DistributedAppFailoverTimeout, SyncNodesTimeout) ->
     % find config location
-    {ok,[[{release, ApplicationName, AppVsn, _, _, _}]]} = file:consult(filename:join([ReleaseRootPath, "releases", "RELEASES"])),
+    {ok, [[{release, ApplicationName, AppVsn, _, _, _}]]} =
+        file:consult(filename:join([ReleaseRootPath, "releases", "RELEASES"])),
     SysConfigPath = filename:join([ReleaseRootPath, "releases", AppVsn, "sys.config"]),
     VmArgsPath = filename:join([ReleaseRootPath, "releases", AppVsn, "vm.args"]),
 
     % configure user defined envs
-    lists:foreach(fun({Key, Value}) -> replace_vm_arg(VmArgsPath, "-" ++ atom_to_list(Key), Value) end, VmArgs),
-    lists:foreach(fun({Key, Value}) -> replace_env(SysConfigPath, ApplicationName, Key, Value) end, SysConfig),
+    lists:foreach(
+        fun({Key, Value}) -> replace_vm_arg(VmArgsPath, "-" ++ atom_to_list(Key), Value) end,
+        VmArgs),
+    lists:foreach(
+        fun({Key, Value}) -> replace_env(SysConfigPath, ApplicationName, Key, Value) end,
+        SysConfig),
 
     % configure kernel distributed erlang app
     NodeName = proplists:get_value(name, VmArgs),
@@ -46,10 +52,15 @@ configure_release(ReleaseRootPath, ApplicationName, SysConfig, VmArgs, Distribut
             OptCcms = CcmNodes -- [list_to_atom(NodeName)],
             replace_application_config(SysConfigPath, kernel,
                 [
-                    {distributed, [{list_to_atom(ApplicationName), DistributedAppFailoverTimeout, [list_to_atom(NodeName), list_to_tuple(OptCcms)]}]},
+                    {distributed, [{
+                        list_to_atom(ApplicationName),
+                        DistributedAppFailoverTimeout,
+                        [list_to_atom(NodeName),
+                            list_to_tuple(OptCcms)]
+                    }]},
                     {sync_nodes_mandatory, OptCcms},
                     {sync_nodes_timeout, SyncNodesTimeout}
-            ]);
+                ]);
         false -> ok
     end.
 
@@ -114,4 +125,4 @@ replace_vm_arg(VMArgsPath, FullArgName, ArgValue) ->
 %%--------------------------------------------------------------------
 -spec term_to_string(term()) -> string().
 term_to_string(Term) ->
-    io_lib:fwrite("~p",[Term]).
+    io_lib:fwrite("~p", [Term]).

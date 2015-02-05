@@ -1,5 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
+%%% @author Krzysztof Trzepla
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -13,10 +14,13 @@
 %%%-------------------------------------------------------------------
 -module(worker_proxy).
 -author("Tomasz Lichon").
+-author("Krzysztof Trzepla").
 
 -include("cluster_elements/worker_host/worker_protocol.hrl").
 -include("cluster_elements/request_dispatcher/worker_map.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+-define(DEFAULT_REQUEST_TIMEOUT, timer:seconds(10)).
 
 %% API
 -export([call/2, call/3, call/4, multicall/2, multicall/3,
@@ -29,24 +33,24 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Synchronously send request to worker with default timeout.
-%% @equiv call(WorkerName, Request, 10000)
+%% @equiv call(WorkerName, Request, ?DEFAULT_REQUEST_TIMEOUT)
 %% @end
 %%--------------------------------------------------------------------
 -spec call(WorkerName :: atom(), Request :: term()) ->
     ok | {ok, term()} | {error, term()}.
 call(WorkerName, Request) ->
-    call(WorkerName, Request, 10000).
+    call(WorkerName, Request, ?DEFAULT_REQUEST_TIMEOUT).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Synchronously send request to worker with default worker selection type.
-%% @equiv call(WorkerName, Request, Timeout, ?default_worker_selection_type)
+%% @equiv call(WorkerName, Request, Timeout, ?DEFAULT_WORKER_SELECTION_TYPE)
 %% @end
 %%--------------------------------------------------------------------
 -spec call(WorkerName :: atom(), Request :: term(), Timeout :: timeout()) ->
     ok | {ok, term()} | {error, term()}.
 call(WorkerName, Request, Timeout) ->
-    call(WorkerName, Request, Timeout, ?default_worker_selection_type).
+    call(WorkerName, Request, Timeout, ?DEFAULT_WORKER_SELECTION_TYPE).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -75,13 +79,13 @@ call(WorkerName, Request, Timeout, SelectionType) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Synchronously send request to all workers with default timeout.
-%% @equiv multicall(WorkerName, Request, 10000)
+%% @equiv multicall(WorkerName, Request, ?DEFAULT_REQUEST_TIMEOUT)
 %% @end
 %%--------------------------------------------------------------------
 -spec multicall(WorkerName :: atom(), Request :: term()) ->
     [{Node :: node(), ok | {ok, term()} | {error, term()}}].
 multicall(WorkerName, Request) ->
-    multicall(WorkerName, Request, 10000).
+    multicall(WorkerName, Request, ?DEFAULT_REQUEST_TIMEOUT).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -123,13 +127,13 @@ cast(WorkerName, Request, ReplyTo) ->
 %% Asynchronously send request to worker, answer with given MsgId is
 %% expected at ReplyTo process/gen_server. The answer would be
 %% 'worker_answer' record.
-%% @equiv cast(WorkerName, Request, ReplyTo, MsgId, ?default_worker_selection_type)
+%% @equiv cast(WorkerName, Request, ReplyTo, MsgId, ?DEFAULT_WORKER_SELECTION_TYPE)
 %% @end
 %%--------------------------------------------------------------------
 -spec cast(WorkerName :: atom(), Request :: term(), ReplyTo :: {proc, pid()}
     | {gen_serv, atom() | pid()}, MsgId :: term() | undefined) -> ok | {error, term()}.
 cast(WorkerName, Request, ReplyTo, MsgId) ->
-    cast(WorkerName, Request, ReplyTo, MsgId, ?default_worker_selection_type).
+    cast(WorkerName, Request, ReplyTo, MsgId, ?DEFAULT_WORKER_SELECTION_TYPE).
 
 %%--------------------------------------------------------------------
 %% @doc
