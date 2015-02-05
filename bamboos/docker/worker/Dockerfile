@@ -20,8 +20,8 @@ RUN ./kerl build 17.4 17.4 && \
 ENV PATH /opt/erlang/bin:$PATH
 
 # Install runtime dependencies
-RUN apt-get install -y python-pip
-RUN pip install docker-py
+ADD https://get.docker.com/builds/Linux/x86_64/docker-latest /usr/bin/docker
+RUN chmod a+x /usr/bin/docker
 
 # Set up the environment
 ENV HOME /root

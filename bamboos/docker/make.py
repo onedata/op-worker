@@ -12,6 +12,7 @@ Run the script with -h flag to learn about script's running options.
 import argparse
 import docker
 import os
+import platform
 import sys
 
 from os.path import expanduser
@@ -67,20 +68,22 @@ home = expanduser('~')
 command = '''
 import os, shutil, subprocess, sys
 
-# Create a new user only for ssh-add's pleasure
-subprocess.call(['useradd', '--create-home', '--uid', '{uid}', 'maketmp'])
-
 os.environ['HOME'] = '{home}'
-os.setregid({gid}, {gid})
-os.setreuid({uid}, {uid})
+
+ssh_home = '/root/.ssh'
+if {shed_privileges}:
+    subprocess.call(['useradd', '--create-home', '--uid', '{uid}', 'maketmp'])
+    ssh_home = '/home/maketmp/.ssh'
+    os.setregid({gid}, {gid})
+    os.setreuid({uid}, {uid})
 
 if '{src}' != '{dst}':
     ret = subprocess.call(['rsync', '--archive', '/tmp/src/', '{dst}'])
     if ret != 0:
         sys.exit(ret)
 
-shutil.copytree('/tmp/keys', '/home/maketmp/.ssh')
-for root, dirs, files in os.walk('/home/maketmp/.ssh'):
+shutil.copytree('/tmp/keys', ssh_home)
+for root, dirs, files in os.walk(ssh_home):
     for dir in dirs:
         os.chmod(os.path.join(root, dir), 0o700)
     for file in files:
@@ -100,7 +103,8 @@ command = command.format(
     gid=os.getegid(),
     src=args.src,
     dst=args.dst,
-    home=home)
+    home=home,
+    shed_privileges=(platform.system() == 'Linux'))
 
 reflect = [(home, 'ro'), (args.dst, 'rw')]
 reflect.extend(zip(args.reflect, ['rw'] * len(args.reflect)))
