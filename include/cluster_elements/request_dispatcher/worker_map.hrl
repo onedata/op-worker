@@ -17,3 +17,4 @@
 -type worker_ref() :: atom() | {atom(), node()}.
 
 -endif.
+
