@@ -12,8 +12,6 @@
 -module(args_parser).
 -author("Tomasz Lichon").
 
--define(JSON_PARSER_DIR, "deps/mochiweb/ebin").
-
 %% API
 -export([parse_config_file/1]).
 
@@ -29,7 +27,6 @@
 -spec parse_config_file(ArgsFile :: string()) -> list().
 parse_config_file(ArgsFile) ->
     {ok, FileContent} = file:read_file(ArgsFile),
-    code:add_path(?JSON_PARSER_DIR),
     Json = mochijson2:decode(FileContent, [{format, proplist}]),
     json_proplist_to_term(Json).
 

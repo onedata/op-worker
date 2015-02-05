@@ -15,8 +15,8 @@
 
 % oneprovider specific config
 -define(ONEPROVIDER_APP_NAME, oneprovider_node).
--define(DIST_APP_FAILOVER_TIMEOUT, 5000).
--define(SYNC_NODES_TIMEOUT, 60000).
+-define(DIST_APP_FAILOVER_TIMEOUT, timer:seconds(5)).
+-define(SYNC_NODES_TIMEOUT, timer:minutes(1)).
 
 %% API
 -export([configure_release/4]).
@@ -30,16 +30,16 @@
 %% Configure release stored at ReleaseRootPath, according to given parameters
 %% @end
 %%--------------------------------------------------------------------
--spec configure_release(ApplicationName :: atom(), ReleaseRootPath :: string(), SysConfig :: list(), VmArgs :: list()) ->
-    ok | no_return().
+-spec configure_release(ApplicationName :: atom(), ReleaseRootPath :: string(),
+    SysConfig :: list(), VmArgs :: list()) -> ok | no_return().
 configure_release(?ONEPROVIDER_APP_NAME, ReleaseRootPath, SysConfig, VmArgs) ->
     {SysConfigPath, VmArgsPath} = find_config_location(?ONEPROVIDER_APP_NAME, ReleaseRootPath),
     lists:foreach(
-        fun({Key, Value}) -> replace_vm_arg(VmArgsPath, "-" ++ atom_to_list(Key), Value) end, 
+        fun({Key, Value}) -> replace_vm_arg(VmArgsPath, "-" ++ atom_to_list(Key), Value) end,
         VmArgs
     ),
     lists:foreach(
-        fun({Key, Value}) -> replace_env(SysConfigPath, ?ONEPROVIDER_APP_NAME, Key, Value) end, 
+        fun({Key, Value}) -> replace_env(SysConfigPath, ?ONEPROVIDER_APP_NAME, Key, Value) end,
         SysConfig
     ),
 
@@ -53,10 +53,9 @@ configure_release(?ONEPROVIDER_APP_NAME, ReleaseRootPath, SysConfig, VmArgs) ->
             replace_application_config(SysConfigPath, kernel,
                 [
                     {distributed, [{
-                        ?ONEPROVIDER_APP_NAME, 
-                        ?DIST_APP_FAILOVER_TIMEOUT, 
-                        [list_to_atom(NodeName), 
-                            list_to_tuple(OptCcms)]
+                        ?ONEPROVIDER_APP_NAME,
+                        ?DIST_APP_FAILOVER_TIMEOUT,
+                        [list_to_atom(NodeName), list_to_tuple(OptCcms)]
                     }]},
                     {sync_nodes_mandatory, OptCcms},
                     {sync_nodes_timeout, ?SYNC_NODES_TIMEOUT}
@@ -65,8 +64,14 @@ configure_release(?ONEPROVIDER_APP_NAME, ReleaseRootPath, SysConfig, VmArgs) ->
     end;
 configure_release(ApplicationName, ReleaseRootPath, SysConfig, VmArgs) ->
     {SysConfigPath, VmArgsPath} = find_config_location(ApplicationName, ReleaseRootPath),
-    lists:foreach(fun({Key, Value}) -> replace_vm_arg(VmArgsPath, "-" ++ atom_to_list(Key), Value) end, VmArgs),
-    lists:foreach(fun({Key, Value}) -> replace_env(SysConfigPath, ApplicationName, Key, Value) end, SysConfig).
+    lists:foreach(
+        fun({Key, Value}) -> replace_vm_arg(VmArgsPath, "-" ++ atom_to_list(Key), Value) end,
+        VmArgs
+    ),
+    lists:foreach(
+        fun({Key, Value}) -> replace_env(SysConfigPath, ApplicationName, Key, Value) end,
+        SysConfig
+    ).
 
 %%%===================================================================
 %%% Internal functions
@@ -82,7 +87,8 @@ configure_release(ApplicationName, ReleaseRootPath, SysConfig, VmArgs) ->
     {SysConfigPath :: string(), VmArgsPath :: string()}.
 find_config_location(ApplicationName, ReleaseRootPath) ->
     ApplicationNameString = atom_to_list(ApplicationName),
-    {ok, [[{release, ApplicationNameString, AppVsn, _, _, _}]]} = file:consult(filename:join([ReleaseRootPath, "releases", "RELEASES"])),
+    {ok, [[{release, ApplicationNameString, AppVsn, _, _, _}]]} =
+        file:consult(filename:join([ReleaseRootPath, "releases", "RELEASES"])),
     SysConfigPath = filename:join([ReleaseRootPath, "releases", AppVsn, "sys.config"]),
     VmArgsPath = filename:join([ReleaseRootPath, "releases", AppVsn, "vm.args"]),
     {SysConfigPath, VmArgsPath}.
@@ -107,8 +113,9 @@ replace_env(SysConfigPath, ApplicationName, EnvName, EnvValue) ->
 -spec replace_application_config(string(), atom(), list()) -> ok | no_return().
 replace_application_config(SysConfigPath, ApplicationName, ApplicationEnvs) ->
     {ok, [SysConfig]} = file:consult(SysConfigPath),
-    UpdatedSysConfig = [{ApplicationName, ApplicationEnvs} | proplists:delete(ApplicationName, SysConfig)],
-    ok = file:write_file(SysConfigPath, term_to_string(UpdatedSysConfig) ++ ".").
+    UpdatedSysConfig =
+        [{ApplicationName, ApplicationEnvs} | proplists:delete(ApplicationName, SysConfig)],
+    ok = file:write_file(SysConfigPath, [term_to_string(UpdatedSysConfig), $.]).
 
 %%--------------------------------------------------------------------
 %% @doc
