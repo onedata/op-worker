@@ -108,28 +108,13 @@ prepare_neccessary_paths(Config) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Extracts sys.config and vm.args configuration from 'NodeConfig'.
-<<<<<<< HEAD
-%% Additionally, function preety prints summary of release configuration.
-=======
 %% Additionally, function pretty prints summary of release configuration.
->>>>>>> c34bb9d937883c03028e770146f60d809c22db0d
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_and_print_configuration(AppName :: atom(), InputDir :: string(),
     ReleaseDir :: string(), NodeConfig :: list()) -> {SysConfig :: list(), VmArgs :: list()}.
 prepare_and_print_configuration(AppName, InputDir, ReleaseDir, NodeConfig) ->
     logger:print("================ Configuring release ===================="),
-<<<<<<< HEAD
-    logger:preety_print_entry({application, AppName}),
-    logger:preety_print_entry({input_dir, InputDir}),
-    logger:preety_print_entry({release_dir, ReleaseDir}),
-    logger:print("====================== vm.args =========================="),
-    VmArgs = proplists:get_value('vm.args', NodeConfig),
-    lists:foreach(fun(X) -> logger:preety_print_entry(X) end, VmArgs),
-    logger:print("===================== sys.config ========================"),
-    SysConfig = proplists:get_value('sys.config', NodeConfig),
-    lists:foreach(fun(X) -> logger:preety_print_entry(X) end, SysConfig),
-=======
     logger:pretty_print_entry({application, AppName}),
     logger:pretty_print_entry({input_dir, InputDir}),
     logger:pretty_print_entry({release_dir, ReleaseDir}),
@@ -139,7 +124,6 @@ prepare_and_print_configuration(AppName, InputDir, ReleaseDir, NodeConfig) ->
     logger:print("===================== sys.config ========================"),
     SysConfig = proplists:get_value('sys.config', NodeConfig),
     lists:foreach(fun(X) -> logger:pretty_print_entry(X) end, SysConfig),
->>>>>>> c34bb9d937883c03028e770146f60d809c22db0d
     logger:print("========================================================="),
     logger:print(""),
     {SysConfig, VmArgs}.
@@ -168,24 +152,7 @@ prepare_fresh_release(InputDir, TargetDir, Name) ->
 %%--------------------------------------------------------------------
 -spec helpers_init() -> ok.
 helpers_init() ->
-    GenDevDir = get_escript_dir(),
-<<<<<<< HEAD
-    true = code:add_path(filename:join(GenDevDir, "ebin")).
-=======
-    true = code:add_path(GenDevDir),
-    lists:foreach(fun(Module) -> compile:file(filename:join(GenDevDir, atom_to_list(Module) ++ ".erl"),
-        [{outdir, GenDevDir}]) end, ?HELPER_MODULES).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Cleans helper modules' binaries
-%% @end
-%%--------------------------------------------------------------------
--spec helpers_cleanup() -> ok.
-helpers_cleanup() ->
-    GenDevDir = get_escript_dir(),
-    lists:foreach(fun(Module) -> file:delete(filename:join(GenDevDir, atom_to_list(Module)++".beam")) end, ?HELPER_MODULES).
->>>>>>> c34bb9d937883c03028e770146f60d809c22db0d
+    true = code:add_path(filename:join(get_escript_dir(), "ebin")).
 
 %%--------------------------------------------------------------------
 %% @doc
