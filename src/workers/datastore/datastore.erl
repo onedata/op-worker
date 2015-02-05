@@ -225,6 +225,7 @@ init_drivers(Configs) ->
 %% @todo: Write me!
 %% @end
 %%--------------------------------------------------------------------
+-spec ensure_state_loaded() -> ok | no_return().
 ensure_state_loaded() ->
     case ets:info(?LOCAL_STATE) of
         undefined ->
