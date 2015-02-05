@@ -9,8 +9,11 @@
 %%% worker_map external parameters, used to customize worker map queries
 %%% @end
 %%%-------------------------------------------------------------------
--author("Tomasz Lichon").
+-ifndef(WORKER_MAP_HRL).
+-define(WORKER_MAP_HRL, 1).
 
--define(default_worker_selection_type, random).
--type(selection_type() :: random | prefere_local).
--type(worker_ref() :: atom() | {atom(), node()}).
+-define(DEFAULT_WORKER_SELECTION_TYPE, random).
+-type selection_type() :: random | prefer_local.
+-type worker_ref() :: atom() | {atom(), node()}.
+
+-endif.

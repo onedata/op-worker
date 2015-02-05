@@ -103,7 +103,7 @@ handle_call(healthcheck, _From, #dispatcher_state{state_num = StateNum} = State)
     {reply, {ok, StateNum}, State};
 
 handle_call(_Request, _From, State) ->
-    ?warning("Wrong call: ~p", [_Request]),
+    ?log_bad_request(_Request),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -132,8 +132,8 @@ handle_cast({update_state, WorkersList, NewStateNum}, State) ->
 handle_cast(stop, State) ->
     {stop, normal, State};
 
-handle_cast(_Msg, State) ->
-    ?warning("Wrong cast: ~p", [_Msg]),
+handle_cast(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -152,8 +152,8 @@ handle_cast(_Msg, State) ->
 handle_info({timer, Msg}, State) ->
     gen_server:cast(?DISPATCHER_NAME, Msg),
     {noreply, State};
-handle_info(_Info, State) ->
-    ?warning("Dispatcher wrong info: ~p", [_Info]),
+handle_info(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -204,17 +204,14 @@ check_state(State = #dispatcher_state{state_num = StateNum}, NewStateNum) when S
     State;
 check_state(State, _) ->
     ?info("Dispatcher had old state number, starting update"),
-    NewState =
-        case gen_server:call({global, ?CCM}, get_workers) of
-            {non, _} ->
-                State;
-            {error, _} ->
-                ?error("Dispatcher had old state number but could not update data"),
-                State;
-            {WorkersList, StateNum} ->
-                worker_map:update_workers(WorkersList),
-                ?info("Dispatcher state updated, state num: ~p", [StateNum]),
-                State#dispatcher_state{state_num = StateNum}
-        end,
-    gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_up_to_date, NewState#dispatcher_state.state_num}),
-    NewState.
+    try gen_server:call({global, ?CCM}, get_workers) of
+        {WorkersList, StateNum} ->
+            worker_map:update_workers(WorkersList),
+            gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_up_to_date, StateNum}),
+            ?info("Dispatcher state updated, state num: ~p", [StateNum]),
+            State#dispatcher_state{state_num = StateNum}
+    catch
+        _:Error ->
+        ?error("Dispatcher had old state number but could not update data, error: ~p",[Error]),
+        State
+    end.

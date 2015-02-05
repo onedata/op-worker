@@ -241,11 +241,15 @@ start_dns_listeners() ->
 %%--------------------------------------------------------------------
 -spec stop_listeners() -> ok.
 stop_listeners() ->
-    catch cowboy:stop_listener(?WEBSOCKET_LISTENER),
-    catch cowboy:stop_listener(?HTTP_REDIRECTOR_LISTENER),
-    catch cowboy:stop_listener(?REST_LISTENER),
-    catch cowboy:stop_listener(?HTTPS_LISTENER),
-    catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE).
+    Listeners = [?WEBSOCKET_LISTENER, ?HTTP_REDIRECTOR_LISTENER, ?REST_LISTENER, ?HTTPS_LISTENER, ?SESSION_LOGIC_MODULE],
+    Results = lists:map(
+        fun (?SESSION_LOGIC_MODULE) -> catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE);
+            (X) ->{X, catch cowboy:stop_listener(X)}
+        end, Listeners),
+    lists:foreach(
+        fun ({_, ok}) -> ok;
+            ({X, Error}) -> ?error("Error on stopping listener ~p: ~p", [X, Error])
+        end, Results).
 
 %%%===================================================================
 %%% Internal functions

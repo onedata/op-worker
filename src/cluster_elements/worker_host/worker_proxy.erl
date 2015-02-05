@@ -18,6 +18,8 @@
 -include("cluster_elements/request_dispatcher/worker_map.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-define(DEFAULT_REQUEST_TIMEOUT, timer:seconds(10)).
+
 %% API
 -export([call/2, call/3, call/4, cast/2, cast/3, cast/4, cast/5]).
 
@@ -33,7 +35,8 @@
 %%--------------------------------------------------------------------
 -spec call(WorkerRef :: worker_ref(), Request :: term()) -> ok | {ok, term()} | {error, term()}.
 call(WorkerRef, Request) ->
-    call(WorkerRef, Request, 10000).
+    call(WorkerRef, Request, ?DEFAULT_REQUEST_TIMEOUT).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -43,7 +46,8 @@ call(WorkerRef, Request) ->
 %%--------------------------------------------------------------------
 -spec call(WorkerRef :: worker_ref(), Request :: term(), Timeout :: integer()) -> ok | {ok, term()} | {error, term()}.
 call(WorkerRef, Request, Timeout) ->
-    call(WorkerRef, Request, Timeout, ?default_worker_selection_type).
+    call(WorkerRef, Request, Timeout, ?DEFAULT_WORKER_SELECTION_TYPE).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -67,6 +71,7 @@ call(WorkerRef, Request, Timeout, SelectionType) ->
             Error
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Asynchronously send request to worker
@@ -76,6 +81,7 @@ call(WorkerRef, Request, Timeout, SelectionType) ->
 -spec cast(WorkerRef :: worker_ref(), Request :: term()) -> ok | {error, term()}.
 cast(WorkerRef, Request) ->
     cast(WorkerRef, Request, undefined).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -101,7 +107,8 @@ cast(WorkerRef, Request, ReplyTo) ->
 -spec cast(WorkerRef :: worker_ref(), Request :: term(), ReplyTo :: {proc, pid()} | {gen_serv, atom() | pid()}, MsgId :: term() | undefined) ->
     ok | {error, term()}.
 cast(WorkerRef, Request, ReplyTo, MsgId) ->
-    cast(WorkerRef, Request, ReplyTo, MsgId, ?default_worker_selection_type).
+    cast(WorkerRef, Request, ReplyTo, MsgId, ?DEFAULT_WORKER_SELECTION_TYPE).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -126,7 +133,6 @@ cast(WorkerRef, Request, ReplyTo, MsgId, SelectionType) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @private

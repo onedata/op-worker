@@ -13,13 +13,15 @@
 -author("Rafal Slota").
 
 -include("registered_names.hrl").
--include("cluster_elements/oneproxy/oneproxy.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 %% timeout - max inactivity of receive loop before it's recursively invoked again,
 %% endpoint - oneproxy listener port
--record(oneproxy_state, {timeout = timer:minutes(1), endpoint}).
+-record(oneproxy_state, {
+    timeout = timer:minutes(1) :: integer(),
+    endpoint :: integer()
+}).
 
 -define(DER_CERTS_DIR,      "der_certs").
 -define(LOG_DEBUG_PREFIX,   "[ DEBUG ] ").
