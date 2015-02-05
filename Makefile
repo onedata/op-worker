@@ -41,9 +41,6 @@ eunit: deps compile
 	./rebar eunit skip_deps=true suites=${SUITES}
 ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
-	
-testclean:
-	rm -rf distributed_tests_out
 
 ##
 ## Dialyzer targets local

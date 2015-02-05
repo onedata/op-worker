@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 
+"""
+Cleans up Docker containers given by their name or id. Running containers are
+killed first. Volumes are not removed automatically.
+
+Run the script with -h flag to learn about script's running options.
+"""
+
 import argparse
 import docker
 

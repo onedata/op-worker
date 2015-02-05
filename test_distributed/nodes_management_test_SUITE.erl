@@ -17,33 +17,20 @@
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/test/test_node_starter.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([one_node_test/1, ccm_and_worker_test/1]).
+-export([ccm_and_worker_test/1]).
 
-%% all() -> [one_node_test, ccm_and_worker_test].
 all() -> [ccm_and_worker_test].
 
 %%%===================================================================
 %%% Test function
 %% ====================================================================
-one_node_test(Config) ->
-    [Node] = ?config(nodes, Config),
-    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Node}, get_node_type)).
 
 ccm_and_worker_test(Config) ->
     [Ccm] = ?config(op_ccm_nodes, Config),
-    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
-
-    %todo integrate with test_utils
-    cluster_state_notifier:cast({subscribe_for_init, self(), length(Workers)}),
-    receive
-        init_finished -> ok
-    after
-        50000 -> throw(timeout)
-    end,
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, Ccm}, get_node_type)),
     ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, get_node_type)),
@@ -59,28 +46,11 @@ ccm_and_worker_test(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-init_per_testcase(one_node_test, Config) ->
-    ?INIT_CODE_PATH(Config),?CLEAN_TEST_DIRS,
-    test_node_starter:start_deps_for_tester_node(),
-
-    [Node] = test_node_starter:start_test_nodes(1),
-
-    test_node_starter:start_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, [Node], [
-        [{node_type, ccm}, {dispatcher_port, 8888}, {ccm_nodes, [Node]}, {heartbeat_success_interval, 1000}]]),
-
-    lists:append([{nodes, [Node]}], Config);
-
 init_per_testcase(ccm_and_worker_test, Config) ->
     try
-        ?INIT_CODE_PATH(Config),
         test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json"))
-    catch T:M ->
-        ct:print("ctprint: ~p:~p~n~p", [T, M, erlang:get_stacktrace()])
+    catch A:B ->
+        ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()])
     end.
 end_per_testcase(ccm_and_worker_test, Config) ->
-  test_node_starter:clean_environment(Config);
-end_per_testcase(_, Config) ->
-    Nodes = ?config(nodes, Config),
-    test_node_starter:stop_app_on_nodes(?APP_NAME, ?ONEPROVIDER_DEPS, Nodes),
-    test_node_starter:stop_test_nodes(Nodes),
-    test_node_starter:stop_deps_for_tester_node().
+    test_node_starter:clean_environment(Config).
