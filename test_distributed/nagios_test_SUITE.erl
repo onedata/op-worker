@@ -21,13 +21,13 @@
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([nagios_test/1]).
 
-%% all() -> [one_node_test, nagios_test].
 all() -> [nagios_test].
 
 %%%===================================================================
 %%% Test function
 %% ====================================================================
 nagios_test(Config) ->
+    ct:print("BLEBLEBLE"),
     [Ccm] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2, Worker3] = Workers = ?config(op_worker_nodes, Config),
 
@@ -55,8 +55,12 @@ nagios_test(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_testcase(nagios_test, Config) ->
-  ?INIT_CODE_PATH(Config),
-  test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json")).
+    try
+        ?INIT_CODE_PATH(Config),
+        test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json"))
+    catch T:M ->
+        ct:print("~p:~p~n~p", [T, M, erlang:get_stacktrace()])
+    end.
 
 end_per_testcase(nagios_test, Config) ->
-  test_node_starter:clean_environment(Config).
+    test_node_starter:clean_environment(Config).

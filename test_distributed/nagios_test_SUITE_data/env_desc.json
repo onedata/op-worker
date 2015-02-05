@@ -37,17 +37,6 @@
                 "ccm_nodes": [ "ccm@"],
                 "db_nodes": [ "db@" ]
             }
-        },
-        "worker3": {
-            "vm.args": {
-                "name": "worker3@",
-                "setcookie": "oneprovider_node"
-            },
-            "sys.config": {
-                "node_type": "worker",
-                "ccm_nodes": [ "ccm@"],
-                "db_nodes": [ "db@" ]
-            }
         }
     }
 }

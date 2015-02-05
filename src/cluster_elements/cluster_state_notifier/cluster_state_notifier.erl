@@ -9,7 +9,7 @@
 %%% Gen server which handles notifications of cluster state changes
 %%% @end
 %%%-------------------------------------------------------------------
--module(cluster_state_monitor).
+-module(cluster_state_notifier).
 -author("Tomasz Lichon").
 
 -behaviour(gen_server).

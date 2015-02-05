@@ -71,8 +71,12 @@ init_per_testcase(one_node_test, Config) ->
     lists:append([{nodes, [Node]}], Config);
 
 init_per_testcase(ccm_and_worker_test, Config) ->
-  ?INIT_CODE_PATH(Config),
-  test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json")).
+    try
+        ?INIT_CODE_PATH(Config),
+        test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json"))
+    catch T:M ->
+        ct:print("ctprint: ~p:~p~n~p", [T, M, erlang:get_stacktrace()])
+    end.
 end_per_testcase(ccm_and_worker_test, Config) ->
   test_node_starter:clean_environment(Config);
 end_per_testcase(_, Config) ->
