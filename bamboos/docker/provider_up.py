@@ -72,7 +72,7 @@ parser.add_argument(
 args = parser.parse_args()
 uid = str(int(time.time()))
 
-config = parse_config(args.config_path)
+config = parse_config(args.config_path)['oneprovider_node']
 config['config']['target_dir'] = '/root/bin'
 configs = [tweak_config(config, node, uid) for node in config['nodes']]
 
@@ -110,9 +110,9 @@ for cfg in configs:
 cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
-escript gen_dev.erl /tmp/gen_dev_args.json
+escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 /root/bin/node/bin/oneprovider_node console'''
-    command = command.format(gen_dev_args=json.dumps(cfg))
+    command = command.format(gen_dev_args=json.dumps({'oneprovider_node' : cfg}))
 
     container = docker.run(
         image=args.image,
