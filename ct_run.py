@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import glob
 import os
 import sys
 sys.path.insert(0, 'bamboos/docker')
@@ -37,7 +38,12 @@ ct_command = ['ct_run',
               '-logdir', './logs/',
               '-ct_hooks', 'cth_surefire', '[{path, "surefire.xml"}]',
               '-noshell',
-              '-name', 'tester']
+              '-name', 'tester',
+              '-include', '../include', '../deps']
+
+code_paths = ['-pa', os.path.join(script_dir, 'ebin')]
+code_paths.extend(glob.glob(os.path.join(script_dir, 'deps', '*', 'ebin')))
+ct_command.extend(code_paths)
 
 if args.suites:
     ct_command.append('-suite')
