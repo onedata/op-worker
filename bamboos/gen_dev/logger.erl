@@ -16,7 +16,11 @@
 -define(PRINTING_WIDTH, 30).
 
 %% API
+<<<<<<< HEAD
 -export([print_usage/0, preety_print_entry/1, print/1, print/2]).
+=======
+-export([print_usage/0, pretty_print_entry/1, print/1, print/2]).
+>>>>>>> c34bb9d937883c03028e770146f60d809c22db0d
 
 %%%===================================================================
 %%% Logging
@@ -33,11 +37,19 @@ print_usage() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+<<<<<<< HEAD
 %% Preety prints given key value entry
 %% @end
 %%--------------------------------------------------------------------
 -spec preety_print_entry({Key :: atom(), Value :: term()}) -> ok.
 preety_print_entry({Key, Value}) ->
+=======
+%% pretty prints given key value entry
+%% @end
+%%--------------------------------------------------------------------
+-spec pretty_print_entry({Key :: atom(), Value :: term()}) -> ok.
+pretty_print_entry({Key, Value}) ->
+>>>>>>> c34bb9d937883c03028e770146f60d809c22db0d
     print("~*s~p", [-?PRINTING_WIDTH, atom_to_list(Key), Value]).
 
 %%--------------------------------------------------------------------
