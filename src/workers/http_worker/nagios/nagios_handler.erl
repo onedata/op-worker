@@ -220,7 +220,7 @@ check_ccm(Timeout) ->
 %% Contacts node managers on given nodes for healthcheck. The check is performed in parallel (one proces per node).
 %% @end
 %%--------------------------------------------------------------------
--spec check_node_managers(Nodes :: [atom()], Timeout :: integer()) -> {ok, StateNum :: integer()} | error.
+-spec check_node_managers(Nodes :: [atom()], Timeout :: integer()) -> [{ok, StateNum :: integer()} | error].
 check_node_managers(Nodes, Timeout) ->
     pmap(
         fun(Node) ->
@@ -240,7 +240,7 @@ check_node_managers(Nodes, Timeout) ->
 %% Contacts request dispatchers on given nodes for healthcheck. The check is performed in parallel (one proces per node).
 %% @end
 %%--------------------------------------------------------------------
--spec check_dispatchers(Nodes :: [atom()], Timeout :: integer()) -> {ok, StateNum :: integer()} | error.
+-spec check_dispatchers(Nodes :: [atom()], Timeout :: integer()) -> [{ok, StateNum :: integer()} | error].
 check_dispatchers(Nodes, Timeout) ->
     pmap(
         fun(Node) ->
@@ -300,7 +300,7 @@ check_workers(Nodes, Workers, Timeout) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Works as lists:map/2, but in paralel, more explanation can be found
+%% Works as lists:map/2, but in parallel, more explanation can be found
 %% in: http://montsamu.blogspot.com/2007/02/erlang-parallel-map-and-parallel.html
 %% @end
 %%--------------------------------------------------------------------

@@ -373,12 +373,12 @@ get_workers(Module) ->
                 end;
             UpdateError ->
                 ?error("DNS get_worker error: ~p", [UpdateError]),
-                {error, dns_update_state_error}
+                serv_fail
         end
     catch
         E1:E2 ->
             ?error("DNS get_worker error: ~p:~p", [E1, E2]),
-            {error, dns_get_worker_error}
+            serv_fail
     end.
 
 %%--------------------------------------------------------------------
@@ -424,7 +424,7 @@ get_nodes() ->
     catch
         E1:E2 ->
             ?error("DNS get_nodes error: ~p:~p", [E1, E2]),
-            {error, get_nodes}
+            serv_fail
     end.
 
 
@@ -476,6 +476,6 @@ make_ans_random(Result) ->
 %% DNS query processing to dns_worker.
 %% @end
 %%--------------------------------------------------------------------
--spec call_dns_worker(Request :: term()) -> term() | serv_fail.
+-spec call_dns_worker(Request :: term()) -> term().
 call_dns_worker(Request) ->
     worker_proxy:call(dns_worker, Request).

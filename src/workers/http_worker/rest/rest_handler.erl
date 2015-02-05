@@ -118,7 +118,7 @@ content_types_provided(Req, State) ->
 %% functions should be used to process the requests.
 %% @end
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), #state{}) -> {{binary(), atom()}, req(), #state{}}.
+-spec content_types_accepted(req(), #state{}) -> {[{binary(), atom()}], req(), #state{}}.
 content_types_accepted(Req, State) ->
     {[
         {<<"application/cdmi-container">>, put_cdmi_container}

@@ -16,7 +16,6 @@
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/test/test_node_starter.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).

@@ -48,7 +48,7 @@ eunit: deps compile
 
 # Builds .dialyzer.plt init file. This is internal target, call dialyzer_init instead
 .dialyzer.plt:
-	-dialyzer --build_plt --output_plt .dialyzer.plt --apps kernel stdlib sasl erts ssl tools runtime_tools crypto inets xmerl snmp public_key eunit syntax_tools compiler ./deps/*/ebin
+	-dialyzer --build_plt --output_plt .dialyzer.plt --apps kernel stdlib sasl erts ssl tools runtime_tools crypto inets xmerl snmp public_key eunit syntax_tools compiler ./ebin -r deps
 
 
 # Starts dialyzer on whole ./ebin dir. If .dialyzer.plt does not exist, will be generated

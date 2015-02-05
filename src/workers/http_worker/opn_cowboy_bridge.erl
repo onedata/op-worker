@@ -66,7 +66,7 @@
 %% If applied fun ends with an exception, it will be rethrown in the handling process.
 %% @end
 %%--------------------------------------------------------------------
--spec apply(Module :: atom(), Fun :: function(), Args :: [term()]) -> term() | no_return().
+-spec apply(Module :: atom(), Fun :: atom(), Args :: [term()]) -> term() | no_return().
 apply(Module, Fun, Args) ->
     case get_delegation() of
         false ->
@@ -150,7 +150,7 @@ get_socket_pid() ->
 %% Cowboy handler callback, called to initialize request handling flow.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Type :: any(), Req :: req(), Opts :: [term()]) -> {ok, NewReq :: term(), State :: term()}.
+-spec init(Type :: any(), Req :: req(), Opts :: [term()]) -> {ok | shutdown, NewReq :: term(), State :: term()}.
 init(Type, Req, Opts) ->
     HandlerModule = proplists:get_value(handler_module, Opts),
     HandlerOpts = proplists:get_value(handler_opts, Opts, []),
@@ -246,7 +246,8 @@ websocket_info(Info, Req, State) ->
 -spec websocket_terminate(Reason :: term(), Req :: term(), State :: term()) -> ok.
 websocket_terminate(Reason, Req, State) ->
     delegate(websocket_terminate, [Reason, Req, State], 3),
-    terminate_handling_process().
+    terminate_handling_process(),
+    ok.
 
 %%%===================================================================
 %%% REST callbacks
@@ -589,7 +590,7 @@ terminate_handling_process() ->
 %% @equiv delegate(Fun, Args, Arity, false)
 %% @end
 %%--------------------------------------------------------------------
--spec delegate(Fun :: function(), Args :: [term()], Arity :: integer()) -> term().
+-spec delegate(Fun :: atom(), Args :: [term()], Arity :: integer()) -> term().
 delegate(Fun, Args, Arity) ->
     delegate(Fun, Args, Arity, false).
 
@@ -604,7 +605,7 @@ delegate(Fun, Args, Arity) ->
 %% callbacks (mostly REST).
 %% @end
 %%--------------------------------------------------------------------
--spec delegate(Fun :: function(), Args :: [term()], Arity :: integer(), FailWithNoCall :: boolean()) -> term().
+-spec delegate(Fun :: atom(), Args :: [term()], Arity :: integer(), FailWithNoCall :: boolean()) -> term().
 %%--------------------------------------------------------------------
 delegate(Fun, Args, Arity, FailWithNoCall) ->
     HandlerModule = get_handler_module(),
