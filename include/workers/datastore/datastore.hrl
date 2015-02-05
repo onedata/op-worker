@@ -8,16 +8,11 @@
 %%% @doc Common definions and configurations for datastore.
 %%% @end
 %%%-------------------------------------------------------------------
--author("Rafal Slota").
 
-%% Wrapper for all models' records
--record(document, {
-    key     :: datastore:key(),
-    rev     :: term(),
-    value   :: datastore:value(),
-    links   :: term()
-}).
+-ifndef(DATASTORE_HRL).
+-define(DATASTORE_HRL, 1).
 
+-include("workers/datastore/datastore_models.hrl").
 
 %% This record shall not be used outside datastore engine and shall not be instantiate
 %% directly. Use MODEL_CONFIG macro instead.
@@ -44,8 +39,4 @@
 %% List of all available models
 -define(MODELS, [some_record]).
 
-
-%% Models' definitions
-
-%% some_record - example model
--record(some_record, {field1, field2, field3}).
+-endif.

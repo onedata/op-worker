@@ -5,16 +5,25 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Internal common definitions for datastore
+%%% @doc Models definitions.
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(DATASTORE_INTERNAL_HRL).
--define(DATASTORE_INTERNAL_HRL, 1).
+-ifndef(DATASTORE_MODELS_HRL).
+-define(DATASTORE_MODELS_HRL, 1).
 
-%% Drivers definitions
--define(PERSISTENCE_DRIVER, riak_datastore_driver).
--define(LOCAL_CACHE_DRIVER, ets_cache_driver).
--define(DISTRIBUTED_CACHE_DRIVER, mnesia_cache_driver).
+%% Wrapper for all models' records
+-record(document, {
+    key     :: datastore:key(),
+    rev     :: term(),
+    value   :: datastore:value(),
+    links   :: term()
+}).
+
+
+%% Models' definitions
+
+%% some_record - example model
+-record(some_record, {field1, field2, field3}).
 
 -endif.

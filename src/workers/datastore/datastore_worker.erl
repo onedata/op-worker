@@ -66,16 +66,12 @@ init(_Args) ->
 %% {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Request, State :: term()) -> Result when
+-spec handle(Request, State :: term()) -> Result :: term() when
     Request :: ping | healthcheck |
-    {update_state, list(), list()} |
-    {get_worker, atom()} |
-    get_nodes,
-    Result :: ok | {ok, Response} | {error, Error} | pong,
-    Response :: [inet:ip4_address()],
-    Error :: term().
+    {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]}.
 handle(ping, _State) ->
     pong;
+
 handle(healthcheck, _State) ->
     ok;
 

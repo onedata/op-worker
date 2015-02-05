@@ -15,6 +15,9 @@
 -include("workers/datastore/datastore_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% ETS name for local (node scope) state.
+-define(LOCAL_STATE, datastore_local_state).
+
 
 %% #document types
 -type key() :: undefined | term().
@@ -146,7 +149,7 @@ model_name(Record) when is_tuple(Record) ->
 %%--------------------------------------------------------------------
 run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
     ensure_state_loaded(),
-    Hooked = ets:lookup(datastore_local_state, {ModelName, Method}),
+    Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     HooksRes =
         lists:map(
             fun({_, HookedModule}) ->
@@ -166,7 +169,7 @@ run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
 %%--------------------------------------------------------------------
 run_posthooks(#model_config{name = ModelName}, Method, Level, Context, Return) ->
     ensure_state_loaded(),
-    Hooked = ets:lookup(datastore_local_state, {ModelName, Method}),
+    Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     lists:foreach(
             fun({_, HookedModule}) ->
                 spawn(fun() -> HookedModule:'after'(ModelName, Method, Level, Context, Return) end)
