@@ -1,1 +1,1 @@
-{'*', [{outdir, "."}, {i, "../include"},{i, "../deps"}]}.
+{'*', [{outdir, "ebin"}]}.
