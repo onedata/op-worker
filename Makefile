@@ -2,39 +2,25 @@
 
 all: rel
 
+##
+## Rebar targets
+##
+
 compile:
 	./rebar compile
+	rm -rf src/proto
 
 deps:
 	./rebar get-deps
 
-clean: relclean testclean
-	./rebar clean
-
-distclean: clean
-	./rebar delete-deps
-
 generate: deps compile
 	./rebar generate
 
-##
-## Testing
-##
+clean:
+	./rebar clean
 
-eunit: deps compile
-	./rebar eunit skip_deps=true suites=${SUITES}
-  ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
-	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
-
-ct: generate
-	./test_distributed/start_distributed_test.sh ${SUITE} ${CASE}
-  ## Remove *_per_suite result from CT test results
-	@for tout in `find distributed_tests_out -name "TEST-*.xml"`; do awk '/testcase/{gsub("<testcase name=\"[a-z]+_per_suite\"(([^/>]*/>)|([^>]*>[^<]*</testcase>))", "")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
-
-test: eunit ct
-
-testclean:
-	rm -rf distributed_tests_out
+distclean:
+	./rebar delete-deps
 
 ##
 ## Release targets
@@ -47,7 +33,16 @@ relclean:
 	rm -rf rel/oneprovider_node
 
 ##
-## Dialyzer
+## Testing targets
+##
+
+eunit: deps compile
+	./rebar eunit skip_deps=true suites=${SUITES}
+## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
+	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
+
+##
+## Dialyzer targets local
 ##
 
 # Builds .dialyzer.plt init file. This is internal target, call dialyzer_init instead

@@ -27,7 +27,6 @@ deps
 doc
 logs
 ebin
-distributed_tests_out
 
 c_lib
 c_src/helpers_nif/*.o
@@ -35,3 +34,6 @@ c_src/rt_container/*.o
 c_src/oneproxy/build/*
 
 docs/_build/
+
+*.beam
+*.pyc
