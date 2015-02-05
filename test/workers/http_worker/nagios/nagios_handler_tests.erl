@@ -38,7 +38,7 @@
 % ]}
 % Status can be: ok | error | out_of_sync
 
-calculate_cluster_Status_test() ->
+calculate_cluster_status_test() ->
     meck:new(nagios_handler, [passthrough]),
     Nodes = [?NODE_1, ?NODE_2, ?NODE_3, ?NODE_4],
     StatusNum = 5,
