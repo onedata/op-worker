@@ -20,6 +20,7 @@
 }).
 
 -record(read_event_subscription, {
+    id :: non_neg_integer(),
     counter_threshold = 1 :: undefined | non_neg_integer(),
     time_threshold :: undefined | non_neg_integer(),
     size_threshold :: undefined | non_neg_integer(),

@@ -42,6 +42,9 @@ emit(Event) ->
 subscribe(Subscription) ->
     worker_proxy:call(?EVENT_MANAGER_WORKER, {subscription, Subscription}).
 
+%% handle(Message) ->
+%%     case event_translator
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
