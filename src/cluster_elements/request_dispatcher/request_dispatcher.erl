@@ -100,7 +100,7 @@ handle_call(get_state_num, _From, State) ->
     {reply, State#dispatcher_state.state_num, State};
 
 handle_call(_Request, _From, State) ->
-    ?warning("Dispatcher wrong call: ~p", [_Request]),
+    ?log_bad_request(_Request),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -129,8 +129,8 @@ handle_cast({update_state, WorkersList, NewStateNum}, State) ->
 handle_cast(stop, State) ->
     {stop, normal, State};
 
-handle_cast(_Msg, State) ->
-    ?warning("Dispatcher wrong cast: ~p", [_Msg]),
+handle_cast(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -149,8 +149,8 @@ handle_cast(_Msg, State) ->
 handle_info({timer, Msg}, State) ->
     gen_server:cast(?DISPATCHER_NAME, Msg),
     {noreply, State};
-handle_info(_Info, State) ->
-    ?warning("Dispatcher wrong info: ~p", [_Info]),
+handle_info(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

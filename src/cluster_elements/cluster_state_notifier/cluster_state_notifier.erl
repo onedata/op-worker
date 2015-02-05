@@ -14,6 +14,7 @@
 
 -behaviour(gen_server).
 
+-include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -26,7 +27,7 @@
 -define(SERVER, ?MODULE).
 
 %% gen_server state
--record(state, {node_state_numbers = [], ccm_state_number = 0, ccm_nodes_connected = 0, init_subscribers = []}).
+-record(state, {node_state_numbers = [], ccm_state_number = 0, ccm_nodes_connected = [], init_subscribers = []}).
 
 %%%===================================================================
 %%% API
@@ -82,7 +83,7 @@ init([]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_call(_Request, _From, State) ->
-    ?warning("cluster_state_notifier unknown call: ~p", [_Request]),
+    ?log_bad_request(_Request),
     {reply, ok, State}.
 
 %%--------------------------------------------------------------------
@@ -100,14 +101,14 @@ handle_cast({subscribe_for_init, AnswerPid, HowManyWorkerNodes}, State = #state{
     {noreply, NewState};
 handle_cast({ccm_state_updated, Nodes, NewStateNumber}, State) ->
     NewState = State#state{ccm_nodes_connected = Nodes, ccm_state_number = NewStateNumber},
-    try_notify_subscribers(NewState),
-    {noreply, NewState};
+    NewState2 = try_notify_subscribers(NewState),
+    {noreply, NewState2};
 handle_cast({dispatcher_state_updated, Node, NewStateNumber}, State = #state{node_state_numbers = StateNumbers}) ->
     NewState = State#state{node_state_numbers = [{Node, NewStateNumber} | proplists:delete(Node, StateNumbers)]},
-    try_notify_subscribers(NewState),
-    {noreply, NewState};
+    NewState2 = try_notify_subscribers(NewState),
+    {noreply, NewState2};
 handle_cast(_Request, State) ->
-    ?warning("cluster_state_notifier unknown cast: ~p", [_Request]),
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -120,8 +121,8 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_info(_Info, State) ->
-    ?warning("cluster_state_notifier unknown info: ~p", [_Info]),
+handle_info(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -164,7 +165,7 @@ try_notify_subscribers(State = #state{init_subscribers = []}) ->
     State;
 try_notify_subscribers(State = #state{node_state_numbers = StateNumbers, ccm_nodes_connected = AllNodes, ccm_state_number = CcmStateNum, init_subscribers = [{AnsPid, HowManyNodes} | Rest]}) ->
     case CcmStateNum > 1
-        andalso HowManyNodes =< length(AllNodes)
+        andalso HowManyNodes < length(AllNodes)
         andalso length(AllNodes) == length(StateNumbers)
         andalso lists:all(fun({_, StateNum}) -> StateNum =:= CcmStateNum end, StateNumbers)
     of

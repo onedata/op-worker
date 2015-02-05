@@ -240,7 +240,7 @@ stop_listeners() ->
             (X) ->{X, catch cowboy:stop_listener(X)}
         end, Listeners),
     lists:foreach(
-        fun ({X, ok}) -> ok;
+        fun ({_, ok}) -> ok;
             ({X, Error}) -> ?error("Error on stopping listener ~p: ~p", [X, Error])
         end, Results).
 
