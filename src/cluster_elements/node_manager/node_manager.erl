@@ -87,6 +87,10 @@ stop() ->
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
 init([worker]) ->
+
+    %% Initialize datastore
+    datastore:ensure_state_loaded(),
+
     try
         listener_starter:start_dispatcher_listener(),
         listener_starter:start_gui_listener(),
@@ -101,6 +105,10 @@ init([worker]) ->
             {stop, cannot_initialize_listeners}
     end;
 init([ccm]) ->
+
+    %% Initialize datastore
+    datastore:ensure_state_loaded(),
+
     gen_server:cast(self(), do_heartbeat),
     {ok, #node_state{node_type = ccm, ccm_con_status = not_connected}};
 init([_Type]) ->

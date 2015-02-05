@@ -44,7 +44,7 @@
 
 %% API
 -export([save/2, update/4, create/2, get/3, delete/3, exists/3]).
--export([configs_per_bucket/1]).
+-export([configs_per_bucket/1, ensure_state_loaded/0]).
 
 
 %%%===================================================================
@@ -148,7 +148,6 @@ model_name(Record) when is_tuple(Record) ->
 %% @end
 %%--------------------------------------------------------------------
 run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
-    ensure_state_loaded(),
     Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     HooksRes =
         lists:map(
@@ -168,7 +167,6 @@ run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
 %% @end
 %%--------------------------------------------------------------------
 run_posthooks(#model_config{name = ModelName}, Method, Level, Context, Return) ->
-    ensure_state_loaded(),
     Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     lists:foreach(
             fun({_, HookedModule}) ->
