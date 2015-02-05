@@ -1,5 +1,14 @@
 #!/usr/bin/env python
 
+"""
+Runs 'make' command in a dockerized development environment. The files are
+copied from 'source directory' to 'output directory' and then the make is ran.
+The copy operation is optimized, so that only new and changed files are copied.
+The script uses user's SSH keys in case dependency fetching is needed.
+
+Run the script with -h flag to learn about script's running options.
+"""
+
 import argparse
 import docker
 import os

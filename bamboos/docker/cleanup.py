@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 
+"""
+Cleans up Docker containers given by their name or id. Running containers are
+killed first. Volumes are not removed automatically.
+
+Run the script with -h flag to learn about script's running options.
+"""
+
 import argparse
 import docker
 
@@ -15,4 +22,4 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-docker.remove(args.docker_ids, volumes=True, force=True)
+docker.remove(args.docker_ids, force=True)
