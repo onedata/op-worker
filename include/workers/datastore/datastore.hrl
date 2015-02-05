@@ -14,7 +14,7 @@
 
 -include("workers/datastore/datastore_models.hrl").
 
-%% This record shall not be used outside datastore engine and shall not be instantiate
+%% This record shall not be used outside datastore engine and shall not be instantiated
 %% directly. Use MODEL_CONFIG macro instead.
 -record(model_config, {
     name :: model_behaviour:model_type(),
