@@ -39,8 +39,7 @@ main([ArgsFile]) ->
     try
         helpers_init(),
         ParsedJson = args_parser:parse_config_file(ArgsFile),
-        ok = configure_apps(ParsedJson),
-        helpers_cleanup()
+        ok = configure_apps(ParsedJson)
     catch
         _Type:Error ->
             Stacktrace = erlang:get_stacktrace(),
@@ -154,19 +153,7 @@ prepare_fresh_release(InputDir, TargetDir, Name) ->
 -spec helpers_init() -> ok.
 helpers_init() ->
     GenDevDir = get_escript_dir(),
-    true = code:add_path(GenDevDir),
-    lists:foreach(fun(Module) -> compile:file(filename:join(GenDevDir, atom_to_list(Module) ++ ".erl"),
-        [{outdir, GenDevDir}]) end, ?HELPER_MODULES).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Cleans helper modules' binaries
-%% @end
-%%--------------------------------------------------------------------
--spec helpers_cleanup() -> ok.
-helpers_cleanup() ->
-    GenDevDir = get_escript_dir(),
-    lists:foreach(fun(Module) -> file:delete(filename:join(GenDevDir, atom_to_list(Module)++".beam")) end, ?HELPER_MODULES).
+    true = code:add_path(filename:join(GenDevDir, "ebin")).
 
 %%--------------------------------------------------------------------
 %% @doc
