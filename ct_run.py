@@ -1,5 +1,15 @@
 #!/usr/bin/env python
 
+"""
+Runs oneprovider integration tests, providing Erlang's ct_run with every
+environmental argument it needs for successful run. The output is put into
+'test_distributed/logs'. The (init|end)_per_suite "testcases" are removed from
+the surefire.xml output.
+
+All paths used are relative to script's path, not to the running user's CWD.
+Run the script with -h flag to learn about script's running options.
+"""
+
 import argparse
 import glob
 import os
