@@ -316,14 +316,14 @@ start_workers_on_node(Node, RunningModulesOnNode, [{Module, Args} | ModulesWithA
 %% are started under MAIN_WORKER_SUPERVISOR supervision.
 %% @end
 %%--------------------------------------------------------------------
--spec start_worker_on_node(Node :: atom(), Module :: atom(), WorkerArgs :: term(), State :: term()) -> #cm_state{}.
-start_worker_on_node(Node, Module, WorkerArgs, State) ->
+-spec start_worker_on_node(Node :: atom(), Module :: atom(), Args :: term(), State :: term()) -> #cm_state{}.
+start_worker_on_node(Node, Module, Args, State) ->
     try
         {ok, LoadMemorySize} = application:get_env(?APP_NAME, worker_load_memory_size),
         WorkerSupervisorName = ?WORKER_HOST_SUPERVISOR_NAME(Module),
         {ok, ChildPid} = supervisor:start_child(
             {?MAIN_WORKER_SUPERVISOR_NAME, Node},
-            {Module, {worker_host, start_link, [Module, WorkerArgs, LoadMemorySize]}, transient, 5000, worker, [worker_host]}
+            {Module, {worker_host, start_link, [Module, Args, LoadMemorySize]}, transient, 5000, worker, [worker_host]}
         ),
         {ok, _} = supervisor:start_child(
             {?MAIN_WORKER_SUPERVISOR_NAME, Node},
