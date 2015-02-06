@@ -89,16 +89,12 @@ for root, dirs, files in os.walk(ssh_home):
     for file in files:
         os.chmod(os.path.join(root, file), 0o600)
 
-sh_command = 'eval $(ssh-agent) > /dev/null; ssh-add; make deps'
+sh_command = 'set -e; eval $(ssh-agent) > /dev/null; ssh-add; make {params}'
 ret = subprocess.call(['sh', '-c', sh_command])
-if ret != 0:
-    sys.exit(ret)
-
-ret = subprocess.call(['make'] + {params})
 sys.exit(ret)
 '''
 command = command.format(
-    params=args.params,
+    params=' '.join(args.params),
     uid=os.geteuid(),
     gid=os.getegid(),
     src=args.src,
