@@ -24,6 +24,9 @@
 %% Encoded atom prefix
 -define(ATOM_PREFIX, "ATOM::").
 
+-type riak_node() :: {HostName :: binary(), Port :: non_neg_integer()}.
+-type riak_connection() :: {riak_node(), ConnectionHandle :: term()}.
+
 
 %% API
 -export([init_bucket/2]).
@@ -155,6 +158,13 @@ exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
 %%% Internal functions
 %%%===================================================================
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates given riak object to erlang term.
+%% @end
+%%--------------------------------------------------------------------
+-spec form_riak_obj(map | counter | register, Obj :: term()) -> term().
 form_riak_obj(map, Obj) ->
     riakc_map:fold(
         fun({K, Type}, V, Acc) ->
@@ -169,6 +179,13 @@ form_riak_obj(register, Obj) when is_binary(Obj) ->
 form_riak_obj(register, Obj) ->
     from_binary(riakc_register:value(Obj)).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates given erlang map into riak object that maybe already initialized.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_riak_obj(term(), undefined | term()) -> term().
 to_riak_obj(Term, undefined) when is_tuple(Term) ->
     to_riak_obj(Term);
 to_riak_obj(Term, Rev) when is_tuple(Term) ->
@@ -182,6 +199,13 @@ to_riak_obj(Term, Rev) when is_tuple(Term) ->
             riakc_map:update({to_binary(K), Type}, fun(_) -> RiakObj end, Acc)
         end, RMap0, Map).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates given erlang term into new riak object.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_riak_obj(term()) -> term().
 to_riak_obj(Term) when is_tuple(Term) ->
     to_riak_obj(Term, riakc_map:new());
 to_riak_obj(Int) when is_integer(Int) ->
@@ -200,6 +224,12 @@ to_riak_obj(Term) ->
     riakc_register:set(Bin, Register).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls given MFA with riak connection handle added as first argument.
+%% @end
+%%--------------------------------------------------------------------
+-spec call(Module :: atom(), Method :: atom(), Args :: [term()]) -> term() | {error, no_riak_nodes}.
 call(Module, Method, Args) ->
     call(Module, Method, Args, 3).
 
@@ -218,11 +248,24 @@ call(_Module, _Method, _Args, _Retry) ->
     {error, no_riak_nodes}.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Selects riak connection from connection pool retuned by get_connections/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec select_connection() -> riak_connection().
 select_connection() ->
     Connections = get_connections(),
     lists:nth(crypto:rand_uniform(1, length(Connections) + 1), Connections).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets riak active connections. When no connection is available, tries to
+%% estabilish new connections.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_connections() -> [riak_connection()].
 get_connections() ->
     case datastore_worker:state_get(riak_connections) of
         [_ | _] = Connections ->
@@ -234,6 +277,12 @@ get_connections() ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Connects to given Riak database nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec connect([riak_node()]) -> [riak_connection()].
 connect([{HostName, Port} = Node | R]) ->
     case riakc_pb_socket:start_link(binary_to_list(HostName), Port) of
         {ok, Pid} ->
@@ -245,6 +294,34 @@ connect([{HostName, Port} = Node | R]) ->
 connect([]) ->
     [].
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Encodes given term to base64 binary.
+%% @end
+%%--------------------------------------------------------------------
+-spec term_to_base64(term()) -> binary().
+term_to_base64(Term) ->
+    Base = base64:encode(term_to_binary(Term)),
+    <<?OBJ_PREFIX, Base/binary>>.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Decodes given base64 binary to erlang term (reverses term_to_base64/1).
+%% @end
+%%--------------------------------------------------------------------
+-spec base64_to_term(binary()) -> term().
+base64_to_term(<<?OBJ_PREFIX, Base/binary>>) ->
+    binary_to_term(base64:decode(Base)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Encodes given given term as binary which maybe human readable if possible.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_binary(term()) -> binary().
 to_binary(Term) when is_binary(Term) ->
     Term;
 to_binary(Term) when is_atom(Term) ->
@@ -253,13 +330,12 @@ to_binary(Term) ->
     term_to_base64(Term).
 
 
-term_to_base64(Term) ->
-    Base = base64:encode(term_to_binary(Term)),
-    <<?OBJ_PREFIX, Base/binary>>.
-
-base64_to_term(<<?OBJ_PREFIX, Base/binary>>) ->
-    binary_to_term(base64:decode(Base)).
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates given database "register" object to erlang term (reverses to_binary/1).
+%% @end
+%%--------------------------------------------------------------------
+-spec from_binary(binary()) -> term().
 from_binary(<<?OBJ_PREFIX, _>> = Bin) ->
     base64_to_term(Bin);
 from_binary(<<?ATOM_PREFIX, Atom/binary>>) ->
@@ -268,6 +344,12 @@ from_binary(Bin) ->
     Bin.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Encodes geven bucket name to format supported by database.
+%% @end
+%%--------------------------------------------------------------------
+-spec bucket_encode(datastore:bucket() | binary()) -> binary().
 bucket_encode(Bucket) when is_atom(Bucket) ->
     atom_to_binary(Bucket, utf8);
 bucket_encode(Bucket) when is_binary(Bucket) ->

@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Main datastore API implementation.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(datastore).
@@ -54,64 +54,64 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Saves given #document.
 %% @end
 %%--------------------------------------------------------------------
 -spec save(Level :: store_level(), datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(Level, #document{} = Document) ->
     ModelName = model_name(Document),
-    exec_driver(ModelName, level_to_driver(Level, write), save, [maybe_gen_uuid(Document)], Document).
+    exec_driver(ModelName, level_to_driver(Level), save, [maybe_gen_uuid(Document)], Document).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Updates given by key document by replacing given fields with new values.
 %% @end
 %%--------------------------------------------------------------------
 -spec update(Level :: store_level(), ModelName :: model_behaviour:model_type(), datastore:key(), Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
 update(Level, ModelName, Key, Diff) ->
-    exec_driver(ModelName, level_to_driver(Level, write), update, [Key, Diff], {Key, Diff}).
+    exec_driver(ModelName, level_to_driver(Level), update, [Key, Diff], {Key, Diff}).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Creates new #document.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(Level :: store_level(), datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(Level, #document{} = Document) ->
     ModelName = model_name(Document),
-    exec_driver(ModelName, level_to_driver(Level, write), create, [maybe_gen_uuid(Document)], Document).
+    exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)], Document).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Gets #document with given key.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(Level :: store_level(), ModelName :: model_behaviour:model_type(), datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
 get(Level, ModelName, Key) ->
-    exec_driver(ModelName, level_to_driver(Level, read), get, [Key], Key).
+    exec_driver(ModelName, level_to_driver(Level), get, [Key], Key).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Deletes #document with given key.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(Level :: store_level(), ModelName :: model_behaviour:model_type(), datastore:key()) -> ok | datastore:generic_error().
 delete(Level, ModelName, Key) ->
-    exec_driver(ModelName, level_to_driver(Level, write), delete, [Key], Key).
+    exec_driver(ModelName, level_to_driver(Level), delete, [Key], Key).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
-%% @end
+%% Checks if #document with given key exists. This method shall not be used with multiple drivers at once -
+%% use *_only levels.
 %%--------------------------------------------------------------------
 -spec exists(Level :: store_level(), ModelName :: model_behaviour:model_type(), datastore:key()) -> true | false | datastore:generic_error().
 exists(Level, ModelName, Key) ->
-    exec_driver(ModelName, level_to_driver(Level, read), exists, [Key], Key).
+    exec_driver(ModelName, level_to_driver(Level), exists, [Key], Key).
 
 
 %%%===================================================================
@@ -121,7 +121,7 @@ exists(Level, ModelName, Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% For given #document generates key if undefined and returns updated #document structure.
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_gen_uuid(document()) -> document().
@@ -133,9 +133,10 @@ maybe_gen_uuid(#document{} = Doc) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Gets model name for given document/record.
 %% @end
 %%--------------------------------------------------------------------
+-spec model_name(tuple() | document()) -> atom().
 model_name(#document{value = Record}) ->
     model_name(Record);
 model_name(Record) when is_tuple(Record) ->
@@ -144,9 +145,11 @@ model_name(Record) when is_tuple(Record) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Runs all pre-hooks for given model, method and context.
 %% @end
 %%--------------------------------------------------------------------
+-spec run_prehooks(model_behaviour:model_config(), model_behaviour:model_action(), store_level(), term()) ->
+    ok | {error, Reason :: any()}.
 run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
     Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     HooksRes =
@@ -163,9 +166,12 @@ run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Runs asynchronously all post-hooks for given model, method, context and return value.
+%% Returns given return value.
 %% @end
 %%--------------------------------------------------------------------
+-spec run_posthooks(model_behaviour:model_config(), model_behaviour:model_action(), store_level(), term(), ReturnValue) ->
+    ReturnValue when ReturnValue :: term().
 run_posthooks(#model_config{name = ModelName}, Method, Level, Context, Return) ->
     Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     lists:foreach(
@@ -177,9 +183,11 @@ run_posthooks(#model_config{name = ModelName}, Method, Level, Context, Return) -
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Initializes local (node scope) datastore state with given models.
+%% Returns initialized configuration.
 %% @end
 %%--------------------------------------------------------------------
+-spec load_local_state([model_behaviour:model_type()]) -> [model_behaviour:model_config()].
 load_local_state(Models) ->
     ets:new(?LOCAL_STATE, [named_table, public, bag]),
     lists:map(
@@ -195,9 +203,10 @@ load_local_state(Models) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Organizes given models into #{bucket -> [model]} map.
 %% @end
 %%--------------------------------------------------------------------
+-spec configs_per_bucket([model_behaviour:model_config()]) -> #{bucket() => [model_behaviour:model_config()]}.
 configs_per_bucket(Configs) ->
     lists:foldl(
         fun(ModelConfig, Acc) ->
@@ -208,9 +217,10 @@ configs_per_bucket(Configs) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Runs init_bucket/1 for each datastore driver using given models'.
 %% @end
 %%--------------------------------------------------------------------
+-spec init_drivers(model_behaviour:model_config()) -> ok | no_return().
 init_drivers(Configs) ->
     lists:foreach(
         fun({Bucket, Models}) ->
@@ -222,7 +232,7 @@ init_drivers(Configs) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Loads local state and initializes datastore drivers if needed.
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_state_loaded() -> ok | no_return().
@@ -237,27 +247,29 @@ ensure_state_loaded() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Translates store level into list of drivers.
 %% @end
 %%--------------------------------------------------------------------
-level_to_driver(disk_only, _) ->
+-spec level_to_driver(store_level()) -> [Driver :: atom()].
+level_to_driver(disk_only) ->
     ?PERSISTENCE_DRIVER;
-level_to_driver(local_only, _) ->
+level_to_driver(local_only) ->
     ?LOCAL_CACHE_DRIVER;
-level_to_driver(global_only, _) ->
+level_to_driver(global_only) ->
     ?DISTRIBUTED_CACHE_DRIVER;
-level_to_driver(locally_cached, _) ->
+level_to_driver(locally_cached) ->
     [?LOCAL_CACHE_DRIVER, ?PERSISTENCE_DRIVER];
-level_to_driver(globally_cached, _) ->
+level_to_driver(globally_cached) ->
     [?DISTRIBUTED_CACHE_DRIVER, ?PERSISTENCE_DRIVER].
 
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Reverses level_to_driver/1
 %% @end
 %%--------------------------------------------------------------------
+-spec driver_to_level(atom()) -> store_level().
 driver_to_level(?PERSISTENCE_DRIVER) ->
     disk_only;
 driver_to_level(?LOCAL_CACHE_DRIVER) ->
@@ -268,9 +280,11 @@ driver_to_level(?DISTRIBUTED_CACHE_DRIVER) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Executes given model action on given driver(s).
 %% @end
 %%--------------------------------------------------------------------
+-spec exec_driver(model_behaviour:model_type(), [Driver] | Driver, model_behaviour:model_action(), [term()], term()) ->
+    ok | {ok, any()} | {error, any()} when Driver :: atom().
 exec_driver(ModelName, [Driver], Method, Args, Context) when is_atom(Driver) ->
     exec_driver(ModelName, Driver, Method, Args, Context);
 exec_driver(ModelName, [Driver | Rest], Method, Args, Context) when is_atom(Driver) ->

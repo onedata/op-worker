@@ -16,7 +16,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves the document
+%% Initializes given bucket locally (this method is executed per-node).
 %% @end
 %%--------------------------------------------------------------------
 -callback init_bucket(Bucket :: datastore:bucket(), Models :: [model_behaviour:model_config()]) -> ok.
@@ -24,7 +24,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves the document
+%% Saves given #document.
 %% @end
 %%--------------------------------------------------------------------
 -callback save(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
@@ -32,7 +32,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Updates given by key document by replacing given fields with new values.
 %% @end
 %%--------------------------------------------------------------------
 -callback update(model_behaviour:model_config(), datastore:key(),
@@ -41,7 +41,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Creates new #document.
 %% @end
 %%--------------------------------------------------------------------
 -callback create(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
@@ -49,7 +49,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Gets #document with given key.
 %% @end
 %%--------------------------------------------------------------------
 -callback get(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
@@ -57,7 +57,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Deletes #document with given key.
 %% @end
 %%--------------------------------------------------------------------
 -callback delete(model_behaviour:model_config(), datastore:key()) -> ok | datastore:generic_error().
@@ -65,7 +65,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @todo: Write me!
+%% Checks if #document with given key exists.
 %% @end
 %%--------------------------------------------------------------------
 -callback exists(model_behaviour:model_config(), datastore:key()) -> true | false | datastore:generic_error().
