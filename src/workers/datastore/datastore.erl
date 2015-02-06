@@ -60,7 +60,7 @@
 -spec save(Level :: store_level(), datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(Level, #document{} = Document) ->
     ModelName = model_name(Document),
-    exec_driver(ModelName, level_to_driver(Level), save, [maybe_gen_uuid(Document)], Document).
+    exec_driver(ModelName, level_to_driver(Level), save, [maybe_gen_uuid(Document)]).
 
 
 %%--------------------------------------------------------------------
@@ -70,7 +70,7 @@ save(Level, #document{} = Document) ->
 %%--------------------------------------------------------------------
 -spec update(Level :: store_level(), ModelName :: model_behaviour:model_type(), datastore:key(), Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
 update(Level, ModelName, Key, Diff) ->
-    exec_driver(ModelName, level_to_driver(Level), update, [Key, Diff], {Key, Diff}).
+    exec_driver(ModelName, level_to_driver(Level), update, [Key, Diff]).
 
 
 %%--------------------------------------------------------------------
@@ -81,7 +81,7 @@ update(Level, ModelName, Key, Diff) ->
 -spec create(Level :: store_level(), datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(Level, #document{} = Document) ->
     ModelName = model_name(Document),
-    exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)], Document).
+    exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
 
 
 %%--------------------------------------------------------------------
@@ -91,7 +91,7 @@ create(Level, #document{} = Document) ->
 %%--------------------------------------------------------------------
 -spec get(Level :: store_level(), ModelName :: model_behaviour:model_type(), datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
 get(Level, ModelName, Key) ->
-    exec_driver(ModelName, level_to_driver(Level), get, [Key], Key).
+    exec_driver(ModelName, level_to_driver(Level), get, [Key]).
 
 
 %%--------------------------------------------------------------------
@@ -101,7 +101,7 @@ get(Level, ModelName, Key) ->
 %%--------------------------------------------------------------------
 -spec delete(Level :: store_level(), ModelName :: model_behaviour:model_type(), datastore:key()) -> ok | datastore:generic_error().
 delete(Level, ModelName, Key) ->
-    exec_driver(ModelName, level_to_driver(Level), delete, [Key], Key).
+    exec_driver(ModelName, level_to_driver(Level), delete, [Key]).
 
 
 %%--------------------------------------------------------------------
@@ -111,7 +111,7 @@ delete(Level, ModelName, Key) ->
 %%--------------------------------------------------------------------
 -spec exists(Level :: store_level(), ModelName :: model_behaviour:model_type(), datastore:key()) -> true | false | datastore:generic_error().
 exists(Level, ModelName, Key) ->
-    exec_driver(ModelName, level_to_driver(Level), exists, [Key], Key).
+    exec_driver(ModelName, level_to_driver(Level), exists, [Key]).
 
 
 %%%===================================================================
@@ -283,21 +283,21 @@ driver_to_level(?DISTRIBUTED_CACHE_DRIVER) ->
 %% Executes given model action on given driver(s).
 %% @end
 %%--------------------------------------------------------------------
--spec exec_driver(model_behaviour:model_type(), [Driver] | Driver, model_behaviour:model_action(), [term()], term()) ->
+-spec exec_driver(model_behaviour:model_type(), [Driver] | Driver, model_behaviour:model_action(), [term()]) ->
     ok | {ok, any()} | {error, any()} when Driver :: atom().
-exec_driver(ModelName, [Driver], Method, Args, Context) when is_atom(Driver) ->
-    exec_driver(ModelName, Driver, Method, Args, Context);
-exec_driver(ModelName, [Driver | Rest], Method, Args, Context) when is_atom(Driver) ->
-    case exec_driver(ModelName, Driver, Method, Args, Context) of
+exec_driver(ModelName, [Driver], Method, Args) when is_atom(Driver) ->
+    exec_driver(ModelName, Driver, Method, Args);
+exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
+    case exec_driver(ModelName, Driver, Method, Args) of
         {error, Reason} ->
             {error, Reason};
         _ ->
-            exec_driver(ModelName, Rest, Method, Args, Context)
+            exec_driver(ModelName, Rest, Method, Args)
     end;
-exec_driver(ModelName, Driver, Method, Args, Context) when is_atom(Driver) ->
+exec_driver(ModelName, Driver, Method, Args) when is_atom(Driver) ->
     ModelConfig = ModelName:model_init(),
     Return =
-        case run_prehooks(ModelConfig, Method, driver_to_level(Driver), Context) of
+        case run_prehooks(ModelConfig, Method, driver_to_level(Driver), Args) of
             ok ->
                 FullArgs = [ModelConfig | Args],
                 case Driver of
@@ -309,5 +309,5 @@ exec_driver(ModelName, Driver, Method, Args, Context) when is_atom(Driver) ->
             {error, Reason} ->
                 {error, Reason}
         end,
-    run_posthooks(ModelConfig, Method, driver_to_level(Driver), Context, Return).
+    run_posthooks(ModelConfig, Method, driver_to_level(Driver), Args, Return).
 

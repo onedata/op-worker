@@ -79,8 +79,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback executed as post-hook registered with model_init/0. Context is a term given as
-%% argument for method that was executed.
+%% Callback executed as post-hook registered with model_init/0. Context is the executed method's list of arguments.
 %% @end
 %%--------------------------------------------------------------------
 -callback 'after'(ModelName :: model_type(), Method :: model_action(),
@@ -90,8 +89,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback executed as pre-hook registered with model_init/0. Context is a term given as
-%% argument for method that was executed.
+%% Callback executed as pre-hook registered with model_init/0. Context is the executed method's list of arguments.
 %% This callback can interrupt execution of the operation by returning {error, Reason} tuple.
 %% @end
 %%--------------------------------------------------------------------
