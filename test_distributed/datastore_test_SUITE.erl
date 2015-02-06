@@ -113,12 +113,15 @@ global_cache_atomic_update_test(Config) ->
                     Record#some_record{field1 = Value + 1}
                 end,
 
+    Self = self(),
     lists:foreach(fun(Node) ->
         spawn(
             fun() ->
-                ?call_store(Node, update, [Level, some_record, Key, UpdateFun])
+                ?call_store(Node, update, [Level, some_record, Key, UpdateFun]),
+                Self ! done
             end)
         end, lists:duplicate(100, Worker1) ++ lists:duplicate(100, Worker2)),
+    [receive done -> ok end || _ <- lists:seq(1, 200)],
 
     ?assertMatch({ok, #document{value = #some_record{field1 = 200}}},
         ?call_store(Worker1, get, [Level,

@@ -100,7 +100,7 @@ update(#model_config{} = ModelConfig, Key, Diff) ->
                 {ok, Key};
             [Value] when is_function(Diff) ->
                 NewValue = Diff(strip_key(Value)),
-                ok = mnesia:write(table_name(ModelConfig), inject_key(Key, datastore_utils:shallow_to_record(NewValue)), write),
+                ok = mnesia:write(table_name(ModelConfig), inject_key(Key, NewValue), write),
                 {ok, Key};
             Reason ->
                 {error, Reason}
