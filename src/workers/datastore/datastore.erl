@@ -23,7 +23,7 @@
 -type key() :: undefined | term().
 -type document() :: #document{}.
 -type value() :: term().
--type document_diff() :: #{term() => term()}.
+-type document_diff() :: #{term() => term()} | fun((OldValue :: value()) -> NewValue :: value()).
 -type bucket() :: atom().
 
 -export_type([key/0, value/0, document/0, document_diff/0, bucket/0]).

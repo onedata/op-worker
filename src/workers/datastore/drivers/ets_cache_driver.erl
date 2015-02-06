@@ -55,6 +55,8 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
 %%--------------------------------------------------------------------
 -spec update(model_behaviour:model_config(), datastore:key(),
     Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
+update(#model_config{bucket = _Bucket} = _ModelConfig, _Key, Diff) when is_function(Diff) ->
+    erlang:error(not_implemented);
 update(#model_config{} = ModelConfig, Key, Diff) when is_map(Diff) ->
     case ets:lookup(table_name(ModelConfig), Key) of
         [] ->

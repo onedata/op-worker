@@ -41,11 +41,11 @@ init(_Args) ->
 
     %% Get Riak nodes
     RiakNodes =
-        case application:get_env(?APP_NAME, riak_nodes) of
+        case application:get_env(?APP_NAME, db_nodes) of
             {ok, Nodes} ->
                 lists:map(
                     fun(NodeString) ->
-                        [HostName, Port] = string:tokens(NodeString, ":"),
+                        [HostName, Port] = string:tokens(atom_to_list(NodeString), ":"),
                         {list_to_binary(HostName), list_to_integer(Port)}
                     end, Nodes);
             _ ->

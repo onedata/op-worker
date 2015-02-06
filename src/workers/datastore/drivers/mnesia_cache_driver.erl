@@ -46,9 +46,16 @@ init_bucket(_BucketName, Models) ->
                             throw(Reason)
                     end;
                 [MnesiaNode | _] -> %% there is at least one mnesia node -> join cluster
-                    case rpc:call(MnesiaNode, mnesia, add_table_copy, [Table, node(), ram_copies]) of
+
+
+                    case rpc:call(MnesiaNode, mnesia, change_config, [extra_db_nodes, [node()]]) of
                         {atomic, ok} ->
-                            ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, MnesiaNode, node()]),
+                            case rpc:call(MnesiaNode, mnesia, add_table_copy, [Table, node(), ram_copies]) of
+                                {atomic, ok} ->
+                                    ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, MnesiaNode, node()]);
+                                {aborted, Reason} ->
+                                    ?error("Cannot replicate mnesia table ~p to node ~p due to: ~p", [Table, node(), Reason])
+                            end,
                             ok;
                         {aborted, Reason} ->
                             ?error("Cannot expand mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
@@ -82,13 +89,17 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Docum
 %%--------------------------------------------------------------------
 -spec update(model_behaviour:model_config(), datastore:key(),
     Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
-update(#model_config{} = ModelConfig, Key, Diff) when is_map(Diff) ->
+update(#model_config{} = ModelConfig, Key, Diff) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key, write) of
             [] ->
                 {error, {not_found, missing_or_deleted}};
-            [Value] ->
+            [Value] when is_map(Diff) ->
                 NewValue = maps:merge(datastore_utils:shallow_to_map(strip_key(Value)), Diff),
+                ok = mnesia:write(table_name(ModelConfig), inject_key(Key, datastore_utils:shallow_to_record(NewValue)), write),
+                {ok, Key};
+            [Value] when is_function(Diff) ->
+                NewValue = Diff(strip_key(Value)),
                 ok = mnesia:write(table_name(ModelConfig), inject_key(Key, datastore_utils:shallow_to_record(NewValue)), write),
                 {ok, Key};
             Reason ->
@@ -129,7 +140,7 @@ get(#model_config{} = ModelConfig, Key) ->
             [] ->
                 {error, {not_found, missing_or_deleted}};
             [Value] ->
-                {ok, strip_key(Value)};
+                {ok, #document{key = Key, value = strip_key(Value)}};
             Reason ->
                 {error, Reason}
         end
