@@ -122,7 +122,6 @@ cast(WorkerRef, Request, ReplyTo, MsgId) ->
     MsgId :: term() | undefined, SelectionType :: selection_type()) ->
     ok | {error, term()}.
 cast(WorkerRef, Request, ReplyTo, MsgId, SelectionType) ->
-    MsgId = make_ref(),
     case choose_node(WorkerRef, SelectionType) of
         {ok, Name, Node} ->
             gen_server:cast({Name, Node}, #worker_request{req = Request, id = MsgId, reply_to = ReplyTo});

@@ -124,11 +124,6 @@ handle_cast({check_state, NewStateNum}, State) ->
     NewState = check_state(State, NewStateNum),
     {noreply, NewState};
 
-handle_cast({update_state, WorkersList, NewStateNum}, State) ->
-    ?info("Dispatcher state updated, state num: ~p", [NewStateNum]),
-    worker_map:update_workers(WorkersList),
-    {noreply, State#dispatcher_state{state_num = NewStateNum}};
-
 handle_cast(stop, State) ->
     {stop, normal, State};
 

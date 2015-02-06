@@ -46,6 +46,7 @@
 %%%===================================================================
 %%% Global types
 %%%===================================================================
--type healthcheck_reponse() :: ok | {ok, integer()} | {error, term()}.
+-type healthcheck_reponse() :: ok | {ok, StateNum :: integer()} | {error, {ErrorDesc :: term(), NagiosMessage :: string()}}.
+-export_type([healthcheck_reponse/0]).
 
 -endif.

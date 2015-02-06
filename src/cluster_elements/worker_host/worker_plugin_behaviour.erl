@@ -26,7 +26,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback handle(Request :: term(), State :: term()) ->
-    ok | pong | {ok, Ans :: term()} | {error, Error :: any()}.
+    healthcheck_reponse() | ok | pong | {ok, Ans :: term()} | {error, Error :: any()}.
 
 %%--------------------------------------------------------------------
 %% @doc
