@@ -31,7 +31,7 @@
     closed :: atom(),
     error :: atom(),
     % actual connection state
-    socket :: term(),
+    socket :: port(),
     transport :: module(),
     credentials = undefined :: binary()
 }).
@@ -58,7 +58,7 @@ start_link(Ref, Socket, Transport, Opts) ->
 %% Initializes the server.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term(), Socket :: term(), Transport :: atom(), Opts :: list()) ->
+-spec init(Args :: term(), Socket :: port(), Transport :: atom(), Opts :: list()) ->
     no_return().
 init(Ref, Socket, Transport, _Opts = []) ->
     ok = proc_lib:init_ack({ok, self()}),
@@ -197,6 +197,6 @@ code_change(_OldVsn, State, _Extra) ->
 %% via erlang message
 %% @end
 %%--------------------------------------------------------------------
--spec activate_socket_once(Socket :: term(), Transport :: module()) -> {ok, ClientId :: binary()} | {error, term()}.
+-spec activate_socket_once(Socket :: port(), Transport :: module()) -> ok.
 activate_socket_once(Socket, Transport) ->
     ok = Transport:setopts(Socket, [{active, once}]).

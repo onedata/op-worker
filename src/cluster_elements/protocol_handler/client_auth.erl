@@ -30,7 +30,7 @@ handle_auth_info(Message) ->
     case mochijson2:decode(Message, [{format, proplist}]) of
         [{<<"token">>, Token}] ->
             authenticate_using_token(Token);
-        [{<<"cert">>, OneproxySessionId}] ->
+        [{<<"cert">>, OneproxySessionId}] -> %todo adjust oneproxy to send such info
             authenticate_using_certificate(OneproxySessionId)
     end.
 
