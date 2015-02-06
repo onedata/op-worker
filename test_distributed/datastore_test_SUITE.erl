@@ -121,7 +121,7 @@ init_per_suite(Config) ->
     catch A:B -> ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()]) end.
 
 end_per_suite(Config) ->
-    %%test_node_starter:clean_environment(Config),
+    test_node_starter:clean_environment(Config),
     ok.
 
 
