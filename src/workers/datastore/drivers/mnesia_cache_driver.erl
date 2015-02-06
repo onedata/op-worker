@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_bucket/2]).
+-export([init_bucket/2, healthcheck/1]).
 -export([save/2, update/3, create/2, exists/2, get/2, delete/2]).
 
 %%%===================================================================
@@ -177,6 +177,16 @@ exists(#model_config{} = ModelConfig, Key) ->
             [_Record]   -> true
         end
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback healthcheck/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.
+healthcheck(_) ->
+    ok.
 
 
 %%%===================================================================

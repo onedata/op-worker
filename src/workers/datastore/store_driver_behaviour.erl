@@ -69,3 +69,13 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback exists(model_behaviour:model_config(), datastore:key()) -> true | false | datastore:generic_error().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks driver state.
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.
+healthcheck(_) ->
+    ok.

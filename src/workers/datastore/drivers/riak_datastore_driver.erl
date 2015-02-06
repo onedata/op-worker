@@ -29,7 +29,7 @@
 
 
 %% API
--export([init_bucket/2]).
+-export([init_bucket/2, healthcheck/1]).
 -export([save/2, create/2, update/3, exists/2, get/2, delete/2]).
 
 %%%===================================================================
@@ -154,6 +154,16 @@ exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
         {ok, _} ->
             true
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback healthcheck/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.
+healthcheck(_) ->
+    ok.
 
 
 %%%===================================================================

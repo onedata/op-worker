@@ -15,7 +15,7 @@
 -include("workers/datastore/datastore.hrl").
 
 %% API
--export([init_bucket/2]).
+-export([init_bucket/2, healthcheck/1]).
 -export([save/2, update/3, create/2, exists/2, get/2, delete/2]).
 
 %%%===================================================================
@@ -115,6 +115,16 @@ delete(#model_config{} = ModelConfig, Key) ->
 -spec exists(model_behaviour:model_config(), datastore:key()) -> true | false | datastore:generic_error().
 exists(#model_config{} = ModelConfig, Key) ->
     ets:member(table_name(ModelConfig), Key).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback healthcheck/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.
+healthcheck(_) ->
+    ok.
 
 
 %%%===================================================================
