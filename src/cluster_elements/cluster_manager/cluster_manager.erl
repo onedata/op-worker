@@ -258,8 +258,7 @@ heartbeat(State = #cm_state{nodes = Nodes}, SenderNode) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Initializes cluster - decides at which nodes components should
-%% be started (and starts them). Additionally, it sets timer that
+%% Initializes cluster by starting workers. Additionally sets timer that
 %% initiates checking of cluster state.
 %% @end
 %%--------------------------------------------------------------------
@@ -269,55 +268,46 @@ init_cluster(State = #cm_state{nodes = []}) ->
     erlang:send_after(Interval, self(), {timer, init_cluster}),
     State;
 init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}) ->
-    {_, RunningWorkers, _} = lists:unzip3(Workers),
-    JobsTodoWithArgs = lists:filter(fun({Job, _}) -> not lists:member(Job, RunningWorkers) end, ?MODULES_WITH_ARGS),
-    {JobsTodo, Args} = lists:unzip(JobsTodoWithArgs),
-    case JobsTodo of
-        [] ->
-            State;
-        _ ->
-            ?info("Initialization of jobs ~p using nodes ~p", [JobsTodo, Nodes]),
-            NewState =
-                case erlang:length(Nodes) >= erlang:length(JobsTodo) of
-                    true -> init_cluster_nodes_dominance(State, Nodes, JobsTodo, [], Args, []);
-                    false -> init_cluster_jobs_dominance(State, JobsTodo, Args, Nodes, [])
-                end,
-            update_dispatchers_and_dns(NewState)
+    NewState = start_workers_on_nodes(Nodes, Workers, State),
+    update_dispatchers_and_dns(NewState).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts workers defined in ?MODULES_WITH_ARGS list on given nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_workers_on_nodes(Nodes :: [node()], RunningWorkers :: {Node :: node(),
+    Module :: module(), Args :: term()}, State :: #cm_state{}) -> #cm_state{}.
+start_workers_on_nodes([], _, State) ->
+    State;
+start_workers_on_nodes([Node | Nodes], RunningWorkers, State) ->
+    {_, RunningModulesOnNode, _} = lists:unzip3(lists:filter(fun
+        ({WorkerNode, _, _}) when WorkerNode =:= Node -> true;
+        (_) -> false
+    end, RunningWorkers)),
+    NewState = start_workers_on_node(Node, RunningModulesOnNode, ?MODULES_WITH_ARGS, State),
+    start_workers_on_nodes(Nodes, RunningWorkers, NewState).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts workers on given node.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_workers_on_node(Node :: node(), RunningModulesOnNode :: [module()],
+    ModulesWithArgs :: [{Module :: module(), Args :: term()}],
+    State :: #cm_state{}) -> #cm_state{}.
+start_workers_on_node(_, _, [], State) ->
+    State;
+start_workers_on_node(Node, RunningModulesOnNode, [{Module, Args} | ModulesWithArgs], State) ->
+    case lists:member(Module, RunningModulesOnNode) of
+        true ->
+            start_workers_on_node(Node, RunningModulesOnNode, ModulesWithArgs, State);
+        false ->
+            NewState = start_worker_on_node(Node, Module, Args, State),
+            start_workers_on_node(Node, RunningModulesOnNode, ModulesWithArgs, NewState)
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Chooses node for workers when there are more nodes than workers.
-%% @end
-%%--------------------------------------------------------------------
--spec init_cluster_nodes_dominance(State :: term(), Nodes :: list(), Jobs1 :: list(),
-    Jobs2 :: list(), Args1 :: list(), Args2 :: list()) -> NewState when
-    NewState :: term().
-init_cluster_nodes_dominance(State, [], _Jobs1, _Jobs2, _Args1, _Args2) ->
-    State;
-init_cluster_nodes_dominance(State, Nodes, [], Jobs2, [], Args2) ->
-    init_cluster_nodes_dominance(State, Nodes, Jobs2, [], Args2, []);
-init_cluster_nodes_dominance(State, [N | Nodes], [J | Jobs1], Jobs2, [A | Args1], Args2) ->
-    NewState = start_worker(N, J, A, State),
-    init_cluster_nodes_dominance(NewState, Nodes, Jobs1, [J | Jobs2], Args1, [A | Args2]).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Chooses node for workers when there are more workers than nodes.
-%% @end
-%%--------------------------------------------------------------------
--spec init_cluster_jobs_dominance(State :: term(), Jobs :: list(),
-    Args :: list(), Nodes1 :: list(), Nodes2 :: list()) -> NewState when
-    NewState :: term().
-init_cluster_jobs_dominance(State, [], [], _Nodes1, _Nodes2) ->
-    State;
-init_cluster_jobs_dominance(State, Jobs, Args, [], Nodes2) ->
-    init_cluster_jobs_dominance(State, Jobs, Args, Nodes2, []);
-init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2) ->
-    NewState = start_worker(N, J, A, State),
-    init_cluster_jobs_dominance(NewState, Jobs, Args, Nodes1, [N | Nodes2]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -326,8 +316,8 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 %% are started under MAIN_WORKER_SUPERVISOR supervision.
 %% @end
 %%--------------------------------------------------------------------
--spec start_worker(Node :: atom(), Module :: atom(), WorkerArgs :: term(), State :: term()) -> #cm_state{}.
-start_worker(Node, Module, WorkerArgs, State) ->
+-spec start_worker_on_node(Node :: atom(), Module :: atom(), WorkerArgs :: term(), State :: term()) -> #cm_state{}.
+start_worker_on_node(Node, Module, WorkerArgs, State) ->
     try
         {ok, LoadMemorySize} = application:get_env(?APP_NAME, worker_load_memory_size),
         WorkerSupervisorName = ?WORKER_HOST_SUPERVISOR_NAME(Module),
