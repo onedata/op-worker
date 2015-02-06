@@ -37,7 +37,7 @@ relclean:
 ## Testing targets
 ##
 
-eunit: deps compile
+eunit:
 	./rebar eunit skip_deps=true suites=${SUITES}
 ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
@@ -46,15 +46,14 @@ eunit: deps compile
 ## Dialyzer targets local
 ##
 
-# Builds .dialyzer.plt init file. This is internal target, call dialyzer_init instead
-.dialyzer.plt:
-	-dialyzer --build_plt --output_plt .dialyzer.plt --apps kernel stdlib sasl erts ssl tools runtime_tools crypto inets xmerl snmp public_key eunit syntax_tools compiler ./deps/*/ebin
+PLT ?= .dialyzer.plt
 
+# Builds dialyzer's Persistent Lookup Table file.
+${PLT}:
+	-dialyzer --build_plt --output_plt ${PLT} --apps kernel stdlib sasl erts \
+	    ssl tools runtime_tools crypto inets xmerl snmp public_key eunit \
+	    syntax_tools compiler ./deps/*/ebin
 
-# Starts dialyzer on whole ./ebin dir. If .dialyzer.plt does not exist, will be generated
-dialyzer: compile .dialyzer.plt
-	-dialyzer ./ebin --plt .dialyzer.plt -Werror_handling -Wrace_conditions
-
-
-# Starts full initialization of .dialyzer.plt that is required by dialyzer
-dialyzer_init: compile .dialyzer.plt
+# Dialyzes the project.
+dialyzer: ${PLT}
+	dialyzer ./ebin --plt ${PLT} -Werror_handling -Wrace_conditions --fullpath
