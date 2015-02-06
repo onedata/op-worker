@@ -19,23 +19,38 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([ssl_connection_test/1]).
+-export([cert_connection_test/1, token_connection_test/1]).
 
-all() -> [tcp_connection_test].
+all() -> [cert_connection_test, token_connection_test].
 
 %%%===================================================================
 %%% Test function
 %% ====================================================================
 
-ssl_connection_test(Config) ->
+cert_connection_test(Config) ->
     ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
     {ok, Sock} = ssl:connect(?GET_HOST(Worker1), 5555, [binary, {packet, 4}, {active, true}]),
-    ok = ssl:send(Sock, <<"1">>),
-    ?assertMatch({ssl, _, <<"1">>}, receive_msg()),
-    ok = ssl:send(Sock, <<"2">>),
-    ?assertMatch({ssl, _, <<"2">>}, receive_msg()),
+
+    TokenAuthMessage = <<"{\"token\":\"val\"}">>,
+    ok = ssl:send(Sock, TokenAuthMessage),
+    ok = ssl:send(Sock, <<"data">>),
+    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ok = ssl:close(Sock),
+    ?assertMatch({error, _}, ssl:connection_info(Sock)),
+    ssl:stop().
+
+token_connection_test(Config) ->
+    ssl:start(),
+    [Worker1, _] = ?config(op_worker_nodes, Config),
+    {ok, Sock} = ssl:connect(?GET_HOST(Worker1), 5555, [binary, {packet, 4}, {active, true}]),
+
+    TokenAuthMessage = <<"{\"cert\":\"id\"}">>,
+    ok = ssl:send(Sock, TokenAuthMessage),
+    ok = ssl:send(Sock, <<"data">>),
+    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
+    ok = ssl:close(Sock),
+    ?assertMatch({error, _}, ssl:connection_info(Sock)),
     ssl:stop().
 
 %%%===================================================================

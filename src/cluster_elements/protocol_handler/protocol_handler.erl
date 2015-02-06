@@ -26,11 +26,14 @@
     code_change/3]).
 
 -record(sock_state, {
-    socket :: pid(),
-    transport :: atom(),
+    % handler responses
     ok :: atom(),
     closed :: atom(),
-    error :: atom()
+    error :: atom(),
+    % actual connection state
+    socket :: term(),
+    transport :: module(),
+    credentials = undefined :: binary()
 }).
 
 -define(TIMEOUT, timer:minutes(1)).
@@ -44,7 +47,7 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Ref :: atom(), Socket :: pid(), Transport :: atom(), Opts :: list()) ->
+-spec start_link(Ref :: atom(), Socket :: term(), Transport :: atom(), Opts :: list()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
@@ -55,11 +58,10 @@ start_link(Ref, Socket, Transport, Opts) ->
 %% Initializes the server.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term(), Socket :: pid(), Transport :: atom(), Opts :: list()) ->
+-spec init(Args :: term(), Socket :: term(), Transport :: atom(), Opts :: list()) ->
     no_return().
 init(Ref, Socket, Transport, _Opts = []) ->
     ok = proc_lib:init_ack({ok, self()}),
-    %% Perform any required state initialization here.
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [{active, once}, {packet, ?PACKET_VALUE}]),
     {Ok, Closed, Error} = Transport:messages(),
@@ -128,19 +130,33 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #sock_state{}} |
     {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
+handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, transport = Transport, ok = Ok, credentials = undefined}) ->
+    activate_socket_once(Socket, Transport),
+    case client_auth:handle_auth_info(Data) of
+        {ok, ClientId} ->
+            {noreply, State#sock_state{credentials = ClientId}, ?TIMEOUT};
+        Error ->
+            ?warning_stacktrace("Handling auth_info for connection ~p error: ~p", [Socket, Error]),
+            {stop, Error, State}
+    end;
+
 handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, transport = Transport, ok = Ok}) ->
-    ok = Transport:setopts(Socket, [{active, once}]),
+    activate_socket_once(Socket, Transport),
     ok = Transport:send(Socket, Data),
     {noreply, State, ?TIMEOUT};
+
 handle_info({Closed, Socket}, State = #sock_state{closed = Closed}) ->
     ?info("Connection ~p closed", [Socket]),
     {stop, normal, State};
+
 handle_info({Error, Socket, Reason}, State = #sock_state{error = Error}) ->
     ?warning("Connection ~p error: ~p", [Socket, Reason]),
     {stop, Reason, State};
+
 handle_info(timeout, State = #sock_state{socket = Socket}) ->
     ?warning("Connection ~p timeout", [Socket]),
     {stop, normal, State};
+
 handle_info(_Info, State) ->
     ?log_bad_request(_Info),
     {stop, normal, State}.
@@ -173,3 +189,14 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Activate socket for next message, so it will be send to handling process
+%% via erlang message
+%% @end
+%%--------------------------------------------------------------------
+-spec activate_socket_once(Socket :: term(), Transport :: module()) -> {ok, ClientId :: binary()} | {error, term()}.
+activate_socket_once(Socket, Transport) ->
+    ok = Transport:setopts(Socket, [{active, once}]).
