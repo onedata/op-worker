@@ -240,7 +240,7 @@ heartbeat(State = #cm_state{nodes = Nodes}, SenderNode) ->
                     erlang:monitor_node(SenderNode, true),
                     % update dispatcher if new workers were found
                     case WorkersFound of
-                        true -> update_dispatchers_and_dns(NewState);
+                        true -> update_node_managers_and_dns(NewState);
                         false -> ok
                     end,
                     %trigger cluster init if  number of connected nodes exceedes 'workers_to_trigger_init' var
@@ -286,7 +286,7 @@ init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}) ->
                     true -> init_cluster_nodes_dominance(State, Nodes, JobsTodo, [], Args, []);
                     false -> init_cluster_jobs_dominance(State, JobsTodo, Args, Nodes, [])
                 end,
-            update_dispatchers_and_dns(NewState)
+            update_node_managers_and_dns(NewState)
     end.
 
 %%--------------------------------------------------------------------
@@ -371,7 +371,7 @@ stop_worker(Node, Module, State = #cm_state{workers = Workers}) ->
     try
         NewState = State#cm_state{workers = NewWorkers},
         {ChildNode, _ChildPid} = ChosenChild,
-        update_dispatchers_and_dns(NewState),
+        update_node_managers_and_dns(NewState),
         ok = supervisor:terminate_child({?MAIN_WORKER_SUPERVISOR_NAME, ChildNode}, Module),
         ok = supervisor:terminate_child({?MAIN_WORKER_SUPERVISOR_NAME, ChildNode}, ?WORKER_HOST_SUPERVISOR_NAME(Module)),
         ok = supervisor:delete_child({?MAIN_WORKER_SUPERVISOR_NAME, ChildNode}, Module),
@@ -436,7 +436,7 @@ node_down(Node, State = #cm_state{workers = Workers, nodes = Nodes}) ->
     NewNodes = Nodes -- [Node],
     NewState = State#cm_state{workers = NewWorkers, nodes = NewNodes},
     case WorkersFound of
-        true -> update_dispatchers_and_dns(NewState);
+        true -> update_node_managers_and_dns(NewState);
         false -> NewState
     end.
 
@@ -461,31 +461,14 @@ get_workers_list(State) ->
 %% This function updates all dispatchers and dnses.
 %% @end
 %%--------------------------------------------------------------------
--spec update_dispatchers_and_dns(State :: term()) -> NewState when
+-spec update_node_managers_and_dns(State :: term()) -> NewState when
     NewState :: term().
-update_dispatchers_and_dns(State) ->
-    ?debug("update_dispatchers_and_dns, state: ~p", [State]),
+update_node_managers_and_dns(State) ->
+    ?debug("update_node_managers_and_dns, state: ~p", [State]),
     NewStateNum = State#cm_state.state_num + 1,
-    WorkersList = get_workers_list(State),
     update_dns_state(State#cm_state.workers),
-    update_dispatcher_state(WorkersList, State#cm_state.nodes, NewStateNum),
     update_node_manager_state(State#cm_state.nodes, NewStateNum),
     State#cm_state{state_num = NewStateNum}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updates dispatchers' states.
-%% @end
-%%--------------------------------------------------------------------
--spec update_dispatcher_state(WorkersList :: list(), Nodes :: list(), NewStateNum :: integer()) -> ok.
-update_dispatcher_state(WorkersList, Nodes, NewStateNum) ->
-    UpdateNode = fun(Node) ->
-        gen_server:cast({?DISPATCHER_NAME, Node}, {update_state, WorkersList, NewStateNum})
-    end,
-    lists:foreach(UpdateNode, Nodes),
-    gen_server:cast(?DISPATCHER_NAME, {update_state, WorkersList, NewStateNum}).
 
 
 %%--------------------------------------------------------------------
