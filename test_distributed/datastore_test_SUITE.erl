@@ -120,6 +120,10 @@ global_cache_atomic_update_test(Config) ->
             end)
         end, lists:duplicate(100, Worker1) ++ lists:duplicate(100, Worker2)),
 
+    ?assertMatch({ok, #document{value = #some_record{field1 = 200}}},
+        ?call_store(Worker1, get, [Level,
+            some_record, Key])),
+
     ok.
 
 
