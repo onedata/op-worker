@@ -235,13 +235,19 @@ init_drivers(Configs) ->
 %% Loads local state and initializes datastore drivers if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_state_loaded() -> ok | no_return().
+-spec ensure_state_loaded() -> ok | {error, Reason :: any()}.
 ensure_state_loaded() ->
-    case ets:info(?LOCAL_STATE) of
-        undefined ->
-            Configs = load_local_state(?MODELS),
-            init_drivers(Configs);
-        _ -> ok
+    try
+        case ets:info(?LOCAL_STATE) of
+            undefined ->
+                Configs = load_local_state(?MODELS),
+                init_drivers(Configs);
+            _ -> ok
+        end
+    catch
+        Type:Reason ->
+            ?error_stacktrace("Cannot initialize datastore local state due to ~p: ~p", [Type, Reason]),
+            {error, Reason}
     end.
 
 

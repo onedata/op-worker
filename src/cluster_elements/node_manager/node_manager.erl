@@ -207,6 +207,7 @@ handle_info(_Request, State) ->
     | {shutdown, term()}
     | term().
 terminate(_Reason, _State) ->
+    ?info("Shutting down ~p due to ~p", [?MODULE, _Reason]),
     listener_starter:stop_listeners().
 
 %%--------------------------------------------------------------------

@@ -86,7 +86,7 @@ handle(healthcheck, State) ->
             (K, {error, Reason}, _AccIn) ->
                 ?error("Driver ~p healthckeck error: ~p", [K, Reason]),
                 {error, {driver_failure, {K, Reason}}}
-        end, ok, HC).
+        end, ok, HC);
 
 %% Proxy call to given datastore driver
 handle({driver_call, Module, Method, Args}, _State) ->

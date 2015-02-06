@@ -163,7 +163,11 @@ exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
 %%--------------------------------------------------------------------
 -spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.
 healthcheck(_) ->
-    ok.
+    case call(riakc_pb_socket, ping, []) of
+        pong -> ok;
+        _Other ->
+            {error, no_riak_connection}
+    end.
 
 
 %%%===================================================================

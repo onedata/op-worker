@@ -36,7 +36,6 @@ local_cache_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     Level = local_only,
-    timer:sleep(5000),
 
     local_access_only(Worker1, Level),
     local_access_only(Worker2, Level),
@@ -85,6 +84,10 @@ global_cache_atomic_update_test(Config) ->
 
     Level = global_only,
     Key = some_key_atomic,
+
+    {Mod, Bin, File} = code:get_object_code(?MODULE),
+    {_Replies, _} = rpc:multicall([Worker1, Worker2], code, load_binary,
+        [Mod, File, Bin]),
 
     ?assertMatch({ok, _},
         ?call_store(Worker1, create, [Level,
@@ -179,50 +182,52 @@ global_access(Config, Level) ->
     [CCM] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
+    Key = some_other_key,
+
     ?assertMatch({ok, _},
         ?call_store(Worker1, create, [Level,
             #document{
-                key = some_other_key,
+                key = Key,
                 value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
             }])),
 
     ?assertMatch(true,
         ?call_store(Worker2, exists, [Level,
-            some_record, some_other_key])),
+            some_record, Key])),
 
     ?assertMatch(true,
         ?call_store(CCM, exists, [Level,
-            some_record, some_other_key])),
+            some_record, Key])),
 
     ?assertMatch(true,
         ?call_store(Worker1, exists, [Level,
-            some_record, some_other_key])),
+            some_record, Key])),
 
     ?assertMatch({error, already_exists},
         ?call_store(Worker2, create, [Level,
             #document{
-                key = some_other_key,
+                key = Key,
                 value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
             }])),
 
     ?assertMatch({ok, #document{value = #some_record{field1 = 1, field3 = {test, tuple}}}},
         ?call_store(Worker1, get, [Level,
-            some_record, some_key])),
+            some_record, Key])),
 
     ?assertMatch({ok, #document{value = #some_record{field1 = 1, field3 = {test, tuple}}}},
         ?call_store(Worker2, get, [Level,
-            some_record, some_key])),
+            some_record, some_other_key])),
 
     ?assertMatch({ok, #document{value = #some_record{field1 = 1, field3 = {test, tuple}}}},
         ?call_store(CCM, get, [Level,
-            some_record, some_key])),
+            some_record, Key])),
 
     ?assertMatch({ok, _},
         ?call_store(Worker1, update, [Level,
-            some_record, some_key, #{field1 => 2}])),
+            some_record, Key, #{field1 => 2}])),
 
     ?assertMatch({ok, #document{value = #some_record{field1 = 2}}},
         ?call_store(Worker2, get, [Level,
-            some_record, some_key])),
+            some_record, Key])),
 
     ok.
