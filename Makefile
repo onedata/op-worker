@@ -7,9 +7,7 @@ all: rel
 ##
 
 compile:
-	cp -R c_src/oneproxy/proto src
 	./rebar compile
-	rm -rf src/proto
 
 deps:
 	./rebar get-deps

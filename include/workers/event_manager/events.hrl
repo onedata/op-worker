@@ -1,19 +1,24 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
+%%% @author Krzysztof Trzepla
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% worker_map external parameters, used to customize worker map queries
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
+-ifndef(EVENTS_HRL).
+-define(EVENTS_HRL, 1).
 
--ifndef(WORKER_MAP_HRL).
--define(WORKER_MAP_HRL, 1).
+-include("read_event.hrl").
+-include("write_event.hrl").
 
--define(DEFAULT_WORKER_SELECTION_TYPE, random).
--type selection_type() :: random | prefer_local | {node, Node :: node()}.
+-export_type([event/0, event_subscription/0]).
+
+-type event() :: #read_event{} | #write_event{}.
+-type event_subscription() :: #read_event_subscription{}
+                            | #write_event_subscription{}.
 
 -endif.

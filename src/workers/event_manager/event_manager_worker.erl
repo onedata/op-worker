@@ -1,24 +1,28 @@
-%%%--------------------------------------------------------------------
-%%% @author Lukasz Opiola
-%%% @copyright (C) 2014 ACK CYFRONET AGH
+%%%-------------------------------------------------------------------
+%%% @author Krzysztof Trzepla
+%%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
-%%%--------------------------------------------------------------------
-%%% @doc This module implements worker_plugin_behaviour callbacks.
-%%% It is responsible for spawning processes which then process HTTP requests.
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% 
 %%% @end
-%%%--------------------------------------------------------------------
--module(http_worker).
--author("Lukasz Opiola").
+%%%-------------------------------------------------------------------
+-module(event_manager_worker).
+-author("Krzysztof Trzepla").
 
 -behaviour(worker_plugin_behaviour).
 
--include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/2, cleanup/0]).
+
+%% API
+-export([]).
+
+-record(state, {}).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -32,7 +36,7 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: term()} | {error, Error :: term()}.
 init(_Args) ->
-    {ok, undefined}.
+    {ok, #state{}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -50,14 +54,11 @@ handle(ping, _) ->
 handle(healthcheck, _) ->
     ok;
 
-handle({spawn_handler, SocketPid}, _) ->
-    Pid = spawn(
-        fun() ->
-            erlang:monitor(process, SocketPid),
-            opn_cowboy_bridge:set_socket_pid(SocketPid),
-            opn_cowboy_bridge:request_processing_loop()
-        end),
-    {ok, Pid};
+handle({event, _Event}, _) ->
+    ok;
+
+handle({subscription, _Subscription}, _) ->
+    ok;
 
 handle(_Request, _) ->
     ?log_bad_request(_Request).
@@ -72,3 +73,11 @@ handle(_Request, _) ->
     Error :: timeout | term().
 cleanup() ->
     ok.
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================

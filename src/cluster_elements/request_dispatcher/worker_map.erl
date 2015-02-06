@@ -19,7 +19,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init/0, terminate/0, get_worker_node/1, get_worker_node/2, update_workers/1]).
+-export([init/0, terminate/0, get_worker_node/1, get_worker_node/2,
+    get_worker_nodes/1, update_workers/1]).
 
 %%%===================================================================
 %%% API
@@ -57,14 +58,27 @@ get_worker_node(WorkerName) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Chooses one of nodes where worker is working. The second argument
-%% determines selection type
+%% determines selection type.
 %% @end
 %%--------------------------------------------------------------------
--spec get_worker_node(WorkerName :: atom(), SelectionType :: selection_type()) -> {ok, node()} | {error, term()}.
+-spec get_worker_node(WorkerName :: atom(), SelectionType :: selection_type()) ->
+    {ok, node()} | {error, term()}.
+get_worker_node(_, {node, Node}) ->
+    {ok, Node};
 get_worker_node(WorkerName, random) ->
     get_random_worker_node(WorkerName);
 get_worker_node(WorkerName, prefer_local) ->
     get_worker_node_prefering_local(WorkerName).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Chooses all nodes where worker is working.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_worker_nodes(WorkerName :: atom()) -> {ok, [node()]}.
+get_worker_nodes(WorkerName) ->
+    {_, Nodes} = lists:unzip(ets:lookup(?WORKER_MAP_ETS, WorkerName)),
+    {ok, Nodes}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -74,7 +88,8 @@ get_worker_node(WorkerName, prefer_local) ->
 %%--------------------------------------------------------------------
 -spec update_workers(WorkersList :: [{Node :: node(), WorkerName :: atom()}]) -> ok.
 update_workers(WorkersList) ->
-    WorkersListInverted = lists:map(fun({Node, WorkerName}) -> {WorkerName, Node} end, WorkersList),
+    WorkersListInverted = lists:map(fun({Node, WorkerName}) ->
+        {WorkerName, Node} end, WorkersList),
     ModuleToNodes = utils:aggregate_over_first_element(WorkersListInverted),
     lists:foreach(fun update_worker/1, ModuleToNodes).
 
@@ -122,7 +137,8 @@ get_random_worker_node(WorkerName) ->
 update_worker({WorkerName, Nodes}) ->
     case ets:lookup(?WORKER_MAP_ETS, WorkerName) of
         [] ->
-            lists:foreach(fun(Node) -> true = ets:insert(?WORKER_MAP_ETS, {WorkerName, Node}) end, Nodes),
+            lists:foreach(fun(Node) ->
+                true = ets:insert(?WORKER_MAP_ETS, {WorkerName, Node}) end, Nodes),
             ok;
         Entries ->
             CurrentNodes =
@@ -130,11 +146,13 @@ update_worker({WorkerName, Nodes}) ->
                     [] -> [];
                     [{_, AggregatedNodes}] -> AggregatedNodes
                 end,
-            CurrentNodesSet = ordsets:from_list(CurrentNodes),
-            NewNodesSet = ordsets:from_list(Nodes),
-            ToDelete = ordsets:to_list(ordsets:subtract(CurrentNodesSet, NewNodesSet)),
-            ToCreate = ordsets:to_list(ordsets:subtract(NewNodesSet, CurrentNodesSet)),
-            lists:foreach(fun(Node) -> true = ets:delete_object(?WORKER_MAP_ETS, {WorkerName, Node}) end, ToDelete),
-            lists:foreach(fun(Node) -> true = ets:insert(?WORKER_MAP_ETS, {WorkerName, Node}) end, ToCreate),
+            CurrentNodesSet = sets:from_list(CurrentNodes),
+            NewNodesSet = sets:from_list(Nodes),
+            ToDelete = sets:to_list(sets:subtract(CurrentNodesSet, NewNodesSet)),
+            ToCreate = sets:to_list(sets:subtract(NewNodesSet, CurrentNodesSet)),
+            lists:foreach(fun(Node) ->
+                true = ets:delete_object(?WORKER_MAP_ETS, {WorkerName, Node}) end, ToDelete),
+            lists:foreach(fun(Node) ->
+                true = ets:insert(?WORKER_MAP_ETS, {WorkerName, Node}) end, ToCreate),
             ok
     end.

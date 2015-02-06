@@ -71,7 +71,7 @@ init(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link worker_plugin_behaviour} callback handle/1. <br/>
+%% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
