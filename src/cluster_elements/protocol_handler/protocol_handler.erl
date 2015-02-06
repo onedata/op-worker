@@ -25,12 +25,16 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--record(state, {
+-record(sock_state, {
     socket :: pid(),
-    transport :: atom()
+    transport :: atom(),
+    ok :: atom(),
+    closed :: atom(),
+    error :: atom()
 }).
--define(TIMEOUT, timer:seconds(5)).
 
+-define(TIMEOUT, timer:minutes(1)).
+-define(PACKET_VALUE, 4).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -57,9 +61,15 @@ init(Ref, Socket, Transport, _Opts = []) ->
     ok = proc_lib:init_ack({ok, self()}),
     %% Perform any required state initialization here.
     ok = ranch:accept_ack(Ref),
-    ok = Transport:setopts(Socket, [{active, once}]),
-    gen_server:enter_loop(?MODULE, [], #state{socket = Socket, transport = Transport},
-        ?TIMEOUT).
+    ok = Transport:setopts(Socket, [{active, once}, {packet, ?PACKET_VALUE}]),
+    {Ok, Closed, Error} = Transport:messages(),
+    gen_server:enter_loop(?MODULE, [], #sock_state{
+        socket = Socket,
+        transport = Transport,
+        ok = Ok,
+        closed = Closed,
+        error = Error
+    }, ?TIMEOUT).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -83,13 +93,13 @@ init([]) -> {ok, undefined}.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: #state{}) ->
-    {reply, Reply :: term(), NewState :: #state{}} |
-    {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+    State :: #sock_state{}) ->
+    {reply, Reply :: term(), NewState :: #sock_state{}} |
+    {reply, Reply :: term(), NewState :: #sock_state{}, timeout() | hibernate} |
+    {noreply, NewState :: #sock_state{}} |
+    {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
+    {stop, Reason :: term(), Reply :: term(), NewState :: #sock_state{}} |
+    {stop, Reason :: term(), NewState :: #sock_state{}}.
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, wrong_request, State}.
@@ -100,10 +110,10 @@ handle_call(_Request, _From, State) ->
 %% Handles cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_cast(Request :: term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+-spec handle_cast(Request :: term(), State :: #sock_state{}) ->
+    {noreply, NewState :: #sock_state{}} |
+    {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: #sock_state{}}.
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
@@ -114,19 +124,22 @@ handle_cast(_Request, State) ->
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_info(Info :: timeout() | term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
-handle_info({tcp, Socket, Data}, State=#state{socket=Socket, transport=Transport}) ->
-    Transport:setopts(Socket, [{active, once}]),
-    Transport:send(Socket, Data),
+-spec handle_info(Info :: timeout() | term(), State :: #sock_state{}) ->
+    {noreply, NewState :: #sock_state{}} |
+    {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: #sock_state{}}.
+handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, transport = Transport, ok = Ok}) ->
+    ok = Transport:setopts(Socket, [{active, once}]),
+    ok = Transport:send(Socket, Data),
     {noreply, State, ?TIMEOUT};
-handle_info({tcp_closed, _Socket}, State) ->
+handle_info({Closed, Socket}, State = #sock_state{closed = Closed}) ->
+    ?info("Connection ~p closed", [Socket]),
     {stop, normal, State};
-handle_info({tcp_error, _, Reason}, State) ->
+handle_info({Error, Socket, Reason}, State = #sock_state{error = Error}) ->
+    ?warning("Connection ~p error: ~p", [Socket, Reason]),
     {stop, Reason, State};
-handle_info(timeout, State) ->
+handle_info(timeout, State = #sock_state{socket = Socket}) ->
+    ?warning("Connection ~p timeout", [Socket]),
     {stop, normal, State};
 handle_info(_Info, State) ->
     ?log_bad_request(_Info),
@@ -142,7 +155,7 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: #state{}) -> term().
+    State :: #sock_state{}) -> term().
 terminate(_Reason, _State) ->
     ok.
 
@@ -152,8 +165,8 @@ terminate(_Reason, _State) ->
 %% Converts process state when code is changed.
 %% @end
 %%--------------------------------------------------------------------
--spec code_change(OldVsn :: term() | {down, term()}, State :: #state{},
-    Extra :: term()) -> {ok, NewState :: #state{}} | {error, Reason :: term()}.
+-spec code_change(OldVsn :: term() | {down, term()}, State :: #sock_state{},
+    Extra :: term()) -> {ok, NewState :: #sock_state{}} | {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 

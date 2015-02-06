@@ -31,7 +31,7 @@
 
 % Paths in gui static directory
 -define(STATIC_PATHS, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
--define(ONEPROXY_DISPATCHER, oneproxy_dispatcher).
+-define(ONEPROXY_PROTOCOL_LISTENER, oneproxy_protocol_listener).
 
 % Cowboy listener references
 -define(HTTPS_LISTENER, https).
@@ -58,11 +58,11 @@ start_protocol_listener() ->
     {ok, CertFile} = application:get_env(?APP_NAME, fuse_ssl_cert_path),
 
     LocalPort = oneproxy:get_local_port(Port),
-    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_none) end),
-    register(?ONEPROXY_DISPATCHER, Pid),
+    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_none, no_http) end),
+    register(?ONEPROXY_PROTOCOL_LISTENER, Pid),
 
     {ok, _} = ranch:start_listener(tcp_echo, DispatcherPoolSize,
-        ranch_tcp, [{ip, {127, 0, 0, 1}}, {port, 5555}],
+        ranch_tcp, [{ip, {127, 0, 0, 1}}, {port, LocalPort}],
         protocol_handler, []
     ).
 
