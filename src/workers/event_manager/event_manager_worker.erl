@@ -14,6 +14,7 @@
 
 -behaviour(worker_plugin_behaviour).
 
+-include("workers/event_manager/events.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
@@ -21,6 +22,8 @@
 
 %% API
 -export([]).
+
+-define(SUBSCRIPTION_ID_LENGTH, 16).
 
 -record(state, {}).
 
@@ -44,7 +47,8 @@ init(_Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
-    Request :: ping | healthcheck | {spawn_handler, SocketPid :: pid()},
+    Request :: ping | healthcheck | {event, Event :: event()}
+    | {subscription, Subscription :: event_subscription()},
     Result :: ok | {ok, Response} | {error, Error} | pong,
     Response :: term(),
     Error :: term().
@@ -52,12 +56,6 @@ handle(ping, _) ->
     pong;
 
 handle(healthcheck, _) ->
-    ok;
-
-handle({event, _Event}, _) ->
-    ok;
-
-handle({subscription, _Subscription}, _) ->
     ok;
 
 handle(_Request, _) ->

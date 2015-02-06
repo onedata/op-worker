@@ -16,13 +16,14 @@
 -include("write_event.hrl").
 -include("proto/oneclient/event_messages.hrl").
 
--export_type([event/0, event_subscription/0, client_message/0, server_message/0]).
+-export_type([event/0, event_subscription/0, event_producer/0, event_request/0]).
 
 -type event() :: #read_event{} | #write_event{}.
 -type event_subscription() :: #read_event_subscription{}
                             | #write_event_subscription{}.
--type client_message() :: #'ReadEvent'{} | #'WriteEvent'{}.
--type server_message() :: #'ReadEventSubscription'{}
-                        | #'WriteEventSubscription'{}.
+-type event_producer() :: all_fuse_clients.
+
+-type event_request() :: #'ReadEventSubscription'{}
+                       | #'WriteEventSubscription'{}.
 
 -endif.

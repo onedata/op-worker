@@ -27,6 +27,7 @@
 -type aggregation_rule() :: fun((event_manager:event(), event_manager:event()) ->
     {ok, event_manager:event()} | {error, disparate}).
 -type emission_rule() :: fun((event_stream()) -> true | false).
--type event_handler() :: fun(([event_manager:event()]) -> term()).
+-type event_handler() :: {fun(([event_manager:event()]) -> term()),
+    reliable | unreliable}.
 
 -endif.
