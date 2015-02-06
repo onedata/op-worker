@@ -31,7 +31,6 @@ def tweak_config(config, name, uid):
 
     sys_config = cfg['nodes']['node']['sys.config']
     sys_config['ccm_nodes'] = [set_hostname(n, uid) for n in sys_config['ccm_nodes']]
-    sys_config['db_nodes']  = [set_hostname(n, uid) for n in sys_config['db_nodes']]
 
     vm_args = cfg['nodes']['node']['vm.args']
     vm_args['name'] = set_hostname(vm_args['name'], uid)

@@ -32,7 +32,7 @@ extern std::mutex stdout_mutex;
  * The log_message class.
  * Single instance handles single log message.
  */
-class log_message : public std::ostream {
+class log_message {
 public:
     /// Log severity
     enum severity { DEBUG, INFO, WARNING, ERROR };
