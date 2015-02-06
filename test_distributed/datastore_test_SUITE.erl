@@ -94,7 +94,7 @@ global_cache_atomic_update_test(Config) ->
         ?call_store(Worker1, create, [Level,
             #document{
                 key = Key,
-                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+                value = #some_record{field1 = 0, field2 = <<"abc">>, field3 = {test, tuple}}
             }])),
 
     Pid = self(),
