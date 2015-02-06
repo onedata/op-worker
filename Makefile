@@ -49,11 +49,16 @@ eunit:
 PLT ?= .dialyzer.plt
 
 # Builds dialyzer's Persistent Lookup Table file.
-${PLT}:
-	-dialyzer --build_plt --output_plt ${PLT} --apps kernel stdlib sasl erts \
-	    ssl tools runtime_tools crypto inets xmerl snmp public_key eunit \
-	    syntax_tools compiler ./deps/*/ebin
+.PHONY: plt
+plt:
+	dialyzer --check_plt --plt ${PLT}; \
+	if [ $$? != 0 ]; then \
+	    dialyzer --build_plt --output_plt ${PLT} --apps kernel stdlib sasl erts \
+	        ssl tools runtime_tools crypto inets xmerl snmp public_key eunit \
+	        syntax_tools compiler ./deps/*/ebin; \
+	fi; exit 0
+            
 
 # Dialyzes the project.
-dialyzer: ${PLT}
+dialyzer: plt
 	dialyzer ./ebin --plt ${PLT} -Werror_handling -Wrace_conditions --fullpath
