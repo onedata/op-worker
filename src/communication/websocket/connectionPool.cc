@@ -1,13 +1,14 @@
 /**
- * @file websocketConnectionPool.cc
+ * @file connectionPool.cc
  * @author Konrad Zemek
  * @copyright (C) 2014 ACK CYFRONET AGH
- * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
+ * @copyright This software is released under the MIT license cited in
+ * 'LICENSE.txt'
  */
 
-#include "communication/websocketConnectionPool.h"
+#include "communication/websocket/connectionPool.h"
 
-#include "communication/websocketConnection.h"
+#include "communication/websocket/connection.h"
 #include "logging.h"
 
 #include <openssl/ssl.h>
@@ -18,21 +19,22 @@
 
 template class websocketpp::client<websocketpp::config::asio_tls_client>;
 
-namespace one
-{
-namespace communication
-{
+namespace one {
+namespace communication {
 
 class CertificateData;
 
-WebsocketConnectionPool::WebsocketConnectionPool(
-        const unsigned int connectionsNumber,
-        std::string uri,
-        std::shared_ptr<Scheduler> scheduler,
-        std::function<std::unordered_map<std::string, std::string>()> additionalHeadersFun,
-        std::shared_ptr<const CertificateData> certificateData,
-        const bool verifyServerCertificate)
-    : ConnectionPool{connectionsNumber, std::move(uri), std::move(scheduler)}
+namespace websocket {
+
+ConnectionPool::ConnectionPool(
+    const unsigned int connectionsNumber, std::string uri,
+    std::shared_ptr<Scheduler> scheduler,
+    std::function<std::unordered_map<std::string, std::string>()>
+        additionalHeadersFun,
+    std::shared_ptr<const CertificateData> certificateData,
+    const bool verifyServerCertificate)
+    : ::one::communication::ConnectionPool{connectionsNumber, std::move(uri),
+                                           std::move(scheduler)}
     , m_additionalHeadersFun{std::move(additionalHeadersFun)}
     , m_certificateData{std::move(certificateData)}
     , m_verifyServerCertificate{verifyServerCertificate}
@@ -48,11 +50,12 @@ WebsocketConnectionPool::WebsocketConnectionPool(
 
     m_ioThread = std::thread{&endpoint_type::run, &m_endpoint};
 
-    m_endpoint.set_tls_init_handler(bind(&WebsocketConnectionPool::onTLSInit, this));
-    m_endpoint.set_socket_init_handler(bind(&WebsocketConnectionPool::onSocketInit, this, p::_2));
+    m_endpoint.set_tls_init_handler(bind(&ConnectionPool::onTLSInit, this));
+    m_endpoint.set_socket_init_handler(
+        bind(&ConnectionPool::onSocketInit, this, p::_2));
 }
 
-WebsocketConnectionPool::~WebsocketConnectionPool()
+ConnectionPool::~ConnectionPool()
 {
     LOG(INFO) << "Destroying WebSocket++ connection pool.";
 
@@ -64,11 +67,12 @@ WebsocketConnectionPool::~WebsocketConnectionPool()
     m_ioThread.join();
 }
 
-WebsocketConnectionPool::context_ptr WebsocketConnectionPool::onTLSInit()
+ConnectionPool::context_ptr ConnectionPool::onTLSInit()
 {
     try
     {
-        auto ctx = std::make_shared<context_type>(boost::asio::ssl::context::sslv3);
+        auto ctx =
+            std::make_shared<context_type>(boost::asio::ssl::context::sslv3);
 
         ctx->set_options(boost::asio::ssl::context::default_workarounds |
                          boost::asio::ssl::context::no_sslv2 |
@@ -76,8 +80,8 @@ WebsocketConnectionPool::context_ptr WebsocketConnectionPool::onTLSInit()
 
         ctx->set_default_verify_paths();
         ctx->set_verify_mode(m_verifyServerCertificate
-                             ? boost::asio::ssl::verify_peer
-                             : boost::asio::ssl::verify_none);
+                                 ? boost::asio::ssl::verify_peer
+                                 : boost::asio::ssl::verify_none);
 
         SSL_CTX *ssl_ctx = ctx->native_handle();
         long mode = SSL_CTX_get_session_cache_mode(ssl_ctx);
@@ -86,7 +90,7 @@ WebsocketConnectionPool::context_ptr WebsocketConnectionPool::onTLSInit()
 
         return m_certificateData ? m_certificateData->initContext(ctx) : ctx;
     }
-    catch(boost::system::system_error &e)
+    catch (boost::system::system_error &e)
     {
         LOG(WARNING) << "Cannot initialize TLS socket due to: " << e.what();
     }
@@ -94,22 +98,22 @@ WebsocketConnectionPool::context_ptr WebsocketConnectionPool::onTLSInit()
     return {};
 }
 
-void WebsocketConnectionPool::onSocketInit(socket_type &socket)
+void ConnectionPool::onSocketInit(socket_type &socket)
 {
     socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
 }
 
-std::unique_ptr<Connection> WebsocketConnectionPool::createConnection()
+std::unique_ptr<::one::communication::Connection>
+ConnectionPool::createConnection()
 {
     using namespace std::placeholders;
-    return std::make_unique<WebsocketConnection>(
-                m_onMessageCallback,
-                std::bind(&WebsocketConnectionPool::onFail, this, _1, _2),
-                std::bind(&WebsocketConnectionPool::onOpen, this, _1),
-                std::bind(&WebsocketConnectionPool::onError, this, _1),
-                m_endpoint, m_uri, m_additionalHeadersFun(), m_certificateData,
-                m_verifyServerCertificate);
+    return std::make_unique<Connection>(
+        m_onMessageCallback, std::bind(&ConnectionPool::onFail, this, _1, _2),
+        std::bind(&ConnectionPool::onOpen, this, _1),
+        std::bind(&ConnectionPool::onError, this, _1), m_endpoint, m_uri,
+        m_additionalHeadersFun(), m_certificateData, m_verifyServerCertificate);
 }
 
+} // namespace websocket
 } // namespace communication
 } // namespace one

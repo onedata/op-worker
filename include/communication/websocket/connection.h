@@ -1,17 +1,17 @@
 /**
- * @file websocketConnection.h
+ * @file connection.h
  * @author Konrad Zemek
  * @copyright (C) 2014 ACK CYFRONET AGH
- * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
+ * @copyright This software is released under the MIT license cited in
+ * 'LICENSE.txt'
  */
 
 #ifndef HELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_H
 #define HELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_H
 
+#include "communication/connection.h"
 
-#include "connection.h"
-
-#include "exception.h"
+#include "communication/exception.h"
 
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_client.hpp>
@@ -24,29 +24,27 @@
 
 extern template class websocketpp::client<websocketpp::config::asio_tls_client>;
 
-namespace one
-{
-namespace communication
-{
+namespace one {
+namespace communication {
 
 class CertificateData;
+
+namespace websocket {
 
 /**
  * An @c one::communication::ConnectionError specialization for connection
  * errors occuring due to invalid server certificate.
  */
-class InvalidServerCertificate: public ConnectionError
-{
+class InvalidServerCertificate : public ConnectionError {
 public:
     using ConnectionError::ConnectionError;
 };
 
 /**
- * The WebsocketConnection class is a @c one::communication::Connection
+ * The Connection class is a @c one::communication::Connection
  * specialization for TLS WebSocket++ based connections.
  */
-class WebsocketConnection: public Connection
-{
+class Connection : public ::one::communication::Connection {
     using config_type = websocketpp::config::asio_tls_client;
     using endpoint_type = websocketpp::client<config_type>;
     using connection_ptr = endpoint_type::connection_ptr;
@@ -61,27 +59,28 @@ public:
      * @param onErrorCallback Callback to be called on open connection's error.
      * @param endpoint A reference to an ASIO endpoint.
      * @param uri Server's URI to connect to.
-     * @param additionalHeaders Additional HTTP headers to use for the connection.
+     * @param additionalHeaders Additional HTTP headers to use for the
+     * connection.
      * @param certificateData Certificate data to use for SSL authentication.
      * @param verifyServerCertificate Determines whether to verify server's
      * certificate.
      */
-    WebsocketConnection(
-            std::function<void(const std::string&)> onMessageCallback,
-            std::function<void(Connection&, std::exception_ptr)> onFailCallback,
-            std::function<void(Connection&)> onOpenCallback,
-            std::function<void(Connection&)> onErrorCallback,
-            endpoint_type &endpoint,
-            const std::string &uri,
-            const std::unordered_map<std::string, std::string> &additionalHeaders,
-            std::shared_ptr<const CertificateData> certificateData,
-            const bool verifyServerCertificate);
+    Connection(
+        std::function<void(const std::string &)> onMessageCallback,
+        std::function<void(::one::communication::Connection &,
+                           std::exception_ptr)> onFailCallback,
+        std::function<void(::one::communication::Connection &)> onOpenCallback,
+        std::function<void(::one::communication::Connection &)> onErrorCallback,
+        endpoint_type &endpoint, const std::string &uri,
+        const std::unordered_map<std::string, std::string> &additionalHeaders,
+        std::shared_ptr<const CertificateData> certificateData,
+        const bool verifyServerCertificate);
 
     /**
      * Destructor.
      * Closes the connection.
      */
-    ~WebsocketConnection();
+    ~Connection();
 
     /**
      * Sends a message through the connection.
@@ -111,8 +110,8 @@ private:
     websocketpp::connection_hdl m_connection;
 };
 
+} // namespace websocket
 } // namespace communication
 } // namespace one
-
 
 #endif // HELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_H

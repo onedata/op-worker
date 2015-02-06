@@ -9,7 +9,7 @@
 
 #include "communication/connection.h"
 #include "communication/exception.h"
-#include "communication/websocketConnectionPool.h"
+#include "communication/websocket/connectionPool.h"
 #include "fuse_messages.pb.h"
 #include "logging.h"
 #include "oneErrors.h"
@@ -225,7 +225,7 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(
                  (verifyServerCertificate ? "enabled" : "disabled") << ".";
 
     auto createDataPool = [&](const unsigned int poolSize) {
-        return std::make_unique<WebsocketConnectionPool>(
+        return std::make_unique<websocket::ConnectionPool>(
                     poolSize, uri, scheduler, additionalHeadersFun,
                     certificateData, verifyServerCertificate);
     };
