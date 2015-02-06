@@ -10,7 +10,7 @@
 -author("lopiola").
 
 -ifdef(TEST).
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -define(NODE_1, 'worker1@host.com').

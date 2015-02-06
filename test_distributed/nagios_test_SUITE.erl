@@ -12,7 +12,7 @@
 -author("Lukasz Opiola").
 
 -include("test_utils.hrl").
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

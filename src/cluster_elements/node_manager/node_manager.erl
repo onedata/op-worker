@@ -21,7 +21,7 @@
 
 -behaviour(gen_server).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% This record is used by node_manager (it contains its state).
@@ -121,7 +121,7 @@ init([_Type]) ->
     | {noreply, NewState, hibernate}
     | {stop, Reason, Reply, NewState}
     | {stop, Reason, NewState},
-    Reply :: term(),
+    Reply :: healthcheck_reponse() | term(),
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().

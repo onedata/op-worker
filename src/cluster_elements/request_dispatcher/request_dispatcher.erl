@@ -14,7 +14,7 @@
 
 -behaviour(gen_server).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include("modules_and_args.hrl").
 -include("cluster_elements/request_dispatcher/request_dispatcher_state.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -92,7 +92,7 @@ init(_) ->
     | {noreply, NewState, hibernate}
     | {stop, Reason, Reply, NewState}
     | {stop, Reason, NewState},
-    Reply :: term(),
+    Reply :: healthcheck_reponse() | term(),
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().

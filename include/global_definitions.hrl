@@ -6,12 +6,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains definitions of names used to identify
-%%% different parts of application (or whole application).
+%%% This file contains global definitions of component names and types
+%%% used accross the application.
 %%% @end
 %%%-------------------------------------------------------------------
 -ifndef(REGISTERED_NAMES_HRL).
 -define(REGISTERED_NAMES_HRL, 1).
+
+%%%===================================================================
+%%% Global names
+%%%===================================================================
 
 %% Name of the application.
 -define(APP_NAME, oneprovider_node).
@@ -37,6 +41,11 @@
 
 %% Local name (name and node is used to identify it) of supervisor that
 %% coordinates the processes started by concrete worker_host (given by arg)
--define(WORKER_HOST_SUPERVISOR_NAME(Module), list_to_atom(atom_to_list(Module) ++ "_sup") ).
+-define(WORKER_HOST_SUPERVISOR_NAME(Module), list_to_atom(atom_to_list(Module) ++ "_sup")).
+
+%%%===================================================================
+%%% Global types
+%%%===================================================================
+-type healthcheck_reponse() :: ok | {ok, integer()} | {error, term()}.
 
 -endif.

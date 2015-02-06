@@ -14,7 +14,7 @@
 
 -behaviour(gen_server).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

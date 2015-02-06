@@ -18,7 +18,7 @@
 -behaviour(worker_plugin_behaviour).
 -behaviour(dns_query_handler_behaviour).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/dns/dns.hrl").
 
@@ -79,7 +79,7 @@ init(_) ->
     {update_state, list(), list()} |
     {get_worker, atom()} |
     get_nodes,
-    Result :: ok | {ok, Response} | {error, Error} | pong,
+    Result :: healthcheck_reponse() | ok | {ok, Response} | {error, Error} | pong,
     Response :: [inet:ip4_address()],
     Error :: term().
 handle(ping, _) ->

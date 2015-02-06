@@ -20,7 +20,7 @@
 -behaviour(cowboy_http_handler).
 -behaviour(cowboy_websocket_handler).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include("workers/http_worker/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 

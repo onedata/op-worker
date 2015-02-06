@@ -12,7 +12,7 @@
 -module(oneprovider_node_sup).
 -author("Michal Wrzeszcz").
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -behaviour(supervisor).
 
 %% API

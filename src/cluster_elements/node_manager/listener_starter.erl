@@ -12,7 +12,7 @@
 -module(listener_starter).
 -author("Tomasz Lichon").
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
 -include_lib("ctool/include/logging.hrl").
 

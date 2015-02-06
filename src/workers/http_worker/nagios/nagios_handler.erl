@@ -14,7 +14,7 @@
 
 -behaviour(cowboy_http_handler).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -207,7 +207,8 @@ calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatus
     when Node :: atom().
 check_ccm(Timeout) ->
     try
-        {_Nodes, _Workers, _StateNum} = gen_server:call({global, ?CCM}, healthcheck, Timeout)
+        {ok, {Nodes, Workers, StateNum}} = gen_server:call({global, ?CCM}, healthcheck, Timeout),
+        {Nodes, Workers, StateNum}
     catch
         Type:Error ->
             ?error("CCM connection error during healthcheck: ~p:~p", [Type, Error]),

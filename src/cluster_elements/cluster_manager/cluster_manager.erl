@@ -16,7 +16,7 @@
 
 -behaviour(gen_server).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include("modules_and_args.hrl").
 -include("cluster_elements/worker_host/worker_protocol.hrl").
 -include("cluster_elements/cluster_manager/cluster_manager_state.hrl").
@@ -102,7 +102,7 @@ init(_) ->
     | {noreply, NewState, hibernate}
     | {stop, Reason, Reply, NewState}
     | {stop, Reason, NewState},
-    Reply :: term(),
+    Reply :: healthcheck_reponse() | term(),
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
@@ -118,7 +118,7 @@ handle_call(get_workers, _From, State) ->
 
 handle_call(healthcheck, _From, State) ->
     WorkersList = get_workers_list(State),
-    {reply, {State#cm_state.nodes, WorkersList, State#cm_state.state_num}, State};
+    {reply, {ok, {State#cm_state.nodes, WorkersList, State#cm_state.state_num}}, State};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
