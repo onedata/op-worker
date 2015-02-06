@@ -114,6 +114,7 @@ global_cache_atomic_update_test(Config) ->
                 end,
 
     Self = self(),
+    Timeout = timer:seconds(30),
     lists:foreach(fun(Node) ->
         spawn(
             fun() ->
@@ -121,7 +122,7 @@ global_cache_atomic_update_test(Config) ->
                 Self ! done
             end)
         end, lists:duplicate(100, Worker1) ++ lists:duplicate(100, Worker2)),
-    [receive done -> ok end || _ <- lists:seq(1, 200)],
+    [receive done -> ok after Timeout -> ok end || _ <- lists:seq(1, 200)],
 
     ?assertMatch({ok, #document{value = #some_record{field1 = 200}}},
         ?call_store(Worker1, get, [Level,
