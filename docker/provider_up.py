@@ -86,7 +86,7 @@ skydock = docker.run(
     image='crosbymichael/skydock',
     detach=True,
     name='skydock_{0}'.format(uid),
-    reflect=['/var/run/docker.sock'],
+    reflect=[('/var/run/docker.sock', 'rw')],
     volumes=[(args.create_service, '/createService.js', 'ro')],
     command=['-ttl', '30', '-environment', 'dev', '-s', '/var/run/docker.sock',
              '-domain', 'docker', '-name', 'skydns_{0}'.format(uid), '-plugins',
@@ -112,7 +112,7 @@ cat <<"EOF" > /tmp/gen_dev_args.json
 EOF
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 /root/bin/node/bin/oneprovider_node console'''
-    command = command.format(gen_dev_args=json.dumps({'oneprovider_node' : cfg}))
+    command = command.format(gen_dev_args=json.dumps({'oneprovider_node': cfg}))
 
     container = docker.run(
         image=args.image,
