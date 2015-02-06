@@ -85,6 +85,7 @@ global_cache_atomic_update_test(Config) ->
     Level = global_only,
     Key = some_key_atomic,
 
+    %% Load this module into oneprovider nodes so that update fun() will be available
     {Mod, Bin, File} = code:get_object_code(?MODULE),
     {_Replies, _} = rpc:multicall([Worker1, Worker2], code, load_binary,
         [Mod, File, Bin]),
