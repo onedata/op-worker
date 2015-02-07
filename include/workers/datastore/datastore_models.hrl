@@ -22,6 +22,6 @@
 
 %% Models' definitions
 -record(sample_model, {field1, field2, field3}).
--record(sequencer_model, {}).
+-record(sequencer_model, {sequencer_pid}).
 
 -endif.

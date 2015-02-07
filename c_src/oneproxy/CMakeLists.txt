@@ -48,7 +48,7 @@ target_include_directories(oneproxy_gsi SYSTEM PUBLIC
 target_compile_options(oneproxy_gsi PUBLIC ${Globus_CFLAGS_OTHER})
 
 # protocols
-set(PROTO_FILES proto/oneproxy.proto)
+set(PROTO_FILES proto/oneproxy_messages.proto)
 PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 
 add_library(proto STATIC ${PROTO_SRCS} ${PROTO_HDRS})

@@ -33,31 +33,30 @@
 init_bucket(_BucketName, Models) ->
     lists:foreach( %% model
         fun(#model_config{name = ModelName, fields = Fields}) ->
+            Node = node(),
             Table = table_name(ModelName),
             case get_active_nodes(Table) of
                 [] -> %% No mnesia nodes -> create new table
                     case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
-                        {ram_copies, [node()]}, {type, set}]) of
+                        {ram_copies, [Node]}, {type, set}]) of
                         {atomic, ok} -> ok;
-                        {aborted, {already_exists, _}} ->
+                        {aborted, {already_exists, Table}} ->
                             ok;
                         {aborted, Reason} ->
                             ?error("Cannot init mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
                             throw(Reason)
                     end;
                 [MnesiaNode | _] -> %% there is at least one mnesia node -> join cluster
-
-
-                    case rpc:call(MnesiaNode, mnesia, change_config, [extra_db_nodes, [node()]]) of
-                        {atomic, ok} ->
-                            case rpc:call(MnesiaNode, mnesia, add_table_copy, [Table, node(), ram_copies]) of
+                    case rpc:call(MnesiaNode, mnesia, change_config, [extra_db_nodes, [Node]]) of
+                        {ok, [Node]} ->
+                            case rpc:call(MnesiaNode, mnesia, add_table_copy, [Table, Node, ram_copies]) of
                                 {atomic, ok} ->
                                     ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, MnesiaNode, node()]);
                                 {aborted, Reason} ->
                                     ?error("Cannot replicate mnesia table ~p to node ~p due to: ~p", [Table, node(), Reason])
                             end,
                             ok;
-                        {aborted, Reason} ->
+                        {error, Reason} ->
                             ?error("Cannot expand mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
                             throw(Reason)
                     end
@@ -173,8 +172,8 @@ delete(#model_config{} = ModelConfig, Key) ->
 exists(#model_config{} = ModelConfig, Key) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
-            []          -> false;
-            [_Record]   -> true
+            [] -> false;
+            [_Record] -> true
         end
     end).
 
