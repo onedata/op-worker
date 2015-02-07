@@ -14,7 +14,7 @@
 
 -include("workers/datastore/datastore.hrl").
 
-%% API
+%% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0, 'after'/5, before/4]).
 
 %%%===================================================================
@@ -112,4 +112,3 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
-

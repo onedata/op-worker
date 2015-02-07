@@ -15,12 +15,12 @@
 -include("workers/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% API
+%% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
 -export([save/2, update/3, create/2, exists/2, get/2, delete/2]).
 
 %%%===================================================================
-%%% API
+%%% store_driver_behaviour callbacks
 %%%===================================================================
 
 
@@ -181,7 +181,7 @@ exists(#model_config{} = ModelConfig, Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link store_driver_behaviour} callback healthcheck/2.
+%% {@link store_driver_behaviour} callback healthcheck/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.

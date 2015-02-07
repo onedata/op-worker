@@ -13,7 +13,6 @@
 
 -include("workers/datastore/datastore.hrl").
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Initializes given bucket locally (this method is executed per-node).
@@ -76,6 +75,4 @@
 %% Checks driver state.
 %% @end
 %%--------------------------------------------------------------------
--spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.
-healthcheck(_) ->
-    ok.
+-callback healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.

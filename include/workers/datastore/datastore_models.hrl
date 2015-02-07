@@ -20,11 +20,8 @@
     links   :: term()
 }).
 
-
 %% Models' definitions
-
-%% some_record - example model
--record(some_record, {field1, field2, field3}).
+-record(sample_model, {field1, field2, field3}).
 -record(sequencer_model, {}).
 
 -endif.

@@ -37,6 +37,6 @@
 
 
 %% List of all available models
--define(MODELS, [some_record, sequencer_model]).
+-define(MODELS, [sample_model, sequencer_model]).
 
 -endif.
