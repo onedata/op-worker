@@ -1,0 +1,32 @@
+package one.clproto;
+
+message MessageRequest {
+    required uint64 message_id = 1;
+    required uint64 seq_num    = 2;
+}
+
+message MessageAcknowledgement {
+    required uint64 message_id = 1;
+    required uint64 seq_num    = 2;
+}
+
+message Status {
+    enum Code {
+        VOK        = 1;
+        VENOENT    = 2;
+        VEACCES    = 3;
+        VEEXIST    = 4;
+        VEIO       = 5;
+        VENOTSUP   = 6;
+        VENOTEMPTY = 7;
+        VEREMOTEIO = 8;
+        VEPERM     = 9;
+        VEINVAL    = 10;
+        VEDQUOT    = 11;
+        VENOATTR   = 12;
+        VECOMM     = 13;
+    }
+
+    required Code  code        = 1;
+    optional bytes description = 2;
+}

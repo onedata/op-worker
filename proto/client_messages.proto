@@ -1,23 +1,25 @@
 package one.clproto;
 
 import "handshake_messages.proto";
-import "common_messages.proto";
+import "communication_messages.proto";
 import "event_messages.proto";
 
 // list of messages that can be sent from the client to the server
 message ClientMessage {
-    optional uint64 response_id  = 1;
+    optional uint64 message_id   = 1;
     optional uint64 seq_num      = 2;
     optional bool   last_message = 3;
     oneof client_message {
         // handshake_messages.proto
-        HandshakeRequest              handshake_request               = 4;
-        HandshakeAcknowledgement      handshake_acknowledgement       = 5;
+        HandshakeRequest              handshake_request         = 4;
+        HandshakeAcknowledgement      handshake_acknowledgement = 5;
 
-        // common_messages.proto
-        Status                        status                          = 6;
+        // communication_messages.proto
+        Status                        status                    = 6;
+        MessageRequest                message_request           = 7;
+        MessageAcknowledgement        message_acknowledgement   = 8;
 
         // event_messages.proto
-        Event                         event                           = 7;
+        Event                         event                     = 9;
     }
 }
