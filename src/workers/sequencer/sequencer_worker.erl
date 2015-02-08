@@ -1,3 +1,4 @@
+
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
 %%% @copyright (C) 2015 ACK CYFRONET AGH
@@ -9,12 +10,12 @@
 %%% 
 %%% @end
 %%%-------------------------------------------------------------------
--module(event_manager_worker).
+-module(sequencer_worker).
 -author("Krzysztof Trzepla").
 
 -behaviour(worker_plugin_behaviour).
 
--include("workers/event_manager/events.hrl").
+-include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
@@ -22,10 +23,6 @@
 
 %% API
 -export([]).
-
--define(SUBSCRIPTION_ID_LENGTH, 16).
-
--record(state, {}).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -39,7 +36,7 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: term()} | {error, Error :: term()}.
 init(_Args) ->
-    {ok, #state{}}.
+    {ok, undefined}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -47,8 +44,7 @@ init(_Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
-    Request :: ping | healthcheck | {event, Event :: event()}
-    | {subscription, Subscription :: event_subscription()},
+    Request :: ping | healthcheck,
     Result :: ok | {ok, Response} | {error, Error} | pong,
     Response :: term(),
     Error :: term().

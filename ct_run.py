@@ -13,6 +13,7 @@ Run the script with -h flag to learn about script's running options.
 import argparse
 import glob
 import os
+import platform
 import sys
 sys.path.insert(0, 'bamboos/docker')
 import docker
@@ -65,11 +66,15 @@ if args.cases:
 
 command = '''
 import os, subprocess, sys, stat
-docker_gid = os.stat('/var/run/docker.sock').st_gid
-os.chmod('/etc/resolv.conf', 0o666)
-os.setgroups([docker_gid])
-os.setregid({gid}, {gid})
-os.setreuid({uid}, {uid})
+
+if {shed_privileges}:
+    os.environ['HOME'] = '/tmp'
+    docker_gid = os.stat('/var/run/docker.sock').st_gid
+    os.chmod('/etc/resolv.conf', 0o666)
+    os.setgroups([docker_gid])
+    os.setregid({gid}, {gid})
+    os.setreuid({uid}, {uid})
+
 command = {cmd}
 ret = subprocess.call(command)
 
@@ -85,15 +90,18 @@ for file in glob.glob('logs/*/surefire.xml'):
 
 sys.exit(ret)
 '''
-command = command.format(uid=os.geteuid(), gid=os.getegid(), cmd=ct_command)
+command = command.format(
+    uid=os.geteuid(),
+    gid=os.getegid(),
+    cmd=ct_command,
+    shed_privileges=(platform.system() == 'Linux'))
 
 ret = docker.run(tty=True,
                  rm=True,
                  interactive=True,
                  workdir=os.path.join(script_dir, 'test_distributed'),
-                 reflect=[script_dir,
-                          '/var/run/docker.sock',
-                          '/usr/bin/docker'],
+                 reflect=[(script_dir, 'rw'),
+                          ('/var/run/docker.sock', 'rw')],
                  hostname='test.master',
                  image=args.image,
                  command=['python', '-c', command])
