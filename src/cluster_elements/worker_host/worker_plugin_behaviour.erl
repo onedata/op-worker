@@ -13,6 +13,8 @@
 -module(worker_plugin_behaviour).
 -author("Michal Wrzeszcz").
 
+-include("global_definitions.hrl").
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Initialize module

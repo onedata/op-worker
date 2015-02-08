@@ -13,7 +13,7 @@
 
 -behaviour(worker_plugin_behaviour).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include("workers/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 

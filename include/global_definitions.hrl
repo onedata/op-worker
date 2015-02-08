@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains global definitions of component names and types
+%%% This file contains global definitions of component names, macros and types
 %%% used accross the application.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -46,7 +46,14 @@
 %%%===================================================================
 %%% Global types
 %%%===================================================================
--type healthcheck_reponse() :: ok | {ok, StateNum :: integer()} | {error, {ErrorDesc :: term(), NagiosMessage :: string()}}.
+
+% ErrorDesc will appear in xml as node status.
+-type healthcheck_reponse() :: ok | {ok, term()} | {error, ErrorDesc :: atom()}.
 -export_type([healthcheck_reponse/0]).
+% Macro that should be used to log an error during healthcheck
+-define(HEALTHCHECK_ERROR_LOG_MSG(_Msg),
+    HEALTHCHECK_ERROR_LOG(_Msg, [])).
+-define(HEALTHCHECK_ERROR_LOG_MSG(_Msg, _Args),
+    lists:flatten(io_lib:format("Healthcheck error in ~p on node ~p: " ++ _Msg, [?MODULE, node()] ++ _Args))).
 
 -endif.

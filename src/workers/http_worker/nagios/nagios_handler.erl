@@ -110,7 +110,7 @@ terminate(_Reason, _Req, _State) ->
 %%         ...
 %%     ]}
 %% ]}
-%% Status can be: ok | error | out_of_sync
+%% Status can be: ok | out_of_sync | error | atom()
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cluster_status(Timeout :: integer()) -> term().
@@ -140,7 +140,7 @@ get_cluster_status(Timeout) ->
 %%--------------------------------------------------------------------
 -spec calculate_cluster_status(Nodes :: [Node], StateNum :: integer(), NodeManagerStatuses :: [{Node, Status}],
     DistpatcherStatuses :: [{Node, Status}], WorkerStatuses :: [{Node, [{Worker :: atom(), Status}]}]) -> term()
-    when Node :: atom(), Status :: ok | out_of_sync | error.
+    when Node :: atom(), Status :: ok | out_of_sync | error | atom().
 calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses) ->
     NodeStatuses =
         lists:map(
@@ -148,19 +148,31 @@ calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatus
                 % Calculate node manager and dispatcher statuses
                 % ok - if the state num is the same as in the CCM
                 % out_of_sync - if the state num is other than in the CCM
-                % error - if the component is unreachable
+                % Error::atom() - if an error of type Error occured
                 NodeManagerStatus =
                     case proplists:get_value(Node, NodeManagerStatuses) of
                         {ok, StateNum} -> ok;
                         {ok, _} -> out_of_sync;
-                        _ -> error
+                        {error, ErrorDesc1} -> ErrorDesc1
                     end,
                 RequestDistpatcherStatus =
                     case proplists:get_value(Node, DistpatcherStatuses) of
                         {ok, StateNum} -> ok;
                         {ok, _} -> out_of_sync;
-                        _ -> error
+                        {error, ErrorDesc2} -> ErrorDesc2
                     end,
+                % Calculate workers' statuses
+                % ok - if the worker returned 'ok'
+                % Error::atom() - if an error of type Error occured
+                MappedWorkerStatuses = lists:map(
+                    fun({WName, WStatus}) ->
+                        MappedStatus = case WStatus of
+                                           ok -> ok;
+                                           {error, ErrorDesc3} -> ErrorDesc3
+                                       end,
+                        {WName, MappedStatus}
+                    end, lists:usort(proplists:get_value(Node, WorkerStatuses))),
+
                 % The list for each node contains:
                 % node_manager status
                 % request_dispatcher status
@@ -168,30 +180,32 @@ calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatus
                 ComponentStatuses = [
                     {?NODE_MANAGER_NAME, NodeManagerStatus},
                     {?DISPATCHER_NAME, RequestDistpatcherStatus} |
-                    lists:usort(proplists:get_value(Node, WorkerStatuses))
+                    MappedWorkerStatuses
                 ],
                 % Calculate status of the whole node - it's the same as the worst status of any child
-                % ok > out_of_sync > error
+                % ok > out_of_sync > Other (any other atom means an error)
+                % If any node component has an error, node's status will be 'error'.
                 NodeStatus = lists:foldl(
                     fun({_, CurrentStatus}, Acc) ->
                         case {Acc, CurrentStatus} of
                             {ok, Any} -> Any;
                             {out_of_sync, ok} -> out_of_sync;
                             {out_of_sync, Any} -> Any;
-                            {error, _} -> error
+                            {_Error, _} -> error
                         end
                     end, ok, ComponentStatuses),
                 {Node, NodeStatus, ComponentStatuses}
             end, Nodes),
     % Calculate status of the whole application - it's the same as the worst status of any node
-    % ok > out_of_sync > error
+    % ok > out_of_sync > Other (any other atom means an error)
+    % If any node has an error, app's status will be 'error'.
     AppStatus = lists:foldl(
         fun({_, CurrentStatus, _}, Acc) ->
             case {Acc, CurrentStatus} of
                 {ok, Any} -> Any;
                 {out_of_sync, ok} -> out_of_sync;
                 {out_of_sync, Any} -> Any;
-                {error, _} -> error
+                {_Error, _} -> error
             end
         end, ok, NodeStatuses),
     % Sort node statuses by node name
@@ -221,16 +235,16 @@ check_ccm(Timeout) ->
 %% Contacts node managers on given nodes for healthcheck. The check is performed in parallel (one proces per node).
 %% @end
 %%--------------------------------------------------------------------
--spec check_node_managers(Nodes :: [atom()], Timeout :: integer()) -> [{ok, StateNum :: integer()} | error].
+-spec check_node_managers(Nodes :: [atom()], Timeout :: integer()) -> [healthcheck_reponse()].
 check_node_managers(Nodes, Timeout) ->
     pmap(
         fun(Node) ->
             Result =
                 try
-                    {ok, _StateNum} = gen_server:call({?NODE_MANAGER_NAME, Node}, healthcheck, Timeout)
+                    gen_server:call({?NODE_MANAGER_NAME, Node}, healthcheck, Timeout)
                 catch T:M ->
                     ?error("Connection error to ~p at ~p: ~p:~p", [?NODE_MANAGER_NAME, Node, T, M]),
-                    error
+                    {error, timeout}
                 end,
             {Node, Result}
         end, Nodes).
@@ -241,16 +255,16 @@ check_node_managers(Nodes, Timeout) ->
 %% Contacts request dispatchers on given nodes for healthcheck. The check is performed in parallel (one proces per node).
 %% @end
 %%--------------------------------------------------------------------
--spec check_dispatchers(Nodes :: [atom()], Timeout :: integer()) -> [{ok, StateNum :: integer()} | error].
+-spec check_dispatchers(Nodes :: [atom()], Timeout :: integer()) -> [healthcheck_reponse()].
 check_dispatchers(Nodes, Timeout) ->
     pmap(
         fun(Node) ->
             Result =
                 try
-                    {ok, _StateNum} = gen_server:call({?DISPATCHER_NAME, Node}, healthcheck, Timeout)
+                    gen_server:call({?DISPATCHER_NAME, Node}, healthcheck, Timeout)
                 catch T:M ->
                     ?error("Connection error to ~p at ~p: ~p:~p", [?DISPATCHER_NAME, Node, T, M]),
-                    error
+                    {error, timeout}
                 end,
             {Node, Result}
         end, Nodes).
@@ -263,16 +277,16 @@ check_dispatchers(Nodes, Timeout) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_workers(Nodes :: [atom()], Workers :: [{Node :: atom(), WorkerName :: atom()}], Timeout :: integer()) ->
-    [{Node :: atom(), [{Worker :: atom(), Status :: ok | error}]}].
+    [{Node :: atom(), [{Worker :: atom(), Status :: healthcheck_reponse()}]}].
 check_workers(Nodes, Workers, Timeout) ->
     WorkerStatuses = pmap(
         fun({WNode, WName}) ->
             Result =
                 try
-                    ok = worker_proxy:call({WName, WNode}, healthcheck, Timeout)
+                    worker_proxy:call({WName, WNode}, healthcheck, Timeout)
                 catch T:M ->
                     ?error("Connection error to ~p at ~p: ~p:~p", [?DISPATCHER_NAME, WNode, T, M]),
-                    error
+                    {error, timeout}
                 end,
             {WNode, WName, Result}
         end, Workers),

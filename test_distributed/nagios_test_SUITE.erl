@@ -121,4 +121,5 @@ init_per_testcase(nagios_test, Config) ->
     end.
 
 end_per_testcase(nagios_test, Config) ->
-    test_node_starter:clean_environment(Config).
+    ok.
+%%     test_node_starter:clean_environment(Config).
