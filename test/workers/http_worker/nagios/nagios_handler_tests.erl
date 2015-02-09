@@ -1,13 +1,15 @@
-%%%-------------------------------------------------------------------
-%%% @author lopiola
-%%% @copyright (C) 2015, <COMPANY>
-%%% @doc
-%%%
+%%%--------------------------------------------------------------------
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
-%%% Created : 03. lut 2015 16:32
-%%%-------------------------------------------------------------------
+%%%--------------------------------------------------------------------
+%%% @doc Unit tests for nagios_handler module.
+%%% @end
+%%%--------------------------------------------------------------------
 -module(nagios_handler_tests).
--author("lopiola").
+-author("Lukasz Opiola").
 
 -ifdef(TEST).
 -include("global_definitions.hrl").
