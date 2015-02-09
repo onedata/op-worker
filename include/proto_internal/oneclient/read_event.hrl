@@ -21,6 +21,7 @@
 }).
 
 -record(read_event_subscription, {
+    subscription_id = undefined :: binary(),
     producer = all_fuse_clients :: event_manager:event_producer(),
     producer_counter_threshold = 1 :: undefined | non_neg_integer(),
     producer_time_threshold :: undefined | non_neg_integer(),
