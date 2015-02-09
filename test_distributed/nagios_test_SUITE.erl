@@ -78,15 +78,8 @@ nagios_test(Config) ->
 %%% Internal functions
 %%%===================================================================
 
-% Tries to get health report from nagios endpoint. Retries several times
-% if the endpoint is unreachable.
+% Requests health report from nagios endpoint.
 perform_nagios_healthcheck(Node) ->
-    perform_nagios_healthcheck(Node, ?HEALTHCHECK_RETRIES).
-
-perform_nagios_healthcheck(_, 0) ->
-    {error, max_retries_to_nagios_reached};
-
-perform_nagios_healthcheck(Node, Retries) ->
     case rpc:call(Node, ibrowse, send_req, [?HEALTHCHECK_PATH, [], get]) of
         {ok, "200", _, Response} ->
             {ok, Response};
@@ -96,9 +89,8 @@ perform_nagios_healthcheck(Node, Retries) ->
                 {headers, Headers},
                 {body, Response}
             ]}};
-        _ ->
-            timer:sleep(?HEALTHCHECK_RETRY_PERIOD),
-            perform_nagios_healthcheck(Node, Retries - 1)
+        Other ->
+            Other
     end.
 
 
