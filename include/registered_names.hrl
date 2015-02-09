@@ -39,4 +39,8 @@
 %% coordinates the processes started by concrete worker_host (given by arg)
 -define(WORKER_HOST_SUPERVISOR_NAME(Module), list_to_atom(atom_to_list(Module) ++ "_sup") ).
 
+%% Local name (name and node is used to identify it) of supervisor that
+%% coordinates sequencer managers at each node
+-define(SEQUENCER_DISPATCHER_SUPERVISOR_NAME, sequencer_dispatcher_sup).
+
 -endif.

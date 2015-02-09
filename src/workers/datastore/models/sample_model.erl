@@ -56,7 +56,7 @@ create(Document) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     datastore:get(local_only, ?MODULE, Key).
 

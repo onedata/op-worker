@@ -8,7 +8,7 @@
 %%% @doc Sequencer model.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer_model).
+-module(sequencer_manager_model).
 -author("Krzysztof Trzepla").
 -behaviour(model_behaviour).
 
@@ -28,7 +28,7 @@
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(local_only, Document).
+    datastore:save(global_only, Document).
 
 
 %%--------------------------------------------------------------------
@@ -38,7 +38,7 @@ save(Document) ->
 %%--------------------------------------------------------------------
 -spec update(datastore:key(), Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(local_only, ?MODULE, Key, Diff).
+    datastore:update(global_only, ?MODULE, Key, Diff).
 
 
 %%--------------------------------------------------------------------
@@ -48,7 +48,7 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    datastore:create(local_only, Document).
+    datastore:create(global_only, Document).
 
 
 %%--------------------------------------------------------------------
@@ -56,9 +56,9 @@ create(Document) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(local_only, ?MODULE, Key).
+    datastore:get(global_only, ?MODULE, Key).
 
 
 %%--------------------------------------------------------------------
@@ -68,7 +68,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(local_only, ?MODULE, Key).
+    datastore:delete(global_only, ?MODULE, Key).
 
 
 %%--------------------------------------------------------------------
@@ -78,7 +78,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> true | false | datastore:generic_error().
 exists(Key) ->
-    datastore:exists(local_only, ?MODULE, Key).
+    datastore:exists(global_only, ?MODULE, Key).
 
 
 %%--------------------------------------------------------------------

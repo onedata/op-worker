@@ -51,7 +51,7 @@
 %% Gets #document with given key.
 %% @end
 %%--------------------------------------------------------------------
--callback get(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
+-callback get(model_behaviour:model_config(), datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 
 
 %%--------------------------------------------------------------------

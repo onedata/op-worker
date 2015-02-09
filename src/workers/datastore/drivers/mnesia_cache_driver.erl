@@ -132,7 +132,7 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
 %% {@link store_driver_behaviour} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(model_behaviour:model_config(), datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(#model_config{} = ModelConfig, Key) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
