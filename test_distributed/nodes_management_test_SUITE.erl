@@ -46,12 +46,7 @@ ccm_and_worker_test(Config) ->
 %%%===================================================================
 
 init_per_testcase(ccm_and_worker_test, Config) ->
-    try
-        test_node_starter:prepare_test_environment(Config,
-            ?TEST_FILE(Config, "env_desc.json"), ?MODULE)
-    catch
-        A:B -> ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()])
-    end.
+    ?TRY_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_testcase(ccm_and_worker_test, Config) ->
     test_node_starter:clean_environment(Config).

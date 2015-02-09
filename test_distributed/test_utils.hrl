@@ -15,6 +15,11 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+%% Catches suite init exceptions
+-define(TRY_INIT(Config, EnvDescription),
+    try test_node_starter:prepare_test_environment(Config, EnvDescription, ?MODULE)
+    catch A:B -> ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()]) end).
+
 %% Returns absolute path to given file in the test data directory
 -define(TEST_FILE(Config, X), filename:join(?config(data_dir, Config), X)).
 
