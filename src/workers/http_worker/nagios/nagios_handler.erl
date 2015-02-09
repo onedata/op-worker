@@ -34,7 +34,7 @@
 %% Cowboy handler callback, no state is required
 %% @end
 %%--------------------------------------------------------------------
--spec init(term(), term(), term()) -> {ok, term(), []}.
+-spec init(term(), term(), term()) -> {ok, cowboy_req:req(), term()}.
 init(_Type, Req, _Opts) ->
     {ok, Req, []}.
 
@@ -44,7 +44,7 @@ init(_Type, Req, _Opts) ->
 %% Handles a request producing an XML response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(term(), term()) -> {ok, term(), term()}.
+-spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
 handle(Req, State) ->
     {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
 
