@@ -6,15 +6,15 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Client credentials used in protocol_handler to extend client_message
+%%% internal protocol event messages
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(CREDENTIALS_HRL).
--define(CREDENTIALS_HRL, 1).
+-ifndef(EVENT_MESSAGES_HRL).
+-define(EVENT_MESSAGES_HRL, 1).
 
--record(credentials, {
-    fuse_id = <<"ID">>
+-record(event_subscription_cancellation, {
+    id :: binary()
 }).
 
 -endif.

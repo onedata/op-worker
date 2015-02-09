@@ -12,7 +12,7 @@
 -module(client_auth).
 -author("Tomasz Lichon").
 
--include("proto_internal/oneclient/credentials.hrl").
+-include("cluster_elements/protocol_handler/credentials.hrl").
 
 %% API
 -export([handle_auth_info/1]).

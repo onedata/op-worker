@@ -6,21 +6,19 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Internal version of client protocol message
+%%% Client credentials used in protocol_handler to extend client_message
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(CLIENT_MESSAGES_HRL).
--define(CLIENT_MESSAGES_HRL, 1).
+-ifndef(CREDENTIALS_HRL).
+-define(CREDENTIALS_HRL, 1).
 
--include("cluster_elements/protocol_handler/credentials.hrl").
+-export_type([fuse_id/0]).
 
--record(client_message, {
-    response_id :: integer(),
-    seq_num :: integer(),
-    last_message :: boolean(),
-    credentials :: #credentials{},
-    client_message :: tuple()
+-type fuse_id() :: binary().
+
+-record(credentials, {
+    fuse_id = <<"ID">> :: fuse_id()
 }).
 
 -endif.

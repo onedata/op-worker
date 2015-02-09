@@ -15,15 +15,14 @@
 -include("proto/oneclient/messages.hrl").
 -include("proto_internal/oneclient/common_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
--include("workers/event_manager/event_stream.hrl").
--include("workers/event_manager/events.hrl").
--include("workers/event_manager/read_event.hrl").
--include("workers/event_manager/write_event.hrl").
+-include("proto_internal/oneclient/read_event.hrl").
+-include("proto_internal/oneclient/write_event.hrl").
+-include("proto_internal/oneclient/event_messages.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([translate/1]).
+-export([translate_from_protobuf/1, translate_to_protobuf/1]).
 
 %%%===================================================================
 %%% API
@@ -31,103 +30,127 @@
 
 %%--------------------------------------------------------------------
 %% @doc
+%% traslate protobuf record to internal record
 %% @end
 %%--------------------------------------------------------------------
--spec translate(tuple()) -> tuple().
-translate(#'FileBlock'{offset = Off, size = S}) ->
+-spec translate_from_protobuf(tuple()) -> tuple().
+translate_from_protobuf(#'FileBlock'{offset = Off, size = S}) ->
     #file_block{offset = Off, size = S};
-translate(#file_block{offset = Off, size = S}) ->
-    #'FileBlock'{offset = Off, size = S};
-
-translate(#'EnvironmentVariable'{name = Name, value = Val}) ->
+translate_from_protobuf(#'EnvironmentVariable'{name = Name, value = Val}) ->
     #environment_variable{name = Name, value = Val};
-translate(#environment_variable{name = Name, value = Val}) ->
-    #'EnvironmentVariable'{name = Name, value = Val};
-
-translate(#'Status'{code = Code, description = Desc}) ->
+translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
-translate(#status{code = Code, description = Desc}) ->
-    #'Status'{code = Code, description = Desc};
-
-translate(#read_event{} = Record) ->
-    #'ReadEvent'{
-        counter = Record#read_event.counter,
-        file_id = Record#read_event.file_id,
-        size = Record#read_event.size,
-        blocks = Record#read_event.blocks
-    };
-translate(#'ReadEvent'{} = Record) ->
+translate_from_protobuf(#'Event'{event = {_, Record}}) ->
+    Record;
+translate_from_protobuf(#'ReadEvent'{} = Record) ->
     {ok, #read_event{
         counter = Record#'ReadEvent'.counter,
         file_id = Record#'ReadEvent'.file_id,
         size = Record#'ReadEvent'.size,
         blocks = Record#'ReadEvent'.blocks
     }};
-
-translate(#read_event_subscription{} = Subscription) ->
-    #'ReadEventSubscription'{
-        id = Subscription#read_event_subscription.subscription_id,
-        counter_threshold = set_event_threshold_parameter(
-            Subscription#read_event_subscription.producer_counter_threshold,
-            Subscription#read_event_subscription.subscriber_counter_threshold
-        ),
-        time_threshold = set_event_threshold_parameter(
-            Subscription#read_event_subscription.producer_time_threshold,
-            Subscription#read_event_subscription.subscriber_time_threshold
-        ),
-        size_threshold = set_event_threshold_parameter(
-            Subscription#read_event_subscription.producer_size_threshold,
-            Subscription#read_event_subscription.subscriber_size_threshold
-        )
-    };
-
-translate(#write_event{} = Record) ->
-    #'WriteEvent'{
-        counter = Record#write_event.counter,
-        file_id = Record#write_event.file_id,
-        size = Record#write_event.size,
-        blocks = Record#write_event.blocks
-    };
-translate(#'WriteEvent'{} = Record) ->
+translate_from_protobuf(#'WriteEvent'{} = Record) ->
     #write_event{
         counter = Record#'WriteEvent'.counter,
         file_id = Record#'WriteEvent'.file_id,
         size = Record#'WriteEvent'.size,
         blocks = Record#'WriteEvent'.blocks
     };
-
-translate(#write_event_subscription{} = Subscription) ->
-    #'WriteEventSubscription'{
-        counter_threshold = set_event_threshold_parameter(
-            Subscription#write_event_subscription.producer_counter_threshold,
-            Subscription#write_event_subscription.subscriber_counter_threshold
-        ),
-        time_threshold = set_event_threshold_parameter(
-            Subscription#write_event_subscription.producer_time_threshold,
-            Subscription#write_event_subscription.subscriber_time_threshold
-        ),
-        size_threshold = set_event_threshold_parameter(
-            Subscription#write_event_subscription.producer_size_threshold,
-            Subscription#write_event_subscription.subscriber_size_threshold
-        )
-    };
-
-translate(#'HandshakeRequest'{environment_variables = Envs}) ->
+translate_from_protobuf(#'HandshakeRequest'{environment_variables = Envs}) ->
     #handshake_request{environment_variables = Envs};
-translate(#handshake_request{environment_variables = Envs}) ->
-    #'HandshakeRequest'{environment_variables = Envs};
-
-translate(#'HandshakeResponse'{fuse_id = Id}) ->
+translate_from_protobuf(#'HandshakeResponse'{fuse_id = Id}) ->
     #handshake_response{fuse_id = Id};
-translate(#handshake_response{fuse_id = Id}) ->
-    #'HandshakeResponse'{fuse_id = Id};
-
-translate(#'HandshakeAcknowledgement'{fuse_id = Id}) ->
+translate_from_protobuf(#'HandshakeAcknowledgement'{fuse_id = Id}) ->
     #handshake_acknowledgement{fuse_id = Id};
-translate(#handshake_acknowledgement{fuse_id = Id}) ->
-    #'HandshakeAcknowledgement'{fuse_id = Id};
+translate_from_protobuf(Record) ->
+    ?error("~p:~p - unknown record ~p", [?MODULE, ?LINE, Record]),
+    throw({unknown_record, Record}).
 
-translate(Record) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% translate internal record to protobuf record
+%% @end
+%%--------------------------------------------------------------------
+-spec translate_to_protobuf(tuple()) -> tuple().
+translate_to_protobuf(#file_block{offset = Off, size = S}) ->
+    #'FileBlock'{offset = Off, size = S};
+translate_to_protobuf(#environment_variable{name = Name, value = Val}) ->
+    #'EnvironmentVariable'{name = Name, value = Val};
+translate_to_protobuf(#status{code = Code, description = Desc}) ->
+    #'Status'{code = Code, description = Desc};
+translate_to_protobuf(#read_event{} = Record) ->
+    #'Event'{event =
+    {read_event,
+        #'ReadEvent'{
+            counter = Record#read_event.counter,
+            file_id = Record#read_event.file_id,
+            size = Record#read_event.size,
+            blocks = Record#read_event.blocks
+        }}
+    };
+translate_to_protobuf(#write_event{} = Record) ->
+    #'Event'{event =
+    {write_event,
+        #'WriteEvent'{
+            counter = Record#write_event.counter,
+            file_id = Record#write_event.file_id,
+            size = Record#write_event.size,
+            blocks = Record#write_event.blocks
+        }}
+    };
+translate_to_protobuf(#event_subscription_cancellation{id = Id}) ->
+    #'EventSubscription'{
+        event_subscription = {event_subscription_cancellation,
+            #'EventSubscriptionCancellation'{
+                id = Id
+            }
+        }
+    };
+translate_to_protobuf(#read_event_subscription{} = Subscription) ->
+    #'EventSubscription'{
+        event_subscription = {read_event_subscription,
+            #'ReadEventSubscription'{
+                id = Subscription#read_event_subscription.subscription_id,
+                counter_threshold = set_event_threshold_parameter(
+                    Subscription#read_event_subscription.producer_counter_threshold,
+                    Subscription#read_event_subscription.subscriber_counter_threshold
+                ),
+                time_threshold = set_event_threshold_parameter(
+                    Subscription#read_event_subscription.producer_time_threshold,
+                    Subscription#read_event_subscription.subscriber_time_threshold
+                ),
+                size_threshold = set_event_threshold_parameter(
+                    Subscription#read_event_subscription.producer_size_threshold,
+                    Subscription#read_event_subscription.subscriber_size_threshold
+                )
+            }
+        }
+    };
+translate_to_protobuf(#write_event_subscription{} = Subscription) ->
+    #'EventSubscription'{
+        event_subscription = {write_event_subscription,
+            #'WriteEventSubscription'{
+                counter_threshold = set_event_threshold_parameter(
+                    Subscription#write_event_subscription.producer_counter_threshold,
+                    Subscription#write_event_subscription.subscriber_counter_threshold
+                ),
+                time_threshold = set_event_threshold_parameter(
+                    Subscription#write_event_subscription.producer_time_threshold,
+                    Subscription#write_event_subscription.subscriber_time_threshold
+                ),
+                size_threshold = set_event_threshold_parameter(
+                    Subscription#write_event_subscription.producer_size_threshold,
+                    Subscription#write_event_subscription.subscriber_size_threshold
+                )
+            }
+        }};
+translate_to_protobuf(#handshake_request{environment_variables = Envs}) ->
+    #'HandshakeRequest'{environment_variables = Envs};
+translate_to_protobuf(#handshake_response{fuse_id = Id}) ->
+    #'HandshakeResponse'{fuse_id = Id};
+translate_to_protobuf(#handshake_acknowledgement{fuse_id = Id}) ->
+    #'HandshakeAcknowledgement'{fuse_id = Id};
+translate_to_protobuf(Record) ->
     ?error("~p:~p - unknown record ~p", [?MODULE, ?LINE, Record]),
     throw({unknown_record, Record}).
 

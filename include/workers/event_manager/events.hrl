@@ -12,8 +12,8 @@
 -ifndef(EVENTS_HRL).
 -define(EVENTS_HRL, 1).
 
--include("read_event.hrl").
--include("write_event.hrl").
+-include("proto_internal/oneclient/read_event.hrl").
+-include("proto_internal/oneclient/write_event.hrl").
 
 -export_type([event/0, event_subscription/0, event_producer/0]).
 
