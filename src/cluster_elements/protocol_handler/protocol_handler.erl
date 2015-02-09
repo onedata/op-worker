@@ -142,12 +142,16 @@ handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, transport =
 
 handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, transport = Transport, ok = Ok, credentials = Cred}) ->
     activate_socket_once(Socket, Transport),
-    Msg = serializator:deserialize_client_message(Data, Cred),
-    ?info("Got message ~p", [Msg]),
-    {noreply, State, ?TIMEOUT};
+    case serializator:deserialize_client_message(Data, Cred) of
+        {ok, Msg} ->
+            ?info("Got message ~p", [Msg]),
+            {noreply, State, ?TIMEOUT};
+        Error ->
+            ?warning("Connection ~p message decoding error: ~p", [Socket, Error]),
+            {stop, Error, State}
+    end;
 
-handle_info({Closed, Socket}, State = #sock_state{closed = Closed}) ->
-    ?info("Connection ~p closed", [Socket]),
+handle_info({Closed, _}, State = #sock_state{closed = Closed}) ->
     {stop, normal, State};
 
 handle_info({Error, Socket, Reason}, State = #sock_state{error = Error}) ->

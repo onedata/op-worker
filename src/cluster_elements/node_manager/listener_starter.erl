@@ -37,6 +37,7 @@
 -define(HTTPS_LISTENER, https).
 -define(REST_LISTENER, rest).
 -define(HTTP_REDIRECTOR_LISTENER, http).
+-define(TCP_PROTO_LISTENER, tcp_proto).
 
 %% API
 -export([start_protocol_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0,
@@ -61,7 +62,7 @@ start_protocol_listener() ->
     Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_none, no_http) end),
     register(?ONEPROXY_PROTOCOL_LISTENER, Pid),
 
-    {ok, _} = ranch:start_listener(tcp_echo, DispatcherPoolSize,
+    {ok, _} = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
         ranch_tcp, [{ip, {127, 0, 0, 1}}, {port, LocalPort}],
         protocol_handler, []
     ).

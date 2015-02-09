@@ -128,8 +128,8 @@ translate(#handshake_acknowledgement{fuse_id = Id}) ->
     #'HandshakeAcknowledgement'{fuse_id = Id};
 
 translate(Record) ->
-    ?error("~p:~p - bad record ~p", [?MODULE, ?LINE, Record]),
-    {error, {unknown_record, Record}}.
+    ?error("~p:~p - unknown record ~p", [?MODULE, ?LINE, Record]),
+    throw({unknown_record, Record}).
 
 %%%===================================================================
 %%% Internal functions
