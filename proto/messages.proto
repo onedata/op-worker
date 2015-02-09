@@ -1,0 +1,4 @@
+package one.clproto;
+
+import "server_messages.proto";
+import "client_messages.proto";

@@ -3,14 +3,7 @@ package one.clproto;
 import "common_messages.proto";
 
 message HandshakeRequest {
-    message CertificateConfirmation {
-        required bytes login  = 1;
-        required bool  result = 2;
-    }
-
-    required bytes                   hostname                 = 1;
     repeated EnvironmentVariable     environment_variables    = 2;
-    optional CertificateConfirmation certificate_confirmation = 3;
 }
 
 message HandshakeResponse {
