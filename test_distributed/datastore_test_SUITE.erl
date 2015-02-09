@@ -136,7 +136,8 @@ global_cache_atomic_update_test(Config) ->
 
 init_per_suite(Config) ->
     try
-        test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json"))
+        test_node_starter:prepare_test_environment(Config,
+            ?TEST_FILE(Config, "env_desc.json"), ?MODULE)
     catch
         A:B -> ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()])
     end.

@@ -18,9 +18,11 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([sequencer_dispatcher_test/1]).
+-export([sequencer_dispatcher_test/1, sequencer_test/1]).
 
-all() -> [sequencer_dispatcher_test].
+-record(client_message, {message_id, seq_num, last_message, client_message}).
+
+all() -> [sequencer_dispatcher_test, sequencer_test].
 
 %%%===================================================================
 %%% Test function
@@ -29,14 +31,14 @@ all() -> [sequencer_dispatcher_test].
 sequencer_dispatcher_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
+    Self = self(),
     FuseId1 = <<"fuse_id_1">>,
     FuseId2 = <<"fuse_id_2">>,
-    Connection = self(),
 
     [SeqMan1, SeqMan2] = lists:map(fun(FuseId) ->
         CreateOrGetSeqManAnswers = utils:pmap(fun(Worker) ->
             rpc:call(Worker, sequencer_dispatcher,
-                create_or_get_sequencer_manager, [FuseId, Connection])
+                create_or_get_sequencer_manager, [FuseId, Self])
         end, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)),
 
         lists:foreach(fun(CreateOrGetSeqManAnswer) ->
@@ -75,13 +77,55 @@ sequencer_dispatcher_test(Config) ->
 
     ok.
 
+sequencer_test(Config) ->
+    [Worker, _] = ?config(op_worker_nodes, Config),
+
+    Answer = rpc:call(Worker, erlang, apply, [fun() ->
+        Self = self(),
+        FuseId = <<"fuse_id">>,
+        ClientMsg = #client_message{message_id = 1, last_message = false},
+
+        {ok, SeqMan} = sequencer_dispatcher:create_or_get_sequencer_manager(FuseId, Self),
+        ok = meck:new(router, [non_strict]),
+        ok = meck:expect(router, route, fun(Msg) -> Self ! Msg end),
+
+        lists:foreach(fun(SeqNum) ->
+            gen_server:cast(SeqMan, ClientMsg#client_message{seq_num = SeqNum})
+        end, utils:random_shuffle(lists:seq(1, 100))),
+
+        lists:foreach(fun(SeqNum) ->
+            Msg = ClientMsg#client_message{seq_num = SeqNum},
+            ReceiveAnswer = receive
+                                Msg -> ok
+                            after
+                                timer:seconds(1) -> {error, {timeout, SeqNum}}
+                            end,
+            ?assertEqual(ok, ReceiveAnswer)
+        end, lists:seq(1, 100)),
+
+        ReceiveAnswer = receive
+                            ack -> ok
+                        after
+                            timer:seconds(1) -> {error, timeout}
+                        end,
+        ?assertEqual(ok, ReceiveAnswer),
+
+        true = meck:validate(router),
+        ok = sequencer_dispatcher:remove_sequencer_manager(FuseId)
+    end, []]),
+
+    ?assertEqual(ok, Answer),
+
+    ok.
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
     try
-        test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json"))
+        test_node_starter:prepare_test_environment(Config,
+            ?TEST_FILE(Config, "env_desc.json"), ?MODULE)
     catch
         A:B -> ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()])
     end.
@@ -93,7 +137,14 @@ end_per_suite(Config) ->
 %%% Internal functions
 %%%===================================================================
 
-processes(Workers) ->
-    lists:foldl(fun(Worker, Processes) ->
-        Processes ++ rpc:call(Worker, erlang, processes, [])
-    end, [], Workers).
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns list of processes running on given nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec processes(Nodes :: [node()]) -> [Pid :: pid()].
+processes(Nodes) ->
+    lists:foldl(fun(Node, Processes) ->
+        Processes ++ rpc:call(Node, erlang, processes, [])
+    end, [], Nodes).
