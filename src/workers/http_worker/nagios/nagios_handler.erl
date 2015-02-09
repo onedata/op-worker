@@ -111,6 +111,8 @@ terminate(_Reason, _Req, _State) ->
 %%     ]}
 %% ]}
 %% Status can be: ok | out_of_sync | error | atom()
+%%
+%% If CCM cannot be contacted, the function returns 'error' atom.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cluster_status(Timeout :: integer()) -> term().
@@ -237,7 +239,7 @@ check_ccm(Timeout) ->
 %%--------------------------------------------------------------------
 -spec check_node_managers(Nodes :: [atom()], Timeout :: integer()) -> [healthcheck_reponse()].
 check_node_managers(Nodes, Timeout) ->
-    pmap(
+    utils:pmap(
         fun(Node) ->
             Result =
                 try
@@ -257,7 +259,7 @@ check_node_managers(Nodes, Timeout) ->
 %%--------------------------------------------------------------------
 -spec check_dispatchers(Nodes :: [atom()], Timeout :: integer()) -> [healthcheck_reponse()].
 check_dispatchers(Nodes, Timeout) ->
-    pmap(
+    utils:pmap(
         fun(Node) ->
             Result =
                 try
@@ -279,7 +281,7 @@ check_dispatchers(Nodes, Timeout) ->
 -spec check_workers(Nodes :: [atom()], Workers :: [{Node :: atom(), WorkerName :: atom()}], Timeout :: integer()) ->
     [{Node :: atom(), [{Worker :: atom(), Status :: healthcheck_reponse()}]}].
 check_workers(Nodes, Workers, Timeout) ->
-    WorkerStatuses = pmap(
+    WorkerStatuses = utils:pmap(
         fun({WNode, WName}) ->
             Result =
                 try
@@ -306,47 +308,3 @@ check_workers(Nodes, Workers, Timeout) ->
             end
         end, [], Nodes),
     WorkersByNode ++ EmptyNodes.
-
-
-%%%====================================================================
-%% Paralel Map Function
-%%%====================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Works as lists:map/2, but in parallel, more explanation can be found
-%% in: http://montsamu.blogspot.com/2007/02/erlang-parallel-map-and-parallel.html
-%% @end
-%%--------------------------------------------------------------------
--spec pmap(F :: fun((term()) -> term()), L :: list()) -> list().
-pmap(F, L) ->
-    S = self(),
-    Pids = lists:map(fun(I) -> spawn(fun() -> pmap_f(S, F, I) end) end, L),
-    pmap_gather(Pids).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gather result from spawned process during pmap
-%% @end
-%%--------------------------------------------------------------------
--spec pmap_gather(List :: list()) -> list().
-pmap_gather([H | T]) ->
-    receive
-        {H, Ret} -> [Ret | pmap_gather(T)]
-    end;
-pmap_gather([]) ->
-    [].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Computes function value and sends result to parent process
-%% @end
-%%--------------------------------------------------------------------
--spec pmap_f(Parent :: pid(), F :: fun((term()) -> term()), I :: term()) -> term().
-pmap_f(Parent, F, I) ->
-    Parent ! {self(), (catch F(I))}.

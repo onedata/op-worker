@@ -36,14 +36,6 @@ all() -> [nagios_test].
 nagios_test(Config) ->
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
 
-    %todo integrate with test_utils
-    cluster_state_notifier:cast({subscribe_for_init, self(), length(WorkerNodes)}),
-    receive
-        init_finished -> ok
-    after
-        50000 -> throw(timeout)
-    end,
-
     {ok, XMLString} = perform_nagios_healthcheck(Worker1),
 
     {Xml, _} = xmerl_scan:string(XMLString),
