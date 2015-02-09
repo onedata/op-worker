@@ -7,18 +7,19 @@ import "handshake_messages.proto";
 // list of messages that can be sent from the server to the client
 message ServerMessage {
     optional uint64 message_id   = 1;
-    optional uint64 seq_num      = 2;
-    optional bool   last_message = 3;
+    optional uint64 stream_id    = 2;
+    optional uint64 seq_num      = 3;
+    optional bool   last_message = 4;
     oneof server_message {
         // handshake_messages.proto
-        HandshakeResponse        handshake_response      = 4;
+        HandshakeResponse        handshake_response      = 5;
 
         // communication_messages.proto
-        Status                   status                  = 5;
-        MessageRequest           message_request         = 6;
-        MessageAcknowledgement   message_acknowledgement = 7;
+        Status                   status                  = 6;
+        MessageRequest           message_request         = 7;
+        MessageAcknowledgement   message_acknowledgement = 8;
 
         // event_messages.proto
-        EventSubscription        event_subscription      = 8;
+        EventSubscription        event_subscription      = 9;
     }
 }

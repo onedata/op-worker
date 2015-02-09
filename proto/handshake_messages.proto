@@ -3,7 +3,7 @@ package one.clproto;
 import "common_messages.proto";
 
 message HandshakeRequest {
-    repeated EnvironmentVariable     environment_variables    = 2;
+    repeated EnvironmentVariable environment_variables = 1;
 }
 
 message HandshakeResponse {

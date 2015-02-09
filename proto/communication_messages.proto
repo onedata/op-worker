@@ -1,8 +1,9 @@
 package one.clproto;
 
 message MessageRequest {
-    required uint64 message_id = 1;
-    required uint64 seq_num    = 2;
+    required uint64 message_id    = 1;
+    required uint64 lower_seq_num = 2;
+    required uint64 upper_seq_num = 3;
 }
 
 message MessageAcknowledgement {
