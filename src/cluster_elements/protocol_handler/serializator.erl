@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%%
+%%% Serializes and deserializes protobuf messages
 %%% @end
 %%%-------------------------------------------------------------------
 -module(serializator).
@@ -49,10 +49,14 @@ deserialize_client_message(Message, Cred) ->
     binary() | {error, term()}.
 serialize_server_message(#server_message{response_id = Id, seq_num = Seq,
     last_message = Last, server_message = Msg}) ->
-    ProtobufMessage = translator:translate_to_protobuf(Msg),
-    ServerMessage = #'ServerMessage'{response_id = Id, seq_num = Seq,
-        last_message = Last, server_message = {element(1, Msg), ProtobufMessage}},
-    server_messages:encode_msg(ServerMessage).
+    try
+        ProtobufMessage = translator:translate_to_protobuf(Msg),
+        ServerMessage = #'ServerMessage'{response_id = Id, seq_num = Seq,
+            last_message = Last, server_message = {element(1, Msg), ProtobufMessage}},
+        {ok, server_messages:encode_msg(ServerMessage)}
+    catch
+        _:Error  -> {error, Error}
+    end.
 
 %%%===================================================================
 %%% Internal functions

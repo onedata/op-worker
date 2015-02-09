@@ -15,11 +15,11 @@
 -behaviour(ranch_protocol).
 -behaviour(gen_server).
 
+-include_lib("proto_internal/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/4]).
--export([init/4]).
+-export([start_link/4, init/4, call/2, cast/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -41,6 +41,24 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv gen_server:call(Pid, Req).
+%% @end
+%%--------------------------------------------------------------------
+-spec call(Pid :: pid(), Req :: term()) -> ok | {error, term()}.
+call(Pid, Req) ->
+    gen_server:call(Pid, Req).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv gen_server:cast(Pid, Req).
+%% @end
+%%--------------------------------------------------------------------
+-spec cast(Pid :: pid(), Req :: term()) -> ok.
+cast(Pid, Req) ->
+    gen_server:cast(Pid, Req).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,6 +120,10 @@ init([]) -> {ok, undefined}.
     {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #sock_state{}} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
+handle_call({send, ServerMsg}, _From, State = #sock_state{socket = Socket,
+    transport = Transport}) ->
+    Ans = send_server_message(Socket, Transport, ServerMsg),
+    {reply, Ans, State};
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, wrong_request, State}.
@@ -116,6 +138,10 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #sock_state{}} |
     {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
+handle_cast({send, ServerMsg}, State = #sock_state{socket = Socket,
+    transport = Transport}) ->
+    send_server_message(Socket, Transport, ServerMsg),
+    {noreply, State};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
@@ -145,7 +171,13 @@ handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, transport =
     case serializator:deserialize_client_message(Data, Cred) of
         {ok, Msg} ->
             ?info("Got message ~p", [Msg]),
-            {noreply, State, ?TIMEOUT};
+            case router:preroute_message(Msg) of
+                ok ->
+                    {noreply, State, ?TIMEOUT};
+                {_, Response = #server_message{}} ->
+                    send_server_message(Socket, Transport, Response),
+                    {noreply, State, ?TIMEOUT}
+            end;
         Error ->
             ?warning("Connection ~p message decoding error: ~p", [Socket, Error]),
             {stop, Error, State}
@@ -205,3 +237,23 @@ code_change(_OldVsn, State, _Extra) ->
 -spec activate_socket_once(Socket :: port(), Transport :: module()) -> ok.
 activate_socket_once(Socket, Transport) ->
     ok = Transport:setopts(Socket, [{active, once}]).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Activate socket for next message, so it will be send to handling process
+%% via erlang message
+%% @end
+%%--------------------------------------------------------------------
+-spec send_server_message(Socket :: port(), Transport :: module(),
+    ServerMessage :: tuple()) -> ok | {error, term()}.
+send_server_message(Socket, Transport, ServerMsg) ->
+    case serializator:serialize_server_message(ServerMsg) of
+        {ok, Data} ->
+            ok = Transport:send(Socket, Data),
+            ok;
+        Error ->
+            ?error("Connection ~p, message ~p encoding error: ~p",
+                [Socket, ServerMsg, Error]),
+            Error
+    end.
