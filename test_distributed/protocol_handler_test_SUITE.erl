@@ -72,7 +72,7 @@ protobuf_msg_test(Config) ->
             ok
         end]),
     Msg = #'ClientMessage'{
-        response_id = 0,
+        message_id = 0,
         client_message = {handshake_request, #'HandshakeRequest'{}}
     },
     RawMsg = client_messages:encode_msg(Msg),

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%%
+%%% Internal version of server protocol message.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -14,8 +14,9 @@
 -define(SERVER_MESSAGES_HRL, 1).
 
 -record(server_message, {
-    response_id :: integer(),
-    seq_num :: integer(),
+    message_id :: non_neg_integer(),
+    stream_id :: non_neg_integer(),
+    seq_num :: non_neg_integer(),
     last_message :: boolean(),
     server_message :: tuple()
 }).

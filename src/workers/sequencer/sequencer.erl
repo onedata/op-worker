@@ -6,7 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% This module implements gen_server behaviour and is responsible
+%%% for sorting messages in ascending order of sequence number and forwarding
+%%% them to the router.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(sequencer).
@@ -15,6 +17,9 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
+-include("proto_internal/oneclient/client_messages.hrl").
+-include("proto_internal/oneclient/server_messages.hrl").
+-include("proto_internal/oneclient/communication_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -44,8 +49,6 @@
     msgs_ack_win :: non_neg_integer(),
     time_ack_win :: non_neg_integer()
 }).
-
--record(client_message, {message_id, seq_num, last_message, client_message}).
 
 %%%===================================================================
 %%% API
@@ -184,6 +187,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Forward message to the router and sends periodic acknowledgement messages.
+%% Returns modified sequencer state.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_msg(Msg :: #client_message{}, State :: #state{}) ->
+    {stop, normal, NewState :: #state{}} |
+    {noreply, NewState :: #state{}}.
 process_msg(#client_message{last_message = true} = Msg, State) ->
     NewState = send_msg_ack(send_msg(Msg, State)),
     {stop, normal, NewState};
@@ -196,6 +209,17 @@ process_msg(#client_message{seq_num = MsgSeqNum} = Msg,
         false -> {noreply, NewState}
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes pending messages by calling process_msg/2 function on messages
+%% with sequence number equal to current sequence number. Returns modified
+%% sequencer state.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_pending_msgs({stop, normal, State :: #state{}} |{noreply,
+    State :: #state{}}) -> {stop, normal, NewState :: #state{}} |
+{noreply, NewState :: #state{}}.
 process_pending_msgs({stop, normal, State}) ->
     {stop, normal, State};
 
@@ -207,21 +231,70 @@ process_pending_msgs({noreply, #state{seq_num = SeqNum, msgs = Msgs} = State}) -
             {noreply, State}
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Forwards message to the router.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_msg(Msg :: #client_message{}, State :: #state{}) ->
+    NewState :: #state{}.
 send_msg(Msg, #state{seq_num = SeqNum} = State) ->
-    router:route(Msg),
+    router:route_message(Msg),
     State#state{seq_num = SeqNum + 1}.
 
-send_msg_ack(#state{msg_id = _MsgId, seq_man = SeqMan, seq_num = SeqNum} = State) ->
-    gen_server:cast(SeqMan, {send, ack}),
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends acknowledgement to sequencer manager for last forwarded message.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_msg_ack(State :: #state{}) -> NewState :: #state{}.
+send_msg_ack(#state{msg_id = MsgId, seq_man = SeqMan, seq_num = SeqNum} = State) ->
+    Msg = #server_message{server_message = #message_acknowledgement{
+        message_id = MsgId,
+        seq_num = SeqNum - 1
+    }},
+    gen_server:cast(SeqMan, {send, Msg}),
     State#state{seq_num_ack = SeqNum - 1}.
 
-send_msg_req(#client_message{message_id = _MsgId, seq_num = _MsgSeqNum},
-    #state{seq_man = SeqMan, seq_num = _SeqNum} = State) ->
-    gen_server:cast(SeqMan, {send, req}),
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends request to sequencer manager for messages with sequence number ranging
+%% expected sequence number to sequence number proceeding sequence number of
+%% received message minus one.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_msg_req(Msg :: #client_message{}, State :: #state{}) ->
+    NewState :: #state{}.
+send_msg_req(#client_message{message_id = MsgId, seq_num = MsgSeqNum},
+    #state{seq_man = SeqMan, seq_num = SeqNum} = State) ->
+    Msg = #server_message{server_message = #message_request{
+        message_id = MsgId,
+        lower_seq_num = SeqNum,
+        upper_seq_num = MsgSeqNum - 1
+    }},
+    gen_server:cast(SeqMan, {send, Msg}),
     State.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Stores message in sequencer state.
+%% @end
+%%--------------------------------------------------------------------
+-spec store_msg(Msg :: #client_message{}, State :: #state{}) ->
+    NewState :: #state{}.
 store_msg(#client_message{seq_num = SeqNum} = Msg, #state{msgs = Msgs} = State) ->
     State#state{msgs = maps:put(SeqNum, Msg, Msgs)}.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes message from sequencer state.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_msg(Msg :: #client_message{}, State :: #state{}) ->
+    NewState :: #state{}.
 remove_msg(#client_message{seq_num = SeqNum}, #state{msgs = Msgs} = State) ->
     State#state{msgs = maps:remove(SeqNum, Msgs)}.

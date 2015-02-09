@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% This module implements gen_server behaviour and is responsible
+%%% for dispatching messages sent by given FUSE client to sequencers.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(sequencer_manager).
@@ -14,6 +15,7 @@
 
 -behaviour(gen_server).
 
+-include("proto_internal/oneclient/client_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -25,16 +27,14 @@
 
 %% sequencer manager state:
 %% seq_sup - pid of sequencer supervisor
-%% cons   - list of connectionnection pids to FUSE client associated with
-%%                 sequencer manager
+%% cons    - list of connectionnection pids to FUSE client associated with
+%%           sequencer manager
 %% seqs    - mapping from message ID to sequencer pid
 -record(state, {
     seq_sup,
     cons = [],
     seqs = #{}
 }).
--record(client_message, {message_id, seq_num, last_message, client_message}).
-
 
 %%%===================================================================
 %%% API
@@ -138,7 +138,7 @@ handle_cast({send, Msg}, #state{cons = []} = State) ->
     {noreply, State};
 
 handle_cast({send, Msg}, #state{cons = [Connection | Connections]} = State) ->
-    Connection ! Msg,
+    protocol_handler:cast(Connection, Msg),
     {noreply, State#state{cons = Connections ++ [Connection]}};
 
 handle_cast(_Request, State) ->

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Internal version of protocol handshake messages
+%%% Internal version of protocol handshake messages.
 %%% @end
 %%%-------------------------------------------------------------------
 

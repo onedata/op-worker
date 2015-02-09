@@ -13,22 +13,23 @@
 
 -include("test_utils.hrl").
 -include("registered_names.hrl").
+-include("proto_internal/oneclient/client_messages.hrl").
+-include("proto_internal/oneclient/server_messages.hrl").
+-include("proto_internal/oneclient/communication_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([sequencer_dispatcher_test/1, sequencer_test/1]).
+-export([sequencer_worker_test/1, sequencer_test/1]).
 
--record(client_message, {message_id, seq_num, last_message, client_message}).
-
-all() -> [sequencer_dispatcher_test, sequencer_test].
+all() -> [sequencer_worker_test, sequencer_test].
 
 %%%===================================================================
 %%% Test function
 %% ====================================================================
 
-sequencer_dispatcher_test(Config) ->
+sequencer_worker_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     Self = self(),
@@ -37,7 +38,7 @@ sequencer_dispatcher_test(Config) ->
 
     [SeqMan1, SeqMan2] = lists:map(fun(FuseId) ->
         CreateOrGetSeqManAnswers = utils:pmap(fun(Worker) ->
-            rpc:call(Worker, sequencer_dispatcher,
+            rpc:call(Worker, sequencer_worker,
                 create_or_get_sequencer_manager, [FuseId, Self])
         end, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)),
 
@@ -62,10 +63,10 @@ sequencer_dispatcher_test(Config) ->
             P =:= SeqMan1
         end, ProcessesBeforeRemoval)),
 
-        RemoveSeqManAnswer1 = rpc:call(Worker1, sequencer_dispatcher,
+        RemoveSeqManAnswer1 = rpc:call(Worker1, sequencer_worker,
             remove_sequencer_manager, [FuseId]),
         ?assertMatch(ok, RemoveSeqManAnswer1),
-        RemoveSeqManAnswer2 = rpc:call(Worker1, sequencer_dispatcher,
+        RemoveSeqManAnswer2 = rpc:call(Worker1, sequencer_worker,
             remove_sequencer_manager, [FuseId]),
         ?assertMatch({error, _}, RemoveSeqManAnswer2),
 
@@ -83,35 +84,44 @@ sequencer_test(Config) ->
     Answer = rpc:call(Worker, erlang, apply, [fun() ->
         Self = self(),
         FuseId = <<"fuse_id">>,
-        ClientMsg = #client_message{message_id = 1, last_message = false},
+        MsgId = 1,
+        MsgCount = 100,
+        ClientMsg = #client_message{message_id = MsgId, last_message = false},
+        MsgReq = #message_request{message_id = MsgId},
+        MsgAck = #message_acknowledgement{message_id = MsgId, seq_num = MsgCount},
 
-        {ok, SeqMan} = sequencer_dispatcher:create_or_get_sequencer_manager(FuseId, Self),
-        ok = meck:new(router, [non_strict]),
-        ok = meck:expect(router, route, fun(Msg) -> Self ! Msg end),
+        {ok, SeqMan} = sequencer_worker:create_or_get_sequencer_manager(FuseId, Self),
+        ok = meck:new(router, []),
+        ok = meck:expect(router, route_message, fun(Msg) -> Self ! Msg end),
+        ok = meck:new(protocol_handler, []),
+        ok = meck:expect(protocol_handler, cast, fun(Connection, Msg) ->
+            Connection ! Msg
+        end),
 
         lists:foreach(fun(SeqNum) ->
             gen_server:cast(SeqMan, ClientMsg#client_message{seq_num = SeqNum})
-        end, utils:random_shuffle(lists:seq(1, 100))),
+        end, lists:seq(MsgCount, 1, -1)),
 
         lists:foreach(fun(SeqNum) ->
-            Msg = ClientMsg#client_message{seq_num = SeqNum},
-            ReceiveAnswer = receive
-                                Msg -> ok
-                            after
-                                timer:seconds(1) -> {error, {timeout, SeqNum}}
-                            end,
-            ?assertEqual(ok, ReceiveAnswer)
-        end, lists:seq(1, 100)),
+            ReceiveMsg = receive_msg(#server_message{
+                server_message = MsgReq#message_request{
+                    lower_seq_num = 1, upper_seq_num = SeqNum - 1
+                }
+            }),
+            ?assertEqual(ok, ReceiveMsg)
+        end, lists:seq(MsgCount, 2, -1)),
 
-        ReceiveAnswer = receive
-                            ack -> ok
-                        after
-                            timer:seconds(1) -> {error, timeout}
-                        end,
-        ?assertEqual(ok, ReceiveAnswer),
+        lists:foreach(fun(SeqNum) ->
+            ReceiveMsg = receive_msg(ClientMsg#client_message{seq_num = SeqNum}),
+            ?assertEqual(ok, ReceiveMsg)
+        end, lists:seq(1, MsgCount)),
+
+        ReceiveMsg = receive_msg(#server_message{server_message = MsgAck}),
+        ?assertEqual(ok, ReceiveMsg),
 
         true = meck:validate(router),
-        ok = sequencer_dispatcher:remove_sequencer_manager(FuseId)
+        true = meck:validate(protocol_handler),
+        ok = sequencer_worker:remove_sequencer_manager(FuseId)
     end, []]),
 
     ?assertEqual(ok, Answer),
@@ -143,3 +153,18 @@ processes(Nodes) ->
     lists:foldl(fun(Node, Processes) ->
         Processes ++ rpc:call(Node, erlang, processes, [])
     end, [], Nodes).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Waits for given message or returns timeout.
+%% @end
+%%--------------------------------------------------------------------
+-spec receive_msg(Msg :: term()) -> ok | {error, {timeout, Msg :: term()}}.
+receive_msg(Msg) ->
+    receive
+        Msg -> ok
+    after
+        timer:seconds(1) -> {error, {timeout, Msg}}
+    end.

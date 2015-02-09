@@ -12,9 +12,23 @@
 -ifndef(MODULES_AND_ARGS_HRL).
 -define(MODULES_AND_ARGS_HRL, 1).
 
--define(MODULES, [datastore_worker, http_worker, dns_worker, 
-    event_manager_worker]).
--define(MODULES_WITH_ARGS, [{datastore_worker, []}, {http_worker, []},
-    {dns_worker, []}, {event_manager_worker, []}]).
+-define(MODULES, [
+    datastore_worker,
+    http_worker,
+    dns_worker,
+    event_manager_worker,
+    sequencer_worker
+]).
+
+-define(MODULES_WITH_ARGS, [
+    {datastore_worker, []},
+    {http_worker, []},
+    {dns_worker, []},
+    {event_manager_worker, []},
+    {sequencer_worker, [
+        {supervisor_spec, sequencer_worker:supervisor_spec()},
+        {supervisor_children_spec, sequencer_worker:supervisor_children_spec()}
+    ]}
+]).
 
 -endif.

@@ -70,8 +70,7 @@ init([worker]) ->
     {ok, {{one_for_one, 5, 10}, [
         {main_worker_sup, {main_worker_sup, start_link, []}, permanent, infinity, supervisor, [main_worker_sup]},
         {request_dispatcher, {request_dispatcher, start_link, []}, permanent, 5000, worker, [request_dispatcher]},
-        {node_manager, {node_manager, start_link, [worker]}, permanent, 5000, worker, [node_manager]},
-        {sequencer_dispatcher_sup, {sequencer_dispatcher_sup, start_link, []}, permanent, infinity, supervisor, [sequencer_dispatcher_sup]}
+        {node_manager, {node_manager, start_link, [worker]}, permanent, 5000, worker, [node_manager]}
     ]}};
 init([ccm]) ->
     {ok, {{one_for_one, 5, 10}, [

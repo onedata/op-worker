@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Internal version of client protocol message
+%%% Internal version of client protocol message.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -16,8 +16,9 @@
 -include("cluster_elements/protocol_handler/credentials.hrl").
 
 -record(client_message, {
-    response_id :: integer(),
-    seq_num :: integer(),
+    message_id :: non_neg_integer(),
+    stream_id :: non_neg_integer(),
+    seq_num :: non_neg_integer(),
     last_message :: boolean(),
     credentials :: #credentials{},
     client_message :: tuple()
