@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% This module implements supervisor behaviour and is responsible
+%%% for supervising and restarting sequencers.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(sequencer_sup).

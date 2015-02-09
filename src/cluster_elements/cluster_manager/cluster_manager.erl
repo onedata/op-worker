@@ -327,7 +327,7 @@ start_worker_on_node(Node, Module, Args, State) ->
         ),
         {ok, _} = supervisor:start_child(
             {?MAIN_WORKER_SUPERVISOR_NAME, Node},
-            {WorkerSupervisorName, {worker_host_sup, start_link, [WorkerSupervisorName]}, transient, infinity, supervisor, [worker_host_sup]}
+            {WorkerSupervisorName, {worker_host_sup, start_link, [WorkerSupervisorName, Args]}, transient, infinity, supervisor, [worker_host_sup]}
         ),
         Workers = State#cm_state.workers,
         ?info("Worker: ~s started at node: ~s", [Module, Node]),

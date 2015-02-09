@@ -18,17 +18,17 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([sequencer_dispatcher_test/1, sequencer_test/1]).
+-export([sequencer_worker_test/1, sequencer_test/1]).
 
 -record(client_message, {message_id, seq_num, last_message, client_message}).
 
-all() -> [sequencer_dispatcher_test, sequencer_test].
+all() -> [sequencer_worker_test, sequencer_test].
 
 %%%===================================================================
 %%% Test function
 %% ====================================================================
 
-sequencer_dispatcher_test(Config) ->
+sequencer_worker_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     Self = self(),
@@ -37,7 +37,7 @@ sequencer_dispatcher_test(Config) ->
 
     [SeqMan1, SeqMan2] = lists:map(fun(FuseId) ->
         CreateOrGetSeqManAnswers = utils:pmap(fun(Worker) ->
-            rpc:call(Worker, sequencer_dispatcher,
+            rpc:call(Worker, sequencer_worker,
                 create_or_get_sequencer_manager, [FuseId, Self])
         end, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)),
 
@@ -62,10 +62,10 @@ sequencer_dispatcher_test(Config) ->
             P =:= SeqMan1
         end, ProcessesBeforeRemoval)),
 
-        RemoveSeqManAnswer1 = rpc:call(Worker1, sequencer_dispatcher,
+        RemoveSeqManAnswer1 = rpc:call(Worker1, sequencer_worker,
             remove_sequencer_manager, [FuseId]),
         ?assertMatch(ok, RemoveSeqManAnswer1),
-        RemoveSeqManAnswer2 = rpc:call(Worker1, sequencer_dispatcher,
+        RemoveSeqManAnswer2 = rpc:call(Worker1, sequencer_worker,
             remove_sequencer_manager, [FuseId]),
         ?assertMatch({error, _}, RemoveSeqManAnswer2),
 
@@ -85,7 +85,7 @@ sequencer_test(Config) ->
         FuseId = <<"fuse_id">>,
         ClientMsg = #client_message{message_id = 1, last_message = false},
 
-        {ok, SeqMan} = sequencer_dispatcher:create_or_get_sequencer_manager(FuseId, Self),
+        {ok, SeqMan} = sequencer_worker:create_or_get_sequencer_manager(FuseId, Self),
         ok = meck:new(router, [non_strict]),
         ok = meck:expect(router, route, fun(Msg) -> Self ! Msg end),
 
@@ -111,7 +111,7 @@ sequencer_test(Config) ->
         ?assertEqual(ok, ReceiveAnswer),
 
         true = meck:validate(router),
-        ok = sequencer_dispatcher:remove_sequencer_manager(FuseId)
+        ok = sequencer_worker:remove_sequencer_manager(FuseId)
     end, []]),
 
     ?assertEqual(ok, Answer),

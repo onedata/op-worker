@@ -19,7 +19,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1]).
+-export([start_link/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -33,10 +33,10 @@
 %% Starts the supervisor
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Name :: atom()) ->
+-spec start_link(Name :: atom(), Args :: term()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(Name) ->
-    supervisor:start_link({local, Name}, ?MODULE, []).
+start_link(Name, Args) ->
+    supervisor:start_link({local, Name}, ?MODULE, Args).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -58,14 +58,18 @@ start_link(Name) ->
     }} |
     ignore |
     {error, Reason :: term()}).
-init([]) ->
-    RestartStrategy = one_for_one,
-    MaxRestarts = 1000,
-    RestartTimeWindow = 3600,
+init(Args) ->
+    DefaultRestartStrategy = one_for_one,
+    DefaultMaxR = 1000,
+    DefaultMaxT = timer:hours(1),
+    SupervisorSpec = proplists:get_value(supervisor_spec, Args, {
+        DefaultRestartStrategy,
+        DefaultMaxR,
+        DefaultMaxT
+    }),
+    ChildrenSpec = proplists:get_value(supervisor_children_spec, Args, []),
 
-    SupFlags = {RestartStrategy, MaxRestarts, RestartTimeWindow},
-
-    {ok, {SupFlags, []}}.
+    {ok, {SupervisorSpec, ChildrenSpec}}.
 
 %%%===================================================================
 %%% Internal functions

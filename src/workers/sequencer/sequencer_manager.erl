@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% This module implements gen_server behaviour and is responsible
+%%% for dispatching messages sent by given FUSE client to sequencers.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(sequencer_manager).
@@ -25,8 +26,8 @@
 
 %% sequencer manager state:
 %% seq_sup - pid of sequencer supervisor
-%% cons   - list of connectionnection pids to FUSE client associated with
-%%                 sequencer manager
+%% cons    - list of connectionnection pids to FUSE client associated with
+%%           sequencer manager
 %% seqs    - mapping from message ID to sequencer pid
 -record(state, {
     seq_sup,
