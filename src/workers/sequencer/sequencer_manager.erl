@@ -138,7 +138,7 @@ handle_cast({send, Msg}, #state{cons = []} = State) ->
     {noreply, State};
 
 handle_cast({send, Msg}, #state{cons = [Connection | Connections]} = State) ->
-    Connection ! {msg, Msg},
+    Connection ! Msg,
     {noreply, State#state{cons = Connections ++ [Connection]}};
 
 handle_cast(_Request, State) ->

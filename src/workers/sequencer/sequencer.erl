@@ -208,17 +208,16 @@ process_pending_msgs({noreply, #state{seq_num = SeqNum, msgs = Msgs} = State}) -
     end.
 
 send_msg(Msg, #state{seq_num = SeqNum} = State) ->
-    ?info("Sending msg ~p in state ~p", [Msg, State]),
+    router:route(Msg),
     State#state{seq_num = SeqNum + 1}.
 
-send_msg_ack(#state{msg_id = MsgId, seq_man = SeqMan, seq_num = SeqNum} = State) ->
-    ?info("Sending ack to sequence manager (pid: ~p) for message (id: ~p, seq_num: ~p)",
-        [SeqMan, MsgId, SeqNum - 1]),
+send_msg_ack(#state{msg_id = _MsgId, seq_man = SeqMan, seq_num = SeqNum} = State) ->
+    gen_server:cast(SeqMan, {send, ack}),
     State#state{seq_num_ack = SeqNum - 1}.
 
-send_msg_req(#client_message{message_id = MsgId, seq_num = MsgSeqNum}, #state{seq_man = SeqMan, seq_num = SeqNum} = State) ->
-    ?info("Sending req to sequencer manager (pid: ~p) for messages (id: ~p, range: [~p, ~p))",
-        [SeqMan, MsgId, SeqNum, MsgSeqNum]),
+send_msg_req(#client_message{message_id = _MsgId, seq_num = _MsgSeqNum},
+    #state{seq_man = SeqMan, seq_num = _SeqNum} = State) ->
+    gen_server:cast(SeqMan, {send, req}),
     State.
 
 store_msg(#client_message{seq_num = SeqNum} = Msg, #state{msgs = Msgs} = State) ->
