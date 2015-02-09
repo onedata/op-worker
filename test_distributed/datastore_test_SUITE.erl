@@ -13,7 +13,6 @@
 
 -include("test_utils.hrl").
 -include("registered_names.hrl").
--include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
@@ -101,17 +100,17 @@ global_cache_atomic_update_test(Config) ->
     ?assertMatch({ok, Key},
         ?call_store(Worker2, update, [Level,
             sample_model, Key,
-                fun(#sample_model{field1 = 0} = Record) ->
-                    Record#sample_model{field2 = Pid}
-                end])),
+            fun(#sample_model{field1 = 0} = Record) ->
+                Record#sample_model{field2 = Pid}
+            end])),
 
     ?assertMatch({ok, #document{value = #sample_model{field1 = 0, field2 = Pid}}},
         ?call_store(Worker1, get, [Level,
             sample_model, Key])),
 
     UpdateFun = fun(#sample_model{field1 = Value} = Record) ->
-                    Record#sample_model{field1 = Value + 1}
-                end,
+        Record#sample_model{field1 = Value + 1}
+    end,
 
     Self = self(),
     Timeout = timer:seconds(30),
@@ -121,7 +120,7 @@ global_cache_atomic_update_test(Config) ->
                 ?call_store(Node, update, [Level, sample_model, Key, UpdateFun]),
                 Self ! done
             end)
-        end, lists:duplicate(100, Worker1) ++ lists:duplicate(100, Worker2)),
+    end, lists:duplicate(100, Worker1) ++ lists:duplicate(100, Worker2)),
     [receive done -> ok after Timeout -> ok end || _ <- lists:seq(1, 200)],
 
     ?assertMatch({ok, #document{value = #sample_model{field1 = 200}}},
@@ -143,8 +142,7 @@ init_per_suite(Config) ->
     end.
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config),
-    ok.
+    test_node_starter:clean_environment(Config).
 
 
 -spec local_access_only(Node :: atom(), Level :: datastore:store_level()) -> ok.
@@ -189,8 +187,8 @@ local_access_only(Node, Level) ->
             sample_model, Key])),
 
     ?assertMatch({error, {not_found, _}},
-         ?call_store(Node, get, [Level,
-             sample_model, Key])),
+        ?call_store(Node, get, [Level,
+            sample_model, Key])),
 
     ?assertMatch({error, {not_found, _}},
         ?call_store(Node, update, [Level,
