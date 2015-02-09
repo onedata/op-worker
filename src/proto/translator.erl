@@ -14,9 +14,8 @@
 
 -include("proto/oneclient/messages.hrl").
 -include("proto_internal/oneclient/common_messages.hrl").
+-include("proto_internal/oneclient/communication_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
--include("proto_internal/oneclient/read_event.hrl").
--include("proto_internal/oneclient/write_event.hrl").
 -include("proto_internal/oneclient/event_messages.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -41,14 +40,14 @@ translate_from_protobuf(#'EnvironmentVariable'{name = Name, value = Val}) ->
 translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
 translate_from_protobuf(#'Event'{event = {_, Record}}) ->
-    Record;
+    translate_from_protobuf(Record);
 translate_from_protobuf(#'ReadEvent'{} = Record) ->
-    {ok, #read_event{
+    #read_event{
         counter = Record#'ReadEvent'.counter,
         file_id = Record#'ReadEvent'.file_id,
         size = Record#'ReadEvent'.size,
         blocks = Record#'ReadEvent'.blocks
-    }};
+    };
 translate_from_protobuf(#'WriteEvent'{} = Record) ->
     #write_event{
         counter = Record#'WriteEvent'.counter,

@@ -15,6 +15,7 @@
 
 -behaviour(gen_server).
 
+-include("proto_internal/oneclient/client_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -34,8 +35,6 @@
     cons = [],
     seqs = #{}
 }).
--record(client_message, {message_id, seq_num, last_message, client_message}).
-
 
 %%%===================================================================
 %%% API
@@ -139,7 +138,7 @@ handle_cast({send, Msg}, #state{cons = []} = State) ->
     {noreply, State};
 
 handle_cast({send, Msg}, #state{cons = [Connection | Connections]} = State) ->
-    Connection ! Msg,
+    protocol_handler:cast(Connection, Msg),
     {noreply, State#state{cons = Connections ++ [Connection]}};
 
 handle_cast(_Request, State) ->

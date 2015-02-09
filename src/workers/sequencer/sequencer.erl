@@ -17,6 +17,9 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
+-include("proto_internal/oneclient/client_messages.hrl").
+-include("proto_internal/oneclient/server_messages.hrl").
+-include("proto_internal/oneclient/communication_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -46,8 +49,6 @@
     msgs_ack_win :: non_neg_integer(),
     time_ack_win :: non_neg_integer()
 }).
-
--record(client_message, {message_id, seq_num, last_message, client_message}).
 
 %%%===================================================================
 %%% API
@@ -239,7 +240,7 @@ process_pending_msgs({noreply, #state{seq_num = SeqNum, msgs = Msgs} = State}) -
 -spec send_msg(Msg :: #client_message{}, State :: #state{}) ->
     NewState :: #state{}.
 send_msg(Msg, #state{seq_num = SeqNum} = State) ->
-    router:route(Msg),
+    router:route_message(Msg),
     State#state{seq_num = SeqNum + 1}.
 
 %%--------------------------------------------------------------------
@@ -248,8 +249,12 @@ send_msg(Msg, #state{seq_num = SeqNum} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_msg_ack(State :: #state{}) -> NewState :: #state{}.
-send_msg_ack(#state{msg_id = _MsgId, seq_man = SeqMan, seq_num = SeqNum} = State) ->
-    gen_server:cast(SeqMan, {send, ack}),
+send_msg_ack(#state{msg_id = MsgId, seq_man = SeqMan, seq_num = SeqNum} = State) ->
+    Msg = #server_message{server_message = #message_acknowledgement{
+        message_id = MsgId,
+        seq_num = SeqNum - 1
+    }},
+    gen_server:cast(SeqMan, {send, Msg}),
     State#state{seq_num_ack = SeqNum - 1}.
 
 %%--------------------------------------------------------------------
@@ -262,9 +267,14 @@ send_msg_ack(#state{msg_id = _MsgId, seq_man = SeqMan, seq_num = SeqNum} = State
 %%--------------------------------------------------------------------
 -spec send_msg_req(Msg :: #client_message{}, State :: #state{}) ->
     NewState :: #state{}.
-send_msg_req(#client_message{message_id = _MsgId, seq_num = _MsgSeqNum},
-    #state{seq_man = SeqMan, seq_num = _SeqNum} = State) ->
-    gen_server:cast(SeqMan, {send, req}),
+send_msg_req(#client_message{message_id = MsgId, seq_num = MsgSeqNum},
+    #state{seq_man = SeqMan, seq_num = SeqNum} = State) ->
+    Msg = #server_message{server_message = #message_request{
+        message_id = MsgId,
+        lower_seq_num = SeqNum,
+        upper_seq_num = MsgSeqNum - 1
+    }},
+    gen_server:cast(SeqMan, {send, Msg}),
     State.
 
 %%--------------------------------------------------------------------

@@ -32,9 +32,9 @@
     {ok, Record :: term()} | {error, term()}.
 deserialize_client_message(Message, Cred) ->
     try client_messages:decode_msg(Message, 'ClientMessage') of
-        #'ClientMessage'{response_id = Id, seq_num = SeqNum,
+        #'ClientMessage'{message_id = Id, seq_num = SeqNum,
             last_message = Last, client_message = {_, Msg}} ->
-            {ok, #client_message{response_id = Id, seq_num = SeqNum, last_message = Last,
+            {ok, #client_message{message_id = Id, seq_num = SeqNum, last_message = Last,
                 credentials = Cred, client_message = translator:translate_from_protobuf(Msg)}}
     catch
         _:Error -> {error, Error}
@@ -47,11 +47,11 @@ deserialize_client_message(Message, Cred) ->
 %%--------------------------------------------------------------------
 -spec serialize_server_message(#server_message{}) ->
     binary() | {error, term()}.
-serialize_server_message(#server_message{response_id = Id, seq_num = Seq,
+serialize_server_message(#server_message{message_id = Id, seq_num = Seq,
     last_message = Last, server_message = Msg}) ->
     try
         ProtobufMessage = translator:translate_to_protobuf(Msg),
-        ServerMessage = #'ServerMessage'{response_id = Id, seq_num = Seq,
+        ServerMessage = #'ServerMessage'{message_id = Id, seq_num = Seq,
             last_message = Last, server_message = {element(1, Msg), ProtobufMessage}},
         {ok, server_messages:encode_msg(ServerMessage)}
     catch

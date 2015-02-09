@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Client credentials used in protocol_handler to extend client_message
+%%% Client credentials used in protocol_handler to extend client_message.
 %%% @end
 %%%-------------------------------------------------------------------
 

@@ -114,12 +114,9 @@ global_cache_atomic_update_test(Config) ->
 
     Self = self(),
     Timeout = timer:seconds(30),
-    lists:foreach(fun(Node) ->
-        spawn(
-            fun() ->
-                ?call_store(Node, update, [Level, sample_model, Key, UpdateFun]),
-                Self ! done
-            end)
+    utils:pforeach(fun(Node) ->
+        ?call_store(Node, update, [Level, sample_model, Key, UpdateFun]),
+        Self ! done
     end, lists:duplicate(100, Worker1) ++ lists:duplicate(100, Worker2)),
     [receive done -> ok after Timeout -> ok end || _ <- lists:seq(1, 200)],
 

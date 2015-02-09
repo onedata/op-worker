@@ -16,6 +16,7 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("workers/datastore/datastore_models.hrl").
+-include("cluster_elements/protocol_handler/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
@@ -103,7 +104,7 @@ cleanup() ->
 %% does not exist it is instantiated.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_get_sequencer_manager(FuseId :: binary(), Connection :: pid()) ->
+-spec create_or_get_sequencer_manager(FuseId :: fuse_id(), Connection :: pid()) ->
     {ok, Pid :: pid()} | {error, Reason :: term()}.
 create_or_get_sequencer_manager(FuseId, Connection) ->
     worker_proxy:call(?SEQUENCER_WORKER,
@@ -114,7 +115,7 @@ create_or_get_sequencer_manager(FuseId, Connection) ->
 %% Removes sequencer manager for FUSE client.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_sequencer_manager(FuseId :: binary()) ->
+-spec remove_sequencer_manager(FuseId :: fuse_id()) ->
     ok | {error, Reason :: term()}.
 remove_sequencer_manager(FuseId) ->
     worker_proxy:call(?SEQUENCER_WORKER, {remove_sequencer_manager, FuseId}).
@@ -175,7 +176,7 @@ supervisor_children_spec() ->
 %% Returns pid of existing sequencer manager for FUSE client.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sequencer_manager(FuseId :: binary()) ->
+-spec get_sequencer_manager(FuseId :: fuse_id()) ->
     {ok, #sequencer_manager_model{}} | {error, Reason :: term()}.
 get_sequencer_manager(FuseId) ->
     case sequencer_manager_model:get(FuseId) of
@@ -191,7 +192,7 @@ get_sequencer_manager(FuseId) ->
 %% Creates sequencer manager for FUSE client.
 %% @end
 %%--------------------------------------------------------------------
--spec create_sequencer_manager(FuseId :: binary(), Connection :: pid()) ->
+-spec create_sequencer_manager(FuseId :: fuse_id(), Connection :: pid()) ->
     {ok, Pid :: pid()} | {error, Reason :: term()}.
 create_sequencer_manager(FuseId, Connection) ->
     Node = node(),
