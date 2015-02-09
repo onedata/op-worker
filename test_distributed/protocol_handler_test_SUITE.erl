@@ -14,6 +14,8 @@
 -include("test_utils.hrl").
 -include("registered_names.hrl").
 -include("proto/oneclient/messages.hrl").
+-include("proto_internal/oneclient/client_messages.hrl").
+-include("proto_internal/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -53,10 +55,14 @@ protobuf_msg_test(Config) ->
     [Worker1, _] = ?config(op_worker_nodes, Config),
     {ok, Sock} = connect_via_token(Worker1),
 
+    ok = rpc:call(Worker1, meck, new, [router, [passthrough, non_strict, unstick, no_link]]),
+    ok = rpc:call(Worker1, meck, expect, [router, preroute_message,
+        fun(#client_message{credentials = #credentials{}, client_message = #handshake_request{}}) -> ok end]),
     Msg = #'ClientMessage'{response_id = 0, client_message = {handshake_request, #'HandshakeRequest'{}}},
     RawMsg = client_messages:encode_msg(Msg),
     ok = ssl:send(Sock, RawMsg),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
+    true = rpc:call(Worker1, meck, validate, [router]),
     ok = ssl:send(Sock, <<"non_protobuff">>),
 %%     ?assertMatch({error, _}, ssl:connection_info(Sock)),
 
