@@ -15,6 +15,7 @@ import glob
 import os
 import platform
 import sys
+import time
 sys.path.insert(0, 'bamboos/docker')
 import docker
 
@@ -43,13 +44,14 @@ parser.add_argument(
 
 args = parser.parse_args()
 script_dir = os.path.dirname(os.path.realpath(__file__))
+uid = str(int(time.time()))
 
 ct_command = ['ct_run',
               '-dir', '.',
               '-logdir', './logs/',
               '-ct_hooks', 'cth_surefire', '[{path, "surefire.xml"}]',
               '-noshell',
-              '-name', 'tester',
+              '-name', 'testmaster@testmaster.{0}.dev.docker'.format(uid),
               '-include', '../include', '../deps']
 
 code_paths = ['-pa', os.path.join(script_dir, 'ebin')]
@@ -102,7 +104,8 @@ ret = docker.run(tty=True,
                  workdir=os.path.join(script_dir, 'test_distributed'),
                  reflect=[(script_dir, 'rw'),
                           ('/var/run/docker.sock', 'rw')],
-                 hostname='test.master',
+                 name='testmaster_{0}'.format(uid),
+                 hostname='testmaster.{0}.dev.docker'.format(uid),
                  image=args.image,
                  command=['python', '-c', command])
 sys.exit(ret)
