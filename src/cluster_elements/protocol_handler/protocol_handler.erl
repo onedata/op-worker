@@ -133,16 +133,17 @@ handle_cast(_Request, State) ->
 handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, transport = Transport, ok = Ok, credentials = undefined}) ->
     activate_socket_once(Socket, Transport),
     case client_auth:handle_auth_info(Data) of
-        {ok, ClientId} ->
-            {noreply, State#sock_state{credentials = ClientId}, ?TIMEOUT};
+        {ok, Cred} ->
+            {noreply, State#sock_state{credentials = Cred}, ?TIMEOUT};
         Error ->
             ?warning_stacktrace("Handling auth_info for connection ~p error: ~p", [Socket, Error]),
             {stop, Error, State}
     end;
 
-handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, transport = Transport, ok = Ok}) ->
+handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, transport = Transport, ok = Ok, credentials = Cred}) ->
     activate_socket_once(Socket, Transport),
-    ok = Transport:send(Socket, Data),
+    Msg = serializator:deserialize_client_message(Data, Cred),
+    ?info("Got message ~p", [Msg]),
     {noreply, State, ?TIMEOUT};
 
 handle_info({Closed, Socket}, State = #sock_state{closed = Closed}) ->

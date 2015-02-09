@@ -34,7 +34,6 @@ cert_connection_test(Config) ->
 
     TokenAuthMessage = <<"{\"token\":\"val\"}">>,
     ok = ssl:send(Sock, TokenAuthMessage),
-    ok = ssl:send(Sock, <<"data">>),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ok = ssl:close(Sock),
     ?assertMatch({error, _}, ssl:connection_info(Sock)),
@@ -47,7 +46,6 @@ token_connection_test(Config) ->
 
     TokenAuthMessage = <<"{\"cert\":\"id\"}">>,
     ok = ssl:send(Sock, TokenAuthMessage),
-    ok = ssl:send(Sock, <<"data">>),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ok = ssl:close(Sock),
     ?assertMatch({error, _}, ssl:connection_info(Sock)),

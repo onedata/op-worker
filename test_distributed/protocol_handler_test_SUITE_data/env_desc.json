@@ -13,7 +13,7 @@
                 "sys.config": {
                     "node_type": "ccm",
                     "ccm_nodes": [ "ccm@" ],
-                    "db_nodes": [ "db@" ],
+                    "db_nodes": [ "127.0.0.1:49161" ],
                     "workers_to_trigger_init": 2
                 }
             },
@@ -25,7 +25,7 @@
                 "sys.config": {
                     "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
-                    "db_nodes": [ "db@" ]
+                    "db_nodes": [ "127.0.0.1:49161" ]
                 }
             },
             "worker2": {
@@ -36,7 +36,7 @@
                 "sys.config": {
                     "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
-                    "db_nodes": [ "db@" ]
+                    "db_nodes": [ "127.0.0.1:49161" ]
                 }
             }
         }

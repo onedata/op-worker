@@ -12,6 +12,8 @@
 -module(client_auth).
 -author("Tomasz Lichon").
 
+-include("proto_internal/oneclient/credentials.hrl").
+
 %% API
 -export([handle_auth_info/1]).
 
@@ -25,7 +27,7 @@
 %% (cert/token)
 %% @end
 %%--------------------------------------------------------------------
--spec handle_auth_info(Message :: binary()) -> {ok, ClientId :: binary()} | {error, term()}.
+-spec handle_auth_info(Message :: binary()) -> {ok, Cred :: #credentials{}} | {error, term()}.
 handle_auth_info(Message) ->
     case mochijson2:decode(Message, [{format, proplist}]) of
         [{<<"token">>, Token}] ->
@@ -40,20 +42,20 @@ handle_auth_info(Message) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticate client using given token, returns client uuid
+%% Authenticate client using given token, returns client credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_token(Token :: binary()) -> {ok, ClientId :: binary()} | {error, term()}.
+-spec authenticate_using_token(Token :: binary()) -> {ok, Cred :: #credentials{}} | {error, term()}.
 authenticate_using_token(_Token) ->
-    {ok, <<"uuid">>}.
+    {ok, #credentials{}}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Authenticate client using given SessionId. The certificate is obtained
-%% from oneproxy. Returns client uuid.
+%% from oneproxy. Returns client credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_certificate(Token :: binary()) -> {ok, ClientId :: binary()} | {error, term()}.
+-spec authenticate_using_certificate(Token :: binary()) -> {ok, Cred :: #credentials{}} | {error, term()}.
 authenticate_using_certificate(_OneproxySessionId) ->
-    {ok, <<"uuid">>}.
+    {ok, #credentials{}}.
 
