@@ -6,8 +6,8 @@ import "common_messages.proto";
 
 message Event {
     oneof event {
-        ReadEvent  read  = 1;
-        WriteEvent write = 2;
+        ReadEvent  read_event  = 1;
+        WriteEvent write_event = 2;
     }
 }
 
@@ -30,9 +30,9 @@ message WriteEvent {
 
 message EventSubscription {
     oneof event_subscription {
-        ReadEventSubscription         read         = 1;
-        WriteEventSubscription        write        = 2;
-        EventSubscriptionCancellation cancellation = 3;
+        ReadEventSubscription         read_event_subscription         = 1;
+        WriteEventSubscription        write_event_subscription        = 2;
+        EventSubscriptionCancellation event_subscription_cancellation = 3;
     }
 }
 
