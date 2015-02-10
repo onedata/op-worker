@@ -55,7 +55,7 @@ def run_command(cmd):
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    description='Bring up oneprovider cluster.')
+    description='Bring up oneprovider nodes.')
 
 parser.add_argument(
     '--image', '-i',
@@ -151,4 +151,5 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
     output['docker_ids'].append(container)
     output['op_{type}_nodes'.format(type=node_type)].append(node_name)
 
+# Print JSON to output so it can be parsed by other scripts
 print(json.dumps(output))
