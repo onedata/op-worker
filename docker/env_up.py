@@ -16,12 +16,15 @@ import os
 import time
 import subprocess
 
+def get_script_dir():
+    return os.path.dirname(os.path.realpath(__file__))
+
 def run_command(cmd):
     return subprocess.Popen(cmd,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
                             stdin=subprocess.PIPE).communicate()[0]
 
-dns_config = json.loads(run_command(
-    os.path.dirname(os.path.realpath(__file__)) + '/dns_up.py'))
+uid = str(int(time.time()))
+dns_config = json.loads(run_command([get_script_dir() + '/dns_up.py', '--uid', uid]))
 print(dns_config['dns'])

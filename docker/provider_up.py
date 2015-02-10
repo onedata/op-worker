@@ -14,7 +14,11 @@ import docker
 import json
 import os
 import time
+import subprocess
 
+
+def get_script_dir():
+    return os.path.dirname(os.path.realpath(__file__))
 
 def parse_config(path):
     with open(path, 'r') as f:
@@ -40,6 +44,12 @@ def tweak_config(config, name, uid):
 
     return cfg
 
+def run_command(cmd):
+    return subprocess.Popen(cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            stdin=subprocess.PIPE).communicate()[0]
+
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -60,11 +70,11 @@ parser.add_argument(
     dest='bin')
 
 parser.add_argument(
-    '--create-service', '-c',
+    '--dns', '-d',
     action='store',
-    default='{0}/createService.js'.format(os.path.dirname(os.path.realpath(__file__))),
-    help='path to createService.js plugin',
-    dest='create_service')
+    default='auto',
+    help='IP Address of DNS, or "auto" if it should be started with the provider',
+    dest='dns')
 
 parser.add_argument(
     'config_path',
@@ -78,28 +88,14 @@ config = parse_config(args.config_path)['oneprovider_node']
 config['config']['target_dir'] = '/root/bin'
 configs = [tweak_config(config, node, uid) for node in config['nodes']]
 
-skydns = docker.run(
-    image='crosbymichael/skydns',
-    detach=True,
-    name='skydns_{0}'.format(uid),
-    command=['-nameserver', '8.8.8.8:53', '-domain', 'docker'])
-
-skydock = docker.run(
-    image='crosbymichael/skydock',
-    detach=True,
-    name='skydock_{0}'.format(uid),
-    reflect=[('/var/run/docker.sock', 'rw')],
-    volumes=[(args.create_service, '/createService.js', 'ro')],
-    command=['-ttl', '30', '-environment', 'dev', '-s', '/var/run/docker.sock',
-             '-domain', 'docker', '-name', 'skydns_{0}'.format(uid), '-plugins',
-             '/createService.js'])
-
-skydns_config = docker.inspect(skydns)
-dns = skydns_config['NetworkSettings']['IPAddress']
-
 output = collections.defaultdict(list)
-output['dns'] = dns
-output['docker_ids'] = [skydns, skydock]
+
+dns = args.dns
+if dns is 'auto':
+    dns_config = json.loads(run_command([get_script_dir() + '/dns_up.py', '--uid', uid]))
+    dns = dns_config['dns']
+    output['dns'] = dns_config['dns']
+    output['docker_ids'] = dns_config['docker_ids']
 
 for cfg in configs:
     node_type = cfg['nodes']['node']['sys.config']['node_type']
