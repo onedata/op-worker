@@ -17,6 +17,7 @@
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
@@ -28,6 +29,7 @@ all() -> [ccm_and_worker_test].
 %%% Test function
 %% ====================================================================
 
+-perf_test(do_test).
 ccm_and_worker_test(Config) ->
     [Ccm] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
@@ -47,9 +49,7 @@ ccm_and_worker_test(Config) ->
 %%%===================================================================
 
 init_per_testcase(ccm_and_worker_test, Config) ->
-  try
-  test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json"))
-  catch A:B -> ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()]) end.
+  test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_testcase(ccm_and_worker_test, Config) ->
   test_node_starter:clean_environment(Config).

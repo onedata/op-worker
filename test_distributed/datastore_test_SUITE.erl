@@ -136,13 +136,10 @@ global_cache_atomic_update_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    try
-        test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json"))
-    catch A:B -> ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()]) end.
+    test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config),
-    ok.
+    test_node_starter:clean_environment(Config).
 
 
 -spec local_access_only(Node :: atom(), Level :: datastore:store_level()) -> ok.

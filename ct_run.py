@@ -47,6 +47,7 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 uid = str(int(time.time()))
 
 ct_command = ['ct_run',
+              '-no_auto_compile',
               '-dir', '.',
               '-logdir', './logs/',
               '-ct_hooks', 'cth_surefire', '[{path, "surefire.xml"}]',
