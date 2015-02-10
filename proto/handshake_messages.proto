@@ -1,7 +1,5 @@
 package one.clproto;
 
-import "common_messages.proto";
-
 message HandshakeRequest {
     optional bytes session_id       = 1;
     optional AuthMethod auth_method = 2;
