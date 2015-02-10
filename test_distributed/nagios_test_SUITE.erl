@@ -36,10 +36,6 @@ all() -> [nagios_test].
 nagios_test(Config) ->
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
 
-    % TODO remove this sleep when cluster init is checked with use of nagios
-    % Now, it may happen that cluster starts but cowboy listeners are still starting
-    timer:sleep(5000),
-
     {ok, XMLString} = perform_nagios_healthcheck(Worker1),
 
     {Xml, _} = xmerl_scan:string(XMLString),
