@@ -56,7 +56,7 @@ def run_command(cmd):
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    description='Bring up globalregistry.')
+    description='Bring up globalregistry nodes.')
 
 parser.add_argument(
     '--image', '-i',
@@ -180,4 +180,5 @@ sed -i 's/-setcookie monster/-setcookie {cookie}/g' /opt/bigcouch/etc/vm.args
     output['docker_ids'] += [gr]
     output['gr_nodes'] += ['{0}@{1}'.format(gr_name, gr_hostname)]
 
+# Print JSON to output so it can be parsed by other scripts
 print(json.dumps(output))
