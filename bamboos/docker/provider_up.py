@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Brings up a oneprovider cluster.
+Brings up a set of oneprovider nodes. They can create separate clusters.
 Run the script with -h flag to learn about script's running options.
 """
 
@@ -75,7 +75,8 @@ parser.add_argument(
     '--dns', '-d',
     action='store',
     default='auto',
-    help='IP address of DNS, or "auto" if it should be started with the provider',
+    help='IP address of DNS or "none" - if no dns should be started or ' +
+         '"auto" - if it should be started automatically',
     dest='dns')
 
 parser.add_argument(
@@ -88,7 +89,7 @@ parser.add_argument(
 parser.add_argument(
     'config_path',
     action='store',
-    help='path to gen_dev_args.json that will be used to configure the cluster')
+    help='path to gen_dev_args.json that will be used to configure oneprovider_node instances')
 
 args = parser.parse_args()
 uid = args.uid
@@ -100,11 +101,13 @@ configs = [tweak_config(config, node, uid) for node in config['nodes']]
 output = collections.defaultdict(list)
 
 dns = args.dns
-if dns is 'auto':
+if dns == 'auto':
     dns_config = json.loads(run_command([get_script_dir() + '/dns_up.py', '--uid', uid]))
     dns = dns_config['dns']
     output['dns'] = dns_config['dns']
     output['docker_ids'] = dns_config['docker_ids']
+elif dns == 'none':
+    dns = None
 
 for cfg in configs:
     node_type = cfg['nodes']['node']['sys.config']['node_type']
@@ -121,17 +124,29 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 /root/bin/node/bin/oneprovider_node console'''
     command = command.format(gen_dev_args=json.dumps({'oneprovider_node': cfg}))
 
-    container = docker.run(
-        image=args.image,
-        hostname=hostname,
-        detach=True,
-        interactive=True,
-        tty=True,
-        workdir='/root/build',
-        name='{0}_{1}'.format(name, uid),
-        volumes=[(args.bin, '/root/build', 'ro')],
-        dns=[dns],
-        command=command)
+    if dns is None:
+        container = docker.run(
+            image=args.image,
+            hostname=hostname,
+            detach=True,
+            interactive=True,
+            tty=True,
+            workdir='/root/build',
+            name='{0}_{1}'.format(name, uid),
+            volumes=[(args.bin, '/root/build', 'ro')],
+            command=command)
+    else:
+        container = docker.run(
+            image=args.image,
+            hostname=hostname,
+            detach=True,
+            interactive=True,
+            tty=True,
+            workdir='/root/build',
+            name='{0}_{1}'.format(name, uid),
+            volumes=[(args.bin, '/root/build', 'ro')],
+            dns=[dns],
+            command=command)
 
     output['docker_ids'].append(container)
     output['op_{type}_nodes'.format(type=node_type)].append(node_name)
