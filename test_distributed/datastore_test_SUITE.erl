@@ -25,8 +25,7 @@
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1]).
 
-%% all() -> [local_cache_test, global_cache_test, global_cache_atomic_update_test].
-all() -> [].
+all() -> [local_cache_test, global_cache_test, global_cache_atomic_update_test].
 
 %%%===================================================================
 %%% Test function

@@ -22,8 +22,7 @@
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([ccm_and_worker_test/1]).
 
-%% all() -> [ccm_and_worker_test].
-all() -> [].
+all() -> [ccm_and_worker_test].
 
 %%%===================================================================
 %%% Test function
