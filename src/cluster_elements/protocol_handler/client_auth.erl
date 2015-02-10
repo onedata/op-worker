@@ -27,7 +27,7 @@
 %% (cert/token)
 %% @end
 %%--------------------------------------------------------------------
--spec handle_auth_info(Message :: binary()) -> {ok, Cred :: #credentials{}} | {error, term()}.
+-spec handle_auth_info(Message :: binary()) -> {ok, Cred :: #credentials{}}.
 handle_auth_info(Message) ->
     case mochijson2:decode(Message, [{format, proplist}]) of
         [{<<"token">>, Token}] ->

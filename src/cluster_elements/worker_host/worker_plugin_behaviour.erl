@@ -20,7 +20,8 @@
 %% Initialize module
 %% @end
 %%--------------------------------------------------------------------
--callback init(Args :: term()) -> {ok, State :: term()} | {error, Error :: term()}.
+-callback init(Args :: term()) ->
+    {ok, State :: term()} | {error, Reason :: term()}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -29,11 +30,11 @@
 %%--------------------------------------------------------------------
 -callback handle(Request :: term(), State :: term()) ->
     healthcheck_reponse() | ok | pong | {ok, Answer :: term()} | 
-    {error, Error :: term()}.
+    {error, Reason :: term()}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% The module will not be used anymore. Clean up!
 %% @end
 %%--------------------------------------------------------------------
--callback cleanup() -> ok | {error, Error :: term()}.
+-callback cleanup() -> ok | {error, Reason :: term()}.

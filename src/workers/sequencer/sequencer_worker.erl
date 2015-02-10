@@ -15,6 +15,7 @@
 
 -behaviour(worker_plugin_behaviour).
 
+-include("global_definitions.hrl").
 -include("workers/datastore/datastore_models.hrl").
 -include("cluster_elements/protocol_handler/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -39,7 +40,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, State :: term()} | {error, Error :: term()}.
+    Result :: {ok, State :: term()} | {error, Reason :: term()}.
 init(_Args) ->
     {ok, []}.
 
@@ -52,7 +53,9 @@ init(_Args) ->
     Request :: ping | healthcheck |
     {get_or_create_sequencer_manager, FuseId :: fuse_id(), Connection :: pid()} |
     {remove_sequencer_manager, FuseId :: fuse_id()},
-    Result :: ok | {ok, Response :: term()} | {error, Error :: term()} | pong.
+    Result :: healthcheck_reponse() | ok | pong | {ok, Response} | {error, Reason},
+    Response :: term(),
+    Reason :: term().
 handle(ping, _) ->
     pong;
 

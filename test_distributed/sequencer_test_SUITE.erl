@@ -90,9 +90,11 @@ sequencer_test(Config) ->
         MsgAck = #message_acknowledgement{message_id = MsgId, seq_num = MsgCount},
 
         {ok, SeqMan} = worker_proxy:call(sequencer_worker,
-            {get_or_create_sequencer_manager, FuseId, Self}),
+            {get_or_create_sequencer_manager, FuseId, Self}, 5000, prefer_local),
         ok = meck:new(router, []),
-        ok = meck:expect(router, route_message, fun(Msg) -> Self ! Msg end),
+        ok = meck:expect(router, route_message, fun(Msg) ->
+            Self ! Msg
+        end),
         ok = meck:new(protocol_handler, []),
         ok = meck:expect(protocol_handler, cast, fun(Connection, Msg) ->
             Connection ! Msg

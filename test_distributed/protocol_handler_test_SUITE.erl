@@ -55,7 +55,7 @@ protobuf_msg_test(Config) ->
 
     ok = rpc:call(Worker1, meck, new, [router, [passthrough, non_strict, unstick, no_link]]),
     ok = rpc:call(Worker1, meck, expect, [router, preroute_message,
-        fun(#client_message{credentials = #credentials{}, client_message = #handshake_request{}}) -> ok end]),
+        fun(_, #client_message{credentials = #credentials{}, client_message = #handshake_request{}}) -> ok end]),
     Msg = #'ClientMessage'{message_id = 0, client_message = {handshake_request, #'HandshakeRequest'{}}},
     RawMsg = client_messages:encode_msg(Msg),
     ok = ssl:send(Sock, RawMsg),

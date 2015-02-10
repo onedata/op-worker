@@ -30,7 +30,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, State :: term()} | {error, Error :: term()}.
+    Result :: {ok, State :: term()} | {error, Reason :: term()}.
 init(_Args) ->
     {ok, undefined}.
 
@@ -41,9 +41,9 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck | {spawn_handler, SocketPid :: pid()},
-    Result :: healthcheck_reponse() | ok | {ok, Response} | {error, Error} | pong,
+    Result :: healthcheck_reponse() | ok | {ok, Response} | {error, Reason} | pong,
     Response :: term(),
-    Error :: term().
+    Reason :: term().
 handle(ping, _) ->
     pong;
 

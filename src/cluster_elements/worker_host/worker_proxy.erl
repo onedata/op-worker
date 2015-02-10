@@ -118,8 +118,8 @@ cast(WorkerRef, Request) ->
 %% @equiv cast(WorkerName, Request, ReplyTo, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec cast(WorkerRef :: worker_ref(), Request :: term(),
-    ReplyTo :: {proc, pid()} | {gen_serv, atom() | pid()}) -> ok | {error, term()}.
+-spec cast(WorkerRef :: worker_ref(), Request :: term(), ReplyTo :: process_ref()) ->
+    ok | {error, term()}.
 cast(WorkerRef, Request, ReplyTo) ->
     cast(WorkerRef, Request, ReplyTo, undefined).
 
@@ -131,8 +131,7 @@ cast(WorkerRef, Request, ReplyTo) ->
 %% @equiv cast(WorkerName, Request, ReplyTo, MsgId, ?DEFAULT_WORKER_SELECTION_TYPE)
 %% @end
 %%--------------------------------------------------------------------
--spec cast(WorkerRef :: worker_ref(), Request :: term(),
-    ReplyTo :: {proc, pid()} | {gen_serv, atom() | pid()},
+-spec cast(WorkerRef :: worker_ref(), Request :: term(), ReplyTo :: process_ref(),
     MsgId :: term() | undefined) -> ok | {error, term()}.
 cast(WorkerRef, Request, ReplyTo, MsgId) ->
     cast(WorkerRef, Request, ReplyTo, MsgId, ?DEFAULT_WORKER_SELECTION_TYPE).
@@ -146,7 +145,7 @@ cast(WorkerRef, Request, ReplyTo, MsgId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cast(WorkerRef :: worker_ref(), Request :: term(),
-    ReplyTo :: {proc, pid()} | {gen_serv, atom() | pid()}, MsgId :: term() | undefined,
+    ReplyTo :: process_ref(), MsgId :: term() | undefined,
     SelectionType :: selection_type()) -> ok | {error, term()}.
 cast(WorkerRef, Request, ReplyTo, MsgId, SelectionType) ->
     case choose_node(WorkerRef, SelectionType) of
@@ -176,8 +175,7 @@ multicast(WorkerName, Request) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec multicast(WorkerName :: worker_name(), Request :: term(),
-    ReplyTo :: {proc, pid()}| {gen_serv, atom() | pid()}) ->
-    [{Node :: node(), ok | {error, term()}}].
+    ReplyTo :: process_ref()) -> [{Node :: node(), ok | {error, term()}}].
 multicast(WorkerName, Request, ReplyTo) ->
     multicast(WorkerName, Request, ReplyTo, undefiend).
 
@@ -189,8 +187,8 @@ multicast(WorkerName, Request, ReplyTo) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec multicast(WorkerName :: worker_name(), Request :: term(),
-    ReplyTo :: {proc, pid()}| {gen_serv, atom() | pid()},
-    MsgId :: term() | undefined) -> [{Node :: node(), ok | {error, term()}}].
+    ReplyTo :: process_ref(), MsgId :: term() | undefined) ->
+    [{Node :: node(), ok | {error, term()}}].
 multicast(WorkerName, Request, ReplyTo, MsgId) ->
     {ok, Nodes} = worker_map:get_worker_nodes(WorkerName),
     utils:pmap(fun(Node) ->
@@ -207,7 +205,8 @@ multicast(WorkerName, Request, ReplyTo, MsgId) ->
 %% Chooses a node to send a worker request to.
 %% @end
 %%--------------------------------------------------------------------
--spec choose_node(WorkerRef :: worker_ref(), SelectionType :: selection_type()) -> {ok, WorkerName :: worker_name(), WorkerNode :: atom()} | {error, term()}.
+-spec choose_node(WorkerRef :: worker_ref(), SelectionType :: selection_type()) ->
+    {ok, WorkerName :: worker_name(), WorkerNode :: atom()} | {error, term()}.
 choose_node(WorkerRef, SelectionType) ->
     case WorkerRef of
         {WName, WNode} ->

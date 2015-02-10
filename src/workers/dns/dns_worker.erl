@@ -55,8 +55,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, #dns_worker_state{}} | {error, Error},
-    Error :: term().
+    Result :: {ok, #dns_worker_state{}} | {error, Reason :: term()}.
 init([]) ->
     {ok, #dns_worker_state{}};
 
@@ -79,9 +78,9 @@ init(_) ->
     {update_state, list(), list()} |
     {get_worker, atom()} |
     get_nodes,
-    Result :: healthcheck_reponse() | ok | {ok, Response} | {error, Error} | pong,
+    Result :: healthcheck_reponse() | ok | pong | {ok, Response} | {error, Reason},
     Response :: [inet:ip4_address()],
-    Error :: term().
+    Reason :: term().
 handle(ping, _) ->
     pong;
 
