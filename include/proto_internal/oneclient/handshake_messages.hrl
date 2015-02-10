@@ -14,17 +14,23 @@
 -define(HANDSHAKE_MESSAGES_HRL, 1).
 
 -include("common_messages.hrl").
+-include("cluster_elements/protocol_handler/credentials.hrl").
 
--record(handshake_request, {
-    environment_variables = [] :: [#environment_variable{}]
+-record(token, {
+    value :: binary()
 }).
 
--record(handshake_acknowledgement, {
-    fuse_id :: binary()
+-record(certificate, {
+    value :: binary()
+}).
+
+-record(handshake_request, {
+    auth_method :: #token{} | #certificate{},
+    session_id :: session_id()
 }).
 
 -record(handshake_response, {
-    fuse_id :: binary()
+    session_id :: binary()
 }).
 
 -endif.

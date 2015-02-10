@@ -15,7 +15,7 @@
 -include("registered_names.hrl").
 -include("proto/oneclient/messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneclient/handshake_messages.hrl").
+-include("proto_internal/oneclient/event_messages.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -66,14 +66,16 @@ protobuf_msg_test(Config) ->
         fun(
             #client_message{
                 credentials = #credentials{},
-                client_message = #handshake_request{}
+                client_message = #read_event{}
             }
         ) ->
             ok
         end]),
     Msg = #'ClientMessage'{
         message_id = 0,
-        client_message = {handshake_request, #'HandshakeRequest'{}}
+        client_message =
+        {event, #'Event'{event =
+            {read_event, #'ReadEvent'{counter = 1, file_id = <<"id">>, size=1, blocks = []}}}}
     },
     RawMsg = client_messages:encode_msg(Msg),
 

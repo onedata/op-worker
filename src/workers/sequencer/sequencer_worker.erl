@@ -60,22 +60,22 @@ handle(ping, _) ->
 handle(healthcheck, _) ->
     ok;
 
-handle({create_or_get_sequencer_manager, FuseId, Connection}, _) ->
-    case get_sequencer_manager(FuseId) of
+handle({create_or_get_sequencer_manager, SessionId, Connection}, _) ->
+    case get_sequencer_manager(SessionId) of
         {ok, #sequencer_manager_model{pid = SeqMan}} ->
             ok = gen_server:call(SeqMan, {add_connection, Connection}),
             {ok, SeqMan};
         {error, {not_found, _}} ->
-            create_sequencer_manager(FuseId, Connection);
+            create_sequencer_manager(SessionId, Connection);
         {error, Reason} ->
             {error, Reason}
     end;
 
-handle({remove_sequencer_manager, FuseId}, _) ->
-    case get_sequencer_manager(FuseId) of
+handle({remove_sequencer_manager, SessionId}, _) ->
+    case get_sequencer_manager(SessionId) of
         {ok, #sequencer_manager_model{node = Node, sup = SeqManSup}} ->
             ok = sequencer_worker:stop_sequencer_manager_sup(Node, SeqManSup),
-            sequencer_manager_model:delete(FuseId);
+            sequencer_manager_model:delete(SessionId);
         {error, Reason} ->
             {error, Reason}
     end;
@@ -104,21 +104,21 @@ cleanup() ->
 %% does not exist it is instantiated.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_get_sequencer_manager(FuseId :: fuse_id(), Connection :: pid()) ->
+-spec create_or_get_sequencer_manager(SessionId :: session_id(), Connection :: pid()) ->
     {ok, Pid :: pid()} | {error, Reason :: term()}.
-create_or_get_sequencer_manager(FuseId, Connection) ->
+create_or_get_sequencer_manager(SessionId, Connection) ->
     worker_proxy:call(?SEQUENCER_WORKER,
-        {create_or_get_sequencer_manager, FuseId, Connection}).
+        {create_or_get_sequencer_manager, SessionId, Connection}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes sequencer manager for FUSE client.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_sequencer_manager(FuseId :: fuse_id()) ->
+-spec remove_sequencer_manager(SessionId :: session_id()) ->
     ok | {error, Reason :: term()}.
-remove_sequencer_manager(FuseId) ->
-    worker_proxy:call(?SEQUENCER_WORKER, {remove_sequencer_manager, FuseId}).
+remove_sequencer_manager(SessionId) ->
+    worker_proxy:call(?SEQUENCER_WORKER, {remove_sequencer_manager, SessionId}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -176,10 +176,10 @@ supervisor_children_spec() ->
 %% Returns pid of existing sequencer manager for FUSE client.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sequencer_manager(FuseId :: fuse_id()) ->
+-spec get_sequencer_manager(SessionId :: session_id()) ->
     {ok, #sequencer_manager_model{}} | {error, Reason :: term()}.
-get_sequencer_manager(FuseId) ->
-    case sequencer_manager_model:get(FuseId) of
+get_sequencer_manager(SessionId) ->
+    case sequencer_manager_model:get(SessionId) of
         {ok, #document{value = SeqModel}} ->
             {ok, SeqModel};
         {error, Reason} ->
@@ -192,21 +192,21 @@ get_sequencer_manager(FuseId) ->
 %% Creates sequencer manager for FUSE client.
 %% @end
 %%--------------------------------------------------------------------
--spec create_sequencer_manager(FuseId :: fuse_id(), Connection :: pid()) ->
+-spec create_sequencer_manager(SessionId :: session_id(), Connection :: pid()) ->
     {ok, Pid :: pid()} | {error, Reason :: term()}.
-create_sequencer_manager(FuseId, Connection) ->
+create_sequencer_manager(SessionId, Connection) ->
     Node = node(),
     {ok, SeqManSup} = sequencer_worker:start_sequencer_manager_sup(),
     {ok, SeqSup} = sequencer_manager_sup:start_sequencer_sup(SeqManSup),
     {ok, SeqMan} = sequencer_manager_sup:start_sequencer_manager(SeqManSup, SeqSup, Connection),
-    case sequencer_manager_model:create(#document{key = FuseId, value = #sequencer_manager_model{
+    case sequencer_manager_model:create(#document{key = SessionId, value = #sequencer_manager_model{
         node = Node, pid = SeqMan, sup = SeqManSup
     }}) of
-        {ok, FuseId} ->
+        {ok, SessionId} ->
             {ok, SeqMan};
         {error, already_exists} ->
             ok = sequencer_worker:stop_sequencer_manager_sup(Node, SeqManSup),
-            create_or_get_sequencer_manager(FuseId, Connection);
+            create_or_get_sequencer_manager(SessionId, Connection);
         {error, Reason} ->
             {error, Reason}
     end.

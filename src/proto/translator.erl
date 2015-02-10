@@ -35,8 +35,6 @@
 -spec translate_from_protobuf(tuple()) -> tuple().
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S}) ->
     #file_block{offset = Off, size = S};
-translate_from_protobuf(#'EnvironmentVariable'{name = Name, value = Val}) ->
-    #environment_variable{name = Name, value = Val};
 translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
 translate_from_protobuf(#'Event'{event = {_, Record}}) ->
@@ -55,12 +53,12 @@ translate_from_protobuf(#'WriteEvent'{} = Record) ->
         size = Record#'WriteEvent'.size,
         blocks = Record#'WriteEvent'.blocks
     };
-translate_from_protobuf(#'HandshakeRequest'{environment_variables = Envs}) ->
-    #handshake_request{environment_variables = Envs};
-translate_from_protobuf(#'HandshakeResponse'{fuse_id = Id}) ->
-    #handshake_response{fuse_id = Id};
-translate_from_protobuf(#'HandshakeAcknowledgement'{fuse_id = Id}) ->
-    #handshake_acknowledgement{fuse_id = Id};
+translate_from_protobuf(#'HandshakeRequest'{auth_method = Auth, session_id = SessionId}) ->
+    #handshake_request{auth_method = translate_to_protobuf(Auth), session_id = SessionId};
+translate_from_protobuf(#'AuthMethod'{auth_method = {_, #'Certificate'{value = Val}}}) ->
+    #certificate{value = Val};
+translate_from_protobuf(#'AuthMethod'{auth_method = {_, #'Token'{value = Val}}}) ->
+    #token{value = Val};
 translate_from_protobuf(Record) ->
     ?error("~p:~p - unknown record ~p", [?MODULE, ?LINE, Record]),
     throw({unknown_record, Record}).
@@ -73,8 +71,6 @@ translate_from_protobuf(Record) ->
 -spec translate_to_protobuf(tuple()) -> tuple().
 translate_to_protobuf(#file_block{offset = Off, size = S}) ->
     #'FileBlock'{offset = Off, size = S};
-translate_to_protobuf(#environment_variable{name = Name, value = Val}) ->
-    #'EnvironmentVariable'{name = Name, value = Val};
 translate_to_protobuf(#status{code = Code, description = Desc}) ->
     #'Status'{code = Code, description = Desc};
 translate_to_protobuf(#read_event{} = Record) ->
@@ -143,12 +139,8 @@ translate_to_protobuf(#write_event_subscription{} = Subscription) ->
                 )
             }
         }};
-translate_to_protobuf(#handshake_request{environment_variables = Envs}) ->
-    #'HandshakeRequest'{environment_variables = Envs};
-translate_to_protobuf(#handshake_response{fuse_id = Id}) ->
-    #'HandshakeResponse'{fuse_id = Id};
-translate_to_protobuf(#handshake_acknowledgement{fuse_id = Id}) ->
-    #'HandshakeAcknowledgement'{fuse_id = Id};
+translate_to_protobuf(#handshake_response{session_id = Id}) ->
+    #'HandshakeResponse'{session_id = Id};
 translate_to_protobuf(Record) ->
     ?error("~p:~p - unknown record ~p", [?MODULE, ?LINE, Record]),
     throw({unknown_record, Record}).
