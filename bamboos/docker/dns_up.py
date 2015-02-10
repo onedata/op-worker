@@ -15,6 +15,8 @@ import json
 import os
 import time
 
+def get_script_dir():
+    return os.path.dirname(os.path.realpath(__file__))
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -23,7 +25,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     '--create-service', '-c',
     action='store',
-    default='{0}/createService.js'.format(os.path.dirname(os.path.realpath(__file__))),
+    default='{0}/createService.js'.format(get_script_dir()),
     help='path to createService.js plugin',
     dest='create_service')
 

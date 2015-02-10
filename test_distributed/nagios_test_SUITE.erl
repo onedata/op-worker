@@ -78,7 +78,7 @@ nagios_test(Config) ->
 %%% Internal functions
 %%%===================================================================
 
-% TODO remove retires when cluster init is checked with use of nagios
+% TODO remove retries when cluster init is checked with use of nagios
 perform_nagios_healthcheck(Node) ->
     perform_nagios_healthcheck(Node, 20).
 
