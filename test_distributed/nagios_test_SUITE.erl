@@ -82,8 +82,15 @@ nagios_test(Config) ->
 %%% Internal functions
 %%%===================================================================
 
-% Requests health report from nagios endpoint.
+% TODO remove retires when cluster init is checked with use of nagios
 perform_nagios_healthcheck(Node) ->
+    perform_nagios_healthcheck(Node, 20).
+
+perform_nagios_healthcheck(_, 0) ->
+    {error, max_retries_to_nagios_reached};
+
+% Requests health report from nagios endpoint.
+perform_nagios_healthcheck(Node, Retries) ->
     case rpc:call(Node, ibrowse, send_req, [?HEALTHCHECK_PATH, [], get]) of
         {ok, "200", _, Response} ->
             {ok, Response};
@@ -93,8 +100,9 @@ perform_nagios_healthcheck(Node) ->
                 {headers, Headers},
                 {body, Response}
             ]}};
-        Other ->
-            Other
+        _ ->
+            timer:sleep(1000),
+            perform_nagios_healthcheck(Node, Retries - 1)
     end.
 
 
