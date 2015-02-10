@@ -15,6 +15,8 @@ import json
 import os
 import time
 import subprocess
+import random
+import string
 
 
 def get_script_dir():
@@ -43,6 +45,8 @@ def tweak_config(config, name, uid):
 
     vm_args = cfg['nodes']['node']['vm.args']
     vm_args['name'] = set_hostname(vm_args['name'], uid)
+    # Set random cookie so the node does not try to connect to others
+    vm_args['setcookie'] = ''.join(random.sample(string.ascii_letters + string.digits, 16))
 
     return cfg
 

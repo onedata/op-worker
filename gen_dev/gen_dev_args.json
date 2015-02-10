@@ -42,7 +42,7 @@
                     "setcookie": "cookie1"
                 },
                 "sys.config": {
-                    "db_nodes": [ "gr1_db1@" ],
+                    "db_nodes": [ "gr1_db@" ],
                     "grpcert_domain": {"string" : "127.0.0.1"}
                 }
             }
