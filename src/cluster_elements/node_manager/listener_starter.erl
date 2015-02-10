@@ -144,6 +144,7 @@ start_gui_listener() ->
         ]),
 
     ?dump(started_nagios_listener),
+    timer:sleep(10000),
     ?dump(ibrowse:send_req("https://127.0.0.1:443/nagios", [], get)).
 
 
