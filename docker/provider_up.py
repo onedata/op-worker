@@ -20,6 +20,7 @@ import subprocess
 def get_script_dir():
     return os.path.dirname(os.path.realpath(__file__))
 
+
 def parse_config(path):
     with open(path, 'r') as f:
         data = f.read()
@@ -43,6 +44,7 @@ def tweak_config(config, name, uid):
     vm_args['name'] = set_hostname(vm_args['name'], uid)
 
     return cfg
+
 
 def run_command(cmd):
     return subprocess.Popen(cmd,
@@ -73,8 +75,15 @@ parser.add_argument(
     '--dns', '-d',
     action='store',
     default='auto',
-    help='IP Address of DNS, or "auto" if it should be started with the provider',
+    help='IP address of DNS, or "auto" if it should be started with the provider',
     dest='dns')
+
+parser.add_argument(
+    '--uid', '-u',
+    action='store',
+    default=str(int(time.time())),
+    help='uid that will be concatenated to docker names',
+    dest='uid')
 
 parser.add_argument(
     'config_path',
@@ -82,7 +91,7 @@ parser.add_argument(
     help='path to gen_dev_args.json that will be used to configure the cluster')
 
 args = parser.parse_args()
-uid = str(int(time.time()))
+uid = args.uid
 
 config = parse_config(args.config_path)['oneprovider_node']
 config['config']['target_dir'] = '/root/bin'

@@ -62,4 +62,5 @@ output = collections.defaultdict(list)
 output['dns'] = dns
 output['docker_ids'] = [skydns, skydock]
 
+# Print JSON to output so it can be parsed by other scripts
 print(json.dumps(output))
