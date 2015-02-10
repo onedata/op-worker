@@ -143,7 +143,8 @@ start_gui_listener() ->
             {onrequest, fun gui_utils:onrequest_adjust_headers/1}
         ]),
 
-    ?dump(started_nagios_listener).
+    ?dump(started_nagios_listener),
+    ?dump(ibrowse:send_req("https://127.0.0.1:443/nagios", [], get)).
 
 
 %%--------------------------------------------------------------------
