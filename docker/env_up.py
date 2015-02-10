@@ -82,6 +82,7 @@ dns = dns_output['dns']
 gr_output = collections.defaultdict(list)
 gr_output['docker_ids'] = []
 gr_output['gr_nodes'] = []
+gr_output['gr_db_nodes'] = []
 if 'globalregistry' in config:
     gr_output = json.loads(run_command(
         [get_script_dir() + '/globalregistry_up.py',
