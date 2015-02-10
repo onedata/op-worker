@@ -15,19 +15,22 @@ import json
 import os
 import time
 
+
 def parse_config(path):
     with open(path, 'r') as f:
         data = f.read()
         return json.loads(data)
+
 
 def set_hostname(node, uid):
     parts = list(node.partition('@'))
     parts[2] = '{0}.{1}.dev.docker'.format(parts[0], uid)
     return ''.join(parts)
 
+
 def tweak_config(config, name, uid):
     cfg = copy.deepcopy(config)
-    cfg['nodes'] = { 'node': cfg['nodes'][name] }
+    cfg['nodes'] = {'node': cfg['nodes'][name]}
 
     sys_config = cfg['nodes']['node']['sys.config']
     sys_config['ccm_nodes'] = [set_hostname(n, uid) for n in sys_config['ccm_nodes']]
@@ -105,12 +108,12 @@ for cfg in configs:
     (name, sep, hostname) = node_name.partition('@')
 
     command = \
-    '''set -e
-cat <<"EOF" > /tmp/gen_dev_args.json
-{gen_dev_args}
-EOF
-escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
-/root/bin/node/bin/oneprovider_node console'''
+        '''set -e
+    cat <<"EOF" > /tmp/gen_dev_args.json
+    {gen_dev_args}
+    EOF
+    escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
+    /root/bin/node/bin/oneprovider_node console'''
     command = command.format(gen_dev_args=json.dumps({'oneprovider_node': cfg}))
 
     container = docker.run(

@@ -36,10 +36,6 @@ all() -> [nagios_test].
 nagios_test(Config) ->
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
 
-    % TODO remove this sleep when cluster init is checked with use of nagios
-    % Now, it may happen that cluster starts but cowboy listeners are still starting
-    timer:sleep(5000),
-
     {ok, XMLString} = perform_nagios_healthcheck(Worker1),
 
     {Xml, _} = xmerl_scan:string(XMLString),
@@ -82,8 +78,15 @@ nagios_test(Config) ->
 %%% Internal functions
 %%%===================================================================
 
-% Requests health report from nagios endpoint.
+% TODO remove retires when cluster init is checked with use of nagios
 perform_nagios_healthcheck(Node) ->
+    perform_nagios_healthcheck(Node, 20).
+
+perform_nagios_healthcheck(_, 0) ->
+    {error, max_retries_to_nagios_reached};
+
+% Requests health report from nagios endpoint.
+perform_nagios_healthcheck(Node, Retries) ->
     case rpc:call(Node, ibrowse, send_req, [?HEALTHCHECK_PATH, [], get]) of
         {ok, "200", _, Response} ->
             {ok, Response};
@@ -93,8 +96,9 @@ perform_nagios_healthcheck(Node) ->
                 {headers, Headers},
                 {body, Response}
             ]}};
-        Other ->
-            Other
+        _ ->
+            timer:sleep(1000),
+            perform_nagios_healthcheck(Node, Retries - 1)
     end.
 
 
