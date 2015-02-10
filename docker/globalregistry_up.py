@@ -11,7 +11,6 @@ import argparse
 import collections
 import json
 import os
-import sys
 import time
 import docker
 import copy
@@ -122,7 +121,7 @@ cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
-/root/bin/node/bin/oneprovider_node console'''
+/root/bin/node/bin/globalregistry console'''
     gr_command = gr_command.format(gen_dev_args=json.dumps({'globalregistry': cfg}))
 
     # Start DB nodes for current GR instance
@@ -143,22 +142,26 @@ sed -i 's/-setcookie monster/-setcookie {cookie}/g' /opt/bigcouch/etc/vm.args
             detach=True,
             name=db_dockername,
             hostname=db_hostname,
-            command=db_command,
-            dns=dns)
+            dns=[dns],
+            command=db_command)
 
-        output['docker_ids'] = output['docker_ids'] + [bigcouch]
-        output['gr_db_nodes'] = ['{0}@{1}'.format(db_name, db_hostname)]
+        output['docker_ids'] += [bigcouch]
+        output['gr_db_nodes'] += ['{0}@{1}'.format(db_name, db_hostname)]
 
     # Start GR instance
     gr = docker.run(
         image=args.image,
         hostname=gr_hostname,
-        detach=True,
+        detach=False,
         interactive=True,
         tty=True,
+        workdir='/root/build',
         name=gr_dockername,
-        volumes=[(args.bin, '/root/bin', 'ro')],
-        command=gr_command,
-        dns=dns)
+        volumes=[(args.bin, '/root/build', 'ro')],
+        dns=[dns],
+        command=gr_command)
+
+    output['docker_ids'] += [gr]
+    output['gr_nodes'] += ['{0}@{1}'.format(gr_name, gr_hostname)]
 
 print(json.dumps(output))
