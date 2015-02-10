@@ -13,14 +13,14 @@
 -author("Michal Wrzeszcz").
 
 -include("test_utils.hrl").
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([ ccm_and_worker_test/1]).
+-export([ccm_and_worker_test/1]).
 
 all() -> [ccm_and_worker_test].
 
@@ -47,9 +47,10 @@ ccm_and_worker_test(Config) ->
 %%%===================================================================
 
 init_per_testcase(ccm_and_worker_test, Config) ->
-  try
-  test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json"))
-  catch A:B -> ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()]) end.
-
+    try
+        test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json"))
+    catch A:B ->
+        ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()])
+    end.
 end_per_testcase(ccm_and_worker_test, Config) ->
-  test_node_starter:clean_environment(Config).
+    test_node_starter:clean_environment(Config).

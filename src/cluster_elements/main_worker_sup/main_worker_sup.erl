@@ -14,7 +14,7 @@
 
 -behaviour(supervisor).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 
 %% API
 -export([start_link/0]).

@@ -8,9 +8,12 @@ src/gui_static/common
 src/gui_static/flatui
 src/gui_static/fonts
 src/gui_static/n2o
+src/proto
 
 *.iml
 *.sublime*
+*.beam
+*.pyc
 
 rel/oneprovider_node
 rel/test_cluster
