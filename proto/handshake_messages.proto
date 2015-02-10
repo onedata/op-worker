@@ -13,8 +13,8 @@ message HandshakeResponse {
 
 message AuthMethod {
     oneof auth_method {
-        Token token             = 2;
-        Certificate certificate = 3;
+        Token token             = 1;
+        Certificate certificate = 2;
     }
 }
 
