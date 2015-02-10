@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Brings up a Global Registry cluster along with a database.
+Brings up a set of Global Registry nodes along with databases. They can create separate clusters.
 Run the script with -h flag to learn about script's running options.
 """
 
@@ -75,8 +75,9 @@ parser.add_argument(
 parser.add_argument(
     '--dns', '-d',
     action='store',
-    default='auto',
-    help='IP address of DNS, or "auto" if it should be started with the globalregistry',
+    default='none',
+    help='IP address of DNS or "none" - if no dns should be started or ' +
+         '"auto" - if it should be started automatically',
     dest='dns')
 
 parser.add_argument(
@@ -101,11 +102,13 @@ configs = [tweak_config(config, node, uid) for node in config['nodes']]
 output = collections.defaultdict(list)
 
 dns = args.dns
-if dns is 'auto':
+if dns == 'auto':
     dns_config = json.loads(run_command([get_script_dir() + '/dns_up.py', '--uid', uid]))
     dns = dns_config['dns']
     output['dns'] = dns_config['dns']
     output['docker_ids'] = dns_config['docker_ids']
+elif dns == 'none':
+    dns = None
 
 for cfg in configs:
     node_name = cfg['nodes']['node']['vm.args']['name']
@@ -124,42 +127,55 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 /root/bin/node/bin/globalregistry console'''
     gr_command = gr_command.format(gen_dev_args=json.dumps({'globalregistry': cfg}))
 
-    # Start DB nodes for current GR instance
-    for db_node in db_nodes:
-        (db_name, sep, db_hostname) = db_node.partition('@')
-        db_dockername = '{0}_{1}'.format(db_name, uid)
+    # Start DB node for current GR instance
+    db_node = db_nodes[0]
+    (db_name, sep, db_hostname) = db_node.partition('@')
+    db_dockername = '{0}_{1}'.format(db_name, uid)
 
-        db_command = \
+    db_command = \
 '''echo '[httpd]' > /opt/bigcouch/etc/local.ini
 echo 'bind_address = 0.0.0.0' >> /opt/bigcouch/etc/local.ini
 sed -i 's/-name bigcouch/-name {name}@{host}/g' /opt/bigcouch/etc/vm.args
 sed -i 's/-setcookie monster/-setcookie {cookie}/g' /opt/bigcouch/etc/vm.args
 /opt/bigcouch/bin/bigcouch'''
-        db_command = db_command.format(name=db_name, host=db_hostname, cookie=cookie)
+    db_command = db_command.format(name=db_name, host=db_hostname, cookie=cookie)
 
-        bigcouch = docker.run(
-            image='onedata/bigcouch',
-            detach=True,
-            name=db_dockername,
-            hostname=db_hostname,
-            dns=[dns],
-            command=db_command)
+    bigcouch = docker.run(
+        image='onedata/bigcouch',
+        detach=True,
+        name=db_dockername,
+        hostname=db_hostname,
+        command=db_command)
 
-        output['docker_ids'] += [bigcouch]
-        output['gr_db_nodes'] += ['{0}@{1}'.format(db_name, db_hostname)]
+    output['docker_ids'] += [bigcouch]
+    output['gr_db_nodes'] += ['{0}@{1}'.format(db_name, db_hostname)]
 
     # Start GR instance
-    gr = docker.run(
-        image=args.image,
-        hostname=gr_hostname,
-        detach=False,
-        interactive=True,
-        tty=True,
-        workdir='/root/build',
-        name=gr_dockername,
-        volumes=[(args.bin, '/root/build', 'ro')],
-        dns=[dns],
-        command=gr_command)
+    if dns is None:
+        gr = docker.run(
+            image=args.image,
+            hostname=gr_hostname,
+            detach=True,
+            interactive=True,
+            tty=True,
+            workdir='/root/build',
+            name=gr_dockername,
+            volumes=[(args.bin, '/root/build', 'ro')],
+            link={db_dockername: db_hostname},
+            command=gr_command)
+    else:
+        gr = docker.run(
+            image=args.image,
+            hostname=gr_hostname,
+            detach=True,
+            interactive=True,
+            tty=True,
+            workdir='/root/build',
+            name=gr_dockername,
+            volumes=[(args.bin, '/root/build', 'ro')],
+            dns=[dns],
+            link={db_dockername: db_hostname},
+            command=gr_command)
 
     output['docker_ids'] += [gr]
     output['gr_nodes'] += ['{0}@{1}'.format(gr_name, gr_hostname)]
