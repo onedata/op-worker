@@ -13,7 +13,6 @@ message ClientMessage {
     oneof client_message {
         // handshake_messages.proto
         HandshakeRequest              handshake_request         = 5;
-        HandshakeAcknowledgement      handshake_acknowledgement = 6;
 
         // communication_messages.proto
         Status                        status                    = 7;
