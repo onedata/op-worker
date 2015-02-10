@@ -104,12 +104,12 @@ for cfg in configs:
     (name, sep, hostname) = node_name.partition('@')
 
     command = \
-        '''set -e
-    cat <<"EOF" > /tmp/gen_dev_args.json
-    {gen_dev_args}
-    EOF
-    escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
-    /root/bin/node/bin/oneprovider_node console'''
+    '''set -e
+cat <<"EOF" > /tmp/gen_dev_args.json
+{gen_dev_args}
+EOF
+escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
+/root/bin/node/bin/oneprovider_node console'''
     command = command.format(gen_dev_args=json.dumps({'oneprovider_node': cfg}))
 
     container = docker.run(
