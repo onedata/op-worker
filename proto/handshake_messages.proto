@@ -3,13 +3,25 @@ package one.clproto;
 import "common_messages.proto";
 
 message HandshakeRequest {
-    repeated EnvironmentVariable environment_variables = 1;
+    optional bytes session_id       = 1;
+    optional AuthMethod auth_method = 2;
 }
 
 message HandshakeResponse {
-    required bytes fuse_id = 1;
+    required bytes session_id = 1;
 }
 
-message HandshakeAcknowledgement {
-    required bytes fuse_id = 1;
+message AuthMethod {
+    oneof auth_method {
+        Token token             = 2;
+        Certificate certificate = 3;
+    }
+}
+
+message Token {
+  required bytes value = 1;
+}
+
+message Certificate {
+  required bytes value = 1;
 }
