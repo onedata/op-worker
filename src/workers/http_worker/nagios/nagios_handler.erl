@@ -36,6 +36,7 @@
 %%--------------------------------------------------------------------
 -spec init(term(), term(), term()) -> {ok, cowboy_req:req(), term()}.
 init(_Type, Req, _Opts) ->
+    ?dump({nagios_handler_init, Req}),
     {ok, Req, []}.
 
 
@@ -46,14 +47,17 @@ init(_Type, Req, _Opts) ->
 %%--------------------------------------------------------------------
 -spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
 handle(Req, State) ->
+    ?dump({nagios_handler_handle, Req}),
     {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
 
     NewReq =
         case get_cluster_status(Timeout) of
             error ->
+                ?dump(nagios_handler_handle_error),
                 {ok, Req2} = opn_cowboy_bridge:apply(cowboy_req, reply, [500, Req]),
                 Req2;
             {ok, {?APP_NAME, AppStatus, NodeStatuses}} ->
+                ?dump(nagios_handler_handle_ok),
                 MappedClusterState = lists:map(
                     fun({Node, NodeStatus, NodeComponents}) ->
                         NodeDetails = lists:map(
@@ -72,6 +76,7 @@ handle(Req, State) ->
                 Export = xmerl:export_simple(Content, xmerl_xml),
                 Reply = io_lib:format("~s", [lists:flatten(Export)]),
 
+                ?dump(nagios_handler_handle_reply),
                 % Send the reply
                 {ok, Req2} = opn_cowboy_bridge:apply(cowboy_req, reply,
                     [200, [{<<"content-type">>, <<"application/xml">>}], Reply, Req]),
@@ -87,6 +92,7 @@ handle(Req, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(term(), term(), term()) -> ok.
 terminate(_Reason, _Req, _State) ->
+    ?dump(nagios_handler_handle_terminate),
     ok.
 
 

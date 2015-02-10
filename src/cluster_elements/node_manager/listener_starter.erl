@@ -141,7 +141,9 @@ start_gui_listener() ->
             {timeout, Timeout},
             % On every request, add headers that improve security to the response
             {onrequest, fun gui_utils:onrequest_adjust_headers/1}
-        ]).
+        ]),
+
+    ?dump(started_nagios_listener).
 
 
 %%--------------------------------------------------------------------
