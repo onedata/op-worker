@@ -27,7 +27,6 @@
 -type riak_node() :: {HostName :: binary(), Port :: non_neg_integer()}.
 -type riak_connection() :: {riak_node(), ConnectionHandle :: term()}.
 
-
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
 -export([save/2, create/2, update/3, exists/2, get/2, delete/2]).
@@ -46,13 +45,13 @@ init_bucket(_Bucket, _Models) ->
     ?debug("Riak init with nodes: ~p", [datastore_worker:state_get(riak_nodes)]),
     ok.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback init_bucket/2.
 %% @end
 %%--------------------------------------------------------------------
--spec save(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
+-spec save(model_behaviour:model_config(), datastore:document()) ->
+    {ok, datastore:key()} | datastore:generic_error().
 save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = Rev, value = Value}) ->
     RiakObj = to_riak_obj(Value, Rev),
     RiakOP = riakc_map:to_op(RiakObj),
@@ -61,7 +60,6 @@ save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = R
         {error, Reason} ->
             {error, Reason}
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -81,24 +79,24 @@ update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Dif
                         RiakObj = to_riak_obj(V),
                         Module = riakc_datatype:module_for_term(RiakObj),
                         Type = Module:type(),
-                        riakc_map:update({to_binary(K), Type}, fun(_) -> RiakObj end, Acc)
+                        riakc_map:update({to_binary(K), Type}, fun(_) ->
+                            RiakObj end, Acc)
                     end, Result, Diff),
             case call(riakc_pb_socket, update_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key), riakc_map:to_op(NewRMap)]) of
                 ok -> {ok, Key};
-                {error, Reason} ->
-                    {error, Reason}
+                {error, Reason} -> {error, Reason}
             end;
         {error, Reason} ->
             {error, Reason}
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback create/2.
 %% @end
 %%--------------------------------------------------------------------
--spec create(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
+-spec create(model_behaviour:model_config(), datastore:document()) ->
+    {ok, datastore:key()} | datastore:create_error().
 create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value = Value}) ->
     RiakOP = riakc_map:to_op(to_riak_obj(Value)),
     case call(riakc_pb_socket, update_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key), RiakOP]) of
@@ -107,13 +105,13 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
             {error, Reason}
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(model_behaviour:model_config(), datastore:document()) ->
+    {ok, datastore:document()} | datastore:get_error().
 get(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         {ok, Result} ->
@@ -123,13 +121,13 @@ get(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
             {error, Reason}
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(model_behaviour:model_config(), datastore:key()) -> ok | datastore:generic_error().
+-spec delete(model_behaviour:model_config(), datastore:key()) ->
+    ok | datastore:generic_error().
 delete(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, delete, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         ok ->
@@ -138,13 +136,13 @@ delete(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
             {error, Reason}
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback exists/2.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(model_behaviour:model_config(), datastore:key()) -> true | false | datastore:generic_error().
+-spec exists(model_behaviour:model_config(), datastore:key()) ->
+    true | false | datastore:generic_error().
 exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         {ok, {notfound, _}} ->
@@ -155,13 +153,12 @@ exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
             true
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback healthcheck/1.
 %% @end
 %%--------------------------------------------------------------------
--spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.
+-spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
 healthcheck(_) ->
     case call(riakc_pb_socket, ping, []) of
         pong -> ok;
@@ -169,13 +166,12 @@ healthcheck(_) ->
             {error, no_riak_connection}
     end.
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Translates given riak object to erlang term.
 %% @end
@@ -195,8 +191,8 @@ form_riak_obj(register, Obj) when is_binary(Obj) ->
 form_riak_obj(register, Obj) ->
     from_binary(riakc_register:value(Obj)).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Translates given erlang map into riak object that maybe already initialized.
 %% @end
@@ -215,8 +211,8 @@ to_riak_obj(Term, Rev) when is_tuple(Term) ->
             riakc_map:update({to_binary(K), Type}, fun(_) -> RiakObj end, Acc)
         end, RMap0, Map).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Translates given erlang term into new riak object.
 %% @end
@@ -239,8 +235,8 @@ to_riak_obj(Term) ->
     Bin = to_binary(Term),
     riakc_register:set(Bin, Register).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Calls given MFA with riak connection handle added as first argument.
 %% @end
@@ -263,8 +259,8 @@ call(Module, Method, Args, Retry) when Retry >= 0 ->
 call(_Module, _Method, _Args, _Retry) ->
     {error, no_riak_nodes}.
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Selects riak connection from connection pool retuned by get_connections/0.
 %% @end
@@ -274,8 +270,8 @@ select_connection() ->
     Connections = get_connections(),
     lists:nth(crypto:rand_uniform(1, length(Connections) + 1), Connections).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Gets riak active connections. When no connection is available, tries to
 %% estabilish new connections.
@@ -292,8 +288,8 @@ get_connections() ->
             Connections
     end.
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Connects to given Riak database nodes.
 %% @end
@@ -310,8 +306,8 @@ connect([{HostName, Port} = Node | R]) ->
 connect([]) ->
     [].
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Encodes given term to base64 binary.
 %% @end
@@ -321,8 +317,8 @@ term_to_base64(Term) ->
     Base = base64:encode(term_to_binary(Term)),
     <<?OBJ_PREFIX, Base/binary>>.
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Decodes given base64 binary to erlang term (reverses term_to_base64/1).
 %% @end
@@ -331,8 +327,8 @@ term_to_base64(Term) ->
 base64_to_term(<<?OBJ_PREFIX, Base/binary>>) ->
     binary_to_term(base64:decode(Base)).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Encodes given given term as binary which maybe human readable if possible.
 %% @end
@@ -345,8 +341,8 @@ to_binary(Term) when is_atom(Term) ->
 to_binary(Term) ->
     term_to_base64(Term).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Translates given database "register" object to erlang term (reverses to_binary/1).
 %% @end
@@ -359,8 +355,8 @@ from_binary(<<?ATOM_PREFIX, Atom/binary>>) ->
 from_binary(Bin) ->
     Bin.
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Encodes geven bucket name to format supported by database.
 %% @end

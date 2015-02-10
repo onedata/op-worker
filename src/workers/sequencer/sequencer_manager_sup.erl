@@ -80,8 +80,7 @@ start_sequencer_manager(SeqencerManagerSup, SeqSup, Connection) ->
         MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
         [ChildSpec :: supervisor:child_spec()]
     }} |
-    ignore |
-    {error, Reason :: term()}.
+    ignore.
 init([]) ->
     RestartStrategy = one_for_all,
     MaxR = 3,
@@ -100,11 +99,11 @@ init([]) ->
 %%--------------------------------------------------------------------
 -spec sequencer_sup_spec() -> supervisor:child_spec().
 sequencer_sup_spec() ->
-    ChildId = Module = sequencer_sup,
+    Id = Module = sequencer_sup,
     Restart = permanent,
-    ExitTimeout = timer:seconds(10),
+    Shutdown = timer:seconds(10),
     Type = supervisor,
-    {ChildId, {Module, start_link, []}, Restart, ExitTimeout, Type, [Module]}.
+    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -115,9 +114,9 @@ sequencer_sup_spec() ->
 -spec sequencer_manager_spec(SeqSup :: supervisor:sup_ref(),
     Connection :: pid()) -> supervisor:child_spec().
 sequencer_manager_spec(SeqSup, Connection) ->
-    ChildId = Module = sequencer_manager,
+    Id = Module = sequencer_manager,
     Restart = permanent,
-    ExitTimeout = timer:seconds(10),
+    Shutdown = timer:seconds(10),
     Type = worker,
-    {ChildId, {Module, start_link, [SeqSup, Connection]},
-        Restart, ExitTimeout, Type, [Module]}.
+    {Id, {Module, start_link, [SeqSup, Connection]},
+        Restart, Shutdown, Type, [Module]}.

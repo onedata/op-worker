@@ -53,30 +53,104 @@ start_link(NodeType) ->
 %% specifications.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term()) -> Result when
-    Result :: {ok, {SupervisionPolicy, [ChildSpec]}} | ignore,
-    SupervisionPolicy :: {RestartStrategy, MaxR :: non_neg_integer(), MaxT :: pos_integer()},
-    RestartStrategy :: one_for_all
-    | one_for_one
-    | rest_for_one
-    | simple_one_for_one,
-    ChildSpec :: {Id :: term(), StartFunc, RestartPolicy, Type :: worker | supervisor, Modules},
-    StartFunc :: {M :: module(), F :: atom(), A :: [term()] | undefined},
-    RestartPolicy :: permanent
-    | transient
-    | temporary,
-    Modules :: [module()] | dynamic.
-init([worker]) ->
-    {ok, {{one_for_one, 5, 10}, [
-        {main_worker_sup, {main_worker_sup, start_link, []}, permanent, infinity, supervisor, [main_worker_sup]},
-        {request_dispatcher, {request_dispatcher, start_link, []}, permanent, 5000, worker, [request_dispatcher]},
-        {node_manager, {node_manager, start_link, [worker]}, permanent, 5000, worker, [node_manager]}
-    ]}};
+-spec init(Args :: term()) ->
+    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
+        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
+        [ChildSpec :: supervisor:child_spec()]
+    }} |
+    ignore.
 init([ccm]) ->
-    {ok, {{one_for_one, 5, 10}, [
-        {cluster_state_notifier, {cluster_state_notifier, start_link, []}, permanent, 5000, worker, [cluster_state_notifier]},
-        {cluster_manager, {cluster_manager, start_link, []}, permanent, 5000, worker, [cluster_manager]},
-        {main_worker_sup, {main_worker_sup, start_link, []}, permanent, infinity, supervisor, [main_worker_sup]},
-        {node_manager, {node_manager, start_link, [ccm]}, permanent, 5000, worker, [node_manager]},
-        {request_dispatcher, {request_dispatcher, start_link, []}, permanent, 5000, worker, [request_dispatcher]}
+    RestartStrategy = one_for_one,
+    MaxR = 5,
+    MaxT = timer:seconds(10),
+    {ok, {{RestartStrategy, MaxR, MaxT}, [
+        cluster_state_notifier_spec(),
+        cluster_manager_spec(),
+        main_worker_sup_spec(),
+        node_manager_spec(ccm),
+        request_dispatcher_spec()
+    ]}};
+init([worker]) ->
+    RestartStrategy = one_for_one,
+    MaxR = 5,
+    MaxT = timer:seconds(10),
+    {ok, {{RestartStrategy, MaxR, MaxT}, [
+        main_worker_sup_spec(),
+        request_dispatcher_spec(),
+        node_manager_spec(worker)
     ]}}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a supervisor child_spec for a main worker supervisor child.
+%% @end
+%%--------------------------------------------------------------------
+-spec main_worker_sup_spec() -> supervisor:child_spec().
+main_worker_sup_spec() ->
+    Id = Module = main_worker_sup,
+    Restart = permanent,
+    Shutdown = infinity,
+    Type = supervisor,
+    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a worker child_spec for a request dispatcher child.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_dispatcher_spec() -> supervisor:child_spec().
+request_dispatcher_spec() ->
+    Id = Module = request_dispatcher,
+    Restart = permanent,
+    Shutdown = timer:seconds(5),
+    Type = worker,
+    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a worker child_spec for a node manager child.
+%% @end
+%%--------------------------------------------------------------------
+-spec node_manager_spec(NodeType :: ccm | worker) ->
+    supervisor:child_spec().
+node_manager_spec(NodeType) ->
+    Id = Module = node_manager,
+    Restart = permanent,
+    Shutdown = timer:seconds(5),
+    Type = worker,
+    {Id, {Module, start_link, [NodeType]}, Restart, Shutdown, Type, [Module]}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a worker child_spec for a cluster manager child.
+%% @end
+%%--------------------------------------------------------------------
+-spec cluster_manager_spec() -> supervisor:child_spec().
+cluster_manager_spec() ->
+    Id = Module = cluster_manager,
+    Restart = permanent,
+    Shutdown = timer:seconds(5),
+    Type = worker,
+    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a worker child_spec for a cluster state notifier manager child.
+%% @end
+%%--------------------------------------------------------------------
+-spec cluster_state_notifier_spec() -> supervisor:child_spec().
+cluster_state_notifier_spec() ->
+    Id = Module = cluster_state_notifier,
+    Restart = permanent,
+    Shutdown = timer:seconds(5),
+    Type = worker,
+    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.

@@ -38,8 +38,8 @@ sequencer_worker_test(Config) ->
 
     [SeqMan1, SeqMan2] = lists:map(fun(FuseId) ->
         CreateOrGetSeqManAnswers = utils:pmap(fun(Worker) ->
-            rpc:call(Worker, sequencer_worker,
-                create_or_get_sequencer_manager, [FuseId, Self])
+            rpc:call(Worker, worker_proxy, call, [sequencer_worker,
+                {get_or_create_sequencer_manager, FuseId, Self}])
         end, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)),
 
         lists:foreach(fun(CreateOrGetSeqManAnswer) ->
@@ -63,11 +63,11 @@ sequencer_worker_test(Config) ->
             P =:= SeqMan1
         end, ProcessesBeforeRemoval)),
 
-        RemoveSeqManAnswer1 = rpc:call(Worker1, sequencer_worker,
-            remove_sequencer_manager, [FuseId]),
+        RemoveSeqManAnswer1 = rpc:call(Worker1, worker_proxy, call, [
+            sequencer_worker, {remove_sequencer_manager, FuseId}]),
         ?assertMatch(ok, RemoveSeqManAnswer1),
-        RemoveSeqManAnswer2 = rpc:call(Worker1, sequencer_worker,
-            remove_sequencer_manager, [FuseId]),
+        RemoveSeqManAnswer2 = rpc:call(Worker1, worker_proxy, call, [
+            sequencer_worker, {remove_sequencer_manager, FuseId}]),
         ?assertMatch({error, _}, RemoveSeqManAnswer2),
 
         ProcessesAfterRemoval = processes([Worker1, Worker2]),
@@ -90,7 +90,8 @@ sequencer_test(Config) ->
         MsgReq = #message_request{message_id = MsgId},
         MsgAck = #message_acknowledgement{message_id = MsgId, seq_num = MsgCount},
 
-        {ok, SeqMan} = sequencer_worker:create_or_get_sequencer_manager(FuseId, Self),
+        {ok, SeqMan} = worker_proxy:call(sequencer_worker,
+            {get_or_create_sequencer_manager, FuseId, Self}),
         ok = meck:new(router, []),
         ok = meck:expect(router, route_message, fun(Msg) -> Self ! Msg end),
         ok = meck:new(protocol_handler, []),
@@ -121,7 +122,7 @@ sequencer_test(Config) ->
 
         true = meck:validate(router),
         true = meck:validate(protocol_handler),
-        ok = sequencer_worker:remove_sequencer_manager(FuseId)
+        ok = worker_proxy:call(sequencer_worker, {remove_sequencer_manager, FuseId})
     end, []]),
 
     ?assertEqual(ok, Answer),
@@ -158,7 +159,6 @@ processes(Nodes) ->
     lists:foldl(fun(Node, Processes) ->
         Processes ++ rpc:call(Node, erlang, processes, [])
     end, [], Nodes).
-
 
 %%--------------------------------------------------------------------
 %% @private

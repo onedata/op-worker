@@ -75,4 +75,4 @@
 %% Checks driver state.
 %% @end
 %%--------------------------------------------------------------------
--callback healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.
+-callback healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.

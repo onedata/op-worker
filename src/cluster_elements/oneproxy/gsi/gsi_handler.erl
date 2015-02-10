@@ -92,7 +92,8 @@ init() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_certs_from_req(OneProxyHandler :: pid() | atom(), Req :: term()) ->
-    {ok, {OtpCert :: #'OTPCertificate'{}, Chain :: [#'OTPCertificate'{}]}} | {error, no_gsi_session} | {error, Reason :: any()}.
+    {ok, {OtpCert :: #'OTPCertificate'{}, Chain :: [#'OTPCertificate'{}]}} |
+    {error, no_gsi_session} | {error, Reason :: term()}.
 get_certs_from_req(OneProxyHandler, Req) ->
     {SessionId, _} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
     case SessionId of
@@ -169,7 +170,7 @@ strip_self_signed_ca(DERList) when is_list(DERList) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_callback(OtpCert :: #'OTPCertificate'{}, Status :: term(), Certs :: [#'OTPCertificate'{}]) ->
-    {valid, UserState :: any()} | {fail, Reason :: term()}.
+    {valid, UserState :: term()} | {fail, Reason :: term()}.
 verify_callback(OtpCert, valid_peer, Certs) ->
     Serial = save_cert_chain([OtpCert | Certs]),
     ?debug("Peer ~p connected", [Serial]),
@@ -297,7 +298,7 @@ save_cert_chain([OtpCert | Certs]) ->
 %% Initializes Count slave nodes. See {@link initialize_node/1}.
 %% @end
 %%--------------------------------------------------------------------
--spec start_slaves(Count :: non_neg_integer()) -> [any()].
+-spec start_slaves(Count :: non_neg_integer()) -> [term()].
 start_slaves(Count) when Count >= 0 ->
     [initialize_node(list_to_atom(atom_to_list(get_node_name()) ++ "_gsi" ++ integer_to_list(N))) || N <- lists:seq(1, Count)].
 
@@ -308,7 +309,7 @@ start_slaves(Count) when Count >= 0 ->
 %% If NIF load fails, slave node is stopped.
 %% @end
 %%--------------------------------------------------------------------
--spec initialize_node(NodeName :: atom()) -> any().
+-spec initialize_node(NodeName :: atom()) -> term().
 initialize_node(NodeName) when is_atom(NodeName) ->
     ?info("Trying to start GSI slave node: ~p @ ~p", [NodeName, get_host()]),
     case slave:start(get_host(), NodeName, make_code_path() ++ " -setcookie \"" ++ atom_to_list(erlang:get_cookie()) ++ "\"", no_link, erl) of

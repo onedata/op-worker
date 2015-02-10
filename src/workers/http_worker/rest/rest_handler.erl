@@ -36,7 +36,7 @@
 %% now treated as REST module by cowboy.
 %% @end
 %%--------------------------------------------------------------------
--spec init(any(), any(), any()) -> {upgrade, protocol, cowboy_rest, req(), term()}.
+-spec init(term(), term(), term()) -> {upgrade, protocol, cowboy_rest, req(), term()}.
 init(_, Req, Opts) ->
     NewOpts =
         case gsi_handler:get_certs_from_req(?ONEPROXY_REST, Req) of

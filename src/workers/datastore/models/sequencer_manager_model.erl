@@ -26,30 +26,30 @@
 %% {@link model_behaviour} callback save/1. 
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
+-spec save(datastore:document()) ->
+    {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
     datastore:save(global_only, Document).
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback update/2. 
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
+-spec update(datastore:key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
     datastore:update(global_only, ?MODULE, Key, Diff).
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback create/1. 
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
+-spec create(datastore:document()) ->
+    {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
     datastore:create(global_only, Document).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -60,7 +60,6 @@ create(Document) ->
 get(Key) ->
     datastore:get(global_only, ?MODULE, Key).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback delete/1.
@@ -70,16 +69,15 @@ get(Key) ->
 delete(Key) ->
     datastore:delete(global_only, ?MODULE, Key).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback exists/1. 
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) -> true | false | datastore:generic_error().
+-spec exists(datastore:key()) ->
+    true | false | datastore:generic_error().
 exists(Key) ->
     datastore:exists(global_only, ?MODULE, Key).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -90,25 +88,26 @@ exists(Key) ->
 model_init() ->
     ?MODEL_CONFIG(sequencer_bucket, []).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback 'after'/5. 
 %% @end
 %%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
+-spec 'after'(ModelName :: model_behaviour:model_type(),
+    Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback before/4. 
 %% @end
 %%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+-spec before(ModelName :: model_behaviour:model_type(),
+    Method :: model_behaviour:model_action(),
+    Level :: datastore:store_level(), Context :: term()) ->
+    ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.

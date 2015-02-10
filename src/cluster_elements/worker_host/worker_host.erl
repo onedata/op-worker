@@ -54,7 +54,7 @@
 %%--------------------------------------------------------------------
 -spec start_link(Plugin, PluginArgs, LoadMemorySize) -> Result when
     Plugin :: atom(),
-    PluginArgs :: any(),
+    PluginArgs :: term(),
     LoadMemorySize :: integer(),
     Result :: {ok, Pid}
     | ignore

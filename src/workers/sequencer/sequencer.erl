@@ -244,6 +244,7 @@ send_msg(Msg, #state{seq_num = SeqNum} = State) ->
     State#state{seq_num = SeqNum + 1}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Sends acknowledgement to sequencer manager for last forwarded message.
 %% @end

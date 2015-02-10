@@ -18,7 +18,6 @@
 %% ETS name for local (node scope) state.
 -define(LOCAL_STATE, datastore_local_state).
 
-
 %% #document types
 -type key() :: undefined | term().
 -type document() :: #document{}.
@@ -29,16 +28,16 @@
 -export_type([key/0, value/0, document/0, document_diff/0, bucket/0]).
 
 %% Error types
--type generic_error() :: {error, Reason :: any()}.
+-type generic_error() :: {error, Reason :: term()}.
 -type not_found_error(Reason) :: {error, {not_found, Reason}}.
--type update_error() :: not_found_error(any()) | generic_error().
+-type update_error() :: not_found_error(term()) | generic_error().
 -type create_error() :: generic_error() | {error, already_exists}.
--type get_error() :: not_found_error(any()) | generic_error().
+-type get_error() :: not_found_error(term()) | generic_error().
 
 -export_type([generic_error/0, not_found_error/1, update_error/0, create_error/0, get_error/0]).
 
 %% API utility types
--type store_level() :: disk_only | local_only | global_only | locally_cached | globally_cachced.
+-type store_level() :: disk_only | local_only | global_only | locally_cached | globally_cached.
 
 -export_type([store_level/0]).
 
@@ -46,80 +45,79 @@
 -export([save/2, update/4, create/2, get/3, delete/3, exists/3]).
 -export([configs_per_bucket/1, ensure_state_loaded/0]).
 
-
 %%%===================================================================
 %%% API
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Saves given #document.
 %% @end
 %%--------------------------------------------------------------------
--spec save(Level :: store_level(), datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
+-spec save(Level :: store_level(), Document :: datastore:document()) ->
+    {ok, datastore:key()} | datastore:generic_error().
 save(Level, #document{} = Document) ->
     ModelName = model_name(Document),
     exec_driver(ModelName, level_to_driver(Level), save, [maybe_gen_uuid(Document)]).
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates given by key document by replacing given fields with new values.
 %% @end
 %%--------------------------------------------------------------------
--spec update(Level :: store_level(), ModelName :: model_behaviour:model_type(), datastore:key(), Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
+-spec update(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+    Key :: datastore:key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:key()} | datastore:update_error().
 update(Level, ModelName, Key, Diff) ->
     exec_driver(ModelName, level_to_driver(Level), update, [Key, Diff]).
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates new #document.
 %% @end
 %%--------------------------------------------------------------------
--spec create(Level :: store_level(), datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
+-spec create(Level :: store_level(), Document :: datastore:document()) ->
+    {ok, datastore:key()} | datastore:create_error().
 create(Level, #document{} = Document) ->
     ModelName = model_name(Document),
     exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets #document with given key.
 %% @end
 %%--------------------------------------------------------------------
--spec get(Level :: store_level(), ModelName :: model_behaviour:model_type(), datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+    Key :: datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Level, ModelName, Key) ->
     exec_driver(ModelName, level_to_driver(Level), get, [Key]).
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes #document with given key.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(Level :: store_level(), ModelName :: model_behaviour:model_type(), datastore:key()) -> ok | datastore:generic_error().
+-spec delete(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+    Key :: datastore:key()) -> ok | datastore:generic_error().
 delete(Level, ModelName, Key) ->
     exec_driver(ModelName, level_to_driver(Level), delete, [Key]).
 
-
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks if #document with given key exists. This method shall not be used with multiple drivers at once -
-%% use *_only levels.
+%% Checks if #document with given key exists. This method shall not be used with
+%% multiple drivers at once - use *_only levels.
 %%--------------------------------------------------------------------
--spec exists(Level :: store_level(), ModelName :: model_behaviour:model_type(), datastore:key()) -> true | false | datastore:generic_error().
+-spec exists(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+    Key :: datastore:key()) -> true | false | datastore:generic_error().
 exists(Level, ModelName, Key) ->
     exec_driver(ModelName, level_to_driver(Level), exists, [Key]).
-
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% For given #document generates key if undefined and returns updated #document structure.
 %% @end
@@ -130,8 +128,8 @@ maybe_gen_uuid(#document{key = undefined} = Doc) ->
 maybe_gen_uuid(#document{} = Doc) ->
     Doc.
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Gets model name for given document/record.
 %% @end
@@ -142,14 +140,15 @@ model_name(#document{value = Record}) ->
 model_name(Record) when is_tuple(Record) ->
     element(1, Record).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Runs all pre-hooks for given model, method and context.
 %% @end
 %%--------------------------------------------------------------------
--spec run_prehooks(model_behaviour:model_config(), model_behaviour:model_action(), store_level(), term()) ->
-    ok | {error, Reason :: any()}.
+-spec run_prehooks(Config :: model_behaviour:model_config(),
+    Method :: model_behaviour:model_action(), Level :: store_level(),
+    Context :: term()) -> ok | {error, Reason :: term()}.
 run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
     Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     HooksRes =
@@ -163,31 +162,34 @@ run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
             Interrupt
     end.
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Runs asynchronously all post-hooks for given model, method, context and return value.
-%% Returns given return value.
+%% Runs asynchronously all post-hooks for given model, method, context and
+%% return value. Returns given return value.
 %% @end
 %%--------------------------------------------------------------------
--spec run_posthooks(model_behaviour:model_config(), model_behaviour:model_action(), store_level(), term(), ReturnValue) ->
-    ReturnValue when ReturnValue :: term().
+-spec run_posthooks(Config :: model_behaviour:model_config(),
+    Model :: model_behaviour:model_action(), Level :: store_level(),
+    Context :: term(), ReturnValue) -> ReturnValue when ReturnValue :: term().
 run_posthooks(#model_config{name = ModelName}, Method, Level, Context, Return) ->
     Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     lists:foreach(
-            fun({_, HookedModule}) ->
-                spawn(fun() -> HookedModule:'after'(ModelName, Method, Level, Context, Return) end)
-            end, Hooked),
+        fun({_, HookedModule}) ->
+            spawn(fun() ->
+                HookedModule:'after'(ModelName, Method, Level, Context, Return) end)
+        end, Hooked),
     Return.
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Initializes local (node scope) datastore state with given models.
 %% Returns initialized configuration.
 %% @end
 %%--------------------------------------------------------------------
--spec load_local_state([model_behaviour:model_type()]) -> [model_behaviour:model_config()].
+-spec load_local_state(Models :: [model_behaviour:model_type()]) ->
+    [model_behaviour:model_config()].
 load_local_state(Models) ->
     ets:new(?LOCAL_STATE, [named_table, public, bag]),
     lists:map(
@@ -200,13 +202,14 @@ load_local_state(Models) ->
             Config
         end, Models).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Organizes given models into #{bucket -> [model]} map.
 %% @end
 %%--------------------------------------------------------------------
--spec configs_per_bucket([model_behaviour:model_config()]) -> #{bucket() => [model_behaviour:model_config()]}.
+-spec configs_per_bucket(Configs :: [model_behaviour:model_config()]) ->
+    #{bucket() => [model_behaviour:model_config()]}.
 configs_per_bucket(Configs) ->
     lists:foldl(
         fun(ModelConfig, Acc) ->
@@ -214,13 +217,14 @@ configs_per_bucket(Configs) ->
             maps:put(Bucket, [ModelConfig | maps:get(Bucket, Acc, [])], Acc)
         end, #{}, Configs).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Runs init_bucket/1 for each datastore driver using given models'.
 %% @end
 %%--------------------------------------------------------------------
--spec init_drivers(model_behaviour:model_config()) -> ok | no_return().
+-spec init_drivers(Configs :: [model_behaviour:model_config()]) ->
+    ok | no_return().
 init_drivers(Configs) ->
     lists:foreach(
         fun({Bucket, Models}) ->
@@ -229,13 +233,13 @@ init_drivers(Configs) ->
             ok = ?DISTRIBUTED_CACHE_DRIVER:init_bucket(Bucket, Models)
         end, maps:to_list(configs_per_bucket(Configs))).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Loads local state and initializes datastore drivers if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_state_loaded() -> ok | {error, Reason :: any()}.
+-spec ensure_state_loaded() -> ok | {error, Reason :: term()}.
 ensure_state_loaded() ->
     try
         case ets:info(?LOCAL_STATE) of
@@ -246,17 +250,18 @@ ensure_state_loaded() ->
         end
     catch
         Type:Reason ->
-            ?error_stacktrace("Cannot initialize datastore local state due to ~p: ~p", [Type, Reason]),
+            ?error_stacktrace("Cannot initialize datastore local state due to"
+            " ~p: ~p", [Type, Reason]),
             {error, Reason}
     end.
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Translates store level into list of drivers.
 %% @end
 %%--------------------------------------------------------------------
--spec level_to_driver(store_level()) -> [Driver :: atom()].
+-spec level_to_driver(Level :: store_level()) -> [Driver :: atom()].
 level_to_driver(disk_only) ->
     ?PERSISTENCE_DRIVER;
 level_to_driver(local_only) ->
@@ -268,9 +273,8 @@ level_to_driver(locally_cached) ->
 level_to_driver(globally_cached) ->
     [?DISTRIBUTED_CACHE_DRIVER, ?PERSISTENCE_DRIVER].
 
-
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Reverses level_to_driver/1
 %% @end
@@ -283,14 +287,15 @@ driver_to_level(?LOCAL_CACHE_DRIVER) ->
 driver_to_level(?DISTRIBUTED_CACHE_DRIVER) ->
     global_only.
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Executes given model action on given driver(s).
 %% @end
 %%--------------------------------------------------------------------
--spec exec_driver(model_behaviour:model_type(), [Driver] | Driver, model_behaviour:model_action(), [term()]) ->
-    ok | {ok, any()} | {error, any()} when Driver :: atom().
+-spec exec_driver(model_behaviour:model_type(), [Driver] | Driver,
+    Method :: model_behaviour:model_action(), [term()]) ->
+    ok | {ok, term()} | {error, term()} when Driver :: atom().
 exec_driver(ModelName, [Driver], Method, Args) when is_atom(Driver) ->
     exec_driver(ModelName, Driver, Method, Args);
 exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->

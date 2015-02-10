@@ -43,7 +43,8 @@
 %% although caller shall always assume that the session exists and crash otherwise due to malformed data.
 %% @end
 %%--------------------------------------------------------------------
--spec get_session(OneProxyNameOrPid :: atom() | pid(), SessionId :: binary()) -> {ok, Data :: binary()} | {error, Reason :: any()}.
+-spec get_session(OneProxyNameOrPid :: atom() | pid(), SessionId :: binary()) ->
+    {ok, Data :: binary()} | {error, Reason :: term()}.
 get_session(OneProxyNameOrPid, SessionId) ->
     exec(OneProxyNameOrPid, <<"get_session">>, [<<(utils:ensure_binary(SessionId))/binary>>]).
 
@@ -116,7 +117,7 @@ get_der_certs_dir() ->
 %% Save all CAs and CRLs from GSI state to given directory in DER format.
 %% @end
 %%--------------------------------------------------------------------
--spec ca_crl_to_der(Dir :: string()) -> ok | {error, Reason :: any()}.
+-spec ca_crl_to_der(Dir :: string()) -> ok | {error, Reason :: term()}.
 ca_crl_to_der(Dir) ->
     case ets:info(gsi_state) of
         undefined ->

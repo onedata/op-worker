@@ -150,7 +150,7 @@ get_socket_pid() ->
 %% Cowboy handler callback, called to initialize request handling flow.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Type :: any(), Req :: req(), Opts :: [term()]) -> {ok, NewReq :: term(), State :: term()}.
+-spec init(Type :: term(), Req :: req(), Opts :: [term()]) -> {ok, NewReq :: term(), State :: term()}.
 init(Type, Req, Opts) ->
     HandlerModule = proplists:get_value(handler_module, Opts),
     HandlerOpts = proplists:get_value(handler_opts, Opts, []),

@@ -24,23 +24,22 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Starts application by supervisor initialization.
+%% @doc
+%% Starts application by supervisor initialization.
+%% @end
 %%--------------------------------------------------------------------
--spec start(_StartType :: any(), _StartArgs :: any()) -> Result when
-    Result :: {ok, pid()}
-    | ignore
-    | {error, Error},
-    Error :: {already_started, pid()}
-    | {shutdown, term()}
-    | term().
+-spec start(_StartType :: application:start_type(), _StartArgs :: term()) ->
+    {ok, Pid :: pid()} | {ok, Pid :: pid(), State :: term()} |
+    {error, Reason ::term()}.
 start(_StartType, _StartArgs) ->
     {ok, NodeType} = application:get_env(?APP_NAME, node_type),
     oneprovider_node_sup:start_link(NodeType).
 
 %%--------------------------------------------------------------------
-%% @doc Stops application.
+%% @doc
+%% Stops application.
+%% @end
 %%--------------------------------------------------------------------
--spec stop(_State :: any()) -> Result when
-    Result :: ok.
+-spec stop(State :: term()) -> ok.
 stop(_State) ->
     ok.

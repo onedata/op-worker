@@ -63,7 +63,7 @@ init(_Args) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link worker_plugin_behaviour} callback handle/1. <br/>
+%% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result :: term() when
@@ -93,8 +93,8 @@ handle({driver_call, Module, Method, Args}, _State) ->
     erlang:apply(Module, Method, Args);
 
 %% Unknown request
-handle(_Msg, _State) ->
-    ?warning("datastore worker unknown message: ~p", [_Msg]).
+handle(_Request, _) ->
+    ?log_bad_request(_Request).
 
 
 %%--------------------------------------------------------------------

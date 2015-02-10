@@ -23,7 +23,6 @@
 %%% store_driver_behaviour callbacks
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback init_bucket/2.
@@ -64,13 +63,13 @@ init_bucket(_BucketName, Models) ->
         end, Models),
     ok.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback save/2.
 %% @end
 %%--------------------------------------------------------------------
--spec save(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
+-spec save(model_behaviour:model_config(), datastore:document()) ->
+    {ok, datastore:key()} | datastore:generic_error().
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Document) ->
     transaction(fun() ->
         case mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write) of
@@ -79,7 +78,6 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Docum
                 {error, Reason}
         end
     end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -95,7 +93,8 @@ update(#model_config{} = ModelConfig, Key, Diff) ->
                 {error, {not_found, missing_or_deleted}};
             [Value] when is_map(Diff) ->
                 NewValue = maps:merge(datastore_utils:shallow_to_map(strip_key(Value)), Diff),
-                ok = mnesia:write(table_name(ModelConfig), inject_key(Key, datastore_utils:shallow_to_record(NewValue)), write),
+                ok = mnesia:write(table_name(ModelConfig),
+                    inject_key(Key, datastore_utils:shallow_to_record(NewValue)), write),
                 {ok, Key};
             [Value] when is_function(Diff) ->
                 NewValue = Diff(strip_key(Value)),
@@ -106,13 +105,13 @@ update(#model_config{} = ModelConfig, Key, Diff) ->
         end
     end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback create/2.
 %% @end
 %%--------------------------------------------------------------------
--spec create(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
+-spec create(model_behaviour:model_config(), datastore:document()) ->
+    {ok, datastore:key()} | datastore:create_error().
 create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
@@ -126,49 +125,44 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
         end
     end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(model_behaviour:model_config(), datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(model_behaviour:model_config(), datastore:key()) ->
+    {ok, datastore:document()} | datastore:get_error().
 get(#model_config{} = ModelConfig, Key) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
-            [] ->
-                {error, {not_found, missing_or_deleted}};
-            [Value] ->
-                {ok, #document{key = Key, value = strip_key(Value)}};
-            Reason ->
-                {error, Reason}
+            [] -> {error, {not_found, missing_or_deleted}};
+            [Value] -> {ok, #document{key = Key, value = strip_key(Value)}};
+            Reason -> {error, Reason}
         end
     end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(model_behaviour:model_config(), datastore:key()) -> ok | datastore:generic_error().
+-spec delete(model_behaviour:model_config(), datastore:key()) ->
+    ok | datastore:generic_error().
 delete(#model_config{} = ModelConfig, Key) ->
     transaction(fun() ->
         case mnesia:delete(table_name(ModelConfig), Key, write) of
-            ok ->
-                ok;
-            Reason ->
-                {error, Reason}
+            ok -> ok;
+            Reason -> {error, Reason}
         end
     end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback exists/2.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(model_behaviour:model_config(), datastore:key()) -> true | false | datastore:generic_error().
+-spec exists(model_behaviour:model_config(), datastore:key()) ->
+    true | false | datastore:generic_error().
 exists(#model_config{} = ModelConfig, Key) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
@@ -177,23 +171,21 @@ exists(#model_config{} = ModelConfig, Key) ->
         end
     end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback healthcheck/1.
 %% @end
 %%--------------------------------------------------------------------
--spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.
+-spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
 healthcheck(_) ->
     ok.
-
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Gets Mnesia table name for given model.
 %% @end
@@ -204,8 +196,8 @@ table_name(#model_config{name = ModelName}) ->
 table_name(TabName) when is_atom(TabName) ->
     binary_to_atom(<<"dc_", (erlang:atom_to_binary(TabName, utf8))/binary>>, utf8).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Inserts given key as second element of given tuple.
 %% @end
@@ -215,8 +207,8 @@ inject_key(Key, Tuple) when is_tuple(Tuple) ->
     [RecordName | Fields] = tuple_to_list(Tuple),
     list_to_tuple([RecordName, Key] ++ Fields).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Strips second element of given tuple (reverses inject_key/2).
 %% @end
@@ -226,22 +218,23 @@ strip_key(Tuple) when is_tuple(Tuple) ->
     [RecordName, _Key | Fields] = tuple_to_list(Tuple),
     list_to_tuple([RecordName | Fields]).
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Convinience function for executing transaction within Mnesia
 %% @end
 %%--------------------------------------------------------------------
--spec transaction(Fun :: fun(() -> term())) -> atom().
+-spec transaction(Fun :: fun(() -> term())) -> term().
 transaction(Fun) ->
     case mnesia:transaction(Fun) of
-        {atomic, Res} -> Res;
+        {atomic, Result} ->
+            Result;
         {aborted, Reason} ->
             {error, Reason}
     end.
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Gets all active Mnesia nodes which have given Table.
 %% @end
