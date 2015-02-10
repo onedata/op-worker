@@ -107,8 +107,6 @@ protected:
     const int verify_type_;
 
 private:
-    const uint16_t listen_port_;
-
     const std::vector<std::string> ca_crl_dirs_;
 
     std::vector<std::string> crls_;

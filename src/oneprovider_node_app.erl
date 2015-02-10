@@ -14,7 +14,7 @@
 
 -behaviour(application).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 
 %% Application callbacks
 -export([start/2, stop/1]).

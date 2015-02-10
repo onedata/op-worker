@@ -13,6 +13,8 @@
 -module(worker_plugin_behaviour).
 -author("Michal Wrzeszcz").
 
+-include("global_definitions.hrl").
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Initialize module
@@ -26,7 +28,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback handle(Request :: term(), State :: term()) ->
-    ok | {ok, Ans :: term()} | {error, Error :: term()} | pong.
+    healthcheck_reponse() | ok | pong | {ok, Answer :: term()} | 
+    {error, Error :: term()}.
 
 %%--------------------------------------------------------------------
 %% @doc

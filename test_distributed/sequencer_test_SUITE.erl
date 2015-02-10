@@ -12,7 +12,6 @@
 -author("Krzysztof Trzepla").
 
 -include("test_utils.hrl").
--include("registered_names.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/communication_messages.hrl").
@@ -120,8 +119,10 @@ sequencer_test(Config) ->
         ReceiveMsg = receive_msg(#server_message{server_message = MsgAck}),
         ?assertEqual(ok, ReceiveMsg),
 
-        true = meck:validate(router),
+        ?assertEqual({error, timeout}, receive_any()),
+
         true = meck:validate(protocol_handler),
+        true = meck:validate(router),
         ok = worker_proxy:call(sequencer_worker, {remove_sequencer_manager, FuseId})
     end, []]),
 
@@ -159,6 +160,20 @@ processes(Nodes) ->
     lists:foldl(fun(Node, Processes) ->
         Processes ++ rpc:call(Node, erlang, processes, [])
     end, [], Nodes).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Waits for given message or returns timeout.
+%% @end
+%%--------------------------------------------------------------------
+-spec receive_any() -> ok | {error, timeout}.
+receive_any() ->
+    receive
+        _ -> ok
+    after
+        timer:seconds(0) -> {error, timeout}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

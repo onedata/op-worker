@@ -54,7 +54,7 @@ cleanup() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save_session(SessionID :: binary(), Props :: [tuple()], ValidTill :: integer() | undefined) -> ok | no_return().
-save_session(SessionID, Props, TillArg) ->
+save_session(_SessionID, _Props, _TillArg) ->
     ok.
 
 %%--------------------------------------------------------------------
@@ -66,7 +66,7 @@ save_session(SessionID, Props, TillArg) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec lookup_session(SessionID :: binary()) -> Props :: [tuple()] | undefined.
-lookup_session(SessionID) ->
+lookup_session(_SessionID) ->
     [].
 
 %%--------------------------------------------------------------------
@@ -75,7 +75,7 @@ lookup_session(SessionID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_session(SessionID :: binary()) -> ok.
-delete_session(SessionID) ->
+delete_session(_SessionID) ->
     ok.
 
 %%--------------------------------------------------------------------

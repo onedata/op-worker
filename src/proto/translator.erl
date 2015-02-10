@@ -12,12 +12,12 @@
 -module(translator).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/messages.hrl").
 -include("proto_internal/oneclient/common_messages.hrl").
 -include("proto_internal/oneclient/communication_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
 -include("proto_internal/oneclient/event_messages.hrl").
--include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

@@ -12,11 +12,9 @@
 -author("Tomasz Lichon").
 
 -include("test_utils.hrl").
--include("registered_names.hrl").
 -include("proto/oneclient/messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
--include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 

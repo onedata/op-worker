@@ -14,7 +14,7 @@
 
 -behaviour(worker_plugin_behaviour).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
@@ -41,7 +41,7 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck | {spawn_handler, SocketPid :: pid()},
-    Result :: ok | {ok, Response} | {error, Error} | pong,
+    Result :: healthcheck_reponse() | ok | {ok, Response} | {error, Error} | pong,
     Response :: term(),
     Error :: term().
 handle(ping, _) ->

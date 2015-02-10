@@ -20,7 +20,7 @@
 -behaviour(cowboy_http_handler).
 -behaviour(cowboy_websocket_handler).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include("workers/http_worker/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -66,7 +66,7 @@
 %% If applied fun ends with an exception, it will be rethrown in the handling process.
 %% @end
 %%--------------------------------------------------------------------
--spec apply(Module :: atom(), Fun :: function(), Args :: [term()]) -> term() | no_return().
+-spec apply(Module :: atom(), Fun :: atom(), Args :: [term()]) -> term() | no_return().
 apply(Module, Fun, Args) ->
     case get_delegation() of
         false ->
@@ -150,7 +150,15 @@ get_socket_pid() ->
 %% Cowboy handler callback, called to initialize request handling flow.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Type :: term(), Req :: req(), Opts :: [term()]) -> {ok, NewReq :: term(), State :: term()}.
+-spec init(Type :: term(), Req :: cowboy_req:req(), Opts :: [term()]) ->
+    {ok, cowboy_req:req(), term()}
+    | {loop, cowboy_req:req(), term()}
+    | {loop, cowboy_req:req(), term(), hibernate}
+    | {loop, cowboy_req:req(), term(), timeout()}
+    | {loop, cowboy_req:req(), term(), timeout(), hibernate}
+    | {shutdown, cowboy_req:req(), term()}
+    | {upgrade, protocol, module()}
+    | {upgrade, protocol, module(), cowboy_req:req(), term()}.
 init(Type, Req, Opts) ->
     HandlerModule = proplists:get_value(handler_module, Opts),
     HandlerOpts = proplists:get_value(handler_opts, Opts, []),
@@ -185,7 +193,7 @@ init(Type, Req, Opts) ->
 %% Cowboy handler callback, called to process a HTTP request.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Req :: term(), State :: term()) -> {ok, NewReq :: term(), State :: term()}.
+-spec handle(Req :: cowboy_req:req(), State :: term()) -> {ok, NewReq :: cowboy_req:req(), State :: term()}.
 handle(Req, State) ->
     delegate(handle, [Req, State], 2).
 
@@ -194,12 +202,13 @@ handle(Req, State) ->
 %% Cowboy handler callback, called after a request is processed.
 %% @end
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), Req :: term(), State :: term()) -> ok.
+-spec terminate(Reason :: term(), Req :: cowboy_req:req(), State :: term()) -> ok.
 terminate(Reason, Req, State) ->
     delegate(terminate, [Reason, Req, State], 3),
     case get_delegation() of
         true ->
-            terminate_handling_process();
+            terminate_handling_process(),
+            ok;
         false ->
             ok
     end.
@@ -213,7 +222,12 @@ terminate(Reason, Req, State) ->
 %% Cowboy handler callback, called right after protocol upgrade to websocket.
 %% @end
 %%--------------------------------------------------------------------
--spec websocket_init(Transport :: term(), Req :: term(), Opts :: term()) -> ok.
+-spec websocket_init(Transport :: term(), Req :: cowboy_req:req(), Opts :: term()) ->
+    {ok, cowboy_req:req(), term()}
+    | {ok, cowboy_req:req(), term(), hibernate}
+    | {ok, cowboy_req:req(), term(), timeout()}
+    | {ok, cowboy_req:req(), term(), timeout(), hibernate}
+    | {shutdown, cowboy_req:req()}.
 websocket_init(Transport, Req, Opts) ->
     HandlerOpts = proplists:get_value(handler_opts, Opts, []),
     delegate(websocket_init, [Transport, Req, HandlerOpts], 3).
@@ -224,7 +238,12 @@ websocket_init(Transport, Req, Opts) ->
 %% data packet (event) from websocket client.
 %% @end
 %%--------------------------------------------------------------------
--spec websocket_handle(Data :: term(), Req :: term(), State :: term()) -> ok.
+-spec websocket_handle(Data :: term(), Req :: cowboy_req:req(), State :: term()) ->
+    {ok, cowboy_req:req(), term()}
+    | {ok, cowboy_req:req(), NewState :: term(), hibernate}
+    | {reply, cowboy_websocket:frame() | [cowboy_websocket:frame()], cowboy_req:req(), NewState :: term()}
+    | {reply, cowboy_websocket:frame() | [cowboy_websocket:frame()], cowboy_req:req(), NewState :: term(), hibernate}
+    | {shutdown, cowboy_req:req(), term()}.
 websocket_handle(Data, Req, State) ->
     delegate(websocket_handle, [Data, Req, State], 3).
 
@@ -233,7 +252,12 @@ websocket_handle(Data, Req, State) ->
 %% Cowboy handler callback, called when websocket process receives an erlang message.
 %% @end
 %%--------------------------------------------------------------------
--spec websocket_info(Info :: term(), Req :: term(), State :: term()) -> ok.
+-spec websocket_info(Info :: term(), Req :: cowboy_req:req(), State :: term()) ->
+    {ok, cowboy_req:req(), NewState :: term()}
+    | {ok, cowboy_req:req(), NewState :: term(), hibernate}
+    | {reply, cowboy_websocket:frame() | [cowboy_websocket:frame()], cowboy_req:req(), NewState :: term()}
+    | {reply, cowboy_websocket:frame() | [cowboy_websocket:frame()], cowboy_req:req(), NewState :: term(), hibernate}
+    | {shutdown, cowboy_req:req(), term()}.
 websocket_info(Info, Req, State) ->
     delegate(websocket_info, [Info, Req, State], 3).
 
@@ -243,10 +267,11 @@ websocket_info(Info, Req, State) ->
 %% Cowboy handler callback, called on a websocket connection finalization.
 %% @end
 %%--------------------------------------------------------------------
--spec websocket_terminate(Reason :: term(), Req :: term(), State :: term()) -> ok.
+-spec websocket_terminate(Reason :: term(), Req :: cowboy_req:req(), State :: term()) -> ok.
 websocket_terminate(Reason, Req, State) ->
     delegate(websocket_terminate, [Reason, Req, State], 3),
-    terminate_handling_process().
+    terminate_handling_process(),
+    ok.
 
 %%%===================================================================
 %%% REST callbacks
@@ -257,7 +282,7 @@ websocket_terminate(Reason, Req, State) ->
 %% Cowboy handler callback, called right after protocol upgrade to init the request context.
 %% @end
 %%--------------------------------------------------------------------
--spec rest_init(Req :: req(), Opts :: term()) -> {ok, NewReq :: req(), State :: term()} | {shutdown, NewReq :: req()}.
+-spec rest_init(Req :: cowboy_req:req(), Opts :: term()) -> {ok, NewReq :: cowboy_req:req(), State :: term()} | {shutdown, NewReq :: cowboy_req:req()}.
 rest_init(Req, Opts) ->
     HandlerOpts = proplists:get_value(handler_opts, Opts, []),
     delegate(rest_init, [Req, HandlerOpts], 2).
@@ -268,7 +293,7 @@ rest_init(Req, Opts) ->
 %% Checks request validity.
 %% @end
 %%--------------------------------------------------------------------
--spec malformed_request(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+-spec malformed_request(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 malformed_request(Req, State) ->
     delegate(malformed_request, [Req, State], 2, true).
 
@@ -278,7 +303,7 @@ malformed_request(Req, State) ->
 %% Returns methods resolvable by the handler.
 %% @end
 %%--------------------------------------------------------------------
--spec known_methods(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
+-spec known_methods(Req :: cowboy_req:req(), State :: term()) -> {Result :: [binary()], NewReq :: cowboy_req:req(), NewState :: term()}.
 known_methods(Req, State) ->
     delegate(known_methods, [Req, State], 2, true).
 
@@ -288,7 +313,7 @@ known_methods(Req, State) ->
 %% Returns methods that are allowed, based on version specified in URI.
 %% @end
 %%--------------------------------------------------------------------
--spec allowed_methods(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
+-spec allowed_methods(Req :: cowboy_req:req(), State :: term()) -> {Result :: [binary()], NewReq :: cowboy_req:req(), NewState :: term()}.
 allowed_methods(Req, State) ->
     delegate(allowed_methods, [Req, State], 2, true).
 
@@ -298,7 +323,7 @@ allowed_methods(Req, State) ->
 %% Returns true or false if the client is authorized to perform such request.
 %% @end
 %%--------------------------------------------------------------------
--spec is_authorized(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+-spec is_authorized(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 is_authorized(Req, State) ->
     delegate(is_authorized, [Req, State], 2, true).
 
@@ -308,7 +333,7 @@ is_authorized(Req, State) ->
 %% Returns options / requirements associated with a resource.
 %% @end
 %%--------------------------------------------------------------------
--spec options(Req :: req(), State :: term()) -> {Result :: [term()], NewReq :: req(), NewState :: term()}.
+-spec options(Req :: cowboy_req:req(), State :: term()) -> {Result :: [term()], NewReq :: cowboy_req:req(), NewState :: term()}.
 options(Req, State) ->
     delegate(options, [Req, State], 2, true).
 
@@ -319,7 +344,7 @@ options(Req, State) ->
 %% It can be changed later by gui_utils:cowboy_ensure_header/3.
 %% @end
 %%--------------------------------------------------------------------
--spec content_types_provided(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
+-spec content_types_provided(Req :: cowboy_req:req(), State :: term()) -> {Result :: [binary()], NewReq :: cowboy_req:req(), NewState :: term()}.
 content_types_provided(Req, State) ->
     delegate(content_types_provided, [Req, State], 2, true).
 
@@ -329,7 +354,7 @@ content_types_provided(Req, State) ->
 %% Returns list of languages in which the response can be sent.
 %% @end
 %%--------------------------------------------------------------------
--spec languages_provided(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
+-spec languages_provided(Req :: cowboy_req:req(), State :: term()) -> {Result :: [binary()], NewReq :: cowboy_req:req(), NewState :: term()}.
 languages_provided(Req, State) ->
     delegate(languages_provided, [Req, State], 2, true).
 
@@ -339,7 +364,7 @@ languages_provided(Req, State) ->
 %% Returns list of charsets in which the response can be encoded.
 %% @end
 %%--------------------------------------------------------------------
--spec charsets_provided(Req :: req(), State :: term()) -> {Result :: [binary()], NewReq :: req(), NewState :: term()}.
+-spec charsets_provided(Req :: cowboy_req:req(), State :: term()) -> {Result :: [binary()], NewReq :: cowboy_req:req(), NewState :: term()}.
 charsets_provided(Req, State) ->
     delegate(charsets_provided, [Req, State], 2, true).
 
@@ -349,7 +374,7 @@ charsets_provided(Req, State) ->
 %% Returns false or {true, Location}.
 %% @end
 %%--------------------------------------------------------------------
--spec moved_permanently(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+-spec moved_permanently(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 moved_permanently(Req, State) ->
     delegate(moved_permanently, [Req, State], 2, true).
 
@@ -359,7 +384,7 @@ moved_permanently(Req, State) ->
 %% Returns false or {true, Location}.
 %% @end
 %%--------------------------------------------------------------------
--spec moved_temporarily(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+-spec moved_temporarily(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 moved_temporarily(Req, State) ->
     delegate(moved_temporarily, [Req, State], 2, true).
 
@@ -369,7 +394,7 @@ moved_temporarily(Req, State) ->
 %% Determines if resource identified by URI exists.
 %% @end
 %%--------------------------------------------------------------------
--spec resource_exists(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+-spec resource_exists(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 resource_exists(Req, State) ->
     delegate(resource_exists, [Req, State], 2, true).
 
@@ -379,7 +404,7 @@ resource_exists(Req, State) ->
 %% Returns an etag generated from a static file.
 %% @end
 %%--------------------------------------------------------------------
--spec generate_etag(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), NewState :: term()}.
+-spec generate_etag(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), NewState :: term()}.
 generate_etag(Req, State) ->
     delegate(generate_etag, [Req, State], 2, true).
 
@@ -389,7 +414,7 @@ generate_etag(Req, State) ->
 %% Returns file's modification time.
 %% @end
 %%--------------------------------------------------------------------
--spec last_modified(Req :: req(), State :: term()) -> {Result :: integer(), NewReq :: req(), NewState :: term()}.
+-spec last_modified(Req :: cowboy_req:req(), State :: term()) -> {Result :: integer(), NewReq :: cowboy_req:req(), NewState :: term()}.
 last_modified(Req, State) ->
     delegate(last_modified, [Req, State], 2, true).
 
@@ -399,7 +424,7 @@ last_modified(Req, State) ->
 %% Returns time of expiration of a resource.
 %% @end
 %%--------------------------------------------------------------------
--spec expires(Req :: req(), State :: term()) -> {Result :: integer(), NewReq :: req(), NewState :: term()}.
+-spec expires(Req :: cowboy_req:req(), State :: term()) -> {Result :: integer(), NewReq :: cowboy_req:req(), NewState :: term()}.
 expires(Req, State) ->
     delegate(expires, [Req, State], 2, true).
 
@@ -409,7 +434,7 @@ expires(Req, State) ->
 %% Returns true if access to a resource is forbidden.
 %% @end
 %%--------------------------------------------------------------------
--spec forbidden(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+-spec forbidden(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 forbidden(Req, State) ->
     delegate(forbidden, [Req, State], 2, true).
 
@@ -419,7 +444,7 @@ forbidden(Req, State) ->
 %% Handles GET requests.
 %% @end
 %%--------------------------------------------------------------------
--spec get_resource(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), NewState :: term()}.
+-spec get_resource(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), NewState :: term()}.
 get_resource(Req, State) ->
     delegate(get_resource, [Req, State], 2, true).
 
@@ -430,7 +455,7 @@ get_resource(Req, State) ->
 %% functions should be used to process the requests.
 %% @end
 %%--------------------------------------------------------------------
--spec content_types_accepted(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), NewState :: term()}.
+-spec content_types_accepted(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), NewState :: term()}.
 content_types_accepted(Req, State) ->
     delegate(content_types_accepted, [Req, State], 2, true).
 
@@ -439,7 +464,7 @@ content_types_accepted(Req, State) ->
 %% Function handling "application/x-www-form-urlencoded" requests.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_urlencoded_data(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+-spec handle_urlencoded_data(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 handle_urlencoded_data(Req, State) ->
     delegate(handle_urlencoded_data, [Req, State], 2).
 
@@ -448,7 +473,7 @@ handle_urlencoded_data(Req, State) ->
 %% Function handling "application/json" requests.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_json_data(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+-spec handle_json_data(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 handle_json_data(Req, State) ->
     delegate(handle_json_data, [Req, State], 2).
 
@@ -458,7 +483,7 @@ handle_json_data(Req, State) ->
 %% Function handling "multipart/form-data" requests.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_multipart_data(Req :: req(), State :: term()) -> {Result :: boolean(), NewReq :: req(), NewState :: term()}.
+-spec handle_multipart_data(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 handle_multipart_data(Req, State) ->
     delegate(handle_multipart_data, [Req, State], 2).
 
@@ -468,7 +493,7 @@ handle_multipart_data(Req, State) ->
 %% Handles DELETE requests.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_resource(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), NewState :: term()}.
+-spec delete_resource(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), NewState :: term()}.
 delete_resource(Req, State) ->
     delegate(delete_resource, [Req, State], 2).
 
@@ -481,7 +506,7 @@ delete_resource(Req, State) ->
 %% Callback function for cdmi.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cdmi_container(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), term()}.
+-spec get_cdmi_container(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), term()}.
 get_cdmi_container(Req, State) ->
     delegate(get_cdmi_container, [Req, State], 2).
 
@@ -490,7 +515,7 @@ get_cdmi_container(Req, State) ->
 %% Callback function for cdmi.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cdmi_object(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+-spec get_cdmi_object(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), State :: term()}.
 get_cdmi_object(Req, State) ->
     delegate(get_cdmi_object, [Req, State], 2).
 
@@ -499,7 +524,7 @@ get_cdmi_object(Req, State) ->
 %% Callback function for cdmi.
 %% @end
 %%--------------------------------------------------------------------
--spec get_binary(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+-spec get_binary(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), State :: term()}.
 get_binary(Req, State) ->
     delegate(get_binary, [Req, State], 2).
 
@@ -508,7 +533,7 @@ get_binary(Req, State) ->
 %% Callback function for cdmi.
 %% @end
 %%--------------------------------------------------------------------
--spec put_cdmi_container(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+-spec put_cdmi_container(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), State :: term()}.
 put_cdmi_container(Req, State) ->
     delegate(put_cdmi_container, [Req, State], 2).
 
@@ -517,7 +542,7 @@ put_cdmi_container(Req, State) ->
 %% Callback function for cdmi.
 %% @end
 %%--------------------------------------------------------------------
--spec put_cdmi_object(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+-spec put_cdmi_object(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), State :: term()}.
 put_cdmi_object(Req, State) ->
     delegate(put_cdmi_object, [Req, State], 2).
 
@@ -526,7 +551,7 @@ put_cdmi_object(Req, State) ->
 %% Callback function for cdmi.
 %% @end
 %%--------------------------------------------------------------------
--spec put_binary(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+-spec put_binary(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), State :: term()}.
 put_binary(Req, State) ->
     delegate(put_binary, [Req, State], 2).
 
@@ -535,7 +560,7 @@ put_binary(Req, State) ->
 %% Callback function for cdmi.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cdmi_capability(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+-spec get_cdmi_capability(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), State :: term()}.
 get_cdmi_capability(Req, State) ->
     delegate(get_cdmi_capability, [Req, State], 2).
 
@@ -548,7 +573,7 @@ get_cdmi_capability(Req, State) ->
 %% Callback function for static file handler.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file(Req :: req(), State :: term()) -> {Result :: term(), NewReq :: req(), State :: term()}.
+-spec get_file(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), State :: term()}.
 get_file(Req, State) ->
     delegate(get_file, [Req, State], 2).
 
@@ -569,9 +594,9 @@ spawn_handling_process() ->
         {ok, Pid} ->
             set_handler_pid(Pid),
             ok;
-        Error ->
+        {error, Error} ->
             ?error("Cannot spawn handling process, error: ~p", [Error]),
-            Error
+            {error, Error}
     end.
 
 %%--------------------------------------------------------------------
@@ -588,7 +613,7 @@ terminate_handling_process() ->
 %% @equiv delegate(Fun, Args, Arity, false)
 %% @end
 %%--------------------------------------------------------------------
--spec delegate(Fun :: function(), Args :: [term()], Arity :: integer()) -> term().
+-spec delegate(Fun :: atom(), Args :: [term()], Arity :: integer()) -> term().
 delegate(Fun, Args, Arity) ->
     delegate(Fun, Args, Arity, false).
 
@@ -603,7 +628,7 @@ delegate(Fun, Args, Arity) ->
 %% callbacks (mostly REST).
 %% @end
 %%--------------------------------------------------------------------
--spec delegate(Fun :: function(), Args :: [term()], Arity :: integer(), FailWithNoCall :: boolean()) -> term().
+-spec delegate(Fun :: atom(), Args :: [term()], Arity :: integer(), FailWithNoCall :: boolean()) -> term().
 %%--------------------------------------------------------------------
 delegate(Fun, Args, Arity, FailWithNoCall) ->
     HandlerModule = get_handler_module(),

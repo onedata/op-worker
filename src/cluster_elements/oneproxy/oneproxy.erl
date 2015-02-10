@@ -12,7 +12,7 @@
 -module(oneproxy).
 -author("Rafal Slota").
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("public_key/include/public_key.hrl").
 

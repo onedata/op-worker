@@ -15,8 +15,6 @@
 
 -behaviour(supervisor).
 
--include("registered_names.hrl").
-
 %% API
 -export([start_link/0, start_sequencer/3]).
 

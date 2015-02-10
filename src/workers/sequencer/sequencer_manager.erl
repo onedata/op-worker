@@ -134,7 +134,8 @@ handle_cast(#client_message{message_id = MsgId} = Msg,
     end;
 
 handle_cast({send, Msg}, #state{cons = []} = State) ->
-    ?warning("~p:~p cannot send message ~p due to: 'connection pool empty'", [?MODULE, ?LINE, Msg]),
+    ?warning("~p:~p cannot send message ~p due to: 'connection pool empty'",
+        [?MODULE, ?LINE, Msg]),
     {noreply, State};
 
 handle_cast({send, Msg}, #state{cons = [Connection | Connections]} = State) ->
@@ -156,6 +157,7 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info(_Info, State) ->
+    ?log_bad_request(_Info),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

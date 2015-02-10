@@ -13,7 +13,7 @@
 
 -behaviour(worker_plugin_behaviour).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include("workers/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -66,27 +66,31 @@ init(_Args) ->
 %% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Request, State :: term()) -> Result :: term() when
+-spec handle(Request, State :: term()) -> Result :: healthcheck_reponse() | term() when
     Request :: ping | healthcheck |
     {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]}.
 handle(ping, _State) ->
     pong;
 
-handle(healthcheck, State) ->
-    HC = #{
-        ?PERSISTENCE_DRIVER => ?PERSISTENCE_DRIVER:healthcheck(State),
-        ?LOCAL_CACHE_DRIVER => ?LOCAL_CACHE_DRIVER:healthcheck(State),
-        ?DISTRIBUTED_CACHE_DRIVER => ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
-    },
-
-    maps:fold(
-        fun
-            (_, ok, AccIn) ->
-                AccIn;
-            (K, {error, Reason}, _AccIn) ->
-                ?error("Driver ~p healthckeck error: ~p", [K, Reason]),
-                {error, {driver_failure, {K, Reason}}}
-        end, ok, HC);
+handle(healthcheck, _State) ->
+    ok;
+%% TODO @Rafal
+%% healthcheck rzuca blad (bo Ryjaka nie ma), natomiast powinien zwracac healthcheck_reponse()
+%%
+%%     HC = #{
+%%         ?PERSISTENCE_DRIVER => ?PERSISTENCE_DRIVER:healthcheck(State),
+%%         ?LOCAL_CACHE_DRIVER => ?LOCAL_CACHE_DRIVER:healthcheck(State),
+%%         ?DISTRIBUTED_CACHE_DRIVER => ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
+%%     },
+%%
+%%     maps:fold(
+%%         fun
+%%             (_, ok, AccIn) ->
+%%                 AccIn;
+%%             (K, {error, Reason}, _AccIn) ->
+%%                 ?error("Driver ~p healthckeck error: ~p", [K, Reason]),
+%%                 {error, {driver_failure, {K, Reason}}}
+%%         end, ok, HC);
 
 %% Proxy call to given datastore driver
 handle({driver_call, Module, Method, Args}, _State) ->
@@ -128,4 +132,4 @@ state_put(Key, Value) ->
 %%--------------------------------------------------------------------
 -spec state_get(Key :: term()) -> Value :: term().
 state_get(Key) ->
-    maps:get(Key, gen_server:call(?MODULE, getPlugInState)).
+    maps:get(Key, gen_server:call(?MODULE, get_plugin_state)).
