@@ -24,13 +24,13 @@
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1]).
 
-all() -> [cert_connection_test, token_connection_test, protobuf_msg_test].
+all() -> [token_connection_test, cert_connection_test, protobuf_msg_test].
 
 %%%===================================================================
 %%% Test function
 %% ====================================================================
 
-cert_connection_test(Config) ->
+token_connection_test(Config) ->
     % given
     ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
@@ -41,15 +41,16 @@ cert_connection_test(Config) ->
     ?assertMatch({error, _}, ssl:connection_info(Sock)),
     ssl:stop().
 
-token_connection_test(Config) ->
+cert_connection_test(Config) ->
     % given
     ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
-    TokenAuthMessage = <<"{\"cert\":\"id\"}">>,
-
+    TokenAuthMessage = #'ClientMessage'{client_message =
+    {handshake_request, #'HandshakeRequest'{auth_method = #'AuthMethod'{auth_method = {certificate, #'Certificate'{value = <<"VAL">>}}}}}},
+    TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
     % when
     {ok, Sock} = ssl:connect(?GET_HOST(Worker1), 5555, [binary, {packet, 4}, {active, true}]),
-    ok = ssl:send(Sock, TokenAuthMessage),
+    ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
@@ -103,8 +104,10 @@ end_per_suite(Config) ->
 
 connect_via_token(Node) ->
     {ok, Sock} = ssl:connect(?GET_HOST(Node), 5555, [binary, {packet, 4}, {active, true}]),
-    TokenAuthMessage = <<"{\"token\":\"val\"}">>,
-    ok = ssl:send(Sock, TokenAuthMessage),
+    TokenAuthMessage = #'ClientMessage'{client_message =
+    {handshake_request, #'HandshakeRequest'{auth_method = #'AuthMethod'{auth_method = {token, #'Token'{value = <<"VAL">>}}}}}},
+    TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
+    ok = ssl:send(Sock, TokenAuthMessageRaw),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     {ok, Sock}.
 
