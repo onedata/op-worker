@@ -13,12 +13,12 @@
 -ifndef(CREDENTIALS_HRL).
 -define(CREDENTIALS_HRL, 1).
 
--export_type([fuse_id/0]).
+-export_type([session_id/0]).
 
--type fuse_id() :: binary().
+-type session_id() :: binary().
 
 -record(credentials, {
-    fuse_id = <<"ID">> :: fuse_id()
+    session_id = <<"ID">> :: session_id()
 }).
 
 -endif.

@@ -12,6 +12,7 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/messages.hrl").
+-include("proto_internal/oneclient/event_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -22,62 +23,81 @@
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1]).
 
-all() -> [cert_connection_test, token_connection_test, protobuf_msg_test].
+all() -> [token_connection_test, cert_connection_test, protobuf_msg_test].
 
 %%%===================================================================
 %%% Test function
 %% ====================================================================
 
-cert_connection_test(Config) ->
+token_connection_test(Config) ->
+    % given
     ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
+
+    %then
     {ok, Sock} = connect_via_token(Worker1),
     ok = ssl:close(Sock),
     ?assertMatch({error, _}, ssl:connection_info(Sock)),
     ssl:stop().
 
-token_connection_test(Config) ->
+cert_connection_test(Config) ->
+    % given
     ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
+    TokenAuthMessage = #'ClientMessage'{client_message =
+    {handshake_request, #'HandshakeRequest'{auth_method = #'AuthMethod'{
+        auth_method = {certificate, #'Certificate'{value = <<"VAL">>}}
+    }}}},
+    TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
+    % when
     {ok, Sock} = ssl:connect(?GET_HOST(Worker1), 5555, [binary, {packet, 4}, {active, true}]),
+    ok = ssl:send(Sock, TokenAuthMessageRaw),
 
-    TokenAuthMessage = <<"{\"cert\":\"id\"}">>,
-    ok = ssl:send(Sock, TokenAuthMessage),
+    % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ok = ssl:close(Sock),
     ?assertMatch({error, _}, ssl:connection_info(Sock)),
     ssl:stop().
 
 protobuf_msg_test(Config) ->
+    % given
     ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
-    {ok, Sock} = connect_via_token(Worker1),
-    test_utils:mock_new(Worker1, router),
-    test_utils:mock_expect(Worker1, router, preroute_message,
-        fun(_, #client_message{
-            credentials = #credentials{},
-            client_message = #handshake_request{}
-        }) -> ok end
-    ),
-    Msg = #'ClientMessage'{message_id = 0, client_message = {handshake_request, #'HandshakeRequest'{}}},
+    ok = rpc:call(Worker1, meck, new, [router, [passthrough, non_strict, unstick, no_link]]),
+    ok = rpc:call(Worker1, meck, expect, [router, preroute_message,
+        fun(
+            #client_message{
+                credentials = #credentials{},
+                client_message = #read_event{}
+            }
+        ) ->
+            ok
+        end]),
+    Msg = #'ClientMessage'{
+        message_id = 0,
+        client_message =
+        {event, #'Event'{event =
+            {read_event, #'ReadEvent'{counter = 1, file_id = <<"id">>, size=1, blocks = []}}}}
+    },
     RawMsg = client_messages:encode_msg(Msg),
+
+    % when
+    {ok, Sock} = connect_via_token(Worker1),
     ok = ssl:send(Sock, RawMsg),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     test_utils:mock_validate(Worker1, router),
     ok = ssl:send(Sock, <<"non_protobuff">>),
 
+    %then
+    ?assertEqual(true, rpc:call(Worker1, meck, validate, [router])),
+    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ssl:stop().
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_suite(Config) ->
-    try
-        test_node_starter:prepare_test_environment(
-            Config, ?TEST_FILE(Config, "env_desc.json"), ?MODULE)
-    catch
-        A:B -> ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()])
-    end.
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
@@ -88,8 +108,12 @@ end_per_suite(Config) ->
 
 connect_via_token(Node) ->
     {ok, Sock} = ssl:connect(?GET_HOST(Node), 5555, [binary, {packet, 4}, {active, true}]),
-    TokenAuthMessage = <<"{\"token\":\"val\"}">>,
-    ok = ssl:send(Sock, TokenAuthMessage),
+    TokenAuthMessage = #'ClientMessage'{client_message =
+    {handshake_request, #'HandshakeRequest'{auth_method = #'AuthMethod'{
+        auth_method = {token, #'Token'{value = <<"VAL">>}}
+    }}}},
+    TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
+    ok = ssl:send(Sock, TokenAuthMessageRaw),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     {ok, Sock}.
 

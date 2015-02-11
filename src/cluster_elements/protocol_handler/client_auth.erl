@@ -13,9 +13,13 @@
 -author("Tomasz Lichon").
 
 -include("cluster_elements/protocol_handler/credentials.hrl").
+-include("proto_internal/oneclient/client_messages.hrl").
+-include("proto_internal/oneclient/handshake_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 %% API
--export([handle_auth_info/1]).
+-export([handle_handshake/1]).
 
 %%%===================================================================
 %%% API
@@ -27,14 +31,14 @@
 %% (cert/token)
 %% @end
 %%--------------------------------------------------------------------
--spec handle_auth_info(Message :: binary()) -> {ok, Cred :: #credentials{}}.
-handle_auth_info(Message) ->
-    case mochijson2:decode(Message, [{format, proplist}]) of
-        [{<<"token">>, Token}] ->
-            authenticate_using_token(Token);
-        [{<<"cert">>, OneproxySessionId}] -> %todo adjust oneproxy to send such info
-            authenticate_using_certificate(OneproxySessionId)
-    end.
+-spec handle_handshake(Message :: binary()) ->
+    {ok, Cred :: #credentials{}} | {error, term()}.
+handle_handshake(#client_message{client_message =
+#handshake_request{session_id = _Id, auth_method = #token{value = Val}}}) ->
+    authenticate_using_token(Val);
+handle_handshake(#client_message{client_message =
+#handshake_request{session_id = _Id, auth_method = #certificate{value = Val}}}) ->
+    authenticate_using_certificate(Val).
 
 %%%===================================================================
 %%% Internal functions
@@ -45,17 +49,20 @@ handle_auth_info(Message) ->
 %% Authenticate client using given token, returns client credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_token(Token :: binary()) -> {ok, Cred :: #credentials{}} | {error, term()}.
+-spec authenticate_using_token(Token :: binary()) ->
+    {ok, Cred :: #credentials{}} | {error, term()}.
 authenticate_using_token(_Token) ->
+    ?dump(_Token),
     {ok, #credentials{}}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticate client using given SessionId. The certificate is obtained
-%% from oneproxy. Returns client credentials.
+%% Authenticate client using given certificate. Returns client credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_certificate(Token :: binary()) -> {ok, Cred :: #credentials{}} | {error, term()}.
-authenticate_using_certificate(_OneproxySessionId) ->
+-spec authenticate_using_certificate(Token :: binary()) ->
+    {ok, Cred :: #credentials{}} | {error, term()}.
+authenticate_using_certificate(_Certificate) ->
+    ?dump(_Certificate),
     {ok, #credentials{}}.
 

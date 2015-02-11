@@ -126,18 +126,12 @@ global_cache_atomic_update_test(Config) ->
 
     ok.
 
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    try
-        test_node_starter:prepare_test_environment(Config,
-            ?TEST_FILE(Config, "env_desc.json"), ?MODULE)
-    catch
-        A:B -> ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()])
-    end.
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
@@ -169,12 +163,10 @@ local_access_only(Node, Level) ->
         ?call_store(Node, get, [Level,
             sample_model, Key])),
 
-
     Pid = self(),
     ?assertMatch({ok, Key},
         ?call_store(Node, update, [Level,
             sample_model, Key, #{field2 => Pid}])),
-
 
     ?assertMatch({ok, #document{value = #sample_model{field2 = Pid}}},
         ?call_store(Node, get, [Level,
