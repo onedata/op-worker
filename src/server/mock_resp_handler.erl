@@ -36,16 +36,21 @@ init(_Type, Req, [ETSKey]) ->
 %%--------------------------------------------------------------------
 -spec handle(Req :: term(), [ETSKey]) -> {ok, term(), [ETSKey]} when ETSKey :: {Port :: integer(), Path :: binary()}.
 handle(Req, [ETSKey]) ->
-    {ok, Req2} =
+    {ok, NewReq} =
         try
             {ok, _NewReq} = appmock_logic:produce_mock_resp(Req, ETSKey)
         catch T:M ->
             {Port, Path} = ETSKey,
-            ?error_stacktrace("Error in mock_resp_handler. Path: ~p. Port: ~p. ~p:~p.",
-                [Path, Port, T, M]),
-            {ok, _ErrorReq} = cowboy_req:reply(500, Req)
+            Stacktrace = erlang:get_stacktrace(),
+            ?error("Error in mock_resp_handler. Path: ~p. Port: ~p. ~p:~p.~nStacktrace: ~p",
+                [Path, Port, T, M, Stacktrace]),
+            Error = gui_str:format_bin("500 Internal server error - make sure that your description file does not " ++
+            "contain errors.~nType:       ~p~nMessage:    ~p~nStacktrace: ~p", [T, M, Stacktrace]),
+            Req2 = cowboy_req:set_resp_body(Error, Req),
+            Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"text/plain">>, Req2),
+            {ok, _ErrorReq} = cowboy_req:reply(500, Req3)
         end,
-    {ok, Req2, [ETSKey]}.
+    {ok, NewReq, [ETSKey]}.
 
 
 %%--------------------------------------------------------------------

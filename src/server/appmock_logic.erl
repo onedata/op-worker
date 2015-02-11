@@ -94,7 +94,6 @@ produce_mock_resp(Req, ETSKey) ->
     ets:insert(?MAPPINGS_ETS, {?HISTORY_KEY, History ++ [ETSKey]}),
     % Get the response term and current state by {Port, Path} key
     [{ETSKey, MappingState}] = ets:lookup(?MAPPINGS_ETS, ETSKey),
-    ets:delete_object(?MAPPINGS_ETS, {ETSKey, MappingState}),
     #mapping_state{response = ResponseField, state = State, counter = Counter} = MappingState,
     % Get response and new state - either directly, cyclically from a list or by evaluating a fun
     {Response, NewState} = case ResponseField of
@@ -107,12 +106,18 @@ produce_mock_resp(Req, ETSKey) ->
                                    {_Response, _NewState} = Fun(Req, State)
                            end,
     % Put new state in the ETS
+    ets:delete_object(?MAPPINGS_ETS, {ETSKey, MappingState}),
     ets:insert(?MAPPINGS_ETS, {ETSKey, MappingState#mapping_state{state = NewState, counter = Counter + 1}}),
     #mock_resp{code = Code, body = Body, content_type = CType, headers = Headers} = Response,
     {Port, Path} = ETSKey,
     ?debug("Got request at :~p~s~nResponding~n  Code: ~p~n  Headers: ~p~n  Body: ~s", [Port, Path, Code, Headers, Body]),
     % Respond
-    {ok, _NewReq} = cowboy_req:reply(Code, [{<<"content-type">>, CType}] ++ Headers, Body, Req).
+    Req2 = cowboy_req:set_resp_body(Body, Req),
+    Req3 = lists:foldl(
+        fun({HKey, HValue}, CurrReq) ->
+            gui_utils:cowboy_ensure_header(HKey, HValue, CurrReq)
+        end, Req2, [{<<"content-type">>, CType}] ++ Headers),
+    {ok, _NewReq} = cowboy_req:reply(Code, Req3).
 
 
 %%--------------------------------------------------------------------
