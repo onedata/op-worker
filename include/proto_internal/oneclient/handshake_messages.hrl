@@ -21,7 +21,8 @@
 }).
 
 -record(certificate, {
-    value :: binary()
+    client_session_id :: binary(),
+    client_subject_dn :: binary()
 }).
 
 -record(handshake_request, {

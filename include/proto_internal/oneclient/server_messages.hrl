@@ -14,10 +14,10 @@
 -define(SERVER_MESSAGES_HRL, 1).
 
 -record(server_message, {
-    message_id :: non_neg_integer(),
-    stream_id :: non_neg_integer(),
-    seq_num :: non_neg_integer(),
-    last_message :: boolean(),
+    message_id = undefined :: non_neg_integer(),
+    stream_id = undefined :: non_neg_integer(),
+    seq_num = undefined :: non_neg_integer(),
+    last_message = undefined :: boolean(),
     server_message :: tuple()
 }).
 
