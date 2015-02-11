@@ -102,14 +102,15 @@ produce_mock_resp(Req, ETSKey) ->
     % Put new state in the ETS
     ets:insert(?MAPPINGS_ETS, {ETSKey, MappingState#mapping_state{state = NewState, counter = Counter + 1}}),
     #mock_resp{code = Code, body = Body, content_type = CType, headers = Headers} = Response,
+    AllHeaders = [{<<"content-type">>, CType}] ++ Headers,
     {Port, Path} = ETSKey,
-    ?debug("Got request at :~p~s~nResponding~n  Code: ~p~n  Headers: ~p~n  Body: ~s", [Port, Path, Code, Headers, Body]),
+    ?debug("Got request at :~p~s~nResponding~n  Code: ~p~n  Headers: ~p~n  Body: ~s", [Port, Path, Code, AllHeaders, Body]),
     % Respond
     Req2 = cowboy_req:set_resp_body(Body, Req),
     Req3 = lists:foldl(
         fun({HKey, HValue}, CurrReq) ->
             gui_utils:cowboy_ensure_header(HKey, HValue, CurrReq)
-        end, Req2, [{<<"content-type">>, CType}] ++ Headers),
+        end, Req2, AllHeaders),
     {ok, _NewReq} = cowboy_req:reply(Code, Req3).
 
 
