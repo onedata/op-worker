@@ -99,6 +99,17 @@ for cfg in configs:
     node['user_cert'] = '/tmp/cert'
     node['user_key'] = '/tmp/key'
 
+    envs = '''export X509_USER_CERT={cert_path}
+export X509_USER_KEY={key_path}
+export PROVIDER_HOSTNAME={op_hostname}
+export GLOBAL_REGISTRY_URL={gr_hostname}
+'''
+    envs = envs.format(
+        cert_path=node['user_cert'],
+        key_path=node['user_key'],
+        op_hostname=node['op_hostname'],
+        gr_hostname=node['gr_hostname'])
+
     command = '''set -e
 cp /root/build/release/oneclient /root/bin/oneclient
 cat <<"EOF" > /tmp/cert
@@ -107,10 +118,12 @@ EOF
 cat <<"EOF" > /tmp/key
 {key_file}
 EOF
+{envs}
 bash'''
     command = command.format(
         cert_file=open(cert_file_path, 'r').read(),
-        key_file=open(key_file_path, 'r').read())
+        key_file=open(key_file_path, 'r').read(),
+        envs=envs)
 
     container = docker.run(
         image=args.image,
