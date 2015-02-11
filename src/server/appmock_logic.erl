@@ -81,11 +81,10 @@ terminate() ->
 %% If the endpoint had a responding function defined, the state is set to the state returned by the function.
 %% @end
 %%--------------------------------------------------------------------
--spec produce_mock_resp(Req :: cowboy_req:req(), ETSKey :: {Port :: integer(), Path :: binary()}) -> ok.
+-spec produce_mock_resp(Req :: cowboy_req:req(), ETSKey :: {Port :: integer(), Path :: binary()}) -> {ok, cowboy_req:req()}.
 produce_mock_resp(Req, ETSKey) ->
     % Append the request to history
     [{?HISTORY_KEY, History}] = ets:lookup(?MAPPINGS_ETS, ?HISTORY_KEY),
-    ets:delete_object(?MAPPINGS_ETS, {?HISTORY_KEY, History}),
     ets:insert(?MAPPINGS_ETS, {?HISTORY_KEY, History ++ [ETSKey]}),
     % Get the response term and current state by {Port, Path} key
     [{ETSKey, MappingState}] = ets:lookup(?MAPPINGS_ETS, ETSKey),
@@ -101,7 +100,6 @@ produce_mock_resp(Req, ETSKey) ->
                                    {_Response, _NewState} = Fun(Req, State)
                            end,
     % Put new state in the ETS
-    ets:delete_object(?MAPPINGS_ETS, {ETSKey, MappingState}),
     ets:insert(?MAPPINGS_ETS, {ETSKey, MappingState#mapping_state{state = NewState, counter = Counter + 1}}),
     #mock_resp{code = Code, body = Body, content_type = CType, headers = Headers} = Response,
     {Port, Path} = ETSKey,
@@ -238,7 +236,6 @@ start_listeners_for_mappings(ModuleName) ->
 start_listener(ListenerID, Port, Dispatch) ->
     % Save started listener in ETS
     [{?LISTENERS_KEY, ListenersList}] = ets:lookup(?MAPPINGS_ETS, ?LISTENERS_KEY),
-    ets:delete_object(?MAPPINGS_ETS, {?LISTENERS_KEY, ListenersList}),
     ets:insert(?MAPPINGS_ETS, {?LISTENERS_KEY, ListenersList ++ [ListenerID]}),
     % Load certificates' paths from env
     {ok, CaCertFile} = application:get_env(?APP_NAME, ca_cert_file),
