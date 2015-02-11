@@ -13,8 +13,6 @@
 -module(worker_plugin_behaviour).
 -author("Michal Wrzeszcz").
 
--include("global_definitions.hrl").
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Initialize module
@@ -29,7 +27,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback handle(Request :: term(), State :: term()) ->
-    healthcheck_reponse() | ok | pong | {ok, Answer :: term()} | 
+    nagios_handler:healthcheck_reponse() | ok | pong | {ok, Answer :: term()} |
     {error, Reason :: term()}.
 
 %%--------------------------------------------------------------------

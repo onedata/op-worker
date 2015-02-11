@@ -165,7 +165,7 @@ cast(WorkerRef, Request, ReplyTo, MsgId, SelectionType) ->
 -spec multicast(WorkerName :: worker_name(), Request :: term()) ->
     [{Node :: node(), ok | {error, term()}}].
 multicast(WorkerName, Request) ->
-    multicast(WorkerName, Request, undefiend).
+    multicast(WorkerName, Request, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -177,7 +177,7 @@ multicast(WorkerName, Request) ->
 -spec multicast(WorkerName :: worker_name(), Request :: term(),
     ReplyTo :: process_ref()) -> [{Node :: node(), ok | {error, term()}}].
 multicast(WorkerName, Request, ReplyTo) ->
-    multicast(WorkerName, Request, ReplyTo, undefiend).
+    multicast(WorkerName, Request, ReplyTo, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -22,6 +22,8 @@
 -export([init/0, terminate/0, get_worker_node/1, get_worker_node/2,
     get_worker_nodes/1, update_workers/1]).
 
+-export_type([selection_type/0, worker_name/0, worker_ref/0]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================

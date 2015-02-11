@@ -85,9 +85,9 @@ delete_session(_SessionID) ->
 %% The clearing should be performed based on this.
 %% @end
 %%--------------------------------------------------------------------
--spec clear_expired_sessions() -> ok.
+-spec clear_expired_sessions() -> non_neg_integer().
 clear_expired_sessions() ->
-    ok.
+    0.
 
 %%--------------------------------------------------------------------
 %% @doc Returns cookies time to live in seconds.

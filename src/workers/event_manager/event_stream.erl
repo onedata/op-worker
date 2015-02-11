@@ -15,12 +15,17 @@
 
 -behaviour(gen_server).
 
+-include("workers/event_manager/event_stream.hrl").
+
 %% API
 -export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
+
+-export_type([event_stream/0, admission_rule/0, aggregation_rule/0,
+    emission_rule/0, event_handler/0]).
 
 -define(SERVER, ?MODULE).
 

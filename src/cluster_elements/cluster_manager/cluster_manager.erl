@@ -282,8 +282,8 @@ init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}) ->
 %% Starts workers defined in ?MODULES_WITH_ARGS list on given nodes.
 %% @end
 %%--------------------------------------------------------------------
--spec start_workers_on_nodes(Nodes :: [node()], RunningWorkers :: {Node :: node(),
-    Module :: module(), Args :: term()}, State :: #cm_state{}) -> #cm_state{}.
+-spec start_workers_on_nodes(Nodes :: [node()], RunningWorkers :: [{Node :: node(),
+    Module :: module(), Args :: term()}], State :: #cm_state{}) -> #cm_state{}.
 start_workers_on_nodes([], _, State) ->
     State;
 start_workers_on_nodes([Node | Nodes], RunningWorkers, State) ->
@@ -461,7 +461,6 @@ update_node_managers_and_dns(State) ->
     update_node_manager_state(State#cm_state.nodes, NewStateNum),
     State#cm_state{state_num = NewStateNum}.
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -475,7 +474,6 @@ update_node_manager_state(Nodes, NewStateNum) ->
     end,
     lists:foreach(UpdateNode, Nodes),
     gen_server:cast(?NODE_MANAGER_NAME, {update_state, NewStateNum}).
-
 
 %%--------------------------------------------------------------------
 %% @private

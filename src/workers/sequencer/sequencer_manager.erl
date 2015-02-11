@@ -45,7 +45,7 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SeqSup :: supervisor:sup_ref(), Connectionnection :: pid()) ->
+-spec start_link(SeqSup :: pid(), Connectionnection :: pid()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SeqSup, Connectionnection) ->
     gen_server:start_link(?MODULE, [SeqSup, Connectionnection], []).

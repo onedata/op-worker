@@ -11,9 +11,9 @@
 -module(datastore_test_SUITE).
 -author("Rafal Slota").
 
--include("test_utils.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 -include("workers/datastore/datastore_models.hrl").

@@ -45,7 +45,7 @@
     seq_num = 1 :: non_neg_integer(),
     seq_num_ack = 0 :: non_neg_integer(),
     msg_id :: integer(),
-    msgs = #{} :: maps:new(),
+    msgs = #{} :: map(),
     msgs_ack_win :: non_neg_integer(),
     time_ack_win :: non_neg_integer()
 }).

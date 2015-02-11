@@ -15,8 +15,6 @@
 -include("read_event.hrl").
 -include("write_event.hrl").
 
--export_type([event/0, event_subscription/0, event_producer/0]).
-
 -type event() :: #read_event{} | #write_event{}.
 -type event_subscription() :: #read_event_subscription{}
 | #write_event_subscription{}.

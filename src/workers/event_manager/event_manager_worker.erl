@@ -14,7 +14,6 @@
 
 -behaviour(worker_plugin_behaviour).
 
--include("global_definitions.hrl").
 -include("workers/event_manager/events.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -50,7 +49,8 @@ init(_Args) ->
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck | {event, Event :: event()}
     | {subscription, Subscription :: event_subscription()},
-    Result :: healthcheck_reponse() | ok | pong | {ok, Response} | {error, Reason},
+    Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
+    {error, Reason},
     Response :: term(),
     Reason :: term().
 handle(ping, _) ->

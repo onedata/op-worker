@@ -55,7 +55,7 @@ get_session(OneProxyNameOrPid, SessionId) ->
 %% @todo Solve potential conflict with user-defined ports.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_port(Port :: intet:port()) -> LocalPort :: non_neg_integer().
+-spec get_local_port(Port :: inet:port_number()) -> LocalPort :: non_neg_integer().
 get_local_port(443) ->
     12001;
 get_local_port(5555) ->

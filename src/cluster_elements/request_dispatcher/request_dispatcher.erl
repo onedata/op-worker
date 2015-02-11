@@ -14,8 +14,8 @@
 
 -behaviour(gen_server).
 
--include("global_definitions.hrl").
 -include("modules_and_args.hrl").
+-include("global_definitions.hrl").
 -include("cluster_elements/request_dispatcher/request_dispatcher_state.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").

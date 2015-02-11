@@ -40,7 +40,7 @@ start_link() ->
 %% supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_sequencer_sup(SeqManSup :: supervisor:sup_ref()) ->
+-spec start_sequencer_sup(SeqManSup :: pid()) ->
     supervisor:startchild_ret().
 start_sequencer_sup(SeqencerManagerSup) ->
     ChildSpec = sequencer_sup_spec(),
@@ -52,8 +52,8 @@ start_sequencer_sup(SeqencerManagerSup) ->
 %% supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_sequencer_manager(SeqManSup :: supervisor:sup_ref(),
-    SeqSup :: supervisor:sup_ref(), Connection :: pid()) ->
+-spec start_sequencer_manager(SeqManSup :: pid(),
+    SeqSup :: pid(), Connection :: pid()) ->
     supervisor:startchild_ret().
 start_sequencer_manager(SeqencerManagerSup, SeqSup, Connection) ->
     ChildSpec = sequencer_manager_spec(SeqSup, Connection),
@@ -109,7 +109,7 @@ sequencer_sup_spec() ->
 %% Creates a supervisor child_spec for a sequencer manager child.
 %% @end
 %%--------------------------------------------------------------------
--spec sequencer_manager_spec(SeqSup :: supervisor:sup_ref(),
+-spec sequencer_manager_spec(SeqSup :: pid(),
     Connection :: pid()) -> supervisor:child_spec().
 sequencer_manager_spec(SeqSup, Connection) ->
     Id = Module = sequencer_manager,

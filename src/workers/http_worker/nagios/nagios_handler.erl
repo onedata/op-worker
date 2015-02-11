@@ -21,6 +21,8 @@
 -export([init/3, handle/2, terminate/3]).
 -export([get_cluster_status/1]).
 
+-export_type([healthcheck_reponse/0]).
+
 -ifdef(TEST).
 -compile(export_all).
 -endif.

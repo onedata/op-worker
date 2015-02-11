@@ -40,7 +40,7 @@ start_link() ->
 %% supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_sequencer(SeqSup :: supervisor:sup_ref(),
+-spec start_sequencer(SeqSup :: pid(),
     SeqMan :: pid(), MsgId :: integer()) ->
     supervisor:startchild_ret().
 start_sequencer(SeqSup, SeqMan, MsgId) ->

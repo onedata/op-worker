@@ -361,7 +361,7 @@ from_binary(Bin) ->
 %% Encodes geven bucket name to format supported by database.
 %% @end
 %%--------------------------------------------------------------------
--spec bucket_encode(datastore:bucket() | binary()) -> binary().
+-spec bucket_encode(datastore:bucket()) -> binary().
 bucket_encode(Bucket) when is_atom(Bucket) ->
     atom_to_binary(Bucket, utf8);
 bucket_encode(Bucket) when is_binary(Bucket) ->

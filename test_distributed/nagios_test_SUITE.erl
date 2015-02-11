@@ -11,10 +11,10 @@
 -module(nagios_test_SUITE).
 -author("Lukasz Opiola").
 
--include("test_utils.hrl").
 -include("global_definitions.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% export for ct

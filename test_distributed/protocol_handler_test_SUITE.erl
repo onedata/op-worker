@@ -11,11 +11,11 @@
 -module(protocol_handler_test_SUITE).
 -author("Tomasz Lichon").
 
--include("test_utils.hrl").
 -include("proto/oneclient/messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% export for ct
@@ -52,15 +52,18 @@ protobuf_msg_test(Config) ->
     ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
     {ok, Sock} = connect_via_token(Worker1),
-
-    ok = rpc:call(Worker1, meck, new, [router, [passthrough, non_strict, unstick, no_link]]),
-    ok = rpc:call(Worker1, meck, expect, [router, preroute_message,
-        fun(_, #client_message{credentials = #credentials{}, client_message = #handshake_request{}}) -> ok end]),
+    test_utils:mock_new(Worker1, router),
+    test_utils:mock_expect(Worker1, router, preroute_message,
+        fun(_, #client_message{
+            credentials = #credentials{},
+            client_message = #handshake_request{}
+        }) -> ok end
+    ),
     Msg = #'ClientMessage'{message_id = 0, client_message = {handshake_request, #'HandshakeRequest'{}}},
     RawMsg = client_messages:encode_msg(Msg),
     ok = ssl:send(Sock, RawMsg),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
-    true = rpc:call(Worker1, meck, validate, [router]),
+    test_utils:mock_validate(Worker1, router),
     ok = ssl:send(Sock, <<"non_protobuff">>),
 
     ssl:stop().

@@ -15,7 +15,6 @@
 
 -behaviour(worker_plugin_behaviour).
 
--include("global_definitions.hrl").
 -include("workers/datastore/datastore_models.hrl").
 -include("cluster_elements/protocol_handler/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -53,7 +52,8 @@ init(_Args) ->
     Request :: ping | healthcheck |
     {get_or_create_sequencer_manager, FuseId :: fuse_id(), Connection :: pid()} |
     {remove_sequencer_manager, FuseId :: fuse_id()},
-    Result :: healthcheck_reponse() | ok | pong | {ok, Response} | {error, Reason},
+    Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
+    {error, Reason},
     Response :: term(),
     Reason :: term().
 handle(ping, _) ->

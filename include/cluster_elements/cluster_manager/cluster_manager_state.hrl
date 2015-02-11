@@ -17,8 +17,8 @@
 %% nodes, dispatchers and workers in cluster. It also contains reference
 %% to process used to monitor if nodes are alive.
 -record(cm_state, {
-    nodes = [] :: [] | [Node :: node()],
-    workers = [] ::[] | [{Node :: node(), Module :: module(), Args :: term()}],
+    nodes = [] :: [Node :: node()],
+    workers = [] :: [{Node :: node(), Module :: module(), Args :: term()}],
     state_num = 1 :: integer()
 }).
 
