@@ -28,7 +28,7 @@
 %% deserialize protobuf binary data to client message
 %% @end
 %%--------------------------------------------------------------------
--spec deserialize_client_message(Message :: binary(), Cred :: #credentials{}) ->
+-spec deserialize_client_message(Message :: binary(), Cred :: undefined | #credentials{}) ->
     {ok, Record :: term()} | {error, term()}.
 deserialize_client_message(Message, Cred) ->
     try client_messages:decode_msg(Message, 'ClientMessage') of

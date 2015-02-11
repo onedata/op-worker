@@ -131,18 +131,18 @@ sequencer_test(Config) ->
                 lower_seq_num = 1, upper_seq_num = SeqNum - 1
             }
         }, ?TIMEOUT),
-        ?assertEqual(ok, ReceiveAnswer)
+        ?assertMatch({ok, _}, ReceiveAnswer)
     end, lists:seq(MsgCount, 2, -1)),
 
     lists:foreach(fun(SeqNum) ->
         ReceiveAnswer = test_utils:receive_msg(ClientMsg#client_message{
             seq_num = SeqNum}, ?TIMEOUT),
-        ?assertEqual(ok, ReceiveAnswer)
+        ?assertMatch({ok, _}, ReceiveAnswer)
     end, lists:seq(1, MsgCount)),
 
     ReceiveAnswer = test_utils:receive_msg(
         #server_message{server_message = MsgAck}, ?TIMEOUT),
-    ?assertEqual(ok, ReceiveAnswer),
+    ?assertMatch({ok, _}, ReceiveAnswer),
 
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 

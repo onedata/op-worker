@@ -44,11 +44,9 @@ cert_connection_test(Config) ->
     % given
     ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
-    TokenAuthMessage = #'ClientMessage'{client_message =
-    {handshake_request, #'HandshakeRequest'{auth_method = #'AuthMethod'{
-        auth_method = {certificate, #'Certificate'{value = <<"VAL">>}}
-    }}}},
+    TokenAuthMessage = #'ClientMessage'{client_message = {handshake_request, #'HandshakeRequest'{}}},
     TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
+
     % when
     {ok, Sock} = ssl:connect(?GET_HOST(Worker1), 5555, [binary, {packet, 4}, {active, true}]),
     ok = ssl:send(Sock, TokenAuthMessageRaw),
@@ -63,33 +61,27 @@ protobuf_msg_test(Config) ->
     % given
     ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
-    ok = rpc:call(Worker1, meck, new, [router, [passthrough, non_strict, unstick, no_link]]),
-    ok = rpc:call(Worker1, meck, expect, [router, preroute_message,
-        fun(
-            #client_message{
-                credentials = #credentials{},
-                client_message = #read_event{}
-            }
-        ) ->
-            ok
-        end]),
+    test_utils:mock_new(Worker1, router),
+    test_utils:mock_expect(Worker1, router, preroute_message, fun(
+        #client_message{
+            credentials = #credentials{},
+            client_message = #read_event{}
+        }) -> ok
+    end),
     Msg = #'ClientMessage'{
         message_id = 0,
         client_message =
         {event, #'Event'{event =
-            {read_event, #'ReadEvent'{counter = 1, file_id = <<"id">>, size=1, blocks = []}}}}
+        {read_event, #'ReadEvent'{counter = 1, file_id = <<"id">>, size = 1, blocks = []}}}}
     },
     RawMsg = client_messages:encode_msg(Msg),
 
     % when
     {ok, Sock} = connect_via_token(Worker1),
     ok = ssl:send(Sock, RawMsg),
-    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
-    test_utils:mock_validate(Worker1, router),
-    ok = ssl:send(Sock, <<"non_protobuff">>),
 
     %then
-    ?assertEqual(true, rpc:call(Worker1, meck, validate, [router])),
+    test_utils:mock_validate(Worker1, router),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ssl:stop().
 
@@ -107,13 +99,23 @@ end_per_suite(Config) ->
 %%%===================================================================
 
 connect_via_token(Node) ->
-    {ok, Sock} = ssl:connect(?GET_HOST(Node), 5555, [binary, {packet, 4}, {active, true}]),
+    %given
     TokenAuthMessage = #'ClientMessage'{client_message =
-    {handshake_request, #'HandshakeRequest'{auth_method = #'AuthMethod'{
-        auth_method = {token, #'Token'{value = <<"VAL">>}}
-    }}}},
+    {handshake_request, #'HandshakeRequest'{auth_method =
+    #'AuthMethod'{auth_method = {token, #'Token'{value = <<"VAL">>}}}}}},
     TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
+
+    %when
+    {ok, Sock} = ssl:connect(?GET_HOST(Node), 5555, [binary, {packet, 4}, {active, true}]),
     ok = ssl:send(Sock, TokenAuthMessageRaw),
+
+    %then
+    ReceiveAnswer = test_utils:receive_any(timer:seconds(5)),
+    ?assertMatch({ok, _}, ReceiveAnswer),
+    {ok, Data} = ReceiveAnswer,
+    ?assert(is_binary(Data)),
+    ServerMsg = server_messages:decode_msg(Data, 'ServerMessage'),
+    ?assertMatch(#'ServerMessage'{server_message = {handshake_response, #'HandshakeResponse'{}}}, ServerMsg),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     {ok, Sock}.
 
