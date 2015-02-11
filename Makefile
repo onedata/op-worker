@@ -16,7 +16,7 @@ build: release
 
 release: 
 	mkdir -p ${RELEASE_DIR}
-	cd ${RELEASE_DIR} && ${CMAKE} -GNinja -DCMAKE_BUILD_TYPE=Release `if [[ "$$PREFER_STATIC_LINK" != ""  ]]; then echo "-DPREFER_STATIC_LINK=1"; fi` ..
+	cd ${RELEASE_DIR} && ${CMAKE} -GNinja -DCMAKE_BUILD_TYPE=Release $$(if [ "$$PREFER_STATIC_LINK" != ""  ]; then echo "-DPREFER_STATIC_LINK=1"; fi) ..
 	(cd ${RELEASE_DIR} && ninja)
 	ln -sfn release build
 

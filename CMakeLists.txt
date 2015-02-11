@@ -66,6 +66,12 @@ message(STATUS "Checking for FUSE...")
 find_package(FUSE REQUIRED)
 include_directories(SYSTEM ${FUSE_INCLUDE_DIRS})
 
+# Setup Intel TBB
+message(STATUS "Checking for Intel TBB...")
+find_package(TBB REQUIRED)
+link_directories(${TBB_LIBRARY_DIRS})
+include_directories(SYSTEM ${TBB_INCLUDE_DIRS})
+
 # Setup Boost
 if(${PREFER_STATIC_LINK})
     set(Boost_USE_STATIC_LIBS       ON)
