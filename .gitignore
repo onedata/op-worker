@@ -7,3 +7,4 @@ deps/*/
 
 *.pyc
 *.beam
+*.iml
