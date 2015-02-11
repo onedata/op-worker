@@ -31,3 +31,11 @@ def parse_json_file(path):
     with open(path, 'r') as f:
         data = f.read()
         return json.loads(data)
+
+
+# Formats hostname for a docker based on node name and uid
+# node must in in format 'somename@'
+def format_hostname(node_name, uid):
+    parts = list(node_name.partition('@'))
+    parts[2] = '{0}.{1}.dev.docker'.format(parts[0], uid)
+    return ''.join(parts)

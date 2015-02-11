@@ -53,7 +53,6 @@ def run_command(cmd):
                             stdin=subprocess.PIPE).communicate()[0]
 
 
-
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     description='Bring up globalregistry nodes.')
@@ -118,8 +117,7 @@ for cfg in configs:
     (gr_name, sep, gr_hostname) = node_name.partition('@')
     gr_dockername = '{0}_{1}'.format(gr_name, uid)
 
-    gr_command = \
-    '''set -e
+    gr_command = '''set -e
 cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
@@ -132,8 +130,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
     (db_name, sep, db_hostname) = db_node.partition('@')
     db_dockername = '{0}_{1}'.format(db_name, uid)
 
-    db_command = \
-'''echo '[httpd]' > /opt/bigcouch/etc/local.ini
+    db_command = '''echo '[httpd]' > /opt/bigcouch/etc/local.ini
 echo 'bind_address = 0.0.0.0' >> /opt/bigcouch/etc/local.ini
 sed -i 's/-name bigcouch/-name {name}@{host}/g' /opt/bigcouch/etc/vm.args
 sed -i 's/-setcookie monster/-setcookie {cookie}/g' /opt/bigcouch/etc/vm.args
