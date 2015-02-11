@@ -29,7 +29,7 @@ all() -> [ccm_and_worker_test].
 %%% Test function
 %% ====================================================================
 
--perf_test(do_test).
+-perf_test({repeats, 3}).
 ccm_and_worker_test(Config) ->
     [Ccm] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),

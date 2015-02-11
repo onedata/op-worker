@@ -10,6 +10,7 @@ compile:
 	cp -R c_src/oneproxy/proto src
 	./rebar compile
 	rm -rf src/proto
+	mv ebin/*SUITE* test_distributed/
 
 deps:
 	./rebar get-deps

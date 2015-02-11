@@ -42,6 +42,13 @@ parser.add_argument(
     help='name of the test case',
     dest='cases')
 
+parser.add_argument(
+    '--perf', '-p',
+    action='store_true',
+    default=False,
+    help='run performance tests',
+    dest='perf')
+
 args = parser.parse_args()
 script_dir = os.path.dirname(os.path.realpath(__file__))
 uid = str(int(time.time()))
@@ -66,6 +73,9 @@ if args.suites:
 if args.cases:
     ct_command.append('-case')
     ct_command.extend(args.cases)
+
+if args.perf:
+    ct_command.extend(['-env', 'perf_test', 'true'])
 
 command = '''
 import os, subprocess, sys, stat
