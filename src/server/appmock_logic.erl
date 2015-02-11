@@ -104,7 +104,7 @@ produce_mock_resp(Req, ETSKey) ->
     #mock_resp{code = Code, body = Body, content_type = CType, headers = Headers} = Response,
     AllHeaders = [{<<"content-type">>, CType}] ++ Headers,
     {Port, Path} = ETSKey,
-    ?debug("Got request at :~p~s~nResponding~n  Code: ~p~n  Headers: ~p~n  Body: ~s", [Port, Path, Code, AllHeaders, Body]),
+    ?debug("Got request at :~p~s~nResponding~n  Code:    ~p~n  Headers: ~p~n  Body:   ~s", [Port, Path, Code, AllHeaders, Body]),
     % Respond
     Req2 = cowboy_req:set_resp_body(Body, Req),
     Req3 = lists:foldl(
