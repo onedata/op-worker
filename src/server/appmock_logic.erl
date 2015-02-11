@@ -171,7 +171,7 @@ verify_all_mocks(Req) ->
 %% Compiles and loads a given file.
 %% @end
 %%--------------------------------------------------------------------
--spec load_description_module(FilePath :: binary()) -> atom() | no_return.
+-spec load_description_module(FilePath :: binary()) -> module() | no_return().
 load_description_module(FilePath) ->
     try
         FileName = filename:basename(FilePath),

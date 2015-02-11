@@ -18,7 +18,7 @@
 
 % Records that holds the state of a mapping in ETS
 -record(mapping_state, {
-    response = #mock_resp{} :: #mock_resp{} | function(),
+    response = #mock_resp{} :: #mock_resp{} | [#mock_resp{}] | function(),
     % Used to remember state between requests on the same stub
     state = [],
     % Counts number of requests to certain endpoint

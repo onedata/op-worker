@@ -29,7 +29,7 @@
     % port on which requests will be accepted
     port = 443 :: integer(),
     % cowboy_router compatible path on which requests will be accepted
-    path = "/" :: string(),
+    path = <<"/">> :: binary(),
     % response can be:
     % 1) explicit #mock_resp record, will be returned every time the endpoint is used
     % 2) a list of #mock_resp records that will be returned in given sequence, cyclically
@@ -39,5 +39,5 @@
     %       State - carries state between consecutive requests on the same stub
     response = #mock_resp{} :: #mock_resp{} | [#mock_resp{}] | function(),
     % initial state of the stub
-    initial_state = []
+    initial_state = [] :: term()
 }).

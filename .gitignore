@@ -5,6 +5,7 @@ rel/appmock/
 ebin/
 deps/*/
 
+*.plt
 *.pyc
 *.beam
 *.iml
