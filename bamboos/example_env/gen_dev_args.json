@@ -13,7 +13,7 @@
                 "sys.config": {
                     "node_type": "ccm",
                     "ccm_nodes": [ "ccm1@" ],
-                    "db_nodes": [ "db@" ],
+                    "db_nodes": [ "127.0.0.1:49161" ],
                     "workers_to_trigger_init": 1
                 }
             },
@@ -25,7 +25,7 @@
                 "sys.config": {
                     "node_type": "worker",
                     "ccm_nodes": [ "ccm1@"],
-                    "db_nodes": [ "db@" ]
+                    "db_nodes": [ "127.0.0.1:49161" ]
                 }
             }
         }
@@ -39,12 +39,46 @@
             "gr1": {
                 "vm.args": {
                     "name": "gr1@",
-                    "setcookie": "cookie"
+                    "setcookie": "cookie1"
                 },
                 "sys.config": {
                     "db_nodes": [ "gr1_db@" ],
-                    "grpcert_domain": "127.0.0.1"
+                    "grpcert_domain": {"string" : "127.0.0.1"}
                 }
+            }
+        }
+    },
+    "appmock": {
+        "config": {
+            "input_dir": "rel/appmock",
+            "target_dir": "rel/test_cluster"
+        },
+        "nodes": {
+            "appmock1": {
+                "vm.args": {
+                    "name": "appmock1@"
+                },
+                "sys.config": {
+                    "app_description_file": "./example_app_description.erl"
+                }
+            }
+        }
+    },
+    "oneclient": {
+        "nodes": {
+            "client1": {
+                "name": "client1@",
+                "op_hostname": "worker@",
+                "gr_hostname": "gr1@",
+                "user_cert": "./cert.pem",
+                "user_key": "./cert.pem"
+            },
+            "client2": {
+                "name": "client2@",
+                "op_hostname": "worker@",
+                "gr_hostname": "gr1@",
+                "user_cert": "./cert.pem",
+                "user_key": "./cert.pem"
             }
         }
     }

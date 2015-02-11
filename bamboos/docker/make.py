@@ -12,6 +12,8 @@ Run the script with -h flag to learn about script's running options.
 import argparse
 import docker
 import os
+import platform
+import sys
 
 from os.path import expanduser
 
@@ -61,27 +63,55 @@ parser.add_argument(
     help='parameters passed to `make`')
 
 args = parser.parse_args()
+home = expanduser('~')
 
-command = \
-'''cp --recursive --no-target-directory --force /root/keys /root/.ssh
-chown --recursive root:root /root/.ssh
-chmod 700 /root/.ssh
-chmod 600 /root/.ssh/*
-eval $(ssh-agent)
-ssh-add
-rsync --archive /root/src/ /root/bin
-make {params};
-chown --recursive --from=root {uid}:{gid} .'''
+command = '''
+import os, shutil, subprocess, sys
+
+os.environ['HOME'] = '{home}'
+
+ssh_home = '/root/.ssh'
+if {shed_privileges}:
+    subprocess.call(['useradd', '--create-home', '--uid', '{uid}', 'maketmp'])
+    ssh_home = '/home/maketmp/.ssh'
+    os.setregid({gid}, {gid})
+    os.setreuid({uid}, {uid})
+
+if '{src}' != '{dst}':
+    ret = subprocess.call(['rsync', '--archive', '/tmp/src/', '{dst}'])
+    if ret != 0:
+        sys.exit(ret)
+
+shutil.copytree('/tmp/keys', ssh_home)
+for root, dirs, files in os.walk(ssh_home):
+    for dir in dirs:
+        os.chmod(os.path.join(root, dir), 0o700)
+    for file in files:
+        os.chmod(os.path.join(root, file), 0o600)
+
+sh_command = 'eval $(ssh-agent) > /dev/null; ssh-add 2>&1; make {params}'
+ret = subprocess.call(['sh', '-c', sh_command])
+sys.exit(ret)
+'''
 command = command.format(
     params=' '.join(args.params),
-    uid=os.getuid(),
-    gid=os.getgid())
+    uid=os.geteuid(),
+    gid=os.getegid(),
+    src=args.src,
+    dst=args.dst,
+    home=home,
+    shed_privileges=(platform.system() == 'Linux'))
 
-volumes = [
-    (args.src, '/root/src', 'ro'),
-    (args.dst, '/root/bin', 'rw'),
-    (args.keys, '/root/keys', 'ro')]
+reflect = [(home, 'ro'), (args.dst, 'rw')]
+reflect.extend(zip(args.reflect, ['rw'] * len(args.reflect)))
 
-docker.run(tty=True, interactive=True, rm=True, reflect=args.reflect,
-           volumes=volumes, workdir='/root/bin', image=args.image,
-           command=command)
+ret = docker.run(tty=True,
+                 interactive=True,
+                 rm=True,
+                 reflect=reflect,
+                 volumes=[(args.keys, '/tmp/keys', 'ro'),
+                          (args.src, '/tmp/src', 'ro')],
+                 workdir=args.dst,
+                 image=args.image,
+                 command=['python', '-c', command])
+sys.exit(ret)

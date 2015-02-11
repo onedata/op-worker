@@ -21,7 +21,8 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
         cmd.append('-d')
 
     for addr in dns:
-        cmd.extend(['--dns', addr])
+        if addr is not None:
+            cmd.extend(['--dns', addr])
 
     if hostname:
         cmd.extend(['-h', hostname])
@@ -41,8 +42,8 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
     if rm:
         cmd.append('--rm')
 
-    for path in reflect:
-        vol = '{0}:{0}:rw'.format(os.path.abspath(path))
+    for path, read in reflect:
+        vol = '{0}:{0}:{1}'.format(os.path.abspath(path), read)
         cmd.extend(['-v', vol])
 
     for entry in volumes:
@@ -54,7 +55,7 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
             cmd.extend(['-v', entry])
 
     if workdir:
-        cmd.extend(['-w', workdir])
+        cmd.extend(['-w', os.path.abspath(workdir)])
 
     if user:
         cmd.extend(['-u', user])

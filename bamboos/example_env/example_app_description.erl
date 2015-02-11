@@ -7,6 +7,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This is an example app description used by appmock.
+%%%
+%%% This file is referenced from gen_dev_args.json and
+%%% must be in the same directory for appmock_up.py to work.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(example_app_description).

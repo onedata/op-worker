@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Brings up a set of oneprovider nodes. They can create separate clusters.
+Brings up a set of appmock instances.
 Run the script with -h flag to learn about script's running options.
 """
 
@@ -14,6 +14,8 @@ import copy
 import docker
 import json
 import os
+import random
+import string
 import time
 
 
@@ -21,37 +23,36 @@ def tweak_config(config, name, uid):
     cfg = copy.deepcopy(config)
     cfg['nodes'] = {'node': cfg['nodes'][name]}
 
-    sys_config = cfg['nodes']['node']['sys.config']
-    sys_config['ccm_nodes'] = [common.format_hostname(n, uid) for n in sys_config['ccm_nodes']]
-
     vm_args = cfg['nodes']['node']['vm.args']
     vm_args['name'] = common.format_hostname(vm_args['name'], uid)
+    # Set random cookie so the node does not try to connect to others
+    vm_args['setcookie'] = ''.join(random.sample(string.ascii_letters + string.digits, 16))
 
     return cfg
 
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    description='Bring up oneprovider nodes.')
+    description='Bring up appmock nodes.')
 
 parser.add_argument(
     '--image', '-i',
     action='store',
     default='onedata/worker',
-    help='docker image to use as a container',
+    help='the image to use for the container',
     dest='image')
 
 parser.add_argument(
     '--bin', '-b',
     action='store',
     default=os.getcwd(),
-    help='path to oneprovider directory (precompiled)',
+    help='the path to appmock repository (precompiled)',
     dest='bin')
 
 parser.add_argument(
     '--dns', '-d',
     action='store',
-    default='auto',
+    default='none',
     help='IP address of DNS or "none" - if no dns should be started or ' +
          '"auto" - if it should be started automatically',
     dest='dns')
@@ -66,12 +67,12 @@ parser.add_argument(
 parser.add_argument(
     'config_path',
     action='store',
-    help='path to gen_dev_args.json that will be used to configure oneprovider_node instances')
+    help='path to gen_dev_args.json that will be used to configure appmock instances')
 
 args = parser.parse_args()
 uid = args.uid
 
-config = common.parse_json_file(args.config_path)['oneprovider_node']
+config = common.parse_json_file(args.config_path)['appmock']
 config['config']['target_dir'] = '/root/bin'
 configs = [tweak_config(config, node, uid) for node in config['nodes']]
 
@@ -87,19 +88,30 @@ elif dns == 'none':
     dns = None
 
 for cfg in configs:
-    node_type = cfg['nodes']['node']['sys.config']['node_type']
     node_name = cfg['nodes']['node']['vm.args']['name']
-
     (name, sep, hostname) = node_name.partition('@')
 
-    command = \
-        '''set -e
+    sys_config = cfg['nodes']['node']['sys.config']
+    app_desc_file_path = sys_config['app_description_file']
+    app_desc_file_name = os.path.basename(app_desc_file_path)
+    # App desc file can be an absolute path or relative to gen_dev_args.json
+    if not os.path.isabs(app_desc_file_path):
+        app_desc_file_path = common.get_file_dir(args.config_path) + '/' + app_desc_file_path
+    sys_config['app_description_file'] = '/tmp/' + app_desc_file_name
+
+    command = '''set -e
+cat <<"EOF" > /tmp/{app_desc_file_name}
+{app_desc_file}
+EOF
 cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
-/root/bin/node/bin/oneprovider_node console'''
-    command = command.format(gen_dev_args=json.dumps({'oneprovider_node': cfg}))
+/root/bin/node/bin/appmock console'''
+    command = command.format(
+        app_desc_file_name=app_desc_file_name,
+        app_desc_file=open(app_desc_file_path, 'r').read(),
+        gen_dev_args=json.dumps({'appmock': cfg}))
 
     container = docker.run(
         image=args.image,
@@ -114,7 +126,13 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         command=command)
 
     output['docker_ids'].append(container)
-    output['op_{type}_nodes'.format(type=node_type)].append(node_name)
+    output['appmock_nodes'].append(node_name)
 
 # Print JSON to output so it can be parsed by other scripts
 print(json.dumps(output))
+
+
+
+
+
+
