@@ -117,7 +117,6 @@ elif dns == 'none':
 
 for cfg in configs:
     node_name = cfg['nodes']['node']['vm.args']['name']
-
     (name, sep, hostname) = node_name.partition('@')
 
     sys_config = cfg['nodes']['node']['sys.config']
@@ -143,29 +142,17 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         app_desc_file=open(app_desc_file_path, 'r').read(),
         gen_dev_args=json.dumps({'appmock': cfg}))
 
-    if dns is None:
-        container = docker.run(
-            image=args.image,
-            hostname=hostname,
-            detach=True,
-            interactive=True,
-            tty=True,
-            workdir='/root/build',
-            name='{0}_{1}'.format(name, uid),
-            volumes=[(args.bin, '/root/build', 'ro')],
-            command=command)
-    else:
-        container = docker.run(
-            image=args.image,
-            hostname=hostname,
-            detach=True,
-            interactive=True,
-            tty=True,
-            workdir='/root/build',
-            name='{0}_{1}'.format(name, uid),
-            volumes=[(args.bin, '/root/build', 'ro')],
-            dns=[dns],
-            command=command)
+    container = docker.run(
+        image=args.image,
+        hostname=hostname,
+        detach=True,
+        interactive=True,
+        tty=True,
+        workdir='/root/build',
+        name='{0}_{1}'.format(name, uid),
+        volumes=[(args.bin, '/root/build', 'ro')],
+        dns=[dns],
+        command=command)
 
     output['docker_ids'].append(container)
     output['appmock_nodes'].append(node_name)
