@@ -45,21 +45,16 @@
 %%--------------------------------------------------------------------
 -spec initialize(FilePath :: string()) -> ok | error.
 initialize(FilePath) ->
-    try
-        % Initialize an ETS table to store states and counters of certain stubs
-        ets:new(?MAPPINGS_ETS, [set, named_table, public]),
-        % Insert a tuple in ETS which will keep track of all started cowboy listeners
-        ets:insert(?MAPPINGS_ETS, {?LISTENERS_KEY, []}),
-        % Insert a tuple in ETS which will remember the history of requests
-        ets:insert(?MAPPINGS_ETS, {?HISTORY_KEY, []}),
-        DescriptionModule = load_description_module(FilePath),
-        start_remote_control_listener(),
-        start_listeners_for_mappings(DescriptionModule),
-        ok
-    catch T:M ->
-        ?error_stacktrace("Cannot initialize appmock application - ~p:~p", [T, M]),
-        error
-    end.
+    % Initialize an ETS table to store states and counters of certain stubs
+    ets:new(?MAPPINGS_ETS, [set, named_table, public]),
+    % Insert a tuple in ETS which will keep track of all started cowboy listeners
+    ets:insert(?MAPPINGS_ETS, {?LISTENERS_KEY, []}),
+    % Insert a tuple in ETS which will remember the history of requests
+    ets:insert(?MAPPINGS_ETS, {?HISTORY_KEY, []}),
+    DescriptionModule = load_description_module(FilePath),
+    start_remote_control_listener(),
+    start_listeners_for_mappings(DescriptionModule),
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -86,7 +81,7 @@ terminate() ->
 %% If the endpoint had a responding function defined, the state is set to the state returned by the function.
 %% @end
 %%--------------------------------------------------------------------
--spec produce_mock_resp(Req :: term(), ETSKey :: {Port :: integer(), Path :: binary()}) -> ok.
+-spec produce_mock_resp(Req :: cowboy_req:req(), ETSKey :: {Port :: integer(), Path :: binary()}) -> ok.
 produce_mock_resp(Req, ETSKey) ->
     % Append the request to history
     [{?HISTORY_KEY, History}] = ets:lookup(?MAPPINGS_ETS, ?HISTORY_KEY),
@@ -127,7 +122,7 @@ produce_mock_resp(Req, ETSKey) ->
 %% Returned body is encoded to JSON.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_mock(Req :: term()) -> {ok, term()}.
+-spec verify_mock(Req :: cowboy_req:req()) -> {ok, term()}.
 verify_mock(Req) ->
     {ok, JSONBody, _} = cowboy_req:body(Req),
     Body = appmock_utils:decode_from_json(JSONBody),
@@ -154,7 +149,7 @@ verify_mock(Req) ->
 %% Returned body is encoded to JSON.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_all_mocks(Req :: term()) -> {ok, term()}.
+-spec verify_all_mocks(Req :: cowboy_req:req()) -> {ok, term()}.
 verify_all_mocks(Req) ->
     {ok, JSONBody, _} = cowboy_req:body(Req),
     BodyStruct = appmock_utils:decode_from_json(JSONBody),

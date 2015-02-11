@@ -23,7 +23,7 @@
 %% Cowboy callback, called to initialize the state of the handler.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Type :: term(), Req :: term(), [ETSKey]) -> {ok, term(), [ETSKey]} when ETSKey :: {Port :: integer(), Path :: binary()}.
+-spec init(Type :: term(), Req :: cowboy_req:req(), [ETSKey]) -> {ok, term(), [ETSKey]} when ETSKey :: {Port :: integer(), Path :: binary()}.
 init(_Type, Req, [ETSKey]) ->
     {ok, Req, [ETSKey]}.
 
@@ -34,7 +34,7 @@ init(_Type, Req, [ETSKey]) ->
 %% Handles requests to mocked endpoints by delegating them to appmock_logic.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Req :: term(), [ETSKey]) -> {ok, term(), [ETSKey]} when ETSKey :: {Port :: integer(), Path :: binary()}.
+-spec handle(Req :: cowboy_req:req(), [ETSKey]) -> {ok, term(), [ETSKey]} when ETSKey :: {Port :: integer(), Path :: binary()}.
 handle(Req, [ETSKey]) ->
     {ok, NewReq} =
         try
@@ -45,7 +45,7 @@ handle(Req, [ETSKey]) ->
             ?error("Error in mock_resp_handler. Path: ~p. Port: ~p. ~p:~p.~nStacktrace: ~p",
                 [Path, Port, T, M, Stacktrace]),
             Error = gui_str:format_bin("500 Internal server error - make sure that your description file does not " ++
-            "contain errors.~nType:       ~p~nMessage:    ~p~nStacktrace: ~p", [T, M, Stacktrace]),
+            "contain errors.~n-----------------~nType:       ~p~nMessage:    ~p~nStacktrace: ~p", [T, M, Stacktrace]),
             Req2 = cowboy_req:set_resp_body(Error, Req),
             Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"text/plain">>, Req2),
             {ok, _ErrorReq} = cowboy_req:reply(500, Req3)
@@ -58,6 +58,6 @@ handle(Req, [ETSKey]) ->
 %% Cowboy callback, called to perform cleanup after the request is handled.
 %% @end
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), Req :: term(), State :: term()) -> ok.
+-spec terminate(Reason :: term(), Req :: cowboy_req:req(), State :: term()) -> ok.
 terminate(_Reason, _Req, _State) ->
     ok.
