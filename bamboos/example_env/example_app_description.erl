@@ -13,7 +13,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(example_app_description).
--behaviour(mock_app_description).
+-behaviour(mock_app_description_behaviour).
 
 -include("appmock.hrl").
 -include_lib("ctool/include/logging.hrl").

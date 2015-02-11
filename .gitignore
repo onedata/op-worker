@@ -4,3 +4,6 @@
 rel/appmock/
 ebin/
 deps/*/
+
+*.pyc
+*.beam

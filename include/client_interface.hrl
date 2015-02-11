@@ -63,10 +63,13 @@
 % Produces an error message if verification fails (server side).
 -define(VERIFY_MOCK_PACK_ERROR(_Number),
     [{<<"result">>, <<"error">>}, {<<"number">>, _Number}]).
-% Retrieves the error details from verify_mock error (actual number of requests) (client side).
+% Produces an error message if the endpoint requested to be verified does not exis (server side).
+-define(VERIFY_MOCK_PACK_ERROR_WRONG_ENDPOINT,
+    [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}]).
+% Retrieves the error details from verify_mock error (client side).
 -define(VERIFY_MOCK_UNPACK_ERROR(_RespBody),
-    begin
-        [{<<"result">>, <<"error">>}, {<<"number">>, _Number}] = _RespBody,
-        _Number
+    case _RespBody of
+        [{<<"result">>, <<"error">>}, {<<"number">>, _Number}] -> {error, _Number};
+        [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}] -> {error, wrong_endpoint}
     end
 ).

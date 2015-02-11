@@ -31,7 +31,7 @@
     % cowboy_router compatible path on which requests will be accepted
     path = "/" :: string(),
     % response can be:
-    % 1) explicit #mock_resp record
+    % 1) explicit #mock_resp record, will be returned every time the endpoint is used
     % 2) a list of #mock_resp records that will be returned in given sequence, cyclically
     % 3) a 2 argument function:
     %       fun(Req, State) -> {#mock_resp{}, NewState}

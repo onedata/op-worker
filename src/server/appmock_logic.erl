@@ -95,16 +95,19 @@ produce_mock_resp(Req, ETSKey) ->
     % Get the response term and current state by {Port, Path} key
     [{ETSKey, MappingState}] = ets:lookup(?MAPPINGS_ETS, ETSKey),
     ets:delete_object(?MAPPINGS_ETS, {ETSKey, MappingState}),
-    #mapping_state{response = ResponseField, state = State} = MappingState,
-    % Get response and new state - either directly or by evaluating a fun
+    #mapping_state{response = ResponseField, state = State, counter = Counter} = MappingState,
+    % Get response and new state - either directly, cyclically from a list or by evaluating a fun
     {Response, NewState} = case ResponseField of
                                #mock_resp{} ->
                                    {ResponseField, State};
+                               RespList when is_list(RespList) ->
+                                   CurrentResp = lists:nth((Counter rem length(RespList)) + 1, RespList),
+                                   {CurrentResp, State};
                                Fun when is_function(Fun, 2) ->
                                    {_Response, _NewState} = Fun(Req, State)
                            end,
     % Put new state in the ETS
-    ets:insert(?MAPPINGS_ETS, {ETSKey, MappingState#mapping_state{state = NewState}}),
+    ets:insert(?MAPPINGS_ETS, {ETSKey, MappingState#mapping_state{state = NewState, counter = Counter + 1}}),
     #mock_resp{code = Code, body = Body, content_type = CType, headers = Headers} = Response,
     {Port, Path} = ETSKey,
     ?debug("Got request at :~p~s~nResponding~n  Code: ~p~n  Headers: ~p~n  Body: ~s", [Port, Path, Code, Headers, Body]),
@@ -124,21 +127,19 @@ verify_mock(Req) ->
     {ok, JSONBody, _} = cowboy_req:body(Req),
     Body = appmock_utils:decode_from_json(JSONBody),
     {Port, Path, Number} = ?VERIFY_MOCK_UNPACK_REQUEST(Body),
-    [{?HISTORY_KEY, History}] = ets:lookup(?MAPPINGS_ETS, ?HISTORY_KEY),
-    ActualNumber = lists:foldl(
-        fun({HPort, HPath}, Acc) ->
-            case {HPort, HPath} of
-                {Port, Path} -> Acc + 1;
-                _ -> Acc
-            end
-        end, 0, History),
-    Reply = case ActualNumber of
-                Number ->
-                    appmock_utils:encode_to_json(?OK_RESULT);
-                _ ->
-                    appmock_utils:encode_to_json(?VERIFY_MOCK_PACK_ERROR(ActualNumber))
-            end,
-    {ok, _NewReq} = cowboy_req:reply(200, [{<<"content-type">>, <<"application/json">>}], Reply, Req).
+    ReplyTerm = case ets:lookup(?MAPPINGS_ETS, {Port, Path}) of
+                    [] ->
+                        ?VERIFY_MOCK_PACK_ERROR_WRONG_ENDPOINT;
+                    [{{Port, Path}, #mapping_state{counter = ActualNumber}}] ->
+                        case ActualNumber of
+                            Number ->
+                                ?OK_RESULT;
+                            _ ->
+                                ?VERIFY_MOCK_PACK_ERROR(ActualNumber)
+                        end
+                end,
+    {ok, _NewReq} = cowboy_req:reply(200, [{<<"content-type">>, <<"application/json">>}],
+        appmock_utils:encode_to_json(ReplyTerm), Req).
 
 
 %%--------------------------------------------------------------------

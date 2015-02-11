@@ -20,6 +20,8 @@
 -record(mapping_state, {
     response = #mock_resp{} :: #mock_resp{} | function(),
     % Used to remember state between requests on the same stub
-    state = []
+    state = [],
+    % Counts number of requests to certain endpoint
+    counter = 0
 }).
 

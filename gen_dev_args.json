@@ -11,7 +11,7 @@
                     "setcookie": "appmock"
                 },
                 "sys.config": {
-                    "app_description_file": "example_app_description.erl"
+                    "app_description_file": "./example_app_description.erl"
                 }
             }
         }

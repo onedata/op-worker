@@ -12,7 +12,7 @@
 %%% and will be compiled and loaded dynamically.
 %%% @end
 %%%-------------------------------------------------------------------
--module(mock_app_description).
+-module(mock_app_description_behaviour).
 
 -include("appmock.hrl").
 

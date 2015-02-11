@@ -10,7 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(example_app_description).
--behaviour(mock_app_description).
+-behaviour(mock_app_description_behaviour).
 
 -include("appmock.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -20,7 +20,11 @@
 response_mocks() -> [
     #mock_resp_mapping{port = 8080, path = <<"/test1">>, response = #mock_resp{body = <<"this is test1 endpoint">>}},
 
-    #mock_resp_mapping{port = 8080, path = <<"/test2">>, response = #mock_resp{body = <<"this is test2 endpoint">>}},
+    #mock_resp_mapping{port = 8080, path = <<"/test2">>, response = [
+        #mock_resp{body = <<"lorem ipsum">>},
+        #mock_resp{body = <<"dolor sit amet,">>},
+        #mock_resp{body = <<"consectetur adipiscing elit.">>}
+    ]},
 
     #mock_resp_mapping{port = 9090, path = <<"/test_with_state">>,
         response = fun(_Req, State) ->

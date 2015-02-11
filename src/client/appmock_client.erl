@@ -41,13 +41,14 @@ verify_mock(Hostname, Port, Path, ExpectedCalls) ->
         {200, _, RespBodyJSON} = appmock_utils:https_request(Hostname, RemoteControlPort,
             <<?VERIFY_MOCK_PATH>>, post, [], JSON),
         RespBody = appmock_utils:decode_from_json(RespBodyJSON),
-        ?dump(RespBody),
         case RespBody of
             ?OK_RESULT ->
                 ok;
             _ ->
-                Number = ?VERIFY_MOCK_UNPACK_ERROR(RespBody),
-                {different, Number}
+                case ?VERIFY_MOCK_UNPACK_ERROR(RespBody) of
+                    {error, wrong_endpoint} -> {error, wrong_endpoint};
+                    {error, Number} when is_integer(Number) -> {different, Number}
+                end
         end
     catch T:M ->
         ?error("Error in verify_mock - ~p:~p", [T, M]),
