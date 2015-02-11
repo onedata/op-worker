@@ -1,26 +1,14 @@
 package one.clproto;
 
 message HandshakeRequest {
-    optional bytes session_id       = 1;
-    optional AuthMethod auth_method = 2;
+    optional bytes session_id = 1;
+    optional Token token      = 2;
 }
 
 message HandshakeResponse {
     required bytes session_id = 1;
 }
 
-message AuthMethod {
-    oneof auth_method {
-        Token token             = 1;
-        Certificate certificate = 2;
-    }
-}
-
 message Token {
   required bytes value = 1;
-}
-
-message Certificate {
-  required bytes client_subject_dn = 1;
-  required bytes client_session_id = 2;
 }
