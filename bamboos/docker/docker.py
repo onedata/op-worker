@@ -21,7 +21,8 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
         cmd.append('-d')
 
     for addr in dns:
-        cmd.extend(['--dns', addr])
+        if addr is not None:
+            cmd.extend(['--dns', addr])
 
     if hostname:
         cmd.extend(['-h', hostname])

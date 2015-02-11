@@ -150,32 +150,18 @@ sed -i 's/-setcookie monster/-setcookie {cookie}/g' /opt/bigcouch/etc/vm.args
     output['docker_ids'] += [bigcouch]
     output['gr_db_nodes'] += ['{0}@{1}'.format(db_name, db_hostname)]
 
-    # Start GR instance
-    if dns is None:
-        gr = docker.run(
-            image=args.image,
-            hostname=gr_hostname,
-            detach=True,
-            interactive=True,
-            tty=True,
-            workdir='/root/build',
-            name=gr_dockername,
-            volumes=[(args.bin, '/root/build', 'ro')],
-            link={db_dockername: db_hostname},
-            command=gr_command)
-    else:
-        gr = docker.run(
-            image=args.image,
-            hostname=gr_hostname,
-            detach=True,
-            interactive=True,
-            tty=True,
-            workdir='/root/build',
-            name=gr_dockername,
-            volumes=[(args.bin, '/root/build', 'ro')],
-            dns=[dns],
-            link={db_dockername: db_hostname},
-            command=gr_command)
+    gr = docker.run(
+        image=args.image,
+        hostname=gr_hostname,
+        detach=True,
+        interactive=True,
+        tty=True,
+        workdir='/root/build',
+        name=gr_dockername,
+        volumes=[(args.bin, '/root/build', 'ro')],
+        dns=[dns],
+        link={db_dockername: db_hostname},
+        command=gr_command)
 
     output['docker_ids'] += [gr]
     output['gr_nodes'] += ['{0}@{1}'.format(gr_name, gr_hostname)]

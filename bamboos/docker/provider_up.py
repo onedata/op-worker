@@ -124,29 +124,17 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 /root/bin/node/bin/oneprovider_node console'''
     command = command.format(gen_dev_args=json.dumps({'oneprovider_node': cfg}))
 
-    if dns is None:
-        container = docker.run(
-            image=args.image,
-            hostname=hostname,
-            detach=True,
-            interactive=True,
-            tty=True,
-            workdir='/root/build',
-            name='{0}_{1}'.format(name, uid),
-            volumes=[(args.bin, '/root/build', 'ro')],
-            command=command)
-    else:
-        container = docker.run(
-            image=args.image,
-            hostname=hostname,
-            detach=True,
-            interactive=True,
-            tty=True,
-            workdir='/root/build',
-            name='{0}_{1}'.format(name, uid),
-            volumes=[(args.bin, '/root/build', 'ro')],
-            dns=[dns],
-            command=command)
+    container = docker.run(
+        image=args.image,
+        hostname=hostname,
+        detach=True,
+        interactive=True,
+        tty=True,
+        workdir='/root/build',
+        name='{0}_{1}'.format(name, uid),
+        volumes=[(args.bin, '/root/build', 'ro')],
+        dns=[dns],
+        command=command)
 
     output['docker_ids'].append(container)
     output['op_{type}_nodes'.format(type=node_type)].append(node_name)
