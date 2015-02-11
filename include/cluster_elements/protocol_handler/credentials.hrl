@@ -13,8 +13,6 @@
 -ifndef(CREDENTIALS_HRL).
 -define(CREDENTIALS_HRL, 1).
 
--export_type([session_id/0]).
-
 -type session_id() :: binary().
 
 -record(credentials, {

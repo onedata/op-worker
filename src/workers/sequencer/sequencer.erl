@@ -16,7 +16,7 @@
 
 -behaviour(gen_server).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/communication_messages.hrl").
@@ -45,7 +45,7 @@
     seq_num = 1 :: non_neg_integer(),
     seq_num_ack = 0 :: non_neg_integer(),
     msg_id :: integer(),
-    msgs = #{} :: maps:new(),
+    msgs = #{} :: map(),
     msgs_ack_win :: non_neg_integer(),
     time_ack_win :: non_neg_integer()
 }).
@@ -244,6 +244,7 @@ send_msg(Msg, #state{seq_num = SeqNum} = State) ->
     State#state{seq_num = SeqNum + 1}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Sends acknowledgement to sequencer manager for last forwarded message.
 %% @end

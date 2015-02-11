@@ -37,7 +37,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, State :: term()} | {error, Error :: term()}.
+    Result :: {ok, State :: term()} | {error, Reason :: term()}.
 init(_Args) ->
     {ok, #state{}}.
 
@@ -49,9 +49,10 @@ init(_Args) ->
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck | {event, Event :: event()}
     | {subscription, Subscription :: event_subscription()},
-    Result :: ok | {ok, Response} | {error, Error} | pong,
+    Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
+    {error, Reason},
     Response :: term(),
-    Error :: term().
+    Reason :: term().
 handle(ping, _) ->
     pong;
 

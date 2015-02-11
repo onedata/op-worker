@@ -15,6 +15,7 @@
 -behaviour(ranch_protocol).
 -behaviour(gen_server).
 
+-include("cluster_elements/protocol_handler/credentials.hrl").
 -include_lib("proto_internal/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -33,7 +34,8 @@
     % actual connection state
     socket :: port(),
     transport :: module(),
-    credentials = undefined :: binary()
+    credentials :: #credentials{},
+    sequencer_manager :: pid()
 }).
 
 -define(TIMEOUT, timer:minutes(1)).
@@ -66,7 +68,7 @@ cast(Pid, Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(Ref :: atom(), Socket :: term(), Transport :: atom(), Opts :: list()) ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+    {ok, Pid :: pid()}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
 
@@ -152,32 +154,34 @@ handle_cast(_Request, State) ->
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_info(Info :: timeout() | term(), State :: #sock_state{}) ->
+-spec handle_info(Info :: timeout() | {Ok :: atom(), Socket :: port(),
+    Data :: binary()} | term(), State :: #sock_state{}) ->
     {noreply, NewState :: #sock_state{}} |
     {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, transport = Transport, ok = Ok, credentials = Cred}) ->
+handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket,
+    transport = Transport, ok = Ok, credentials = Cred, sequencer_manager = SeqMan}) ->
     activate_socket_once(Socket, Transport),
     case serializator:deserialize_client_message(Data, Cred) of
         {ok, Msg} when Cred == undefined -> % handle handshake message
             case client_auth:handle_handshake(Msg) of
                 {ok, {NewCredentials, Response}} ->
                     send_server_message(Socket, Transport, Response),
-                    {noreply, State#sock_state{credentials = NewCredentials}, ?TIMEOUT};
-                Error ->
-                    ?warning("Handshake ~p, error ~p", [Msg, Error]),
-                    {stop, Error, State}
+                    {noreply, State#sock_state{credentials = NewCredentials}, ?TIMEOUT}
+%%                 Error ->
+%%                     ?warning("Handshake ~p, error ~p", [Msg, Error]),
+%%                     {stop, Error, State}
             end;
         {ok, Msg} ->
-            case router:preroute_message(Msg) of
+            case router:preroute_message(SeqMan, Msg) of
                 ok ->
-                    {noreply, State, ?TIMEOUT};
-                {_, Response = #server_message{}} ->
-                    send_server_message(Socket, Transport, Response),
-                    {noreply, State, ?TIMEOUT};
-                {error, Reason} ->
-                    ?warning("Message ~p handling error: ~p", [Msg, Reason]),
-                    {stop, {error, Reason}, State}
+                    {noreply, State, ?TIMEOUT}
+%%                 {_, Response = #server_message{}} ->
+%%                     send_server_message(Socket, Transport, Response),
+%%                     {noreply, State, ?TIMEOUT};
+%%                 {error, Reason} ->
+%%                     ?warning("Message ~p handling error: ~p", [Msg, Reason]),
+%%                     {stop, {error, Reason}, State}
             end;
         Error ->
             ?warning("Connection ~p message decoding error: ~p", [Socket, Error]),

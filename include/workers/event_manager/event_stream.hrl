@@ -12,9 +12,6 @@
 -ifndef(EVENT_STREAM_HRL).
 -define(EVENT_STREAM_HRL, 1).
 
--export_type([event_stream/0, admission_rule/0, aggregation_rule/0,
-    emission_rule/0, event_handler/0]).
-
 -record(event_stream, {
     admission_rule :: admission_rule(),
     aggregation_rule :: aggregation_rule(),

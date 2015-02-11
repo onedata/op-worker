@@ -35,17 +35,16 @@ init_bucket(_Bucket, Models) ->
         end, Models),
     ok.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback save/2.
 %% @end
 %%--------------------------------------------------------------------
--spec save(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
+-spec save(model_behaviour:model_config(), datastore:document()) ->
+    {ok, datastore:key()} | datastore:generic_error().
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     true = ets:insert(table_name(ModelConfig), {Key, Value}),
     {ok, Key}.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -66,26 +65,26 @@ update(#model_config{} = ModelConfig, Key, Diff) when is_map(Diff) ->
             {ok, Key}
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback create/2.
 %% @end
 %%--------------------------------------------------------------------
--spec create(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
+-spec create(model_behaviour:model_config(), datastore:document()) ->
+    {ok, datastore:key()} | datastore:create_error().
 create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     case ets:insert_new(table_name(ModelConfig), {Key, Value}) of
         false -> {error, already_exists};
-        true  -> {ok, Key}
+        true -> {ok, Key}
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(model_behaviour:model_config(), datastore:document()) ->
+    {ok, datastore:document()} | datastore:get_error().
 get(#model_config{} = ModelConfig, Key) ->
     case ets:lookup(table_name(ModelConfig), Key) of
         [{_, Value}] ->
@@ -94,44 +93,42 @@ get(#model_config{} = ModelConfig, Key) ->
             {error, {not_found, missing_or_deleted}}
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(model_behaviour:model_config(), datastore:key()) -> ok | datastore:generic_error().
+-spec delete(model_behaviour:model_config(), datastore:key()) ->
+    ok | datastore:generic_error().
 delete(#model_config{} = ModelConfig, Key) ->
     true = ets:delete(table_name(ModelConfig), Key),
     ok.
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback exists/2.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(model_behaviour:model_config(), datastore:key()) -> true | false | datastore:generic_error().
+-spec exists(model_behaviour:model_config(), datastore:key()) ->
+    true | false | datastore:generic_error().
 exists(#model_config{} = ModelConfig, Key) ->
     ets:member(table_name(ModelConfig), Key).
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback healthcheck/1.
 %% @end
 %%--------------------------------------------------------------------
--spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.
+-spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
 healthcheck(_) ->
     ok.
-
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Gets ETS table name for given model.
 %% @end

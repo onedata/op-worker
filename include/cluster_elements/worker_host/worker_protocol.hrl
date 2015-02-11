@@ -13,7 +13,7 @@
 -ifndef(WORKER_PROTOCOL_HRL).
 -define(WORKER_PROTOCOL_HRL, 1).
 
--type process_ref() :: {proc, pid()} | {gen_serv, pid() | atom()}.
+-type process_ref() :: undefined | {proc, pid()} | {gen_serv, pid() | atom()}.
 
 -record(worker_request, {
     id = undefined :: term(),

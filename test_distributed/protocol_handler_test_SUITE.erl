@@ -11,13 +11,12 @@
 -module(protocol_handler_test_SUITE).
 -author("Tomasz Lichon").
 
--include("test_utils.hrl").
--include("registered_names.hrl").
 -include("proto/oneclient/messages.hrl").
--include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/event_messages.hrl").
--include_lib("ctool/include/global_registry/gr_users.hrl").
+-include("proto_internal/oneclient/client_messages.hrl").
+-include("proto_internal/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% export for ct
@@ -62,21 +61,18 @@ protobuf_msg_test(Config) ->
     % given
     ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
-    ok = rpc:call(Worker1, meck, new, [router, [passthrough, non_strict, unstick, no_link]]),
-    ok = rpc:call(Worker1, meck, expect, [router, preroute_message,
-        fun(
-            #client_message{
-                credentials = #credentials{},
-                client_message = #read_event{}
-            }
-        ) ->
-            ok
-        end]),
+    test_utils:mock_new(Worker1, router),
+    test_utils:mock_expect(Worker1, router, preroute_message, fun(
+        #client_message{
+            credentials = #credentials{},
+            client_message = #read_event{}
+        }) -> ok
+    end),
     Msg = #'ClientMessage'{
         message_id = 0,
         client_message =
         {event, #'Event'{event =
-            {read_event, #'ReadEvent'{counter = 1, file_id = <<"id">>, size=1, blocks = []}}}}
+        {read_event, #'ReadEvent'{counter = 1, file_id = <<"id">>, size = 1, blocks = []}}}}
     },
     RawMsg = client_messages:encode_msg(Msg),
 
@@ -85,7 +81,7 @@ protobuf_msg_test(Config) ->
     ok = ssl:send(Sock, RawMsg),
 
     %then
-    ?assertEqual(true, rpc:call(Worker1, meck, validate, [router])),
+    test_utils:mock_validate(Worker1, router),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ssl:stop().
 
@@ -93,7 +89,7 @@ protobuf_msg_test(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_suite(Config) ->
-    ?TRY_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
@@ -114,18 +110,10 @@ connect_via_token(Node) ->
     ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     %then
-    Data = receive_msg(),
-    ?assertNotEqual(timeout, Data),
+    ReceiveAnswer = test_utils:receive_any(timer:seconds(5)),
+    ?assertMatch({ok, _}, ReceiveAnswer),
+    {ssl, _, Data} = ReceiveAnswer,
     ?assert(is_binary(Data)),
     ServerMsg = server_messages:decode_msg(Data, 'ServerMessage'),
     ?assertMatch(#'ServerMessage'{server_message = {handshake_response, #'HandshakeResponse'{}}}, ServerMsg),
-    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
-    {ok, Sock}.
-
-receive_msg() ->
-    receive
-        {ssl, _, Msg} -> Msg
-    after
-        timer:seconds(5) -> timeout
-    end.
-
+    ?assertMatch({ok, _}, ssl:connection_info(Sock)).

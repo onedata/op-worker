@@ -14,6 +14,5 @@
 
 %% Includes from cowboy
 -type req() :: cowboy_req:req().
--export_type([req/0]).
 
 -endif.

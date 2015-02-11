@@ -11,9 +11,9 @@
 -module(datastore_test_SUITE).
 -author("Rafal Slota").
 
--include("test_utils.hrl").
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 -include("workers/datastore/datastore_models.hrl").
@@ -126,13 +126,12 @@ global_cache_atomic_update_test(Config) ->
 
     ok.
 
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TRY_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
@@ -164,12 +163,10 @@ local_access_only(Node, Level) ->
         ?call_store(Node, get, [Level,
             sample_model, Key])),
 
-
     Pid = self(),
     ?assertMatch({ok, Key},
         ?call_store(Node, update, [Level,
             sample_model, Key, #{field2 => Pid}])),
-
 
     ?assertMatch({ok, #document{value = #sample_model{field2 = Pid}}},
         ?call_store(Node, get, [Level,

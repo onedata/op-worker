@@ -15,8 +15,6 @@
 
 -behaviour(supervisor).
 
--include("registered_names.hrl").
-
 %% API
 -export([start_link/0, start_sequencer_sup/1, start_sequencer_manager/3]).
 
@@ -42,7 +40,7 @@ start_link() ->
 %% supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_sequencer_sup(SeqManSup :: supervisor:sup_ref()) ->
+-spec start_sequencer_sup(SeqManSup :: pid()) ->
     supervisor:startchild_ret().
 start_sequencer_sup(SeqencerManagerSup) ->
     ChildSpec = sequencer_sup_spec(),
@@ -54,8 +52,8 @@ start_sequencer_sup(SeqencerManagerSup) ->
 %% supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_sequencer_manager(SeqManSup :: supervisor:sup_ref(),
-    SeqSup :: supervisor:sup_ref(), Connection :: pid()) ->
+-spec start_sequencer_manager(SeqManSup :: pid(),
+    SeqSup :: pid(), Connection :: pid()) ->
     supervisor:startchild_ret().
 start_sequencer_manager(SeqencerManagerSup, SeqSup, Connection) ->
     ChildSpec = sequencer_manager_spec(SeqSup, Connection),
@@ -80,8 +78,7 @@ start_sequencer_manager(SeqencerManagerSup, SeqSup, Connection) ->
         MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
         [ChildSpec :: supervisor:child_spec()]
     }} |
-    ignore |
-    {error, Reason :: term()}.
+    ignore.
 init([]) ->
     RestartStrategy = one_for_all,
     MaxR = 3,
@@ -100,11 +97,11 @@ init([]) ->
 %%--------------------------------------------------------------------
 -spec sequencer_sup_spec() -> supervisor:child_spec().
 sequencer_sup_spec() ->
-    ChildId = Module = sequencer_sup,
+    Id = Module = sequencer_sup,
     Restart = permanent,
-    ExitTimeout = timer:seconds(10),
+    Shutdown = timer:seconds(10),
     Type = supervisor,
-    {ChildId, {Module, start_link, []}, Restart, ExitTimeout, Type, [Module]}.
+    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -112,12 +109,12 @@ sequencer_sup_spec() ->
 %% Creates a supervisor child_spec for a sequencer manager child.
 %% @end
 %%--------------------------------------------------------------------
--spec sequencer_manager_spec(SeqSup :: supervisor:sup_ref(),
+-spec sequencer_manager_spec(SeqSup :: pid(),
     Connection :: pid()) -> supervisor:child_spec().
 sequencer_manager_spec(SeqSup, Connection) ->
-    ChildId = Module = sequencer_manager,
+    Id = Module = sequencer_manager,
     Restart = permanent,
-    ExitTimeout = timer:seconds(10),
+    Shutdown = timer:seconds(10),
     Type = worker,
-    {ChildId, {Module, start_link, [SeqSup, Connection]},
-        Restart, ExitTimeout, Type, [Module]}.
+    {Id, {Module, start_link, [SeqSup, Connection]},
+        Restart, Shutdown, Type, [Module]}.

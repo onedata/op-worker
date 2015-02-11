@@ -51,13 +51,12 @@ start_link(Name, Args) ->
 %% specifications.
 %% @end
 %%--------------------------------------------------------------------
--spec(init(Args :: term()) ->
+-spec init(Args :: term()) ->
     {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
         MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
         [ChildSpec :: supervisor:child_spec()]
     }} |
-    ignore |
-    {error, Reason :: term()}).
+    ignore.
 init(Args) ->
     DefaultRestartStrategy = one_for_one,
     DefaultMaxR = 1000,

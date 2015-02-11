@@ -15,7 +15,7 @@
 -include("proto_internal/oneclient/client_messages.hrl").
 
 %% API
--export([preroute_message/1, route_message/1]).
+-export([preroute_message/2, route_message/1]).
 
 %%%===================================================================
 %%% API
@@ -26,12 +26,12 @@
 %% Check if message is sequential, if so - proxy it throught sequencer
 %% @end
 %%--------------------------------------------------------------------
--spec preroute_message(Msg :: #client_message{}) -> ok | {error, term()}.
-preroute_message(#client_message{seq_num = Seq} = Msg) when Seq =/= undefined ->
+-spec preroute_message(SeqMan :: pid(), Msg :: #client_message{}) ->
+    ok | {error, term()}.
+preroute_message(_SeqMan, #client_message{seq_num = Seq} = Msg) when Seq =/= undefined ->
     route_message(Msg);
-preroute_message(_Msg) ->
-    % todo integrate with sequencer
-    ok.
+preroute_message(SeqMan, Msg) ->
+    gen_server:cast(SeqMan, Msg).
 
 %%--------------------------------------------------------------------
 %% @doc

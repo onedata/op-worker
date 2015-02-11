@@ -24,7 +24,6 @@
 
 %% API
 -export([start_sequencer_manager_sup/0, stop_sequencer_manager_sup/2]).
--export([create_or_get_sequencer_manager/2, remove_sequencer_manager/1]).
 -export([supervisor_spec/0, supervisor_children_spec/0]).
 
 -define(SEQUENCER_WORKER, sequencer_worker).
@@ -40,7 +39,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, State :: term()} | {error, Error :: term()}.
+    Result :: {ok, State :: term()} | {error, Reason :: term()}.
 init(_Args) ->
     {ok, []}.
 
@@ -50,35 +49,24 @@ init(_Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
-    Request :: ping | healthcheck,
-    Result :: ok | {ok, Response} | {error, Error} | pong,
+    Request :: ping | healthcheck |
+    {get_or_create_sequencer_manager, SessionId :: session_id(), Connection :: pid()} |
+    {remove_sequencer_manager, SessionId :: session_id()},
+    Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
+    {error, Reason},
     Response :: term(),
-    Error :: term().
+    Reason :: term().
 handle(ping, _) ->
     pong;
 
 handle(healthcheck, _) ->
     ok;
 
-handle({create_or_get_sequencer_manager, SessionId, Connection}, _) ->
-    case get_sequencer_manager(SessionId) of
-        {ok, #sequencer_manager_model{pid = SeqMan}} ->
-            ok = gen_server:call(SeqMan, {add_connection, Connection}),
-            {ok, SeqMan};
-        {error, {not_found, _}} ->
-            create_sequencer_manager(SessionId, Connection);
-        {error, Reason} ->
-            {error, Reason}
-    end;
+handle({get_or_create_sequencer_manager, SessionId, Connection}, _) ->
+    get_or_create_sequencer_manager(SessionId, Connection);
 
 handle({remove_sequencer_manager, SessionId}, _) ->
-    case get_sequencer_manager(SessionId) of
-        {ok, #sequencer_manager_model{node = Node, sup = SeqManSup}} ->
-            ok = sequencer_worker:stop_sequencer_manager_sup(Node, SeqManSup),
-            sequencer_manager_model:delete(SessionId);
-        {error, Reason} ->
-            {error, Reason}
-    end;
+    remove_sequencer_manager(SessionId);
 
 handle(_Request, _) ->
     ?log_bad_request(_Request).
@@ -97,28 +85,6 @@ cleanup() ->
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns pid of sequencer manager for FUSE client. If sequencer manager
-%% does not exist it is instantiated.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_get_sequencer_manager(SessionId :: session_id(), Connection :: pid()) ->
-    {ok, Pid :: pid()} | {error, Reason :: term()}.
-create_or_get_sequencer_manager(SessionId, Connection) ->
-    worker_proxy:call(?SEQUENCER_WORKER,
-        {create_or_get_sequencer_manager, SessionId, Connection}).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes sequencer manager for FUSE client.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_sequencer_manager(SessionId :: session_id()) ->
-    ok | {error, Reason :: term()}.
-remove_sequencer_manager(SessionId) ->
-    worker_proxy:call(?SEQUENCER_WORKER, {remove_sequencer_manager, SessionId}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -158,17 +124,37 @@ supervisor_spec() ->
 %% Creates spec for a sequencer worker supervisor child.
 %% @end
 %%--------------------------------------------------------------------
--spec supervisor_children_spec() -> supervisor:child_spec().
+-spec supervisor_children_spec() -> [supervisor:child_spec()].
 supervisor_children_spec() ->
-    ChildId = Module = sequencer_manager_sup,
+    Id = Module = sequencer_manager_sup,
     Restart = permanent,
-    ExitTimeout = timer:seconds(10),
+    Shutdown = timer:seconds(10),
     Type = supervisor,
-    [{ChildId, {Module, start_link, []}, Restart, ExitTimeout, Type, [Module]}].
+    [{Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}].
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns pid of sequencer manager for FUSE client. If sequencer manager
+%% does not exist it is instantiated.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_create_sequencer_manager(SessionId :: session_id(), Connection :: pid()) ->
+    {ok, Pid :: pid()} | {error, Reason :: term()}.
+get_or_create_sequencer_manager(SessionId, Connection) ->
+    case get_sequencer_manager(SessionId) of
+        {ok, #sequencer_manager_model{pid = SeqMan}} ->
+            ok = gen_server:call(SeqMan, {add_connection, Connection}),
+            {ok, SeqMan};
+        {error, {not_found, _}} ->
+            create_sequencer_manager(SessionId, Connection);
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -206,7 +192,24 @@ create_sequencer_manager(SessionId, Connection) ->
             {ok, SeqMan};
         {error, already_exists} ->
             ok = sequencer_worker:stop_sequencer_manager_sup(Node, SeqManSup),
-            create_or_get_sequencer_manager(SessionId, Connection);
+            get_or_create_sequencer_manager(SessionId, Connection);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes sequencer manager for FUSE client.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_sequencer_manager(SessionId :: session_id()) ->
+    ok | {error, Reason :: term()}.
+remove_sequencer_manager(SessionId) ->
+    case get_sequencer_manager(SessionId) of
+        {ok, #sequencer_manager_model{node = Node, sup = SeqManSup}} ->
+            ok = sequencer_worker:stop_sequencer_manager_sup(Node, SeqManSup),
+            sequencer_manager_model:delete(SessionId);
         {error, Reason} ->
             {error, Reason}
     end.

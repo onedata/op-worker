@@ -22,6 +22,8 @@
 -export([init/0, terminate/0, get_worker_node/1, get_worker_node/2,
     get_worker_nodes/1, update_workers/1]).
 
+-export_type([selection_type/0, worker_name/0, worker_ref/0]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -51,7 +53,7 @@ terminate() ->
 %% @equiv get_worker_node(WorkerName, any).
 %% @end
 %%--------------------------------------------------------------------
--spec get_worker_node(WorkerName :: atom()) -> {ok, node()} | {error, term()}.
+-spec get_worker_node(WorkerName :: worker_name()) -> {ok, node()} | {error, term()}.
 get_worker_node(WorkerName) ->
     get_worker_node(WorkerName, ?DEFAULT_WORKER_SELECTION_TYPE).
 
@@ -61,10 +63,8 @@ get_worker_node(WorkerName) ->
 %% determines selection type.
 %% @end
 %%--------------------------------------------------------------------
--spec get_worker_node(WorkerName :: atom(), SelectionType :: selection_type()) ->
+-spec get_worker_node(WorkerName :: worker_name(), SelectionType :: selection_type()) ->
     {ok, node()} | {error, term()}.
-get_worker_node(_, {node, Node}) ->
-    {ok, Node};
 get_worker_node(WorkerName, random) ->
     get_random_worker_node(WorkerName);
 get_worker_node(WorkerName, prefer_local) ->
@@ -75,7 +75,7 @@ get_worker_node(WorkerName, prefer_local) ->
 %% Chooses all nodes where worker is working.
 %% @end
 %%--------------------------------------------------------------------
--spec get_worker_nodes(WorkerName :: atom()) -> {ok, [node()]}.
+-spec get_worker_nodes(WorkerName :: worker_name()) -> {ok, [node()]}.
 get_worker_nodes(WorkerName) ->
     {_, Nodes} = lists:unzip(ets:lookup(?WORKER_MAP_ETS, WorkerName)),
     {ok, Nodes}.
@@ -86,7 +86,7 @@ get_worker_nodes(WorkerName) ->
 %% Updates ets when new workers list appears.
 %% @end
 %%--------------------------------------------------------------------
--spec update_workers(WorkersList :: [{Node :: node(), WorkerName :: atom()}]) -> ok.
+-spec update_workers(WorkersList :: [{Node :: node(), WorkerName :: worker_name()}]) -> ok.
 update_workers(WorkersList) ->
     WorkersListInverted = lists:map(fun({Node, WorkerName}) ->
         {WorkerName, Node} end, WorkersList),
@@ -103,7 +103,7 @@ update_workers(WorkersList) ->
 %% Chooses one of nodes where worker is working. Prefers local node.
 %% @end
 %%--------------------------------------------------------------------
--spec get_worker_node_prefering_local(WorkerName :: atom()) -> {ok, node()} | {error, term()}.
+-spec get_worker_node_prefering_local(WorkerName :: worker_name()) -> {ok, node()} | {error, term()}.
 get_worker_node_prefering_local(WorkerName) ->
     MyNode = node(),
     case ets:match(?WORKER_MAP_ETS, {WorkerName, MyNode}) of
@@ -117,7 +117,7 @@ get_worker_node_prefering_local(WorkerName) ->
 %% Chooses random node where worker is working
 %% @end
 %%--------------------------------------------------------------------
--spec get_random_worker_node(WorkerName :: atom()) -> {ok, node()} | {error, term()}.
+-spec get_random_worker_node(WorkerName :: worker_name()) -> {ok, node()} | {error, term()}.
 get_random_worker_node(WorkerName) ->
     case ets:lookup(?WORKER_MAP_ETS, WorkerName) of
         [] -> {error, not_found};
@@ -133,7 +133,7 @@ get_random_worker_node(WorkerName) ->
 %% Updates location of given worker (nodes where it is running) in worker map
 %% @end
 %%--------------------------------------------------------------------
--spec update_worker({WorkerName :: atom(), Nodes :: [node()]}) -> ok.
+-spec update_worker({WorkerName :: worker_name(), Nodes :: [node()]}) -> ok.
 update_worker({WorkerName, Nodes}) ->
     case ets:lookup(?WORKER_MAP_ETS, WorkerName) of
         [] ->

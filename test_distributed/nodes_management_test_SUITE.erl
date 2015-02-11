@@ -12,9 +12,9 @@
 -module(nodes_management_test_SUITE).
 -author("Michal Wrzeszcz").
 
--include("test_utils.hrl").
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% export for ct
@@ -46,7 +46,7 @@ ccm_and_worker_test(Config) ->
 %%%===================================================================
 
 init_per_testcase(ccm_and_worker_test, Config) ->
-    ?TRY_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_testcase(ccm_and_worker_test, Config) ->
     test_node_starter:clean_environment(Config).

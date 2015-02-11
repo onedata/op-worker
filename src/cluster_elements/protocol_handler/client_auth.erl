@@ -31,8 +31,8 @@
 %% (cert/token)
 %% @end
 %%--------------------------------------------------------------------
--spec handle_handshake(Message :: binary()) ->
-    {ok, Cred :: #credentials{}} | {error, term()}.
+-spec handle_handshake(Message :: #client_message{}) ->
+    {ok, {Cred :: #credentials{}, #server_message{}}}.
 handle_handshake(#client_message{client_message = #handshake_request{
     session_id = _Id, auth_method = #token{value = Val}}}) ->
     #credentials{session_id = SessionId} = Cred = authenticate_using_token(Val),

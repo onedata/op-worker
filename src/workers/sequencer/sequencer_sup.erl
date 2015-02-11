@@ -15,8 +15,6 @@
 
 -behaviour(supervisor).
 
--include("registered_names.hrl").
-
 %% API
 -export([start_link/0, start_sequencer/3]).
 
@@ -42,7 +40,7 @@ start_link() ->
 %% supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_sequencer(SeqSup :: supervisor:sup_ref(),
+-spec start_sequencer(SeqSup :: pid(),
     SeqMan :: pid(), MsgId :: integer()) ->
     supervisor:startchild_ret().
 start_sequencer(SeqSup, SeqMan, MsgId) ->
@@ -66,8 +64,7 @@ start_sequencer(SeqSup, SeqMan, MsgId) ->
         MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
         [ChildSpec :: supervisor:child_spec()]
     }} |
-    ignore |
-    {error, Reason :: term()}.
+    ignore.
 init([]) ->
     RestartStrategy = simple_one_for_one,
     MaxR = 3,
@@ -86,8 +83,8 @@ init([]) ->
 %%--------------------------------------------------------------------
 -spec sequencer_spec() -> supervisor:child_spec().
 sequencer_spec() ->
-    ChildId = Module = sequencer,
+    Id = Module = sequencer,
     Restart = transient,
-    ExitTimeout = timer:seconds(10),
+    Shutdown = timer:seconds(10),
     Type = worker,
-    {ChildId, {Module, start_link, []}, Restart, ExitTimeout, Type, [Module]}.
+    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.

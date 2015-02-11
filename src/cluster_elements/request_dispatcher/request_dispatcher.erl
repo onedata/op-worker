@@ -14,8 +14,8 @@
 
 -behaviour(gen_server).
 
--include("registered_names.hrl").
 -include("modules_and_args.hrl").
+-include("global_definitions.hrl").
 -include("cluster_elements/request_dispatcher/request_dispatcher_state.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").
@@ -92,12 +92,15 @@ init(_) ->
     | {noreply, NewState, hibernate}
     | {stop, Reason, Reply, NewState}
     | {stop, Reason, NewState},
-    Reply :: term(),
+    Reply :: healthcheck_reponse() | term(),
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
-handle_call(get_state_num, _From, State) ->
-    {reply, State#dispatcher_state.state_num, State};
+handle_call(get_state_num, _From, #dispatcher_state{state_num = StateNum} = State) ->
+    {reply, StateNum, State};
+
+handle_call(healthcheck, _From, #dispatcher_state{state_num = StateNum} = State) ->
+    {reply, {ok, StateNum}, State};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -120,11 +123,6 @@ handle_call(_Request, _From, State) ->
 handle_cast({check_state, NewStateNum}, State) ->
     NewState = check_state(State, NewStateNum),
     {noreply, NewState};
-
-handle_cast({update_state, WorkersList, NewStateNum}, State) ->
-    ?info("Dispatcher state updated, state num: ~p", [NewStateNum]),
-    worker_map:update_workers(WorkersList),
-    {noreply, State#dispatcher_state{state_num = NewStateNum}};
 
 handle_cast(stop, State) ->
     {stop, normal, State};

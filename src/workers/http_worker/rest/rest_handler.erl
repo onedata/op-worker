@@ -36,7 +36,7 @@
 %% now treated as REST module by cowboy.
 %% @end
 %%--------------------------------------------------------------------
--spec init(any(), any(), any()) -> {upgrade, protocol, cowboy_rest, req(), term()}.
+-spec init(term(), term(), term()) -> {upgrade, protocol, cowboy_rest, req(), term()}.
 init(_, Req, Opts) ->
     NewOpts =
         case gsi_handler:get_certs_from_req(?ONEPROXY_REST, Req) of
@@ -118,7 +118,7 @@ content_types_provided(Req, State) ->
 %% functions should be used to process the requests.
 %% @end
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), #state{}) -> {{binary(), atom()}, req(), #state{}}.
+-spec content_types_accepted(req(), #state{}) -> {[{binary(), atom()}], req(), #state{}}.
 content_types_accepted(Req, State) ->
     {[
         {<<"application/cdmi-container">>, put_cdmi_container}

@@ -21,7 +21,7 @@
 
 -behaviour(gen_server).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% This record is used by node_manager (it contains its state).
@@ -121,7 +121,7 @@ init([_Type]) ->
     | {noreply, NewState, hibernate}
     | {stop, Reason, Reply, NewState}
     | {stop, Reason, NewState},
-    Reply :: term(),
+    Reply :: healthcheck_reponse() | term(),
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
@@ -130,6 +130,9 @@ handle_call(get_node_type, _From, State = #node_state{node_type = NodeType}) ->
 
 handle_call(get_state_num, _From, State = #node_state{state_num = StateNum}) ->
     {reply, StateNum, State};
+
+handle_call(healthcheck, _From, State = #node_state{state_num = StateNum}) ->
+    {reply, {ok, StateNum}, State};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -153,7 +156,12 @@ handle_cast(do_heartbeat, State) ->
     {noreply, NewState};
 
 handle_cast({heartbeat_ok, StateNum}, State) ->
-    NewState = heartbeat_ok(StateNum, State),
+    NewState = on_ccm_state_change(StateNum, State),
+    {noreply, NewState};
+
+handle_cast({update_state, NewStateNum}, State) ->
+    ?info("Node manager state updated, state num: ~p", [NewStateNum]),
+    NewState = on_ccm_state_change(NewStateNum, State),
     {noreply, NewState};
 
 handle_cast({dispatcher_up_to_date, DispState}, State) ->
@@ -265,11 +273,11 @@ do_heartbeat(State = #node_state{ccm_con_status = not_connected}) ->
 %% Saves information about ccm connection when ccm answers to its request
 %% @end
 %%--------------------------------------------------------------------
--spec heartbeat_ok(NewStateNum :: integer(), State :: term()) -> #node_state{}.
-heartbeat_ok(NewStateNum, State = #node_state{state_num = NewStateNum, dispatcher_state = NewStateNum}) ->
+-spec on_ccm_state_change(NewStateNum :: integer(), State :: term()) -> #node_state{}.
+on_ccm_state_change(NewStateNum, State = #node_state{state_num = NewStateNum, dispatcher_state = NewStateNum}) ->
     ?debug("heartbeat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
     State;
-heartbeat_ok(NewStateNum, State) ->
+on_ccm_state_change(NewStateNum, State) ->
     ?debug("heartbeat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
     update_dispatcher(NewStateNum),
     State#node_state{state_num = NewStateNum}.

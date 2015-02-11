@@ -12,7 +12,7 @@
 -module(page_404).
 -author("Lukasz Opiola").
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 %% Include common gui hrl from ctool
 -include_lib("ctool/include/gui/common.hrl").
 

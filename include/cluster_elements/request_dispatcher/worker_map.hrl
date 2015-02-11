@@ -14,6 +14,9 @@
 -define(WORKER_MAP_HRL, 1).
 
 -define(DEFAULT_WORKER_SELECTION_TYPE, random).
--type selection_type() :: random | prefer_local | {node, Node :: node()}.
+-type selection_type() :: random | prefer_local.
+-type worker_name() :: atom().
+-type worker_ref() :: worker_name() |
+                      {WorkerName :: worker_name(), Node :: node()}.
 
 -endif.

@@ -36,10 +36,10 @@
 %% @equiv call(WorkerName, Request, ?DEFAULT_REQUEST_TIMEOUT)
 %% @end
 %%--------------------------------------------------------------------
--spec call(WorkerName :: atom(), Request :: term()) ->
+-spec call(WorkerRef :: worker_ref(), Request :: term()) ->
     ok | {ok, term()} | {error, term()}.
-call(WorkerName, Request) ->
-    call(WorkerName, Request, ?DEFAULT_REQUEST_TIMEOUT).
+call(WorkerRef, Request) ->
+    call(WorkerRef, Request, ?DEFAULT_REQUEST_TIMEOUT).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -47,10 +47,10 @@ call(WorkerName, Request) ->
 %% @equiv call(WorkerName, Request, Timeout, ?DEFAULT_WORKER_SELECTION_TYPE)
 %% @end
 %%--------------------------------------------------------------------
--spec call(WorkerName :: atom(), Request :: term(), Timeout :: timeout()) ->
+-spec call(WorkerRef :: worker_ref(), Request :: term(), Timeout :: timeout()) ->
     ok | {ok, term()} | {error, term()}.
-call(WorkerName, Request, Timeout) ->
-    call(WorkerName, Request, Timeout, ?DEFAULT_WORKER_SELECTION_TYPE).
+call(WorkerRef, Request, Timeout) ->
+    call(WorkerRef, Request, Timeout, ?DEFAULT_WORKER_SELECTION_TYPE).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -58,22 +58,23 @@ call(WorkerName, Request, Timeout) ->
 %% algorithm, with given timeout.
 %% @end
 %%--------------------------------------------------------------------
--spec call(WorkerName :: atom(), Request :: term(), Timeout :: timeout(),
+-spec call(WorkerRef :: worker_ref(), Request :: term(), Timeout :: timeout(),
     SelectionType :: selection_type()) -> ok | {ok, term()} | {error, term()}.
-call(WorkerName, Request, Timeout, SelectionType) ->
+call(WorkerRef, Request, Timeout, SelectionType) ->
     MsgId = make_ref(),
-    case worker_map:get_worker_node(WorkerName, SelectionType) of
-        {ok, Node} ->
-            gen_server:cast({WorkerName, Node}, #worker_request{req = Request,
+    case choose_node(WorkerRef, SelectionType) of
+        {ok, Name, Node} ->
+            gen_server:cast({Name, Node}, #worker_request{req = Request,
                 id = MsgId, reply_to = {proc, self()}}),
             receive
                 #worker_answer{id = MsgId, response = Response} -> Response
             after Timeout ->
                 ?error("Worker: ~p, request: ~p exceeded timeout of ~p ms",
-                    [WorkerName, Request, Timeout]),
+                    [WorkerRef, Request, Timeout]),
                 {error, timeout}
             end;
-        Error -> Error
+        Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------
@@ -82,7 +83,7 @@ call(WorkerName, Request, Timeout, SelectionType) ->
 %% @equiv multicall(WorkerName, Request, ?DEFAULT_REQUEST_TIMEOUT)
 %% @end
 %%--------------------------------------------------------------------
--spec multicall(WorkerName :: atom(), Request :: term()) ->
+-spec multicall(WorkerName :: worker_name(), Request :: term()) ->
     [{Node :: node(), ok | {ok, term()} | {error, term()}}].
 multicall(WorkerName, Request) ->
     multicall(WorkerName, Request, ?DEFAULT_REQUEST_TIMEOUT).
@@ -92,23 +93,23 @@ multicall(WorkerName, Request) ->
 %% Synchronously send request to all workers with given timeout.
 %% @end
 %%--------------------------------------------------------------------
--spec multicall(WorkerName :: atom(), Request :: term(), Timeout :: timeout()) ->
+-spec multicall(WorkerName :: worker_name(), Request :: term(), Timeout :: timeout()) ->
     [{Node :: node(), ok | {ok, term()} | {error, term()}}].
 multicall(WorkerName, Request, Timeout) ->
     {ok, Nodes} = worker_map:get_worker_nodes(WorkerName),
     utils:pmap(fun(Node) ->
-        {Node, call(WorkerName, Request, Timeout, {node, Node})}
+        {Node, call({WorkerName, Node}, Request, Timeout)}
     end, Nodes).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Asynchronously send request to worker.
-%% @equiv cast(WorkerName, Request, undefined)
+%% @equiv cast(WorkerRef, Request, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec cast(WorkerName :: atom(), Request :: term()) -> ok | {error, term()}.
-cast(WorkerName, Request) ->
-    cast(WorkerName, Request, undefined).
+-spec cast(WorkerRef :: worker_ref(), Request :: term()) -> ok | {error, term()}.
+cast(WorkerRef, Request) ->
+    cast(WorkerRef, Request, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -117,10 +118,10 @@ cast(WorkerName, Request) ->
 %% @equiv cast(WorkerName, Request, ReplyTo, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec cast(WorkerName :: atom(), Request :: term(), ReplyTo :: {proc, pid()}
-    | {gen_serv, atom() | pid()}) -> ok | {error, term()}.
-cast(WorkerName, Request, ReplyTo) ->
-    cast(WorkerName, Request, ReplyTo, undefined).
+-spec cast(WorkerRef :: worker_ref(), Request :: term(), ReplyTo :: process_ref()) ->
+    ok | {error, term()}.
+cast(WorkerRef, Request, ReplyTo) ->
+    cast(WorkerRef, Request, ReplyTo, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -130,10 +131,10 @@ cast(WorkerName, Request, ReplyTo) ->
 %% @equiv cast(WorkerName, Request, ReplyTo, MsgId, ?DEFAULT_WORKER_SELECTION_TYPE)
 %% @end
 %%--------------------------------------------------------------------
--spec cast(WorkerName :: atom(), Request :: term(), ReplyTo :: {proc, pid()}
-    | {gen_serv, atom() | pid()}, MsgId :: term() | undefined) -> ok | {error, term()}.
-cast(WorkerName, Request, ReplyTo, MsgId) ->
-    cast(WorkerName, Request, ReplyTo, MsgId, ?DEFAULT_WORKER_SELECTION_TYPE).
+-spec cast(WorkerRef :: worker_ref(), Request :: term(), ReplyTo :: process_ref(),
+    MsgId :: term() | undefined) -> ok | {error, term()}.
+cast(WorkerRef, Request, ReplyTo, MsgId) ->
+    cast(WorkerRef, Request, ReplyTo, MsgId, ?DEFAULT_WORKER_SELECTION_TYPE).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -143,15 +144,16 @@ cast(WorkerName, Request, ReplyTo, MsgId) ->
 %% 'worker_answer' record.
 %% @end
 %%--------------------------------------------------------------------
--spec cast(WorkerName :: atom(), Request :: term(), ReplyTo :: {proc, pid()}
-    | {gen_serv, atom() | pid()}, MsgId :: term() | undefined,
+-spec cast(WorkerRef :: worker_ref(), Request :: term(),
+    ReplyTo :: process_ref(), MsgId :: term() | undefined,
     SelectionType :: selection_type()) -> ok | {error, term()}.
-cast(WorkerName, Request, ReplyTo, MsgId, SelectionType) ->
-    case worker_map:get_worker_node(WorkerName, SelectionType) of
-        {ok, Node} ->
-            gen_server:cast({WorkerName, Node}, #worker_request{req = Request,
+cast(WorkerRef, Request, ReplyTo, MsgId, SelectionType) ->
+    case choose_node(WorkerRef, SelectionType) of
+        {ok, Name, Node} ->
+            gen_server:cast({Name, Node}, #worker_request{req = Request,
                 id = MsgId, reply_to = ReplyTo});
-        Error -> Error
+        Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------
@@ -160,10 +162,10 @@ cast(WorkerName, Request, ReplyTo, MsgId, SelectionType) ->
 %% @equiv multicast(WorkerName, Request, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec multicast(WorkerName :: atom(), Request :: term()) ->
+-spec multicast(WorkerName :: worker_name(), Request :: term()) ->
     [{Node :: node(), ok | {error, term()}}].
 multicast(WorkerName, Request) ->
-    multicast(WorkerName, Request, undefiend).
+    multicast(WorkerName, Request, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -172,10 +174,10 @@ multicast(WorkerName, Request) ->
 %% @equiv multicast(WorkerName, Request, ReplyTo, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec multicast(WorkerName :: atom(), Request :: term(), ReplyTo :: {proc, pid()}
-    | {gen_serv, atom() | pid()}) -> [{Node :: node(), ok | {error, term()}}].
+-spec multicast(WorkerName :: worker_name(), Request :: term(),
+    ReplyTo :: process_ref()) -> [{Node :: node(), ok | {error, term()}}].
 multicast(WorkerName, Request, ReplyTo) ->
-    multicast(WorkerName, Request, ReplyTo, undefiend).
+    multicast(WorkerName, Request, ReplyTo, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -184,15 +186,36 @@ multicast(WorkerName, Request, ReplyTo) ->
 %% list of pairs: node and associated 'worker_answer' record.
 %% @end
 %%--------------------------------------------------------------------
--spec multicast(WorkerName :: atom(), Request :: term(), ReplyTo :: {proc, pid()}
-    | {gen_serv, atom() | pid()}, MsgId :: term() | undefined) ->
+-spec multicast(WorkerName :: worker_name(), Request :: term(),
+    ReplyTo :: process_ref(), MsgId :: term() | undefined) ->
     [{Node :: node(), ok | {error, term()}}].
 multicast(WorkerName, Request, ReplyTo, MsgId) ->
     {ok, Nodes} = worker_map:get_worker_nodes(WorkerName),
     utils:pmap(fun(Node) ->
-        {Node, cast(WorkerName, Request, ReplyTo, MsgId, {node, Node})}
+        {Node, cast({WorkerName, Node}, Request, ReplyTo, MsgId)}
     end, Nodes).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Chooses a node to send a worker request to.
+%% @end
+%%--------------------------------------------------------------------
+-spec choose_node(WorkerRef :: worker_ref(), SelectionType :: selection_type()) ->
+    {ok, WorkerName :: worker_name(), WorkerNode :: atom()} | {error, term()}.
+choose_node(WorkerRef, SelectionType) ->
+    case WorkerRef of
+        {WName, WNode} ->
+            {ok, WName, WNode};
+        WName ->
+            case worker_map:get_worker_node(WName, SelectionType) of
+                {ok, WNode} ->
+                    {ok, WName, WNode};
+                {error, Error} ->
+                    {error, Error}
+            end
+    end.

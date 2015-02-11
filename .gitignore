@@ -16,6 +16,8 @@ src/proto/oneproxy/*.erl
 
 *.iml
 *.sublime*
+*.beam
+*.pyc
 
 rel/oneprovider_node
 rel/test_cluster
@@ -34,6 +36,3 @@ c_src/rt_container/*.o
 c_src/oneproxy/build/*
 
 docs/_build/
-
-*.beam
-*.pyc

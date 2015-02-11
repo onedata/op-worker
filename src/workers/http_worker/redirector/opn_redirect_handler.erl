@@ -25,7 +25,7 @@
 %% Cowboy handler callback, no state is required
 %% @end
 %%--------------------------------------------------------------------
--spec init(any(), term(), any()) -> {ok, term(), []}.
+-spec init(term(), term(), term()) -> {ok, term(), []}.
 init(_Type, Req, _Opts) ->
     {ok, Req, []}.
 
