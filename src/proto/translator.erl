@@ -54,7 +54,7 @@ translate_from_protobuf(#'WriteEvent'{} = Record) ->
         blocks = Record#'WriteEvent'.blocks
     };
 translate_from_protobuf(#'HandshakeRequest'{auth_method = Auth, session_id = SessionId}) ->
-    #handshake_request{auth_method = translate_to_protobuf(Auth), session_id = SessionId};
+    #handshake_request{auth_method = translate_from_protobuf(Auth), session_id = SessionId};
 translate_from_protobuf(#'AuthMethod'{auth_method =
     {_, #'Certificate'{client_session_id = Id, client_subject_dn = Dn}}}) ->
     #certificate{client_session_id = Id, client_subject_dn = Dn};

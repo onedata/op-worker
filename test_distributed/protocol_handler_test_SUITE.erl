@@ -124,7 +124,7 @@ connect_via_token(Node) ->
 
 receive_msg() ->
     receive
-        Msg -> Msg
+        {ssl, _, Msg} -> Msg
     after
         timer:seconds(5) -> timeout
     end.
