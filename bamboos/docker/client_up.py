@@ -8,38 +8,24 @@ Run the script with -h flag to learn about script's running options.
 from __future__ import print_function
 import argparse
 import collections
+import common
 import copy
 import docker
 import json
 import os
 import time
-import subprocess
-import common
-
-
-
-def set_hostname(node, uid):
-    parts = list(node.partition('@'))
-    parts[2] = '{0}.{1}.dev.docker'.format(parts[0], uid)
-    return ''.join(parts)
 
 
 def tweak_config(config, name, uid):
     cfg = copy.deepcopy(config)
     cfg['nodes'] = {'node': cfg['nodes'][name]}
     node = cfg['nodes']['node']
-    node['name'] = set_hostname(node['name'], uid)
-    node['op_hostname'] = set_hostname(node['op_hostname'], uid)
-    node['gr_hostname'] = set_hostname(node['gr_hostname'], uid)
+    node['name'] = common.format_hostname(node['name'], uid)
+    node['op_hostname'] = common.format_hostname(node['op_hostname'], uid)
+    node['gr_hostname'] = common.format_hostname(node['gr_hostname'], uid)
 
     return cfg
 
-
-def run_command(cmd):
-    return subprocess.Popen(cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            stdin=subprocess.PIPE).communicate()[0]
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -79,7 +65,6 @@ parser.add_argument(
     action='store',
     help='path to gen_dev_args.json that will be used to configure oneclient instances')
 
-
 args = parser.parse_args()
 uid = args.uid
 
@@ -114,8 +99,7 @@ for cfg in configs:
     node['user_cert'] = '/tmp/cert'
     node['user_key'] = '/tmp/key'
 
-    command = \
-    '''set -e
+    command = '''set -e
 cp /root/build/release/oneclient /root/bin/oneclient
 cat <<"EOF" > /tmp/cert
 {cert_file}
