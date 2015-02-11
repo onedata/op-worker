@@ -15,6 +15,11 @@
 
 -type session_id() :: binary().
 
+-record(certificate_info, {
+    client_subject_dn :: binary(),
+    client_session_id :: binary()
+}).
+
 -record(credentials, {
     session_id = <<"ID">> :: session_id()
 }).

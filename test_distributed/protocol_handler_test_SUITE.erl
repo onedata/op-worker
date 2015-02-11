@@ -23,7 +23,7 @@
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1]).
 
-all() -> [token_connection_test, cert_connection_test, protobuf_msg_test].
+all() -> [token_connection_test].
 
 %%%===================================================================
 %%% Test function
@@ -44,12 +44,12 @@ cert_connection_test(Config) ->
     % given
     ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
-    TokenAuthMessage = #'ClientMessage'{client_message = {handshake_request, #'HandshakeRequest'{}}},
-    TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
+    CertAuthMessage = #'ClientMessage'{client_message = {handshake_request, #'HandshakeRequest'{}}},
+    CertAuthMessageRaw = client_messages:encode_msg(CertAuthMessage),
 
     % when
     {ok, Sock} = ssl:connect(?GET_HOST(Worker1), 5555, [binary, {packet, 4}, {active, true}]),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    ok = ssl:send(Sock, CertAuthMessageRaw),
 
     % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
@@ -101,8 +101,7 @@ end_per_suite(Config) ->
 connect_via_token(Node) ->
     %given
     TokenAuthMessage = #'ClientMessage'{client_message =
-    {handshake_request, #'HandshakeRequest'{auth_method =
-    #'AuthMethod'{auth_method = {token, #'Token'{value = <<"VAL">>}}}}}},
+    {handshake_request, #'HandshakeRequest'{token = #'Token'{value = <<"VAL">>}}}},
     TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
 
     %when
@@ -110,10 +109,11 @@ connect_via_token(Node) ->
     ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     %then
-    ReceiveAnswer = test_utils:receive_any(timer:seconds(5)),
+    ReceiveAnswer = test_utils:receive_any(timer:seconds(10)),
     ?assertMatch({ok, _}, ReceiveAnswer),
     {ssl, _, Data} = ReceiveAnswer,
     ?assert(is_binary(Data)),
     ServerMsg = server_messages:decode_msg(Data, 'ServerMessage'),
     ?assertMatch(#'ServerMessage'{server_message = {handshake_response, #'HandshakeResponse'{}}}, ServerMsg),
-    ?assertMatch({ok, _}, ssl:connection_info(Sock)).
+    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
+    {ok, Sock}.

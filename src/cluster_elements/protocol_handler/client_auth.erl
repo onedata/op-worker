@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([handle_handshake/1]).
+-export([handle_handshake/2]).
 
 %%%===================================================================
 %%% API
@@ -31,16 +31,15 @@
 %% (cert/token)
 %% @end
 %%--------------------------------------------------------------------
--spec handle_handshake(Message :: #client_message{}) ->
+-spec handle_handshake(Message :: #client_message{}, CertInfo :: #certificate_info{}) ->
     {ok, {Cred :: #credentials{}, #server_message{}}}.
 handle_handshake(#client_message{client_message = #handshake_request{
-    session_id = _Id, auth_method = #token{value = Val}}}) ->
-    #credentials{session_id = SessionId} = Cred = authenticate_using_token(Val),
+    session_id = _Id, token = Token = #token{}}}, _) ->
+    #credentials{session_id = SessionId} = Cred = authenticate_using_token(Token),
     {ok, {Cred, #server_message{server_message = #handshake_response{session_id = SessionId}}}};
-handle_handshake(#client_message{client_message = #handshake_request{
-    session_id = _Id, auth_method =
-    #certificate{client_session_id = Id, client_subject_dn = Dn}}}) ->
-    #credentials{session_id = SessionId} = Cred = authenticate_using_certificate(Id, Dn),
+
+handle_handshake(#client_message{client_message = #handshake_request{session_id = _Id}}, CertInfo) ->
+    #credentials{session_id = SessionId} = Cred = authenticate_using_certificate(CertInfo),
     {ok, {Cred, #server_message{server_message = #handshake_response{session_id = SessionId}}}}.
 
 %%%===================================================================
@@ -52,7 +51,7 @@ handle_handshake(#client_message{client_message = #handshake_request{
 %% Authenticate client using given token, returns client credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_token(Token :: binary()) -> #credentials{}.
+-spec authenticate_using_token(Token :: #token{}) -> #credentials{}.
 authenticate_using_token(_Token) ->
     ?dump(_Token),
     #credentials{}.
@@ -62,9 +61,9 @@ authenticate_using_token(_Token) ->
 %% Authenticate client using given certificate. Returns client credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_certificate(OneproxySessionId :: binary(), Dn :: binary()) ->
+-spec authenticate_using_certificate(CertInfo :: #certificate_info{}) ->
     #credentials{}.
-authenticate_using_certificate(_OneproxySessionId, _Dn) ->
-    ?dump([_OneproxySessionId, _Dn]),
+authenticate_using_certificate(_CertInfo) ->
+    ?dump(_CertInfo),
     #credentials{}.
 

@@ -34,6 +34,7 @@
     % actual connection state
     socket :: port(),
     transport :: module(),
+    certificate_info :: #certificate_info{},
     credentials :: #credentials{},
     sequencer_manager :: pid()
 }).
@@ -159,29 +160,39 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #sock_state{}} |
     {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket,
-    transport = Transport, ok = Ok, credentials = Cred, sequencer_manager = SeqMan}) ->
+handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
+    certificate_info = undefined}) ->
+    case serializator:deserialize_oneproxy_certificate_info_message(Data) of
+        {ok, #certificate_info{} = Info} ->
+            {noreply, State#sock_state{certificate_info = Info}, ?TIMEOUT};
+        Error ->
+            ?warning("Cannot decode oneproxy CertificateInfo message, error: ~p", [Error]),
+            {stop, Error, State}
+    end;
+handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
+    transport = Transport, credentials = Cred, sequencer_manager = SeqMan,
+    certificate_info = CertInfo}) ->
     activate_socket_once(Socket, Transport),
     case serializator:deserialize_client_message(Data, Cred) of
         {ok, Msg} when Cred == undefined -> % handle handshake message
-            case client_auth:handle_handshake(Msg) of
+            case client_auth:handle_handshake(Msg, CertInfo) of
                 {ok, {NewCredentials, Response}} ->
                     send_server_message(Socket, Transport, Response),
-                    {noreply, State#sock_state{credentials = NewCredentials}, ?TIMEOUT}
-%%                 Error ->
-%%                     ?warning("Handshake ~p, error ~p", [Msg, Error]),
-%%                     {stop, Error, State}
+                    {noreply, State#sock_state{credentials = NewCredentials}, ?TIMEOUT};
+                Error ->
+                    ?warning("Handshake ~p, error ~p", [Msg, Error]),
+                    {stop, Error, State}
             end;
         {ok, Msg} ->
             case router:preroute_message(SeqMan, Msg) of
                 ok ->
-                    {noreply, State, ?TIMEOUT}
-%%                 {_, Response = #server_message{}} ->
-%%                     send_server_message(Socket, Transport, Response),
-%%                     {noreply, State, ?TIMEOUT};
-%%                 {error, Reason} ->
-%%                     ?warning("Message ~p handling error: ~p", [Msg, Reason]),
-%%                     {stop, {error, Reason}, State}
+                    {noreply, State, ?TIMEOUT};
+                {_, Response = #server_message{}} ->
+                    send_server_message(Socket, Transport, Response),
+                    {noreply, State, ?TIMEOUT};
+                {error, Reason} ->
+                    ?warning("Message ~p handling error: ~p", [Msg, Reason]),
+                    {stop, {error, Reason}, State}
             end;
         Error ->
             ?warning("Connection ~p message decoding error: ~p", [Socket, Error]),

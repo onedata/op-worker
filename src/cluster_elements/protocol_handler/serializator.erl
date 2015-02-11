@@ -13,11 +13,13 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/messages.hrl").
+-include("proto/oneproxy/oneproxy_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
 
 %% API
--export([deserialize_client_message/2, serialize_server_message/1]).
+-export([deserialize_client_message/2, serialize_server_message/1,
+    deserialize_oneproxy_certificate_info_message/1]).
 
 %%%===================================================================
 %%% API
@@ -56,6 +58,21 @@ serialize_server_message(#server_message{message_id = Id, seq_num = Seq,
         {ok, server_messages:encode_msg(ServerMessage)}
     catch
         _:Error  -> {error, Error}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% deserialize oneproxy protobuf binary data
+%% @end
+%%--------------------------------------------------------------------
+-spec deserialize_oneproxy_certificate_info_message(Message :: binary()) ->
+    {ok, #certificate_info{}} | {error, term()}.
+deserialize_oneproxy_certificate_info_message(Message) ->
+    try oneproxy_messages:decode_msg(Message, 'CertificateInfo') of
+        #'CertificateInfo'{client_session_id = Id, client_subject_dn = Dn} ->
+            {ok, #certificate_info{client_session_id = Id, client_subject_dn = Dn}}
+    catch
+        _:Error -> {error, Error}
     end.
 
 %%%===================================================================

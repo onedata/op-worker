@@ -53,13 +53,12 @@ translate_from_protobuf(#'WriteEvent'{} = Record) ->
         size = Record#'WriteEvent'.size,
         blocks = Record#'WriteEvent'.blocks
     };
-translate_from_protobuf(#'HandshakeRequest'{auth_method = Auth, session_id = SessionId}) ->
-    #handshake_request{auth_method = translate_from_protobuf(Auth), session_id = SessionId};
-translate_from_protobuf(#'AuthMethod'{auth_method =
-    {_, #'Certificate'{client_session_id = Id, client_subject_dn = Dn}}}) ->
-    #certificate{client_session_id = Id, client_subject_dn = Dn};
-translate_from_protobuf(#'AuthMethod'{auth_method = {_, #'Token'{value = Val}}}) ->
+translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
+    #handshake_request{token = translate_from_protobuf(Token), session_id = SessionId};
+translate_from_protobuf(#'Token'{value = Val}) ->
     #token{value = Val};
+translate_from_protobuf(undefined) ->
+    undefined;
 translate_from_protobuf(Record) ->
     ?error("~p:~p - unknown record ~p", [?MODULE, ?LINE, Record]),
     throw({unknown_record, Record}).

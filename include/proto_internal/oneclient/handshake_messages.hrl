@@ -20,13 +20,8 @@
     value :: binary()
 }).
 
--record(certificate, {
-    client_session_id :: binary(),
-    client_subject_dn :: binary()
-}).
-
 -record(handshake_request, {
-    auth_method :: #token{} | #certificate{},
+    token :: #token{},
     session_id :: session_id()
 }).
 
