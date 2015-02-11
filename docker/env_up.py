@@ -13,24 +13,7 @@ import collections
 import json
 import os
 import time
-import subprocess
-
-
-def parse_config(path):
-    with open(path, 'r') as f:
-        data = f.read()
-        return json.loads(data)
-
-
-def get_script_dir():
-    return os.path.dirname(os.path.realpath(__file__))
-
-
-def run_command(cmd):
-    return subprocess.Popen(cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            stdin=subprocess.PIPE).communicate()[0]
+import common
 
 
 parser = argparse.ArgumentParser(
@@ -66,16 +49,23 @@ parser.add_argument(
     dest='bin_am')
 
 parser.add_argument(
+    '--bin-client', '-bc',
+    action='store',
+    default=os.getcwd() + '/oneclient',
+    help='the path to oneclient repository (precompiled)',
+    dest='bin_oc')
+
+parser.add_argument(
     'config_path',
     action='store',
     help='path to gen_dev_args.json file that will be used to configure the environment')
 
 args = parser.parse_args()
-config = parse_config(args.config_path)
+config = common.parse_json_file(args.config_path)
 uid = str(int(time.time()))
 
 # Start DNS
-dns_output = json.loads(run_command([get_script_dir() + '/dns_up.py', '--uid', uid]))
+dns_output = common.run_script_return_dict('dns_up.py', ['--uid', uid])
 dns = dns_output['dns']
 
 # Start globalregistry instances
@@ -84,13 +74,12 @@ gr_output['docker_ids'] = []
 gr_output['gr_nodes'] = []
 gr_output['gr_db_nodes'] = []
 if 'globalregistry' in config:
-    gr_output = json.loads(run_command(
-        [get_script_dir() + '/globalregistry_up.py',
-         '--image', args.image,
-         '--bin', args.bin_gr,
-         '--dns', dns,
-         '--uid', uid,
-         args.config_path]))
+    gr_output = common.run_script_return_dict('globalregistry_up.py', [
+        '--image', args.image,
+        '--bin', args.bin_gr,
+        '--dns', dns,
+        '--uid', uid,
+        args.config_path])
 
 # Start oneprovider_node instances
 op_output = collections.defaultdict(list)
@@ -98,34 +87,46 @@ op_output['docker_ids'] = []
 op_output['op_ccm_nodes'] = []
 op_output['op_worker_nodes'] = []
 if 'oneprovider_node' in config:
-    op_output = json.loads(run_command(
-        [get_script_dir() + '/provider_up.py',
-         '--image', args.image,
-         '--bin', args.bin_op,
-         '--dns', dns,
-         '--uid', uid,
-         args.config_path]))
+    op_output = common.run_script_return_dict('provider_up.py', [
+        '--image', args.image,
+        '--bin', args.bin_op,
+        '--dns', dns,
+        '--uid', uid,
+        args.config_path])
 
 # Start appmock instances
 am_output = collections.defaultdict(list)
 am_output['docker_ids'] = []
 am_output['appmock_nodes'] = []
 if 'appmock' in config:
-    am_output = json.loads(run_command(
-        [get_script_dir() + '/appmock_up.py',
-         '--image', args.image,
-         '--bin', args.bin_am,
-         '--dns', dns,
-         '--uid', uid,
-         args.config_path]))
+    am_output = common.run_script_return_dict('appmock_up.py', [
+        '--image', args.image,
+        '--bin', args.bin_am,
+        '--dns', dns,
+        '--uid', uid,
+        args.config_path])
+
+# Start oneclient instances
+oc_output = collections.defaultdict(list)
+oc_output['docker_ids'] = []
+oc_output['client_nodes'] = []
+if 'oneclient' in config:
+    oc_output = common.run_script_return_dict('client_up.py', [
+        '--image', args.image,
+        '--bin', args.bin_oc,
+        '--dns', dns,
+        '--uid', uid,
+        args.config_path])
 
 # Gather output from all components' starting and print it
 output = collections.defaultdict(list)
 output['dns'] = dns_output['dns']
-output['docker_ids'] = dns_output['docker_ids'] + gr_output['docker_ids'] + op_output['docker_ids'] + am_output['docker_ids']
+output['docker_ids'] = dns_output['docker_ids'] + gr_output['docker_ids'] + op_output['docker_ids'] + \
+                       am_output['docker_ids'] + oc_output['docker_ids']
 output['gr_nodes'] = gr_output['gr_nodes']
 output['gr_db_nodes'] = gr_output['gr_db_nodes']
 output['op_ccm_nodes'] = op_output['op_ccm_nodes']
 output['op_worker_nodes'] = op_output['op_worker_nodes']
 output['appmock_nodes'] = am_output['appmock_nodes']
+output['client_nodes'] = oc_output['client_nodes']
 print(json.dumps(output))
