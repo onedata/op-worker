@@ -69,6 +69,13 @@ private:
      */
     void handle_handshake(const boost::system::error_code &error);
 
+    /**
+    * Sends information about client's certificate to server
+    * @param error Boost error code
+    * @param bytes_transferred The number of read bytes
+    */
+    void send_cert_info(const bool verified);
+
     const std::string forward_host_;
     const std::string forward_port_;
 };

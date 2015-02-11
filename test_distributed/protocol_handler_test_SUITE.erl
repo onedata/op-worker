@@ -23,7 +23,7 @@
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1]).
 
-all() -> [token_connection_test].
+all() -> [token_connection_test, cert_connection_test, protobuf_msg_test].
 
 %%%===================================================================
 %%% Test function
@@ -109,9 +109,9 @@ connect_via_token(Node) ->
     ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     %then
-    ReceiveAnswer = test_utils:receive_any(timer:seconds(10)),
-    ?assertMatch({ok, _}, ReceiveAnswer),
-    {ssl, _, Data} = ReceiveAnswer,
+    ReceiveAnswer = test_utils:receive_any(timer:seconds(5)),
+    ?assertMatch({ok, {ssl, _, _}}, ReceiveAnswer),
+    {ok, {ssl, _, Data}} = ReceiveAnswer,
     ?assert(is_binary(Data)),
     ServerMsg = server_messages:decode_msg(Data, 'ServerMessage'),
     ?assertMatch(#'ServerMessage'{server_message = {handshake_response, #'HandshakeResponse'{}}}, ServerMsg),

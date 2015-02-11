@@ -161,7 +161,8 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
 handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
-    certificate_info = undefined}) ->
+    transport = Transport, certificate_info = undefined}) ->
+    activate_socket_once(Socket, Transport),
     case serializator:deserialize_oneproxy_certificate_info_message(Data) of
         {ok, #certificate_info{} = Info} ->
             {noreply, State#sock_state{certificate_info = Info}, ?TIMEOUT};
