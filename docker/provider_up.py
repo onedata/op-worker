@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+"""
+Brings up a oneprovider cluster.
+Run the script with -h flag to learn about script's running options.
+"""
+
 from __future__ import print_function
 
 import argparse
@@ -67,7 +72,7 @@ parser.add_argument(
 args = parser.parse_args()
 uid = str(int(time.time()))
 
-config = parse_config(args.config_path)
+config = parse_config(args.config_path)['oneprovider_node']
 config['config']['target_dir'] = '/root/bin'
 configs = [tweak_config(config, node, uid) for node in config['nodes']]
 
@@ -81,7 +86,7 @@ skydock = docker.run(
     image='crosbymichael/skydock',
     detach=True,
     name='skydock_{0}'.format(uid),
-    reflect=['/var/run/docker.sock'],
+    reflect=[('/var/run/docker.sock', 'rw')],
     volumes=[(args.create_service, '/createService.js', 'ro')],
     command=['-ttl', '30', '-environment', 'dev', '-s', '/var/run/docker.sock',
              '-domain', 'docker', '-name', 'skydns_{0}'.format(uid), '-plugins',
@@ -105,9 +110,9 @@ for cfg in configs:
 cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
-escript gen_dev.erl /tmp/gen_dev_args.json
+escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 /root/bin/node/bin/oneprovider_node console'''
-    command = command.format(gen_dev_args=json.dumps(cfg))
+    command = command.format(gen_dev_args=json.dumps({'oneprovider_node': cfg}))
 
     container = docker.run(
         image=args.image,
