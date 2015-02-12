@@ -15,7 +15,7 @@
 -behaviour(ranch_protocol).
 -behaviour(gen_server).
 
--include("cluster_elements/protocol_handler/credentials.hrl").
+-include("workers/datastore/models/session.hrl").
 -include_lib("proto_internal/oneclient/server_messages.hrl").
 -include_lib("proto_internal/oneclient/handshake_messages.hrl").
 -include_lib("proto_internal/oneproxy/oneproxy_messages.hrl").

@@ -14,7 +14,7 @@
 -define(HANDSHAKE_MESSAGES_HRL, 1).
 
 -include("common_messages.hrl").
--include("cluster_elements/protocol_handler/credentials.hrl").
+-include("workers/datastore/models/session.hrl").
 
 -record(token, {
     value :: binary()
@@ -26,7 +26,7 @@
 }).
 
 -record(handshake_response, {
-    session_id :: binary()
+    session_id :: session_id()
 }).
 
 -endif.

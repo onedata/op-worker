@@ -13,7 +13,6 @@
 -author("Tomasz Lichon").
 
 -include("workers/datastore/datastore_models.hrl").
--include("cluster_elements/protocol_handler/credentials.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").

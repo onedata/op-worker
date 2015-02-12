@@ -16,7 +16,7 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("workers/datastore/datastore_models.hrl").
--include("cluster_elements/protocol_handler/credentials.hrl").
+-include("workers/datastore/models/session.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks

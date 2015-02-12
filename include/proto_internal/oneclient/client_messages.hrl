@@ -14,7 +14,8 @@
 -define(CLIENT_MESSAGES_HRL, 1).
 
 -include("message_id.hrl").
--include("cluster_elements/protocol_handler/credentials.hrl").
+-include("workers/datastore/models/session.hrl").
+
 
 -record(client_message, {
     message_id :: #message_id{} | undefined,
