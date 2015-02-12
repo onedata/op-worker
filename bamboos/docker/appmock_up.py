@@ -94,7 +94,7 @@ for cfg in configs:
     sys_config = cfg['nodes']['node']['sys.config']
     app_desc_file_path = sys_config['app_description_file']
     app_desc_file_name = os.path.basename(app_desc_file_path)
-    # App desc file can be an absolute path or relative to example_gen_dev_args.json
+    # App desc file can be an absolute path or relative to gen_dev_args.json
     if not os.path.isabs(app_desc_file_path):
         app_desc_file_path = common.get_file_dir(args.config_path) + '/' + app_desc_file_path
     sys_config['app_description_file'] = '/tmp/' + app_desc_file_name
