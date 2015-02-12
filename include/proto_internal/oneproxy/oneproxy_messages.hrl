@@ -6,17 +6,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Client credentials used in protocol_handler to extend client_message.
+%%% internal records for oneproxy messages
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(CREDENTIALS_HRL).
--define(CREDENTIALS_HRL, 1).
+-ifndef(ONEPROXY_MESSAGES_HRL).
+-define(ONEPROXY_MESSAGES_HRL, 1).
 
--type session_id() :: binary().
-
--record(credentials, {
-    session_id = <<"ID">> :: session_id()
+-record(certificate_info, {
+    client_subject_dn :: binary(),
+    client_session_id :: binary()
 }).
 
 -endif.

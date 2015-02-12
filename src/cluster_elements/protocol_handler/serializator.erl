@@ -16,6 +16,7 @@
 -include("proto/oneproxy/oneproxy_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
+-include("proto_internal/oneproxy/oneproxy_messages.hrl").
 
 %% API
 -export([deserialize_client_message/2, serialize_server_message/1,
