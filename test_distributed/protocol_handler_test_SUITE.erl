@@ -25,6 +25,8 @@
 
 all() -> [token_connection_test, cert_connection_test, protobuf_msg_test].
 
+-define(CLEANUP, false).
+
 %%%===================================================================
 %%% Test function
 %% ====================================================================
@@ -44,15 +46,34 @@ cert_connection_test(Config) ->
     % given
     ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
-    CertAuthMessage = #'ClientMessage'{client_message = {handshake_request, #'HandshakeRequest'{}}},
-    CertAuthMessageRaw = client_messages:encode_msg(CertAuthMessage),
+    HandshakeReq = #'ClientMessage'{client_message = {handshake_request, #'HandshakeRequest'{}}},
+    HandshakeReqRaw = client_messages:encode_msg(HandshakeReq),
+    Pid = self(),
+    test_utils:mock_new(Worker1, serializator),
+    test_utils:mock_expect(Worker1, serializator, deserialize_oneproxy_certificate_info_message,
+        fun(Data) ->
+            Ans = meck:passthrough([Data]),
+            Pid ! {certificate_info_message, Ans},
+            Ans
+    end),
+    Cert = ?TEST_FILE(Config, "peer.pem"),
 
     % when
-    {ok, Sock} = ssl:connect(?GET_HOST(Worker1), 5555, [binary, {packet, 4}, {active, true}]),
-    ok = ssl:send(Sock, CertAuthMessageRaw),
+    {ok, Sock} = ssl:connect(?GET_HOST(Worker1), 5555, [binary, {packet, 4}, {active, true},
+        {certfile, Cert}, {cacertfile, Cert}]),
+    {ok, {certificate_info_message, {ok, CertInfo}}} = test_utils:receive_any(timer:seconds(5)),
+    ok = ssl:send(Sock, HandshakeReqRaw),
+    {ok, {ssl, _, RawHandshakeResponse}} = test_utils:receive_any(timer:seconds(5)),
 
     % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
+    ?assertMatch(#certificate_info{}, CertInfo),
+    ?assert(is_binary(CertInfo#certificate_info.client_session_id)),
+    ?assert(is_binary(CertInfo#certificate_info.client_subject_dn)),
+    HandshakeResponse = server_messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
+    #'ServerMessage'{server_message = {handshake_response, #'HandshakeResponse'{session_id =
+        SessionId}}} = HandshakeResponse,
+    ?assert(is_binary(SessionId)),
     ok = ssl:close(Sock),
     ?assertMatch({error, _}, ssl:connection_info(Sock)),
     ssl:stop().
@@ -91,6 +112,8 @@ protobuf_msg_test(Config) ->
 init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
+end_per_suite(_) when ?CLEANUP == false ->
+    ok;
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
