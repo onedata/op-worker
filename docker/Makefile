@@ -6,7 +6,7 @@ base: base/Dockerfile
 	docker build -t onedata/base:v2 base/
 
 builder: base builder/Dockerfile
-	docker build -t onedata/builder:v2 builder/
+	docker build -t onedata/builder:v3 builder/
 
 worker: base worker/Dockerfile
 	docker build -t onedata/worker:v2 worker/

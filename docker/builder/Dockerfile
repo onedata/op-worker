@@ -9,7 +9,7 @@ RUN dpkg -i /root/globus-toolkit-repo_latest_all.deb
 
 # Install development packages
 RUN apt-get update && \
-    apt-get install -y clang cmake elixir erlang erlang-src gdb \
+    apt-get install -y clang cmake doxygen elixir erlang erlang-src gdb \
                        libboost-all-dev libbotan1.10-dev libfuse-dev \
                        libglobus-common-dev libglobus-gsi-callback-dev \
                        libltdl-dev libprotobuf-dev libstdc++-4.9-dev \
