@@ -15,7 +15,7 @@
 %% API
 -export([generate/0, generate/1, encode/1, decode/1]).
 
--include("cluster_elements/protocol_handler/message_id.hrl").
+-include("proto_internal/oneclient/message_id.hrl").
 
 -define(INT64, 9223372036854775807).
 

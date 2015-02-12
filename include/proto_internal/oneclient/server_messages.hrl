@@ -13,7 +13,7 @@
 -ifndef(SERVER_MESSAGES_HRL).
 -define(SERVER_MESSAGES_HRL, 1).
 
--include("cluster_elements/protocol_handler/message_id.hrl").
+-include("message_id.hrl").
 
 -record(server_message, {
     message_id :: #message_id{} | undefined,

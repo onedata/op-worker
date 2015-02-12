@@ -13,7 +13,7 @@
 -ifndef(CLIENT_MESSAGES_HRL).
 -define(CLIENT_MESSAGES_HRL, 1).
 
--include("cluster_elements/protocol_handler/message_id.hrl").
+-include("message_id.hrl").
 -include("cluster_elements/protocol_handler/credentials.hrl").
 
 -record(client_message, {
