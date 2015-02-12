@@ -180,8 +180,8 @@ load_description_module(FilePath) ->
         {ok, Bin} = file:read_file(filename:rootname(FileName) ++ ".beam"),
         erlang:load_module(ModuleName, Bin),
         ModuleName
-    catch _:_ ->
-        throw(invalid_app_description_module)
+    catch T:M ->
+        throw({invalid_app_description_module, {type, T}, {message, M}, {stacktrace, erlang:get_stacktrace()}})
     end.
 
 
