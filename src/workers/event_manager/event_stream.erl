@@ -19,28 +19,33 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2]).
+-export([start_link/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
 -export_type([event_stream/0, admission_rule/0, aggregation_rule/0,
-    emission_rule/0, event_handler/0]).
+    transition_rule/0, emission_rule/0, event_handler/0, metadata/0]).
 
 -type event_stream() :: #event_stream{}.
 -type admission_rule() :: fun((event_manager:event()) -> true | false).
 -type aggregation_rule() :: fun((event_manager:event(), event_manager:event()) ->
     {ok, event_manager:event()} | {error, disparate}).
--type emission_rule() :: fun((event_stream()) -> true | false).
--type event_handler() :: fun(([event_manager:event()]) -> term()).
+-type transition_rule() :: fun((event_manager:event(), metadata()) -> metadata()).
+-type emission_rule() :: fun((metadata()) -> true | false).
+-type event_handler() :: fun(([event_manager:event()]) -> ok).
+-type metadata() :: term().
 
 %% event stream state:
 %% sub_id   - subscription ID associated with event stream
 %% evt_disp - pid of event dispatcher
 -record(state, {
-    sub_id :: non_neg_integer(),
-    evt_disp :: pid()
+    sub_id :: event_manager:subscription_id(),
+    evt_disp :: pid(),
+    evts = [] :: [event_manager:event()],
+    spec :: event_stream(),
+    meta :: metadata()
 }).
 
 %%%===================================================================
@@ -52,10 +57,10 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(EvtDisp :: pid(), SubId :: non_neg_integer()) ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(EvtDisp, SubId) ->
-    gen_server:start_link(?MODULE, [EvtDisp, SubId], []).
+-spec start_link(EvtDisp :: pid(), SubId :: event_manager:subscription_id(),
+    EvtStmSpec :: event_stream()) -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+start_link(EvtDisp, SubId, EvtStmSpec) ->
+    gen_server:start_link(?MODULE, [EvtDisp, SubId, EvtStmSpec], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -70,9 +75,11 @@ start_link(EvtDisp, SubId) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([EvtDisp, SubId]) ->
+init([EvtDisp, SubId, EvtStmSpec]) ->
+    process_flag(trap_exit, true),
     gen_server:cast(self(), initialize),
-    {ok, #state{evt_disp = EvtDisp, sub_id = SubId}}.
+    {ok, #state{sub_id = SubId, evt_disp = EvtDisp, spec = EvtStmSpec,
+        meta = reset_metadata(EvtStmSpec)}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -102,13 +109,23 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(initialize, #state{evt_disp = EvtDisp, sub_id = SubId} = State) ->
+handle_cast(initialize, #state{evt_disp = EvtDisp, spec = SubId} = State) ->
     case gen_server:call(EvtDisp, {event_stream_initialized, SubId}) of
         {ok, #state{} = EvtStmState} ->
             ?info("Event stream reinitialized in state: ~p", [EvtStmState]),
             {noreply, EvtStmState};
         _ ->
             {noreply, State}
+    end;
+
+handle_cast({event, Evt}, #state{evts = Evts, meta = Meta, spec = EvtStmSpec} = State) ->
+    {NewEvts, NewMeta} = aggregate(Evt, Evts, Meta, EvtStmSpec),
+    case is_emission_rule_satisfied(NewMeta, EvtStmSpec) of
+        true ->
+            emit(NewEvts, EvtStmSpec),
+            {noreply, State#state{evts = [], meta = reset_metadata(EvtStmSpec)}};
+        false ->
+            {noreply, State#state{evts = NewEvts, meta = NewMeta}}
     end;
 
 handle_cast(_Request, State) ->
@@ -142,7 +159,7 @@ handle_info(_Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{sub_id = SubId, evt_disp = EvtDisp} = State) ->
     ?warning("Event stream closed in state ~p due to: ~p", [State, Reason]),
-    gen_server:cast(EvtDisp, {event_terminated, SubId, Reason, State}).
+    gen_server:cast(EvtDisp, {event_stream_terminated, SubId, Reason, State}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -158,3 +175,65 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns initial value of stream metadata.
+%% @end
+%%--------------------------------------------------------------------
+-spec reset_metadata(EvtStmSpec :: event_stream()) -> metadata().
+reset_metadata(#event_stream{metadata = Meta}) ->
+    Meta.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes stream event handlers on aggregated events.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit(Evts :: [event_manager:event()], EvtStmSpec :: event_stream()) -> ok.
+emit(Evts, #event_stream{handlers = Handlers}) ->
+    lists:foreach(fun(Handler) ->
+        Handler(Evts)
+    end, Handlers).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether emission rule is satisfied for event stream.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_emission_rule_satisfied(Meta :: metadata(), EvtStmSpec :: event_stream()) ->
+    true | false.
+is_emission_rule_satisfied(Meta, #event_stream{emission_rule = EmsRule}) ->
+    EmsRule(Meta).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Aggregates an event with first aggregable event stored in the event stream.
+%% @equiv aggregate(Evt, Evts, [], Meta, EvtStmSpec)
+%% @end
+%%--------------------------------------------------------------------
+-spec aggregate(Evt :: event_manager:event(), Evts :: [event_manager:event()],
+    Meta :: metadata(), EvtStmSpec :: event_stream()) ->
+    {NewEvts :: [event_manager:event()], NewMeta :: metadata()}.
+aggregate(Evt, Evts, Meta, EvtStmSpec) ->
+    aggregate(Evt, Evts, [], Meta, EvtStmSpec).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Aggregates an event with first aggregable event stored in the event stream.
+%% @end
+%%--------------------------------------------------------------------
+-spec aggregate(Evt :: event_manager:event(), Evts :: [event_manager:event()],
+    DipEvts :: [event_manager:event()], Meta :: metadata(), EvtStmSpec :: event_stream()) ->
+    {NewEvts :: [event_manager:event()], NewMeta :: metadata()}.
+aggregate(Evt, [], Evts, Meta, #event_stream{transition_rule = TrsRule}) ->
+    {[Evt | Evts], TrsRule(Evt, Meta)};
+
+aggregate(Evt, [StmEvt | StmEvts], DisEvts, Meta,
+    #event_stream{aggregation_rule = AggRule, transition_rule = TrsRule} = EvtStmSpec) ->
+    case AggRule(Evt, StmEvt) of
+        {ok, NewEvt} ->
+            {[NewEvt | StmEvts] ++ DisEvts, TrsRule(Evt, Meta)};
+        {error, disparate} ->
+            aggregate(Evt, StmEvts, [StmEvt | DisEvts], Meta, EvtStmSpec)
+    end.

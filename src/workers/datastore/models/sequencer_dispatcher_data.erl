@@ -1,15 +1,15 @@
 %%%-------------------------------------------------------------------
-%%% @author Rafal Slota
+%%% @author Krzysztof Trzepla
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Sample model.
+%%% @doc Sequencer model.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sample_model).
--author("Rafal Slota").
+-module(sequencer_dispatcher_data).
+-author("Krzysztof Trzepla").
 -behaviour(model_behaviour).
 
 -include("workers/datastore/datastore.hrl").
@@ -29,7 +29,7 @@
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(globally_cached, Document).
+    datastore:save(global_only, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -39,7 +39,7 @@ save(Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(globally_cached, ?MODULE, Key, Diff).
+    datastore:update(global_only, ?MODULE, Key, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -49,7 +49,7 @@ update(Key, Diff) ->
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    datastore:create(globally_cached, Document).
+    datastore:create(global_only, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -58,7 +58,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(local_only, ?MODULE, Key).
+    datastore:get(global_only, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -67,16 +67,17 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(local_only, ?MODULE, Key).
+    datastore:delete(global_only, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback exists/1. 
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) -> true | false | datastore:generic_error().
+-spec exists(datastore:key()) ->
+    true | false | datastore:generic_error().
 exists(Key) ->
-    datastore:exists(local_only, ?MODULE, Key).
+    datastore:exists(global_only, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -85,7 +86,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(test_bucket, [{sample_model, update}]).
+    ?MODEL_CONFIG(sequencer_bucket, []).
 
 %%--------------------------------------------------------------------
 %% @doc

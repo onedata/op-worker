@@ -15,25 +15,28 @@
 
 -behaviour(gen_server).
 
+-include("workers/datastore/datastore_models.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2]).
+-export([start_link/4]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
 %% sequencer dispatcher state:
+%% session_id  - ID of session associated with event dispatcher
 %% seq_stm_sup - pid of sequencer stream supervisor
 %% cons        - list of connection pids to client associated with
-%%                sequencer dispatcher
-%% seq_stms    - mapping from message ID to sequencer stream pid
+%%               sequencer dispatcher
+%% seq_stms    - mapping from message ID to sequencer stream
 -record(state, {
-    seq_stm_sup,
-    cons = [],
-    seq_stms = #{}
+    session_id :: session_id(),
+    seq_stm_sup :: pid(),
+    cons = [] :: [pid()],
+    seq_stms = #{} :: map()
 }).
 
 %%%===================================================================
@@ -45,10 +48,11 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SeqStmSup :: pid(), Con :: pid()) ->
+-spec start_link(SeqDispSup :: pid(), SeqStmSup :: pid(),
+    SessionId :: session_id(), Con :: pid()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SeqStmSup, Con) ->
-    gen_server:start_link(?MODULE, [SeqStmSup, Con], []).
+start_link(SeqDispSup, SeqStmSup, SessionId, Con) ->
+    gen_server:start_link(?MODULE, [SeqDispSup, SeqStmSup, SessionId, Con], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -63,8 +67,16 @@ start_link(SeqStmSup, Con) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SeqStmSup, Con]) ->
-    {ok, #state{seq_stm_sup = SeqStmSup, cons = [Con]}}.
+init([SeqDispSup, SeqStmSup, SessionId, Con]) ->
+    process_flag(trap_exit, true),
+    case sequencer_dispatcher_data:create(#document{key = SessionId,
+        value = #sequencer_dispatcher_data{node = node(), pid = self(), sup = SeqDispSup}
+    }) of
+        {ok, SessionId} ->
+            {ok, #state{seq_stm_sup = SeqStmSup, cons = [Con], session_id = SessionId}};
+        {error, Reason} ->
+            {stop, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -80,13 +92,13 @@ init([SeqStmSup, Con]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_call({sequencer_stream_initialized, MsgId}, {SeqStm, _}, #state{seq_stms = SeqStms} = State) ->
+handle_call({sequencer_stream_initialized, MsgId}, {Pid, _}, #state{seq_stms = SeqStms} = State) ->
     case maps:find(MsgId, SeqStms) of
         {ok, {state, SeqStmState, PendingMsgs}} ->
             lists:foreach(fun(Msg) ->
-                gen_server:cast(SeqStm, Msg)
+                gen_server:cast(Pid, Msg)
             end, lists:reverse(PendingMsgs)),
-            {reply, {ok, SeqStmState}, State#state{seq_stms = maps:put(MsgId, {pid, SeqStm}, SeqStms)}};
+            {reply, {ok, SeqStmState}, State#state{seq_stms = maps:put(MsgId, {pid, Pid}, SeqStms)}};
         _ ->
             {reply, undefined, State}
     end;
@@ -120,8 +132,8 @@ handle_cast({sequencer_stream_terminated, MsgId, _, SeqStmState}, #state{seq_stm
 handle_cast(#client_message{message_id = MsgId} = Msg,
     #state{seq_stm_sup = SeqStmSup, seq_stms = SeqStms} = State) ->
     case maps:find(MsgId, SeqStms) of
-        {ok, {pid, SeqStm}} ->
-            gen_server:cast(SeqStm, Msg),
+        {ok, {pid, Pid}} ->
+            gen_server:cast(Pid, Msg),
             {noreply, State};
         {ok, {state, SeqStmState, PendingMsgs}} ->
             {noreply, State#state{seq_stms =
@@ -171,8 +183,9 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(_Reason, _State) ->
-    ok.
+terminate(Reason, #state{session_id = SessionId} = State) ->
+    ?warning("Sequencer dispatcher terminated in state ~p due to: ~p", [State, Reason]),
+    sequencer_dispatcher_data:delete(SessionId).
 
 %%--------------------------------------------------------------------
 %% @private

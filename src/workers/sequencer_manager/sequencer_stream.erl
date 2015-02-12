@@ -79,6 +79,7 @@ start_link(SeqDisp, MsgId) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SeqDisp, MsgId]) ->
+    process_flag(trap_exit, true),
     gen_server:cast(self(), initialize),
     {ok, #state{seq_disp = SeqDisp, msg_id = MsgId}}.
 
@@ -170,7 +171,7 @@ handle_info(_Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
 terminate(Reason, #state{msg_id = MsgId, seq_disp = SeqDisp} = State) ->
-    ?warning("Sequencer stream closed in state ~p due to: ~p", [State, Reason]),
+    ?warning("Sequencer stream closed in state ~p due to: ~p", [MsgId, State, Reason]),
     gen_server:cast(SeqDisp, {sequencer_stream_terminated, MsgId, Reason, State}).
 
 %%--------------------------------------------------------------------

@@ -12,6 +12,7 @@
 -module(router).
 -author("Tomasz Lichon").
 
+-include("proto_internal/oneclient/event_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 
 %% API
@@ -39,6 +40,12 @@ preroute_message(SeqMan, Msg) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec route_message(Msg :: #client_message{}) -> ok | {error, term()}.
+route_message(#client_message{credentials = #credentials{session_id = SessionId},
+    client_message = #read_event{} = Evt}) ->
+    event_manager:emit(Evt, SessionId);
+route_message(#client_message{credentials = #credentials{session_id = SessionId},
+    client_message = #write_event{} = Evt}) ->
+    event_manager:emit(Evt, SessionId);
 route_message(#client_message{}) ->
     % todo integrate with worker hosts
     ok.

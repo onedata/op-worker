@@ -16,7 +16,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_event_stream/3]).
+-export([start_link/0, start_event_stream/4, stop_event_stream/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -40,9 +40,20 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_event_stream(EvtStmSup :: pid(), EvtDisp :: pid(),
-    SubId :: non_neg_integer()) -> supervisor:startchild_ret().
-start_event_stream(EvtStmSup, EvtDisp, SubId) ->
-    supervisor:start_child(EvtStmSup, [EvtDisp, SubId]).
+    SubId :: event_manager:subscription_id(),
+    EvtStmSpec :: event_stream:event_stream()) -> ok | {error, Reason :: term()}.
+start_event_stream(EvtStmSup, EvtDisp, SubId, EvtStmSpec) ->
+    supervisor:start_child(EvtStmSup, [EvtDisp, SubId, EvtStmSpec]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Stops event stream supervised by event stream supervisor.
+%% @end
+%%--------------------------------------------------------------------
+-spec stop_event_stream(EvtStmSup :: pid(), EvtStm :: pid()) ->
+    ok | {error, Reason :: term()}.
+stop_event_stream(EvtStmSup, EvtStm) ->
+    supervisor:terminate_child(EvtStmSup, EvtStm).
 
 %%%===================================================================
 %%% Supervisor callbacks

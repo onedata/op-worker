@@ -102,42 +102,25 @@ translate_to_protobuf(#event_subscription_cancellation{id = Id}) ->
             }
         }
     };
-translate_to_protobuf(#read_event_subscription{} = Subscription) ->
+translate_to_protobuf(#read_event_subscription{} = Sub) ->
     #'EventSubscription'{
         event_subscription = {read_event_subscription,
             #'ReadEventSubscription'{
-                id = Subscription#read_event_subscription.subscription_id,
-                counter_threshold = set_event_threshold_parameter(
-                    Subscription#read_event_subscription.producer_counter_threshold,
-                    Subscription#read_event_subscription.subscriber_counter_threshold
-                ),
-                time_threshold = set_event_threshold_parameter(
-                    Subscription#read_event_subscription.producer_time_threshold,
-                    Subscription#read_event_subscription.subscriber_time_threshold
-                ),
-                size_threshold = set_event_threshold_parameter(
-                    Subscription#read_event_subscription.producer_size_threshold,
-                    Subscription#read_event_subscription.subscriber_size_threshold
-                )
+                id = Sub#read_event_subscription.id,
+                counter_threshold = Sub#read_event_subscription.producer_counter_threshold,
+                time_threshold = Sub#read_event_subscription.producer_time_threshold,
+                size_threshold = Sub#read_event_subscription.producer_size_threshold
             }
         }
     };
-translate_to_protobuf(#write_event_subscription{} = Subscription) ->
+translate_to_protobuf(#write_event_subscription{} = Sub) ->
     #'EventSubscription'{
         event_subscription = {write_event_subscription,
             #'WriteEventSubscription'{
-                counter_threshold = set_event_threshold_parameter(
-                    Subscription#write_event_subscription.producer_counter_threshold,
-                    Subscription#write_event_subscription.subscriber_counter_threshold
-                ),
-                time_threshold = set_event_threshold_parameter(
-                    Subscription#write_event_subscription.producer_time_threshold,
-                    Subscription#write_event_subscription.subscriber_time_threshold
-                ),
-                size_threshold = set_event_threshold_parameter(
-                    Subscription#write_event_subscription.producer_size_threshold,
-                    Subscription#write_event_subscription.subscriber_size_threshold
-                )
+                id = Sub#write_event_subscription.id,
+                counter_threshold = Sub#write_event_subscription.producer_counter_threshold,
+                time_threshold = Sub#write_event_subscription.producer_time_threshold,
+                size_threshold = Sub#write_event_subscription.producer_size_threshold
             }
         }};
 translate_to_protobuf(#handshake_response{session_id = Id}) ->
@@ -149,23 +132,3 @@ translate_to_protobuf(Record) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns producer paramter if present or modified subscriber parameter.
-%% If parameters are not provided returns 'undefined'.
-%% @end
-%%--------------------------------------------------------------------
--spec set_event_threshold_parameter(ProducerParameter, SubscriberParameter) -> Parameter when
-    Parameter :: undefined | non_neg_integer(),
-    ProducerParameter :: undefined | non_neg_integer(),
-    SubscriberParameter :: undefined | non_neg_integer().
-set_event_threshold_parameter(undefined, undefined) ->
-    undefined;
-
-set_event_threshold_parameter(undefined, SubscriberParameter) ->
-    {ok, Ratio} = application:get_env(?APP_NAME, subs_to_prod_threshold_ratio),
-    SubscriberParameter / Ratio;
-
-set_event_threshold_parameter(ProducerParameter, _) ->
-    ProducerParameter.

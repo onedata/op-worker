@@ -125,7 +125,7 @@ supervisor_child_spec() ->
     Connection :: pid()) -> {ok, Pid :: pid()} | {error, Reason :: term()}.
 get_or_create_sequencer_dispatcher(SessionId, Connection) ->
     case get_sequencer_dispatcher_model(SessionId) of
-        {ok, #sequencer_dispatcher_model{pid = SeqDisp}} ->
+        {ok, #sequencer_dispatcher_data{pid = SeqDisp}} ->
             ok = gen_server:call(SeqDisp, {add_connection, Connection}),
             {ok, SeqDisp};
         {error, {not_found, _}} ->
@@ -141,9 +141,9 @@ get_or_create_sequencer_dispatcher(SessionId, Connection) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sequencer_dispatcher_model(SessionId :: session_id()) ->
-    {ok, #sequencer_dispatcher_model{}} | {error, Reason :: term()}.
+    {ok, #sequencer_dispatcher_data{}} | {error, Reason :: term()}.
 get_sequencer_dispatcher_model(SessionId) ->
-    case sequencer_dispatcher_model:get(SessionId) of
+    case sequencer_dispatcher_data:get(SessionId) of
         {ok, #document{value = SeqModel}} ->
             {ok, SeqModel};
         {error, Reason} ->
@@ -159,17 +159,14 @@ get_sequencer_dispatcher_model(SessionId) ->
 -spec create_sequencer_dispatcher(SessionId :: session_id(), Connection :: pid()) ->
     {ok, Pid :: pid()} | {error, Reason :: term()}.
 create_sequencer_dispatcher(SessionId, Connection) ->
-    Node = node(),
     {ok, SeqDispSup} = start_sequencer_dispatcher_sup(),
     {ok, SeqStmSup} = sequencer_dispatcher_sup:start_sequencer_stream_sup(SeqDispSup),
-    {ok, SeqDisp} = sequencer_dispatcher_sup:start_sequencer_dispatcher(SeqDispSup, SeqStmSup, Connection),
-    case sequencer_dispatcher_model:create(#document{key = SessionId, value = #sequencer_dispatcher_model{
-        node = Node, pid = SeqDisp, sup = SeqDispSup
-    }}) of
-        {ok, SessionId} ->
+    case sequencer_dispatcher_sup:start_sequencer_dispatcher(SeqDispSup,
+        SeqStmSup, SessionId, Connection) of
+        {ok, SeqDisp} ->
             {ok, SeqDisp};
-        {error, already_exists} ->
-            ok = stop_sequencer_dispatcher_sup(Node, SeqDispSup),
+        {error, {already_exists, _}} ->
+            ok = stop_sequencer_dispatcher_sup(node(), SeqDispSup),
             get_or_create_sequencer_dispatcher(SessionId, Connection);
         {error, Reason} ->
             {error, Reason}
@@ -185,9 +182,8 @@ create_sequencer_dispatcher(SessionId, Connection) ->
     ok | {error, Reason :: term()}.
 remove_sequencer_dispatcher(SessionId) ->
     case get_sequencer_dispatcher_model(SessionId) of
-        {ok, #sequencer_dispatcher_model{node = Node, sup = SeqDispSup}} ->
-            ok = stop_sequencer_dispatcher_sup(Node, SeqDispSup),
-            sequencer_dispatcher_model:delete(SessionId);
+        {ok, #sequencer_dispatcher_data{node = Node, sup = SeqDispSup}} ->
+            stop_sequencer_dispatcher_sup(Node, SeqDispSup);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -209,7 +205,7 @@ start_sequencer_dispatcher_sup() ->
 %% Stops sequencer dispatcher supervisor and its children.
 %% @end
 %%--------------------------------------------------------------------
--spec stop_sequencer_dispatcher_sup(Node :: node(), Pid :: pid()) ->
+-spec stop_sequencer_dispatcher_sup(Node :: node(), SeqDispSup :: pid()) ->
     ok | {error, Reason :: term()}.
-stop_sequencer_dispatcher_sup(Node, Pid) ->
-    supervisor:terminate_child({?SEQUENCER_MANAGER_WORKER_SUP, Node}, Pid).
+stop_sequencer_dispatcher_sup(Node, SeqDispSup) ->
+    supervisor:terminate_child({?SEQUENCER_MANAGER_WORKER_SUP, Node}, SeqDispSup).

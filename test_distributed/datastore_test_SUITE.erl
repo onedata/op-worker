@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Tests datastore main API based on 'sample_model' model.
+%%% @doc Tests datastore main API based on 'some_record' model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(datastore_test_SUITE).
@@ -44,20 +44,20 @@ local_cache_test(Config) ->
         ?call_store(Worker1, create, [Level,
             #document{
                 key = some_other_key,
-                value = #sample_model{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
             }])),
 
     ?assertMatch(false,
         ?call_store(Worker2, exists, [Level,
-            sample_model, some_other_key])),
+            some_record, some_other_key])),
 
     ?assertMatch(false,
         ?call_store(CCM, exists, [Level,
-            sample_model, some_other_key])),
+            some_record, some_other_key])),
 
     ?assertMatch(true,
         ?call_store(Worker1, exists, [Level,
-            sample_model, some_other_key])),
+            some_record, some_other_key])),
 
     ok.
 
@@ -93,36 +93,36 @@ global_cache_atomic_update_test(Config) ->
         ?call_store(Worker1, create, [Level,
             #document{
                 key = Key,
-                value = #sample_model{field1 = 0, field2 = <<"abc">>, field3 = {test, tuple}}
+                value = #some_record{field1 = 0, field2 = <<"abc">>, field3 = {test, tuple}}
             }])),
 
     Pid = self(),
     ?assertMatch({ok, Key},
         ?call_store(Worker2, update, [Level,
-            sample_model, Key,
-            fun(#sample_model{field1 = 0} = Record) ->
-                Record#sample_model{field2 = Pid}
+            some_record, Key,
+            fun(#some_record{field1 = 0} = Record) ->
+                Record#some_record{field2 = Pid}
             end])),
 
-    ?assertMatch({ok, #document{value = #sample_model{field1 = 0, field2 = Pid}}},
+    ?assertMatch({ok, #document{value = #some_record{field1 = 0, field2 = Pid}}},
         ?call_store(Worker1, get, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
-    UpdateFun = fun(#sample_model{field1 = Value} = Record) ->
-        Record#sample_model{field1 = Value + 1}
+    UpdateFun = fun(#some_record{field1 = Value} = Record) ->
+        Record#some_record{field1 = Value + 1}
     end,
 
     Self = self(),
     Timeout = timer:seconds(30),
     utils:pforeach(fun(Node) ->
-        ?call_store(Node, update, [Level, sample_model, Key, UpdateFun]),
+        ?call_store(Node, update, [Level, some_record, Key, UpdateFun]),
         Self ! done
     end, lists:duplicate(100, Worker1) ++ lists:duplicate(100, Worker2)),
     [receive done -> ok after Timeout -> ok end || _ <- lists:seq(1, 200)],
 
-    ?assertMatch({ok, #document{value = #sample_model{field1 = 200}}},
+    ?assertMatch({ok, #document{value = #some_record{field1 = 200}}},
         ?call_store(Worker1, get, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
     ok.
 
@@ -145,44 +145,44 @@ local_access_only(Node, Level) ->
         ?call_store(Node, create, [Level,
             #document{
                 key = Key,
-                value = #sample_model{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
             }])),
 
     ?assertMatch({error, already_exists},
         ?call_store(Node, create, [Level,
             #document{
                 key = Key,
-                value = #sample_model{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
             }])),
 
     ?assertMatch(true,
         ?call_store(Node, exists, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
-    ?assertMatch({ok, #document{value = #sample_model{field3 = {test, tuple}}}},
+    ?assertMatch({ok, #document{value = #some_record{field3 = {test, tuple}}}},
         ?call_store(Node, get, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
     Pid = self(),
     ?assertMatch({ok, Key},
         ?call_store(Node, update, [Level,
-            sample_model, Key, #{field2 => Pid}])),
+            some_record, Key, #{field2 => Pid}])),
 
-    ?assertMatch({ok, #document{value = #sample_model{field2 = Pid}}},
+    ?assertMatch({ok, #document{value = #some_record{field2 = Pid}}},
         ?call_store(Node, get, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
     ?assertMatch(ok,
         ?call_store(Node, delete, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
     ?assertMatch({error, {not_found, _}},
         ?call_store(Node, get, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
     ?assertMatch({error, {not_found, _}},
         ?call_store(Node, update, [Level,
-            sample_model, Key, #{field2 => self()}])),
+            some_record, Key, #{field2 => self()}])),
 
     ok.
 
@@ -198,46 +198,46 @@ global_access(Config, Level) ->
         ?call_store(Worker1, create, [Level,
             #document{
                 key = Key,
-                value = #sample_model{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
             }])),
 
     ?assertMatch(true,
         ?call_store(Worker2, exists, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
     ?assertMatch(true,
         ?call_store(CCM, exists, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
     ?assertMatch(true,
         ?call_store(Worker1, exists, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
     ?assertMatch({error, already_exists},
         ?call_store(Worker2, create, [Level,
             #document{
                 key = Key,
-                value = #sample_model{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
             }])),
 
-    ?assertMatch({ok, #document{value = #sample_model{field1 = 1, field3 = {test, tuple}}}},
+    ?assertMatch({ok, #document{value = #some_record{field1 = 1, field3 = {test, tuple}}}},
         ?call_store(Worker1, get, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
-    ?assertMatch({ok, #document{value = #sample_model{field1 = 1, field3 = {test, tuple}}}},
+    ?assertMatch({ok, #document{value = #some_record{field1 = 1, field3 = {test, tuple}}}},
         ?call_store(Worker2, get, [Level,
-            sample_model, some_other_key])),
+            some_record, some_other_key])),
 
-    ?assertMatch({ok, #document{value = #sample_model{field1 = 1, field3 = {test, tuple}}}},
+    ?assertMatch({ok, #document{value = #some_record{field1 = 1, field3 = {test, tuple}}}},
         ?call_store(CCM, get, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
     ?assertMatch({ok, _},
         ?call_store(Worker1, update, [Level,
-            sample_model, Key, #{field1 => 2}])),
+            some_record, Key, #{field1 => 2}])),
 
-    ?assertMatch({ok, #document{value = #sample_model{field1 = 2}}},
+    ?assertMatch({ok, #document{value = #some_record{field1 = 2}}},
         ?call_store(Worker2, get, [Level,
-            sample_model, Key])),
+            some_record, Key])),
 
     ok.

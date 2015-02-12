@@ -8,14 +8,14 @@
 %%% @doc Sequencer model.
 %%% @end
 %%%-------------------------------------------------------------------
--module(event_dispatcher_model).
+-module(event_dispatcher_data).
 -author("Krzysztof Trzepla").
 -behaviour(model_behaviour).
 
 -include("workers/datastore/datastore.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0, 'after'/5, before/4]).
+-export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0, 'after'/5, before/4]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -62,6 +62,15 @@ get(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error().
+list() ->
+    mnesia_cache_driver:list(model_init()).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -86,7 +95,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(sequencer_bucket, []).
+    ?MODEL_CONFIG(event_dispatcher_bucket, []).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -15,8 +15,10 @@
 
 -behaviour(supervisor).
 
+-include("cluster_elements/protocol_handler/credentials.hrl").
+
 %% API
--export([start_link/0, start_event_stream_sup/1, start_event_dispatcher/2]).
+-export([start_link/0, start_event_stream_sup/1, start_event_dispatcher/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -52,10 +54,10 @@ start_event_stream_sup(EvtDispSup) ->
 %% supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_event_dispatcher(EvtDispSup :: pid(), EvtStmSup :: pid()) ->
-    supervisor:startchild_ret().
-start_event_dispatcher(EvtDispSup, EvtStmSup) ->
-    ChildSpec = event_dispatcher_spec(EvtStmSup),
+-spec start_event_dispatcher(EvtDispSup :: pid(), EvtStmSup :: pid(),
+    SessionId :: session_id()) -> supervisor:startchild_ret().
+start_event_dispatcher(EvtDispSup, EvtStmSup, SessionId) ->
+    ChildSpec = event_dispatcher_spec(EvtDispSup, EvtStmSup, SessionId),
     supervisor:start_child(EvtDispSup, ChildSpec).
 
 %%%===================================================================
@@ -107,11 +109,12 @@ event_stream_sup_spec() ->
 %% Returns a supervisor child_spec for a event dispatcher.
 %% @end
 %%--------------------------------------------------------------------
--spec event_dispatcher_spec(EvtStmSup :: pid()) ->
-    supervisor:child_spec().
-event_dispatcher_spec(EvtStmSup) ->
+-spec event_dispatcher_spec(EvtDispSup :: pid(), EvtStmSup :: pid(),
+    SessionId :: session_id()) -> supervisor:child_spec().
+event_dispatcher_spec(EvtDispSup, EvtStmSup, SessionId) ->
     Id = Module = event_dispatcher,
     Restart = permanent,
     Shutdown = timer:seconds(10),
     Type = worker,
-    {Id, {Module, start_link, [EvtStmSup]}, Restart, Shutdown, Type, [Module]}.
+    {Id, {Module, start_link, [EvtDispSup, EvtStmSup, SessionId]},
+        Restart, Shutdown, Type, [Module]}.

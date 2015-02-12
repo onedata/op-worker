@@ -23,18 +23,36 @@
 %% Models' definitions
 
 %% sample model with example fields
--record(sample_model, {field1, field2, field3}).
+-record(some_record, {
+    field1 :: term(),
+    field2 :: term(),
+    field3 :: term()
+}).
 
 %% sequencer dispatcher model:
 %% node - node on which sequencer dispatcher has been started
 %% pid  - pid of sequencer dispatcher associated with client session
 %% sup  - pid of sequencer dispatcher supervisor
--record(sequencer_dispatcher_model, {node, pid, sup}).
+-record(sequencer_dispatcher_data, {
+    node :: node(),
+    pid :: pid(),
+    sup :: pid()
+}).
 
-%% sequencer manager model:
+%% event dispatcher model:
 %% node - node on which event dispatcher has been started
 %% pid  - pid of event dispatcher associated with FUSE client
 %% sup  - pid of event dispatcher supervisor
--record(event_dispatcher_model, {node, pid, sup}).
+-record(event_dispatcher_data, {
+    node :: node(),
+    pid :: pid(),
+    sup :: pid()
+}).
+
+%% event manager model:
+%% value - mapping from subscription ID to subscription
+-record(subscription, {
+    value :: event_manager:subscription()
+}).
 
 -endif.

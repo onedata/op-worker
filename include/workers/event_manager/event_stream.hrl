@@ -13,10 +13,13 @@
 -define(EVENT_STREAM_HRL, 1).
 
 -record(event_stream, {
-    admission_rule :: admission_rule(),
-    aggregation_rule :: aggregation_rule(),
-    emission_rule :: emission_rule(),
-    handlers :: [event_handler()]
+    metadata :: event_stream:metadata(),
+    admission_rule :: event_stream:admission_rule(),
+    aggregation_rule :: event_stream:aggregation_rule(),
+    transition_rule :: event_stream:transition_rule(),
+    emission_rule :: event_stream:emission_rule(),
+    emission_time :: timeout(),
+    handlers :: [event_stream:event_handler()]
 }).
 
 -endif.

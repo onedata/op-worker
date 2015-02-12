@@ -15,7 +15,10 @@
 
 -behaviour(worker_plugin_behaviour).
 
+-include("workers/event_manager/read_event.hrl").
+-include("workers/event_manager/write_event.hrl").
 -include("workers/datastore/datastore_models.hrl").
+-include("proto_internal/oneclient/client_messages.hrl").
 -include("cluster_elements/protocol_handler/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -48,6 +51,9 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck |
+    {emit, Evt :: event_manager:event(), SessionId :: session_id()} |
+    {subscribe, Sub :: event_manager:subscription()} |
+    {unsubscribe, SubId :: event_manager:subscription_id()} |
     {get_or_create_event_dispatcher, SessionId :: session_id()} |
     {remove_event_dispatcher, SessionId :: session_id()},
     Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
@@ -59,6 +65,15 @@ handle(ping, _) ->
 
 handle(healthcheck, _) ->
     ok;
+
+handle({emit, Evt, SessionId}, _) ->
+    emit(Evt, SessionId);
+
+handle({subscribe, Sub}, _) ->
+    subscribe(Sub);
+
+handle({unsubscribe, SubId}, _) ->
+    unsubscribe(SubId);
 
 handle({get_or_create_event_dispatcher, SessionId}, _) ->
     get_or_create_event_dispatcher(SessionId);
@@ -117,6 +132,56 @@ supervisor_child_spec() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Emits an event to event manager associated with given session.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit(Evt :: event_manager:event(), SessionId :: session_id()) ->
+    ok | {error, Reason :: term()}.
+emit(Evt, SessionId) ->
+    case get_or_create_event_dispatcher(SessionId) of
+        {ok, EvtDisp} ->
+            gen_server:cast(EvtDisp, #client_message{client_message = Evt});
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates subscription for events.
+%% @end
+%%--------------------------------------------------------------------
+-spec subscribe(Sub :: event_manager:subscription()) ->
+    {ok, SubId :: event_manager:subscription_id()} | {error, Reason :: term()}.
+subscribe(Sub) ->
+    SubId = crypto:rand_uniform(0, 16#FFFFFFFFFFFFFFFF),
+    {ok, SubId} = subscription:create(
+        #document{key = SubId, value = #subscription{value = Sub}}
+    ),
+    {ok, Docs} = event_dispatcher_data:list(),
+    lists:foreach(fun(#document{value = #event_dispatcher_data{pid = EvtDisp}}) ->
+        ok = gen_server:call(EvtDisp, {add_subscription, SubId, Sub})
+    end, Docs),
+    {ok, SubId}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes subscription for events.
+%% @end
+%%--------------------------------------------------------------------
+-spec unsubscribe(SubId :: event_manager:subscription_id()) ->
+    ok | {error, Reason :: term()}.
+unsubscribe(SubId) ->
+    {ok, Docs} = event_dispatcher_data:list(),
+    lists:foreach(fun(#document{value = #event_dispatcher_data{pid = EvtDisp}}) ->
+        ok = gen_server:call(EvtDisp, {remove_subscription, SubId})
+    end, Docs),
+    ok = subscription:delete(SubId).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Returns pid of event dispatcher for client session. If event
 %% dispatcher does not exist it is instantiated.
 %% @end
@@ -124,8 +189,8 @@ supervisor_child_spec() ->
 -spec get_or_create_event_dispatcher(SessionId :: session_id()) ->
     {ok, Pid :: pid()} | {error, Reason :: term()}.
 get_or_create_event_dispatcher(SessionId) ->
-    case get_event_dispatcher_model(SessionId) of
-        {ok, #event_dispatcher_model{pid = EvtDisp}} ->
+    case get_event_dispatcher_data(SessionId) of
+        {ok, #event_dispatcher_data{pid = EvtDisp}} ->
             {ok, EvtDisp};
         {error, {not_found, _}} ->
             create_event_dispatcher(SessionId);
@@ -139,12 +204,12 @@ get_or_create_event_dispatcher(SessionId) ->
 %% Returns model of existing event dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_event_dispatcher_model(SessionId :: session_id()) ->
-    {ok, #event_dispatcher_model{}} | {error, Reason :: term()}.
-get_event_dispatcher_model(SessionId) ->
-    case event_dispatcher_model:get(SessionId) of
-        {ok, #document{value = EvModel}} ->
-            {ok, EvModel};
+-spec get_event_dispatcher_data(SessionId :: session_id()) ->
+    {ok, #event_dispatcher_data{}} | {error, Reason :: term()}.
+get_event_dispatcher_data(SessionId) ->
+    case event_dispatcher_data:get(SessionId) of
+        {ok, #document{value = EvtDispData}} ->
+            {ok, EvtDispData};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -158,17 +223,13 @@ get_event_dispatcher_model(SessionId) ->
 -spec create_event_dispatcher(SessionId :: session_id()) ->
     {ok, Pid :: pid()} | {error, Reason :: term()}.
 create_event_dispatcher(SessionId) ->
-    Node = node(),
     {ok, EvtDispSup} = start_event_dispatcher_sup(),
     {ok, EvtStmSup} = event_dispatcher_sup:start_event_stream_sup(EvtDispSup),
-    {ok, EvtDisp} = event_dispatcher_sup:start_event_dispatcher(EvtDispSup, EvtStmSup),
-    case event_dispatcher_model:create(#document{key = SessionId, value = #event_dispatcher_model{
-        node = Node, pid = EvtDisp, sup = EvtDispSup
-    }}) of
-        {ok, SessionId} ->
+    case event_dispatcher_sup:start_event_dispatcher(EvtDispSup, EvtStmSup, SessionId) of
+        {ok, EvtDisp} ->
             {ok, EvtDisp};
-        {error, already_exists} ->
-            ok = stop_event_dispatcher_sup(Node, EvtDispSup),
+        {error, {already_exists, _}} ->
+            ok = stop_event_dispatcher_sup(node(), EvtDispSup),
             get_or_create_event_dispatcher(SessionId);
         {error, Reason} ->
             {error, Reason}
@@ -183,10 +244,9 @@ create_event_dispatcher(SessionId) ->
 -spec remove_event_dispatcher(SessionId :: session_id()) ->
     ok | {error, Reason :: term()}.
 remove_event_dispatcher(SessionId) ->
-    case get_event_dispatcher_model(SessionId) of
-        {ok, #event_dispatcher_model{node = Node, sup = EvtDispSup}} ->
-            ok = stop_event_dispatcher_sup(Node, EvtDispSup),
-            event_dispatcher_model:delete(SessionId);
+    case get_event_dispatcher_data(SessionId) of
+        {ok, #event_dispatcher_data{node = Node, sup = EvtDispSup}} ->
+            stop_event_dispatcher_sup(Node, EvtDispSup);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -208,7 +268,7 @@ start_event_dispatcher_sup() ->
 %% Stops event dispatcher supervisor and its children.
 %% @end
 %%--------------------------------------------------------------------
--spec stop_event_dispatcher_sup(Node :: node(), Pid :: pid()) ->
+-spec stop_event_dispatcher_sup(Node :: node(), EvtDispSup :: pid()) ->
     ok | {error, Reason :: term()}.
-stop_event_dispatcher_sup(Node, Pid) ->
-    supervisor:terminate_child({?EVENT_MANAGER_WORKER_SUP, Node}, Pid).
+stop_event_dispatcher_sup(Node, EvtDispSup) ->
+    supervisor:terminate_child({?EVENT_MANAGER_WORKER_SUP, Node}, EvtDispSup).

@@ -17,7 +17,7 @@
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
--export([save/2, update/3, create/2, exists/2, get/2, delete/2]).
+-export([save/2, update/3, create/2, exists/2, get/2, list/1, delete/2]).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
@@ -139,6 +139,19 @@ get(#model_config{} = ModelConfig, Key) ->
             [Value] -> {ok, #document{key = Key, value = strip_key(Value)}};
             Reason -> {error, Reason}
         end
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list(model_behaviour:model_config()) ->
+    {ok, [datastore:document()]} | datastore:generic_error().
+list(#model_config{} = ModelConfig) ->
+    SelectAll = [{'_', [], ['$_']}],
+    transaction(fun() ->
+        {ok, mnesia:select(table_name(ModelConfig), SelectAll)}
     end).
 
 %%--------------------------------------------------------------------

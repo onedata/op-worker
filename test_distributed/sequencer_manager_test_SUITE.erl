@@ -36,15 +36,15 @@ sequencer_manager_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     Self = self(),
-    FuseId1 = <<"fuse_id_1">>,
-    FuseId2 = <<"fuse_id_2">>,
+    SessionId1 = <<"session_id_1">>,
+    SessionId2 = <<"session_id_2">>,
 
     % Check whether sequencer worker returns the same sequencer dispatcher
     % for given session dispite of node on which request is processed.
-    [SeqDisp1, SeqDisp2] = lists:map(fun({FuseId, Workers}) ->
+    [SeqDisp1, SeqDisp2] = lists:map(fun({SessionId, Workers}) ->
         CreateOrGetSeqDispAnswers = utils:pmap(fun(Worker) ->
             rpc:call(Worker, sequencer_manager,
-                get_or_create_sequencer_dispatcher, [FuseId, Self])
+                get_or_create_sequencer_dispatcher, [SessionId, Self])
         end, Workers),
 
         lists:foreach(fun(CreateOrGetSeqDispAnswer) ->
@@ -59,8 +59,8 @@ sequencer_manager_test(Config) ->
 
         FirstSeqDisp
     end, [
-        {FuseId1, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)},
-        {FuseId2, lists:duplicate(2, Worker2) ++ lists:duplicate(2, Worker1)}
+        {SessionId1, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)},
+        {SessionId2, lists:duplicate(2, Worker2) ++ lists:duplicate(2, Worker1)}
     ]),
 
     % Check whether sequencer worker returns different sequencer dispatchers for
@@ -69,17 +69,17 @@ sequencer_manager_test(Config) ->
 
     % Check whether sequencer worker can remove sequencer manager
     % for given session dispite of node on which request is processed.
-    utils:pforeach(fun({FuseId, Worker}) ->
+    utils:pforeach(fun({SessionId, Worker}) ->
         ProcessesBeforeRemoval = processes([Worker1, Worker2]),
         ?assertMatch([_], lists:filter(fun(P) ->
             P =:= SeqDisp1
         end, ProcessesBeforeRemoval)),
 
         RemoveSeqDispAnswer1 = rpc:call(Worker, sequencer_manager,
-            remove_sequencer_dispatcher, [FuseId]),
+            remove_sequencer_dispatcher, [SessionId]),
         ?assertMatch(ok, RemoveSeqDispAnswer1),
         RemoveSeqDispAnswer2 = rpc:call(Worker, sequencer_manager,
-            remove_sequencer_dispatcher, [FuseId]),
+            remove_sequencer_dispatcher, [SessionId]),
         ?assertMatch({error, _}, RemoveSeqDispAnswer2),
 
         ProcessesAfterRemoval = processes([Worker1, Worker2]),
@@ -87,9 +87,15 @@ sequencer_manager_test(Config) ->
             Proces =:= SeqDisp1
         end, ProcessesAfterRemoval))
     end, [
-        {FuseId1, Worker2},
-        {FuseId2, Worker1}
+        {SessionId1, Worker2},
+        {SessionId2, Worker1}
     ]),
+
+    % Check whether sequencer dispatcher were deleted
+    ?assertMatch({error, {not_found, _}}, rpc:call(Worker1,
+        sequencer_dispatcher_data, get, [SessionId1])),
+    ?assertMatch({error, {not_found, _}}, rpc:call(Worker2,
+        sequencer_dispatcher_data, get, [SessionId2])),
 
     ok.
 
@@ -97,7 +103,7 @@ sequencer_manager_test(Config) ->
 sequencer_stream_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
     Self = self(),
-    FuseId = <<"fuse_id">>,
+    SessionId = <<"session_id">>,
     MsgId = 1,
     MsgCount = 100,
     ClientMsg = #client_message{message_id = MsgId, last_message = false},
@@ -113,7 +119,7 @@ sequencer_stream_test(Config) ->
     end),
 
     {ok, SeqDisp} = rpc:call(Worker, sequencer_manager,
-        get_or_create_sequencer_dispatcher, [FuseId, Self]),
+        get_or_create_sequencer_dispatcher, [SessionId, Self]),
 
     %% Send 'MsgCount' messages in reverse order
     lists:foreach(fun(SeqNum) ->
@@ -155,7 +161,7 @@ sequencer_stream_test(Config) ->
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
     ok = rpc:call(Worker, sequencer_manager,
-        remove_sequencer_dispatcher, [FuseId]),
+        remove_sequencer_dispatcher, [SessionId]),
 
     test_utils:mock_validate(Worker, [router, protocol_handler]),
 
