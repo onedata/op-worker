@@ -165,47 +165,11 @@ handle_cast(_Request, State) ->
 handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
     transport = Transport, certificate_info = undefined}) ->
     activate_socket_once(Socket, Transport),
-    try serializator:deserialize_oneproxy_certificate_info_message(Data) of
-        {ok, #certificate_info{} = Info} ->
-            {noreply, State#sock_state{certificate_info = Info}, ?TIMEOUT}
-    catch
-        _:Error ->
-            ?error_stacktrace("Cannot decode oneproxy CertificateInfo message, error: ~p", [Error]),
-            {stop, Error, State}
-    end;
+    handle_oneproxy_certificate_info_message(State, Data);
 handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
-    transport = Transport, session_id = SessionId, sequencer_manager = SeqMan,
-    certificate_info = CertInfo}) ->
+    transport = Transport}) ->
     activate_socket_once(Socket, Transport),
-    try serializator:deserialize_client_message(Data, SessionId) of
-        {ok, Msg} when SessionId == undefined -> % handle handshake message
-            try client_auth:handle_handshake(Msg, CertInfo) of
-                {ok, Response = #server_message{server_message =
-                #handshake_response{session_id = NewSessionId}}} ->
-                    send_server_message(Socket, Transport, Response),
-                    {noreply, State#sock_state{session_id = NewSessionId}, ?TIMEOUT}
-            catch
-                _:Error ->
-                    ?warning_stacktrace("Handshake ~p, error ~p", [Msg, Error]),
-                    {stop, Error, State}
-            end;
-        {ok, Msg} ->
-            case router:preroute_message(SeqMan, Msg) of
-                ok ->
-                    {noreply, State, ?TIMEOUT};
-                {_, Response = #server_message{}} ->
-                    send_server_message(Socket, Transport, Response),
-                    {noreply, State, ?TIMEOUT};
-                {error, Reason} ->
-                    ?warning("Message ~p handling error: ~p", [Msg, Reason]),
-                    {stop, {error, Reason}, State}
-            end
-    catch
-        _:Error ->
-            ?warning_stacktrace("Connection ~p, message decoding error: ~p", [Socket, Error]),
-            {stop, Error, State}
-    end;
-
+    handle_client_message(State, Data);
 handle_info({Closed, _}, State = #sock_state{closed = Closed}) ->
     {stop, normal, State};
 
@@ -250,6 +214,89 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handle first message after opening connection - information from
+%% oneproxy about peer certificate
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_oneproxy_certificate_info_message(#sock_state{}, binary()) ->
+    {noreply, NewState :: #sock_state{}, timeout()} |
+    {stop, Reason :: term(), NewState :: #sock_state{}}.
+handle_oneproxy_certificate_info_message(State, Data) ->
+    try serializator:deserialize_oneproxy_certificate_info_message(Data) of
+        {ok, #certificate_info{} = Info} ->
+            {noreply, State#sock_state{certificate_info = Info}, ?TIMEOUT}
+    catch
+        _:Error ->
+            ?error_stacktrace("Cannot decode oneproxy CertificateInfo message, error: ~p", [Error]),
+            {stop, Error, State}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handle usual client data, it is decoded and passed to subsequent handler
+%% functions
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_client_message(#sock_state{}, binary()) ->
+    {noreply, NewState :: #sock_state{}, timeout()} |
+    {stop, Reason :: term(), NewState :: #sock_state{}}.
+handle_client_message(State = #sock_state{session_id = SessionId}, Data) ->
+    try serializator:deserialize_client_message(Data, SessionId) of
+        {ok, Msg} when SessionId == undefined ->
+            handle_handshake(State, Msg);
+        {ok, Msg} ->
+            handle_normal_message(State, Msg)
+    catch
+        _:Error ->
+            ?warning_stacktrace("Client message decoding error: ~p", [Error]),
+            {stop, Error, State}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handle client handshake_request, it is necessary to authenticate
+%% and obtain session
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_handshake(#sock_state{}, #certificate_info{}) ->
+    {noreply, NewState :: #sock_state{}, timeout()} |
+    {stop, Reason :: term(), NewState :: #sock_state{}}.
+handle_handshake(State =
+    #sock_state{certificate_info = Cert, socket = Sock, transport = Transp}, Msg) ->
+    try client_auth:handle_handshake(Msg, Cert) of
+        {ok, Response = #server_message{server_message =
+        #handshake_response{session_id = NewSessionId}}} ->
+            send_server_message(Sock, Transp, Response),
+            {noreply, State#sock_state{session_id = NewSessionId}, ?TIMEOUT}
+    catch
+        _:Error ->
+            ?warning_stacktrace("Handshake ~p, error ~p", [Msg, Error]),
+            {stop, Error, State}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handle nomal client_message
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_normal_message(#sock_state{}, tuple()) ->
+    {noreply, NewState :: #sock_state{}, timeout()} |
+    {stop, Reason :: term(), NewState :: #sock_state{}}.
+handle_normal_message(State =
+    #sock_state{sequencer_manager = SeqMan, socket = Sock, transport = Transp}, Msg) ->
+    case router:preroute_message(SeqMan, Msg) of
+        ok ->
+            {noreply, State, ?TIMEOUT};
+        {_, Response = #server_message{}} ->
+            send_server_message(Sock, Transp, Response),
+            {noreply, State, ?TIMEOUT};
+        {error, Reason} ->
+            ?warning("Message ~p handling error: ~p", [Msg, Reason]),
+            {stop, {error, Reason}, State}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
