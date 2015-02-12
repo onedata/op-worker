@@ -21,8 +21,9 @@ using namespace std::placeholders;
 namespace one {
 namespace communication {
 
-SSLConnection::SSLConnection(boost::asio::io_service &ioService,
-    boost::asio::ssl::context &context, const bool verifyServerCertificate,
+SSLConnection::SSLConnection(
+    boost::asio::io_service &ioService, boost::asio::ssl::context &context,
+    const bool verifyServerCertificate,
     std::function<void(std::vector<char>)> onMessageReceived,
     std::function<void(std::shared_ptr<SSLConnection>)> onReady,
     std::function<void(std::shared_ptr<SSLConnection>)> onClosed)
@@ -33,7 +34,6 @@ SSLConnection::SSLConnection(boost::asio::io_service &ioService,
     , m_strand{ioService}
     , m_socket{ioService, context}
 {
-    m_socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay{true});
 }
 
 SSLConnection::~SSLConnection()
@@ -58,12 +58,15 @@ void SSLConnection::start(boost::asio::ip::tcp::resolver::iterator endpointIt)
         boost::asio::async_connect(
             m_socket.lowest_layer(), endpointIt,
             [t = shared_from_this()](const boost::system::error_code &ec,
-                boost::asio::ip::tcp::resolver::iterator) {
+                                     boost::asio::ip::tcp::resolver::iterator) {
 
                 if (ec) {
                     t->close("Failed to establish TCP connection", ec);
                     return;
                 }
+
+                t->m_socket.lowest_layer().set_option(
+                    boost::asio::ip::tcp::no_delay{true});
 
                 t->m_socket.async_handshake(
                     boost::asio::ssl::stream_base::client,
@@ -76,9 +79,8 @@ void SSLConnection::start(boost::asio::ip::tcp::resolver::iterator endpointIt)
                                 t->m_verifyServerCertificate) {
                                 t->close("Server certificate verification "
                                          "failed. OpenSSL error",
-                                    ec);
-                            }
-                            else {
+                                         ec);
+                            } else {
                                 t->close("Failed to perform SSL handshake", ec);
                             }
 
@@ -117,7 +119,8 @@ void SSLConnection::close()
 
 void SSLConnection::startReading()
 {
-    boost::asio::async_read(m_socket, headerToBuffer(m_inHeader),
+    boost::asio::async_read(
+        m_socket, headerToBuffer(m_inHeader),
         m_strand.wrap([t = shared_from_this()](
             const boost::system::error_code &ec, size_t) {
 
@@ -129,9 +132,9 @@ void SSLConnection::startReading()
             const auto messageSize = ntohl(t->m_inHeader);
             t->m_inBuffer.resize(messageSize);
 
-            boost::asio::async_read(t->m_socket,
-                boost::asio::mutable_buffers_1{
-                    &t->m_inBuffer[0], t->m_inBuffer.size()},
+            boost::asio::async_read(
+                t->m_socket, boost::asio::mutable_buffers_1{
+                                 &t->m_inBuffer[0], t->m_inBuffer.size()},
                 t->m_strand.wrap(
                     [t](const boost::system::error_code &ec, size_t) {
                         if (ec) {
@@ -150,7 +153,8 @@ void SSLConnection::startWriting()
     std::array<boost::asio::const_buffer, 2> compositeBuffer{
         {headerToBuffer(m_outHeader), boost::asio::buffer(m_outBuffer)}};
 
-    boost::asio::async_write(m_socket, compositeBuffer,
+    boost::asio::async_write(
+        m_socket, compositeBuffer,
         m_strand.wrap([t = shared_from_this()](
             const boost::system::error_code &ec, size_t) {
 
@@ -166,8 +170,8 @@ void SSLConnection::startWriting()
         }));
 }
 
-std::string SSLConnection::close(
-    std::string what, const boost::system::error_code &ec)
+std::string SSLConnection::close(std::string what,
+                                 const boost::system::error_code &ec)
 {
     auto msg = what + ": " + ec.message();
     LOG(ERROR) << msg;
@@ -175,8 +179,8 @@ std::string SSLConnection::close(
     return msg;
 }
 
-boost::asio::mutable_buffers_1 SSLConnection::headerToBuffer(
-    std::uint32_t &header)
+boost::asio::mutable_buffers_1
+SSLConnection::headerToBuffer(std::uint32_t &header)
 {
     return {static_cast<void *>(&header), sizeof(header)};
 }
