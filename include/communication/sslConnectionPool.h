@@ -1,7 +1,7 @@
 /**
  * @file sslConnectionPool.h
  * @author Konrad Zemek
- * @copyright (C) 2014 ACK CYFRONET AGH
+ * @copyright (C) 2015 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in
  * 'LICENSE.txt'
  */
@@ -20,40 +20,27 @@
 
 #include <functional>
 #include <future>
-#include <queue>
 #include <memory>
-#include <unordered_set>
 #include <string>
+#include <queue>
+#include <vector>
 #include <thread>
 #include <tuple>
+#include <unordered_set>
 
 namespace one {
 namespace communication {
 
 class CertificateData;
+class SSLConnection;
 
 /**
  * A @c one::communication::ConnectionPool specialization for managing
  * SSL based connections.
  */
 class SSLConnectionPool {
-    // TODO: Chyba nie potrzeba używać unique_ptr, socket jest movable
-    using SSLSocket = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
+    using SendTask = std::tuple<std::vector<char>, std::promise<void>>;
     static constexpr size_t OUTBOX_SIZE = 1000;
-
-    class Connection {
-    public:
-        Connection(std::unique_ptr<SSLSocket> socket);
-        Connection(Connection&&) = default;
-        Connection &operator=(Connection&&) = default;
-        void close();
-        SSLSocket &operator*();
-        std::unique_ptr<SSLSocket> &operator->();
-        ~Connection();
-
-    private:
-        std::unique_ptr<SSLSocket> m_socket;
-    };
 
 public:
     /**
@@ -68,13 +55,12 @@ public:
      * certificate.
      */
     SSLConnectionPool(const unsigned int connectionsNumber, std::string host,
-                      std::string port,
-                      std::shared_ptr<const CertificateData> certificateData,
-                      const bool verifyServerCertificate);
+        std::string port,
+        std::shared_ptr<const CertificateData> certificateData,
+        const bool verifyServerCertificate,
+        std::function<void(std::vector<char>)> onMessage);
 
-    std::future<void> send(std::string message);
-
-    void createConnection();
+    std::future<void> send(std::vector<char> message);
 
     /**
      * Destructor.
@@ -84,28 +70,24 @@ public:
     ~SSLConnectionPool();
 
 private:
-    void onOperationError(Connection conn, std::promise<void> brokenPromise,
-                          const boost::system::error_code &ec);
-
-    void scheduleRecreateConnection();
-
-    void write(Connection conn, std::string message,
-               std::promise<void> promise);
-
-    void returnToQueue(Connection conn);
+    void createConnection();
+    void onMessageReceived(std::vector<char> message);
+    void onConnectionReady(std::shared_ptr<SSLConnection> conn);
+    void onConnectionClosed(std::shared_ptr<SSLConnection> conn);
 
     std::shared_ptr<const CertificateData> m_certificateData;
     const bool m_verifyServerCertificate;
-
     boost::asio::io_service m_ioService;
     boost::asio::io_service::work m_idleWork;
     boost::asio::io_service::strand m_blockingStrand;
+    boost::asio::io_service::strand m_connectionsStrand;
     std::vector<std::thread> m_workers;
-
     boost::asio::ip::tcp::resolver::iterator m_endpointIterator;
-    tbb::concurrent_bounded_queue<
-        std::shared_ptr<std::tuple<std::string, std::promise<void>>>> m_outbox;
+    tbb::concurrent_bounded_queue<std::shared_ptr<SendTask>> m_outbox;
+    tbb::concurrent_queue<std::shared_ptr<SendTask>> m_rejects;
+    std::unordered_set<std::shared_ptr<SSLConnection>> m_connections;
     boost::asio::ssl::context m_context;
+    std::function<void(std::vector<char>)> m_onMessage;
 };
 
 } // namespace communication
