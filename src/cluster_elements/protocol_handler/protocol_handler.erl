@@ -129,6 +129,7 @@ handle_call({send, ServerMsg}, _From, State = #sock_state{socket = Socket,
     transport = Transport}) ->
     Ans = send_server_message(Socket, Transport, ServerMsg),
     {reply, Ans, State};
+
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, wrong_request, State}.
@@ -147,6 +148,7 @@ handle_cast({send, ServerMsg}, State = #sock_state{socket = Socket,
     transport = Transport}) ->
     send_server_message(Socket, Transport, ServerMsg),
     {noreply, State};
+
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
@@ -166,10 +168,12 @@ handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
     transport = Transport, certificate_info = undefined}) ->
     activate_socket_once(Socket, Transport),
     handle_oneproxy_certificate_info_message(State, Data);
+
 handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
     transport = Transport}) ->
     activate_socket_once(Socket, Transport),
     handle_client_message(State, Data);
+
 handle_info({Closed, _}, State = #sock_state{closed = Closed}) ->
     {stop, normal, State};
 
