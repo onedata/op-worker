@@ -31,6 +31,7 @@ around_advice(#annotation{data = {_, _} = SingleExt}, M, F, Inputs) ->
 around_advice(#annotation{data = ConfExt}, M, F, Inputs) when is_list(ConfExt)->
   case os:getenv("perf_test") of
     "true" ->
+      process_flag(trap_exit, true),
       Repeats = proplists:get_value(repeats, ConfExt, 1),
       case proplists:get_value(perf_configs, ConfExt, []) of
         [] ->
@@ -43,16 +44,18 @@ around_advice(#annotation{data = ConfExt}, M, F, Inputs) when is_list(ConfExt)->
       end;
     _ ->
       Ext = proplists:get_value(ct_config, ConfExt, []),
-      annotation:call_advised(M, F, lists:append(Inputs, Ext))
+      [I1] = Inputs,
+      annotation:call_advised(M, F, [I1 ++ Ext])
   end;
 
 around_advice(#annotation{}, M, F, Inputs) ->
   around_advice(#annotation{data=[]}, M, F, Inputs).
 
 exec_perf_config(M, F, Inputs, Ext, Repeats) ->
-  Ans = exec_multiple_tests(M, F, lists:append(Inputs, Ext), Repeats),
+  [I1] = Inputs,
+  Ans = exec_multiple_tests(M, F, [I1 ++ Ext], Repeats),
   {ok, File} = file:open("perf_"++atom_to_list(M)++"_"++atom_to_list(F), [append]),
-  io:fwrite(File, "Time: ~p, ok_counter ~p, errors: ~p, repeats ~p, conf_ext: ~p", Ans ++ [Repeats, Ext]),
+  io:fwrite(File, "Time: ~p, ok_counter ~p, errors: ~p, repeats ~p, conf_ext: ~p~n", Ans ++ [Repeats, Ext]),
   file:close(File).
 
 exec_multiple_tests(M, F, Inputs, Count) ->
@@ -74,8 +77,18 @@ exec_test(M, F, Inputs) ->
     BeforeProcessing = os:timestamp(),
     annotation:call_advised(M, F, Inputs),
     AfterProcessing = os:timestamp(),
-    timer:now_diff(AfterProcessing, BeforeProcessing)
+    check_links(AfterProcessing, BeforeProcessing)
   catch
     E1:E2 ->
       {error, {E1,E2}}
+  end.
+
+check_links(AfterProcessing, BeforeProcessing) ->
+  receive
+    {'EXIT', _, normal} ->
+      check_links(AfterProcessing, BeforeProcessing);
+    {'EXIT',_,_} ->
+      {error, linked_proc_error}
+  after 0 ->
+    timer:now_diff(AfterProcessing, BeforeProcessing)
   end.
