@@ -6,10 +6,10 @@ import "event_messages.proto";
 
 // list of messages that can be sent from the client to the server
 message ClientMessage {
-    optional uint64 message_id   = 1;
+    optional bytes message_id    = 1;
     optional uint64 stream_id    = 2;
     optional uint64 seq_num      = 3;
-    optional bool   last_message = 4;
+    optional bool last_message   = 4;
     oneof client_message {
         // handshake_messages.proto
         HandshakeRequest              handshake_request         = 5;
