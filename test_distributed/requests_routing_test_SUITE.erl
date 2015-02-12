@@ -55,7 +55,7 @@ direct_cast_test(Config) ->
     TestProc = fun() ->
         Self = self(),
         SendReq = fun(MsgId) ->
-            ?assertEqual(okqa, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, MsgId, prefer_local]))
+            ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, MsgId, prefer_local]))
         end,
         for(1, ProcSendNum, SendReq),
         check_ans(ProcSendNum)
