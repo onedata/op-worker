@@ -10,6 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(remote_control_handler).
+-author("Lukasz Opiola").
 
 -include_lib("ctool/include/logging.hrl").
 -include("appmock_internal.hrl").
@@ -34,26 +35,33 @@ init(_Type, Req, Args) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Cowboy callback, called to process a request.
-%% Handles remote control requests by delegating them to appmock_logic.
+%% Handles remote control requests by delegating them to appmock_server.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Req :: cowboy_req:req(), State :: term()) -> {ok, term(), State :: term()}.
 handle(Req, State) ->
     [Path] = State,
-    {ok, Req2} =
+    {ok, NewReq} =
         try
-            case Path of
-                ?VERIFY_ALL_PATH ->
-                    appmock_logic:verify_all_mocks(Req);
-                ?VERIFY_MOCK_PATH ->
-                    appmock_logic:verify_mock(Req)
-            end
+            {ok, {Code, Headers, Body}} =
+                case Path of
+                    ?VERIFY_ALL_PATH ->
+                        appmock_server:verify_all_mocks(Req);
+                    ?VERIFY_MOCK_PATH ->
+                        appmock_server:verify_mock(Req)
+                end,
+            Req2 = cowboy_req:set_resp_body(Body, Req),
+            Req3 = lists:foldl(
+                fun({HKey, HValue}, CurrReq) ->
+                    gui_utils:cowboy_ensure_header(HKey, HValue, CurrReq)
+                end, Req2, Headers),
+            {ok, _NewReq} = cowboy_req:reply(Code, Req3)
         catch T:M ->
             ?error_stacktrace("Error in remote_control_handler. Path: ~p. ~p:~p.",
                 [Path, T, M]),
             {ok, _ErrorReq} = cowboy_req:reply(500, Req)
         end,
-    {ok, Req2, State}.
+    {ok, NewReq, State}.
 
 
 %%--------------------------------------------------------------------

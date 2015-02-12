@@ -10,6 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(appmock_app).
+-author("Lukasz Opiola").
 -behaviour(application).
 
 -include("appmock_internal.hrl").
@@ -26,4 +27,4 @@ start(_StartType, _StartArgs) ->
     appmock_sup:start_link().
 
 stop(_State) ->
-    appmock_sup:clean_up().
+    ok.

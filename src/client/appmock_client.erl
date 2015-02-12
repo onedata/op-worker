@@ -12,6 +12,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(appmock_client).
+-author("Lukasz Opiola").
 
 -include_lib("ctool/include/logging.hrl").
 -include("appmock_internal.hrl").
