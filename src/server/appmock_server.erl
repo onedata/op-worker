@@ -137,12 +137,6 @@ init([]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_call(get_history, _From, State) ->
-    {reply, {ok, State#state.mock_resp_history}, State};
-
-handle_call({append_to_history, Mapping}, _From, #state{mock_resp_history = History} = State) ->
-    {reply, ok, State#state{mock_resp_history = History ++ [Mapping]}};
-
 handle_call({produce_mock_resp, Req, ETSKey}, _From, State) ->
     {{Code, Headers, Body}, NewState} = internal_produce_mock_resp(Req, ETSKey, State),
     {reply, {ok, {Code, Headers, Body}}, NewState};
