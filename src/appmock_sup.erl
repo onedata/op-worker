@@ -10,13 +10,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(appmock_sup).
-
+-author("Lukasz Opiola").
 -behaviour(supervisor).
 
 -include("appmock_internal.hrl").
 
 %% API
--export([start_link/0, clean_up/0]).
+-export([start_link/0]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -31,15 +31,12 @@
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-clean_up() ->
-    appmock_logic:terminate().
-
 %% ===================================================================
 %% Supervisor callbacks
 %% ===================================================================
 
 init([]) ->
-    {ok, AppDescriptionFile} = application:get_env(?APP_NAME, app_description_file),
-    ok = appmock_logic:initialize(AppDescriptionFile),
-    {ok, { {one_for_one, 5, 10}, []} }.
+    {ok, {{one_for_one, 5, 10}, [
+        {appmock_server, {appmock_server, start_link, []}, permanent, 5000, worker, [appmock_server]}
+    ]}}.
 

@@ -13,6 +13,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(mock_app_description_behaviour).
+-author("Lukasz Opiola").
 
 -include("appmock.hrl").
 

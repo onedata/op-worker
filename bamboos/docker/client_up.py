@@ -90,7 +90,7 @@ for cfg in configs:
     cert_file_path = node['user_cert']
     key_file_path = node['user_key']
     # cert_file_path and key_file_path can both be an absolute path
-    # or relative to gen_dev_args.json
+    # or relative to example_gen_dev_args.json
     if not os.path.isabs(cert_file_path):
         cert_file_path = common.get_file_dir(args.config_path) + '/' + cert_file_path
     if not os.path.isabs(key_file_path):

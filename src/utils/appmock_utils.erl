@@ -10,6 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(appmock_utils).
+-author("Lukasz Opiola").
 
 %% API
 -export([https_request/6, encode_to_json/1, decode_from_json/1]).

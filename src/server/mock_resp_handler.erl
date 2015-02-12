@@ -10,6 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(mock_resp_handler).
+-author("Lukasz Opiola").
 
 -include_lib("ctool/include/logging.hrl").
 -include("appmock.hrl").
@@ -31,14 +32,20 @@ init(_Type, Req, [ETSKey]) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Cowboy callback, called to process a request.
-%% Handles requests to mocked endpoints by delegating them to appmock_logic.
+%% Handles requests to mocked endpoints by delegating them to appmock_server.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Req :: cowboy_req:req(), [ETSKey]) -> {ok, term(), [ETSKey]} when ETSKey :: {Port :: integer(), Path :: binary()}.
 handle(Req, [ETSKey]) ->
     {ok, NewReq} =
         try
-            {ok, _NewReq} = appmock_logic:produce_mock_resp(Req, ETSKey)
+            {ok, {Code, Headers, Body}} = appmock_server:produce_mock_resp(Req, ETSKey),
+            Req2 = cowboy_req:set_resp_body(Body, Req),
+            Req3 = lists:foldl(
+                fun({HKey, HValue}, CurrReq) ->
+                    gui_utils:cowboy_ensure_header(HKey, HValue, CurrReq)
+                end, Req2, Headers),
+            {ok, _NewReq} = cowboy_req:reply(Code, Req3)
         catch T:M ->
             {Port, Path} = ETSKey,
             Stacktrace = erlang:get_stacktrace(),
@@ -46,9 +53,9 @@ handle(Req, [ETSKey]) ->
                 [Path, Port, T, M, Stacktrace]),
             Error = gui_str:format_bin("500 Internal server error - make sure that your description file does not " ++
             "contain errors.~n-----------------~nType:       ~p~nMessage:    ~p~nStacktrace: ~p", [T, M, Stacktrace]),
-            Req2 = cowboy_req:set_resp_body(Error, Req),
-            Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"text/plain">>, Req2),
-            {ok, _ErrorReq} = cowboy_req:reply(500, Req3)
+            ErrorReq2 = cowboy_req:set_resp_body(Error, Req),
+            ErrorReq3 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"text/plain">>, ErrorReq2),
+            {ok, _ErrorReq} = cowboy_req:reply(500, ErrorReq3)
         end,
     {ok, NewReq, [ETSKey]}.
 

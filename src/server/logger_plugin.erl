@@ -11,6 +11,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(logger_plugin).
+-author("Lukasz Opiola").
 -behaviour(logger_plugin_behaviour).
 
 %% logger_plugin_behaviour API
