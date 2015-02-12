@@ -102,7 +102,7 @@ sequencer_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
     Self = self(),
     FuseId = <<"fuse_id">>,
-    MsgId = 1,
+    MsgId = <<"1">>,
     MsgCount = 100,
     ClientMsg = #client_message{message_id = MsgId, last_message = false},
     MsgReq = #message_request{message_id = MsgId},

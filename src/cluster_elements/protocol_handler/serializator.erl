@@ -36,7 +36,7 @@ deserialize_client_message(Message, SessionId) ->
     #'ClientMessage'{message_id = Id, seq_num = SeqNum, last_message = Last,
         client_message = {_, Msg}} =
         client_messages:decode_msg(Message, 'ClientMessage'),
-    {ok, #client_message{message_id = Id, seq_num = SeqNum, last_message = Last,
+    {ok, #client_message{message_id = message_id:decode(Id), seq_num = SeqNum, last_message = Last,
         session_id = SessionId, client_message = translator:translate_from_protobuf(Msg)}}.
 
 %%--------------------------------------------------------------------
@@ -49,7 +49,7 @@ deserialize_client_message(Message, SessionId) ->
 serialize_server_message(#server_message{message_id = Id, seq_num = Seq,
     last_message = Last, server_message = Msg}) ->
     ProtobufMessage = translator:translate_to_protobuf(Msg),
-    ServerMessage = #'ServerMessage'{message_id = Id, seq_num = Seq,
+    ServerMessage = #'ServerMessage'{message_id = message_id:encode(Id), seq_num = Seq,
         last_message = Last, server_message = {element(1, Msg), ProtobufMessage}},
     {ok, server_messages:encode_msg(ServerMessage)}.
 

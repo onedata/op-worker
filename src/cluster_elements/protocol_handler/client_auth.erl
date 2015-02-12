@@ -58,7 +58,7 @@ handle_handshake(#client_message{client_message = #handshake_request{
 -spec authenticate_using_token(#token{}) -> #credentials{}.
 authenticate_using_token(_Token) ->
     ?dump(_Token),
-    #credentials{}.
+    #credentials{}. %todo
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -69,4 +69,4 @@ authenticate_using_token(_Token) ->
     #credentials{}.
 authenticate_using_certificate(_CertInfo) ->
     ?dump(_CertInfo),
-    #credentials{}.
+    #credentials{}. %todo

@@ -89,7 +89,7 @@ protobuf_msg_test(Config) ->
         }) -> ok
     end),
     Msg = #'ClientMessage'{
-        message_id = 0,
+        message_id = <<"0">>,
         client_message =
         {event, #'Event'{event =
         {read_event, #'ReadEvent'{counter = 1, file_id = <<"id">>, size = 1, blocks = []}}}}
