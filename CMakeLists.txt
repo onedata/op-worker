@@ -49,9 +49,9 @@ if(${PREFER_STATIC_LINK})
     find_library(KRB5_LIBRARY krb5)
 
     if(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
-        set(OPENSSL_LIBRARIES ${SSL_LIBRARY} ${CRYPTO_LIBRARY})
+	set(OPENSSL_LIBRARIES ${SSL_LIBRARY} ${CRYPTO_LIBRARY})
     else(NOT ${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
-        set(OPENSSL_LIBRARIES ${SSL_LIBRARY} ${CRYPTO_LIBRARY} ${KRB5_LIBRARY})
+	set(OPENSSL_LIBRARIES ${SSL_LIBRARY} ${CRYPTO_LIBRARY} ${KRB5_LIBRARY})
     endif(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
 endif(${PREFER_STATIC_LINK})
 
@@ -101,11 +101,11 @@ find_library(DL_LIBRARY dl)
 # Pull git submodules
 message(STATUS "Pulling submodules using git...")
 execute_process(COMMAND ${GIT_EXECUTABLE} submodule init
-                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+		WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 execute_process(COMMAND ${GIT_EXECUTABLE} submodule update
-                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+		WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 execute_process(COMMAND ${GIT_EXECUTABLE} submodule foreach git checkout
-                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+		WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 # Compile .proto files
 file(GLOB PROTO_FILES clproto/proto/*.proto)
@@ -120,7 +120,7 @@ if(${PREFER_STATIC_LINK}) # Try to link libstdc++.a
     execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libstdc++.a OUTPUT_VARIABLE LIBSTD_NAME)
     string(STRIP ${LIBSTD_NAME} LIBSTD_NAME)
     if(EXISTS ${LIBSTD_NAME})
-        execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${LIBSTD_NAME} ${PROJECT_BINARY_DIR}/libstdc++.a)
+	execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${LIBSTD_NAME} ${PROJECT_BINARY_DIR}/libstdc++.a)
     endif(EXISTS ${LIBSTD_NAME})
 endif(${PREFER_STATIC_LINK})
 
@@ -166,49 +166,12 @@ target_link_libraries(helpersShared ${COMMON_LIBRARIES})
 target_link_libraries(clproto ${PROTOBUF_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
 
 install(TARGETS helpers helpersShared clproto
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
+	LIBRARY DESTINATION lib
+	ARCHIVE DESTINATION lib
 )
 install(FILES ${GLOG_LIBRARIES} ${GTEST_LIBRARIES} ${GMOCK_LIBRARIES} DESTINATION lib)
 install(DIRECTORY ${GTEST_INCLUDE_DIR}/gtest DESTINATION include)
 install(DIRECTORY ${GMOCK_INCLUDE_DIR}/gmock DESTINATION include)
 install(DIRECTORY ${GLOG_INCLUDE_DIR}/glog DESTINATION include)
 
-###########################
-##         TESTS         ##
-###########################
-
 enable_testing()
-include_directories(test/include)
-include_directories(SYSTEM ${GTEST_INCLUDE_DIR} ${GMOCK_INCLUDE_DIR})
-
-file(GLOB_RECURSE HELPER_TEST_HEADERS test/include/*.h)
-add_library(testRunner OBJECT test/testRunner.cc)
-add_dependencies(testRunner glog gmock gtest)
-
-add_custom_target(cunit)
-macro(run_test test_target)
-  string(REGEX REPLACE "_test" "" test_name "${test_target}")
-  add_custom_target(${test_target}_runtest
-      COMMAND ${test_target} --gtest_output="xml:cunit_results/TEST-${test_name}.xml"
-      DEPENDS ${test_target}
-      WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
-  add_dependencies(cunit ${test_target}_runtest)
-endmacro()
-
-file(GLOB_RECURSE HELPER_TEST_SOURCES test/*_test.cc)
-foreach(TEST_FILE ${HELPER_TEST_SOURCES})
-    get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
-    add_executable(${TEST_NAME} ${TEST_FILE} ${HELPER_TEST_HEADERS} $<TARGET_OBJECTS:testRunner>)
-    add_dependencies(${TEST_NAME} gmock gtest)
-    target_link_libraries(${TEST_NAME}
-        ${GTEST_LIBRARIES}
-        ${Boost_LIBRARIES_SHARED}
-        ${GMOCK_LIBRARIES}
-        ${FUSE_LIBRARIES}
-        helpers
-        ${PLATFORM_EXTRA_LIBS}
-    )
-    add_test(${TEST_NAME} ${TEST_NAME})
-    run_test(${TEST_NAME})
-endforeach()
