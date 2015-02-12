@@ -37,6 +37,6 @@
 
 
 %% List of all available models
--define(MODELS, [sample_model, sequencer_manager_model]).
+-define(MODELS, [sample_model, sequencer_manager_model, session]).
 
 -endif.

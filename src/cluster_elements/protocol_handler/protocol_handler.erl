@@ -17,6 +17,7 @@
 
 -include("cluster_elements/protocol_handler/credentials.hrl").
 -include_lib("proto_internal/oneclient/server_messages.hrl").
+-include_lib("proto_internal/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -35,7 +36,7 @@
     socket :: port(),
     transport :: module(),
     certificate_info :: #certificate_info{},
-    credentials :: #credentials{},
+    session_id :: session_id(),
     sequencer_manager :: pid()
 }).
 
@@ -163,25 +164,28 @@ handle_cast(_Request, State) ->
 handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
     transport = Transport, certificate_info = undefined}) ->
     activate_socket_once(Socket, Transport),
-    case serializator:deserialize_oneproxy_certificate_info_message(Data) of
+    try serializator:deserialize_oneproxy_certificate_info_message(Data) of
         {ok, #certificate_info{} = Info} ->
-            {noreply, State#sock_state{certificate_info = Info}, ?TIMEOUT};
-        Error ->
-            ?warning("Cannot decode oneproxy CertificateInfo message, error: ~p", [Error]),
+            {noreply, State#sock_state{certificate_info = Info}, ?TIMEOUT}
+    catch
+        _:Error ->
+            ?error_stacktrace("Cannot decode oneproxy CertificateInfo message, error: ~p", [Error]),
             {stop, Error, State}
     end;
 handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
-    transport = Transport, credentials = Cred, sequencer_manager = SeqMan,
+    transport = Transport, session_id = SessionId, sequencer_manager = SeqMan,
     certificate_info = CertInfo}) ->
     activate_socket_once(Socket, Transport),
-    case serializator:deserialize_client_message(Data, Cred) of
-        {ok, Msg} when Cred == undefined -> % handle handshake message
-            case client_auth:handle_handshake(Msg, CertInfo) of
-                {ok, {NewCredentials, Response}} ->
+    try serializator:deserialize_client_message(Data, SessionId) of
+        {ok, Msg} when SessionId == undefined -> % handle handshake message
+            try client_auth:handle_handshake(Msg, CertInfo) of
+                {ok, Response = #server_message{server_message =
+                #handshake_response{session_id = NewSessionId}}} ->
                     send_server_message(Socket, Transport, Response),
-                    {noreply, State#sock_state{credentials = NewCredentials}, ?TIMEOUT};
-                Error ->
-                    ?warning("Handshake ~p, error ~p", [Msg, Error]),
+                    {noreply, State#sock_state{session_id = NewSessionId}, ?TIMEOUT}
+            catch
+                _:Error ->
+                    ?warning_stacktrace("Handshake ~p, error ~p", [Msg, Error]),
                     {stop, Error, State}
             end;
         {ok, Msg} ->
@@ -194,9 +198,10 @@ handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
                 {error, Reason} ->
                     ?warning("Message ~p handling error: ~p", [Msg, Reason]),
                     {stop, {error, Reason}, State}
-            end;
-        Error ->
-            ?warning("Connection ~p message decoding error: ~p", [Socket, Error]),
+            end
+    catch
+        _:Error ->
+            ?warning_stacktrace("Connection ~p, message decoding error: ~p", [Socket, Error]),
             {stop, Error, State}
     end;
 
@@ -226,7 +231,8 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #sock_state{}) -> term().
-terminate(_Reason, _State) ->
+terminate(_Reason, #sock_state{session_id = SessionId}) ->
+    session:remove_connection(SessionId, self()),
     ok.
 
 %%--------------------------------------------------------------------
@@ -265,11 +271,12 @@ activate_socket_once(Socket, Transport) ->
 -spec send_server_message(Socket :: port(), Transport :: module(),
     ServerMessage :: tuple()) -> ok | {error, term()}.
 send_server_message(Socket, Transport, ServerMsg) ->
-    case serializator:serialize_server_message(ServerMsg) of
+    try serializator:serialize_server_message(ServerMsg) of
         {ok, Data} ->
-            ok = Transport:send(Socket, Data);
-        Error ->
-            ?error("Connection ~p, message ~p encoding error: ~p",
+            ok = Transport:send(Socket, Data)
+    catch
+        _:Error ->
+            ?error_stacktrace("Connection ~p, message ~p encoding error: ~p",
                 [Socket, ServerMsg, Error]),
             Error
     end.

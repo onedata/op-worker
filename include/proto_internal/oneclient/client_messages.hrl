@@ -20,7 +20,7 @@
     stream_id :: non_neg_integer(),
     seq_num :: non_neg_integer(),
     last_message :: boolean(),
-    credentials :: #credentials{},
+    session_id :: session_id(),
     client_message :: tuple()
 }).
 

@@ -36,7 +36,7 @@ preroute_message(SeqMan, Msg) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Route message to adequate handler
+%% Route message to adequate handler, this function should never throw
 %% @end
 %%--------------------------------------------------------------------
 -spec route_message(Msg :: #client_message{}) -> ok | {ok, #server_message{}} | {error, term()}.

@@ -85,7 +85,6 @@ protobuf_msg_test(Config) ->
     test_utils:mock_new(Worker1, router),
     test_utils:mock_expect(Worker1, router, preroute_message, fun(
         #client_message{
-            credentials = #credentials{},
             client_message = #read_event{}
         }) -> ok
     end),

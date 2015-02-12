@@ -12,6 +12,8 @@
 -ifndef(DATASTORE_MODELS_HRL).
 -define(DATASTORE_MODELS_HRL, 1).
 
+-include("cluster_elements/protocol_handler/credentials.hrl").
+
 %% Wrapper for all models' records
 -record(document, {
     key :: datastore:key(),
@@ -29,5 +31,13 @@
 %% pid  - pid of sequencer manager associated with FUSE client
 %% sup  - pid of sequencer manager supervisor
 -record(sequencer_manager_model, {node, pid, sup}).
+
+%% session:
+%% credentials - owner credentials
+%% connections - list of connections' pids
+-record(session,{
+    credentials :: #credentials{},
+    connections :: list() %todo consider extracting connection to independent record
+}).
 
 -endif.
