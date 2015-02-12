@@ -17,17 +17,20 @@
     http_worker,
     dns_worker,
     event_manager_worker,
-    sequencer_worker
+    sequencer_manager_worker
 ]).
 
 -define(MODULES_WITH_ARGS, [
     {datastore_worker, []},
     {http_worker, []},
     {dns_worker, []},
-    {event_manager_worker, []},
-    {sequencer_worker, [
-        {supervisor_spec, sequencer_worker:supervisor_spec()},
-        {supervisor_children_spec, sequencer_worker:supervisor_children_spec()}
+    {event_manager_worker, [
+        {supervisor_spec, event_manager_worker:supervisor_spec()},
+        {supervisor_child_spec, event_manager_worker:supervisor_child_spec()}
+    ]},
+    {sequencer_manager_worker, [
+        {supervisor_spec, sequencer_manager_worker:supervisor_spec()},
+        {supervisor_child_spec, sequencer_manager_worker:supervisor_child_spec()}
     ]}
 ]).
 

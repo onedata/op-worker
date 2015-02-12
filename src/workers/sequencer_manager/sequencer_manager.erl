@@ -7,28 +7,19 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for creating and forwarding requests to
-%%% event manager worker.
+%%% sequencer manager worker.
 %%% @end
 %%%-------------------------------------------------------------------
--module(event_manager).
+-module(sequencer_manager).
 -author("Krzysztof Trzepla").
 
--include("workers/event_manager/read_event.hrl").
--include("workers/event_manager/write_event.hrl").
 -include("cluster_elements/protocol_handler/credentials.hrl").
 
 %% API
--export([get_or_create_event_dispatcher/1, remove_event_dispatcher/1]).
-
--export_type([event/0, event_subscription/0, event_producer/0]).
-
--type event() :: #read_event{} | #write_event{}.
--type event_subscription() :: #read_event_subscription{}
-| #write_event_subscription{}.
--type event_producer() :: fuse.
+-export([get_or_create_sequencer_dispatcher/2, remove_sequencer_dispatcher/1]).
 
 -define(TIMEOUT, timer:seconds(5)).
--define(EVENT_MANAGER_WORKER, event_manager_worker).
+-define(SEQUENCER_MANAGER_WORKER, sequencer_manager_worker).
 
 %%%===================================================================
 %%% API
@@ -36,31 +27,31 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns pid of event dispatcher for given session. If event
+%% Returns pid of sequencer dispatcher for given session. If sequencer
 %% dispatcher does not exist it is instantiated.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_event_dispatcher(SessionId :: session_id()) ->
-    {ok, SeqDisp :: pid()} | {error, Reason :: term()}.
-get_or_create_event_dispatcher(SessionId) ->
+-spec get_or_create_sequencer_dispatcher(SessionId :: session_id(),
+    Connection :: pid()) -> {ok, SeqDisp :: pid()} | {error, Reason :: term()}.
+get_or_create_sequencer_dispatcher(SessionId, Connection) ->
     worker_proxy:call(
-        ?EVENT_MANAGER_WORKER,
-        {get_or_create_event_dispatcher, SessionId},
+        ?SEQUENCER_MANAGER_WORKER,
+        {get_or_create_sequencer_dispatcher, SessionId, Connection},
         ?TIMEOUT,
         prefer_local
     ).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes event dispatcher for client session.
+%% Removes sequencer dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_event_dispatcher(SessionId :: session_id()) ->
+-spec remove_sequencer_dispatcher(SessionId :: session_id()) ->
     ok | {error, Reason :: term()}.
-remove_event_dispatcher(SessionId) ->
+remove_sequencer_dispatcher(SessionId) ->
     worker_proxy:call(
-        ?EVENT_MANAGER_WORKER,
-        {remove_event_dispatcher, SessionId},
+        ?SEQUENCER_MANAGER_WORKER,
+        {remove_sequencer_dispatcher, SessionId},
         ?TIMEOUT,
         prefer_local
     ).

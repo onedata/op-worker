@@ -5,10 +5,11 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Tests sequencer API.
+%%% @doc
+%%% This file contains tests of sequencer manager API.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer_test_SUITE).
+-module(sequencer_manager_test_SUITE).
 -author("Krzysztof Trzepla").
 
 -include("proto_internal/oneclient/client_messages.hrl").
@@ -20,75 +21,70 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([sequencer_worker_test/1, sequencer_test/1]).
+-export([sequencer_manager_test/1, sequencer_stream_test/1]).
 
-all() -> [sequencer_worker_test, sequencer_test].
+all() -> [sequencer_manager_test, sequencer_stream_test].
 
 -define(TIMEOUT, timer:seconds(5)).
 
-%%%===================================================================
+%%%====================================================================
 %%% Test function
 %%%====================================================================
 
-%% Test creation and removal of sequencer managers using sequencer worker.
-sequencer_worker_test(Config) ->
+%% Test creation and removal of sequencer dispatcher using sequencer manager.
+sequencer_manager_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     Self = self(),
     FuseId1 = <<"fuse_id_1">>,
     FuseId2 = <<"fuse_id_2">>,
 
-    % Check whether sequencer worker returns the same sequencer manager
+    % Check whether sequencer worker returns the same sequencer dispatcher
     % for given session dispite of node on which request is processed.
-    [SeqMan1, SeqMan2] = lists:map(fun({FuseId, Workers}) ->
-        CreateOrGetSeqManAnswers = utils:pmap(fun(Worker) ->
-            rpc:call(Worker, worker_proxy, call, [sequencer_worker,
-                {get_or_create_sequencer_manager, FuseId, Self},
-                ?TIMEOUT, prefer_local])
+    [SeqDisp1, SeqDisp2] = lists:map(fun({FuseId, Workers}) ->
+        CreateOrGetSeqDispAnswers = utils:pmap(fun(Worker) ->
+            rpc:call(Worker, sequencer_manager,
+                get_or_create_sequencer_dispatcher, [FuseId, Self])
         end, Workers),
 
-        lists:foreach(fun(CreateOrGetSeqManAnswer) ->
-            ?assertMatch({ok, _}, CreateOrGetSeqManAnswer)
-        end, CreateOrGetSeqManAnswers),
+        lists:foreach(fun(CreateOrGetSeqDispAnswer) ->
+            ?assertMatch({ok, _}, CreateOrGetSeqDispAnswer)
+        end, CreateOrGetSeqDispAnswers),
 
-        {_, [FirstSeqMan | SeqMans]} = lists:unzip(CreateOrGetSeqManAnswers),
+        {_, [FirstSeqDisp | SeqDisps]} = lists:unzip(CreateOrGetSeqDispAnswers),
 
-        lists:foreach(fun(SeqMan) ->
-            ?assertEqual(FirstSeqMan, SeqMan)
-        end, SeqMans),
+        lists:foreach(fun(SeqDisp) ->
+            ?assertEqual(FirstSeqDisp, SeqDisp)
+        end, SeqDisps),
 
-        FirstSeqMan
+        FirstSeqDisp
     end, [
         {FuseId1, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)},
         {FuseId2, lists:duplicate(2, Worker2) ++ lists:duplicate(2, Worker1)}
     ]),
 
-    % Check whether sequencer worker returns different sequencer manager for
-    % different session.
-    ?assertNotEqual(SeqMan1, SeqMan2),
+    % Check whether sequencer worker returns different sequencer dispatchers for
+    % different sessions.
+    ?assertNotEqual(SeqDisp1, SeqDisp2),
 
     % Check whether sequencer worker can remove sequencer manager
     % for given session dispite of node on which request is processed.
     utils:pforeach(fun({FuseId, Worker}) ->
         ProcessesBeforeRemoval = processes([Worker1, Worker2]),
         ?assertMatch([_], lists:filter(fun(P) ->
-            P =:= SeqMan1
+            P =:= SeqDisp1
         end, ProcessesBeforeRemoval)),
 
-        RemoveSeqManAnswer1 = rpc:call(Worker, worker_proxy, call, [
-            sequencer_worker, {remove_sequencer_manager, FuseId},
-            ?TIMEOUT, prefer_local]
-        ),
-        ?assertMatch(ok, RemoveSeqManAnswer1),
-        RemoveSeqManAnswer2 = rpc:call(Worker, worker_proxy, call, [
-            sequencer_worker, {remove_sequencer_manager, FuseId},
-            ?TIMEOUT, prefer_local]
-        ),
-        ?assertMatch({error, _}, RemoveSeqManAnswer2),
+        RemoveSeqDispAnswer1 = rpc:call(Worker, sequencer_manager,
+            remove_sequencer_dispatcher, [FuseId]),
+        ?assertMatch(ok, RemoveSeqDispAnswer1),
+        RemoveSeqDispAnswer2 = rpc:call(Worker, sequencer_manager,
+            remove_sequencer_dispatcher, [FuseId]),
+        ?assertMatch({error, _}, RemoveSeqDispAnswer2),
 
         ProcessesAfterRemoval = processes([Worker1, Worker2]),
-        ?assertMatch([], lists:filter(fun(P) ->
-            P =:= SeqMan1
+        ?assertMatch([], lists:filter(fun(Proces) ->
+            Proces =:= SeqDisp1
         end, ProcessesAfterRemoval))
     end, [
         {FuseId1, Worker2},
@@ -97,8 +93,8 @@ sequencer_worker_test(Config) ->
 
     ok.
 
-%% Test sequencer behaviour.
-sequencer_test(Config) ->
+%% Test sequencer stream behaviour.
+sequencer_stream_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
     Self = self(),
     FuseId = <<"fuse_id">>,
@@ -116,39 +112,50 @@ sequencer_test(Config) ->
         Connection ! Msg
     end),
 
-    {ok, SeqMan} = rpc:call(Worker, worker_proxy, call, [sequencer_worker,
-        {get_or_create_sequencer_manager, FuseId, Self},
-        ?TIMEOUT, prefer_local
-    ]),
+    {ok, SeqDisp} = rpc:call(Worker, sequencer_manager,
+        get_or_create_sequencer_dispatcher, [FuseId, Self]),
 
+    %% Send 'MsgCount' messages in reverse order
     lists:foreach(fun(SeqNum) ->
-        gen_server:cast(SeqMan, ClientMsg#client_message{seq_num = SeqNum})
+        gen_server:cast(SeqDisp, ClientMsg#client_message{seq_num = SeqNum})
     end, lists:seq(MsgCount, 1, -1)),
 
+    %% Check whether 'MsgCount' - 1 request messages were sent
     lists:foreach(fun(SeqNum) ->
-        ReceiveAnswer = test_utils:receive_msg(#server_message{
+        ?assertMatch({ok, _}, test_utils:receive_msg(#server_message{
             server_message = MsgReq#message_request{
                 lower_seq_num = 1, upper_seq_num = SeqNum - 1
             }
-        }, ?TIMEOUT),
-        ?assertMatch({ok, _}, ReceiveAnswer)
+        }, ?TIMEOUT))
     end, lists:seq(MsgCount, 2, -1)),
 
+    %% Check whether messages were forwarded in right order
     lists:foreach(fun(SeqNum) ->
-        ReceiveAnswer = test_utils:receive_msg(ClientMsg#client_message{
-            seq_num = SeqNum}, ?TIMEOUT),
-        ?assertMatch({ok, _}, ReceiveAnswer)
+        ?assertMatch({ok, _}, test_utils:receive_msg(ClientMsg#client_message{
+            seq_num = SeqNum}, ?TIMEOUT))
     end, lists:seq(1, MsgCount)),
 
-    ReceiveAnswer = test_utils:receive_msg(
-        #server_message{server_message = MsgAck}, ?TIMEOUT),
-    ?assertMatch({ok, _}, ReceiveAnswer),
+    %% Check whether messages acknowledgement was sent
+    ?assertMatch({ok, _}, test_utils:receive_msg(
+        #server_message{server_message = MsgAck}, ?TIMEOUT)),
+
+    %% Send last message
+    gen_server:cast(SeqDisp, ClientMsg#client_message{
+        seq_num = MsgCount + 1, last_message = true}),
+
+    %% Check whether last message was sent
+    ?assertMatch({ok, _}, test_utils:receive_msg(ClientMsg#client_message{
+        seq_num = MsgCount + 1, last_message = true}, ?TIMEOUT)),
+
+    %% Check whether last message acknowledgement was sent
+    ?assertMatch({ok, _}, test_utils:receive_msg(
+        #server_message{server_message = MsgAck#message_acknowledgement{
+            seq_num = MsgCount + 1}}, ?TIMEOUT)),
 
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
-    ok = rpc:call(Worker, worker_proxy, call, [
-        sequencer_worker, {remove_sequencer_manager, FuseId}
-    ]),
+    ok = rpc:call(Worker, sequencer_manager,
+        remove_sequencer_dispatcher, [FuseId]),
 
     test_utils:mock_validate(Worker, [router, protocol_handler]),
 

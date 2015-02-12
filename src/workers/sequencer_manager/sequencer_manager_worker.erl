@@ -7,10 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements {@link worker_plugin_behaviour} and is responsible
-%%% for creating and removing sequencer managers for FUSE clients.
+%%% for creating and removing sequencer dispatchers for client sessions.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer_worker).
+-module(sequencer_manager_worker).
 -author("Krzysztof Trzepla").
 
 -behaviour(worker_plugin_behaviour).
@@ -23,11 +23,9 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([start_sequencer_manager_sup/0, stop_sequencer_manager_sup/2]).
--export([supervisor_spec/0, supervisor_children_spec/0]).
+-export([supervisor_spec/0, supervisor_child_spec/0]).
 
--define(SEQUENCER_WORKER, sequencer_worker).
--define(SEQUENCER_WORKER_SUP, sequencer_worker_sup).
+-define(SEQUENCER_MANAGER_WORKER_SUP, sequencer_manager_worker_sup).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -50,8 +48,8 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck |
-    {get_or_create_sequencer_manager, SessionId :: session_id(), Connection :: pid()} |
-    {remove_sequencer_manager, SessionId :: session_id()},
+    {get_or_create_sequencer_dispatcher, SessionId :: session_id(), Connection :: pid()} |
+    {remove_sequencer_dispatcher, SessionId :: session_id()},
     Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: term(),
@@ -62,11 +60,11 @@ handle(ping, _) ->
 handle(healthcheck, _) ->
     ok;
 
-handle({get_or_create_sequencer_manager, SessionId, Connection}, _) ->
-    get_or_create_sequencer_manager(SessionId, Connection);
+handle({get_or_create_sequencer_dispatcher, SessionId, Connection}, _) ->
+    get_or_create_sequencer_dispatcher(SessionId, Connection);
 
-handle({remove_sequencer_manager, SessionId}, _) ->
-    remove_sequencer_manager(SessionId);
+handle({remove_sequencer_dispatcher, SessionId}, _) ->
+    remove_sequencer_dispatcher(SessionId);
 
 handle(_Request, _) ->
     ?log_bad_request(_Request).
@@ -88,27 +86,7 @@ cleanup() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts sequencer manager supervisor supervised by sequencer dispatcher
-%% supervisor.
-%% @end
-%%--------------------------------------------------------------------
--spec start_sequencer_manager_sup() -> supervisor:startchild_ret().
-start_sequencer_manager_sup() ->
-    supervisor:start_child(?SEQUENCER_WORKER_SUP, []).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Stops sequencer manager supervisor and its children.
-%% @end
-%%--------------------------------------------------------------------
--spec stop_sequencer_manager_sup(Node :: node(), Pid :: pid()) ->
-    ok | {error, Reason :: term()}.
-stop_sequencer_manager_sup(Node, Pid) ->
-    supervisor:terminate_child({?SEQUENCER_WORKER_SUP, Node}, Pid).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates spec for sequencer worker supervisor.
+%% Returns a supervisor spec for a sequencer manager worker supervisor.
 %% @end
 %%--------------------------------------------------------------------
 -spec supervisor_spec() ->
@@ -121,12 +99,12 @@ supervisor_spec() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates spec for a sequencer worker supervisor child.
+%% Returns a supervisor child_spec for a sequencer dispatcher supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec supervisor_children_spec() -> [supervisor:child_spec()].
-supervisor_children_spec() ->
-    Id = Module = sequencer_manager_sup,
+-spec supervisor_child_spec() -> [supervisor:child_spec()].
+supervisor_child_spec() ->
+    Id = Module = sequencer_dispatcher_sup,
     Restart = permanent,
     Shutdown = timer:seconds(10),
     Type = supervisor,
@@ -139,19 +117,19 @@ supervisor_children_spec() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns pid of sequencer manager for FUSE client. If sequencer manager
-%% does not exist it is instantiated.
+%% Returns pid of sequencer dispatcher for client session. If sequencer
+%% dispatcher does not exist it is instantiated.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_sequencer_manager(SessionId :: session_id(), Connection :: pid()) ->
-    {ok, Pid :: pid()} | {error, Reason :: term()}.
-get_or_create_sequencer_manager(SessionId, Connection) ->
-    case get_sequencer_manager(SessionId) of
-        {ok, #sequencer_manager_model{pid = SeqMan}} ->
-            ok = gen_server:call(SeqMan, {add_connection, Connection}),
-            {ok, SeqMan};
+-spec get_or_create_sequencer_dispatcher(SessionId :: session_id(),
+    Connection :: pid()) -> {ok, Pid :: pid()} | {error, Reason :: term()}.
+get_or_create_sequencer_dispatcher(SessionId, Connection) ->
+    case get_sequencer_dispatcher_model(SessionId) of
+        {ok, #sequencer_dispatcher_model{pid = SeqDisp}} ->
+            ok = gen_server:call(SeqDisp, {add_connection, Connection}),
+            {ok, SeqDisp};
         {error, {not_found, _}} ->
-            create_sequencer_manager(SessionId, Connection);
+            create_sequencer_dispatcher(SessionId, Connection);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -159,13 +137,13 @@ get_or_create_sequencer_manager(SessionId, Connection) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns pid of existing sequencer manager for FUSE client.
+%% Returns model of existing sequencer dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sequencer_manager(SessionId :: session_id()) ->
-    {ok, #sequencer_manager_model{}} | {error, Reason :: term()}.
-get_sequencer_manager(SessionId) ->
-    case sequencer_manager_model:get(SessionId) of
+-spec get_sequencer_dispatcher_model(SessionId :: session_id()) ->
+    {ok, #sequencer_dispatcher_model{}} | {error, Reason :: term()}.
+get_sequencer_dispatcher_model(SessionId) ->
+    case sequencer_dispatcher_model:get(SessionId) of
         {ok, #document{value = SeqModel}} ->
             {ok, SeqModel};
         {error, Reason} ->
@@ -175,24 +153,24 @@ get_sequencer_manager(SessionId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates sequencer manager for FUSE client.
+%% Creates sequencer dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec create_sequencer_manager(SessionId :: session_id(), Connection :: pid()) ->
+-spec create_sequencer_dispatcher(SessionId :: session_id(), Connection :: pid()) ->
     {ok, Pid :: pid()} | {error, Reason :: term()}.
-create_sequencer_manager(SessionId, Connection) ->
+create_sequencer_dispatcher(SessionId, Connection) ->
     Node = node(),
-    {ok, SeqManSup} = sequencer_worker:start_sequencer_manager_sup(),
-    {ok, SeqSup} = sequencer_manager_sup:start_sequencer_sup(SeqManSup),
-    {ok, SeqMan} = sequencer_manager_sup:start_sequencer_manager(SeqManSup, SeqSup, Connection),
-    case sequencer_manager_model:create(#document{key = SessionId, value = #sequencer_manager_model{
-        node = Node, pid = SeqMan, sup = SeqManSup
+    {ok, SeqDispSup} = start_sequencer_dispatcher_sup(),
+    {ok, SeqStmSup} = sequencer_dispatcher_sup:start_sequencer_stream_sup(SeqDispSup),
+    {ok, SeqDisp} = sequencer_dispatcher_sup:start_sequencer_dispatcher(SeqDispSup, SeqStmSup, Connection),
+    case sequencer_dispatcher_model:create(#document{key = SessionId, value = #sequencer_dispatcher_model{
+        node = Node, pid = SeqDisp, sup = SeqDispSup
     }}) of
         {ok, SessionId} ->
-            {ok, SeqMan};
+            {ok, SeqDisp};
         {error, already_exists} ->
-            ok = sequencer_worker:stop_sequencer_manager_sup(Node, SeqManSup),
-            get_or_create_sequencer_manager(SessionId, Connection);
+            ok = stop_sequencer_dispatcher_sup(Node, SeqDispSup),
+            get_or_create_sequencer_dispatcher(SessionId, Connection);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -200,16 +178,38 @@ create_sequencer_manager(SessionId, Connection) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes sequencer manager for FUSE client.
+%% Removes sequencer dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_sequencer_manager(SessionId :: session_id()) ->
+-spec remove_sequencer_dispatcher(SessionId :: session_id()) ->
     ok | {error, Reason :: term()}.
-remove_sequencer_manager(SessionId) ->
-    case get_sequencer_manager(SessionId) of
-        {ok, #sequencer_manager_model{node = Node, sup = SeqManSup}} ->
-            ok = sequencer_worker:stop_sequencer_manager_sup(Node, SeqManSup),
-            sequencer_manager_model:delete(SessionId);
+remove_sequencer_dispatcher(SessionId) ->
+    case get_sequencer_dispatcher_model(SessionId) of
+        {ok, #sequencer_dispatcher_model{node = Node, sup = SeqDispSup}} ->
+            ok = stop_sequencer_dispatcher_sup(Node, SeqDispSup),
+            sequencer_dispatcher_model:delete(SessionId);
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts sequencer dispatcher supervisor supervised by sequencer manager
+%% worker supervisor.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_sequencer_dispatcher_sup() -> supervisor:startchild_ret().
+start_sequencer_dispatcher_sup() ->
+    supervisor:start_child(?SEQUENCER_MANAGER_WORKER_SUP, []).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Stops sequencer dispatcher supervisor and its children.
+%% @end
+%%--------------------------------------------------------------------
+-spec stop_sequencer_dispatcher_sup(Node :: node(), Pid :: pid()) ->
+    ok | {error, Reason :: term()}.
+stop_sequencer_dispatcher_sup(Node, Pid) ->
+    supervisor:terminate_child({?SEQUENCER_MANAGER_WORKER_SUP, Node}, Pid).

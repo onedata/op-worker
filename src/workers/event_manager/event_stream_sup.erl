@@ -1,25 +1,22 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
+%%% @author Krzysztof Trzepla
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This is the supervisor for worker_host usage. It is started as a brother
-%%% of worker_host, under main_worker_sup. All permanent processes
-%%% started by worker_host should be children of this supervisor.
-%%% Every worker has its own supervisor, registered as ${worker_name}_sup,
-%%% i.e. dns_worker <-> dns_worker_sup
+%%% This module implements supervisor behaviour and is responsible
+%%% for supervising and restarting event streams.
 %%% @end
 %%%-------------------------------------------------------------------
--module(worker_host_sup).
--author("Tomasz Lichon").
+-module(event_stream_sup).
+-author("Krzysztof Trzepla").
 
 -behaviour(supervisor).
 
 %% API
--export([start_link/2]).
+-export([start_link/0, start_event_stream/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -33,10 +30,19 @@
 %% Starts the supervisor
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Name :: atom(), Args :: term()) ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(Name, Args) ->
-    supervisor:start_link({local, Name}, ?MODULE, Args).
+-spec start_link() -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+start_link() ->
+    supervisor:start_link(?MODULE, []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts event stream supervised by event stream supervisor.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_event_stream(EvtStmSup :: pid(), EvtDisp :: pid(),
+    SubId :: non_neg_integer()) -> supervisor:startchild_ret().
+start_event_stream(EvtStmSup, EvtDisp, SubId) ->
+    supervisor:start_child(EvtStmSup, [EvtDisp, SubId]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -57,19 +63,26 @@ start_link(Name, Args) ->
         [ChildSpec :: supervisor:child_spec()]
     }} |
     ignore.
-init(Args) ->
-    DefaultRestartStrategy = one_for_one,
-    DefaultMaxR = 1000,
-    DefaultMaxT = timer:hours(1),
-    SupervisorSpec = proplists:get_value(supervisor_spec, Args, {
-        DefaultRestartStrategy,
-        DefaultMaxR,
-        DefaultMaxT
-    }),
-    ChildrenSpec = proplists:get_value(supervisor_child_spec, Args, []),
-
-    {ok, {SupervisorSpec, ChildrenSpec}}.
+init([]) ->
+    RestartStrategy = simple_one_for_one,
+    MaxR = 3,
+    MaxT = timer:minutes(1),
+    {ok, {{RestartStrategy, MaxR, MaxT}, [event_stream_spec()]}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a supervisor child_spec for a event stream.
+%% @end
+%%--------------------------------------------------------------------
+-spec event_stream_spec() -> supervisor:child_spec().
+event_stream_spec() ->
+    Id = Module = event_stream,
+    Restart = transient,
+    Shutdown = timer:seconds(10),
+    Type = worker,
+    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.

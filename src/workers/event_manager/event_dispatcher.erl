@@ -7,33 +7,29 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible
-%%% for dispatching messages sent by given FUSE client to sequencers.
+%%% for dispatching events associated with given session to event streams.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer_manager).
+-module(event_dispatcher).
 -author("Krzysztof Trzepla").
 
 -behaviour(gen_server).
 
--include("proto_internal/oneclient/client_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
-%% sequencer manager state:
-%% seq_sup - pid of sequencer supervisor
-%% cons    - list of connectionnection pids to FUSE client associated with
-%%           sequencer manager
-%% seqs    - mapping from message ID to sequencer pid
+%% event dispatcher state:
+%% evt_stm_sup - pid of event stream supervisor
+%% evt_stms    - mapping from message ID to event stream pid
 -record(state, {
-    seq_sup,
-    cons = [],
-    seqs = #{}
+    evt_stm_sup,
+    evt_stms = #{}
 }).
 
 %%%===================================================================
@@ -45,10 +41,10 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SeqSup :: pid(), Connectionnection :: pid()) ->
+-spec start_link(EvtStmSup :: pid()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SeqSup, Connectionnection) ->
-    gen_server:start_link(?MODULE, [SeqSup, Connectionnection], []).
+start_link(EvtStmSup) ->
+    gen_server:start_link(?MODULE, [EvtStmSup], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -63,8 +59,8 @@ start_link(SeqSup, Connectionnection) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SeqSup, Connection]) ->
-    {ok, #state{seq_sup = SeqSup, cons = [Connection]}}.
+init([EvtStmSup]) ->
+    {ok, #state{evt_stm_sup = EvtStmSup}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -80,22 +76,16 @@ init([SeqSup, Connection]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_call({sequencer_initialized, MsgId}, {Seq, _}, #state{seqs = Seqs} = State) ->
-    case maps:find(MsgId, Seqs) of
-        {ok, {state, SeqState, PendingMsgs}} ->
-            lists:foreach(fun(Msg) ->
-                gen_server:cast(Seq, Msg)
-            end, lists:reverse(PendingMsgs)),
-            {reply, {ok, SeqState}, State#state{seqs = maps:put(MsgId, {pid, Seq}, Seqs)}};
+handle_call({event_stream_initialized, SubId}, {EvtStm, _}, #state{evt_stms = EvtStms} = State) ->
+    case maps:find(SubId, EvtStms) of
+        {ok, {state, EvtStmState, PendingEvts}} ->
+            lists:foreach(fun(Evt) ->
+                gen_server:cast(EvtStm, Evt)
+            end, lists:reverse(PendingEvts)),
+            {reply, {ok, EvtStmState}, State#state{evt_stms = maps:put(SubId, {pid, EvtStm}, EvtStms)}};
         _ ->
             {reply, undefined, State}
     end;
-
-handle_call({add_connection, Connection}, _From, #state{cons = Connections} = State) ->
-    {reply, ok, State#state{cons = [Connection | Connections]}};
-
-handle_call({remove_connection, Connection}, _From, #state{cons = Connections} = State) ->
-    {reply, ok, State#state{cons = Connections -- [Connection]}};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -111,36 +101,11 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast({sequencer_terminated, MsgId, normal, _}, #state{seqs = Seqs} = State) ->
-    {noreply, State#state{seqs = maps:remove(MsgId, Seqs)}};
+handle_cast({event_stream_terminated, SubId, normal, _}, #state{evt_stms = EvtStms} = State) ->
+    {noreply, State#state{evt_stms = maps:remove(SubId, EvtStms)}};
 
-handle_cast({sequencer_terminated, MsgId, _, SeqState}, #state{seqs = Seqs} = State) ->
-    {noreply, State#state{seqs = maps:put(MsgId, {state, SeqState, []}, Seqs)}};
-
-handle_cast(#client_message{message_id = MsgId} = Msg,
-    #state{seq_sup = SeqSup, seqs = Seqs} = State) ->
-    case maps:find(MsgId, Seqs) of
-        {ok, {pid, Seq}} ->
-            gen_server:cast(Seq, Msg),
-            {noreply, State};
-        {ok, {state, SeqState, PendingMsgs}} ->
-            {noreply, State#state{seqs =
-            maps:put(MsgId, {state, SeqState, [Msg | PendingMsgs]}, Seqs)}};
-        _ ->
-            SeqMan = self(),
-            {ok, _Seq} = sequencer_sup:start_sequencer(SeqSup, SeqMan, MsgId),
-            {noreply, State#state{seqs =
-            maps:put(MsgId, {state, undefined, [Msg]}, Seqs)}}
-    end;
-
-handle_cast({send, Msg}, #state{cons = []} = State) ->
-    ?warning("~p:~p cannot send message ~p due to: 'connection pool empty'",
-        [?MODULE, ?LINE, Msg]),
-    {noreply, State};
-
-handle_cast({send, Msg}, #state{cons = [Connection | Connections]} = State) ->
-    protocol_handler:cast(Connection, Msg),
-    {noreply, State#state{cons = Connections ++ [Connection]}};
+handle_cast({event_stream_terminated, SubId, _, EvtStmState}, #state{evt_stms = EvtStms} = State) ->
+    {noreply, State#state{evt_stms = maps:put(SubId, {state, EvtStmState, []}, EvtStms)}};
 
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
@@ -177,7 +142,7 @@ terminate(_Reason, _State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Connectionverts process state when code is changed.
+%% Converts process state when code is changed.
 %% @end
 %%--------------------------------------------------------------------
 -spec code_change(OldVsn :: term() | {down, term()}, State :: #state{},

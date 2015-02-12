@@ -37,6 +37,10 @@
 
 
 %% List of all available models
--define(MODELS, [sample_model, sequencer_manager_model]).
+-define(MODELS, [
+    sample_model,
+    sequencer_dispatcher_model,
+    event_dispatcher_model
+]).
 
 -endif.

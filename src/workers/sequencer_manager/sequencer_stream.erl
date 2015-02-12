@@ -11,7 +11,7 @@
 %%% them to the router.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer).
+-module(sequencer_stream).
 -author("Krzysztof Trzepla").
 
 -behaviour(gen_server).
@@ -29,19 +29,20 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
-%% sequencer state:
-%% msg_id       - message ID associated with sequencer
+%% sequencer stream state:
+%% msg_id       - message ID associated with sequencer stream
 %% seq_num      - sequence number of message that can be processed by sequencer
+%%                stream
 %% seq_num_ack  - sequence number of last acknowledge message
 %% msgs         - mapping from sequence number to message for messages waiting to
-%%                be processed by sequencer
-%% seq_man      - pid of sequencer manager
-%% msgs_ack_win - amount of messages that have to be forwarded by sequencer before
-%%                emissions of acknowledgement message
+%%                be processed by sequencer stream
+%% seq_disp     - pid of sequencer dispatcher
+%% msgs_ack_win - amount of messages that have to be forwarded by sequencer stream
+%%                before emissions of acknowledgement message
 %% time_ack_win - amount of seconds that have to elapsed before emission of
 %%                acknowledgement message
 -record(state, {
-    seq_man :: pid(),
+    seq_disp :: pid(),
     seq_num = 1 :: non_neg_integer(),
     seq_num_ack = 0 :: non_neg_integer(),
     msg_id :: integer(),
@@ -59,10 +60,10 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SeqMan :: pid(), MsgId :: integer()) ->
+-spec start_link(SeqDisp :: pid(), MsgId :: non_neg_integer()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SeqMan, MsgId) ->
-    gen_server:start_link(?MODULE, [SeqMan, MsgId], []).
+start_link(SeqDisp, MsgId) ->
+    gen_server:start_link(?MODULE, [SeqDisp, MsgId], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -77,9 +78,9 @@ start_link(SeqMan, MsgId) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SeqMan, MsgId]) ->
+init([SeqDisp, MsgId]) ->
     gen_server:cast(self(), initialize),
-    {ok, #state{seq_man = SeqMan, msg_id = MsgId}}.
+    {ok, #state{seq_disp = SeqDisp, msg_id = MsgId}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -109,14 +110,14 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(initialize, #state{seq_man = SeqMan, msg_id = MsgId} = State) ->
-    {ok, MsgsAckWin} = application:get_env(?APP_NAME, sequencer_msgs_ack_win),
-    {ok, TimeAckWin} = application:get_env(?APP_NAME, sequencer_time_ack_win),
+handle_cast(initialize, #state{seq_disp = SeqDisp, msg_id = MsgId} = State) ->
+    {ok, MsgsAckWin} = application:get_env(?APP_NAME, sequencer_stream_msgs_ack_win),
+    {ok, TimeAckWin} = application:get_env(?APP_NAME, sequencer_stream_time_ack_win),
     erlang:send_after(timer:seconds(TimeAckWin), self(), periodic_ack),
-    case gen_server:call(SeqMan, {sequencer_initialized, MsgId}) of
-        {ok, #state{} = SeqState} ->
-            ?info("Sequencer reinitialized in state: ~p", [SeqState]),
-            {noreply, SeqState#state{msgs_ack_win = MsgsAckWin, time_ack_win = TimeAckWin}};
+    case gen_server:call(SeqDisp, {sequencer_stream_initialized, MsgId}) of
+        {ok, #state{} = SeqStmState} ->
+            ?info("Sequencer stream reinitialized in state: ~p", [SeqStmState]),
+            {noreply, SeqStmState#state{msgs_ack_win = MsgsAckWin, time_ack_win = TimeAckWin}};
         _ ->
             {noreply, State#state{msgs_ack_win = MsgsAckWin, time_ack_win = TimeAckWin}}
     end;
@@ -168,9 +169,9 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(Reason, #state{msg_id = MsgId, seq_man = SeqMan} = State) ->
-    ?warning("Sequencer terminated in state ~p due to: ~p", [State, Reason]),
-    gen_server:cast(SeqMan, {sequencer_terminated, MsgId, Reason, State}).
+terminate(Reason, #state{msg_id = MsgId, seq_disp = SeqDisp} = State) ->
+    ?warning("Sequencer stream closed in state ~p due to: ~p", [State, Reason]),
+    gen_server:cast(SeqDisp, {sequencer_stream_terminated, MsgId, Reason, State}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -246,42 +247,42 @@ send_msg(Msg, #state{seq_num = SeqNum} = State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sends acknowledgement to sequencer manager for last forwarded message.
+%% Sends acknowledgement to sequencer dispatcher for last forwarded message.
 %% @end
 %%--------------------------------------------------------------------
 -spec send_msg_ack(State :: #state{}) -> NewState :: #state{}.
-send_msg_ack(#state{msg_id = MsgId, seq_man = SeqMan, seq_num = SeqNum} = State) ->
+send_msg_ack(#state{msg_id = MsgId, seq_disp = SeqDisp, seq_num = SeqNum} = State) ->
     Msg = #server_message{server_message = #message_acknowledgement{
         message_id = MsgId,
         seq_num = SeqNum - 1
     }},
-    gen_server:cast(SeqMan, {send, Msg}),
+    gen_server:cast(SeqDisp, {send, Msg}),
     State#state{seq_num_ack = SeqNum - 1}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sends request to sequencer manager for messages with sequence number ranging
-%% expected sequence number to sequence number proceeding sequence number of
-%% received message minus one.
+%% Sends request to sequencer dispatcher for messages with sequence number
+%% ranging expected sequence number to sequence number proceeding sequence
+%% number of received message minus one.
 %% @end
 %%--------------------------------------------------------------------
 -spec send_msg_req(Msg :: #client_message{}, State :: #state{}) ->
     NewState :: #state{}.
 send_msg_req(#client_message{message_id = MsgId, seq_num = MsgSeqNum},
-    #state{seq_man = SeqMan, seq_num = SeqNum} = State) ->
+    #state{seq_disp = SeqDisp, seq_num = SeqNum} = State) ->
     Msg = #server_message{server_message = #message_request{
         message_id = MsgId,
         lower_seq_num = SeqNum,
         upper_seq_num = MsgSeqNum - 1
     }},
-    gen_server:cast(SeqMan, {send, Msg}),
+    gen_server:cast(SeqDisp, {send, Msg}),
     State.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Stores message in sequencer state.
+%% Stores message in sequencer stream state.
 %% @end
 %%--------------------------------------------------------------------
 -spec store_msg(Msg :: #client_message{}, State :: #state{}) ->
@@ -292,7 +293,7 @@ store_msg(#client_message{seq_num = SeqNum} = Msg, #state{msgs = Msgs} = State) 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes message from sequencer state.
+%% Removes message from sequencer stream state.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_msg(Msg :: #client_message{}, State :: #state{}) ->

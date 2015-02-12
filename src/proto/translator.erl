@@ -56,7 +56,7 @@ translate_from_protobuf(#'WriteEvent'{} = Record) ->
 translate_from_protobuf(#'HandshakeRequest'{auth_method = Auth, session_id = SessionId}) ->
     #handshake_request{auth_method = translate_from_protobuf(Auth), session_id = SessionId};
 translate_from_protobuf(#'AuthMethod'{auth_method =
-    {_, #'Certificate'{client_session_id = Id, client_subject_dn = Dn}}}) ->
+{_, #'Certificate'{client_session_id = Id, client_subject_dn = Dn}}}) ->
     #certificate{client_session_id = Id, client_subject_dn = Dn};
 translate_from_protobuf(#'AuthMethod'{auth_method = {_, #'Token'{value = Val}}}) ->
     #token{value = Val};
@@ -164,7 +164,7 @@ set_event_threshold_parameter(undefined, undefined) ->
     undefined;
 
 set_event_threshold_parameter(undefined, SubscriberParameter) ->
-    {ok, Ratio} = application:get_env(?APP_NAME, producer_threshold_ratio),
+    {ok, Ratio} = application:get_env(?APP_NAME, subs_to_prod_threshold_ratio),
     SubscriberParameter / Ratio;
 
 set_event_threshold_parameter(ProducerParameter, _) ->

@@ -7,15 +7,15 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible
-%%% for aggregating incomming events and executing handlers.
+%%% for dispatching messages associated with given session to sequencer streams.
 %%% @end
 %%%-------------------------------------------------------------------
--module(event_stream).
+-module(sequencer_dispatcher).
 -author("Krzysztof Trzepla").
 
 -behaviour(gen_server).
 
--include("workers/event_manager/event_stream.hrl").
+-include("proto_internal/oneclient/client_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -25,22 +25,15 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--export_type([event_stream/0, admission_rule/0, aggregation_rule/0,
-    emission_rule/0, event_handler/0]).
-
--type event_stream() :: #event_stream{}.
--type admission_rule() :: fun((event_manager:event()) -> true | false).
--type aggregation_rule() :: fun((event_manager:event(), event_manager:event()) ->
-    {ok, event_manager:event()} | {error, disparate}).
--type emission_rule() :: fun((event_stream()) -> true | false).
--type event_handler() :: fun(([event_manager:event()]) -> term()).
-
-%% event stream state:
-%% sub_id   - subscription ID associated with event stream
-%% evt_disp - pid of event dispatcher
+%% sequencer dispatcher state:
+%% seq_stm_sup - pid of sequencer stream supervisor
+%% cons        - list of connection pids to client associated with
+%%                sequencer dispatcher
+%% seq_stms    - mapping from message ID to sequencer stream pid
 -record(state, {
-    sub_id :: non_neg_integer(),
-    evt_disp :: pid()
+    seq_stm_sup,
+    cons = [],
+    seq_stms = #{}
 }).
 
 %%%===================================================================
@@ -52,10 +45,10 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(EvtDisp :: pid(), SubId :: non_neg_integer()) ->
+-spec start_link(SeqStmSup :: pid(), Con :: pid()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(EvtDisp, SubId) ->
-    gen_server:start_link(?MODULE, [EvtDisp, SubId], []).
+start_link(SeqStmSup, Con) ->
+    gen_server:start_link(?MODULE, [SeqStmSup, Con], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -70,9 +63,8 @@ start_link(EvtDisp, SubId) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([EvtDisp, SubId]) ->
-    gen_server:cast(self(), initialize),
-    {ok, #state{evt_disp = EvtDisp, sub_id = SubId}}.
+init([SeqStmSup, Con]) ->
+    {ok, #state{seq_stm_sup = SeqStmSup, cons = [Con]}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -88,6 +80,23 @@ init([EvtDisp, SubId]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_call({sequencer_stream_initialized, MsgId}, {SeqStm, _}, #state{seq_stms = SeqStms} = State) ->
+    case maps:find(MsgId, SeqStms) of
+        {ok, {state, SeqStmState, PendingMsgs}} ->
+            lists:foreach(fun(Msg) ->
+                gen_server:cast(SeqStm, Msg)
+            end, lists:reverse(PendingMsgs)),
+            {reply, {ok, SeqStmState}, State#state{seq_stms = maps:put(MsgId, {pid, SeqStm}, SeqStms)}};
+        _ ->
+            {reply, undefined, State}
+    end;
+
+handle_call({add_connection, Con}, _From, #state{cons = Cons} = State) ->
+    {reply, ok, State#state{cons = [Con | Cons]}};
+
+handle_call({remove_connection, Con}, _From, #state{cons = Cons} = State) ->
+    {reply, ok, State#state{cons = Cons -- [Con]}};
+
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, ok, State}.
@@ -102,14 +111,36 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(initialize, #state{evt_disp = EvtDisp, sub_id = SubId} = State) ->
-    case gen_server:call(EvtDisp, {event_stream_initialized, SubId}) of
-        {ok, #state{} = EvtStmState} ->
-            ?info("Event stream reinitialized in state: ~p", [EvtStmState]),
-            {noreply, EvtStmState};
+handle_cast({sequencer_stream_terminated, MsgId, normal, _}, #state{seq_stms = SeqStms} = State) ->
+    {noreply, State#state{seq_stms = maps:remove(MsgId, SeqStms)}};
+
+handle_cast({sequencer_stream_terminated, MsgId, _, SeqStmState}, #state{seq_stms = SeqStms} = State) ->
+    {noreply, State#state{seq_stms = maps:put(MsgId, {state, SeqStmState, []}, SeqStms)}};
+
+handle_cast(#client_message{message_id = MsgId} = Msg,
+    #state{seq_stm_sup = SeqStmSup, seq_stms = SeqStms} = State) ->
+    case maps:find(MsgId, SeqStms) of
+        {ok, {pid, SeqStm}} ->
+            gen_server:cast(SeqStm, Msg),
+            {noreply, State};
+        {ok, {state, SeqStmState, PendingMsgs}} ->
+            {noreply, State#state{seq_stms =
+            maps:put(MsgId, {state, SeqStmState, [Msg | PendingMsgs]}, SeqStms)}};
         _ ->
-            {noreply, State}
+            SeqDisp = self(),
+            {ok, _SeqStm} = sequencer_stream_sup:start_sequencer_stream(SeqStmSup, SeqDisp, MsgId),
+            {noreply, State#state{seq_stms =
+            maps:put(MsgId, {state, undefined, [Msg]}, SeqStms)}}
     end;
+
+handle_cast({send, Msg}, #state{cons = []} = State) ->
+    ?warning("~p:~p cannot send message ~p due to: 'connection pool empty'",
+        [?MODULE, ?LINE, Msg]),
+    {noreply, State};
+
+handle_cast({send, Msg}, #state{cons = [Con | Cons]} = State) ->
+    protocol_handler:cast(Con, Msg),
+    {noreply, State#state{cons = Cons ++ [Con]}};
 
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
@@ -140,9 +171,8 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(Reason, #state{sub_id = SubId, evt_disp = EvtDisp} = State) ->
-    ?warning("Event stream closed in state ~p due to: ~p", [State, Reason]),
-    gen_server:cast(EvtDisp, {event_terminated, SubId, Reason, State}).
+terminate(_Reason, _State) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private

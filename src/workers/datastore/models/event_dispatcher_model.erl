@@ -8,7 +8,7 @@
 %%% @doc Sequencer model.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer_manager_model).
+-module(event_dispatcher_model).
 -author("Krzysztof Trzepla").
 -behaviour(model_behaviour).
 

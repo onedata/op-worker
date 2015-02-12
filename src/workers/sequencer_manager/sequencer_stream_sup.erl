@@ -7,16 +7,16 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements supervisor behaviour and is responsible
-%%% for supervising and restarting sequencers.
+%%% for supervising and restarting sequencer streams.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer_sup).
+-module(sequencer_stream_sup).
 -author("Krzysztof Trzepla").
 
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_sequencer/3]).
+-export([start_link/0, start_sequencer_stream/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -36,15 +36,13 @@ start_link() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts sequencer manager supervisor supervised by sequencer dispatcher
-%% supervisor.
+%% Starts sequencer stream supervised by sequencer stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_sequencer(SeqSup :: pid(),
-    SeqMan :: pid(), MsgId :: integer()) ->
-    supervisor:startchild_ret().
-start_sequencer(SeqSup, SeqMan, MsgId) ->
-    supervisor:start_child(SeqSup, [SeqMan, MsgId]).
+-spec start_sequencer_stream(SeqStmSup :: pid(), SeqDisp :: pid(),
+    MsgId :: non_neg_integer()) -> supervisor:startchild_ret().
+start_sequencer_stream(SeqStmSup, SeqDisp, MsgId) ->
+    supervisor:start_child(SeqStmSup, [SeqDisp, MsgId]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -69,7 +67,7 @@ init([]) ->
     RestartStrategy = simple_one_for_one,
     MaxR = 3,
     MaxT = timer:minutes(1),
-    {ok, {{RestartStrategy, MaxR, MaxT}, [sequencer_spec()]}}.
+    {ok, {{RestartStrategy, MaxR, MaxT}, [sequencer_stream_spec()]}}.
 
 %%%===================================================================
 %%% Internal functions
@@ -78,12 +76,12 @@ init([]) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates a supervisor child_spec for a sequencer manager supervisor child.
+%% Returns a supervisor child_spec for a sequencer stream.
 %% @end
 %%--------------------------------------------------------------------
--spec sequencer_spec() -> supervisor:child_spec().
-sequencer_spec() ->
-    Id = Module = sequencer,
+-spec sequencer_stream_spec() -> supervisor:child_spec().
+sequencer_stream_spec() ->
+    Id = Module = sequencer_stream,
     Restart = transient,
     Shutdown = timer:seconds(10),
     Type = worker,

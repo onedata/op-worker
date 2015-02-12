@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%%
+%%% This file contains definition of event stream.
 %%% @end
 %%%-------------------------------------------------------------------
 -ifndef(EVENT_STREAM_HRL).
@@ -18,13 +18,5 @@
     emission_rule :: emission_rule(),
     handlers :: [event_handler()]
 }).
-
--type event_stream() :: #event_stream{}.
--type admission_rule() :: fun((event_manager:event()) -> true | false).
--type aggregation_rule() :: fun((event_manager:event(), event_manager:event()) ->
-    {ok, event_manager:event()} | {error, disparate}).
--type emission_rule() :: fun((event_stream()) -> true | false).
--type event_handler() :: {fun(([event_manager:event()]) -> term()),
-    reliable | unreliable}.
 
 -endif.

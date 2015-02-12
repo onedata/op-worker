@@ -7,16 +7,16 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements supervisor behaviour and is responsible
-%%% for supervising and restarting sequencer managers.
+%%% for supervising and restarting event managers.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer_manager_sup).
+-module(event_dispatcher_sup).
 -author("Krzysztof Trzepla").
 
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_sequencer_sup/1, start_sequencer_manager/3]).
+-export([start_link/0, start_event_stream_sup/1, start_event_dispatcher/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -36,29 +36,27 @@ start_link() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts sequencer supervisor supervised by sequencer manager
+%% Starts event stream supervisor supervised by event manager
 %% supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_sequencer_sup(SeqManSup :: pid()) ->
+-spec start_event_stream_sup(EvtDispSup :: pid()) ->
     supervisor:startchild_ret().
-start_sequencer_sup(SeqencerManagerSup) ->
-    ChildSpec = sequencer_sup_spec(),
-    supervisor:start_child(SeqencerManagerSup, ChildSpec).
+start_event_stream_sup(EvtDispSup) ->
+    ChildSpec = event_stream_sup_spec(),
+    supervisor:start_child(EvtDispSup, ChildSpec).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts sequencer manager supervised by sequencer manager
+%% Starts event dispatcher supervised by event dispatcher
 %% supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_sequencer_manager(SeqManSup :: pid(),
-    SeqSup :: pid(), Connection :: pid()) ->
+-spec start_event_dispatcher(EvtDispSup :: pid(), EvtStmSup :: pid()) ->
     supervisor:startchild_ret().
-start_sequencer_manager(SeqencerManagerSup, SeqSup, Connection) ->
-    ChildSpec = sequencer_manager_spec(SeqSup, Connection),
-    supervisor:start_child(SeqencerManagerSup, ChildSpec).
-
+start_event_dispatcher(EvtDispSup, EvtStmSup) ->
+    ChildSpec = event_dispatcher_spec(EvtStmSup),
+    supervisor:start_child(EvtDispSup, ChildSpec).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -92,12 +90,12 @@ init([]) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates a supervisor child_spec for a sequencer supervisor child.
+%% Returns a supervisor child_spec for a event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec sequencer_sup_spec() -> supervisor:child_spec().
-sequencer_sup_spec() ->
-    Id = Module = sequencer_sup,
+-spec event_stream_sup_spec() -> supervisor:child_spec().
+event_stream_sup_spec() ->
+    Id = Module = event_stream_sup,
     Restart = permanent,
     Shutdown = timer:seconds(10),
     Type = supervisor,
@@ -106,15 +104,14 @@ sequencer_sup_spec() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates a supervisor child_spec for a sequencer manager child.
+%% Returns a supervisor child_spec for a event dispatcher.
 %% @end
 %%--------------------------------------------------------------------
--spec sequencer_manager_spec(SeqSup :: pid(),
-    Connection :: pid()) -> supervisor:child_spec().
-sequencer_manager_spec(SeqSup, Connection) ->
-    Id = Module = sequencer_manager,
+-spec event_dispatcher_spec(EvtStmSup :: pid()) ->
+    supervisor:child_spec().
+event_dispatcher_spec(EvtStmSup) ->
+    Id = Module = event_dispatcher,
     Restart = permanent,
     Shutdown = timer:seconds(10),
     Type = worker,
-    {Id, {Module, start_link, [SeqSup, Connection]},
-        Restart, Shutdown, Type, [Module]}.
+    {Id, {Module, start_link, [EvtStmSup]}, Restart, Shutdown, Type, [Module]}.
