@@ -42,6 +42,8 @@ simple_call_test(Config) ->
     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])),
     ?assertEqual(pong, rpc:call(Worker, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])).
 
+%%%===================================================================
+
 -perf_test([
     {repeats, 100},
     {perf_config, [{proc_num, 100}, {proc_repeats, 100}]},
@@ -63,6 +65,8 @@ direct_cast_test(Config) ->
 
     ?assertEqual(ok, spawn_and_check(TestProc, ProcNum)).
 
+%%%===================================================================
+
 -perf_test([
     {repeats, 100},
     {perf_config, [{proc_num, 100}, {proc_repeats, 100}]},
@@ -83,6 +87,8 @@ redirect_cast_test(Config) ->
     end,
 
     ?assertEqual(ok, spawn_and_check(TestProc, ProcNum)).
+
+%%%===================================================================
 
 -perf_test([
     {repeats, 100},
@@ -120,6 +126,10 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
   test_node_starter:clean_environment(Config).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 spawn_and_check(_Fun, 0) ->
     ok;
