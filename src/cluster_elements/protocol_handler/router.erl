@@ -12,6 +12,7 @@
 -module(router).
 -author("Tomasz Lichon").
 
+-include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 
 %% API
@@ -27,7 +28,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec preroute_message(SeqMan :: pid(), Msg :: #client_message{}) ->
-    ok | {error, term()}.
+    ok | {ok, #server_message{}} | {error, term()}.
 preroute_message(_SeqMan, #client_message{seq_num = Seq} = Msg) when Seq =/= undefined ->
     route_message(Msg);
 preroute_message(SeqMan, Msg) ->
@@ -38,7 +39,7 @@ preroute_message(SeqMan, Msg) ->
 %% Route message to adequate handler
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(Msg :: #client_message{}) -> ok | {error, term()}.
+-spec route_message(Msg :: #client_message{}) -> ok | {ok, #server_message{}} | {error, term()}.
 route_message(#client_message{}) ->
     % todo integrate with worker hosts
     ok.

@@ -32,7 +32,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_handshake(Message :: #client_message{}, CertInfo :: #certificate_info{}) ->
-    {ok, {Cred :: #credentials{}, #server_message{}}}.
+    {ok, {Cred :: #credentials{}, #server_message{}}} | {error, term()}.
 handle_handshake(#client_message{client_message = #handshake_request{
     session_id = _Id, token = Token = #token{}}}, _) ->
     #credentials{session_id = SessionId} = Cred = authenticate_using_token(Token),
