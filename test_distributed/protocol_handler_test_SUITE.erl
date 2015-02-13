@@ -22,9 +22,11 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1]).
+-export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1,
+    multi_message_test/1]).
 
-all() -> [token_connection_test, cert_connection_test, protobuf_msg_test].
+all() -> [token_connection_test, cert_connection_test, protobuf_msg_test,
+    multi_message_test].
 
 -define(CLEANUP, false).
 
@@ -46,17 +48,16 @@ token_connection_test(Config) ->
 cert_connection_test(Config) ->
     % given
     ssl:start(),
-    [Worker1, _] = ?config(op_worker_nodes, Config),
+    [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     HandshakeReq = #'ClientMessage'{client_message = {handshake_request, #'HandshakeRequest'{}}},
     HandshakeReqRaw = client_messages:encode_msg(HandshakeReq),
     Pid = self(),
-    test_utils:mock_new(Worker1, serializator),
-    test_utils:mock_expect(Worker1, serializator, deserialize_oneproxy_certificate_info_message,
+    test_utils:mock_expect(Workers, serializator, deserialize_oneproxy_certificate_info_message,
         fun(Data) ->
             Ans = meck:passthrough([Data]),
             Pid ! {certificate_info_message, Ans},
             Ans
-    end),
+        end),
     Cert = ?TEST_FILE(Config, "peer.pem"),
 
     % when
@@ -73,7 +74,7 @@ cert_connection_test(Config) ->
     ?assert(is_binary(CertInfo#certificate_info.client_subject_dn)),
     HandshakeResponse = server_messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
     #'ServerMessage'{server_message = {handshake_response, #'HandshakeResponse'{session_id =
-        SessionId}}} = HandshakeResponse,
+    SessionId}}} = HandshakeResponse,
     ?assert(is_binary(SessionId)),
     ok = ssl:close(Sock),
     ?assertMatch({error, _}, ssl:connection_info(Sock)),
@@ -82,13 +83,11 @@ cert_connection_test(Config) ->
 protobuf_msg_test(Config) ->
     % given
     ssl:start(),
-    [Worker1, _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker1, router),
-    test_utils:mock_expect(Worker1, router, preroute_message, fun(
-        #client_message{
-            client_message = #read_event{}
-        }) -> ok
-    end),
+    [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_expect(Workers, router, preroute_message,
+        fun(#client_message{client_message = #read_event{}}) ->
+            ok
+        end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
         client_message =
@@ -102,15 +101,49 @@ protobuf_msg_test(Config) ->
     ok = ssl:send(Sock, RawMsg),
 
     %then
-    test_utils:mock_validate(Worker1, router),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
+    ssl:stop().
+
+multi_message_test(Config) ->
+    % given
+    ssl:start(),
+    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+    Self = self(),
+    test_utils:mock_expect(Workers, router, route_message,
+        fun(#client_message{client_message = #read_event{counter = Counter}}) ->
+            Self ! Counter,
+            ok
+        end),
+    MsgNumbers = [1,2,3,4,5,6,7,8,9,10],
+    Events = lists:map(
+        fun(N) ->
+            #'ClientMessage'{client_message = {event, #'Event'{event =
+                {read_event, #'ReadEvent'{counter = N, file_id = <<"id">>, size = 1, blocks = []}}}}}
+        end, MsgNumbers),
+    RawEvents = lists:map(fun(E) -> client_messages:encode_msg(E) end, Events),
+
+    % when
+    {ok, Sock} = connect_via_token(Worker1),
+    lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
+
+    %then
+    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
+    lists:foreach(
+        fun(N) ->
+            ?assertMatch({ok, N}, test_utils:receive_msg(N, timer:seconds(5)))
+        end, MsgNumbers),
     ssl:stop().
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    Config2 = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    Workers = ?config(op_worker_nodes, Config2),
+    test_utils:mock_new(Workers, router), %todo repair meck - https://github.com/eproxus/meck/issues/35
+    test_utils:mock_new(Workers, serializator),
+    Config2.
+
 
 end_per_suite(_) when ?CLEANUP == false ->
     ok;
@@ -132,9 +165,8 @@ connect_via_token(Node) ->
     ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     %then
-    ReceiveAnswer = test_utils:receive_any(timer:seconds(5)),
-    ?assertMatch({ok, {ssl, _, _}}, ReceiveAnswer),
-    {ok, {ssl, _, Data}} = ReceiveAnswer,
+    ReceiveAnswer = receive {ssl, _, _} = Ans -> Ans after timer:seconds(5) -> {error, timeout} end,
+    {ssl, _, Data} = ReceiveAnswer,
     ?assert(is_binary(Data)),
     ServerMsg = server_messages:decode_msg(Data, 'ServerMessage'),
     ?assertMatch(#'ServerMessage'{server_message = {handshake_response, #'HandshakeResponse'{}}}, ServerMsg),

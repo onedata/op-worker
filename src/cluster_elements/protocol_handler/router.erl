@@ -30,8 +30,8 @@
 %%--------------------------------------------------------------------
 -spec preroute_message(SeqMan :: pid(), Msg :: #client_message{}) ->
     ok | {ok, #server_message{}} | {error, term()}.
-preroute_message(_SeqMan, #client_message{seq_num = Seq} = Msg) when Seq =/= undefined ->
-    route_message(Msg);
+preroute_message(_SeqMan, #client_message{seq_num = undefined} = Msg) ->
+    router:route_message(Msg);
 preroute_message(SeqMan, Msg) ->
     gen_server:cast(SeqMan, Msg).
 
