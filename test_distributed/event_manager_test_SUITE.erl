@@ -12,15 +12,23 @@
 -module(event_manager_test_SUITE).
 -author("Krzysztof Trzepla").
 
+-include("workers/event_manager/write_event.hrl").
+-include("workers/event_manager/event_stream.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([event_manager_test/1]).
+-export([
+    event_manager_creation_and_removal_test/1,
+    event_manager_subscription_and_emission_test/1
+]).
 
-all() -> [event_manager_test].
+all() -> [
+    event_manager_creation_and_removal_test,
+    event_manager_subscription_and_emission_test
+].
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -29,7 +37,7 @@ all() -> [event_manager_test].
 %%%====================================================================
 
 %% Test creation and removal of event dispatcher using event manager.
-event_manager_test(Config) ->
+event_manager_creation_and_removal_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     SessionId1 = <<"session_id_1">>,
@@ -86,6 +94,63 @@ event_manager_test(Config) ->
         {SessionId1, Worker2},
         {SessionId2, Worker1}
     ]),
+
+    ok.
+
+event_manager_subscription_and_emission_test(Config) ->
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+
+    Self = self(),
+    SessionId1 = <<"session_id_1">>,
+    SessionId2 = <<"session_id_2">>,
+    Sub = #write_event_subscription{
+        producer = gui,
+        event_stream_spec = #event_stream{
+            metadata = 0,
+            admission_rule = fun(#write_event{}) -> true; (_) -> false end,
+            aggregation_rule = fun
+                (#write_event{file_id = FileId} = Evt1, #write_event{file_id = FileId} = Evt2) ->
+                    {ok, #write_event{
+                        counter = Evt1#write_event.counter + Evt2#write_event.counter,
+                        size = Evt1#write_event.size + Evt2#write_event.size,
+                        file_size = Evt2#write_event.file_size,
+                        blocks = Evt1#write_event.blocks ++ Evt2#write_event.blocks
+                    }};
+                (_, _) -> {error, disparate}
+            end,
+            transition_rule = fun(Meta, #write_event{counter = Counter}) ->
+                Meta + Counter
+            end,
+            emission_rule = fun(Meta) -> Meta >= 5 end,
+            handlers = [fun(Evts) -> Self ! {handler, Evts} end]
+        }
+    },
+
+    {ok, _} = rpc:call(Worker1, event_manager,
+        get_or_create_event_dispatcher, [SessionId1]),
+
+    SubAnswer = rpc:call(Worker2, event_manager, subscribe, [Sub]),
+    ?assertMatch({ok, _}, SubAnswer),
+    {ok, SubId} = SubAnswer,
+
+    {ok, _} = rpc:call(Worker2, event_manager,
+        get_or_create_event_dispatcher, [SessionId2]),
+
+    lists:foldl(fun(Evt, N) ->
+        EmitAns = rpc:call(Worker1, event_manager, emit, [Evt#write_event{blocks = [N]}, SessionId1]),
+        ?assertEqual(ok, EmitAns),
+        N + 1
+    end, 1, lists:duplicate(5, #write_event{counter = 1, size = 1, file_size = 1, blocks = []})),
+
+    ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{counter = 5,
+        size = 5, file_size = 1, blocks = [1, 2, 3, 4, 5]}]}, ?TIMEOUT)),
+    ?assertMatch({error, timeout}, test_utils:receive_any()),
+
+    UnsubAnswer = rpc:call(Worker1, event_manager, unsubscribe, [SubId]),
+    ?assertEqual(ok, UnsubAnswer),
+
+    ok = rpc:call(Worker1, event_manager, remove_event_dispatcher, [SessionId2]),
+    ok = rpc:call(Worker2, event_manager, remove_event_dispatcher, [SessionId1]),
 
     ok.
 

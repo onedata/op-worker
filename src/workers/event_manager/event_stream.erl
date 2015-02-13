@@ -32,7 +32,7 @@
 -type admission_rule() :: fun((event_manager:event()) -> true | false).
 -type aggregation_rule() :: fun((event_manager:event(), event_manager:event()) ->
     {ok, event_manager:event()} | {error, disparate}).
--type transition_rule() :: fun((event_manager:event(), metadata()) -> metadata()).
+-type transition_rule() :: fun((metadata(), event_manager:event()) -> metadata()).
 -type emission_rule() :: fun((metadata()) -> true | false).
 -type event_handler() :: fun(([event_manager:event()]) -> ok).
 -type metadata() :: term().
@@ -227,13 +227,13 @@ aggregate(Evt, Evts, Meta, EvtStmSpec) ->
     DipEvts :: [event_manager:event()], Meta :: metadata(), EvtStmSpec :: event_stream()) ->
     {NewEvts :: [event_manager:event()], NewMeta :: metadata()}.
 aggregate(Evt, [], Evts, Meta, #event_stream{transition_rule = TrsRule}) ->
-    {[Evt | Evts], TrsRule(Evt, Meta)};
+    {[Evt | Evts], TrsRule(Meta, Evt)};
 
 aggregate(Evt, [StmEvt | StmEvts], DisEvts, Meta,
     #event_stream{aggregation_rule = AggRule, transition_rule = TrsRule} = EvtStmSpec) ->
-    case AggRule(Evt, StmEvt) of
+    case AggRule(StmEvt, Evt) of
         {ok, NewEvt} ->
-            {[NewEvt | StmEvts] ++ DisEvts, TrsRule(Evt, Meta)};
+            {[NewEvt | StmEvts] ++ DisEvts, TrsRule(Meta, Evt)};
         {error, disparate} ->
             aggregate(Evt, StmEvts, [StmEvt | DisEvts], Meta, EvtStmSpec)
     end.

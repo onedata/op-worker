@@ -15,9 +15,7 @@
 
 -behaviour(gen_server).
 
--include("workers/event_manager/read_event.hrl").
--include("workers/event_manager/write_event.hrl").
--include("workers/event_manager/event_stream.hrl").
+-include("workers/event_manager/events.hrl").
 -include("workers/datastore/datastore_models.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -80,9 +78,8 @@ init([EvtDispSup, EvtStmSup, SessionId]) ->
     }) of
         {ok, SessionId} ->
             {ok, Docs} = subscription:list(),
-            EvtStms = lists:map(fun
-                (#document{key = SubId, value = #subscription{value = Sub}}) ->
-                    {SubId, create_event_stream(EvtStmSup, SubId, Sub)}
+            EvtStms = lists:map(fun(#document{value = #subscription{value = Sub}}) ->
+                create_event_stream(EvtStmSup, Sub)
             end, Docs),
             {ok, #state{evt_stms = EvtStms, evt_stm_sup = EvtStmSup, session_id = SessionId}};
         {error, Reason} ->
@@ -110,16 +107,16 @@ handle_call({event_stream_initialized, SubId}, {EvtStm, _}, #state{evt_stms = Ev
                 gen_server:cast(EvtStm, {event, Evt})
             end, lists:reverse(PendingEvts)),
             {reply, {ok, EvtStmState}, State#state{
-                evt_stms = lists:keyreplace(SubId, 1, EvtStms, {pid, EvtStm, EvtStmSpec})
+                evt_stms = lists:keyreplace(SubId, 1, EvtStms, {SubId, {pid, EvtStm, EvtStmSpec}})
             }};
         _ ->
             {reply, undefined, State}
     end;
 
-handle_call({add_subscription, SubId, Sub}, _From,
+handle_call({add_subscription, Sub}, _From,
     #state{evt_stm_sup = EvtStmSup, evt_stms = EvtStms} = State) ->
     {reply, ok, State#state{evt_stms = [
-        {SubId, create_event_stream(EvtStmSup, SubId, Sub)} | EvtStms
+        create_event_stream(EvtStmSup, Sub) | EvtStms
     ]}};
 
 handle_call({remove_subscription, SubId}, _From,
@@ -146,29 +143,29 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast({event_stream_terminated, SubId, normal, _}, #state{evt_stms = EvtStms} = State) ->
+handle_cast({event_stream_terminated, SubId, shutdown, _}, #state{evt_stms = EvtStms} = State) ->
     {noreply, State#state{evt_stms = lists:keydelete(SubId, 1, EvtStms)}};
 
 handle_cast({event_stream_terminated, SubId, _, EvtStmState}, #state{evt_stms = EvtStms} = State) ->
     {SubId, {pid, _, EvtStmSpec}} = lists:keyfind(SubId, 1, EvtStms),
     {noreply, State#state{
-        evt_stms = lists:keyreplace(SubId, 1, EvtStms, {state, EvtStmState, EvtStmSpec, []})
+        evt_stms = lists:keyreplace(SubId, 1, EvtStms, {SubId, {state, EvtStmState, EvtStmSpec, []}})
     }};
 
 handle_cast(#client_message{client_message = Evt}, #state{evt_stms = EvtStms} = State) ->
     NewEvtStms = lists:map(fun
-        ({pid, Pid, EvtStmSpec} = EvtStm) ->
+        ({_, {pid, Pid, EvtStmSpec}} = EvtStm) ->
             case is_admission_rule_satisfied(Evt, EvtStmSpec) of
                 true -> gen_server:cast(Pid, {event, Evt}), EvtStm;
                 false -> EvtStm
             end;
-        ({state, EvtStmState, EvtStmSpec, PendingEvts} = EvtStm) ->
+        ({_, {state, EvtStmState, EvtStmSpec, PendingEvts}} = EvtStm) ->
             case is_admission_rule_satisfied(Evt, EvtStmSpec) of
                 true -> {state, EvtStmState, EvtStmSpec, [Evt | PendingEvts]};
                 false -> EvtStm
             end
     end, EvtStms),
-    State#state{evt_stms = NewEvtStms};
+    {noreply, State#state{evt_stms = NewEvtStms}};
 
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
@@ -234,26 +231,19 @@ is_admission_rule_satisfied(Evt, #event_stream{admission_rule = AdmRule}) ->
 %% Creates event stream for given subscription.
 %% @end
 %%--------------------------------------------------------------------
--spec create_event_stream(EvtStmSup :: pid(), SubId :: event_manager:subscription_id(),
-    Sub :: event_manager:subscription()) -> {pid, EvtStm :: pid(),
-    EvtStmSpec :: event_stream:event_stream()}.
-create_event_stream(EvtStmSup, SubId, Sub) ->
-    EvtStmSpec = get_event_stream_spec(Sub),
+-spec create_event_stream(EvtStmSup :: pid(), Sub :: event_manager:subscription()) ->
+    {SubId :: event_manager:subscription_id(),
+        {pid, EvtStm :: pid(), EvtStmSpec :: event_stream:event_stream()}}.
+create_event_stream(EvtStmSup, #read_event_subscription{id = SubId,
+    event_stream_spec = EvtStmSpec} = Sub) ->
     ok = send_subscription(Sub),
     {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), SubId, EvtStmSpec),
-    {pid, EvtStm, EvtStmSpec}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns event stream spec for given subscription.
-%% @end
-%%--------------------------------------------------------------------
--spec get_event_stream_spec(Sub :: event_manager:subscription()) ->
-    EvtStmSpec :: event_stream:event_stream().
-get_event_stream_spec(#read_event_subscription{event_stream_spec = EvtStmSpec}) ->
-    EvtStmSpec;
-get_event_stream_spec(#write_event_subscription{event_stream_spec = EvtStmSpec}) ->
-    EvtStmSpec.
+    {SubId, {pid, EvtStm, EvtStmSpec}};
+create_event_stream(EvtStmSup, #write_event_subscription{id = SubId,
+    event_stream_spec = EvtStmSpec} = Sub) ->
+    ok = send_subscription(Sub),
+    {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), SubId, EvtStmSpec),
+    {SubId, {pid, EvtStm, EvtStmSpec}}.
 
 %%--------------------------------------------------------------------
 %% @doc

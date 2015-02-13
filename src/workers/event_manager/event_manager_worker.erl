@@ -15,8 +15,7 @@
 
 -behaviour(worker_plugin_behaviour).
 
--include("workers/event_manager/read_event.hrl").
--include("workers/event_manager/write_event.hrl").
+-include("workers/event_manager/events.hrl").
 -include("workers/datastore/datastore_models.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("cluster_elements/protocol_handler/credentials.hrl").
@@ -155,14 +154,27 @@ emit(Evt, SessionId) ->
     {ok, SubId :: event_manager:subscription_id()} | {error, Reason :: term()}.
 subscribe(Sub) ->
     SubId = crypto:rand_uniform(0, 16#FFFFFFFFFFFFFFFF),
+    NewSub = set_id(SubId, Sub),
     {ok, SubId} = subscription:create(
-        #document{key = SubId, value = #subscription{value = Sub}}
+        #document{key = SubId, value = #subscription{value = NewSub}}
     ),
     {ok, Docs} = event_dispatcher_data:list(),
     lists:foreach(fun(#document{value = #event_dispatcher_data{pid = EvtDisp}}) ->
-        ok = gen_server:call(EvtDisp, {add_subscription, SubId, Sub})
+        ok = gen_server:call(EvtDisp, {add_subscription, NewSub})
     end, Docs),
     {ok, SubId}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets ID for event subscription.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_id(SubId :: event_manager:subscription_id(), Sub :: event_manager:subscription()) ->
+    NewSub :: event_manager:subscription().
+set_id(SubId, #read_event_subscription{} = Sub) ->
+    Sub#read_event_subscription{id = SubId};
+set_id(SubId, #write_event_subscription{} = Sub) ->
+    Sub#write_event_subscription{id = SubId}.
 
 %%--------------------------------------------------------------------
 %% @private

@@ -151,7 +151,10 @@ get(#model_config{} = ModelConfig, Key) ->
 list(#model_config{} = ModelConfig) ->
     SelectAll = [{'_', [], ['$_']}],
     transaction(fun() ->
-        {ok, mnesia:select(table_name(ModelConfig), SelectAll)}
+        Values = lists:map(fun(Value) ->
+            #document{key = get_key(Value), value = strip_key(Value)}
+        end, mnesia:select(table_name(ModelConfig), SelectAll)),
+        {ok, Values}
     end).
 
 %%--------------------------------------------------------------------
@@ -230,6 +233,17 @@ inject_key(Key, Tuple) when is_tuple(Tuple) ->
 strip_key(Tuple) when is_tuple(Tuple) ->
     [RecordName, _Key | Fields] = tuple_to_list(Tuple),
     list_to_tuple([RecordName | Fields]).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns key of a tuple.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_key(Tuple :: tuple()) -> Key :: term().
+get_key(Tuple) when is_tuple(Tuple) ->
+    [_RecordName, Key | _Fields] = tuple_to_list(Tuple),
+    Key.
 
 %%--------------------------------------------------------------------
 %% @private

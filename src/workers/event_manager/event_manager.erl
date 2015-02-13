@@ -13,8 +13,7 @@
 -module(event_manager).
 -author("Krzysztof Trzepla").
 
--include("workers/event_manager/read_event.hrl").
--include("workers/event_manager/write_event.hrl").
+-include("workers/event_manager/events.hrl").
 -include("workers/datastore/datastore_models.hrl").
 -include("cluster_elements/protocol_handler/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
