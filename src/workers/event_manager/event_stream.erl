@@ -109,7 +109,12 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(initialize, #state{evt_disp = EvtDisp, spec = SubId} = State) ->
+handle_cast(initialize, #state{sub_id = SubId, evt_disp = EvtDisp,
+    spec = #event_stream{emission_time = EmsTime}} = State) ->
+    case is_integer(EmsTime) of
+        true -> erlang:send_after(EmsTime, self(), periodic_emission);
+        _ -> ok
+    end,
     case gen_server:call(EvtDisp, {event_stream_initialized, SubId}) of
         {ok, #state{} = EvtStmState} ->
             ?info("Event stream reinitialized in state: ~p", [EvtStmState]),
@@ -142,6 +147,17 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_info(periodic_emission, #state{evts = [],
+    spec = #event_stream{emission_time = EmsTime}} = State) ->
+    erlang:send_after(EmsTime, self(), periodic_emission),
+    {noreply, State};
+
+handle_info(periodic_emission, #state{evts = Evts,
+    spec = #event_stream{emission_time = EmsTime} = EvtStmSpec} = State) ->
+    emit(Evts, EvtStmSpec),
+    erlang:send_after(EmsTime, self(), periodic_emission),
+    {noreply, State#state{evts = [], meta = reset_metadata(EvtStmSpec)}};
+
 handle_info(_Info, State) ->
     ?log_bad_request(_Info),
     {noreply, State}.

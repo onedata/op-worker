@@ -17,7 +17,7 @@
     file_id :: binary(),
     file_size :: non_neg_integer(),
     size :: non_neg_integer(),
-    blocks :: [{non_neg_integer(), non_neg_integer()}]
+    blocks = [] :: [{non_neg_integer(), non_neg_integer()}]
 }).
 
 -record(write_event_subscription, {

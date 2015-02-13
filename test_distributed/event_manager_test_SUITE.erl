@@ -111,6 +111,7 @@ event_manager_subscription_and_emission_test(Config) ->
             aggregation_rule = fun
                 (#write_event{file_id = FileId} = Evt1, #write_event{file_id = FileId} = Evt2) ->
                     {ok, #write_event{
+                        file_id = Evt1#write_event.file_id,
                         counter = Evt1#write_event.counter + Evt2#write_event.counter,
                         size = Evt1#write_event.size + Evt2#write_event.size,
                         file_size = Evt2#write_event.file_size,
@@ -121,7 +122,7 @@ event_manager_subscription_and_emission_test(Config) ->
             transition_rule = fun(Meta, #write_event{counter = Counter}) ->
                 Meta + Counter
             end,
-            emission_rule = fun(Meta) -> Meta >= 5 end,
+            emission_rule = fun(Meta) -> Meta >= 6 end,
             handlers = [fun(Evts) -> Self ! {handler, Evts} end]
         }
     },
@@ -140,10 +141,26 @@ event_manager_subscription_and_emission_test(Config) ->
         EmitAns = rpc:call(Worker1, event_manager, emit, [Evt#write_event{blocks = [N]}, SessionId1]),
         ?assertEqual(ok, EmitAns),
         N + 1
-    end, 1, lists:duplicate(5, #write_event{counter = 1, size = 1, file_size = 1, blocks = []})),
+    end, 1, lists:duplicate(6, #write_event{counter = 1, size = 1, file_size = 1})),
 
-    ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{counter = 5,
-        size = 5, file_size = 1, blocks = [1, 2, 3, 4, 5]}]}, ?TIMEOUT)),
+    ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{counter = 6,
+        size = 6, file_size = 1, blocks = [1, 2, 3, 4, 5, 6]}]}, ?TIMEOUT)),
+    ?assertMatch({error, timeout}, test_utils:receive_any()),
+
+    FileId1 = <<"file_id_1">>,
+    FileId2 = <<"file_id_2">>,
+
+    lists:foreach(fun(FileId) ->
+        lists:foreach(fun(Evt) ->
+            EmitAns = rpc:call(Worker1, event_manager, emit, [Evt, SessionId2]),
+            ?assertEqual(ok, EmitAns)
+        end, lists:duplicate(3, #write_event{file_id = FileId, counter = 1, size = 1, file_size = 1}))
+    end, [FileId1, FileId2]),
+
+    ?assertMatch({ok, _}, test_utils:receive_msg({handler, [
+        #write_event{file_id = FileId2, counter = 3, size = 3, file_size = 1},
+        #write_event{file_id = FileId1, counter = 3, size = 3, file_size = 1}
+    ]}, ?TIMEOUT)),
     ?assertMatch({error, timeout}, test_utils:receive_any()),
 
     UnsubAnswer = rpc:call(Worker1, event_manager, unsubscribe, [SubId]),
