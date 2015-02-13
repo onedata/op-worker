@@ -13,7 +13,9 @@
 -author("Tomasz Lichon").
 
 -include("proto_internal/oneclient/event_messages.hrl").
+-include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([preroute_message/2, route_message/1]).
@@ -28,28 +30,54 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec preroute_message(SeqMan :: pid(), Msg :: #client_message{}) ->
-    ok | {error, term()}.
-preroute_message(_SeqMan, #client_message{seq_num = Seq} = Msg) when Seq =/= undefined ->
-    route_message(Msg);
+    ok | {ok, #server_message{}} | {error, term()}.
+preroute_message(_SeqMan, #client_message{seq_num = undefined} = Msg) ->
+    router:route_message(Msg);
 preroute_message(SeqMan, Msg) ->
     gen_server:cast(SeqMan, Msg).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Route message to adequate handler
+%% Route message to adequate handler, this function should never throw
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(Msg :: #client_message{}) -> ok | {error, term()}.
-route_message(#client_message{credentials = #credentials{session_id = SessionId},
-    client_message = #read_event{} = Evt}) ->
-    event_manager:emit(Evt, SessionId);
-route_message(#client_message{credentials = #credentials{session_id = SessionId},
-    client_message = #write_event{} = Evt}) ->
-    event_manager:emit(Evt, SessionId);
-route_message(#client_message{}) ->
-    % todo integrate with worker hosts
-    ok.
+-spec route_message(Msg :: #client_message{}) -> ok | {ok, #server_message{}} | {error, term()}.
+route_message(Msg = #client_message{message_id = undefined}) ->
+    route_and_ignore_answer(Msg);
+route_message(Msg = #client_message{message_id = #message_id{issuer = server, handler = undefined}}) ->
+    route_and_ignore_answer(Msg);
+route_message(Msg = #client_message{message_id = #message_id{issuer = server, handler = Pid}}) ->
+    Pid ! Msg;
+route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) ->
+    route_and_send_answer(Msg).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Route message to adequate worker and return ok
+%% @end
+%%--------------------------------------------------------------------
+-spec route_and_ignore_answer(#client_message{}) -> ok.
+route_and_ignore_answer(#client_message{session_id = SessionId,
+    client_message = #read_event{} = Evt}) ->
+    event_manager:emit(Evt, SessionId);
+route_and_ignore_answer(#client_message{session_id = SessionId,
+    client_message = #write_event{} = Evt}) ->
+    event_manager:emit(Evt, SessionId);
+route_and_ignore_answer(Msg = #client_message{}) ->
+    ?info("route_and_ignore_answer(~p)", [Msg]),
+    ok. %todo
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Route message to adequate worker, asynchronously wait for answer
+%% repack it into server_message and send to the client
+%% @end
+%%--------------------------------------------------------------------
+-spec route_and_send_answer(#client_message{}) -> ok.
+route_and_send_answer(Msg = #client_message{}) ->
+    ?info("route_and_send_answer(~p)", [Msg]),
+    ok. %todo

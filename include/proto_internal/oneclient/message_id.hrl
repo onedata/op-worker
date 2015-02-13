@@ -6,27 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Internal version of protocol handshake messages.
+%%% Internal server message_id (to client it is opaque as it goes as binary)
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(HANDSHAKE_MESSAGES_HRL).
--define(HANDSHAKE_MESSAGES_HRL, 1).
+-ifndef(MESSAGE_ID_HRL).
+-define(MESSAGE_ID_HRL, 1).
 
--include("common_messages.hrl").
--include("workers/datastore/models/session.hrl").
-
--record(token, {
-    value :: binary()
-}).
-
--record(handshake_request, {
-    token :: #token{},
-    session_id :: session_id()
-}).
-
--record(handshake_response, {
-    session_id :: session_id()
+-record(message_id, {
+    issuer :: client | server,
+    id :: binary(),
+    handler :: pid() | undefined
 }).
 
 -endif.

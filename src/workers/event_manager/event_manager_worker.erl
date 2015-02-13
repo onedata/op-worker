@@ -18,7 +18,6 @@
 -include("workers/event_manager/events.hrl").
 -include("workers/datastore/datastore_models.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
--include("cluster_elements/protocol_handler/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
@@ -50,11 +49,11 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck |
-    {emit, Evt :: event_manager:event(), SessionId :: session_id()} |
+    {emit, Evt :: event_manager:event(), SessionId :: session:session_id()} |
     {subscribe, Sub :: event_manager:subscription()} |
     {unsubscribe, SubId :: event_manager:subscription_id()} |
-    {get_or_create_event_dispatcher, SessionId :: session_id()} |
-    {remove_event_dispatcher, SessionId :: session_id()},
+    {get_or_create_event_dispatcher, SessionId :: session:session_id()} |
+    {remove_event_dispatcher, SessionId :: session:session_id()},
     Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: term(),
@@ -134,7 +133,7 @@ supervisor_child_spec() ->
 %% Emits an event to event manager associated with given session.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Evt :: event_manager:event(), SessionId :: session_id()) ->
+-spec emit(Evt :: event_manager:event(), SessionId :: session:session_id()) ->
     ok | {error, Reason :: term()}.
 emit(Evt, SessionId) ->
     case get_or_create_event_dispatcher(SessionId) of
@@ -198,7 +197,7 @@ unsubscribe(SubId) ->
 %% dispatcher does not exist it is instantiated.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_event_dispatcher(SessionId :: session_id()) ->
+-spec get_or_create_event_dispatcher(SessionId :: session:session_id()) ->
     {ok, Pid :: pid()} | {error, Reason :: term()}.
 get_or_create_event_dispatcher(SessionId) ->
     case get_event_dispatcher_data(SessionId) of
@@ -216,7 +215,7 @@ get_or_create_event_dispatcher(SessionId) ->
 %% Returns model of existing event dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_event_dispatcher_data(SessionId :: session_id()) ->
+-spec get_event_dispatcher_data(SessionId :: session:session_id()) ->
     {ok, #event_dispatcher_data{}} | {error, Reason :: term()}.
 get_event_dispatcher_data(SessionId) ->
     case event_dispatcher_data:get(SessionId) of
@@ -232,7 +231,7 @@ get_event_dispatcher_data(SessionId) ->
 %% Creates event dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec create_event_dispatcher(SessionId :: session_id()) ->
+-spec create_event_dispatcher(SessionId :: session:session_id()) ->
     {ok, Pid :: pid()} | {error, Reason :: term()}.
 create_event_dispatcher(SessionId) ->
     {ok, EvtDispSup} = start_event_dispatcher_sup(),
@@ -253,7 +252,7 @@ create_event_dispatcher(SessionId) ->
 %% Removes event dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_event_dispatcher(SessionId :: session_id()) ->
+-spec remove_event_dispatcher(SessionId :: session:session_id()) ->
     ok | {error, Reason :: term()}.
 remove_event_dispatcher(SessionId) ->
     case get_event_dispatcher_data(SessionId) of

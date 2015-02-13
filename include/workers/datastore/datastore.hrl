@@ -41,7 +41,8 @@
     some_record,
     sequencer_dispatcher_data,
     event_dispatcher_data,
-    subscription
+    subscription,
+    session
 ]).
 
 -endif.

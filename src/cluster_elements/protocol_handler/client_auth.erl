@@ -6,20 +6,21 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Client authentication
+%%% Client authentication library
 %%% @end
 %%%-------------------------------------------------------------------
 -module(client_auth).
 -author("Tomasz Lichon").
 
--include("cluster_elements/protocol_handler/credentials.hrl").
+-include("workers/datastore/datastore_models.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
+-include("proto_internal/oneproxy/oneproxy_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([handle_handshake/1]).
+-export([handle_handshake/2]).
 
 %%%===================================================================
 %%% API
@@ -31,17 +32,19 @@
 %% (cert/token)
 %% @end
 %%--------------------------------------------------------------------
--spec handle_handshake(Message :: #client_message{}) ->
-    {ok, {Cred :: #credentials{}, #server_message{}}}.
+-spec handle_handshake(#client_message{}, #certificate_info{}) ->
+    {ok, #server_message{}} | no_return().
 handle_handshake(#client_message{client_message = #handshake_request{
-    session_id = _Id, auth_method = #token{value = Val}}}) ->
-    #credentials{session_id = SessionId} = Cred = authenticate_using_token(Val),
-    {ok, {Cred, #server_message{server_message = #handshake_response{session_id = SessionId}}}};
+    session_id = IdToReuse, token = Token = #token{}}}, _) ->
+    Cred = authenticate_using_token(Token),
+    {ok, SessionId} = session:create_or_reuse_session(Cred, self(), IdToReuse),
+    {ok, #server_message{server_message = #handshake_response{session_id = SessionId}}};
+
 handle_handshake(#client_message{client_message = #handshake_request{
-    session_id = _Id, auth_method =
-    #certificate{client_session_id = Id, client_subject_dn = Dn}}}) ->
-    #credentials{session_id = SessionId} = Cred = authenticate_using_certificate(Id, Dn),
-    {ok, {Cred, #server_message{server_message = #handshake_response{session_id = SessionId}}}}.
+    session_id = IdToReuse}}, CertInfo) ->
+    Cred = authenticate_using_certificate(CertInfo),
+    {ok, SessionId} = session:create_or_reuse_session(Cred, self(), IdToReuse),
+    {ok, #server_message{server_message = #handshake_response{session_id = SessionId}}}.
 
 %%%===================================================================
 %%% Internal functions
@@ -52,19 +55,18 @@ handle_handshake(#client_message{client_message = #handshake_request{
 %% Authenticate client using given token, returns client credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_token(Token :: binary()) -> #credentials{}.
+-spec authenticate_using_token(#token{}) -> #credentials{}.
 authenticate_using_token(_Token) ->
     ?dump(_Token),
-    #credentials{}.
+    #credentials{}. %todo
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Authenticate client using given certificate. Returns client credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_certificate(OneproxySessionId :: binary(), Dn :: binary()) ->
+-spec authenticate_using_certificate(#certificate_info{}) ->
     #credentials{}.
-authenticate_using_certificate(_OneproxySessionId, _Dn) ->
-    ?dump([_OneproxySessionId, _Dn]),
-    #credentials{}.
-
+authenticate_using_certificate(_CertInfo) ->
+    ?dump(_CertInfo),
+    #credentials{}. %todo

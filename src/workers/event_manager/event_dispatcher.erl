@@ -32,7 +32,7 @@
 %% evt_stm_sup - pid of event stream supervisor
 %% evt_stms    - mapping from subscription ID to event stream
 -record(state, {
-    session_id :: session_id(),
+    session_id :: session:session_id(),
     evt_stm_sup :: pid(),
     evt_stms = [] :: [{
         SubId :: event_manager:subscription_id(),
@@ -53,7 +53,7 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(EvtDispSup :: pid(), EvtStmSup :: pid(), SessionId :: session_id()) ->
+-spec start_link(EvtDispSup :: pid(), EvtStmSup :: pid(), SessionId :: session:session_id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(EvtDispSup, EvtStmSup, SessionId) ->
     gen_server:start_link(?MODULE, [EvtDispSup, EvtStmSup, SessionId], []).

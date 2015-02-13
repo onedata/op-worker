@@ -59,7 +59,7 @@ start_protocol_listener() ->
     {ok, CertFile} = application:get_env(?APP_NAME, fuse_ssl_cert_path),
 
     LocalPort = oneproxy:get_local_port(Port),
-    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_none, no_http) end),
+    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_peer, no_http) end),
     register(?ONEPROXY_PROTOCOL_LISTENER, Pid),
 
     {ok, _} = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,

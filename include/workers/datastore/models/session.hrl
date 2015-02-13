@@ -6,17 +6,25 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Client credentials used in protocol_handler to extend client_message.
+%%% Session model definitions
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(CREDENTIALS_HRL).
--define(CREDENTIALS_HRL, 1).
+-ifndef(SESSION_HRL).
+-define(SESSION_HRL, 1).
 
 -type session_id() :: binary().
 
 -record(credentials, {
-    session_id = <<"ID">> :: session_id()
+    user_id :: binary()
+}).
+
+%% session:
+%% credentials - owner credentials
+%% connections - list of connections' pids
+-record(session,{
+    credentials :: #credentials{},
+    connections :: list() %todo consider extracting connection to independent record
 }).
 
 -endif.

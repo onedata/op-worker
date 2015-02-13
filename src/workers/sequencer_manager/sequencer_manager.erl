@@ -13,8 +13,6 @@
 -module(sequencer_manager).
 -author("Krzysztof Trzepla").
 
--include("cluster_elements/protocol_handler/credentials.hrl").
-
 %% API
 -export([get_or_create_sequencer_dispatcher/2, remove_sequencer_dispatcher/1]).
 
@@ -31,7 +29,7 @@
 %% dispatcher does not exist it is instantiated.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_sequencer_dispatcher(SessionId :: session_id(),
+-spec get_or_create_sequencer_dispatcher(SessionId :: session:session_id(),
     Connection :: pid()) -> {ok, SeqDisp :: pid()} | {error, Reason :: term()}.
 get_or_create_sequencer_dispatcher(SessionId, Connection) ->
     worker_proxy:call(
@@ -46,7 +44,7 @@ get_or_create_sequencer_dispatcher(SessionId, Connection) ->
 %% Removes sequencer dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_sequencer_dispatcher(SessionId :: session_id()) ->
+-spec remove_sequencer_dispatcher(SessionId :: session:session_id()) ->
     ok | {error, Reason :: term()}.
 remove_sequencer_dispatcher(SessionId) ->
     worker_proxy:call(

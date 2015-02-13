@@ -15,8 +15,6 @@
 
 -behaviour(supervisor).
 
--include("cluster_elements/protocol_handler/credentials.hrl").
-
 %% API
 -export([start_link/0, start_event_stream_sup/1, start_event_dispatcher/3]).
 
@@ -55,7 +53,7 @@ start_event_stream_sup(EvtDispSup) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_event_dispatcher(EvtDispSup :: pid(), EvtStmSup :: pid(),
-    SessionId :: session_id()) -> supervisor:startchild_ret().
+    SessionId :: session:session_id()) -> supervisor:startchild_ret().
 start_event_dispatcher(EvtDispSup, EvtStmSup, SessionId) ->
     ChildSpec = event_dispatcher_spec(EvtDispSup, EvtStmSup, SessionId),
     supervisor:start_child(EvtDispSup, ChildSpec).
@@ -110,7 +108,7 @@ event_stream_sup_spec() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec event_dispatcher_spec(EvtDispSup :: pid(), EvtStmSup :: pid(),
-    SessionId :: session_id()) -> supervisor:child_spec().
+    SessionId :: session:session_id()) -> supervisor:child_spec().
 event_dispatcher_spec(EvtDispSup, EvtStmSup, SessionId) ->
     Id = Module = event_dispatcher,
     Restart = permanent,

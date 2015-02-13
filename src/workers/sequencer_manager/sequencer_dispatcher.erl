@@ -33,7 +33,7 @@
 %%               sequencer dispatcher
 %% seq_stms    - mapping from message ID to sequencer stream
 -record(state, {
-    session_id :: session_id(),
+    session_id :: session:session_id(),
     seq_stm_sup :: pid(),
     cons = [] :: [pid()],
     seq_stms = #{} :: map()
@@ -49,7 +49,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(SeqDispSup :: pid(), SeqStmSup :: pid(),
-    SessionId :: session_id(), Con :: pid()) ->
+    SessionId :: session:session_id(), Con :: pid()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SeqDispSup, SeqStmSup, SessionId, Con) ->
     gen_server:start_link(?MODULE, [SeqDispSup, SeqStmSup, SessionId, Con], []).

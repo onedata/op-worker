@@ -15,7 +15,6 @@
 
 -include("workers/event_manager/events.hrl").
 -include("workers/datastore/datastore_models.hrl").
--include("cluster_elements/protocol_handler/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -42,7 +41,7 @@
 %% Emits an event to event manager associated with given session.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Evt :: event(), SessionId :: session_id()) ->
+-spec emit(Evt :: event(), SessionId :: session:session_id()) ->
     ok | {error, Reason :: term()}.
 emit(Evt, SessionId) ->
     worker_proxy:call(
@@ -88,7 +87,7 @@ unsubscribe(SubId) ->
 %% dispatcher does not exist it is instantiated.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_event_dispatcher(SessionId :: session_id()) ->
+-spec get_or_create_event_dispatcher(SessionId :: session:session_id()) ->
     {ok, EvtDisp :: pid()} | {error, Reason :: term()}.
 get_or_create_event_dispatcher(SessionId) ->
     worker_proxy:call(
@@ -103,7 +102,7 @@ get_or_create_event_dispatcher(SessionId) ->
 %% Removes event dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_event_dispatcher(SessionId :: session_id()) ->
+-spec remove_event_dispatcher(SessionId :: session:session_id()) ->
     ok | {error, Reason :: term()}.
 remove_event_dispatcher(SessionId) ->
     worker_proxy:call(

@@ -15,8 +15,6 @@
 
 -behaviour(supervisor).
 
--include("cluster_elements/protocol_handler/credentials.hrl").
-
 %% API
 -export([start_link/0, start_sequencer_stream_sup/1, start_sequencer_dispatcher/4]).
 
@@ -55,7 +53,7 @@ start_sequencer_stream_sup(SeqDispSup) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_sequencer_dispatcher(SeqDispSup :: pid(), SeqStmSup :: pid(),
-    SessionId :: session_id(), Connection :: pid()) -> supervisor:startchild_ret().
+    SessionId :: session:session_id(), Connection :: pid()) -> supervisor:startchild_ret().
 start_sequencer_dispatcher(SeqDispSup, SeqStmSup, SessionId, Connection) ->
     ChildSpec = sequencer_dispatcher_spec(SeqDispSup, SeqStmSup, SessionId, Connection),
     supervisor:start_child(SeqDispSup, ChildSpec).
@@ -110,7 +108,7 @@ sequencer_stream_sup_spec() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec sequencer_dispatcher_spec(SeqDispSup :: pid(), SeqStmSup :: pid(),
-    SessionId :: session_id(), Connection :: pid()) -> supervisor:child_spec().
+    SessionId :: session:session_id(), Connection :: pid()) -> supervisor:child_spec().
 sequencer_dispatcher_spec(SeqDispSup, SeqStmSup, SessionId, Connection) ->
     Id = Module = sequencer_dispatcher,
     Restart = permanent,

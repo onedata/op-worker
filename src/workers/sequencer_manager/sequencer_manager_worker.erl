@@ -16,7 +16,7 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("workers/datastore/datastore_models.hrl").
--include("cluster_elements/protocol_handler/credentials.hrl").
+-include("workers/datastore/models/session.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
@@ -48,8 +48,8 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck |
-    {get_or_create_sequencer_dispatcher, SessionId :: session_id(), Connection :: pid()} |
-    {remove_sequencer_dispatcher, SessionId :: session_id()},
+    {get_or_create_sequencer_dispatcher, SessionId :: session:session_id(), Connection :: pid()} |
+    {remove_sequencer_dispatcher, SessionId :: session:session_id()},
     Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: term(),
@@ -121,7 +121,7 @@ supervisor_child_spec() ->
 %% dispatcher does not exist it is instantiated.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_sequencer_dispatcher(SessionId :: session_id(),
+-spec get_or_create_sequencer_dispatcher(SessionId :: session:session_id(),
     Connection :: pid()) -> {ok, Pid :: pid()} | {error, Reason :: term()}.
 get_or_create_sequencer_dispatcher(SessionId, Connection) ->
     case get_sequencer_dispatcher_model(SessionId) of
@@ -140,7 +140,7 @@ get_or_create_sequencer_dispatcher(SessionId, Connection) ->
 %% Returns model of existing sequencer dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sequencer_dispatcher_model(SessionId :: session_id()) ->
+-spec get_sequencer_dispatcher_model(SessionId :: session:session_id()) ->
     {ok, #sequencer_dispatcher_data{}} | {error, Reason :: term()}.
 get_sequencer_dispatcher_model(SessionId) ->
     case sequencer_dispatcher_data:get(SessionId) of
@@ -156,7 +156,7 @@ get_sequencer_dispatcher_model(SessionId) ->
 %% Creates sequencer dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec create_sequencer_dispatcher(SessionId :: session_id(), Connection :: pid()) ->
+-spec create_sequencer_dispatcher(SessionId :: session:session_id(), Connection :: pid()) ->
     {ok, Pid :: pid()} | {error, Reason :: term()}.
 create_sequencer_dispatcher(SessionId, Connection) ->
     {ok, SeqDispSup} = start_sequencer_dispatcher_sup(),
@@ -178,7 +178,7 @@ create_sequencer_dispatcher(SessionId, Connection) ->
 %% Removes sequencer dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_sequencer_dispatcher(SessionId :: session_id()) ->
+-spec remove_sequencer_dispatcher(SessionId :: session:session_id()) ->
     ok | {error, Reason :: term()}.
 remove_sequencer_dispatcher(SessionId) ->
     case get_sequencer_dispatcher_model(SessionId) of
