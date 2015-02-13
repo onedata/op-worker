@@ -1,4 +1,4 @@
-.PHONY: all base builder worker bigcouch
+.PHONY: all base builder worker bigcouch riak
 
 all: base builder worker bigcouch
 
@@ -13,3 +13,7 @@ worker: base worker/Dockerfile
 
 bigcouch: bigcouch/Dockerfile
 	docker build -t onedata/bigcouch:v1 bigcouch/
+
+riak: riak/Dockerfile
+	docker build -t onedata/riak:v1 riak/
+

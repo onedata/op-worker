@@ -71,6 +71,38 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
     return subprocess.call(cmd)
 
 
+def exec_(container, command, docker_host=None, detach=False, interactive=False,
+          tty=False):
+
+    cmd = ['docker']
+
+    if docker_host:
+        cmd.extend(['-H', docker_host])
+
+    cmd.append('exec')
+
+    if detach:
+        cmd.append('-d')
+
+    if detach or sys.__stdin__.isatty():
+        if interactive:
+            cmd.append('-i')
+        if tty:
+            cmd.append('-t')
+
+    cmd.append(container)
+
+    if isinstance(command, str):
+        cmd.extend(['sh', '-c', command])
+    elif isinstance(command, list):
+        cmd.extend(command)
+
+    if detach:
+        return subprocess.check_output(cmd).decode('utf-8').strip()
+
+    return subprocess.call(cmd)
+
+
 def inspect(container, docker_host=None):
     cmd = ['docker']
 
