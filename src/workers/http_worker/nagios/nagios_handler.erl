@@ -23,6 +23,9 @@
 
 -export_type([healthcheck_reponse/0]).
 
+% ErrorDesc will appear in xml as node status.
+-type healthcheck_reponse() :: ok | {ok, term()} | {error, ErrorDesc :: atom()}.
+
 -ifdef(TEST).
 -compile(export_all).
 -endif.

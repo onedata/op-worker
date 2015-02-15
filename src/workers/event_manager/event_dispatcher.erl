@@ -155,12 +155,12 @@ handle_cast({event_stream_terminated, SubId, _, EvtStmState}, #state{evt_stms = 
 handle_cast(#client_message{client_message = Evt}, #state{evt_stms = EvtStms} = State) ->
     NewEvtStms = lists:map(fun
         ({_, {pid, Pid, EvtStmSpec}} = EvtStm) ->
-            case is_admission_rule_satisfied(Evt, EvtStmSpec) of
+            case apply_admission_rule(Evt, EvtStmSpec) of
                 true -> gen_server:cast(Pid, {event, Evt}), EvtStm;
                 false -> EvtStm
             end;
         ({_, {state, EvtStmState, EvtStmSpec, PendingEvts}} = EvtStm) ->
-            case is_admission_rule_satisfied(Evt, EvtStmSpec) of
+            case apply_admission_rule(Evt, EvtStmSpec) of
                 true -> {state, EvtStmState, EvtStmSpec, [Evt | PendingEvts]};
                 false -> EvtStm
             end
@@ -218,12 +218,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Evaluates event stream admission rule on event.
+%% Applies event stream admission rule on an event.
 %% @end
 %%--------------------------------------------------------------------
--spec is_admission_rule_satisfied(Evt :: event_manager:event(),
+-spec apply_admission_rule(Evt :: event_manager:event(),
     EvtStm :: event_stream:event_stream()) -> true | false.
-is_admission_rule_satisfied(Evt, #event_stream{admission_rule = AdmRule}) ->
+apply_admission_rule(Evt, #event_stream{admission_rule = AdmRule}) ->
     AdmRule(Evt).
 
 %%--------------------------------------------------------------------

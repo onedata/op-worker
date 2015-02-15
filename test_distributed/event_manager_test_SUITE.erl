@@ -117,7 +117,7 @@ event_manager_subscription_and_emission_test(Config) ->
                         file_size = Evt2#write_event.file_size,
                         blocks = Evt1#write_event.blocks ++ Evt2#write_event.blocks
                     }};
-                (_, _) -> {error, disparate}
+                (_, _) -> {error, different}
             end,
             transition_rule = fun(Meta, #write_event{counter = Counter}) ->
                 Meta + Counter

@@ -124,7 +124,7 @@ supervisor_child_spec() ->
 -spec get_or_create_sequencer_dispatcher(SessionId :: session:session_id(),
     Connection :: pid()) -> {ok, Pid :: pid()} | {error, Reason :: term()}.
 get_or_create_sequencer_dispatcher(SessionId, Connection) ->
-    case get_sequencer_dispatcher_model(SessionId) of
+    case get_sequencer_dispatcher_data(SessionId) of
         {ok, #sequencer_dispatcher_data{pid = SeqDisp}} ->
             ok = gen_server:call(SeqDisp, {add_connection, Connection}),
             {ok, SeqDisp};
@@ -140,9 +140,9 @@ get_or_create_sequencer_dispatcher(SessionId, Connection) ->
 %% Returns model of existing sequencer dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sequencer_dispatcher_model(SessionId :: session:session_id()) ->
+-spec get_sequencer_dispatcher_data(SessionId :: session:session_id()) ->
     {ok, #sequencer_dispatcher_data{}} | {error, Reason :: term()}.
-get_sequencer_dispatcher_model(SessionId) ->
+get_sequencer_dispatcher_data(SessionId) ->
     case sequencer_dispatcher_data:get(SessionId) of
         {ok, #document{value = SeqModel}} ->
             {ok, SeqModel};
@@ -181,7 +181,7 @@ create_sequencer_dispatcher(SessionId, Connection) ->
 -spec remove_sequencer_dispatcher(SessionId :: session:session_id()) ->
     ok | {error, Reason :: term()}.
 remove_sequencer_dispatcher(SessionId) ->
-    case get_sequencer_dispatcher_model(SessionId) of
+    case get_sequencer_dispatcher_data(SessionId) of
         {ok, #sequencer_dispatcher_data{node = Node, sup = SeqDispSup}} ->
             stop_sequencer_dispatcher_sup(Node, SeqDispSup);
         {error, Reason} ->

@@ -31,7 +31,7 @@
 -type event_stream() :: #event_stream{}.
 -type admission_rule() :: fun((event_manager:event()) -> true | false).
 -type aggregation_rule() :: fun((event_manager:event(), event_manager:event()) ->
-    {ok, event_manager:event()} | {error, disparate}).
+    {ok, event_manager:event()} | {error, different}).
 -type transition_rule() :: fun((metadata(), event_manager:event()) -> metadata()).
 -type emission_rule() :: fun((metadata()) -> true | false).
 -type event_handler() :: fun(([event_manager:event()]) -> ok).
@@ -124,8 +124,9 @@ handle_cast(initialize, #state{sub_id = SubId, evt_disp = EvtDisp,
     end;
 
 handle_cast({event, Evt}, #state{evts = Evts, meta = Meta, spec = EvtStmSpec} = State) ->
-    {NewEvts, NewMeta} = aggregate(Evt, Evts, Meta, EvtStmSpec),
-    case is_emission_rule_satisfied(NewMeta, EvtStmSpec) of
+    NewEvts = apply_aggregation_rule(Evt, Evts, EvtStmSpec),
+    NewMeta = apply_transition_rule(Evt, Meta, EvtStmSpec),
+    case apply_emission_rule(NewMeta, EvtStmSpec) of
         true ->
             emit(NewEvts, EvtStmSpec),
             {noreply, State#state{evts = [], meta = reset_metadata(EvtStmSpec)}};
@@ -193,6 +194,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns initial value of stream metadata.
 %% @end
@@ -202,8 +204,9 @@ reset_metadata(#event_stream{metadata = Meta}) ->
     Meta.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Executes stream event handlers on aggregated events.
+%% Executes stream event handlers on apply_aggregation_ruled events.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit(Evts :: [event_manager:event()], EvtStmSpec :: event_stream()) -> ok.
@@ -213,43 +216,46 @@ emit(Evts, #event_stream{handlers = Handlers}) ->
     end, Handlers).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Checks whether emission rule is satisfied for event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec is_emission_rule_satisfied(Meta :: metadata(), EvtStmSpec :: event_stream()) ->
+-spec apply_emission_rule(Meta :: metadata(), EvtStmSpec :: event_stream()) ->
     true | false.
-is_emission_rule_satisfied(Meta, #event_stream{emission_rule = EmsRule}) ->
+apply_emission_rule(Meta, #event_stream{emission_rule = EmsRule}) ->
     EmsRule(Meta).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Aggregates an event with first aggregable event stored in the event stream.
-%% @equiv aggregate(Evt, Evts, [], Meta, EvtStmSpec)
+%% Applies aggregation rule on every event stored in the stream. Returns
+%% modified list of events. If none of events already in the stream can be aggregated
+%% with the new event it is appended to the list of events.
 %% @end
 %%--------------------------------------------------------------------
--spec aggregate(Evt :: event_manager:event(), Evts :: [event_manager:event()],
-    Meta :: metadata(), EvtStmSpec :: event_stream()) ->
-    {NewEvts :: [event_manager:event()], NewMeta :: metadata()}.
-aggregate(Evt, Evts, Meta, EvtStmSpec) ->
-    aggregate(Evt, Evts, [], Meta, EvtStmSpec).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Aggregates an event with first aggregable event stored in the event stream.
-%% @end
-%%--------------------------------------------------------------------
--spec aggregate(Evt :: event_manager:event(), Evts :: [event_manager:event()],
-    DipEvts :: [event_manager:event()], Meta :: metadata(), EvtStmSpec :: event_stream()) ->
-    {NewEvts :: [event_manager:event()], NewMeta :: metadata()}.
-aggregate(Evt, [], Evts, Meta, #event_stream{transition_rule = TrsRule}) ->
-    {[Evt | Evts], TrsRule(Meta, Evt)};
-
-aggregate(Evt, [StmEvt | StmEvts], DisEvts, Meta,
-    #event_stream{aggregation_rule = AggRule, transition_rule = TrsRule} = EvtStmSpec) ->
-    case AggRule(StmEvt, Evt) of
-        {ok, NewEvt} ->
-            {[NewEvt | StmEvts] ++ DisEvts, TrsRule(Meta, Evt)};
-        {error, disparate} ->
-            aggregate(Evt, StmEvts, [StmEvt | DisEvts], Meta, EvtStmSpec)
+-spec apply_aggregation_rule(NewEvt :: event_manager:event(), Evts :: [event_manager:event()],
+    EvtStmSpec :: event_stream()) -> NewEvts :: [event_manager:event()].
+apply_aggregation_rule(NewEvt, Evts, #event_stream{aggregation_rule = AggRule}) ->
+    {NewEvts, AggCount} = lists:mapfoldl(fun(Evt, AggCount) ->
+        case AggRule(Evt, NewEvt) of
+            {ok, AggEvt} -> {AggEvt, AggCount + 1};
+            {error, different} -> {Evt, AggCount}
+        end
+    end, 0, Evts),
+    case AggCount of
+        0 -> [NewEvt | NewEvts];
+        _ -> NewEvts
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Applies transition rule on event stream metadata and new event. Returns
+%% new metadata associated with the stream.
+%% @end
+%%--------------------------------------------------------------------
+-spec apply_transition_rule(NewEvt :: event_manager:event(), Meta :: metadata(),
+    EvtStmSpec :: event_stream()) -> NewMeta :: metadata().
+apply_transition_rule(Evt, Meta, #event_stream{transition_rule = TrsRule}) ->
+    TrsRule(Meta, Evt).

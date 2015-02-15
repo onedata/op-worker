@@ -43,7 +43,8 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% dns_query_handler_behaviour callbacks
--export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1, handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
+-export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1,
+    handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -78,7 +79,8 @@ init(_) ->
     {update_state, list(), list()} |
     {get_worker, atom()} |
     get_nodes,
-    Result :: healthcheck_reponse() | ok | pong | {ok, Response} | {error, Reason},
+    Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
+    {error, Reason},
     Response :: [inet:ip4_address()],
     Reason :: term().
 handle(ping, _) ->

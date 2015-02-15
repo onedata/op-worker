@@ -171,8 +171,9 @@ handle_info(_Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
 terminate(Reason, #state{msg_id = MsgId, seq_disp = SeqDisp} = State) ->
-    ?warning("Sequencer stream closed in state ~p due to: ~p", [MsgId, State, Reason]),
-    gen_server:cast(SeqDisp, {sequencer_stream_terminated, MsgId, Reason, State}).
+    NewState = send_msg_ack(State),
+    ?warning("Sequencer stream closed in state ~p due to: ~p", [MsgId, NewState, Reason]),
+    gen_server:cast(SeqDisp, {sequencer_stream_terminated, MsgId, Reason, NewState}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -200,7 +201,7 @@ code_change(_OldVsn, State, _Extra) ->
     {stop, normal, NewState :: #state{}} |
     {noreply, NewState :: #state{}}.
 process_msg(#client_message{last_message = true} = Msg, State) ->
-    NewState = send_msg_ack(send_msg(Msg, State)),
+    NewState = send_msg(Msg, State),
     {stop, normal, NewState};
 
 process_msg(#client_message{seq_num = MsgSeqNum} = Msg,

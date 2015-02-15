@@ -47,9 +47,6 @@
 %%% Global types
 %%%===================================================================
 
-% ErrorDesc will appear in xml as node status.
--type healthcheck_reponse() :: ok | {ok, term()} | {error, ErrorDesc :: atom()}.
-
 % Macro that should be used to log an error during healthcheck
 -define(HEALTHCHECK_ERROR_LOG_MSG(_Msg),
     HEALTHCHECK_ERROR_LOG(_Msg, [])).
