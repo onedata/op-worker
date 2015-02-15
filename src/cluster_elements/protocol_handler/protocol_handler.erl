@@ -266,7 +266,7 @@ handle_client_message(State = #sock_state{session_id = SessionId}, Data) ->
 %% and obtain session
 %% @end
 %%--------------------------------------------------------------------
--spec handle_handshake(#sock_state{}, Msg :: #client_message{}) ->
+-spec handle_handshake(#sock_state{}, #client_message{}) ->
     {noreply, NewState :: #sock_state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
 handle_handshake(State = #sock_state{certificate_info = Cert, socket = Sock,
@@ -287,7 +287,7 @@ handle_handshake(State = #sock_state{certificate_info = Cert, socket = Sock,
 %% Handle nomal client_message
 %% @end
 %%--------------------------------------------------------------------
--spec handle_normal_message(#sock_state{}, Msg :: #client_message{}) ->
+-spec handle_normal_message(#sock_state{}, #client_message{}) ->
     {noreply, NewState :: #sock_state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
 handle_normal_message(State = #sock_state{sequencer_manager = SeqMan,

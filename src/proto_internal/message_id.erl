@@ -33,7 +33,7 @@
 %% @equiv generate(undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec generate() -> MsgId :: #message_id{}.
+-spec generate() -> {ok, #message_id{}}.
 generate() ->
     generate(undefined).
 
@@ -43,41 +43,44 @@ generate() ->
 %% Generates ID with encoded handler pid.
 %% @end
 %%--------------------------------------------------------------------
--spec generate(Recipient :: pid() | undefined) -> MsgId :: #message_id{}.
+-spec generate(Recipient :: pid() | undefined) -> {ok, MsgId :: #message_id{}}.
 generate(Recipient) ->
-    #message_id{
+    {ok, #message_id{
         issuer = server,
         id = integer_to_binary(crypto:rand_uniform(0, ?INT64)),
         recipient = Recipient
-    }.
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Encodes message_id to binary form.
 %% @end
 %%--------------------------------------------------------------------
--spec encode(MsgId :: #message_id{} | undefined) -> undefined | binary().
+-spec encode(MsgId :: #message_id{} | undefined) -> {ok, undefined | binary()}.
 encode(undefined) ->
-    undefined;
+    {ok, undefined};
 encode(#message_id{issuer = client, id = Id}) ->
-    Id;
+    {ok, Id};
 encode(MsgId = #message_id{}) ->
-    term_to_binary(MsgId).
+    {ok, term_to_binary(MsgId)}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Decodes message_id from binary form.
 %% @end
 %%--------------------------------------------------------------------
--spec decode(Id :: binary()) -> MsgId :: #message_id{}.
+-spec decode(Id :: binary()) -> {ok, #message_id{}}.
 decode(undefined) ->
-    undefined;
+    {ok, undefined};
 decode(Id) ->
     try binary_to_term(Id) of
-        #message_id{} = MsgId -> MsgId;
-        _ -> #message_id{issuer = client, id = Id}
+        #message_id{} = MsgId ->
+            {ok, MsgId};
+        _ ->
+            {ok, #message_id{issuer = client, id = Id}}
     catch
-        _:_ -> #message_id{issuer = client, id = Id}
+        _:_ ->
+            {ok, #message_id{issuer = client, id = Id}}
     end.
 
 %%%===================================================================

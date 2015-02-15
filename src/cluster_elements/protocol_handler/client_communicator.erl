@@ -83,7 +83,7 @@ communicate_async(Msg, SessionId) ->
 -spec communicate_async(Msg :: #server_message{}, SessionId :: session:id(),
     Recipient :: pid() | undefined) -> {ok, message_id:id()} | {error, term()}.
 communicate_async(Msg, SessionId, Recipient) ->
-    GeneratedId = message_id:generate(Recipient),
+    {ok, GeneratedId} = message_id:generate(Recipient),
     MsgWithId = Msg#server_message{message_id = GeneratedId},
     {ok, #document{value = #session{connections = Conn}}} = session:get(SessionId),
     RandomIndex = random:uniform(length(Conn)),
