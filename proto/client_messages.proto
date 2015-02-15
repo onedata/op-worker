@@ -4,22 +4,24 @@ import "handshake_messages.proto";
 import "communication_messages.proto";
 import "event_messages.proto";
 
-// list of messages that can be sent from the client to the server
+// generic client message
 message ClientMessage {
-    optional bytes message_id    = 1;
-    optional uint64 stream_id    = 2;
-    optional uint64 seq_num      = 3;
-    optional bool last_message   = 4;
-    oneof client_message {
+    optional bytes         message_id     = 1; // should be set when response is
+                                               // expected
+    optional MessageStream message_stream = 2; // identifies message as part of
+                                               // a stream
+    oneof message_body { // list of messages that can be sent from
+                         // the client to the server
         // handshake_messages.proto
-        HandshakeRequest              handshake_request         = 5;
+        HandshakeRequest       handshake_request       = 3;
 
         // communication_messages.proto
-        Status                        status                    = 7;
-        MessageRequest                message_request           = 8;
-        MessageAcknowledgement        message_acknowledgement   = 9;
+        Status                 status                  = 4;
+        MessageStreamReset     message_stream_reset    = 5;
+        MessageRequest         message_request         = 6;
+        MessageAcknowledgement message_acknowledgement = 7;
 
         // event_messages.proto
-        Event                         event                     = 10;
+        Event                  event                   = 8;
     }
 }
