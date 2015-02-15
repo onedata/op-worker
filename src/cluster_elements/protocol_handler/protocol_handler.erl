@@ -16,9 +16,10 @@
 -behaviour(gen_server).
 
 -include("workers/datastore/models/session.hrl").
--include_lib("proto_internal/oneclient/server_messages.hrl").
--include_lib("proto_internal/oneclient/handshake_messages.hrl").
--include_lib("proto_internal/oneproxy/oneproxy_messages.hrl").
+-include("proto_internal/oneclient/client_messages.hrl").
+-include("proto_internal/oneclient/server_messages.hrl").
+-include("proto_internal/oneclient/handshake_messages.hrl").
+-include("proto_internal/oneproxy/oneproxy_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -201,7 +202,7 @@ handle_info(_Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #sock_state{}) -> term().
 terminate(_Reason, #sock_state{session_id = SessionId}) ->
-    session:remove_connection(SessionId, self()),
+    session:remove_connection(self(), SessionId),
     ok.
 
 %%--------------------------------------------------------------------
@@ -265,11 +266,11 @@ handle_client_message(State = #sock_state{session_id = SessionId}, Data) ->
 %% and obtain session
 %% @end
 %%--------------------------------------------------------------------
--spec handle_handshake(#sock_state{}, #certificate_info{}) ->
+-spec handle_handshake(#sock_state{}, Msg :: #client_message{}) ->
     {noreply, NewState :: #sock_state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_handshake(State =
-    #sock_state{certificate_info = Cert, socket = Sock, transport = Transp}, Msg) ->
+handle_handshake(State = #sock_state{certificate_info = Cert, socket = Sock,
+    transport = Transp}, Msg) ->
     try client_auth:handle_handshake(Msg, Cert) of
         {ok, Response = #server_message{server_message =
         #handshake_response{session_id = NewSessionId}}} ->
@@ -286,20 +287,20 @@ handle_handshake(State =
 %% Handle nomal client_message
 %% @end
 %%--------------------------------------------------------------------
--spec handle_normal_message(#sock_state{}, tuple()) ->
+-spec handle_normal_message(#sock_state{}, Msg :: #client_message{}) ->
     {noreply, NewState :: #sock_state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_normal_message(State =
-    #sock_state{sequencer_manager = SeqMan, socket = Sock, transport = Transp}, Msg) ->
+handle_normal_message(State = #sock_state{sequencer_manager = SeqMan,
+    socket = _Sock, transport = _Transp}, Msg) ->
     case router:preroute_message(SeqMan, Msg) of
         ok ->
-            {noreply, State, ?TIMEOUT};
-        {_, Response = #server_message{}} ->
-            send_server_message(Sock, Transp, Response),
-            {noreply, State, ?TIMEOUT};
-        {error, Reason} ->
-            ?warning("Message ~p handling error: ~p", [Msg, Reason]),
-            {stop, {error, Reason}, State}
+            {noreply, State, ?TIMEOUT}
+%%         {_, Response = #server_message{}} ->
+%%             send_server_message(Sock, Transp, Response),
+%%             {noreply, State, ?TIMEOUT};
+%%         {error, Reason} ->
+%%             ?warning("Message ~p handling error: ~p", [Msg, Reason]),
+%%             {stop, {error, Reason}, State}
     end.
 
 %%--------------------------------------------------------------------

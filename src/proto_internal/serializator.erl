@@ -31,8 +31,8 @@
 %% deserialize protobuf binary data to client message
 %% @end
 %%--------------------------------------------------------------------
--spec deserialize_client_message(Message :: binary(), SessionId :: undefined | session_id()) ->
-    {ok, Record :: term()} | no_return().
+-spec deserialize_client_message(Message :: binary(), SessionId :: undefined | session:session_id()) ->
+    {ok, ClientMsg :: #client_message{}} | no_return().
 deserialize_client_message(Message, SessionId) ->
     #'ClientMessage'{message_id = Id, seq_num = SeqNum, last_message = Last,
         client_message = {_, Msg}} =
@@ -45,8 +45,7 @@ deserialize_client_message(Message, SessionId) ->
 %% serialize server message to protobuf binary data
 %% @end
 %%--------------------------------------------------------------------
--spec serialize_server_message(#server_message{}) ->
-    {ok, binary()} | no_return().
+-spec serialize_server_message(#server_message{}) -> {ok, binary()} | no_return().
 serialize_server_message(#server_message{message_id = Id, seq_num = Seq,
     last_message = Last, server_message = Msg}) ->
     ProtobufMessage = translator:translate_to_protobuf(Msg),

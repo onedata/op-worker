@@ -44,7 +44,8 @@ save(Document) ->
 %% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
+-spec update(datastore:key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
     datastore:update(global_only, ?MODULE, Key, Diff).
 
@@ -131,25 +132,25 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% credentials and connection pid.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_reuse_session(#credentials{}, pid(), SessionIdToReuse :: session_id()) ->
-    {ok, session_id()}.
-create_or_reuse_session(Cred, ConnPid, undefined) ->
-    session:create(#document{value = #session{credentials = Cred, connections = [ConnPid]}});
-create_or_reuse_session(Cred, ConnPid, SessionIdToReuse) ->
+-spec create_or_reuse_session(Cred :: #credentials{}, Con :: pid(),
+    SessionIdToReuse :: undefined | session_id()) ->
+    {ok, SessionId :: session_id()} | datastore:create_error() | datastore:update_error().
+create_or_reuse_session(Cred, Con, undefined) ->
+    session:create(#document{value = #session{credentials = Cred, connections = [Con]}});
+create_or_reuse_session(Cred, Con, SessionIdToReuse) ->
     {ok, #document{value = #session{credentials = Cred}}} = session:get(SessionIdToReuse),
-    session:update(SessionIdToReuse,
-        fun(Doc = #document{value = Sess = #session{connections = Conn, credentials = Cred}}) ->
-            Doc#document{value = Sess#session{connections = [ConnPid | Conn]}}
-        end).
+    session:update(SessionIdToReuse, fun(#session{connections = Cons} = Sess) ->
+        Sess#session{connections = [Con | Cons]}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Remove connection from session
 %% @end
 %%--------------------------------------------------------------------
--spec remove_connection(session_id(), pid()) -> {ok, session_id()} | datastore:generic_error().
-remove_connection(SessionId, ConnectionPid) ->
-    session:update(SessionId,
-        fun(Doc = #document{value = Sess = #session{connections = Conn}}) ->
-            Doc#document{value = Sess#session{connections = Conn -- [ConnectionPid]}}
-        end). %todo atomically delete session when there are no connections left
+-spec remove_connection(Con :: pid(), SessionId :: session_id()) ->
+    {ok, SessionId :: session_id()} | datastore:generic_error() | datastore:update_error().
+remove_connection(Con, SessionId) ->
+    session:update(SessionId, fun(#session{connections = Cons} = Sess) ->
+        Sess#session{connections = Cons -- [Con]}
+    end). %todo atomically delete session when there are no connections left

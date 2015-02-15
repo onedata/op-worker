@@ -60,7 +60,7 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SeqDisp :: pid(), MsgId :: non_neg_integer()) ->
+-spec start_link(SeqDisp :: pid(), MsgId :: message_id:message_id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SeqDisp, MsgId) ->
     gen_server:start_link(?MODULE, [SeqDisp, MsgId], []).

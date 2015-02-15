@@ -40,7 +40,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_sequencer_stream(SeqStmSup :: pid(), SeqDisp :: pid(),
-    MsgId :: non_neg_integer()) -> supervisor:startchild_ret().
+    MsgId :: message_id:message_id()) -> supervisor:startchild_ret().
 start_sequencer_stream(SeqStmSup, SeqDisp, MsgId) ->
     supervisor:start_child(SeqStmSup, [SeqDisp, MsgId]).
 

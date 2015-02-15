@@ -41,12 +41,15 @@ preroute_message(SeqMan, Msg) ->
 %% Route message to adequate handler, this function should never throw
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(Msg :: #client_message{}) -> ok | {ok, #server_message{}} | {error, term()}.
+-spec route_message(Msg :: #client_message{}) ->
+    ok | {ok, #server_message{}} | {error, term()}.
 route_message(Msg = #client_message{message_id = undefined}) ->
     route_and_ignore_answer(Msg);
-route_message(Msg = #client_message{message_id = #message_id{issuer = server, handler = undefined}}) ->
+route_message(Msg = #client_message{message_id = #message_id{issuer = server,
+    recipient = undefined}}) ->
     route_and_ignore_answer(Msg);
-route_message(Msg = #client_message{message_id = #message_id{issuer = server, handler = Pid}}) ->
+route_message(Msg = #client_message{message_id = #message_id{issuer = server,
+    recipient = Pid}}) ->
     Pid ! Msg;
 route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) ->
     route_and_send_answer(Msg).

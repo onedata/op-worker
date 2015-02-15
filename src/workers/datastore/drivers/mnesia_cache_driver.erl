@@ -74,8 +74,7 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Docum
     transaction(fun() ->
         case mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write) of
             ok -> {ok, Key};
-            Reason ->
-                {error, Reason}
+            Reason -> {error, Reason}
         end
     end).
 
@@ -221,7 +220,7 @@ table_name(TabName) when is_atom(TabName) ->
 -spec inject_key(Key :: datastore:key(), Tuple :: tuple()) -> NewTuple :: tuple().
 inject_key(Key, Tuple) when is_tuple(Tuple) ->
     [RecordName | Fields] = tuple_to_list(Tuple),
-    list_to_tuple([RecordName, Key] ++ Fields).
+    list_to_tuple([RecordName | [Key | Fields]]).
 
 %%--------------------------------------------------------------------
 %% @private

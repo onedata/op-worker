@@ -16,7 +16,7 @@
 -record(message_id, {
     issuer :: client | server,
     id :: binary(),
-    handler :: pid() | undefined
+    recipient :: pid() | undefined
 }).
 
 -endif.

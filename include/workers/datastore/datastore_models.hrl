@@ -43,7 +43,7 @@
 
 %% event dispatcher model:
 %% node - node on which event dispatcher has been started
-%% pid  - pid of event dispatcher associated with FUSE client
+%% pid  - pid of event dispatcher associated with client session
 %% sup  - pid of event dispatcher supervisor
 -record(event_dispatcher_data, {
     node :: node(),
