@@ -149,7 +149,7 @@ std::shared_ptr<lambda> make_shared_handler(lambda &&l)
 
 void tls2tcp_session::send_cert_info(bool verified)
 {
-    // Fill handshake with cert data (when no auth_method specified)
+    // Prepare
     one::proxy::proto::CertificateInfo certificate_info;
     if (verified) {
         std::array<char, 2048> subject_name;
@@ -159,7 +159,7 @@ void tls2tcp_session::send_cert_info(bool verified)
         certificate_info.set_client_session_id(session_id_);
     }
 
-    // Encode certificate info message
+    // Encode
     string certificate_info_data;
     if(!certificate_info.SerializeToString(&certificate_info_data)) {
         LOG(ERROR) << "Cannot serialize certificate info.";
@@ -168,7 +168,7 @@ void tls2tcp_session::send_cert_info(bool verified)
     auto header = std::make_unique<std::uint32_t>(htonl(certificate_info_data.size()));
     auto msg = std::make_unique<std::string>(std::move(certificate_info_data));
 
-    // Send certificate info message
+    // Send
     std::array<boost::asio::const_buffer, 2> buffers{
             {boost::asio::buffer(static_cast<void *>(&*header), sizeof(*header)),
                     boost::asio::buffer(*msg)}};

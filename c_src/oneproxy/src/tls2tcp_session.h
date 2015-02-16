@@ -70,7 +70,7 @@ private:
     void handle_handshake(const boost::system::error_code &error);
 
     /**
-    * Sends information about client's certificate to server
+    * Sends information about client's certificate to the server
     * @param error Boost error code
     * @param bytes_transferred The number of read bytes
     */
