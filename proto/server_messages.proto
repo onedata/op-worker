@@ -13,7 +13,6 @@ import "event_messages.proto";
 import "stream_messages.proto";
 import "handshake_messages.proto";
 
-// Generic server message
 message ServerMessage {
     optional bytes         message_id     = 1; // should be set when respons is
                                                // expected
@@ -24,8 +23,10 @@ message ServerMessage {
         // handshake_messages.proto
         HandshakeResponse      handshake_response      = 3;
 
-        // communication_messages.proto
+        // common_messages.proto
         Status                 status                  = 4;
+
+        // stream_messages.proto
         MessageStreamReset     message_stream_reset    = 5;
         MessageRequest         message_request         = 6;
         MessageAcknowledgement message_acknowledgement = 7;
