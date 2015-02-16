@@ -322,7 +322,7 @@ activate_socket_once(Socket, Transport) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_server_message(Socket :: port(), Transport :: module(),
-    ServerMessage :: tuple()) -> ok | {error, term()}.
+    ServerMessage :: #server_message{}) -> ok | {error, term()}.
 send_server_message(Socket, Transport, ServerMsg) ->
     try serializator:serialize_server_message(ServerMsg) of
         {ok, Data} ->

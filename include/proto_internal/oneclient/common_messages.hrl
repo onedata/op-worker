@@ -18,9 +18,4 @@
     size :: non_neg_integer()
 }).
 
--record(environment_variable, {
-    name :: binary(),
-    value :: binary()
-}).
-
 -endif.
