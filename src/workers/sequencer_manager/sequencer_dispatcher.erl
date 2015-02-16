@@ -18,7 +18,7 @@
 -include("workers/datastore/datastore_models.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
--include("proto_internal/oneclient/communication_messages.hrl").
+-include("proto_internal/oneclient/stream_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -196,5 +196,5 @@ code_change(_OldVsn, State, _Extra) ->
 -spec reset_message_stream(SessId :: session:id()) ->
     ok | {error, Reason :: term()}.
 reset_message_stream(SessId) ->
-    Msg = #server_message{message_body = #message_stream_reset{seq_num = 1}},
+    Msg = #server_message{message_body = #message_stream_reset{}},
     client_communicator:send(Msg, SessId).

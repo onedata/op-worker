@@ -16,7 +16,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/common_messages.hrl").
--include("proto_internal/oneclient/communication_messages.hrl").
+-include("proto_internal/oneclient/stream_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
 -include("proto_internal/oneclient/event_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -109,8 +109,8 @@ translate_to_protobuf(#handshake_response{session_id = Id}) ->
     #'HandshakeResponse'{session_id = Id};
 translate_to_protobuf(#message_stream{stm_id = StmId, seq_num = SeqNum, eos = Eos}) ->
     #'MessageStream'{stm_id = StmId, seq_num = SeqNum, eos = Eos};
-translate_to_protobuf(#message_stream_reset{seq_num = SeqNum}) ->
-    #'MessageStreamReset'{seq_num = SeqNum};
+translate_to_protobuf(#message_stream_reset{}) ->
+    #'MessageStreamReset'{};
 translate_to_protobuf(#message_request{stm_id = StmId, lower_seq_num = LoSeqNum,
     upper_seq_num = UpSeqNum}) ->
     #'MessageRequest'{stm_id = StmId, lower_seq_num = LoSeqNum,

@@ -13,7 +13,7 @@
 
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
--include("proto_internal/oneclient/communication_messages.hrl").
+-include("proto_internal/oneclient/common_messages.hrl").
 -include("proto_internal/oneclient/event_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").

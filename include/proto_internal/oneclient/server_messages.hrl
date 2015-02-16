@@ -13,7 +13,7 @@
 -ifndef(SERVER_MESSAGES_HRL).
 -define(SERVER_MESSAGES_HRL, 1).
 
--include("communication_messages.hrl").
+-include("stream_messages.hrl").
 
 -record(server_message, {
     message_id :: message_id:id(),

@@ -13,26 +13,6 @@
 -ifndef(COMMUNICATION_MESSAGES_HRL).
 -define(COMMUNICATION_MESSAGES_HRL, 1).
 
-% POSIX error code
--type code() :: 'VOK' |
-                'VENOENT' |
-                'VEACCES' |
-                'VEEXIST' |
-                'VEIO' |
-                'VENOTSUP' |
-                'VENOTEMPTY' |
-                'VEREMOTEIO' |
-                'VEPERM' |
-                'VEINVAL' |
-                'VEDQUOT' |
-                'VENOATTR' |
-                'VECOMM'.
-
--record(status, {
-    code :: code(),
-    description :: binary()
-}).
-
 -record(message_stream, {
     stm_id :: non_neg_integer(),
     seq_num :: non_neg_integer(),
@@ -40,7 +20,6 @@
 }).
 
 -record(message_stream_reset, {
-    seq_num :: non_neg_integer()
 }).
 
 -record(message_request, {

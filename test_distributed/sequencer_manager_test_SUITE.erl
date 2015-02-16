@@ -14,7 +14,7 @@
 
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
--include("proto_internal/oneclient/communication_messages.hrl").
+-include("proto_internal/oneclient/stream_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -122,9 +122,7 @@ sequencer_stream_test(Config) ->
 
     %% Check whether reset stream message was sent
     ?assertMatch({ok, _}, test_utils:receive_msg(
-        #server_message{message_body = #message_stream_reset{
-            seq_num = 1
-        }}, ?TIMEOUT
+        #server_message{message_body = #message_stream_reset{}}, ?TIMEOUT
     )),
 
     %% Send 'MsgCount' messages in reverse order
