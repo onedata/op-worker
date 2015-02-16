@@ -146,13 +146,7 @@ init_per_testcase(cert_connection_test, Config) ->
     test_utils:mock_new(Workers, serializator),
     Config;
 
-init_per_testcase(protobuf_msg_test, Config) ->
-    ssl:start(),
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, router),
-    Config;
-
-init_per_testcase(multi_message_test, Config) ->
+init_per_testcase(Case, Config) when Case =:= protobuf_msg_test or Case =:= multi_message_test->
     ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, router),
@@ -168,13 +162,7 @@ end_per_testcase(cert_connection_test, Config) ->
     test_utils:mock_unload(Workers, serializator),
     ssl:stop();
 
-end_per_testcase(protobuf_msg_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, router),
-    test_utils:mock_unload(Workers, router),
-    ssl:stop();
-
-end_per_testcase(multi_message_test, Config) ->
+end_per_testcase(Case, Config) when Case =:= protobuf_msg_test or Case =:= multi_message_test->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate(Workers, router),
     test_utils:mock_unload(Workers, router),
