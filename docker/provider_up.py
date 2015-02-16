@@ -65,7 +65,8 @@ parser.add_argument(
 parser.add_argument(
     'config_path',
     action='store',
-    help='path to gen_dev_args.json that will be used to configure oneprovider_node instances')
+    help='path to gen_dev_args.json that will be used to configure ' +
+         'oneprovider_node instances')
 
 args = parser.parse_args()
 uid = args.uid

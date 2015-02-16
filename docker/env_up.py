@@ -1,4 +1,4 @@
-# !/usr/bin/env python
+#!/usr/bin/env python
 
 """
 Brings up a DNS server with container (skydns + skydock) that allow
