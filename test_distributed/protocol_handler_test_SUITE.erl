@@ -27,11 +27,11 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1,
-    multi_message_test/1, client_send_test/1]).
+    multi_message_test/1, client_send_test/1, client_communicate_test/1]).
 
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
-        multi_message_test, client_send_test].
+        multi_message_test, client_send_test, client_communicate_test].
 
 -define(CLEANUP, true).
 
@@ -101,7 +101,8 @@ protobuf_msg_test(Config) ->
     ok = ssl:send(Sock, RawMsg),
 
     % then
-    ?assertMatch({ok, _}, ssl:connection_info(Sock)).
+    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
+    ok = ssl:close(Sock).
 
 multi_message_test(Config) ->
     % given
@@ -129,35 +130,95 @@ multi_message_test(Config) ->
     lists:foreach(
         fun(N) ->
             ?assertMatch({ok, N}, test_utils:receive_msg(N, timer:seconds(5)))
-        end, MsgNumbers).
+        end, MsgNumbers),
+    ok = ssl:close(Sock).
 
 client_send_test(Config) ->
     % given
     [Worker1, _] = ?config(op_worker_nodes, Config),
-    {ok, {_, SessionId}} = connect_via_token(Worker1),
+    {ok, {Sock, SessionId}} = connect_via_token(Worker1),
     Code = 'VOK',
     Description = <<"desc">>,
-    Msg = #server_message{message_body = #status{
-        code = Code,
-        description = Description}
+    ServerMsgInternal = #server_message{
+        message_body = #status{
+            code = Code,
+            description = Description
+        }
+    },
+    ServerMessageProtobuf = #'ServerMessage'{
+        message_id = undefined,
+        message_body = {status, #'Status'{
+            code = Code,
+            description = Description}
+        }
     },
 
     % when
-    rpc:call(Worker1, client_communicator, send, [Msg, SessionId]),
+    rpc:call(Worker1, client_communicator, send, [ServerMsgInternal, SessionId]),
 
     % then
-    ReceivedData =
+    ReceivedMessage =
         receive
-            {ssl, _, Data} -> Data
+            {ssl, _, Data} ->
+                server_messages:decode_msg(Data, 'ServerMessage')
         after timer:seconds(5) ->
             {error, timeout}
         end,
-    ?assertNotEqual({error, timeout}, ReceivedData),
-    ReceivedMessage = server_messages:decode_msg(ReceivedData, 'ServerMessage'),
-    ?assertEqual(#'ServerMessage'{
-        message_id = undefined,
-        message_body = {status, #'Status'{code = Code, description = Description}}
-    }, ReceivedMessage).
+    ?assertEqual(ServerMessageProtobuf, ReceivedMessage),
+    ok = ssl:close(Sock).
+
+client_communicate_test(Config) ->
+    % given
+    [Worker1, _] = ?config(op_worker_nodes, Config),
+    Code = 'VOK',
+    Description = <<"desc">>,
+    Status = #status{
+        code = Code,
+        description = Description
+    },
+    StatusProtobuf = {status, #'Status'{
+        code = Code,
+        description = Description}
+    },
+    ServerMsgInternal = #server_message{message_body = Status},
+    ClientAnsProtobuf = #'ClientMessage'{message_body = StatusProtobuf},
+    Self = self(),
+    SslEchoClient =
+        fun() ->
+            {ok, {Sock, SessionId}} = connect_via_token(Worker1),
+            Self ! {echo_client_connected, Sock, SessionId},
+            ReceivedMessage =
+                receive
+                    {ssl, _, Data} ->
+                        server_messages:decode_msg(Data, 'ServerMessage')
+                after timer:seconds(5) ->
+                    {error, timeout}
+                end,
+            ?assertMatch(#'ServerMessage'{message_body = {status,
+                #'Status'{code = Code, description = Description}}
+            }, ReceivedMessage),
+            ServerMessageId = ReceivedMessage#'ServerMessage'.message_id,
+            ClientAnsProtobufWithId = ClientAnsProtobuf#'ClientMessage'{message_id = ServerMessageId},
+            ClientAnsRaw = client_messages:encode_msg(ClientAnsProtobufWithId),
+            ssl:send(Sock, ClientAnsRaw)
+
+        end,
+
+    % when
+    spawn_link(SslEchoClient),
+    EchoClientStatus =
+        receive
+            {echo_client_connected, SockVal, SessIdVal} -> {ok, {SockVal, SessIdVal}}
+        after
+            timer:seconds(5) -> {error, timeout}
+        end,
+    ?assertMatch({ok, _}, EchoClientStatus),
+    {ok, {Sock, SessionId}} = EchoClientStatus,
+    CommunicateResult = rpc:call(Worker1, client_communicator, communicate, [ServerMsgInternal, SessionId]),
+
+    % then
+    ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
+    ok = ssl:close(Sock).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
