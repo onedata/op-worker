@@ -34,17 +34,17 @@
 %%--------------------------------------------------------------------
 -spec handle_handshake(#client_message{}, #certificate_info{}) ->
     {ok, #server_message{}} | no_return().
-handle_handshake(#client_message{client_message = #handshake_request{
+handle_handshake(#client_message{message_body = #handshake_request{
     session_id = IdToReuse, token = Token = #token{}}}, _) ->
     Cred = authenticate_using_token(Token),
     {ok, SessionId} = session:create_or_reuse_session(Cred, self(), IdToReuse),
-    {ok, #server_message{server_message = #handshake_response{session_id = SessionId}}};
+    {ok, #server_message{message_body = #handshake_response{session_id = SessionId}}};
 
-handle_handshake(#client_message{client_message = #handshake_request{
+handle_handshake(#client_message{message_body = #handshake_request{
     session_id = IdToReuse}}, CertInfo) ->
     Cred = authenticate_using_certificate(CertInfo),
     {ok, SessionId} = session:create_or_reuse_session(Cred, self(), IdToReuse),
-    {ok, #server_message{server_message = #handshake_response{session_id = SessionId}}}.
+    {ok, #server_message{message_body = #handshake_response{session_id = SessionId}}}.
 
 %%%===================================================================
 %%% Internal functions

@@ -14,7 +14,7 @@
 -author("Krzysztof Trzepla").
 
 %% API
--export([get_or_create_sequencer_dispatcher/2, remove_sequencer_dispatcher/1]).
+-export([get_or_create_sequencer_dispatcher/1, remove_sequencer_dispatcher/1]).
 
 -define(TIMEOUT, timer:seconds(5)).
 -define(SEQUENCER_MANAGER_WORKER, sequencer_manager_worker).
@@ -29,12 +29,12 @@
 %% dispatcher does not exist it is instantiated.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_sequencer_dispatcher(SessionId :: session:session_id(),
-    Connection :: pid()) -> {ok, SeqDisp :: pid()} | {error, Reason :: term()}.
-get_or_create_sequencer_dispatcher(SessionId, Connection) ->
+-spec get_or_create_sequencer_dispatcher(SessId :: session:id()) ->
+    {ok, SeqDisp :: pid()} | {error, Reason :: term()}.
+get_or_create_sequencer_dispatcher(SessId) ->
     worker_proxy:call(
         ?SEQUENCER_MANAGER_WORKER,
-        {get_or_create_sequencer_dispatcher, SessionId, Connection},
+        {get_or_create_sequencer_dispatcher, SessId},
         ?TIMEOUT,
         prefer_local
     ).
@@ -44,12 +44,12 @@ get_or_create_sequencer_dispatcher(SessionId, Connection) ->
 %% Removes sequencer dispatcher for client session.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_sequencer_dispatcher(SessionId :: session:session_id()) ->
+-spec remove_sequencer_dispatcher(SessId :: session:id()) ->
     ok | {error, Reason :: term()}.
-remove_sequencer_dispatcher(SessionId) ->
+remove_sequencer_dispatcher(SessId) ->
     worker_proxy:call(
         ?SEQUENCER_MANAGER_WORKER,
-        {remove_sequencer_dispatcher, SessionId},
+        {remove_sequencer_dispatcher, SessId},
         ?TIMEOUT,
         prefer_local
     ).

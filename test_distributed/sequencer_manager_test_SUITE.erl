@@ -20,7 +20,8 @@
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
+    end_per_testcase/2]).
 -export([sequencer_manager_test/1, sequencer_stream_test/1]).
 
 all() -> [sequencer_manager_test, sequencer_stream_test].
@@ -33,9 +34,8 @@ all() -> [sequencer_manager_test, sequencer_stream_test].
 
 %% Test creation and removal of sequencer dispatcher using sequencer manager.
 sequencer_manager_test(Config) ->
-    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
-    Self = self(),
     SessionId1 = <<"session_id_1">>,
     SessionId2 = <<"session_id_2">>,
 
@@ -44,7 +44,7 @@ sequencer_manager_test(Config) ->
     [SeqDisp1, SeqDisp2] = lists:map(fun({SessionId, Workers}) ->
         CreateOrGetSeqDispAnswers = utils:pmap(fun(Worker) ->
             rpc:call(Worker, sequencer_manager,
-                get_or_create_sequencer_dispatcher, [SessionId, Self])
+                get_or_create_sequencer_dispatcher, [SessionId])
         end, Workers),
 
         lists:foreach(fun(CreateOrGetSeqDispAnswer) ->
@@ -82,6 +82,9 @@ sequencer_manager_test(Config) ->
             remove_sequencer_dispatcher, [SessionId]),
         ?assertMatch({error, _}, RemoveSeqDispAnswer2),
 
+        % Check whether sequencer dispatcher were deleted
+        ?assertMatch({error, {not_found, _}}, rpc:call(Worker1,
+            sequencer_dispatcher_data, get, [SessionId])),
         ProcessesAfterRemoval = processes([Worker1, Worker2]),
         ?assertMatch([], lists:filter(fun(Proces) ->
             Proces =:= SeqDisp1
@@ -91,12 +94,6 @@ sequencer_manager_test(Config) ->
         {SessionId2, Worker1}
     ]),
 
-    % Check whether sequencer dispatcher were deleted
-    ?assertMatch({error, {not_found, _}}, rpc:call(Worker1,
-        sequencer_dispatcher_data, get, [SessionId1])),
-    ?assertMatch({error, {not_found, _}}, rpc:call(Worker2,
-        sequencer_dispatcher_data, get, [SessionId2])),
-
     ok.
 
 %% Test sequencer stream behaviour.
@@ -104,66 +101,90 @@ sequencer_stream_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessionId = <<"session_id">>,
-    MsgId = 1,
+    StmId = 1,
     MsgCount = 100,
-    ClientMsg = #client_message{message_id = MsgId, last_message = false},
-    MsgReq = #message_request{message_id = MsgId},
-    MsgAck = #message_acknowledgement{message_id = MsgId, seq_num = MsgCount},
 
-    test_utils:mock_new(Worker, [router, protocol_handler]),
+    test_utils:mock_new(Worker, [router]),
     test_utils:mock_expect(Worker, router, route_message, fun(Msg) ->
-        Self ! Msg
+        Self ! Msg, ok
     end),
-    test_utils:mock_expect(Worker, protocol_handler, cast, fun(Connection, Msg) ->
-        Connection ! Msg
-    end),
+    test_utils:mock_expect(Worker, client_communicator, send,
+        fun(Msg, Id) when Id =:= SessionId ->
+            Self ! Msg, ok
+        end
+    ),
 
-    {ok, SeqDisp} = rpc:call(Worker, sequencer_manager,
-        get_or_create_sequencer_dispatcher, [SessionId, Self]),
+    %{ok, SeqDisp}
+    Ans = rpc:call(Worker, sequencer_manager,
+        get_or_create_sequencer_dispatcher, [SessionId]),
+    ?assertMatch({ok, _}, Ans),
+    {ok, SeqDisp} = Ans,
+
+    %% Check whether reset stream message was sent
+    ?assertMatch({ok, _}, test_utils:receive_msg(
+        #server_message{message_body = #message_stream_reset{
+            seq_num = 1
+        }}, ?TIMEOUT
+    )),
 
     %% Send 'MsgCount' messages in reverse order
     lists:foreach(fun(SeqNum) ->
-        gen_server:cast(SeqDisp, ClientMsg#client_message{seq_num = SeqNum})
+        gen_server:cast(SeqDisp, #client_message{message_stream = #message_stream{
+            stm_id = StmId, seq_num = SeqNum, eos = false
+        }})
     end, lists:seq(MsgCount, 1, -1)),
 
     %% Check whether 'MsgCount' - 1 request messages were sent
     lists:foreach(fun(SeqNum) ->
         ?assertMatch({ok, _}, test_utils:receive_msg(#server_message{
-            server_message = MsgReq#message_request{
-                lower_seq_num = 1, upper_seq_num = SeqNum - 1
+            message_body = #message_request{
+                stm_id = StmId, lower_seq_num = 1, upper_seq_num = SeqNum - 1
             }
         }, ?TIMEOUT))
     end, lists:seq(MsgCount, 2, -1)),
 
     %% Check whether messages were forwarded in right order
     lists:foreach(fun(SeqNum) ->
-        ?assertMatch({ok, _}, test_utils:receive_msg(ClientMsg#client_message{
-            seq_num = SeqNum}, ?TIMEOUT))
+        ?assertMatch({ok, _}, test_utils:receive_msg(
+            #client_message{message_stream = #message_stream{
+                stm_id = StmId, seq_num = SeqNum, eos = false
+            }}, ?TIMEOUT
+        ))
     end, lists:seq(1, MsgCount)),
 
     %% Check whether messages acknowledgement was sent
     ?assertMatch({ok, _}, test_utils:receive_msg(
-        #server_message{server_message = MsgAck}, ?TIMEOUT)),
+        #server_message{message_body = #message_acknowledgement{
+            stm_id = StmId, seq_num = MsgCount
+        }}, ?TIMEOUT
+    )),
 
     %% Send last message
-    gen_server:cast(SeqDisp, ClientMsg#client_message{
-        seq_num = MsgCount + 1, last_message = true}),
+    gen_server:cast(SeqDisp, #client_message{message_stream = #message_stream{
+        stm_id = StmId, seq_num = MsgCount + 1, eos = true
+    }}),
 
     %% Check whether last message was sent
-    ?assertMatch({ok, _}, test_utils:receive_msg(ClientMsg#client_message{
-        seq_num = MsgCount + 1, last_message = true}, ?TIMEOUT)),
+    ?assertMatch({ok, _}, test_utils:receive_msg(
+        #client_message{message_stream = #message_stream{
+            stm_id = StmId, seq_num = MsgCount + 1, eos = true
+        }}, ?TIMEOUT
+    )),
 
     %% Check whether last message acknowledgement was sent
     ?assertMatch({ok, _}, test_utils:receive_msg(
-        #server_message{server_message = MsgAck#message_acknowledgement{
-            seq_num = MsgCount + 1}}, ?TIMEOUT)),
+        #server_message{message_body = #message_acknowledgement{
+            stm_id = StmId, seq_num = MsgCount + 1
+        }}, ?TIMEOUT
+    )),
 
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
     ok = rpc:call(Worker, sequencer_manager,
         remove_sequencer_dispatcher, [SessionId]),
 
-    test_utils:mock_validate(Worker, [router, protocol_handler]),
+    test_utils:mock_validate(Worker, [router]),
+    test_utils:mock_unload(Worker, [router]),
 
     ok.
 
@@ -176,6 +197,20 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
+
+init_per_testcase(_, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, client_communicator),
+    test_utils:mock_expect(Workers, client_communicator, send,
+        fun(_, _) -> ok end),
+    Config.
+
+end_per_testcase(_, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate(Workers, client_communicator),
+    test_utils:mock_unload(Workers, client_communicator),
+    Config.
+
 
 %%%===================================================================
 %%% Internal functions

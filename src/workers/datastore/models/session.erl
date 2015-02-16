@@ -23,7 +23,9 @@
 %% API
 -export([remove_connection/2, create_or_reuse_session/3]).
 
--export_type([session_id/0]).
+-export_type([id/0]).
+
+-type id() :: binary().
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -133,8 +135,8 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_or_reuse_session(Cred :: #credentials{}, Con :: pid(),
-    SessionIdToReuse :: undefined | session_id()) ->
-    {ok, SessionId :: session_id()} | datastore:create_error() | datastore:update_error().
+    SessionIdToReuse :: undefined | id()) ->
+    {ok, SessionId :: id()} | datastore:create_error() | datastore:update_error().
 create_or_reuse_session(Cred, Con, undefined) ->
     session:create(#document{value = #session{credentials = Cred, connections = [Con]}});
 create_or_reuse_session(Cred, Con, SessionIdToReuse) ->
@@ -148,8 +150,8 @@ create_or_reuse_session(Cred, Con, SessionIdToReuse) ->
 %% Remove connection from session
 %% @end
 %%--------------------------------------------------------------------
--spec remove_connection(Con :: pid(), SessionId :: session_id()) ->
-    {ok, SessionId :: session_id()} | datastore:generic_error() | datastore:update_error().
+-spec remove_connection(Con :: pid(), SessionId :: id()) ->
+    {ok, SessionId :: id()} | datastore:generic_error() | datastore:update_error().
 remove_connection(Con, SessionId) ->
     session:update(SessionId, fun(#session{connections = Cons} = Sess) ->
         Sess#session{connections = Cons -- [Con]}

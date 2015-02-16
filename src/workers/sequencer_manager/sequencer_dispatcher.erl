@@ -17,25 +17,24 @@
 
 -include("workers/datastore/datastore_models.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
+-include("proto_internal/oneclient/server_messages.hrl").
+-include("proto_internal/oneclient/communication_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/4]).
+-export([start_link/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
 %% sequencer dispatcher state:
-%% session_id  - ID of session associated with event dispatcher
+%% sess_id     - ID of session associated with event dispatcher
 %% seq_stm_sup - pid of sequencer stream supervisor
-%% cons        - list of connection pids to client associated with
-%%               sequencer dispatcher
 %% seq_stms    - mapping from message ID to sequencer stream
 -record(state, {
-    session_id :: session:session_id(),
+    sess_id :: session:id(),
     seq_stm_sup :: pid(),
-    cons = [] :: [pid()],
     seq_stms = #{} :: map()
 }).
 
@@ -48,11 +47,10 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SeqDispSup :: pid(), SeqStmSup :: pid(),
-    SessionId :: session:session_id(), Con :: pid()) ->
+-spec start_link(SeqDispSup :: pid(), SeqStmSup :: pid(), SessId :: session:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SeqDispSup, SeqStmSup, SessionId, Con) ->
-    gen_server:start_link(?MODULE, [SeqDispSup, SeqStmSup, SessionId, Con], []).
+start_link(SeqDispSup, SeqStmSup, SessId) ->
+    gen_server:start_link(?MODULE, [SeqDispSup, SeqStmSup, SessId], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -67,13 +65,14 @@ start_link(SeqDispSup, SeqStmSup, SessionId, Con) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SeqDispSup, SeqStmSup, SessionId, Con]) ->
+init([SeqDispSup, SeqStmSup, SessId]) ->
     process_flag(trap_exit, true),
-    case sequencer_dispatcher_data:create(#document{key = SessionId,
+    case sequencer_dispatcher_data:create(#document{key = SessId,
         value = #sequencer_dispatcher_data{node = node(), pid = self(), sup = SeqDispSup}
     }) of
-        {ok, SessionId} ->
-            {ok, #state{seq_stm_sup = SeqStmSup, cons = [Con], session_id = SessionId}};
+        {ok, SessId} ->
+            ok = reset_message_stream(SessId),
+            {ok, #state{seq_stm_sup = SeqStmSup, sess_id = SessId}};
         {error, Reason} ->
             {stop, Reason}
     end.
@@ -92,22 +91,16 @@ init([SeqDispSup, SeqStmSup, SessionId, Con]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_call({sequencer_stream_initialized, MsgId}, {Pid, _}, #state{seq_stms = SeqStms} = State) ->
-    case maps:find(MsgId, SeqStms) of
+handle_call({sequencer_stream_initialized, StmId}, {Pid, _}, #state{seq_stms = SeqStms} = State) ->
+    case maps:find(StmId, SeqStms) of
         {ok, {state, SeqStmState, PendingMsgs}} ->
             lists:foreach(fun(Msg) ->
                 gen_server:cast(Pid, Msg)
             end, lists:reverse(PendingMsgs)),
-            {reply, {ok, SeqStmState}, State#state{seq_stms = maps:put(MsgId, {pid, Pid}, SeqStms)}};
+            {reply, {ok, SeqStmState}, State#state{seq_stms = maps:put(StmId, {pid, Pid}, SeqStms)}};
         _ ->
             {reply, undefined, State}
     end;
-
-handle_call({add_connection, Con}, _From, #state{cons = Cons} = State) ->
-    {reply, ok, State#state{cons = [Con | Cons]}};
-
-handle_call({remove_connection, Con}, _From, #state{cons = Cons} = State) ->
-    {reply, ok, State#state{cons = Cons -- [Con]}};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -123,36 +116,28 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast({sequencer_stream_terminated, MsgId, normal, _}, #state{seq_stms = SeqStms} = State) ->
-    {noreply, State#state{seq_stms = maps:remove(MsgId, SeqStms)}};
+handle_cast({sequencer_stream_terminated, StmId, normal, _}, #state{seq_stms = SeqStms} = State) ->
+    {noreply, State#state{seq_stms = maps:remove(StmId, SeqStms)}};
 
-handle_cast({sequencer_stream_terminated, MsgId, _, SeqStmState}, #state{seq_stms = SeqStms} = State) ->
-    {noreply, State#state{seq_stms = maps:put(MsgId, {state, SeqStmState, []}, SeqStms)}};
+handle_cast({sequencer_stream_terminated, StmId, _, SeqStmState}, #state{seq_stms = SeqStms} = State) ->
+    {noreply, State#state{seq_stms = maps:put(StmId, {state, SeqStmState, []}, SeqStms)}};
 
-handle_cast(#client_message{message_id = MsgId} = Msg,
-    #state{seq_stm_sup = SeqStmSup, seq_stms = SeqStms} = State) ->
-    case maps:find(MsgId, SeqStms) of
+handle_cast(#client_message{message_stream = #message_stream{stm_id = StmId}} = Msg,
+    #state{seq_stm_sup = SeqStmSup, seq_stms = SeqStms, sess_id = SessId} = State) ->
+    case maps:find(StmId, SeqStms) of
         {ok, {pid, Pid}} ->
             gen_server:cast(Pid, Msg),
             {noreply, State};
         {ok, {state, SeqStmState, PendingMsgs}} ->
-            {noreply, State#state{seq_stms =
-            maps:put(MsgId, {state, SeqStmState, [Msg | PendingMsgs]}, SeqStms)}};
+            {noreply, State#state{seq_stms = maps:put(StmId, {state, SeqStmState,
+                [Msg | PendingMsgs]}, SeqStms)}};
         _ ->
             SeqDisp = self(),
-            {ok, _SeqStm} = sequencer_stream_sup:start_sequencer_stream(SeqStmSup, SeqDisp, MsgId),
-            {noreply, State#state{seq_stms =
-            maps:put(MsgId, {state, undefined, [Msg]}, SeqStms)}}
+            {ok, _SeqStm} = sequencer_stream_sup:start_sequencer_stream(SeqStmSup,
+                SeqDisp, SessId, StmId),
+            {noreply, State#state{seq_stms = maps:put(StmId, {state, undefined,
+                [Msg]}, SeqStms)}}
     end;
-
-handle_cast({send, Msg}, #state{cons = []} = State) ->
-    ?warning("~p:~p cannot send message ~p due to: 'connection pool empty'",
-        [?MODULE, ?LINE, Msg]),
-    {noreply, State};
-
-handle_cast({send, Msg}, #state{cons = [Con | Cons]} = State) ->
-    protocol_handler:cast(Con, Msg),
-    {noreply, State#state{cons = Cons ++ [Con]}};
 
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
@@ -183,9 +168,9 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(Reason, #state{session_id = SessionId} = State) ->
+terminate(Reason, #state{sess_id = SessId} = State) ->
     ?warning("Sequencer dispatcher terminated in state ~p due to: ~p", [State, Reason]),
-    sequencer_dispatcher_data:delete(SessionId).
+    sequencer_dispatcher_data:delete(SessId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -201,3 +186,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Resets each client message stream, so that sequence number starts from '1'.
+%% @end
+%%--------------------------------------------------------------------
+-spec reset_message_stream(SessId :: session:id()) ->
+    ok | {error, Reason :: term()}.
+reset_message_stream(SessId) ->
+    Msg = #server_message{message_body = #message_stream_reset{seq_num = 1}},
+    client_communicator:send(Msg, SessId).

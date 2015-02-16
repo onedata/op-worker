@@ -12,6 +12,7 @@
 -module(router).
 -author("Tomasz Lichon").
 
+-include("proto_internal/oneclient/message_id.hrl").
 -include("proto_internal/oneclient/event_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
@@ -31,7 +32,7 @@
 %%--------------------------------------------------------------------
 -spec preroute_message(SeqMan :: pid(), Msg :: #client_message{}) ->
     ok | {ok, #server_message{}} | {error, term()}.
-preroute_message(_SeqMan, #client_message{seq_num = undefined} = Msg) ->
+preroute_message(_SeqMan, #client_message{message_stream = undefined} = Msg) ->
     router:route_message(Msg);
 preroute_message(SeqMan, Msg) ->
     gen_server:cast(SeqMan, Msg).
@@ -65,10 +66,10 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) 
 %%--------------------------------------------------------------------
 -spec route_and_ignore_answer(#client_message{}) -> ok.
 route_and_ignore_answer(#client_message{session_id = SessionId,
-    client_message = #read_event{} = Evt}) ->
+    message_body = #read_event{} = Evt}) ->
     event_manager:emit(Evt, SessionId);
 route_and_ignore_answer(#client_message{session_id = SessionId,
-    client_message = #write_event{} = Evt}) ->
+    message_body = #write_event{} = Evt}) ->
     event_manager:emit(Evt, SessionId);
 route_and_ignore_answer(Msg = #client_message{}) ->
     ?info("route_and_ignore_answer(~p)", [Msg]),

@@ -13,14 +13,12 @@
 -ifndef(SERVER_MESSAGES_HRL).
 -define(SERVER_MESSAGES_HRL, 1).
 
--include("message_id.hrl").
+-include("communication_messages.hrl").
 
 -record(server_message, {
-    message_id :: #message_id{} | undefined,
-    stream_id :: non_neg_integer() | undefined,
-    seq_num :: non_neg_integer() | undefined,
-    last_message :: boolean() | undefined,
-    server_message :: tuple()
+    message_id :: message_id:id(),
+    message_stream :: #message_stream{},
+    message_body :: tuple()
 }).
 
 -endif.

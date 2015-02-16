@@ -32,7 +32,7 @@
 %% evt_stm_sup - pid of event stream supervisor
 %% evt_stms    - mapping from subscription ID to event stream
 -record(state, {
-    session_id :: session:session_id(),
+    session_id :: session:id(),
     evt_stm_sup :: pid(),
     evt_stms = [] :: [{
         SubId :: event_manager:subscription_id(),
@@ -53,7 +53,7 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(EvtDispSup :: pid(), EvtStmSup :: pid(), SessionId :: session:session_id()) ->
+-spec start_link(EvtDispSup :: pid(), EvtStmSup :: pid(), SessionId :: session:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(EvtDispSup, EvtStmSup, SessionId) ->
     gen_server:start_link(?MODULE, [EvtDispSup, EvtStmSup, SessionId], []).
@@ -152,7 +152,7 @@ handle_cast({event_stream_terminated, SubId, _, EvtStmState}, #state{evt_stms = 
         evt_stms = lists:keyreplace(SubId, 1, EvtStms, {SubId, {state, EvtStmState, EvtStmSpec, []}})
     }};
 
-handle_cast(#client_message{client_message = Evt}, #state{evt_stms = EvtStms} = State) ->
+handle_cast(#client_message{message_body = Evt}, #state{evt_stms = EvtStms} = State) ->
     NewEvtStms = lists:map(fun
         ({_, {pid, Pid, EvtStmSpec}} = EvtStm) ->
             case apply_admission_rule(Evt, EvtStmSpec) of

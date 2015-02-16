@@ -104,12 +104,7 @@ perform_nagios_healthcheck(Node, Retries) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_testcase(nagios_test, Config) ->
-    try
-        test_node_starter:prepare_test_environment(
-            Config, ?TEST_FILE(Config, "env_desc.json"), ?MODULE)
-    catch A:B ->
-        ct:print("~p:~p~n~p", [A, B, erlang:get_stacktrace()])
-    end.
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_testcase(nagios_test, Config) ->
     test_node_starter:clean_environment(Config).

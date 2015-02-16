@@ -31,20 +31,20 @@
 %% expected.
 %% @end
 %%--------------------------------------------------------------------
--spec send(Msg :: #server_message{}, SessionId :: session_id()) ->
+-spec send(Msg :: #server_message{}, SessionId :: session:id()) ->
     ok | {error, term()}.
 send(Msg, SessionId) ->
-    {ok, #document{value = #session{connections = Conn}}} = session:get(SessionId),
-    RandomIndex = random:uniform(length(Conn)),
-    Pid = lists:nth(RandomIndex, Conn),
+    {ok, #document{value = #session{connections = Cons}}} = session:get(SessionId),
+    RandomIndex = random:uniform(length(Cons)),
+    Pid = lists:nth(RandomIndex, Cons),
     protocol_handler:call(Pid, Msg#server_message{message_id = undefined}).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends server_message to client and wait for its answer.
+%% Sends server_message to client and waits for its answer.
 %% @end
 %%--------------------------------------------------------------------
--spec communicate(ServerMsg :: #server_message{}, SessionId :: session_id()) ->
+-spec communicate(ServerMsg :: #server_message{}, SessionId :: session:id()) ->
     {ok, #client_message{}} | {error, term()}.
 communicate(ServerMsg, SessionId) ->
     case communicate_async(ServerMsg, SessionId, self()) of
@@ -61,12 +61,12 @@ communicate(ServerMsg, SessionId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends message and expect answer (with generated id) in message's default worker.
+%% Sends message and expects answer (with generated id) in message's default worker.
 %% @equiv communicate_async(Msg, SessionId, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec communicate_async(Msg :: #server_message{}, SessionId :: session_id()) ->
-    {ok, #message_id{}} | {error, term()}.
+-spec communicate_async(Msg :: #server_message{}, SessionId :: session:id()) ->
+    {ok, message_id:id()} | {error, term()}.
 communicate_async(Msg, SessionId) ->
     communicate_async(Msg, SessionId, undefined).
 
@@ -80,8 +80,8 @@ communicate_async(Msg, SessionId) ->
 %% #client_message{message_id = MessageId}
 %% @end
 %%--------------------------------------------------------------------
--spec communicate_async(Msg :: #server_message{}, SessionId :: session_id(),
-    Recipient :: pid() | undefined) -> {ok, #message_id{}} | {error, term()}.
+-spec communicate_async(Msg :: #server_message{}, SessionId :: session:id(),
+    Recipient :: pid() | undefined) -> {ok, message_id:id()} | {error, term()}.
 communicate_async(Msg, SessionId, Recipient) ->
     GeneratedId = message_id:generate(Recipient),
     MsgWithId = Msg#server_message{message_id = GeneratedId},

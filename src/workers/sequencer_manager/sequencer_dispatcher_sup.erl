@@ -16,7 +16,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_sequencer_stream_sup/1, start_sequencer_dispatcher/4]).
+-export([start_link/0, start_sequencer_stream_sup/1, start_sequencer_dispatcher/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -53,9 +53,9 @@ start_sequencer_stream_sup(SeqDispSup) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_sequencer_dispatcher(SeqDispSup :: pid(), SeqStmSup :: pid(),
-    SessionId :: session:session_id(), Connection :: pid()) -> supervisor:startchild_ret().
-start_sequencer_dispatcher(SeqDispSup, SeqStmSup, SessionId, Connection) ->
-    ChildSpec = sequencer_dispatcher_spec(SeqDispSup, SeqStmSup, SessionId, Connection),
+    SessId :: session:id()) -> supervisor:startchild_ret().
+start_sequencer_dispatcher(SeqDispSup, SeqStmSup, SessId) ->
+    ChildSpec = sequencer_dispatcher_spec(SeqDispSup, SeqStmSup, SessId),
     supervisor:start_child(SeqDispSup, ChildSpec).
 
 %%%===================================================================
@@ -108,11 +108,11 @@ sequencer_stream_sup_spec() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec sequencer_dispatcher_spec(SeqDispSup :: pid(), SeqStmSup :: pid(),
-    SessionId :: session:session_id(), Connection :: pid()) -> supervisor:child_spec().
-sequencer_dispatcher_spec(SeqDispSup, SeqStmSup, SessionId, Connection) ->
+    SessId :: session:id()) -> supervisor:child_spec().
+sequencer_dispatcher_spec(SeqDispSup, SeqStmSup, SessId) ->
     Id = Module = sequencer_dispatcher,
     Restart = permanent,
     Shutdown = timer:seconds(10),
     Type = worker,
-    {Id, {Module, start_link, [SeqDispSup, SeqStmSup, SessionId, Connection]},
+    {Id, {Module, start_link, [SeqDispSup, SeqStmSup, SessId]},
         Restart, Shutdown, Type, [Module]}.

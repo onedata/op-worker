@@ -53,7 +53,7 @@ start_event_stream_sup(EvtDispSup) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_event_dispatcher(EvtDispSup :: pid(), EvtStmSup :: pid(),
-    SessionId :: session:session_id()) -> supervisor:startchild_ret().
+    SessionId :: session:id()) -> supervisor:startchild_ret().
 start_event_dispatcher(EvtDispSup, EvtStmSup, SessionId) ->
     ChildSpec = event_dispatcher_spec(EvtDispSup, EvtStmSup, SessionId),
     supervisor:start_child(EvtDispSup, ChildSpec).
@@ -108,7 +108,7 @@ event_stream_sup_spec() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec event_dispatcher_spec(EvtDispSup :: pid(), EvtStmSup :: pid(),
-    SessionId :: session:session_id()) -> supervisor:child_spec().
+    SessionId :: session:id()) -> supervisor:child_spec().
 event_dispatcher_spec(EvtDispSup, EvtStmSup, SessionId) ->
     Id = Module = event_dispatcher,
     Restart = permanent,

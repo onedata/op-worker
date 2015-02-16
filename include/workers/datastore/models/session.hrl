@@ -13,8 +13,6 @@
 -ifndef(SESSION_HRL).
 -define(SESSION_HRL, 1).
 
--type session_id() :: binary().
-
 -record(credentials, {
     user_id :: binary()
 }).

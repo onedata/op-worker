@@ -12,7 +12,8 @@
 -module(serializator).
 -author("Tomasz Lichon").
 
--include("proto/oneclient/messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("proto/oneproxy/oneproxy_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
@@ -31,14 +32,20 @@
 %% deserialize protobuf binary data to client message
 %% @end
 %%--------------------------------------------------------------------
--spec deserialize_client_message(Message :: binary(), SessionId :: undefined | session:session_id()) ->
+-spec deserialize_client_message(Message :: binary(), SessionId :: undefined | session:id()) ->
     {ok, ClientMsg :: #client_message{}} | no_return().
 deserialize_client_message(Message, SessionId) ->
-    #'ClientMessage'{message_id = Id, seq_num = SeqNum, last_message = Last,
-        client_message = {_, Msg}} =
-        client_messages:decode_msg(Message, 'ClientMessage'),
-    {ok, #client_message{message_id = message_id:decode(Id), seq_num = SeqNum, last_message = Last,
-        session_id = SessionId, client_message = translator:translate_from_protobuf(Msg)}}.
+    #'ClientMessage'{
+        message_id = MsgId,
+        message_stream = MsgStm,
+        message_body = {_, MsgBody}
+    } = client_messages:decode_msg(Message, 'ClientMessage'),
+    {ok, #client_message{
+        message_id = message_id:decode(MsgId),
+        message_stream = translator:translate_from_protobuf(MsgStm),
+        session_id = SessionId,
+        message_body = translator:translate_from_protobuf(MsgBody)
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -46,11 +53,14 @@ deserialize_client_message(Message, SessionId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec serialize_server_message(#server_message{}) -> {ok, binary()} | no_return().
-serialize_server_message(#server_message{message_id = Id, seq_num = Seq,
-    last_message = Last, server_message = Msg}) ->
-    ProtobufMessage = translator:translate_to_protobuf(Msg),
-    ServerMessage = #'ServerMessage'{message_id = message_id:encode(Id), seq_num = Seq,
-        last_message = Last, server_message = {element(1, Msg), ProtobufMessage}},
+serialize_server_message(#server_message{message_id = MsgId, message_stream = MsgStm,
+    message_body = MsgBody}) ->
+    MsgName = element(1, MsgBody),
+    ServerMessage = #'ServerMessage'{
+        message_id = message_id:encode(MsgId),
+        message_stream = translator:translate_to_protobuf(MsgStm),
+        message_body = {MsgName, translator:translate_to_protobuf(MsgBody)}
+    },
     {ok, server_messages:encode_msg(ServerMessage)}.
 
 %%--------------------------------------------------------------------

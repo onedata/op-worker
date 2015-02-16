@@ -18,9 +18,9 @@
 %% API
 -export([generate/0, generate/1, encode/1, decode/1]).
 
--export_type([message_id/0]).
+-export_type([id/0]).
 
--type message_id() :: #message_id{}.
+-type id() :: #message_id{}.
 
 -define(INT64, 16#FFFFFFFFFFFFFFF).
 

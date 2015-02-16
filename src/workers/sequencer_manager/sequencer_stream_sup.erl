@@ -16,7 +16,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_sequencer_stream/3]).
+-export([start_link/0, start_sequencer_stream/4]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -40,9 +40,10 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_sequencer_stream(SeqStmSup :: pid(), SeqDisp :: pid(),
-    MsgId :: message_id:message_id()) -> supervisor:startchild_ret().
-start_sequencer_stream(SeqStmSup, SeqDisp, MsgId) ->
-    supervisor:start_child(SeqStmSup, [SeqDisp, MsgId]).
+    SessId :: session:id(), StmId :: non_neg_integer()) ->
+    supervisor:startchild_ret().
+start_sequencer_stream(SeqStmSup, SeqDisp, SessId, StmId) ->
+    supervisor:start_child(SeqStmSup, [SeqDisp, SessId, StmId]).
 
 %%%===================================================================
 %%% Supervisor callbacks

@@ -38,7 +38,7 @@
     socket :: port(),
     transport :: module(),
     certificate_info :: #certificate_info{},
-    session_id :: session_id(),
+    session_id :: session:id(),
     sequencer_manager :: pid()
 }).
 
@@ -272,7 +272,7 @@ handle_client_message(State = #sock_state{session_id = SessionId}, Data) ->
 handle_handshake(State = #sock_state{certificate_info = Cert, socket = Sock,
     transport = Transp}, Msg) ->
     try client_auth:handle_handshake(Msg, Cert) of
-        {ok, Response = #server_message{server_message =
+        {ok, Response = #server_message{message_body =
         #handshake_response{session_id = NewSessionId}}} ->
             send_server_message(Sock, Transp, Response),
             {noreply, State#sock_state{session_id = NewSessionId}, ?TIMEOUT}

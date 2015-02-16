@@ -33,14 +33,24 @@
     description :: binary()
 }).
 
+-record(message_stream, {
+    stm_id :: non_neg_integer(),
+    seq_num :: non_neg_integer(),
+    eos :: boolean()
+}).
+
+-record(message_stream_reset, {
+    seq_num :: non_neg_integer()
+}).
+
 -record(message_request, {
-    message_id :: non_neg_integer(),
+    stm_id :: non_neg_integer(),
     lower_seq_num :: non_neg_integer(),
     upper_seq_num :: non_neg_integer()
 }).
 
 -record(message_acknowledgement, {
-    message_id :: non_neg_integer(),
+    stm_id :: non_neg_integer(),
     seq_num :: non_neg_integer()
 }).
 

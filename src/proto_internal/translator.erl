@@ -13,7 +13,8 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("proto/oneclient/messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/common_messages.hrl").
 -include("proto_internal/oneclient/communication_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
@@ -55,6 +56,8 @@ translate_from_protobuf(#'WriteEvent'{} = Record) ->
     };
 translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
     #handshake_request{token = translate_from_protobuf(Token), session_id = SessionId};
+translate_from_protobuf(#'MessageStream'{stm_id = StmId, seq_num = SeqNum, eos = Eos}) ->
+    #message_stream{stm_id = StmId, seq_num = SeqNum, eos = Eos};
 translate_from_protobuf(#'Token'{value = Val}) ->
     #token{value = Val};
 translate_from_protobuf(undefined) ->
@@ -73,26 +76,6 @@ translate_to_protobuf(#file_block{offset = Off, size = S}) ->
     #'FileBlock'{offset = Off, size = S};
 translate_to_protobuf(#status{code = Code, description = Desc}) ->
     #'Status'{code = Code, description = Desc};
-translate_to_protobuf(#read_event{} = Record) ->
-    #'Event'{event =
-    {read_event,
-        #'ReadEvent'{
-            counter = Record#read_event.counter,
-            file_id = Record#read_event.file_id,
-            size = Record#read_event.size,
-            blocks = Record#read_event.blocks
-        }}
-    };
-translate_to_protobuf(#write_event{} = Record) ->
-    #'Event'{event =
-    {write_event,
-        #'WriteEvent'{
-            counter = Record#write_event.counter,
-            file_id = Record#write_event.file_id,
-            size = Record#write_event.size,
-            blocks = Record#write_event.blocks
-        }}
-    };
 translate_to_protobuf(#event_subscription_cancellation{id = Id}) ->
     #'EventSubscription'{
         event_subscription = {event_subscription_cancellation,
@@ -124,6 +107,18 @@ translate_to_protobuf(#write_event_subscription{} = Sub) ->
         }};
 translate_to_protobuf(#handshake_response{session_id = Id}) ->
     #'HandshakeResponse'{session_id = Id};
+translate_to_protobuf(#message_stream{stm_id = StmId, seq_num = SeqNum, eos = Eos}) ->
+    #'MessageStream'{stm_id = StmId, seq_num = SeqNum, eos = Eos};
+translate_to_protobuf(#message_stream_reset{seq_num = SeqNum}) ->
+    #'MessageStreamReset'{seq_num = SeqNum};
+translate_to_protobuf(#message_request{stm_id = StmId, lower_seq_num = LoSeqNum,
+    upper_seq_num = UpSeqNum}) ->
+    #'MessageRequest'{stm_id = StmId, lower_seq_num = LoSeqNum,
+        upper_seq_num = UpSeqNum};
+translate_to_protobuf(#message_acknowledgement{stm_id = StmId, seq_num = SeqNum}) ->
+    #'MessageAcknowledgement'{stm_id = StmId, seq_num = SeqNum};
+translate_to_protobuf(undefined) ->
+    undefined;
 translate_to_protobuf(Record) ->
     ?error("~p:~p - unknown record ~p", [?MODULE, ?LINE, Record]),
     throw({unknown_record, Record}).
