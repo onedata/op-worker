@@ -1,9 +1,10 @@
 """A custom utils library used across docker scripts."""
 
+import inspect
 import json
 import os
 import subprocess
-import inspect
+import time
 
 
 """Returns the absolute path to directory containing given file"""
@@ -37,9 +38,23 @@ def parse_json_file(path):
 
 
 """Formats hostname for a docker based on node name and uid
-node_name must in in format 'somename@'
+node_name can be in format 'somename@' or 'somename'.
+This is needed so different components are resolvable through DNS.
 """
 def format_hostname(node_name, uid):
-    parts = list(node_name.partition('@'))
-    parts[2] = '{0}.{1}.dev.docker'.format(parts[0], uid)
-    return ''.join(parts)
+    (name, _, _) = node_name.partition('@')
+    return '{0}@{0}.{1}.dev.docker'.format(name, uid)
+
+
+"""Formats docker name based on node name and uid
+node_name can be in format 'somename@' or 'somename'.
+This is needed so different components are resolvable through DNS.
+"""
+def format_dockername(node_name, uid):
+    (name, _, _) = node_name.partition('@')
+    return '{0}_{1}'.format(name, uid)
+
+
+"""Returns a uid (based on current time), that can be used to group dockers in DNS"""
+def generate_uid():
+    return str(int(time.time()))

@@ -13,7 +13,6 @@ import copy
 import docker
 import json
 import os
-import time
 
 
 def tweak_config(config, name, uid):
@@ -56,7 +55,7 @@ parser.add_argument(
 parser.add_argument(
     '--uid', '-u',
     action='store',
-    default=str(int(time.time())),
+    default=common.generate_uid(),
     help='uid that will be concatenated to docker names',
     dest='uid')
 
@@ -99,16 +98,22 @@ for cfg in configs:
     node['user_cert'] = '/tmp/cert'
     node['user_key'] = '/tmp/key'
 
-    envs = '''export X509_USER_CERT={cert_path}
-export X509_USER_KEY={key_path}
-export PROVIDER_HOSTNAME={op_hostname}
-export GLOBAL_REGISTRY_URL={gr_hostname}
-'''
-    envs = envs.format(
-        cert_path=node['user_cert'],
-        key_path=node['user_key'],
-        op_hostname=node['op_hostname'],
-        gr_hostname=node['gr_hostname'])
+    envs = {}
+    envs['X509_USER_CERT'] = node['user_cert']
+    envs['X509_USER_KEY'] = node['user_key']
+    envs['PROVIDER_HOSTNAME'] = node['op_hostname']
+    envs['GLOBAL_REGISTRY_URL'] = node['gr_hostname']
+
+#     envs = '''export X509_USER_CERT={cert_path}
+# export X509_USER_KEY={key_path}
+# export PROVIDER_HOSTNAME={op_hostname}
+# export GLOBAL_REGISTRY_URL={gr_hostname}
+# '''
+#     envs = envs.format(
+#         cert_path=node['user_cert'],
+#         key_path=node['user_key'],
+#         op_hostname=node['op_hostname'],
+#         gr_hostname=node['gr_hostname'])
 
     command = '''set -e
 cp /root/build/release/oneclient /root/bin/oneclient
@@ -118,21 +123,20 @@ EOF
 cat <<"EOF" > /tmp/key
 {key_file}
 EOF
-{envs}
 bash'''
     command = command.format(
         cert_file=open(cert_file_path, 'r').read(),
-        key_file=open(key_file_path, 'r').read(),
-        envs=envs)
+        key_file=open(key_file_path, 'r').read())
 
     container = docker.run(
         image=args.image,
         hostname=hostname,
         detach=True,
+        envs=envs,
         interactive=True,
         tty=True,
         workdir='/root/bin',
-        name='{0}_{1}'.format(name, uid),
+        name=common.format_dockername(name, uid),
         volumes=[(args.bin, '/root/build', 'ro')],
         dns=[dns],
         command=command)

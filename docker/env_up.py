@@ -10,10 +10,9 @@ from __future__ import print_function
 
 import argparse
 import collections
+import common
 import json
 import os
-import time
-import common
 
 
 parser = argparse.ArgumentParser(
@@ -62,14 +61,14 @@ parser.add_argument(
 
 args = parser.parse_args()
 config = common.parse_json_file(args.config_path)
-uid = str(int(time.time()))
+uid = common.generate_uid()
 
 # Start DNS
 dns_output = common.run_script_return_dict('dns_up.py', ['--uid', uid])
 dns = dns_output['dns']
 
 # Start globalregistry instances
-gr_output = collections.defaultdict(list)
+gr_output = dict()
 gr_output['docker_ids'] = []
 gr_output['gr_nodes'] = []
 gr_output['gr_db_nodes'] = []
@@ -82,7 +81,7 @@ if 'globalregistry' in config:
         args.config_path])
 
 # Start oneprovider_node instances
-op_output = collections.defaultdict(list)
+op_output = dict()
 op_output['docker_ids'] = []
 op_output['op_ccm_nodes'] = []
 op_output['op_worker_nodes'] = []
@@ -95,7 +94,7 @@ if 'oneprovider_node' in config:
         args.config_path])
 
 # Start appmock instances
-am_output = collections.defaultdict(list)
+am_output = dict()
 am_output['docker_ids'] = []
 am_output['appmock_nodes'] = []
 if 'appmock' in config:
@@ -107,7 +106,7 @@ if 'appmock' in config:
         args.config_path])
 
 # Start oneclient instances
-oc_output = collections.defaultdict(list)
+oc_output = dict()
 oc_output['docker_ids'] = []
 oc_output['client_nodes'] = []
 if 'oneclient' in config:
@@ -119,7 +118,7 @@ if 'oneclient' in config:
         args.config_path])
 
 # Gather output from all components' starting and print it
-output = collections.defaultdict(list)
+output = dict()
 output['dns'] = dns_output['dns']
 output['docker_ids'] = dns_output['docker_ids'] + gr_output['docker_ids'] + op_output['docker_ids'] + \
                        am_output['docker_ids'] + oc_output['docker_ids']

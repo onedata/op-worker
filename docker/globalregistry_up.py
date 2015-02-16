@@ -9,11 +9,11 @@ from __future__ import print_function
 
 import argparse
 import collections
+import copy
+import common
+import docker
 import json
 import os
-import time
-import docker
-import copy
 import subprocess
 
 
@@ -82,7 +82,7 @@ parser.add_argument(
 parser.add_argument(
     '--uid', '-u',
     action='store',
-    default=str(int(time.time())),
+    default=common.generate_uid(),
     help='uid that will be concatenated to docker names',
     dest='uid')
 
@@ -115,7 +115,7 @@ for cfg in configs:
     db_nodes = cfg['nodes']['node']['sys.config']['db_nodes']
 
     (gr_name, sep, gr_hostname) = node_name.partition('@')
-    gr_dockername = '{0}_{1}'.format(gr_name, uid)
+    gr_dockername = common.format_dockername(gr_name, uid)
 
     gr_command = '''set -e
 cat <<"EOF" > /tmp/gen_dev_args.json
@@ -128,7 +128,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
     # Start DB node for current GR instance
     db_node = db_nodes[0]
     (db_name, sep, db_hostname) = db_node.partition('@')
-    db_dockername = '{0}_{1}'.format(db_name, uid)
+    db_dockername = common.format_dockername(db_name, uid)
 
     db_command = '''echo '[httpd]' > /opt/bigcouch/etc/local.ini
 echo 'bind_address = 0.0.0.0' >> /opt/bigcouch/etc/local.ini
