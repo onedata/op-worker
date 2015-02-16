@@ -30,6 +30,7 @@ parser.add_argument(
 
 parser.add_argument(
     '--nodes', '-n',
+    type=int,
     action='store',
     default=2,
     help='number of riak nodes to bring up',
@@ -88,10 +89,11 @@ for node, _ in nodes:
     while docker.exec_(node, ['riak', 'ping']) != 0:
         time.sleep(1)
 
-for node, _ in nodes[1:]:
-    docker.exec_(
-        node,
-        ['riak-admin', 'cluster', 'join', 'riak@{0}'.format(master_hostname)])
+if len(nodes) > 1:
+    for node, _ in nodes[1:]:
+        docker.exec_(
+            node,
+            ['riak-admin', 'cluster', 'join', 'riak@{0}'.format(master_hostname)])
 
-docker.exec_(master_node, ['riak-admin', 'cluster', 'plan'])
-docker.exec_(master_node, ['riak-admin', 'cluster', 'commit'])
+    docker.exec_(master_node, ['riak-admin', 'cluster', 'plan'])
+    docker.exec_(master_node, ['riak-admin', 'cluster', 'commit'])
