@@ -37,7 +37,7 @@ send(Msg, SessionId) ->
     {ok, #document{value = #session{connections = Cons}}} = session:get(SessionId),
     RandomIndex = random:uniform(length(Cons)),
     Pid = lists:nth(RandomIndex, Cons),
-    protocol_handler:call(Pid, Msg#server_message{message_id = undefined}).
+    protocol_handler:call(Pid, {send, Msg#server_message{message_id = undefined}}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -88,7 +88,7 @@ communicate_async(Msg, SessionId, Recipient) ->
     {ok, #document{value = #session{connections = Conn}}} = session:get(SessionId),
     RandomIndex = random:uniform(length(Conn)),
     Pid = lists:nth(RandomIndex, Conn),
-    case protocol_handler:call(Pid, MsgWithId) of
+    case protocol_handler:call(Pid, {send, MsgWithId}) of
         ok -> {ok, GeneratedId};
         Error -> Error
     end.

@@ -13,7 +13,9 @@
 
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include("proto_internal/oneclient/communication_messages.hrl").
 -include("proto_internal/oneclient/event_messages.hrl").
+-include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
 -include("proto_internal/oneproxy/oneproxy_messages.hrl").
@@ -25,10 +27,11 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1,
-    multi_message_test/1]).
+    multi_message_test/1, client_send_test/1]).
 
-all() -> [token_connection_test, cert_connection_test, protobuf_msg_test,
-    multi_message_test].
+all() ->
+    [token_connection_test, cert_connection_test, protobuf_msg_test,
+        multi_message_test, client_send_test].
 
 -define(CLEANUP, true).
 
@@ -38,18 +41,15 @@ all() -> [token_connection_test, cert_connection_test, protobuf_msg_test,
 
 token_connection_test(Config) ->
     % given
-    ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
 
-    %then
-    {ok, Sock} = connect_via_token(Worker1),
+    % then
+    {ok, {Sock, _}} = connect_via_token(Worker1),
     ok = ssl:close(Sock),
-    ?assertMatch({error, _}, ssl:connection_info(Sock)),
-    ssl:stop().
+    ?assertMatch({error, _}, ssl:connection_info(Sock)).
 
 cert_connection_test(Config) ->
     % given
-    ssl:start(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{}}},
     HandshakeReqRaw = client_messages:encode_msg(HandshakeReq),
@@ -79,12 +79,10 @@ cert_connection_test(Config) ->
     SessionId}}} = HandshakeResponse,
     ?assert(is_binary(SessionId)),
     ok = ssl:close(Sock),
-    ?assertMatch({error, _}, ssl:connection_info(Sock)),
-    ssl:stop().
+    ?assertMatch({error, _}, ssl:connection_info(Sock)).
 
 protobuf_msg_test(Config) ->
     % given
-    ssl:start(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message,
         fun(#client_message{message_body = #read_event{}}) ->
@@ -99,16 +97,14 @@ protobuf_msg_test(Config) ->
     RawMsg = client_messages:encode_msg(Msg),
 
     % when
-    {ok, Sock} = connect_via_token(Worker1),
+    {ok, {Sock, _}} = connect_via_token(Worker1),
     ok = ssl:send(Sock, RawMsg),
 
-    %then
-    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
-    ssl:stop().
+    % then
+    ?assertMatch({ok, _}, ssl:connection_info(Sock)).
 
 multi_message_test(Config) ->
     % given
-    ssl:start(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message,
@@ -125,16 +121,43 @@ multi_message_test(Config) ->
     RawEvents = lists:map(fun(E) -> client_messages:encode_msg(E) end, Events),
 
     % when
-    {ok, Sock} = connect_via_token(Worker1),
+    {ok, {Sock, _}} = connect_via_token(Worker1),
     lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
 
-    %then
+    % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     lists:foreach(
         fun(N) ->
             ?assertMatch({ok, N}, test_utils:receive_msg(N, timer:seconds(5)))
-        end, MsgNumbers),
-    ssl:stop().
+        end, MsgNumbers).
+
+client_send_test(Config) ->
+    % given
+    [Worker1, _] = ?config(op_worker_nodes, Config),
+    {ok, {_, SessionId}} = connect_via_token(Worker1),
+    Code = 'VOK',
+    Description = <<"desc">>,
+    Msg = #server_message{message_body = #status{
+        code = Code,
+        description = Description}
+    },
+
+    % when
+    rpc:call(Worker1, client_communicator, send, [Msg, SessionId]),
+
+    % then
+    ReceivedData =
+        receive
+            {ssl, _, Data} -> Data
+        after timer:seconds(5) ->
+            {error, timeout}
+        end,
+    ?assertNotEqual({error, timeout}, ReceivedData),
+    ReceivedMessage = server_messages:decode_msg(ReceivedData, 'ServerMessage'),
+    ?assertEqual(#'ServerMessage'{
+        message_id = undefined,
+        message_body = {status, #'Status'{code = Code, description = Description}}
+    }, ReceivedMessage).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -149,59 +172,60 @@ end_per_suite(Config) ->
     end.
 
 init_per_testcase(cert_connection_test, Config) ->
+    ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, serializator),
     Config;
 
-init_per_testcase(protobuf_msg_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, router),
-    Config;
-
-init_per_testcase(multi_message_test, Config) ->
+init_per_testcase(Case, Config) when Case =:= protobuf_msg_test
+    orelse Case =:= multi_message_test ->
+    ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, router),
     Config;
 
 init_per_testcase(_, Config) ->
+    ssl:start(),
     Config.
 
 end_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate(Workers, serializator),
     test_utils:mock_unload(Workers, serializator),
-    Config;
+    ssl:stop();
 
-end_per_testcase(protobuf_msg_test, Config) ->
+end_per_testcase(Case, Config) when Case =:= protobuf_msg_test
+    orelse Case =:= multi_message_test ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate(Workers, router),
     test_utils:mock_unload(Workers, router),
-    Config;
+    ssl:stop();
 
-end_per_testcase(multi_message_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, router),
-    test_utils:mock_unload(Workers, router),
-    Config;
+end_per_testcase(_, _) ->
+    ssl:stop().
 
-end_per_testcase(_, Config) ->
-    Config.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Connect to given node using token
+%% @end
+%%--------------------------------------------------------------------
+-spec connect_via_token(Node :: node()) -> {ok, {Sock :: ssl:sslsocket(), SessId :: session:id()}}.
 connect_via_token(Node) ->
-    %given
+    % given
     TokenAuthMessage = #'ClientMessage'{message_body =
     {handshake_request, #'HandshakeRequest'{token = #'Token'{value = <<"VAL">>}}}},
     TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
 
-    %when
+    % when
     {ok, Sock} = ssl:connect(?GET_HOST(Node), 5555, [binary, {packet, 4}, {active, true}]),
     ok = ssl:send(Sock, TokenAuthMessageRaw),
 
-    %then
+    % then
     ReceiveAnswer = receive
                         {ssl, _, _} = Ans -> Ans
                     after timer:seconds(5) ->
@@ -212,4 +236,6 @@ connect_via_token(Node) ->
     ServerMsg = server_messages:decode_msg(Data, 'ServerMessage'),
     ?assertMatch(#'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{}}}, ServerMsg),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
-    {ok, Sock}.
+    #'ServerMessage'{message_body = {handshake_response,
+        #'HandshakeResponse'{session_id = SessionId}}} = ServerMsg,
+    {ok, {Sock, SessionId}}.
