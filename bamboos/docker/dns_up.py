@@ -10,13 +10,10 @@ from __future__ import print_function
 
 import argparse
 import collections
+import common
 import docker
 import json
-import os
-import time
 
-def get_script_dir():
-    return os.path.dirname(os.path.realpath(__file__))
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -25,14 +22,14 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     '--create-service', '-c',
     action='store',
-    default='{0}/createService.js'.format(get_script_dir()),
+    default='{0}/createService.js'.format(common.get_script_dir()),
     help='path to createService.js plugin',
     dest='create_service')
 
 parser.add_argument(
     '--uid', '-u',
     action='store',
-    default=str(int(time.time())),
+    default=common.generate_uid(),
     help='uid that will be concatenated to docker name',
     dest='uid')
 

@@ -14,7 +14,6 @@ import copy
 import docker
 import json
 import os
-import time
 
 
 def tweak_config(config, name, uid):
@@ -59,7 +58,7 @@ parser.add_argument(
 parser.add_argument(
     '--uid', '-u',
     action='store',
-    default=str(int(time.time())),
+    default=common.generate_uid(),
     help='uid that will be concatenated to docker names',
     dest='uid')
 
@@ -108,7 +107,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         interactive=True,
         tty=True,
         workdir='/root/build',
-        name='{0}_{1}'.format(name, uid),
+        name=common.format_dockername(name, uid),
         volumes=[(args.bin, '/root/build', 'ro')],
         dns=[dns],
         command=command)

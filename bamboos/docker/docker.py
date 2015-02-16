@@ -5,7 +5,7 @@ import os
 import sys
 import subprocess
 
-def run(image, docker_host=None, detach=False, dns=[], hostname=None,
+def run(image, docker_host=None, detach=False, dns=[], envs={}, hostname=None,
         interactive=False, link={}, tty=False, rm=False, reflect=[],
         volumes=[], name=None, workdir=None, user=None, run_params=[],
         command=None):
@@ -23,6 +23,9 @@ def run(image, docker_host=None, detach=False, dns=[], hostname=None,
     for addr in dns:
         if addr is not None:
             cmd.extend(['--dns', addr])
+
+    for key in envs:
+        cmd.extend(['-e', '{0}={1}'.format(key, envs[key])])
 
     if hostname:
         cmd.extend(['-h', hostname])
