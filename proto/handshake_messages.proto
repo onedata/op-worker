@@ -1,3 +1,10 @@
+/**
+ * Communication protocol used to obtain client session.
+ * @author Tomasz Lichon
+ * @copyright (C) 2015 ACK CYFRONET AGH
+ * @copyright This software is released under the MIT license cited in
+ * 'LICENSE.txt'
+ */
 package one.clproto;
 
 message HandshakeRequest {
