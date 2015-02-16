@@ -57,7 +57,7 @@ deserialize_client_message(Message, SessionId) ->
 serialize_server_message(#server_message{message_id = MsgId, message_stream = MsgStm,
     message_body = MsgBody}) ->
     MsgName = element(1, MsgBody),
-    {ok, EncodedId} = message_id:encode(Id),
+    {ok, EncodedId} = message_id:encode(MsgId),
     ServerMessage = #'ServerMessage'{
         message_id = EncodedId,
         message_stream = translator:translate_to_protobuf(MsgStm),
