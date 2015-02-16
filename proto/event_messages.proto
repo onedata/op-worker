@@ -1,13 +1,19 @@
+/**
+ * Communication protocol between Event Managers.
+ * @author Krzysztof Trzepla
+ * @copyright (C) 2015 ACK CYFRONET AGH
+ * @copyright This software is released under the MIT license cited in
+ * 'LICENSE.txt'
+ */
 package one.clproto;
 
 import "common_messages.proto";
 
-// Event messages
-
+// Generic event message
 message Event {
-    oneof event {
-        ReadEvent  read  = 1;
-        WriteEvent write = 2;
+    oneof event { // list of all event messages
+        ReadEvent  read_event  = 1;
+        WriteEvent write_event = 2;
     }
 }
 
@@ -26,13 +32,12 @@ message WriteEvent {
     repeated FileBlock blocks    = 5; // list of written blocks
 }
 
-// Subscription messages
-
+// Generic subscription message
 message EventSubscription {
-    oneof event_subscription {
-        ReadEventSubscription         read         = 1;
-        WriteEventSubscription        write        = 2;
-        EventSubscriptionCancellation cancellation = 3;
+    oneof event_subscription { // list of all subscription messages
+        ReadEventSubscription         read_event_subscription         = 1;
+        WriteEventSubscription        write_event_subscription        = 2;
+        EventSubscriptionCancellation event_subscription_cancellation = 3;
     }
 }
 
