@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 """
-Brings up a set of Global Registry nodes along with databases. They can create separate clusters.
+Brings up a set of Global Registry nodes along with databases.
+They can create separate clusters.
 Run the script with -h flag to learn about script's running options.
 """
 
@@ -14,23 +15,6 @@ import common
 import docker
 import json
 import os
-import subprocess
-
-
-def get_script_dir():
-    return os.path.dirname(os.path.realpath(__file__))
-
-
-def parse_config(path):
-    with open(path, 'r') as f:
-        data = f.read()
-        return json.loads(data)
-
-
-def set_hostname(node, uid):
-    parts = list(node.partition('@'))
-    parts[2] = '{0}.{1}.dev.docker'.format(parts[0], uid)
-    return ''.join(parts)
 
 
 def tweak_config(config, name, uid):
@@ -38,19 +22,12 @@ def tweak_config(config, name, uid):
     cfg['nodes'] = {'node': cfg['nodes'][name]}
 
     sys_config = cfg['nodes']['node']['sys.config']
-    sys_config['db_nodes'] = [set_hostname(n, uid) for n in sys_config['db_nodes']]
+    sys_config['db_nodes'] = [common.format_hostname(n, uid) for n in sys_config['db_nodes']]
 
     vm_args = cfg['nodes']['node']['vm.args']
-    vm_args['name'] = set_hostname(vm_args['name'], uid)
+    vm_args['name'] = common.format_hostname(vm_args['name'], uid)
 
     return cfg
-
-
-def run_command(cmd):
-    return subprocess.Popen(cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            stdin=subprocess.PIPE).communicate()[0]
 
 
 parser = argparse.ArgumentParser(
@@ -94,7 +71,7 @@ parser.add_argument(
 args = parser.parse_args()
 uid = args.uid
 
-config = parse_config(args.config_path)['globalregistry']
+config = common.parse_json_file(args.config_path)['globalregistry']
 config['config']['target_dir'] = '/root/bin'
 configs = [tweak_config(config, node, uid) for node in config['nodes']]
 
@@ -102,7 +79,7 @@ output = collections.defaultdict(list)
 
 dns = args.dns
 if dns == 'auto':
-    dns_config = json.loads(run_command([get_script_dir() + '/dns_up.py', '--uid', uid]))
+    dns_config = common.run_script_return_dict('dns_up.py', ['--uid', uid])
     dns = dns_config['dns']
     output['dns'] = dns_config['dns']
     output['docker_ids'] = dns_config['docker_ids']

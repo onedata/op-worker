@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+# !/usr/bin/env python
 
 """
 Brings up a DNS server with container (skydns + skydock) that allow
@@ -9,7 +9,6 @@ Run the script with -h flag to learn about script's running options.
 from __future__ import print_function
 
 import argparse
-import collections
 import common
 import json
 import os
@@ -68,10 +67,11 @@ dns_output = common.run_script_return_dict('dns_up.py', ['--uid', uid])
 dns = dns_output['dns']
 
 # Start globalregistry instances
-gr_output = dict()
-gr_output['docker_ids'] = []
-gr_output['gr_nodes'] = []
-gr_output['gr_db_nodes'] = []
+gr_output = {
+    'docker_ids': [],
+    'gr_nodes': [],
+    'gr_db_nodes': []
+}
 if 'globalregistry' in config:
     gr_output = common.run_script_return_dict('globalregistry_up.py', [
         '--image', args.image,
@@ -81,10 +81,11 @@ if 'globalregistry' in config:
         args.config_path])
 
 # Start oneprovider_node instances
-op_output = dict()
-op_output['docker_ids'] = []
-op_output['op_ccm_nodes'] = []
-op_output['op_worker_nodes'] = []
+op_output = {
+    'docker_ids': [],
+    'op_ccm_nodes': [],
+    'op_worker_nodes': []
+}
 if 'oneprovider_node' in config:
     op_output = common.run_script_return_dict('provider_up.py', [
         '--image', args.image,
@@ -94,9 +95,10 @@ if 'oneprovider_node' in config:
         args.config_path])
 
 # Start appmock instances
-am_output = dict()
-am_output['docker_ids'] = []
-am_output['appmock_nodes'] = []
+am_output = {
+    'docker_ids': [],
+    'appmock_nodes': []
+}
 if 'appmock' in config:
     am_output = common.run_script_return_dict('appmock_up.py', [
         '--image', args.image,
@@ -106,9 +108,10 @@ if 'appmock' in config:
         args.config_path])
 
 # Start oneclient instances
-oc_output = dict()
-oc_output['docker_ids'] = []
-oc_output['client_nodes'] = []
+oc_output = {
+    'docker_ids': [],
+    'client_nodes': []
+}
 if 'oneclient' in config:
     oc_output = common.run_script_return_dict('client_up.py', [
         '--image', args.image,
@@ -118,14 +121,15 @@ if 'oneclient' in config:
         args.config_path])
 
 # Gather output from all components' starting and print it
-output = dict()
-output['dns'] = dns_output['dns']
-output['docker_ids'] = dns_output['docker_ids'] + gr_output['docker_ids'] + op_output['docker_ids'] + \
-                       am_output['docker_ids'] + oc_output['docker_ids']
-output['gr_nodes'] = gr_output['gr_nodes']
-output['gr_db_nodes'] = gr_output['gr_db_nodes']
-output['op_ccm_nodes'] = op_output['op_ccm_nodes']
-output['op_worker_nodes'] = op_output['op_worker_nodes']
-output['appmock_nodes'] = am_output['appmock_nodes']
-output['client_nodes'] = oc_output['client_nodes']
+output = {
+    'dns': dns_output['dns'],
+    'docker_ids': dns_output['docker_ids'] + gr_output['docker_ids'] + op_output['docker_ids'] + \
+                  am_output['docker_ids'] + oc_output['docker_ids'],
+    'gr_nodes': gr_output['gr_nodes'],
+    'gr_db_nodes': gr_output['gr_db_nodes'],
+    'op_ccm_nodes': op_output['op_ccm_nodes'],
+    'op_worker_nodes': op_output['op_worker_nodes'],
+    'appmock_nodes': am_output['appmock_nodes'],
+    'client_nodes': oc_output['client_nodes']
+}
 print(json.dumps(output))
