@@ -38,18 +38,15 @@ all() -> [token_connection_test, cert_connection_test, protobuf_msg_test,
 
 token_connection_test(Config) ->
     % given
-    ssl:start(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
 
     %then
     {ok, Sock} = connect_via_token(Worker1),
     ok = ssl:close(Sock),
-    ?assertMatch({error, _}, ssl:connection_info(Sock)),
-    ssl:stop().
+    ?assertMatch({error, _}, ssl:connection_info(Sock)).
 
 cert_connection_test(Config) ->
     % given
-    ssl:start(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{}}},
     HandshakeReqRaw = client_messages:encode_msg(HandshakeReq),
@@ -79,12 +76,10 @@ cert_connection_test(Config) ->
     SessionId}}} = HandshakeResponse,
     ?assert(is_binary(SessionId)),
     ok = ssl:close(Sock),
-    ?assertMatch({error, _}, ssl:connection_info(Sock)),
-    ssl:stop().
+    ?assertMatch({error, _}, ssl:connection_info(Sock)).
 
 protobuf_msg_test(Config) ->
     % given
-    ssl:start(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message,
         fun(#client_message{message_body = #read_event{}}) ->
@@ -103,12 +98,10 @@ protobuf_msg_test(Config) ->
     ok = ssl:send(Sock, RawMsg),
 
     %then
-    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
-    ssl:stop().
+    ?assertMatch({ok, _}, ssl:connection_info(Sock)).
 
 multi_message_test(Config) ->
     % given
-    ssl:start(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message,
@@ -133,8 +126,7 @@ multi_message_test(Config) ->
     lists:foreach(
         fun(N) ->
             ?assertMatch({ok, N}, test_utils:receive_msg(N, timer:seconds(5)))
-        end, MsgNumbers),
-    ssl:stop().
+        end, MsgNumbers).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -149,43 +141,48 @@ end_per_suite(Config) ->
     end.
 
 init_per_testcase(cert_connection_test, Config) ->
+    ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, serializator),
     Config;
 
 init_per_testcase(protobuf_msg_test, Config) ->
+    ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, router),
     Config;
 
 init_per_testcase(multi_message_test, Config) ->
+    ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, router),
     Config;
 
 init_per_testcase(_, Config) ->
+    ssl:start(),
     Config.
 
 end_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate(Workers, serializator),
     test_utils:mock_unload(Workers, serializator),
-    Config;
+    ssl:stop();
 
 end_per_testcase(protobuf_msg_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate(Workers, router),
     test_utils:mock_unload(Workers, router),
-    Config;
+    ssl:stop();
 
 end_per_testcase(multi_message_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate(Workers, router),
     test_utils:mock_unload(Workers, router),
-    Config;
+    ssl:stop();
 
-end_per_testcase(_, Config) ->
-    Config.
+end_per_testcase(_, _) ->
+    ssl:stop().
+
 
 %%%===================================================================
 %%% Internal functions
