@@ -3,20 +3,24 @@
 import json
 import os
 import subprocess
+import inspect
 
 
-# Returns the absolute path to directory containing given file
+"""Returns the absolute path to directory containing given file"""
 def get_file_dir(file_path):
     return os.path.dirname(os.path.realpath(file_path))
 
 
-# Returns the absolute path to directory containing this file
+"""Returns the absolute path to directory containing the caller script"""
 def get_script_dir():
-    return get_file_dir(__file__)
+    caller = inspect.stack()[1]
+    caller_mod = inspect.getmodule(caller[0])
+    return get_file_dir(caller_mod.__file__)
 
 
-# Runs given script that resides in the same directory and returns JSON.
-# Parses the JSON and returns a dict.
+"""Runs given script that resides in the same directory and returns JSON.
+Parses the JSON and returns a dict.
+"""
 def run_script_return_dict(script, args):
     cmd = [get_file_dir(__file__) + '/' + script] + args
     result = subprocess.Popen(cmd,
@@ -26,15 +30,15 @@ def run_script_return_dict(script, args):
     return json.loads(result)
 
 
-# Parses a JSON file and returns a dict.
+"""Parses a JSON file and returns a dict."""
 def parse_json_file(path):
     with open(path, 'r') as f:
-        data = f.read()
-        return json.loads(data)
+        return json.load(f)
 
 
-# Formats hostname for a docker based on node name and uid
-# node_name must in in format 'somename@'
+"""Formats hostname for a docker based on node name and uid
+node_name must in in format 'somename@'
+"""
 def format_hostname(node_name, uid):
     parts = list(node_name.partition('@'))
     parts[2] = '{0}.{1}.dev.docker'.format(parts[0], uid)
