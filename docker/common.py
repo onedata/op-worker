@@ -20,8 +20,10 @@ def set_up_dns(config, uid):
     if config == 'auto':
         dns_config = run_script_return_dict('dns_up.py', ['--uid', uid])
         return ([dns_config['dns']], dns_config)
+
     if config == 'none':
         return ([], {})
+    
     return ([config], {})
 
 
