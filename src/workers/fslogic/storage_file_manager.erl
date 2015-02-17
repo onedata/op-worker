@@ -39,8 +39,8 @@ mkdir(Path) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(Path :: file_path(), Mode :: perms_octal()) -> {ok, file_id()} | error_reply().
-mkdir(Path, Mode) ->
-    error(not_implemented).
+mkdir(_Path, _Mode) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -50,8 +50,8 @@ mkdir(Path, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mv(FileHandleFrom :: file_handle(), PathOnStorageTo :: file_path()) -> ok | error_reply().
-mv(FileHandleFrom, PathOnStorageTo) ->
-    error(not_implemented).
+mv(_FileHandleFrom, _PathOnStorageTo) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -61,8 +61,8 @@ mv(FileHandleFrom, PathOnStorageTo) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod(FileHandle :: file_handle(), NewPerms :: perms_octal()) -> ok | error_reply().
-chmod(FileHandle, NewPerms) ->
-    error(not_implemented).
+chmod(_FileHandle, _NewPerms) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -72,8 +72,8 @@ chmod(FileHandle, NewPerms) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chown(FileHandle :: file_handle(), User :: user_id(), Group :: group_id()) -> ok | error_reply().
-chown(FileHandle, User, Group) ->
-    error(not_implemented).
+chown(_FileHandle, _User, _Group) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -83,8 +83,8 @@ chown(FileHandle, User, Group) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec link(Path :: binary(), TargetFileHandle :: file_handle()) -> {ok, file_id()} | error_reply().
-link(Path, TargetFileHandle) ->
-    error(not_implemented).
+link(_Path, _TargetFileHandle) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -94,8 +94,8 @@ link(Path, TargetFileHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stat(FileHandle :: file_handle()) -> {ok, file_attributes()} | error_reply().
-stat(FileHandle) ->
-    error(not_implemented).
+stat(_FileHandle) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -105,8 +105,8 @@ stat(FileHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -> {ok, integer()} | error_reply().
-write(FileHandle, Offset, Buffer) ->
-    error(not_implemented).
+write(_FileHandle, _Offset, _Buffer) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -116,8 +116,8 @@ write(FileHandle, Offset, Buffer) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) -> {ok, binary()} | error_reply().
-read(FileHandle, Offset, MaxSize) ->
-    error(not_implemented).
+read(_FileHandle, _Offset, _MaxSize) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -139,8 +139,8 @@ create(Path) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(Path :: file_path(), Mode :: perms_octal()) -> {ok, file_id()} | error_reply().
-create(Path, Mode) ->
-    error(not_implemented).
+create(_Path, _Mode) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -150,8 +150,8 @@ create(Path, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate(FileHandle :: file_handle(), Size :: integer()) -> ok | error_reply().
-truncate(FileHandle, Size) ->
-    error(not_implemented).
+truncate(_FileHandle, _Size) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -161,5 +161,5 @@ truncate(FileHandle, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec rm(Path :: file_path()) -> ok | error_reply().
-rm(Path) ->
-    error(not_implemented).
+rm(_Path) ->
+    ok.

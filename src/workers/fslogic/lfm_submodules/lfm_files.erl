@@ -30,8 +30,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(FileKey :: file_key()) -> {ok, boolean()} | error_reply().
-exists(FileKey) ->
-    error(not_implemented).
+exists(_FileKey) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -41,8 +41,8 @@ exists(FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mv(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
-mv(FileKeyFrom, PathTo) ->
-    error(not_implemented).
+mv(_FileKeyFrom, _PathTo) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -52,8 +52,8 @@ mv(FileKeyFrom, PathTo) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cp(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
-cp(PathFrom, PathTo) ->
-    error(not_implemented).
+cp(_PathFrom, _PathTo) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -63,8 +63,8 @@ cp(PathFrom, PathTo) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec rm(FileKey :: file_key()) -> ok | error_reply().
-rm(FileKey) ->
-    error(not_implemented).
+rm(_FileKey) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -74,8 +74,8 @@ rm(FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(Path :: file_path()) -> {ok, file_id()} | error_reply().
-create(Path) ->
-    error(not_implemented).
+create(_Path) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -85,8 +85,8 @@ create(Path) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open(FileKey :: file_id_or_path(), OpenType :: open_type()) -> {ok, file_handle()} | error_reply().
-open(FileKey, OpenType) ->
-    error(not_implemented).
+open(_FileKey, _OpenType) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -96,8 +96,8 @@ open(FileKey, OpenType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -> {ok, integer()} | error_reply().
-write(FileHandle, Offset, Buffer) ->
-    error(not_implemented).
+write(_FileHandle, _Offset, _Buffer) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -107,8 +107,8 @@ write(FileHandle, Offset, Buffer) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) -> {ok, binary()} | error_reply().
-read(FileHandle, Offset, MaxSize) ->
-    error(not_implemented).
+read(_FileHandle, _Offset, _MaxSize) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -118,8 +118,8 @@ read(FileHandle, Offset, MaxSize) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate(FileKey :: file_key(), Size :: integer()) -> ok | error_reply().
-truncate(FileKey, Size) ->
-    error(not_implemented).
+truncate(_FileKey, _Size) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -129,5 +129,5 @@ truncate(FileKey, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_block_map(FileKey :: file_key()) -> {ok, [block_range()]} | error_reply().
-get_block_map(FileKey) ->
-    error(not_implemented).
+get_block_map(_FileKey) ->
+    ok.

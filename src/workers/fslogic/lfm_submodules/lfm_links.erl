@@ -27,8 +27,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) -> {ok, file_id()} | error_reply().
-create_symlink(Path, TargetFileKey) ->
-    error(not_implemented).
+create_symlink(_Path, _TargetFileKey) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -38,8 +38,8 @@ create_symlink(Path, TargetFileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read_symlink(FileKey :: file_key()) -> {ok, {file_id(), file_name()}} | error_reply().
-read_symlink(FileKey) ->
-    error(not_implemented).
+read_symlink(_FileKey) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -49,5 +49,5 @@ read_symlink(FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_symlink(FileKey :: file_key()) -> ok | error_reply().
-remove_symlink(FileKey) ->
-    error(not_implemented).
+remove_symlink(_FileKey) ->
+    ok.

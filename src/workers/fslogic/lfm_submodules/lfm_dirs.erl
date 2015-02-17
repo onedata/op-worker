@@ -27,8 +27,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(Path :: file_path()) -> {ok, file_id()} | error_reply().
-mkdir(Path) ->
-    error(not_implemented).
+mkdir(_Path) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -39,8 +39,8 @@ mkdir(Path) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ls(FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, {file_id(), file_name()}} | error_reply().
-ls(FileKey, Limit, Offset) ->
-    error(not_implemented).
+ls(_FileKey, _Limit, _Offset) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -50,5 +50,5 @@ ls(FileKey, Limit, Offset) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_count(FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
-get_children_count(FileKey) ->
-    error(not_implemented).
+get_children_count(_FileKey) ->
+    ok.

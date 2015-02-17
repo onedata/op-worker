@@ -29,8 +29,8 @@
 %%--------------------------------------------------------------------
 -spec create_share(FileKey :: file_key(), ShareWith :: all | [{user, user_id()} | {group, group_id()}]) ->
     {ok, ShareID :: share_id()} | error_reply().
-create_share(Path, ShareWith) ->
-    error(not_implemented).
+create_share(_Path, _ShareWith) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -40,8 +40,8 @@ create_share(Path, ShareWith) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_share(ShareID :: share_id()) -> {ok, {file_id(), file_name()}} | error_reply().
-get_share(ShareID) ->
-    error(not_implemented).
+get_share(_ShareID) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -51,5 +51,5 @@ get_share(ShareID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_share(ShareID :: share_id()) -> ok | error_reply().
-remove_share(ShareID) ->
-    error(not_implemented).
+remove_share(_ShareID) ->
+    ok.

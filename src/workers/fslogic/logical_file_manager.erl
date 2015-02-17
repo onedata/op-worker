@@ -66,9 +66,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec set_user_context(UserID :: user_id() | root) -> ok | error_reply().
-set_user_context(UserID) ->
+set_user_context(_UserID) ->
     % TODO this should call user context lib (or whatever it is called)
-    error(not_implemented).
+    ok.
 
 
 %%--------------------------------------------------------------------

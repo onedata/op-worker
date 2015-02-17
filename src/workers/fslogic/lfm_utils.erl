@@ -28,8 +28,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec write_all(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -> ok | error_reply().
-write_all(FileHandle, Offset, Buffer) ->
-    error(not_implemented).
+write_all(_FileHandle, _Offset, _Buffer) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -39,5 +39,5 @@ write_all(FileHandle, Offset, Buffer) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ls_all(Path :: binary()) -> {ok, {file_id(), file_name()}} | error_reply().
-ls_all(Path) ->
-    error(not_implemented).
+ls_all(_Path) ->
+    ok.

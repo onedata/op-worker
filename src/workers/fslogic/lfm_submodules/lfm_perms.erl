@@ -27,8 +27,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec set_perms(FileKey :: file_key(), NewPerms :: perms_octal()) -> ok | error_reply().
-set_perms(Path, NewPerms) ->
-    error(not_implemented).
+set_perms(_Path, _NewPerms) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -38,8 +38,8 @@ set_perms(Path, NewPerms) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_perms(FileKey :: file_key(), PermsType :: permission_type()) -> {ok, boolean()} | error_reply().
-check_perms(Path, PermType) ->
-    error(not_implemented).
+check_perms(_Path, _PermType) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -49,8 +49,8 @@ check_perms(Path, PermType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_acl(FileKey :: file_key()) -> {ok, [access_control_entity()]} | error_reply().
-get_acl(Path) ->
-    error(not_implemented).
+get_acl(_Path) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -60,5 +60,5 @@ get_acl(Path) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_acl(FileKey :: file_key(), EntityList :: [access_control_entity()]) -> ok | error_reply().
-set_acl(Path, EntityList) ->
-    error(not_implemented).
+set_acl(_Path, _EntityList) ->
+    ok.

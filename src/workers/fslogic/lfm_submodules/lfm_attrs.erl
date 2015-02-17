@@ -27,8 +27,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec stat(FileKey :: file_key()) -> {ok, file_attributes()} | error_reply().
-stat(Path) ->
-    error(not_implemented).
+stat(_Path) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -38,8 +38,8 @@ stat(Path) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_xattr(FileKey :: file_key(), Key :: xattr_key()) -> {ok, xattr_value()} | error_reply().
-get_xattr(Path, Key) ->
-    error(not_implemented).
+get_xattr(_Path, _Key) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -49,8 +49,8 @@ get_xattr(Path, Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_xattr(FileKey :: file_key(), Key :: xattr_key(), Value :: xattr_value()) -> ok |  error_reply().
-set_xattr(Path, Key, Value) ->
-    error(not_implemented).
+set_xattr(_Path, _Key, _Value) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -60,8 +60,8 @@ set_xattr(Path, Key, Value) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_xattr(FileKey :: file_key(), Key :: xattr_key()) -> ok |  error_reply().
-remove_xattr(Path, Key) ->
-    error(not_implemented).
+remove_xattr(_Path, _Key) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -71,7 +71,7 @@ remove_xattr(Path, Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_xattr(FileKey :: file_key()) -> {ok, [{Key :: xattr_key(), Value :: xattr_value()}]} | error_reply().
-list_xattr(Path) ->
-    error(not_implemented).
+list_xattr(_Path) ->
+    ok.
 
 
