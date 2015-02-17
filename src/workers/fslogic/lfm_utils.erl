@@ -38,6 +38,6 @@ write_all(_FileHandle, _Offset, _Buffer) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls_all(Path :: binary()) -> {ok, {file_id(), file_name()}} | error_reply().
+-spec ls_all(Path :: binary()) -> {ok, [{file_id(), file_name()}]} | error_reply().
 ls_all(_Path) ->
-    ok.
+    {ok, []}.

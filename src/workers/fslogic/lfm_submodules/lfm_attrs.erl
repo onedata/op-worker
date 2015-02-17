@@ -28,7 +28,7 @@
 %%--------------------------------------------------------------------
 -spec stat(FileKey :: file_key()) -> {ok, file_attributes()} | error_reply().
 stat(_Path) ->
-    ok.
+    {ok, undefined}.
 
 
 %%--------------------------------------------------------------------
@@ -39,7 +39,7 @@ stat(_Path) ->
 %%--------------------------------------------------------------------
 -spec get_xattr(FileKey :: file_key(), Key :: xattr_key()) -> {ok, xattr_value()} | error_reply().
 get_xattr(_Path, _Key) ->
-    ok.
+    {ok, undefined}.
 
 
 %%--------------------------------------------------------------------
@@ -72,6 +72,6 @@ remove_xattr(_Path, _Key) ->
 %%--------------------------------------------------------------------
 -spec list_xattr(FileKey :: file_key()) -> {ok, [{Key :: xattr_key(), Value :: xattr_value()}]} | error_reply().
 list_xattr(_Path) ->
-    ok.
+    {ok, []}.
 
 

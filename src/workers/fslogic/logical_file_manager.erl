@@ -89,7 +89,7 @@ mkdir(Path) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, {file_id(), file_name()}} | error_reply().
+-spec ls(FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_id(), file_name()}]} | error_reply().
 ls(FileKey, Limit, Offset) ->
     lfm_dirs:ls(FileKey, Limit, Offset).
 

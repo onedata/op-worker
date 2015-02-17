@@ -28,7 +28,7 @@
 %%--------------------------------------------------------------------
 -spec mkdir(Path :: file_path()) -> {ok, file_id()} | error_reply().
 mkdir(_Path) ->
-    ok.
+    {ok, <<"">>}.
 
 
 %%--------------------------------------------------------------------
@@ -38,9 +38,9 @@ mkdir(_Path) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, {file_id(), file_name()}} | error_reply().
+-spec ls(FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_id(), file_name()}]} | error_reply().
 ls(_FileKey, _Limit, _Offset) ->
-    ok.
+    {ok, []}.
 
 
 %%--------------------------------------------------------------------
@@ -51,4 +51,4 @@ ls(_FileKey, _Limit, _Offset) ->
 %%--------------------------------------------------------------------
 -spec get_children_count(FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
 get_children_count(_FileKey) ->
-    ok.
+    {ok, 0}.

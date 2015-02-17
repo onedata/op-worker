@@ -31,7 +31,7 @@
 %%--------------------------------------------------------------------
 -spec exists(FileKey :: file_key()) -> {ok, boolean()} | error_reply().
 exists(_FileKey) ->
-    ok.
+    {ok, false}.
 
 
 %%--------------------------------------------------------------------
@@ -75,7 +75,7 @@ rm(_FileKey) ->
 %%--------------------------------------------------------------------
 -spec create(Path :: file_path()) -> {ok, file_id()} | error_reply().
 create(_Path) ->
-    ok.
+    {ok, <<"">>}.
 
 
 %%--------------------------------------------------------------------
@@ -86,7 +86,7 @@ create(_Path) ->
 %%--------------------------------------------------------------------
 -spec open(FileKey :: file_id_or_path(), OpenType :: open_type()) -> {ok, file_handle()} | error_reply().
 open(_FileKey, _OpenType) ->
-    ok.
+    {ok, <<"">>}.
 
 
 %%--------------------------------------------------------------------
@@ -97,7 +97,7 @@ open(_FileKey, _OpenType) ->
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -> {ok, integer()} | error_reply().
 write(_FileHandle, _Offset, _Buffer) ->
-    ok.
+    {ok, 0}.
 
 
 %%--------------------------------------------------------------------
@@ -108,7 +108,7 @@ write(_FileHandle, _Offset, _Buffer) ->
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) -> {ok, binary()} | error_reply().
 read(_FileHandle, _Offset, _MaxSize) ->
-    ok.
+    {ok, <<"">>}.
 
 
 %%--------------------------------------------------------------------
@@ -130,4 +130,4 @@ truncate(_FileKey, _Size) ->
 %%--------------------------------------------------------------------
 -spec get_block_map(FileKey :: file_key()) -> {ok, [block_range()]} | error_reply().
 get_block_map(_FileKey) ->
-    ok.
+    {ok, []}.

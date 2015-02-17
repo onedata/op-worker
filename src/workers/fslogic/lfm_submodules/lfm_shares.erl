@@ -30,7 +30,7 @@
 -spec create_share(FileKey :: file_key(), ShareWith :: all | [{user, user_id()} | {group, group_id()}]) ->
     {ok, ShareID :: share_id()} | error_reply().
 create_share(_Path, _ShareWith) ->
-    ok.
+    {ok, <<"">>}.
 
 
 %%--------------------------------------------------------------------
@@ -41,7 +41,7 @@ create_share(_Path, _ShareWith) ->
 %%--------------------------------------------------------------------
 -spec get_share(ShareID :: share_id()) -> {ok, {file_id(), file_name()}} | error_reply().
 get_share(_ShareID) ->
-    ok.
+    {ok, {undefined, undefined}}.
 
 
 %%--------------------------------------------------------------------

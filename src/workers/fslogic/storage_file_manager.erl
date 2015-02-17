@@ -40,7 +40,7 @@ mkdir(Path) ->
 %%--------------------------------------------------------------------
 -spec mkdir(Path :: file_path(), Mode :: perms_octal()) -> {ok, file_id()} | error_reply().
 mkdir(_Path, _Mode) ->
-    ok.
+    {ok, <<"">>}.
 
 
 %%--------------------------------------------------------------------
@@ -84,7 +84,7 @@ chown(_FileHandle, _User, _Group) ->
 %%--------------------------------------------------------------------
 -spec link(Path :: binary(), TargetFileHandle :: file_handle()) -> {ok, file_id()} | error_reply().
 link(_Path, _TargetFileHandle) ->
-    ok.
+    {ok, <<"">>}.
 
 
 %%--------------------------------------------------------------------
@@ -95,7 +95,7 @@ link(_Path, _TargetFileHandle) ->
 %%--------------------------------------------------------------------
 -spec stat(FileHandle :: file_handle()) -> {ok, file_attributes()} | error_reply().
 stat(_FileHandle) ->
-    ok.
+    {ok, undefined}.
 
 
 %%--------------------------------------------------------------------
@@ -106,7 +106,7 @@ stat(_FileHandle) ->
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -> {ok, integer()} | error_reply().
 write(_FileHandle, _Offset, _Buffer) ->
-    ok.
+    {ok, 0}.
 
 
 %%--------------------------------------------------------------------
@@ -117,7 +117,7 @@ write(_FileHandle, _Offset, _Buffer) ->
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) -> {ok, binary()} | error_reply().
 read(_FileHandle, _Offset, _MaxSize) ->
-    ok.
+    {ok, <<"">>}.
 
 
 %%--------------------------------------------------------------------
@@ -140,7 +140,7 @@ create(Path) ->
 %%--------------------------------------------------------------------
 -spec create(Path :: file_path(), Mode :: perms_octal()) -> {ok, file_id()} | error_reply().
 create(_Path, _Mode) ->
-    ok.
+    {ok, <<"">>}.
 
 
 %%--------------------------------------------------------------------

@@ -39,7 +39,7 @@ set_perms(_Path, _NewPerms) ->
 %%--------------------------------------------------------------------
 -spec check_perms(FileKey :: file_key(), PermsType :: permission_type()) -> {ok, boolean()} | error_reply().
 check_perms(_Path, _PermType) ->
-    ok.
+    {ok, false}.
 
 
 %%--------------------------------------------------------------------
@@ -50,7 +50,7 @@ check_perms(_Path, _PermType) ->
 %%--------------------------------------------------------------------
 -spec get_acl(FileKey :: file_key()) -> {ok, [access_control_entity()]} | error_reply().
 get_acl(_Path) ->
-    ok.
+    {ok, []}.
 
 
 %%--------------------------------------------------------------------
