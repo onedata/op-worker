@@ -7,6 +7,24 @@ import subprocess
 import time
 
 
+def merge(d, merged):
+    """Merge the dict merged into dict d by adding their values on
+    common keys
+    """
+    for key, value in iter(merged.items()):
+        d[key] = d[key] + value if key in d else value
+
+
+def set_up_dns(config, uid):
+    """Sets up DNS configuration values, starting the server if needed."""
+    if config == 'auto':
+        dns_config = run_script_return_dict('dns_up.py', ['--uid', uid])
+        return ([dns_config['dns']], dns_config)
+    if config == 'none':
+        return ([], {})
+    return ([config], {})
+
+
 def get_file_dir(file_path):
     """Returns the absolute path to directory containing given file"""
     return os.path.dirname(os.path.realpath(file_path))
