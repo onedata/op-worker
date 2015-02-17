@@ -77,14 +77,8 @@ configs = [tweak_config(config, node, uid) for node in config['nodes']]
 
 output = collections.defaultdict(list)
 
-dns_servers = [args.dns]
-if args.dns == 'auto':
-    dns_config = common.run_script_return_dict('dns_up.py', ['--uid', uid])
-    dns_servers = [dns_config['dns']]
-    output['dns'] = dns_config['dns']
-    output['docker_ids'] = dns_config['docker_ids']
-elif args.dns == 'none':
-    dns_servers = []
+(dns_servers, dns_output) = common.set_up_dns(args.dns, uid)
+common.merge(output, dns_output)
 
 for cfg in configs:
     node_type = cfg['nodes']['node']['sys.config']['node_type']
