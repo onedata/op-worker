@@ -18,6 +18,7 @@
 -include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
+-include("proto_internal/oneclient/message_id.hrl").
 -include("proto_internal/oneproxy/oneproxy_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -53,7 +54,8 @@ token_connection_test(Config) ->
 cert_connection_test(Config) ->
     % given
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
-    HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{}}},
+    HandshakeReq =
+        #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{}}},
     HandshakeReqRaw = client_messages:encode_msg(HandshakeReq),
     Pid = self(),
     test_utils:mock_expect(Workers, serializator, deserialize_oneproxy_certificate_info_message,
@@ -65,9 +67,10 @@ cert_connection_test(Config) ->
     Cert = ?TEST_FILE(Config, "peer.pem"),
 
     % when
-    {ok, Sock} = ssl:connect(?GET_HOST(Worker1), 5555, [binary, {packet, 4}, {active, true},
-        {certfile, Cert}, {cacertfile, Cert}]),
-    {ok, {certificate_info_message, {ok, CertInfo}}} = test_utils:receive_any(timer:seconds(5)),
+    {ok, Sock} = ssl:connect(?GET_HOST(Worker1), 5555, [binary, {packet, 4},
+        {active, true}, {certfile, Cert}, {cacertfile, Cert}]),
+    {ok, {certificate_info_message, {ok, CertInfo}}} =
+        test_utils:receive_any(timer:seconds(5)),
     ok = ssl:send(Sock, HandshakeReqRaw),
     {ok, {ssl, _, RawHandshakeResponse}} = test_utils:receive_any(timer:seconds(5)),
 
@@ -119,7 +122,12 @@ multi_message_test(Config) ->
     Events = lists:map(
         fun(N) ->
             #'ClientMessage'{message_body = {event, #'Event'{event =
-            {read_event, #'ReadEvent'{counter = N, file_id = <<"id">>, size = 1, blocks = []}}}}}
+            {read_event, #'ReadEvent'{
+                counter = N,
+                file_id = <<"id">>,
+                size = 1,
+                blocks = []
+            }}}}}
         end, MsgNumbers),
     RawEvents = lists:map(fun(E) -> client_messages:encode_msg(E) end, Events),
 
@@ -180,7 +188,8 @@ client_communicate_test(Config) ->
 
     % when
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
-    CommunicateResult = rpc:call(Worker1, client_communicator, communicate, [ServerMsgInternal, SessionId]),
+    CommunicateResult = rpc:call(Worker1, client_communicator, communicate,
+        [ServerMsgInternal, SessionId]),
 
     % then
     ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
@@ -188,16 +197,16 @@ client_communicate_test(Config) ->
 
 client_communiate_async_test(Config) ->
     % given
-    [Worker1, _] = ?config(op_worker_nodes, Config),
+    [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Status = #status{
         code = 'VOK',
         description = <<"desc">>
     },
     ServerMsgInternal = #server_message{message_body = Status},
     Self = self(),
+    {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
 
     % when
-    {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
     {ok, MsgId} = rpc:call(Worker1, client_communicator, communicate_async,
         [ServerMsgInternal, SessionId, Self]),
     ReceivedMessage =
@@ -208,7 +217,24 @@ client_communiate_async_test(Config) ->
         end,
 
     % then
-    ?assertMatch(#client_message{message_id = MsgId, message_body = Status}, ReceivedMessage),
+    ?assertMatch(#client_message{message_id = MsgId, message_body = Status},
+        ReceivedMessage),
+
+    % given
+    test_utils:mock_expect(Workers, router, route_message,
+        fun(#client_message{message_id = MsgId = #message_id{issuer = server,
+            recipient = undefined}}) ->
+            Self ! {router_message_called, MsgId},
+            ok
+        end),
+
+    % when
+    {ok, MsgId2} = rpc:call(Worker1, client_communicator, communicate_async,
+        [ServerMsgInternal, SessionId]),
+    RouterNotification = test_utils:receive_any(timer:seconds(5)),
+
+    % then
+    ?assertEqual({ok, {router_message_called, MsgId2}}, RouterNotification),
     ok = ssl:close(Sock).
 
 %%%===================================================================
@@ -230,7 +256,8 @@ init_per_testcase(cert_connection_test, Config) ->
     Config;
 
 init_per_testcase(Case, Config) when Case =:= protobuf_msg_test
-    orelse Case =:= multi_message_test ->
+    orelse Case =:= multi_message_test
+    orelse Case =:= client_communiate_async_test ->
     ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, router),
@@ -247,7 +274,8 @@ end_per_testcase(cert_connection_test, Config) ->
     ssl:stop();
 
 end_per_testcase(Case, Config) when Case =:= protobuf_msg_test
-    orelse Case =:= multi_message_test ->
+    orelse Case =:= multi_message_test
+    orelse Case =:= client_communiate_async_test ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate(Workers, router),
     test_utils:mock_unload(Workers, router),
