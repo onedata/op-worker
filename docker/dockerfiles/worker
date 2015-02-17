@@ -1,4 +1,4 @@
-FROM onedata/base:v2
+FROM onedata/base:v3
 MAINTAINER Konrad Zemek <konrad.zemek@gmail.com>
 
 # Add a recent docker binary

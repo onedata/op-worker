@@ -1,4 +1,4 @@
-FROM onedata/base:v2
+FROM onedata/base:v3
 MAINTAINER Konrad Zemek <konrad.zemek@gmail.com>
 
 # Add custom package sources
@@ -14,7 +14,7 @@ RUN apt-get update && \
                        libglobus-common-dev libglobus-gsi-callback-dev \
                        libltdl-dev libprotobuf-dev libstdc++-4.9-dev \
                        libtbb-dev ninja-build pkg-config protobuf-compiler \
-                       python-sphinx rpm subversion && \
+                       python-dev python-sphinx rpm subversion && \
     apt-get clean
 
 # Set up the environment
@@ -23,3 +23,5 @@ RUN update-alternatives --set cc /usr/bin/clang && \
     update-alternatives --set c++ /usr/bin/clang++
 RUN echo '    StrictHostKeyChecking no'     >> /etc/ssh/ssh_config && \
     echo '    UserKnownHostsFile /dev/null' >> /etc/ssh/ssh_config
+
+RUN apt-get install -y libpython-dev
