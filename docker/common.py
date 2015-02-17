@@ -19,12 +19,12 @@ def set_up_dns(config, uid):
     """Sets up DNS configuration values, starting the server if needed."""
     if config == 'auto':
         dns_config = run_script_return_dict('dns_up.py', ['--uid', uid])
-        return ([dns_config['dns']], dns_config)
+        return [dns_config['dns']], dns_config
 
     if config == 'none':
-        return ([], {})
+        return [], {}
     
-    return ([config], {})
+    return [config], {}
 
 
 def get_file_dir(file_path):

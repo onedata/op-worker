@@ -14,6 +14,22 @@ import copy
 import docker
 import json
 import os
+import sys
+import time
+
+try:
+    import xml.etree.cElementTree as eTree
+except ImportError:
+    import xml.etree.ElementTree as eTree
+
+try:  # Python 2
+    from urllib2 import urlopen
+    from urllib2 import URLError
+    from httplib import BadStatusLine
+except ImportError:  # Python 3
+    from urllib.request import urlopen
+    from urllib.error import URLError
+    from http.client import BadStatusLine
 
 
 def tweak_config(config, name, uid):
@@ -27,6 +43,20 @@ def tweak_config(config, name, uid):
     vm_args['name'] = common.format_hostname(vm_args['name'], uid)
 
     return cfg
+
+
+def is_up(ip):
+    url = 'https://{0}/nagios'.format(ip)
+    try:
+        fo = urlopen(url, timeout=1)
+        tree = eTree.parse(fo)
+        healthdata = tree.getroot()
+        status = healthdata.attrib['status']
+        return status == 'ok'
+    except URLError:
+        return False
+    except BadStatusLine:
+        return False
 
 
 parser = argparse.ArgumentParser(
@@ -80,6 +110,7 @@ output = collections.defaultdict(list)
 (dns_servers, dns_output) = common.set_up_dns(args.dns, uid)
 common.merge(output, dns_output)
 
+workers = []
 for cfg in configs:
     node_type = cfg['nodes']['node']['sys.config']['node_type']
     node_name = cfg['nodes']['node']['vm.args']['name']
@@ -107,8 +138,21 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         dns_list=dns_servers,
         command=command)
 
+    if node_type == 'worker':
+        workers.append(container)
+
     output['docker_ids'].append(container)
-    output['op_{type}_nodes'.format(type=node_type)].append(node_name)
+    output['op_{0}_nodes'.format(node_type)].append(node_name)
+
+worker_ip = docker.inspect(workers[0])['NetworkSettings']['IPAddress']
+deadline = time.time() + 60
+while not is_up(worker_ip):
+    if time.time() > deadline:
+        print('WARNING: did not get "ok" healthcheck status for 1 minute',
+              file=sys.stderr)
+        break
+
+    time.sleep(1)
 
 # Print JSON to output so it can be parsed by other scripts
 print(json.dumps(output))
