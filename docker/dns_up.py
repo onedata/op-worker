@@ -39,13 +39,13 @@ uid = args.uid
 skydns = docker.run(
     image='crosbymichael/skydns',
     detach=True,
-    name='skydns_{0}'.format(uid),
+    name=common.format_dockername('skydns', uid),
     command=['-nameserver', '8.8.8.8:53', '-domain', 'docker'])
 
 skydock = docker.run(
     image='crosbymichael/skydock',
     detach=True,
-    name='skydock_{0}'.format(uid),
+    name=common.format_dockername('skydock', uid),
     reflect=[('/var/run/docker.sock', 'rw')],
     volumes=[(args.create_service, '/createService.js', 'ro')],
     command=['-ttl', '30', '-environment', 'dev', '-s', '/var/run/docker.sock',
@@ -55,9 +55,10 @@ skydock = docker.run(
 skydns_config = docker.inspect(skydns)
 dns = skydns_config['NetworkSettings']['IPAddress']
 
-output = collections.defaultdict(list)
-output['dns'] = dns
-output['docker_ids'] = [skydns, skydock]
+output = {
+    'dns': dns,
+    'docker_ids': [skydns, skydock]
+}
 
 # Print JSON to output so it can be parsed by other scripts
 print(json.dumps(output))
