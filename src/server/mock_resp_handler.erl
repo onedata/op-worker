@@ -39,7 +39,7 @@ init(_Type, Req, [ETSKey]) ->
 handle(Req, [ETSKey]) ->
     {ok, NewReq} =
         try
-            {ok, {Code, Headers, Body}} = appmock_server:produce_mock_resp(Req, ETSKey),
+            {ok, {Code, Headers, Body}} = mock_resp_server:produce_mock_resp(Req, ETSKey),
             Req2 = cowboy_req:set_resp_body(Body, Req),
             Req3 = lists:foldl(
                 fun({HKey, HValue}, CurrReq) ->

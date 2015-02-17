@@ -7,12 +7,12 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This gen_server provides following functionalities:
-%%% - loading description module
+%%% - loading REST endpoints mocks from description module
 %%% - starting and stopping cowboy listeners
 %%% - in-memory persistence for appmock state such as the mappings, the state of endpoints or history of calls.
 %%% @end
 %%%-------------------------------------------------------------------
--module(appmock_server).
+-module(mock_resp_server).
 -author("Lukasz Opiola").
 
 -behaviour(gen_server).
@@ -33,8 +33,6 @@
     code_change/3]).
 
 -define(SERVER, ?MODULE).
-% Identifier of cowboy listener that handles all remote control requests.
--define(REMOTE_CONTROL_LISTENER, remote_control).
 % Number of acceptors in cowboy listeners
 -define(NUMBER_OF_ACCEPTORS, 10).
 
@@ -119,8 +117,7 @@ init([]) ->
     Mappings = get_mappings(DescriptionModule),
     StatesDict = convert_mappings_to_states_dict(Mappings),
     MappingsListenersIDs = start_listeners_for_mappings(Mappings),
-    RCListenerID = start_remote_control_listener(),
-    {ok, #state{mapping_states = StatesDict, listeners = [RCListenerID | MappingsListenersIDs]}}.
+    {ok, #state{mapping_states = StatesDict, listeners = [MappingsListenersIDs]}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -338,25 +335,6 @@ start_listener(ListenerID, Port, Dispatch) ->
             {env, [{dispatch, Dispatch}]}
         ]),
     ok.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts a cowboy listener that handles all remote control requests.
-%% @end
-%%--------------------------------------------------------------------
--spec start_remote_control_listener() -> ListenerID :: term().
-start_remote_control_listener() ->
-    {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
-    Dispatch = cowboy_router:compile([
-        {'_', [
-            {?VERIFY_ALL_PATH, remote_control_handler, [?VERIFY_ALL_PATH]},
-            {?VERIFY_MOCK_PATH, remote_control_handler, [?VERIFY_MOCK_PATH]}
-        ]}
-    ]),
-    start_listener(?REMOTE_CONTROL_LISTENER, RemoteControlPort, Dispatch),
-    ?REMOTE_CONTROL_LISTENER.
 
 
 %%--------------------------------------------------------------------

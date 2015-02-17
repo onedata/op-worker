@@ -46,9 +46,9 @@ handle(Req, State) ->
             {ok, {Code, Headers, Body}} =
                 case Path of
                     ?VERIFY_ALL_PATH ->
-                        appmock_server:verify_all_mocks(Req);
+                        mock_resp_server:verify_all_mocks(Req);
                     ?VERIFY_MOCK_PATH ->
-                        appmock_server:verify_mock(Req)
+                        mock_resp_server:verify_mock(Req)
                 end,
             Req2 = cowboy_req:set_resp_body(Body, Req),
             Req3 = lists:foldl(
