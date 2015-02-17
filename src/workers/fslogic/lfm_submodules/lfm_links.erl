@@ -39,7 +39,7 @@ create_symlink(_Path, _TargetFileKey) ->
 %%--------------------------------------------------------------------
 -spec read_symlink(FileKey :: file_key()) -> {ok, {file_id(), file_name()}} | error_reply().
 read_symlink(_FileKey) ->
-    {ok, {undefined, undefined}}.
+    {ok, {<<"">>, <<"">>}}.
 
 
 %%--------------------------------------------------------------------

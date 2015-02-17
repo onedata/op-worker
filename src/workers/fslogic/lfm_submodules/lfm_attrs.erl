@@ -39,7 +39,7 @@ stat(_Path) ->
 %%--------------------------------------------------------------------
 -spec get_xattr(FileKey :: file_key(), Key :: xattr_key()) -> {ok, xattr_value()} | error_reply().
 get_xattr(_Path, _Key) ->
-    {ok, undefined}.
+    {ok, <<"">>}.
 
 
 %%--------------------------------------------------------------------

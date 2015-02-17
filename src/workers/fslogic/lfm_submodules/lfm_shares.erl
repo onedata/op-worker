@@ -41,7 +41,7 @@ create_share(_Path, _ShareWith) ->
 %%--------------------------------------------------------------------
 -spec get_share(ShareID :: share_id()) -> {ok, {file_id(), file_name()}} | error_reply().
 get_share(_ShareID) ->
-    {ok, {undefined, undefined}}.
+    {ok, {<<"">>, <<"">>}}.
 
 
 %%--------------------------------------------------------------------
