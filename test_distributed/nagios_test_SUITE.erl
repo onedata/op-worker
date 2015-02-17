@@ -18,7 +18,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% export for ct
--export([all/0, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([nagios_test/1]).
 
 all() -> [nagios_test].
@@ -103,8 +103,9 @@ perform_nagios_healthcheck(Node, Retries) ->
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
-init_per_testcase(nagios_test, Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+init_per_suite(Config) ->
+    test_node_starter:prepare_test_environment(Config,
+        ?TEST_FILE(Config, "env_desc.json"), ?MODULE).
 
-end_per_testcase(nagios_test, Config) ->
+end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

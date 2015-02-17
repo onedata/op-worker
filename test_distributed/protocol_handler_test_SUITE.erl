@@ -241,7 +241,8 @@ client_communiate_async_test(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    test_node_starter:prepare_test_environment(Config,
+        ?TEST_FILE(Config, "env_desc.json"), ?MODULE).
 
 end_per_suite(Config) ->
     case ?CLEANUP of
