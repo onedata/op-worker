@@ -37,7 +37,7 @@ start_link() ->
 
 init([]) ->
     {ok, {{one_for_one, 5, 10}, [
-        {mock_resp_server, {mock_resp_server, start_link, []}, permanent, 5000, worker, [mock_resp_server]},
+        {rest_mock_server, {rest_mock_server, start_link, []}, permanent, 5000, worker, [rest_mock_server]},
         {remote_control_server, {remote_control_server, start_link, []}, permanent, 5000, worker, [remote_control_server]}
     ]}}.
 

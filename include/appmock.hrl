@@ -16,7 +16,7 @@
 %%%===================================================================
 
 % This record represents a single response returned by a mocked endpoint.
--record(mock_resp, {
+-record(rest_response, {
     code = 200 :: integer(),
     content_type = <<"application/json">>,
     headers = [],
@@ -25,7 +25,7 @@
 
 % This record describes a single mapping, uniquely distinguished by port and path.
 % It's used to mock HTTP endpoints that will return predefined or dynamically generated answers.
--record(mock_resp_mapping, {
+-record(rest_mapping, {
     % port on which requests will be accepted
     port = 443 :: integer(),
     % cowboy_router compatible path on which requests will be accepted
@@ -37,7 +37,7 @@
     %       fun(Req, State) -> {#mock_resp{}, NewState}
     %       Req - cowboy #req{} record, read only
     %       State - carries state between consecutive requests on the same stub
-    response = #mock_resp{} :: #mock_resp{} | [#mock_resp{}] | function(),
+    response = #rest_response{} :: #rest_response{} | [#rest_response{}] | function(),
     % initial state of the stub
     initial_state = [] :: term()
 }).

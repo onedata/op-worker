@@ -23,4 +23,4 @@
 %% HTTPS endpoint mocks. It is used to determine which ports and dispatch rules to use.
 %% @end
 %%--------------------------------------------------------------------
--callback response_mocks() -> [#mock_resp_mapping{}].
+-callback response_mocks() -> [#rest_mapping{}].

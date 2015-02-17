@@ -37,6 +37,7 @@
             {cert_file, "cacerts/server.crt"},
             {key_file, "cacerts/server.key"},
 
-            {remote_control_port, 9999}
+            {remote_control_port, 9999},
+            {nagios_healthcheck_timeout, 1000}
         ]}
     ]}.

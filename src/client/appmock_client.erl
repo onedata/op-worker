@@ -37,16 +37,16 @@
     ok | {different, integer()} | {error, term()}.
 verify_mock(Hostname, Port, Path, ExpectedCalls) ->
     try
-        JSON = appmock_utils:encode_to_json(?VERIFY_MOCK_PACK_REQUEST(Port, Path, ExpectedCalls)),
+        JSON = appmock_utils:encode_to_json(?VERIFY_REST_ENDPOINT_PACK_REQUEST(Port, Path, ExpectedCalls)),
         {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
         {200, _, RespBodyJSON} = appmock_utils:https_request(Hostname, RemoteControlPort,
-            <<?VERIFY_MOCK_PATH>>, post, [], JSON),
+            <<?VERIFY_REST_ENDPOINT_PATH>>, post, [], JSON),
         RespBody = appmock_utils:decode_from_json(RespBodyJSON),
         case RespBody of
             ?OK_RESULT ->
                 ok;
             _ ->
-                case ?VERIFY_MOCK_UNPACK_ERROR(RespBody) of
+                case ?VERIFY_REST_ENDPOINT_UNPACK_ERROR(RespBody) of
                     {error, wrong_endpoint} -> {error, wrong_endpoint};
                     {error, Number} when is_integer(Number) -> {different, Number}
                 end
@@ -71,16 +71,16 @@ verify_mock(Hostname, Port, Path, ExpectedCalls) ->
     ok | {different, PortPathMap} | {error, term()} when PortPathMap :: [{Port :: integer(), Path :: binary()}].
 verify_all_mocks(Hostname, ExpectedOrder) ->
     try
-        JSON = appmock_utils:encode_to_json(?VERIFY_ALL_PACK_REQUEST(ExpectedOrder)),
+        JSON = appmock_utils:encode_to_json(?VERIFY_REST_HISTORY_PACK_REQUEST(ExpectedOrder)),
         {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
         {200, _, RespBodyJSON} = appmock_utils:https_request(Hostname, RemoteControlPort,
-            <<?VERIFY_ALL_PATH>>, post, [], JSON),
+            <<?VERIFY_REST_HISTORY_PATH>>, post, [], JSON),
         RespBody = appmock_utils:decode_from_json(RespBodyJSON),
         case RespBody of
             ?OK_RESULT ->
                 ok;
             _ ->
-                History = ?VERIFY_ALL_UNPACK_ERROR(RespBody),
+                History = ?VERIFY_REST_HISTORY_UNPACK_ERROR(RespBody),
                 {different, History}
         end
     catch T:M ->

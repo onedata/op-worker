@@ -12,7 +12,7 @@
 %%% - in-memory persistence for appmock state such as the mappings, the state of endpoints or history of calls.
 %%% @end
 %%%-------------------------------------------------------------------
--module(mock_resp_server).
+-module(rest_mock_server).
 -author("Lukasz Opiola").
 
 -behaviour(gen_server).
@@ -21,8 +21,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0]).
--export([produce_mock_resp/2, verify_mock/1, verify_all_mocks/1]).
+-export([start_link/0, healthcheck/0]).
+-export([produce_response/2, verify_rest_mock_endpoint/3, verify_rest_mock_history/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -39,8 +39,8 @@
 % Internal state of the gen server
 -record(state, {
     listeners = [] :: [term()],
-    mock_resp_history = [] :: [{Port :: integer(), Path :: binary()}],
-    mapping_states = dict:dict() :: dict()
+    request_history = [] :: [{Port :: integer(), Path :: binary()}],
+    mapping_states = dict:new() :: dict:dict()
 }).
 
 %%%===================================================================
@@ -61,40 +61,48 @@ start_link() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Should check if this gen_server and all underlying services (like cowboy listeners)
+%% are ready and working properly. If any error occurs, it should be logged inside this function.
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck() -> ok | error.
+healthcheck() ->
+    {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
+    gen_server:call(?SERVER, healthcheck, Timeout).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Handles a request on a mocked endpoint. The endpoint is uniquely recognized by a pair {Port, Path}.
 %% If the endpoint had a responding function defined, the state is set to the state returned by the function.
 %% @end
 %%--------------------------------------------------------------------
--spec produce_mock_resp(Req :: cowboy_req:req(), ETSKey :: {Port :: integer(), Path :: binary()}) ->
+-spec produce_response(Req :: cowboy_req:req(), ETSKey :: {Port :: integer(), Path :: binary()}) ->
     {ok, {Code :: integer(), Headers :: [{term(), term()}], Body :: binary()}}.
-produce_mock_resp(Req, ETSKey) ->
-    gen_server:call(?SERVER, {produce_mock_resp, Req, ETSKey}).
+produce_response(Req, ETSKey) ->
+    gen_server:call(?SERVER, {produce_response, Req, ETSKey}).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles requests to verify if certain endpoint had been requested given amount of times.
-%% Input args are in request body JSON.
-%% Returned body is encoded to JSON.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_mock(Req :: cowboy_req:req()) ->
-    {ok, {Code :: integer(), Headers :: [{term(), term()}], Body :: binary()}}.
-verify_mock(Req) ->
-    gen_server:call(?SERVER, {verify_mock, Req}).
+-spec verify_rest_mock_endpoint(Port :: integer(), Path :: binary(), Number :: integer()) ->
+    ok | {different, integer()} | {error, wrong_enpoind}.
+verify_rest_mock_endpoint(Port, Path, Number) ->
+    gen_server:call(?SERVER, {verify_rest_mock_endpoint, Port, Path, Number}).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles requests to verify if all endpoints have been requested in expected order.
-%% Input args are in request body JSON.
-%% Returned body is encoded to JSON.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_all_mocks(Req :: cowboy_req:req()) ->
-    {ok, {Code :: integer(), Headers :: [{term(), term()}], Body :: binary()}}.
-verify_all_mocks(Req) ->
-    gen_server:call(?SERVER, {verify_all_mocks, Req}).
+-spec verify_rest_mock_history(ExpectedOrder :: PortPathMap) ->
+    ok | {different, PortPathMap} | {error, term()} when PortPathMap :: [{Port :: integer(), Path :: binary()}].
+verify_rest_mock_history(ExpectedOrder) ->
+    gen_server:call(?SERVER, {verify_rest_mock_history, ExpectedOrder}).
 
 
 %%%===================================================================
@@ -134,17 +142,51 @@ init([]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_call({produce_mock_resp, Req, ETSKey}, _From, State) ->
-    {{Code, Headers, Body}, NewState} = internal_produce_mock_resp(Req, ETSKey, State),
+handle_call(healthcheck, _From, #state{mapping_states = MappingStates} = State) ->
+    Reply =
+        try
+            MappingStatesList = dict:to_list(MappingStates),
+            % Check if all mocked endpoints are connective.
+            lists:foreach(
+                fun({{Port, Path}, MappingState}) ->
+                    case MappingState of
+                        #rest_mapping_state{response = #rest_response{code = Code}} ->
+                            {Code, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, Port, Path, get, [], <<"">>);
+                        _ ->
+                            ok
+                    end
+                end, MappingStatesList),
+            ok
+        catch T:M ->
+            ?error_stacktrace("Error during ~p healthcheck- ~p:~p", [?MODULE, T, M]),
+            error
+        end,
+    {reply, Reply, State};
+
+handle_call({produce_response, Req, ETSKey}, _From, State) ->
+    {{Code, Headers, Body}, NewState} = internal_produce_response(Req, ETSKey, State),
     {reply, {ok, {Code, Headers, Body}}, NewState};
 
-handle_call({verify_mock, Req}, _From, State) ->
-    {{Code, Headers, Body}, NewState} = internal_verify_mock(Req, State),
-    {reply, {ok, {Code, Headers, Body}}, NewState};
+handle_call({verify_rest_mock_endpoint, Port, Path, Number}, _From, State) ->
+    #state{mapping_states = MappingStatesDict} = State,
+    Reply = case dict:find({Port, Path}, MappingStatesDict) of
+                error ->
+                    {error, wrong_endpoint};
+                {ok, [#rest_mapping_state{counter = ActualNumber}]} ->
+                    case ActualNumber of
+                        Number -> ok;
+                        _ -> {different, ActualNumber}
+                    end
+            end,
+    {reply, Reply, State};
 
-handle_call({verify_all_mocks, Req}, _From, State) ->
-    {{Code, Headers, Body}, NewState} = internal_verify_all_mocks(Req, State),
-    {reply, {ok, {Code, Headers, Body}}, NewState};
+handle_call({verify_rest_mock_history, ExpectedHistory}, _From, State) ->
+    #state{request_history = ActualHistory} = State,
+    Reply = case ExpectedHistory of
+                ActualHistory -> ok;
+                _ -> {different, ActualHistory}
+            end,
+    {reply, Reply, State};
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -248,14 +290,14 @@ load_description_module(FilePath) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_mappings(ModuleName :: atom()) ->
-    [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #mapping_state{}}]}].
+    [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #rest_mapping_state{}}]}].
 get_mappings(ModuleName) ->
     % Get all mappings by calling request_mappings/0 function
     Mappings = ModuleName:response_mocks(),
     lists:foldl(
-        fun(#mock_resp_mapping{port = Port, path = Path, response = Resp, initial_state = InitState}, PortsProplist) ->
+        fun(#rest_mapping{port = Port, path = Path, response = Resp, initial_state = InitState}, PortsProplist) ->
             EndpointsForPort = proplists:get_value(Port, PortsProplist, []),
-            NewEndpoints = [{{Port, Path}, #mapping_state{response = Resp, state = InitState}} | EndpointsForPort],
+            NewEndpoints = [{{Port, Path}, #rest_mapping_state{response = Resp, state = InitState}} | EndpointsForPort],
             % Remember the mapping in the proplist
             [{Port, NewEndpoints} | proplists:delete(Port, PortsProplist)]
         end, [], Mappings).
@@ -268,13 +310,13 @@ get_mappings(ModuleName) ->
 %% in description module and starts the listeners.
 %% @end
 %%--------------------------------------------------------------------
--spec convert_mappings_to_states_dict(Mappings :: [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #mapping_state{}}]}]) -> map().
+-spec convert_mappings_to_states_dict(Mappings :: [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #rest_mapping_state{}}]}]) -> map().
 convert_mappings_to_states_dict(Mappings) ->
     Dict = dict:new(),
     lists:foldl(
         fun({_, EndpointsForPort}, CurrentDict) ->
             lists:foldl(
-                fun({{Port, Path}, #mapping_state{} = MappingState}, CurrentDictInside) ->
+                fun({{Port, Path}, #rest_mapping_state{} = MappingState}, CurrentDictInside) ->
                     dict:append({Port, Path}, MappingState, CurrentDictInside)
                 end, CurrentDict, EndpointsForPort)
         end, Dict, Mappings).
@@ -287,7 +329,7 @@ convert_mappings_to_states_dict(Mappings) ->
 %% in description module and starts the listeners.
 %% @end
 %%--------------------------------------------------------------------
--spec start_listeners_for_mappings(Mappings :: [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #mapping_state{}}]}]) ->
+-spec start_listeners_for_mappings(Mappings :: [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #rest_mapping_state{}}]}]) ->
     ListenerIDs :: [term()].
 start_listeners_for_mappings(Mappings) ->
     % Create pairs {Port, CowboyDispatch} for every port, where CowboyDispatch
@@ -297,7 +339,7 @@ start_listeners_for_mappings(Mappings) ->
             Dispatch = cowboy_router:compile([
                 {'_', lists:map(
                     fun({{MPort, MPath}, _}) ->
-                        {binary_to_list(MPath), mock_resp_handler, [{MPort, MPath}]}
+                        {binary_to_list(MPath), rest_mock_handler, [{MPort, MPath}]}
                     end, EndpointsForPort)
                 }
             ]),
@@ -343,16 +385,16 @@ start_listener(ListenerID, Port, Dispatch) ->
 %% Internal function called from handle_call, creating a response from mocked endpoint.
 %% @end
 %%--------------------------------------------------------------------
--spec internal_produce_mock_resp(Req :: cowboy_req:req(), ETSKey :: {Port :: integer(), Path :: binary()}, State :: #state{}) ->
+-spec internal_produce_response(Req :: cowboy_req:req(), ETSKey :: {Port :: integer(), Path :: binary()}, State :: #state{}) ->
     {{ok, {Code :: integer(), Headers :: [{term(), term()}], Body :: binary()}}, NewState :: #state{}}.
-internal_produce_mock_resp(Req, ETSKey, #state{mock_resp_history = History, mapping_states = MappingStatesDict} = ServerState) ->
+internal_produce_response(Req, ETSKey, #state{request_history = History, mapping_states = MappingStatesDict} = ServerState) ->
     % Get the response term and current state by {Port, Path} key
     {ok, [MappingStateRec]} = dict:find(ETSKey, MappingStatesDict),
-    #mapping_state{response = ResponseField, state = MappingState, counter = Counter} = MappingStateRec,
+    #rest_mapping_state{response = ResponseField, state = MappingState, counter = Counter} = MappingStateRec,
     % Get response and new state - either directly, cyclically from a list or by evaluating a fun
     {Response, NewMappingState} =
         case ResponseField of
-            #mock_resp{} ->
+            #rest_response{} ->
                 {ResponseField, MappingState};
             RespList when is_list(RespList) ->
                 CurrentResp = lists:nth((Counter rem length(RespList)) + 1, RespList),
@@ -363,57 +405,10 @@ internal_produce_mock_resp(Req, ETSKey, #state{mock_resp_history = History, mapp
     % Put new state in the dictionary
     NewMappingStatesDict = dict:update(ETSKey,
         fun(_) ->
-            [MappingStateRec#mapping_state{state = NewMappingState, counter = Counter + 1}]
+            [MappingStateRec#rest_mapping_state{state = NewMappingState, counter = Counter + 1}]
         end, MappingStatesDict),
-    #mock_resp{code = Code, body = Body, content_type = CType, headers = Headers} = Response,
+    #rest_response{code = Code, body = Body, content_type = CType, headers = Headers} = Response,
     AllHeaders = [{<<"content-type">>, CType}] ++ Headers,
     {Port, Path} = ETSKey,
     ?info("Got request at :~p~s~nResponding~n  Code:    ~p~n  Headers: ~p~n  Body:    ~s", [Port, Path, Code, AllHeaders, Body]),
-    {{Code, AllHeaders, Body}, ServerState#state{mock_resp_history = History ++ [ETSKey], mapping_states = NewMappingStatesDict}}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Internal function called from handle_call, veryfing if a mocked endpoint has been requested given number of times.
-%% @end
-%%--------------------------------------------------------------------
--spec internal_verify_mock(Req :: cowboy_req:req(), State :: #state{}) ->
-    {{ok, {Code :: integer(), Headers :: [{term(), term()}], Body :: binary()}}, NewState :: #state{}}.
-internal_verify_mock(Req, #state{mapping_states = MappingStatesDict} = State) ->
-    {ok, JSONBody, _} = cowboy_req:body(Req),
-    Body = appmock_utils:decode_from_json(JSONBody),
-    {Port, Path, Number} = ?VERIFY_MOCK_UNPACK_REQUEST(Body),
-    ReplyTerm = case dict:find({Port, Path}, MappingStatesDict) of
-                    error ->
-                        ?VERIFY_MOCK_PACK_ERROR_WRONG_ENDPOINT;
-                    {ok, [#mapping_state{counter = ActualNumber}]} ->
-                        case ActualNumber of
-                            Number ->
-                                ?OK_RESULT;
-                            _ ->
-                                ?VERIFY_MOCK_PACK_ERROR(ActualNumber)
-                        end
-                end,
-    {{200, [{<<"content-type">>, <<"application/json">>}], appmock_utils:encode_to_json(ReplyTerm)}, State}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Internal function called from handle_call, veryfing if all mocked endpoint have been requested in given order.
-%% @end
-%%--------------------------------------------------------------------
--spec internal_verify_all_mocks(Req :: cowboy_req:req(), State :: #state{}) ->
-    {{ok, {Code :: integer(), Headers :: [{term(), term()}], Body :: binary()}}, NewState :: #state{}}.
-internal_verify_all_mocks(Req, #state{mock_resp_history = History} = State) ->
-    {ok, JSONBody, _} = cowboy_req:body(Req),
-    BodyStruct = appmock_utils:decode_from_json(JSONBody),
-    Body = ?VERIFY_ALL_UNPACK_REQUEST(BodyStruct),
-    ReplyTerm = case Body of
-                    History ->
-                        ?OK_RESULT;
-                    _ ->
-                        ?VERIFY_ALL_PACK_ERROR(History)
-                end,
-    {{200, [{<<"content-type">>, <<"application/json">>}], appmock_utils:encode_to_json(ReplyTerm)}, State}.
+    {{Code, AllHeaders, Body}, ServerState#state{request_history = History ++ [ETSKey], mapping_states = NewMappingStatesDict}}.

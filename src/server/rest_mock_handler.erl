@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is a cowboy handler and processes requests to mocked endpoints.
+%%% This module is a cowboy handler and processes requests to mocked REST endpoints.
 %%% @end
 %%%-------------------------------------------------------------------
--module(mock_resp_handler).
+-module(rest_mock_handler).
 -author("Lukasz Opiola").
 
 -include_lib("ctool/include/logging.hrl").
@@ -39,7 +39,7 @@ init(_Type, Req, [ETSKey]) ->
 handle(Req, [ETSKey]) ->
     {ok, NewReq} =
         try
-            {ok, {Code, Headers, Body}} = mock_resp_server:produce_mock_resp(Req, ETSKey),
+            {ok, {Code, Headers, Body}} = rest_mock_server:produce_response(Req, ETSKey),
             Req2 = cowboy_req:set_resp_body(Body, Req),
             Req3 = lists:foldl(
                 fun({HKey, HValue}, CurrReq) ->
@@ -49,8 +49,8 @@ handle(Req, [ETSKey]) ->
         catch T:M ->
             {Port, Path} = ETSKey,
             Stacktrace = erlang:get_stacktrace(),
-            ?error("Error in mock_resp_handler. Path: ~p. Port: ~p. ~p:~p.~nStacktrace: ~p",
-                [Path, Port, T, M, Stacktrace]),
+            ?error("Error in ~p. Path: ~p. Port: ~p. ~p:~p.~nStacktrace: ~p",
+                [?MODULE, Path, Port, T, M, Stacktrace]),
             Error = gui_str:format_bin("500 Internal server error - make sure that your description file does not " ++
             "contain errors.~n-----------------~nType:       ~p~nMessage:    ~p~nStacktrace: ~p", [T, M, Stacktrace]),
             ErrorReq2 = cowboy_req:set_resp_body(Error, Req),

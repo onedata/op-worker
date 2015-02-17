@@ -18,9 +18,11 @@
 -behaviour(gen_server).
 
 -include("appmock_internal.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0]).
+-export([start_link/0, healthcheck/0]).
+-export([verify_rest_mock_history/1, verify_rest_mock_endpoint/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -30,10 +32,7 @@
     terminate/2,
     code_change/3]).
 
--record(state, {
-    % ID of remote control cowboy listener
-    rc_cowboy_listener = undefined :: term()
-}).
+-record(state, {}).
 
 -define(SERVER, ?MODULE).
 % Identifier of cowboy listener that handles all remote control requests.
@@ -56,6 +55,45 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Should check if this gen_server and all underlying services (like cowboy listeners)
+%% are ready and working properly. If any error occurs, it should be logged inside this function.
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck() -> ok | error.
+healthcheck() ->
+    {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
+    gen_server:call(?SERVER, healthcheck, Timeout).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles requests to verify if certain endpoint had been requested given amount of times.
+%% This task is delegated straight to rest_mock_server, but this function is here
+%% for clear API.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_rest_mock_endpoint(Port :: integer(), Path :: binary(), Number :: integer()) ->
+    ok | {different, integer()} | {error, wrong_enpoind}.
+verify_rest_mock_endpoint(Port, Path, Number) ->
+    rest_mock_server:verify_rest_mock_endpoint(Port, Path, Number).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles requests to verify if all endpoints have been requested in expected order.
+%% This task is delegated straight to rest_mock_server, but this function is here
+%% for clear API.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_rest_mock_history(ExpectedHistory :: PortPathMap) ->
+    ok | {different, PortPathMap} | {error, term()} when PortPathMap :: [{Port :: integer(), Path :: binary()}].
+verify_rest_mock_history(ExpectedHistory) ->
+    rest_mock_server:verify_rest_mock_history(ExpectedHistory).
+
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -75,8 +113,8 @@ start_link() ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
 init([]) ->
-    RCListenerID = start_remote_control_listener(),
-    {ok, #state{rc_cowboy_listener = RCListenerID}}.
+    start_remote_control_listener(),
+    {ok, #state{}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -93,6 +131,23 @@ init([]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
+handle_call(healthcheck, _From, State) ->
+    Reply =
+        try
+            {ok, RCPort} = application:get_env(?APP_NAME, remote_control_port),
+            % Check connectivity to mock verification path with some random data
+            {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, <<?VERIFY_REST_ENDPOINT_PATH>>, get, [],
+                <<"{\"port\":10, \"path\":\"/\", \"number\":7}">>),
+            % Check connectivity to mock verify_all path with some random data
+            {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, <<?VERIFY_REST_HISTORY_PATH>>, get, [],
+                <<"{\"mapping\":{\"port\":10, \"path\":\"/\"}}">>),
+            ok
+        catch T:M ->
+            ?error_stacktrace("Error during ~p healthcheck- ~p:~p", [?MODULE, T, M]),
+            error
+        end,
+    {reply, Reply, State};
+
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -141,6 +196,8 @@ handle_info(_Info, State) ->
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
 terminate(_Reason, _State) ->
+    ?info("Stopping cowboy listener: ~p", [?REMOTE_CONTROL_LISTENER]),
+    cowboy:stop_listener(?REMOTE_CONTROL_LISTENER),
     ok.
 
 %%--------------------------------------------------------------------
@@ -167,14 +224,32 @@ code_change(_OldVsn, State, _Extra) ->
 %% Starts a cowboy listener that handles all remote control requests.
 %% @end
 %%--------------------------------------------------------------------
--spec start_remote_control_listener() -> ListenerID :: term().
+-spec start_remote_control_listener() -> ok.
 start_remote_control_listener() ->
     {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
     Dispatch = cowboy_router:compile([
         {'_', [
-            {?VERIFY_ALL_PATH, remote_control_handler, [?VERIFY_ALL_PATH]},
-            {?VERIFY_MOCK_PATH, remote_control_handler, [?VERIFY_MOCK_PATH]}
+            {?VERIFY_REST_HISTORY_PATH, remote_control_handler, [?VERIFY_REST_HISTORY_PATH]},
+            {?VERIFY_REST_ENDPOINT_PATH, remote_control_handler, [?VERIFY_REST_ENDPOINT_PATH]},
+            {?NAGIOS_ENPOINT, remote_control_handler, [?NAGIOS_ENPOINT]}
         ]}
     ]),
-    start_listener(?REMOTE_CONTROL_LISTENER, RemoteControlPort, Dispatch),
-    ?REMOTE_CONTROL_LISTENER.
+    % Load certificates' paths from env
+    {ok, CaCertFile} = application:get_env(?APP_NAME, ca_cert_file),
+    {ok, CertFile} = application:get_env(?APP_NAME, cert_file),
+    {ok, KeyFile} = application:get_env(?APP_NAME, key_file),
+    % Start a https listener on given port
+    ?info("Starting cowboy listener: ~p (~p)", [?REMOTE_CONTROL_LISTENER, RemoteControlPort]),
+    {ok, _} = cowboy:start_https(
+        ?REMOTE_CONTROL_LISTENER,
+        ?NUMBER_OF_ACCEPTORS,
+        [
+            {port, RemoteControlPort},
+            {cacertfile, CaCertFile},
+            {certfile, CertFile},
+            {keyfile, KeyFile}
+        ],
+        [
+            {env, [{dispatch, Dispatch}]}
+        ]),
+    ok.
