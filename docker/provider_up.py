@@ -77,14 +77,14 @@ configs = [tweak_config(config, node, uid) for node in config['nodes']]
 
 output = collections.defaultdict(list)
 
-dns = args.dns
-if dns == 'auto':
+dns_servers = [args.dns]
+if args.dns == 'auto':
     dns_config = common.run_script_return_dict('dns_up.py', ['--uid', uid])
-    dns = dns_config['dns']
+    dns_servers = [dns_config['dns']]
     output['dns'] = dns_config['dns']
     output['docker_ids'] = dns_config['docker_ids']
-elif dns == 'none':
-    dns = None
+elif args.dns == 'none':
+    dns_servers = []
 
 for cfg in configs:
     node_type = cfg['nodes']['node']['sys.config']['node_type']
@@ -110,7 +110,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         workdir='/root/build',
         name=common.format_dockername(name, uid),
         volumes=[(args.bin, '/root/build', 'ro')],
-        dns=[dns],
+        dns_list=dns_servers,
         command=command)
 
     output['docker_ids'].append(container)

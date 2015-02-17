@@ -77,14 +77,14 @@ configs = [tweak_config(config, node, uid) for node in config['nodes']]
 
 output = collections.defaultdict(list)
 
-dns = args.dns
-if dns == 'auto':
+dns_servers = [args.dns]
+if args.dns == 'auto':
     dns_config = common.run_script_return_dict('dns_up.py', ['--uid', uid])
-    dns = dns_config['dns']
+    dns_servers = [dns_config['dns']]
     output['dns'] = dns_config['dns']
     output['docker_ids'] = dns_config['docker_ids']
-elif dns == 'none':
-    dns = None
+elif args.dns == 'none':
+    dns_servers = []
 
 for cfg in configs:
     node_name = cfg['nodes']['node']['vm.args']['name']
@@ -102,7 +102,9 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 /root/bin/node/bin/globalregistry console'''
     gr_command = gr_command.format(gen_dev_args=json.dumps({'globalregistry': cfg}))
 
-    # Start DB node for current GR instance
+    # Start DB node for current GR instance.
+    # Currently, only one DB node for GR is allowed, because we are using links.
+    # It's impossible to create a bigcouch cluster with docker's links.
     db_node = db_nodes[0]
     (db_name, sep, db_hostname) = db_node.partition('@')
     db_dockername = common.format_dockername(db_name, uid)
@@ -133,7 +135,7 @@ sed -i 's/-setcookie monster/-setcookie {cookie}/g' /opt/bigcouch/etc/vm.args
         workdir='/root/build',
         name=gr_dockername,
         volumes=[(args.bin, '/root/build', 'ro')],
-        dns=[dns],
+        dns_list=dns_servers,
         link={db_dockername: db_hostname},
         command=gr_command)
 
