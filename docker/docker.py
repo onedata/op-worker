@@ -1,5 +1,3 @@
-"""A custom library for interacting with Docker through command-line tool."""
-
 import json
 import os
 import sys
