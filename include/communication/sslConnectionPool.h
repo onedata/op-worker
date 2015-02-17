@@ -40,7 +40,6 @@ class SSLConnection;
  */
 class SSLConnectionPool {
     using SendTask = std::tuple<std::vector<char>, std::promise<void>>;
-    static constexpr size_t OUTBOX_SIZE = 1000;
 
 public:
     /**

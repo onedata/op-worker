@@ -23,12 +23,18 @@
 #include <tuple>
 
 using namespace std::placeholders;
+using namespace std::literals::chrono_literals;
+using steady_timer =
+    boost::asio::basic_waitable_timer<std::chrono::steady_clock>;
+
+static constexpr size_t OUTBOX_SIZE = 1000;
+static constexpr auto RECREATE_DELAY = 1s;
 
 namespace one {
 namespace communication {
 
-SSLConnectionPool::SSLConnectionPool(
-    const unsigned int connectionsNumber, std::string host, std::string port,
+SSLConnectionPool::SSLConnectionPool(const unsigned int connectionsNumber,
+    std::string host, std::string port,
     std::shared_ptr<const CertificateData> certificateData,
     const bool verifyServerCertificate,
     std::function<void(std::vector<char>)> onMessage)
@@ -43,16 +49,16 @@ SSLConnectionPool::SSLConnectionPool(
     m_outbox.set_capacity(OUTBOX_SIZE);
 
     std::generate_n(std::back_inserter(m_workers),
-                    std::max<int>(std::thread::hardware_concurrency(), 2), [=] {
-        return std::thread{[=] {
-            try {
-                m_ioService.run();
-            }
-            catch (tbb::user_abort &) {
-                return;
-            }
-        }};
-    });
+        std::max<int>(std::thread::hardware_concurrency(), 2), [=] {
+            return std::thread{[=] {
+                try {
+                    m_ioService.run();
+                }
+                catch (tbb::user_abort &) {
+                    return;
+                }
+            }};
+        });
 
     boost::asio::ip::tcp::resolver resolver{m_ioService};
     boost::asio::ip::tcp::resolver::query query{host, port};
@@ -61,14 +67,14 @@ SSLConnectionPool::SSLConnectionPool(
         m_endpointIterator = resolver.resolve(query);
 
         m_context.set_options(boost::asio::ssl::context::default_workarounds |
-                              boost::asio::ssl::context::no_sslv2 |
-                              boost::asio::ssl::context::no_sslv3 |
-                              boost::asio::ssl::context::single_dh_use);
+            boost::asio::ssl::context::no_sslv2 |
+            boost::asio::ssl::context::no_sslv3 |
+            boost::asio::ssl::context::single_dh_use);
 
         m_context.set_default_verify_paths();
         m_context.set_verify_mode(m_verifyServerCertificate
-                                      ? boost::asio::ssl::verify_peer
-                                      : boost::asio::ssl::verify_none);
+                ? boost::asio::ssl::verify_peer
+                : boost::asio::ssl::verify_none);
 
         SSL_CTX *ssl_ctx = m_context.native_handle();
         auto mode = SSL_CTX_get_session_cache_mode(ssl_ctx);
@@ -113,9 +119,10 @@ void SSLConnectionPool::onConnectionReady(std::shared_ptr<SSLConnection> conn)
             m_outbox.pop(task);
 
         if (auto conn = c.lock()) {
-            conn->send(std::move(std::get<0>(*task)),
-                       std::move(std::get<1>(*task)));
-        } else {
+            conn->send(
+                std::move(std::get<0>(*task)), std::move(std::get<1>(*task)));
+        }
+        else {
             m_rejects.emplace(std::move(task));
         }
     });
@@ -125,13 +132,17 @@ void SSLConnectionPool::onConnectionReady(std::shared_ptr<SSLConnection> conn)
 void SSLConnectionPool::onConnectionClosed(std::shared_ptr<SSLConnection> conn)
 {
     m_connectionsStrand.post([this, conn] { m_connections.erase(conn); });
-    createConnection();
+    auto timer = std::make_shared<steady_timer>(m_ioService, RECREATE_DELAY);
+    timer->async_wait([this, timer](const boost::system::error_code &ec) {
+        if (!ec)
+            createConnection();
+    });
 }
 
 void SSLConnectionPool::createConnection()
 {
-    auto conn = std::make_shared<SSLConnection>(
-        m_ioService, m_context, m_verifyServerCertificate,
+    auto conn = std::make_shared<SSLConnection>(m_ioService, m_context,
+        m_verifyServerCertificate,
         std::bind(&SSLConnectionPool::onMessageReceived, this, _1),
         std::bind(&SSLConnectionPool::onConnectionReady, this, _1),
         std::bind(&SSLConnectionPool::onConnectionClosed, this, _1));
