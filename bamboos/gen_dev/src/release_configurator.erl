@@ -130,8 +130,13 @@ replace_application_config(SysConfigPath, ApplicationName, ApplicationEnvs) ->
 %%--------------------------------------------------------------------
 -spec replace_vm_arg(string(), string(), string()) -> ok | no_return().
 replace_vm_arg(VMArgsPath, FullArgName, ArgValue) ->
-    [] = os:cmd(?SED_COMMAND ++ "\"s#" ++ FullArgName ++ " .*#" ++ FullArgName ++ " " ++
-        ArgValue ++ "#g\" \"" ++ VMArgsPath ++ "\"").
+    {ok, Data} = file:read_file(VMArgsPath),
+    NewData = re:replace(
+        Data,
+        <<(list_to_binary(FullArgName))/binary, " .*">>,
+        <<(list_to_binary(FullArgName))/binary, " ", (list_to_binary(ArgValue))/binary>>
+    ),
+    ok = file:write_file(VMArgsPath, NewData).
 
 %%--------------------------------------------------------------------
 %% @doc

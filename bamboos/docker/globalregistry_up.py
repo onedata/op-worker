@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 """
-Brings up a set of Global Registry nodes along with databases. They can create separate clusters.
+Brings up a set of Global Registry nodes along with databases.
+They can create separate clusters.
 Run the script with -h flag to learn about script's running options.
 """
 
@@ -9,28 +10,11 @@ from __future__ import print_function
 
 import argparse
 import collections
+import copy
+import common
+import docker
 import json
 import os
-import time
-import docker
-import copy
-import subprocess
-
-
-def get_script_dir():
-    return os.path.dirname(os.path.realpath(__file__))
-
-
-def parse_config(path):
-    with open(path, 'r') as f:
-        data = f.read()
-        return json.loads(data)
-
-
-def set_hostname(node, uid):
-    parts = list(node.partition('@'))
-    parts[2] = '{0}.{1}.dev.docker'.format(parts[0], uid)
-    return ''.join(parts)
 
 
 def tweak_config(config, name, uid):
@@ -38,19 +22,12 @@ def tweak_config(config, name, uid):
     cfg['nodes'] = {'node': cfg['nodes'][name]}
 
     sys_config = cfg['nodes']['node']['sys.config']
-    sys_config['db_nodes'] = [set_hostname(n, uid) for n in sys_config['db_nodes']]
+    sys_config['db_nodes'] = [common.format_hostname(n, uid) for n in sys_config['db_nodes']]
 
     vm_args = cfg['nodes']['node']['vm.args']
-    vm_args['name'] = set_hostname(vm_args['name'], uid)
+    vm_args['name'] = common.format_hostname(vm_args['name'], uid)
 
     return cfg
-
-
-def run_command(cmd):
-    return subprocess.Popen(cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            stdin=subprocess.PIPE).communicate()[0]
 
 
 parser = argparse.ArgumentParser(
@@ -82,7 +59,7 @@ parser.add_argument(
 parser.add_argument(
     '--uid', '-u',
     action='store',
-    default=str(int(time.time())),
+    default=common.generate_uid(),
     help='uid that will be concatenated to docker names',
     dest='uid')
 
@@ -94,20 +71,14 @@ parser.add_argument(
 args = parser.parse_args()
 uid = args.uid
 
-config = parse_config(args.config_path)['globalregistry']
+config = common.parse_json_file(args.config_path)['globalregistry']
 config['config']['target_dir'] = '/root/bin'
 configs = [tweak_config(config, node, uid) for node in config['nodes']]
 
 output = collections.defaultdict(list)
 
-dns = args.dns
-if dns == 'auto':
-    dns_config = json.loads(run_command([get_script_dir() + '/dns_up.py', '--uid', uid]))
-    dns = dns_config['dns']
-    output['dns'] = dns_config['dns']
-    output['docker_ids'] = dns_config['docker_ids']
-elif dns == 'none':
-    dns = None
+(dns_servers, dns_output) = common.set_up_dns(args.dns, uid)
+common.merge(output, dns_output)
 
 for cfg in configs:
     node_name = cfg['nodes']['node']['vm.args']['name']
@@ -115,7 +86,7 @@ for cfg in configs:
     db_nodes = cfg['nodes']['node']['sys.config']['db_nodes']
 
     (gr_name, sep, gr_hostname) = node_name.partition('@')
-    gr_dockername = '{0}_{1}'.format(gr_name, uid)
+    gr_dockername = common.format_dockername(gr_name, uid)
 
     gr_command = '''set -e
 cat <<"EOF" > /tmp/gen_dev_args.json
@@ -125,10 +96,12 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 /root/bin/node/bin/globalregistry console'''
     gr_command = gr_command.format(gen_dev_args=json.dumps({'globalregistry': cfg}))
 
-    # Start DB node for current GR instance
+    # Start DB node for current GR instance.
+    # Currently, only one DB node for GR is allowed, because we are using links.
+    # It's impossible to create a bigcouch cluster with docker's links.
     db_node = db_nodes[0]
     (db_name, sep, db_hostname) = db_node.partition('@')
-    db_dockername = '{0}_{1}'.format(db_name, uid)
+    db_dockername = common.format_dockername(db_name, uid)
 
     db_command = '''echo '[httpd]' > /opt/bigcouch/etc/local.ini
 echo 'bind_address = 0.0.0.0' >> /opt/bigcouch/etc/local.ini
@@ -156,7 +129,7 @@ sed -i 's/-setcookie monster/-setcookie {cookie}/g' /opt/bigcouch/etc/vm.args
         workdir='/root/build',
         name=gr_dockername,
         volumes=[(args.bin, '/root/build', 'ro')],
-        dns=[dns],
+        dns_list=dns_servers,
         link={db_dockername: db_hostname},
         command=gr_command)
 
