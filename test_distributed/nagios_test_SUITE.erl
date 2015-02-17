@@ -96,7 +96,7 @@ perform_nagios_healthcheck(Node, Retries) ->
                 {body, Response}
             ]}};
         _ ->
-            timer:sleep(1000),
+            timer:sleep(timer:seconds(1)),
             perform_nagios_healthcheck(Node, Retries - 1)
     end.
 
