@@ -51,7 +51,8 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = server,
     route_and_ignore_answer(Msg);
 route_message(Msg = #client_message{message_id = #message_id{issuer = server,
     recipient = Pid}}) ->
-    Pid ! Msg;
+    Pid ! Msg,
+    ok;
 route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) ->
     route_and_send_answer(Msg).
 
