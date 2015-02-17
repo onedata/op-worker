@@ -46,7 +46,7 @@ def run_script_return_dict(script, args):
                               stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE,
                               stdin=subprocess.PIPE).communicate()[0]
-    return json.loads(result)
+    return json.loads(result.decode('utf-8'))
 
 
 def parse_json_file(path):
