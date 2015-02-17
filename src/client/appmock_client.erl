@@ -18,7 +18,7 @@
 -include("appmock_internal.hrl").
 
 %% API
--export([verify_mock/4, verify_all_mocks/2]).
+-export([verify_rest_endpoint/4, verify_rest_history/2]).
 
 %%%===================================================================
 %%% API
@@ -33,9 +33,9 @@
 %% {error, term()} - when there has been an error in verification procedure (this implies a bug in appmock).
 %% @end
 %%--------------------------------------------------------------------
--spec verify_mock(Hostname :: binary(), Port :: integer(), Path :: binary(), ExpectedCalls :: integer()) ->
+-spec verify_rest_endpoint(Hostname :: binary(), Port :: integer(), Path :: binary(), ExpectedCalls :: integer()) ->
     ok | {different, integer()} | {error, term()}.
-verify_mock(Hostname, Port, Path, ExpectedCalls) ->
+verify_rest_endpoint(Hostname, Port, Path, ExpectedCalls) ->
     try
         JSON = appmock_utils:encode_to_json(?VERIFY_REST_ENDPOINT_PACK_REQUEST(Port, Path, ExpectedCalls)),
         {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
@@ -52,7 +52,7 @@ verify_mock(Hostname, Port, Path, ExpectedCalls) ->
                 end
         end
     catch T:M ->
-        ?error("Error in verify_mock - ~p:~p", [T, M]),
+        ?error("Error in verify_rest_endpoint - ~p:~p", [T, M]),
         {error, M}
     end.
 
@@ -67,9 +67,9 @@ verify_mock(Hostname, Port, Path, ExpectedCalls) ->
 %% {error, term()} - when there has been an error in verification procedure (this implies a bug in appmock).
 %% @end
 %%--------------------------------------------------------------------
--spec verify_all_mocks(Hostname :: binary(), ExpectedOrder :: PortPathMap) ->
+-spec verify_rest_history(Hostname :: binary(), ExpectedOrder :: PortPathMap) ->
     ok | {different, PortPathMap} | {error, term()} when PortPathMap :: [{Port :: integer(), Path :: binary()}].
-verify_all_mocks(Hostname, ExpectedOrder) ->
+verify_rest_history(Hostname, ExpectedOrder) ->
     try
         JSON = appmock_utils:encode_to_json(?VERIFY_REST_HISTORY_PACK_REQUEST(ExpectedOrder)),
         {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
@@ -84,6 +84,6 @@ verify_all_mocks(Hostname, ExpectedOrder) ->
                 {different, History}
         end
     catch T:M ->
-        ?error("Error in verify_all_mocks - ~p:~p", [T, M]),
+        ?error("Error in verify_rest_history - ~p:~p", [T, M]),
         {error, M}
     end.

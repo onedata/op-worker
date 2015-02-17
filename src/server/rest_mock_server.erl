@@ -9,7 +9,7 @@
 %%% This gen_server provides following functionalities:
 %%% - loading REST endpoints mocks from description module
 %%% - starting and stopping cowboy listeners
-%%% - in-memory persistence for appmock state such as the mappings, the state of endpoints or history of calls.
+%%% - in-memory persistence for state such as the state of endpoints or history of calls.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(rest_mock_server).
@@ -40,7 +40,7 @@
 -record(state, {
     listeners = [] :: [term()],
     request_history = [] :: [{Port :: integer(), Path :: binary()}],
-    mapping_states = dict:new() :: dict:dict()
+    mock_states = dict:new() :: dict:dict()
 }).
 
 %%%===================================================================
@@ -121,11 +121,11 @@ verify_rest_mock_history(ExpectedOrder) ->
     {stop, Reason :: term()} | ignore).
 init([]) ->
     {ok, AppDescriptionFile} = application:get_env(?APP_NAME, app_description_file),
-    DescriptionModule = load_description_module(AppDescriptionFile),
+    DescriptionModule = appmock_utils:load_description_module(AppDescriptionFile),
     Mappings = get_mappings(DescriptionModule),
     StatesDict = convert_mappings_to_states_dict(Mappings),
-    MappingsListenersIDs = start_listeners_for_mappings(Mappings),
-    {ok, #state{mapping_states = StatesDict, listeners = [MappingsListenersIDs]}}.
+    ListenersIDs = start_listeners_for_mappings(Mappings),
+    {ok, #state{mock_states = StatesDict, listeners = [ListenersIDs]}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -142,20 +142,20 @@ init([]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_call(healthcheck, _From, #state{mapping_states = MappingStates} = State) ->
+handle_call(healthcheck, _From, #state{mock_states = MockStates} = State) ->
     Reply =
         try
-            MappingStatesList = dict:to_list(MappingStates),
+            MockStatesList = dict:to_list(MockStates),
             % Check if all mocked endpoints are connective.
             lists:foreach(
-                fun({{Port, Path}, MappingState}) ->
-                    case MappingState of
-                        #rest_mapping_state{response = #rest_response{code = Code}} ->
+                fun({{Port, Path}, MockState}) ->
+                    case MockState of
+                        #rest_mock_state{response = #rest_response{code = Code}} ->
                             {Code, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, Port, Path, get, [], <<"">>);
                         _ ->
                             ok
                     end
-                end, MappingStatesList),
+                end, MockStatesList),
             ok
         catch T:M ->
             ?error_stacktrace("Error during ~p healthcheck- ~p:~p", [?MODULE, T, M]),
@@ -168,11 +168,11 @@ handle_call({produce_response, Req, ETSKey}, _From, State) ->
     {reply, {ok, {Code, Headers, Body}}, NewState};
 
 handle_call({verify_rest_mock_endpoint, Port, Path, Number}, _From, State) ->
-    #state{mapping_states = MappingStatesDict} = State,
-    Reply = case dict:find({Port, Path}, MappingStatesDict) of
+    #state{mock_states = MockStatesDict} = State,
+    Reply = case dict:find({Port, Path}, MockStatesDict) of
                 error ->
                     {error, wrong_endpoint};
-                {ok, [#rest_mapping_state{counter = ActualNumber}]} ->
+                {ok, [#rest_mock_state{counter = ActualNumber}]} ->
                     case ActualNumber of
                         Number -> ok;
                         _ -> {different, ActualNumber}
@@ -266,38 +266,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Compiles and loads a given file.
-%% @end
-%%--------------------------------------------------------------------
--spec load_description_module(FilePath :: string()) -> module() | no_return().
-load_description_module(FilePath) ->
-    try
-        FileName = filename:basename(FilePath),
-        {ok, ModuleName} = compile:file(FilePath),
-        {ok, Bin} = file:read_file(filename:rootname(FileName) ++ ".beam"),
-        erlang:load_module(ModuleName, Bin),
-        ModuleName
-    catch T:M ->
-        throw({invalid_app_description_module, {type, T}, {message, M}, {stacktrace, erlang:get_stacktrace()}})
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Analyses the list of mappings returned by response_mocks() of the description module
 %% and produces a map {Port, Path} -> #mapping_state for every port.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_mappings(ModuleName :: atom()) ->
-    [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #rest_mapping_state{}}]}].
+    [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #rest_mock_state{}}]}].
 get_mappings(ModuleName) ->
     % Get all mappings by calling request_mappings/0 function
     Mappings = ModuleName:response_mocks(),
     lists:foldl(
-        fun(#rest_mapping{port = Port, path = Path, response = Resp, initial_state = InitState}, PortsProplist) ->
+        fun(#rest_mock{port = Port, path = Path, response = Resp, initial_state = InitState}, PortsProplist) ->
             EndpointsForPort = proplists:get_value(Port, PortsProplist, []),
-            NewEndpoints = [{{Port, Path}, #rest_mapping_state{response = Resp, state = InitState}} | EndpointsForPort],
+            NewEndpoints = [{{Port, Path}, #rest_mock_state{response = Resp, state = InitState}} | EndpointsForPort],
             % Remember the mapping in the proplist
             [{Port, NewEndpoints} | proplists:delete(Port, PortsProplist)]
         end, [], Mappings).
@@ -310,14 +291,14 @@ get_mappings(ModuleName) ->
 %% in description module and starts the listeners.
 %% @end
 %%--------------------------------------------------------------------
--spec convert_mappings_to_states_dict(Mappings :: [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #rest_mapping_state{}}]}]) -> map().
+-spec convert_mappings_to_states_dict(Mappings :: [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #rest_mock_state{}}]}]) -> map().
 convert_mappings_to_states_dict(Mappings) ->
     Dict = dict:new(),
     lists:foldl(
         fun({_, EndpointsForPort}, CurrentDict) ->
             lists:foldl(
-                fun({{Port, Path}, #rest_mapping_state{} = MappingState}, CurrentDictInside) ->
-                    dict:append({Port, Path}, MappingState, CurrentDictInside)
+                fun({{Port, Path}, #rest_mock_state{} = MockState}, CurrentDictInside) ->
+                    dict:append({Port, Path}, MockState, CurrentDictInside)
                 end, CurrentDict, EndpointsForPort)
         end, Dict, Mappings).
 
@@ -329,7 +310,7 @@ convert_mappings_to_states_dict(Mappings) ->
 %% in description module and starts the listeners.
 %% @end
 %%--------------------------------------------------------------------
--spec start_listeners_for_mappings(Mappings :: [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #rest_mapping_state{}}]}]) ->
+-spec start_listeners_for_mappings(Mappings :: [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #rest_mock_state{}}]}]) ->
     ListenerIDs :: [term()].
 start_listeners_for_mappings(Mappings) ->
     % Create pairs {Port, CowboyDispatch} for every port, where CowboyDispatch
@@ -387,28 +368,28 @@ start_listener(ListenerID, Port, Dispatch) ->
 %%--------------------------------------------------------------------
 -spec internal_produce_response(Req :: cowboy_req:req(), ETSKey :: {Port :: integer(), Path :: binary()}, State :: #state{}) ->
     {{ok, {Code :: integer(), Headers :: [{term(), term()}], Body :: binary()}}, NewState :: #state{}}.
-internal_produce_response(Req, ETSKey, #state{request_history = History, mapping_states = MappingStatesDict} = ServerState) ->
+internal_produce_response(Req, ETSKey, #state{request_history = History, mock_states = MockStatesDict} = ServerState) ->
     % Get the response term and current state by {Port, Path} key
-    {ok, [MappingStateRec]} = dict:find(ETSKey, MappingStatesDict),
-    #rest_mapping_state{response = ResponseField, state = MappingState, counter = Counter} = MappingStateRec,
+    {ok, [MockStateRec]} = dict:find(ETSKey, MockStatesDict),
+    #rest_mock_state{response = ResponseField, state = MockState, counter = Counter} = MockStateRec,
     % Get response and new state - either directly, cyclically from a list or by evaluating a fun
-    {Response, NewMappingState} =
+    {Response, NewMockState} =
         case ResponseField of
             #rest_response{} ->
-                {ResponseField, MappingState};
+                {ResponseField, MockState};
             RespList when is_list(RespList) ->
                 CurrentResp = lists:nth((Counter rem length(RespList)) + 1, RespList),
-                {CurrentResp, MappingState};
+                {CurrentResp, MockState};
             Fun when is_function(Fun, 2) ->
-                {_Response, _NewState} = Fun(Req, MappingState)
+                {_Response, _NewState} = Fun(Req, MockState)
         end,
     % Put new state in the dictionary
-    NewMappingStatesDict = dict:update(ETSKey,
+    NewMockStatesDict = dict:update(ETSKey,
         fun(_) ->
-            [MappingStateRec#rest_mapping_state{state = NewMappingState, counter = Counter + 1}]
-        end, MappingStatesDict),
+            [MockStateRec#rest_mock_state{state = NewMockState, counter = Counter + 1}]
+        end, MockStatesDict),
     #rest_response{code = Code, body = Body, content_type = CType, headers = Headers} = Response,
     AllHeaders = [{<<"content-type">>, CType}] ++ Headers,
     {Port, Path} = ETSKey,
     ?info("Got request at :~p~s~nResponding~n  Code:    ~p~n  Headers: ~p~n  Body:    ~s", [Port, Path, Code, AllHeaders, Body]),
-    {{Code, AllHeaders, Body}, ServerState#state{request_history = History ++ [ETSKey], mapping_states = NewMappingStatesDict}}.
+    {{Code, AllHeaders, Body}, ServerState#state{request_history = History ++ [ETSKey], mock_states = NewMockStatesDict}}.

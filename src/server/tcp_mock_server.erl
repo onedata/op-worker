@@ -6,13 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles all requests connected with remote control
-%%% functionalities. Usually, it needs to call other gen_servers to
-%%% process the requests.
-%%% In addition, it starts and stops the remote control cowboy listener.
+%%% This gen_server provides following functionalities:
+%%% - loading TCP server mocks from description module
+%%% - starting and stopping ranch listeners
+%%% - in-memory persistence for state such as history of received packets.
 %%% @end
 %%%-------------------------------------------------------------------
--module(remote_control_server).
+-module(tcp_mock_server).
 -author("Lukasz Opiola").
 
 -behaviour(gen_server).
@@ -22,7 +22,6 @@
 
 %% API
 -export([start_link/0, healthcheck/0]).
--export([verify_rest_mock_history/1, verify_rest_mock_endpoint/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -32,13 +31,15 @@
     terminate/2,
     code_change/3]).
 
--record(state, {}).
-
 -define(SERVER, ?MODULE).
-% Identifier of cowboy listener that handles all remote control requests.
--define(REMOTE_CONTROL_LISTENER, remote_control).
 % Number of acceptors in cowboy listeners
 -define(NUMBER_OF_ACCEPTORS, 10).
+
+% Internal state of the gen server
+-record(state, {
+    listeners = [] :: [term()],
+    request_history = [] :: [{Port :: integer(), Path :: binary()}]
+}).
 
 %%%===================================================================
 %%% API
@@ -68,32 +69,6 @@ healthcheck() ->
     gen_server:call(?SERVER, healthcheck, Timeout).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Handles requests to verify if certain endpoint had been requested given amount of times.
-%% This task is delegated straight to rest_mock_server, but this function is here
-%% for clear API.
-%% @end
-%%--------------------------------------------------------------------
--spec verify_rest_mock_endpoint(Port :: integer(), Path :: binary(), Number :: integer()) ->
-    ok | {different, integer()} | {error, wrong_enpoind}.
-verify_rest_mock_endpoint(Port, Path, Number) ->
-    rest_mock_server:verify_rest_mock_endpoint(Port, Path, Number).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Handles requests to verify if all endpoints have been requested in expected order.
-%% This task is delegated straight to rest_mock_server, but this function is here
-%% for clear API.
-%% @end
-%%--------------------------------------------------------------------
--spec verify_rest_mock_history(ExpectedHistory :: PortPathMap) ->
-    ok | {different, PortPathMap} | {error, term()} when PortPathMap :: [{Port :: integer(), Path :: binary()}].
-verify_rest_mock_history(ExpectedHistory) ->
-    rest_mock_server:verify_rest_mock_history(ExpectedHistory).
-
-
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -101,20 +76,18 @@ verify_rest_mock_history(ExpectedHistory) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
+%% Initializes the appmock application by creating an ETS table, initializing records in it,
+%% loading given mock app description module and starting cowboy listenera.
 %% @end
 %%--------------------------------------------------------------------
 -spec(init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
 init([]) ->
-    start_remote_control_listener(),
-    {ok, #state{}}.
+    {ok, AppDescriptionFile} = application:get_env(?APP_NAME, app_description_file),
+    DescriptionModule = appmock_utils:load_description_module(AppDescriptionFile),
+    ListenersIDs = start_listeners(DescriptionModule),
+    {ok, #state{listeners = [ListenersIDs]}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -131,21 +104,8 @@ init([]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_call(healthcheck, _From, State) ->
-    Reply =
-        try
-            {ok, RCPort} = application:get_env(?APP_NAME, remote_control_port),
-            % Check connectivity to mock verification path with some random data
-            {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, <<?VERIFY_REST_ENDPOINT_PATH>>, get, [],
-                <<"{\"port\":10, \"path\":\"/\", \"number\":7}">>),
-            % Check connectivity to mock verify_all path with some random data
-            {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, <<?VERIFY_REST_HISTORY_PATH>>, get, [],
-                <<"{\"endpoint\":{\"port\":10, \"path\":\"/\"}}">>),
-            ok
-        catch T:M ->
-            ?error_stacktrace("Error during ~p healthcheck- ~p:~p", [?MODULE, T, M]),
-            error
-        end,
+handle_call(healthcheck, _From, #state{} = State) ->
+    Reply = ok,
     {reply, Reply, State};
 
 handle_call(_Request, _From, State) ->
@@ -190,14 +150,18 @@ handle_info(_Info, State) ->
 %% necessary cleaning up. When it returns, the gen_server terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
+%% Cleans up by stopping previously started cowboy listeners and deleting the ETS table.
 %% @end
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
-terminate(_Reason, _State) ->
-    ?info("Stopping cowboy listener: ~p", [?REMOTE_CONTROL_LISTENER]),
-    cowboy:stop_listener(?REMOTE_CONTROL_LISTENER),
+terminate(_Reason, #state{listeners = Listeners}) ->
+    % Stop all previously started ranch listeners
+    lists:foreach(
+        fun(Listener) ->
+            ?info("Stopping ranch listener: ~p", [Listener]),
+            ranch:stop_listener(Listener)
+        end, Listeners),
     ok.
 
 %%--------------------------------------------------------------------
@@ -214,6 +178,7 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -221,30 +186,40 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Starts a cowboy listener that handles all remote control requests.
+%% Starts all TCP servers that were specified in the app desription module.
 %% @end
 %%--------------------------------------------------------------------
--spec start_remote_control_listener() -> ok.
-start_remote_control_listener() ->
-    {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
-    Dispatch = cowboy_router:compile([
-        {'_', [
-            {?VERIFY_REST_HISTORY_PATH, remote_control_handler, [?VERIFY_REST_HISTORY_PATH]},
-            {?VERIFY_REST_ENDPOINT_PATH, remote_control_handler, [?VERIFY_REST_ENDPOINT_PATH]},
-            {?NAGIOS_ENPOINT, remote_control_handler, [?NAGIOS_ENPOINT]}
-        ]}
-    ]),
+-spec start_listeners(AppDescriptionModule) -> ListenerIDs :: [term()].
+start_listeners(AppDescriptionModule) ->
+    TCPServerMocks = AppDescriptionModule:tcp_server_mocks(),
+    _ListenerIDs = lists:map(
+        fun(#tcp_server_mock{port = Port, ssl = UseSSL}) ->
+            % Generate listener name
+            ListenerID = "tcp" ++ integer_to_list(Port),
+
+            ListenerID
+        end, TCPServerMocks).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts a single cowboy https listener.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_listener(ListenerID :: term(), Port :: integer(), Dispatch :: term()) -> ok.
+start_listener(ListenerID, Port, Dispatch) ->
     % Load certificates' paths from env
     {ok, CaCertFile} = application:get_env(?APP_NAME, ca_cert_file),
     {ok, CertFile} = application:get_env(?APP_NAME, cert_file),
     {ok, KeyFile} = application:get_env(?APP_NAME, key_file),
     % Start a https listener on given port
-    ?info("Starting cowboy listener: ~p (~p)", [?REMOTE_CONTROL_LISTENER, RemoteControlPort]),
+    ?info("Starting cowboy listener: ~p (~p)", [ListenerID, Port]),
     {ok, _} = cowboy:start_https(
-        ?REMOTE_CONTROL_LISTENER,
+        ListenerID,
         ?NUMBER_OF_ACCEPTORS,
         [
-            {port, RemoteControlPort},
+            {port, Port},
             {cacertfile, CaCertFile},
             {certfile, CertFile},
             {keyfile, KeyFile}

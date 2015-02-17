@@ -96,7 +96,8 @@ handle(Req, ?NAGIOS_ENPOINT = State) ->
         try
             HealthcheckResponses = [
                 rest_mock_server:healthcheck(),
-                remote_control_server:healthcheck()
+                remote_control_server:healthcheck(),
+                tcp_mock_server:healthcheck()
             ],
 
             AppStatus = case lists:duplicate(length(HealthcheckResponses), ok) of

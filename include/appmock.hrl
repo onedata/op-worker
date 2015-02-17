@@ -25,7 +25,7 @@
 
 % This record describes a single mapping, uniquely distinguished by port and path.
 % It's used to mock HTTP endpoints that will return predefined or dynamically generated answers.
--record(rest_mapping, {
+-record(rest_mock, {
     % port on which requests will be accepted
     port = 443 :: integer(),
     % cowboy_router compatible path on which requests will be accepted
@@ -40,4 +40,11 @@
     response = #rest_response{} :: #rest_response{} | [#rest_response{}] | function(),
     % initial state of the stub
     initial_state = [] :: term()
+}).
+
+% This record represents a TCP server mock.
+-record(tcp_server_mock, {
+    port = 5555,
+    ssl = true,
+
 }).

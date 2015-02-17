@@ -13,7 +13,7 @@
 -author("Lukasz Opiola").
 
 %% API
--export([https_request/6, encode_to_json/1, decode_from_json/1]).
+-export([https_request/6, encode_to_json/1, decode_from_json/1, load_description_module/1]).
 
 %%%===================================================================
 %%% API
@@ -61,3 +61,21 @@ encode_to_json(Term) ->
 -spec decode_from_json(binary()) -> term().
 decode_from_json(JSON) ->
     try mochijson2:decode(JSON, [{format, proplist}]) catch _:_ -> throw(invalid_json) end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Compiles and loads a given .erl file.
+%% @end
+%%--------------------------------------------------------------------
+-spec load_description_module(FilePath :: string()) -> module() | no_return().
+load_description_module(FilePath) ->
+    try
+        FileName = filename:basename(FilePath),
+        {ok, ModuleName} = compile:file(FilePath),
+        {ok, Bin} = file:read_file(filename:rootname(FileName) ++ ".beam"),
+        erlang:load_module(ModuleName, Bin),
+        ModuleName
+    catch T:M ->
+        throw({invalid_app_description_module, {type, T}, {message, M}, {stacktrace, erlang:get_stacktrace()}})
+    end.

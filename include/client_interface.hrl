@@ -22,13 +22,13 @@
 -define(VERIFY_REST_HISTORY_PACK_REQUEST(_VerificationList),
     lists:map(
         fun({_Port, _Path}) ->
-            {<<"mapping">>, [{<<"port">>, _Port}, {<<"path">>, _Path}]}
+            {<<"endpoint">>, [{<<"port">>, _Port}, {<<"path">>, _Path}]}
         end, _VerificationList)
 ).
 % Transform a struct obtained by decoding JSON into a proplist of pairs {Port, Path} (server side).
 -define(VERIFY_REST_HISTORY_UNPACK_REQUEST(_Struct),
     lists:map(
-        fun({<<"mapping">>, [{<<"port">>, _Port}, {<<"path">>, _Path}]}) ->
+        fun({<<"endpoint">>, [{<<"port">>, _Port}, {<<"path">>, _Path}]}) ->
             {_Port, _Path}
         end, _Struct)
 ).
