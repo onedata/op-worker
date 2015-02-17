@@ -24,6 +24,6 @@
 %% to standard log metadata.
 %% @end
 %%--------------------------------------------------------------------
--spec gather_metadata() -> list().
+-spec gather_metadata() -> [{Key :: term(), Value :: term()}].
 gather_metadata() ->
     [].
