@@ -124,19 +124,45 @@ handle(Req, ?VERIFY_REST_HISTORY_PATH = State) ->
         end,
     {ok, NewReq, State};
 
-handle(Req, ?VERIFY_TCP_SERVER_RECEIVED_COWBOY_ROUTE = State) ->
+handle(Req, ?TCP_SERVER_MESSAGE_COUNT_COWBOY_ROUTE = State) ->
     {ok, NewReq} =
         try
             PortBin = req:binding(port, Req),
             Port = binary_to_integer(PortBin),
             % Unpack the request,
             BodyRaw = req:body(Req),
-            Data = ?VERIFY_TCP_SERVER_RECEIVED_UNPACK_REQUEST(BodyRaw),
-            ReplyTerm = case remote_control_server:verify_tcp_server_received(Port, Data) of
-                            ok ->
+            Data = ?TCP_SERVER_MESSAGE_COUNT_UNPACK_REQUEST(BodyRaw),
+            ReplyTerm = case remote_control_server:tcp_server_message_count(Port, Data) of
+                            {ok, Count} ->
+                                ?TCP_SERVER_MESSAGE_COUNT_PACK_RESPONSE(Count);
+                            {error, wrong_endpoint} ->
+                                ?TCP_SERVER_MESSAGE_COUNT_PACK_ERROR_WRONG_ENDPOINT
+                        end,
+            Req2 = cowboy_req:set_resp_body(appmock_utils:encode_to_json(ReplyTerm), Req),
+            Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req2),
+            {ok, _NewReq} = cowboy_req:reply(200, Req3)
+        catch T:M ->
+            ?error_stacktrace("Error in remote_control_handler. Path: ~p. ~p:~p.",
+                [State, T, M]),
+            {ok, _ErrorReq} = cowboy_req:reply(500, Req)
+        end,
+    {ok, NewReq, State};
+
+handle(Req, ?TCP_SERVER_SEND_COWBOY_ROUTE = State) ->
+    {ok, NewReq} =
+        try
+            PortBin = req:binding(port, Req),
+            Port = binary_to_integer(PortBin),
+            % Unpack the request,
+            BodyRaw = req:body(Req),
+            Data = ?TCP_SERVER_SEND_UNPACK_REQUEST(BodyRaw),
+            ReplyTerm = case remote_control_server:tcp_server_send(Port, Data) of
+                            true ->
                                 ?OK_RESULT;
-                            error ->
-                                ?VERIFY_TCP_SERVER_RECEIVED_PACK_ERROR
+                            {error, failed_to_send_data} ->
+                                ?TCP_SERVER_SEND_PACK_SEND_FAILED_ERROR;
+                            {error, wrong_endpoint} ->
+                                ?TCP_SERVER_SEND_PACK_WRONG_ENDPOINT_ERROR
                         end,
             Req2 = cowboy_req:set_resp_body(appmock_utils:encode_to_json(ReplyTerm), Req),
             Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req2),

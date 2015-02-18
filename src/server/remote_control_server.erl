@@ -23,7 +23,7 @@
 %% API
 -export([start_link/0, healthcheck/0]).
 -export([verify_rest_mock_endpoint/3, verify_rest_mock_history/1]).
--export([verify_tcp_server_received/2]).
+-export([tcp_server_message_count/2, tcp_server_send/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -102,10 +102,21 @@ verify_rest_mock_history(ExpectedHistory) ->
 %% for clear API.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_tcp_server_received(Port :: integer(), Data :: binary()) -> ok | error.
-verify_tcp_server_received(Port, Data) ->
-    tcp_mock_server:verify_tcp_server_received(Port, Data).
+-spec tcp_server_message_count(Port :: integer(), Data :: binary()) -> {ok, integer()} | {error, term()}.
+tcp_server_message_count(Port, Data) ->
+    tcp_mock_server:tcp_server_message_count(Port, Data).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends given data to all clients connected to the TCP server on specified port.
+%% This task is delegated straight to tcp_mock_server, but this function is here
+%% for clear API.
+%% @end
+%%--------------------------------------------------------------------
+-spec tcp_server_send(Port :: integer(), Data :: binary()) -> true | {error, term()}.
+tcp_server_send(Port, Data) ->
+    tcp_mock_server:tcp_server_send(Port, Data).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -148,12 +159,16 @@ handle_call(healthcheck, _From, State) ->
     Reply =
         try
             {ok, RCPort} = application:get_env(?APP_NAME, remote_control_port),
-            % Check connectivity to mock verification path with some random data
+            % Check connectivity to rest endpoint verification path with some random data
             {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, <<?VERIFY_REST_ENDPOINT_PATH>>, get, [],
                 <<"{\"port\":10, \"path\":\"/\", \"number\":7}">>),
-            % Check connectivity to mock verify_all path with some random data
+            % Check connectivity to rest history verification path with some random data
             {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, <<?VERIFY_REST_HISTORY_PATH>>, get, [],
-                <<"{\"endpoint\":{\"port\":10, \"path\":\"/\"}}">>),
+                <<"{\"endpoint\":{\"port\":8080, \"path\":\"/\"}}">>),
+            % Check connectivity to tcp server mock verification path with some random data
+            Path = list_to_binary(?TCP_SERVER_MESSAGE_COUNT_PATH(8080)),
+            {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, Path, get, [],
+                <<"random_data!%$$^&%^&*%^&*">>),
             ok
         catch T:M ->
             ?error_stacktrace("Error during ~p healthcheck- ~p:~p", [?MODULE, T, M]),
@@ -245,7 +260,8 @@ start_remote_control_listener() ->
             {?NAGIOS_ENPOINT, remote_control_handler, [?NAGIOS_ENPOINT]},
             {?VERIFY_REST_HISTORY_PATH, remote_control_handler, [?VERIFY_REST_HISTORY_PATH]},
             {?VERIFY_REST_ENDPOINT_PATH, remote_control_handler, [?VERIFY_REST_ENDPOINT_PATH]},
-            {?VERIFY_TCP_SERVER_RECEIVED_COWBOY_ROUTE, remote_control_handler, [?VERIFY_TCP_SERVER_RECEIVED_COWBOY_ROUTE]}
+            {?TCP_SERVER_MESSAGE_COUNT_COWBOY_ROUTE, remote_control_handler, [?TCP_SERVER_MESSAGE_COUNT_COWBOY_ROUTE]},
+            {?TCP_SERVER_SEND_COWBOY_ROUTE, remote_control_handler, [?TCP_SERVER_SEND_COWBOY_ROUTE]}
         ]}
     ]),
     % Load certificates' paths from env

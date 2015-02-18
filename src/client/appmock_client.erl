@@ -19,7 +19,7 @@
 
 %% API
 -export([verify_rest_endpoint/4, verify_rest_history/2]).
--export([verify_tcp_server_received/3]).
+-export([tcp_server_message_count/3, tcp_server_send/3]).
 
 %%%===================================================================
 %%% API
@@ -30,15 +30,18 @@
 %% Performs a request to an appmock instance to verify if a given endpoint mock
 %% has been requested certain amount of times. Returns:
 %% true - when verification succeded
-%% {false, ActualNumber} - when verification failed; ActualNumber informs how many times has the endpoint been requested
-%% {error, term()} - when there has been an error in verification procedure (this implies a bug in appmock).
+%% {false, ActualNumber} - when verification failed; ActualNumber informs
+%%     how many times has the endpoint been requested
+%% {error, term()} - when there has been an error in verification
+%% procedure (this implies a bug in appmock).
 %% @end
 %%--------------------------------------------------------------------
--spec verify_rest_endpoint(Hostname :: binary(), Port :: integer(), Path :: binary(), ExpectedCalls :: integer()) ->
-    true | {false, integer()} | {error, term()}.
+-spec verify_rest_endpoint(Hostname :: binary(), Port :: integer(), Path :: binary(),
+    ExpectedCalls :: integer()) -> true | {false, integer()} | {error, term()}.
 verify_rest_endpoint(Hostname, Port, Path, ExpectedCalls) ->
     try
-        JSON = appmock_utils:encode_to_json(?VERIFY_REST_ENDPOINT_PACK_REQUEST(Port, Path, ExpectedCalls)),
+        JSON = appmock_utils:encode_to_json(
+            ?VERIFY_REST_ENDPOINT_PACK_REQUEST(Port, Path, ExpectedCalls)),
         {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
         {200, _, RespBodyJSON} = appmock_utils:https_request(Hostname, RemoteControlPort,
             <<?VERIFY_REST_ENDPOINT_PATH>>, post, [], JSON),
@@ -47,10 +50,7 @@ verify_rest_endpoint(Hostname, Port, Path, ExpectedCalls) ->
             ?OK_RESULT ->
                 true;
             _ ->
-                case ?VERIFY_REST_ENDPOINT_UNPACK_ERROR(RespBody) of
-                    {error, wrong_endpoint} -> {error, wrong_endpoint};
-                    {error, Number} when is_integer(Number) -> {false, Number}
-                end
+                ?VERIFY_REST_ENDPOINT_UNPACK_ERROR(RespBody)
         end
     catch T:M ->
         ?error("Error in verify_rest_endpoint - ~p:~p", [T, M]),
@@ -64,8 +64,10 @@ verify_rest_endpoint(Hostname, Port, Path, ExpectedCalls) ->
 %% had been requested in correct order. ExpectedOrder is a list of {Port, Path} pairs
 %% that define the expected order of requests. Returns:
 %% true - when verification succeded
-%% {false, ActualOrder} - when verification failed; ActualOrder is a list holding the requests in actual order.
-%% {error, term()} - when there has been an error in verification procedure (this implies a bug in appmock).
+%% {false, ActualOrder} - when verification failed;
+%%    ActualOrderis a list holding the requests in actual order.
+%% {error, term()} - when there has been an error in verification
+%% procedure (this implies a bug in appmock).
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_rest_history(Hostname :: binary(), ExpectedOrder :: PortPathMap) ->
@@ -97,16 +99,45 @@ verify_rest_history(Hostname, ExpectedOrder) ->
 %% that define the expected order of requests. Returns:
 %% true - when verification succeded
 %% false - when verification failed
-%% {error, term()} - when there has been an error in verification procedure (this implies a bug in appmock).
+%% {error, term()} - when there has been an error in verification
+%% procedure (this implies a bug in appmock).
 %% @end
 %%--------------------------------------------------------------------
--spec verify_tcp_server_received(Hostname :: binary(), Port :: integer(), Data :: binary()) ->
+-spec tcp_server_message_count(Hostname :: binary(), Port :: integer(), Data :: binary()) ->
     true | false | {error, term()}.
-verify_tcp_server_received(Hostname, Port, Data) ->
+tcp_server_message_count(Hostname, Port, Data) ->
     try
-        Binary = ?VERIFY_TCP_SERVER_RECEIVED_PACK_REQUEST(Data),
+        Binary = ?TCP_SERVER_MESSAGE_COUNT_PACK_REQUEST(Data),
         {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
-        Path = ?VERIFY_TCP_SERVER_RECEIVED_PATH(Port),
+        Path = ?TCP_SERVER_MESSAGE_COUNT_PATH(Port),
+        {200, _, RespBodyJSON} = appmock_utils:https_request(Hostname, RemoteControlPort,
+            <<(list_to_binary(Path))/binary>>, post, [], Binary),
+        RespBody = appmock_utils:decode_from_json(RespBodyJSON),
+        ?TCP_SERVER_MESSAGE_COUNT_UNPACK_RESPONSE(RespBody)
+    catch T:M ->
+        ?error("Error in tcp_server_message_count - ~p:~p", [T, M]),
+        {error, M}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Performs a request to an appmock instance to verify if the mocked endpoints
+%% had been requested in correct order. ExpectedOrder is a list of {Port, Path} pairs
+%% that define the expected order of requests. Returns:
+%% true - when verification succeded
+%% false - when verification failed
+%% {error, term()} - when there has been an error in verification
+%% procedure (this implies a bug in appmock).
+%% @end
+%%--------------------------------------------------------------------
+-spec tcp_server_send(Hostname :: binary(), Port :: integer(), Data :: binary()) ->
+    true | {error, term()}.
+tcp_server_send(Hostname, Port, Data) ->
+    try
+        Binary = ?TCP_SERVER_SEND_PACK_REQUEST(Data),
+        {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
+        Path = ?TCP_SERVER_SEND_PATH(Port),
         {200, _, RespBodyJSON} = appmock_utils:https_request(Hostname, RemoteControlPort,
             <<(list_to_binary(Path))/binary>>, post, [], Binary),
         RespBody = appmock_utils:decode_from_json(RespBodyJSON),
@@ -114,9 +145,9 @@ verify_tcp_server_received(Hostname, Port, Data) ->
             ?OK_RESULT ->
                 true;
             _ ->
-                false
+                ?TCP_SERVER_SEND_UNPACK_ERROR(RespBody)
         end
     catch T:M ->
-        ?error("Error in verify_tcp_server_received - ~p:~p", [T, M]),
+        ?error("Error in tcp_server_send - ~p:~p", [T, M]),
         {error, M}
     end.

@@ -314,7 +314,7 @@ convert_mappings_to_states_dict(Mappings) ->
     ListenerIDs :: [term()].
 start_listeners_for_mappings(Mappings) ->
     % Create pairs {Port, CowboyDispatch} for every port, where CowboyDispatch
-    % includes all enpoints for a certain port
+    % includes all endpoints for a certain port
     _ListenerIDs = lists:map(
         fun({Port, EndpointsForPort}) ->
             Dispatch = cowboy_router:compile([

@@ -86,6 +86,6 @@ rest_mocks() -> [
 tcp_server_mocks() -> [
     #tcp_server_mock{
         port = 5555,
-        ssl = false
+        ssl = true
     }
 ].
