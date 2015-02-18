@@ -42,7 +42,7 @@ init(_Type, Req, Args) ->
 %% It decodes a request, delegates the logic to remote_control_server and encodes the answer.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Req :: cowboy_req:req(), State :: term()) -> {ok, term(), State :: term()}.
+-spec handle(Req :: cowboy_req:req(), State :: term()) -> {ok, cowboy_req:req(), State :: term()}.
 handle(Req, ?NAGIOS_ENPOINT = State) ->
     {ok, NewReq} =
         try
