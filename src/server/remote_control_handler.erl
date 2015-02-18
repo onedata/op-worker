@@ -30,9 +30,10 @@
 %%--------------------------------------------------------------------
 -spec init(Type :: term(), Req :: cowboy_req:req(), Args :: term()) -> {ok, term(), Path :: string()}.
 init(_Type, Req, Args) ->
-    [Path] = Args,
     % The request state is it's path, so we can easily create cases for handle function.
-    {ok, Req, Path}.
+    [Path] = Args,
+    % This is a REST endpoint, close connection after every request.
+    {ok, cowboy_req:set([{connection, close}], Req), Path}.
 
 
 %%--------------------------------------------------------------------
@@ -82,9 +83,9 @@ handle(Req, ?VERIFY_REST_ENDPOINT_PATH = State) ->
             {Port, Path, Number} = ?VERIFY_REST_ENDPOINT_UNPACK_REQUEST(Body),
             % Verify the endpoint and return the result encoded to JSON.
             ReplyTerm = case remote_control_server:verify_rest_mock_endpoint(Port, Path, Number) of
-                            ok ->
+                            true ->
                                 ?OK_RESULT;
-                            {different, ActualNumber} ->
+                            {false, ActualNumber} ->
                                 ?VERIFY_REST_ENDPOINT_PACK_ERROR(ActualNumber);
                             {error, wrong_endpoint} ->
                                 ?VERIFY_REST_ENDPOINT_PACK_ERROR_WRONG_ENDPOINT
@@ -108,9 +109,9 @@ handle(Req, ?VERIFY_REST_HISTORY_PATH = State) ->
             History = ?VERIFY_REST_HISTORY_UNPACK_REQUEST(BodyStruct),
             % Verify the history and return the result encoded to JSON.
             ReplyTerm = case remote_control_server:verify_rest_mock_history(History) of
-                            ok ->
+                            true ->
                                 ?OK_RESULT;
-                            {different, ActualHistory} ->
+                            {false, ActualHistory} ->
                                 ?VERIFY_REST_HISTORY_PACK_ERROR(ActualHistory)
                         end,
             Req2 = cowboy_req:set_resp_body(appmock_utils:encode_to_json(ReplyTerm), Req),

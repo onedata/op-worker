@@ -89,7 +89,7 @@ produce_response(Req, ETSKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_rest_mock_endpoint(Port :: integer(), Path :: binary(), Number :: integer()) ->
-    ok | {different, integer()} | {error, wrong_enpoind}.
+    true | {false, integer()} | {error, wrong_enpoind}.
 verify_rest_mock_endpoint(Port, Path, Number) ->
     gen_server:call(?SERVER, {verify_rest_mock_endpoint, Port, Path, Number}).
 
@@ -100,7 +100,7 @@ verify_rest_mock_endpoint(Port, Path, Number) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_rest_mock_history(ExpectedOrder :: PortPathMap) ->
-    ok | {different, PortPathMap} | {error, term()} when PortPathMap :: [{Port :: integer(), Path :: binary()}].
+    true | {false, PortPathMap} | {error, term()} when PortPathMap :: [{Port :: integer(), Path :: binary()}].
 verify_rest_mock_history(ExpectedOrder) ->
     gen_server:call(?SERVER, {verify_rest_mock_history, ExpectedOrder}).
 
@@ -174,8 +174,8 @@ handle_call({verify_rest_mock_endpoint, Port, Path, Number}, _From, State) ->
                     {error, wrong_endpoint};
                 {ok, [#rest_mock_state{counter = ActualNumber}]} ->
                     case ActualNumber of
-                        Number -> ok;
-                        _ -> {different, ActualNumber}
+                        Number -> true;
+                        _ -> {false, ActualNumber}
                     end
             end,
     {reply, Reply, State};
@@ -183,8 +183,8 @@ handle_call({verify_rest_mock_endpoint, Port, Path, Number}, _From, State) ->
 handle_call({verify_rest_mock_history, ExpectedHistory}, _From, State) ->
     #state{request_history = ActualHistory} = State,
     Reply = case ExpectedHistory of
-                ActualHistory -> ok;
-                _ -> {different, ActualHistory}
+                ActualHistory -> true;
+                _ -> {false, ActualHistory}
             end,
     {reply, Reply, State};
 

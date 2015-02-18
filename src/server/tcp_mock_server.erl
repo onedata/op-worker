@@ -129,8 +129,20 @@ init([]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_call(healthcheck, _From, #state{} = State) ->
-    Reply = ok,
+handle_call(healthcheck, _From, #state{request_history = RequestHistory} = State) ->
+    Reply =
+        try
+            % Check connectivity to all TCP listeners
+            lists:foreach(
+                fun({Port, _}) ->
+                    {ok, Socket} = gen_tcp:connect("127.0.0.1", Port, []),
+                    gen_tcp:close(Socket)
+                end, RequestHistory),
+            ok
+        catch T:M ->
+            ?error_stacktrace("Error during ~p healthcheck- ~p:~p", [?MODULE, T, M]),
+            error
+        end,
     {reply, Reply, State};
 
 handle_call({register_packet, Port, Data}, _From, State) ->

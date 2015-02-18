@@ -12,7 +12,7 @@
 %%%-------------------------------------------------------------------
 
 % Term that is sent back when an operation has completed successfully.
--define(OK_RESULT, [{<<"result">>, <<"ok">>}]).
+-define(OK_RESULT, [{<<"result">>, <<"true">>}]).
 
 -define(NAGIOS_ENPOINT, "/nagios").
 
@@ -34,11 +34,11 @@
 ).
 % Produces an error message if verification fails (server side).
 -define(VERIFY_REST_HISTORY_PACK_ERROR(_History),
-    [{<<"result">>, <<"error">>}, {<<"history">>, ?VERIFY_REST_HISTORY_PACK_REQUEST(_History)}]).
+    [{<<"result">>, <<"false">>}, {<<"history">>, ?VERIFY_REST_HISTORY_PACK_REQUEST(_History)}]).
 % Retrieves the error details from verify_rest_history error (actual request history) (client side).
 -define(VERIFY_REST_HISTORY_UNPACK_ERROR(_RespBody),
     begin
-        [{<<"result">>, <<"error">>}, {<<"history">>, _Struct}] = _RespBody,
+        [{<<"result">>, <<"false">>}, {<<"history">>, _Struct}] = _RespBody,
         ?VERIFY_REST_HISTORY_UNPACK_REQUEST(_Struct)
     end
 ).
@@ -64,15 +64,15 @@
 ).
 % Produces an error message if verification fails (server side).
 -define(VERIFY_REST_ENDPOINT_PACK_ERROR(_Number),
-    [{<<"result">>, <<"error">>}, {<<"number">>, _Number}]).
+    [{<<"result">>, <<"false">>}, {<<"number">>, _Number}]).
 % Produces an error message if the endpoint requested to be verified does not exis (server side).
 -define(VERIFY_REST_ENDPOINT_PACK_ERROR_WRONG_ENDPOINT,
-    [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}]).
+    [{<<"result">>, <<"false">>}, {<<"reason">>, <<"wrong_endpoint">>}]).
 % Retrieves the error details from verify_rest_endpoint error (client side).
 -define(VERIFY_REST_ENDPOINT_UNPACK_ERROR(_RespBody),
     case _RespBody of
-        [{<<"result">>, <<"error">>}, {<<"number">>, _Number}] -> {error, _Number};
-        [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}] -> {error, wrong_endpoint}
+        [{<<"result">>, <<"false">>}, {<<"number">>, _Number}] -> {error, _Number};
+        [{<<"result">>, <<"false">>}, {<<"reason">>, <<"wrong_endpoint">>}] -> {error, wrong_endpoint}
     end
 ).
 
@@ -93,4 +93,4 @@
 ).
 % Produces an error message if verification fails (server side).
 -define(VERIFY_TCP_SERVER_RECEIVED_PACK_ERROR,
-    [{<<"result">>, <<"error">>}]).
+    [{<<"result">>, <<"false">>}]).

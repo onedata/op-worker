@@ -30,7 +30,8 @@
 %%--------------------------------------------------------------------
 -spec init(Type :: term(), Req :: cowboy_req:req(), [ETSKey]) -> {ok, term(), [ETSKey]} when ETSKey :: {Port :: integer(), Path :: binary()}.
 init(_Type, Req, [ETSKey]) ->
-    {ok, Req, [ETSKey]}.
+    % This is a REST endpoint, close connection after every request.
+    {ok, cowboy_req:set([{connection, close}], Req), [ETSKey]}.
 
 
 %%--------------------------------------------------------------------

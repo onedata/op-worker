@@ -77,7 +77,7 @@ healthcheck() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_rest_mock_endpoint(Port :: integer(), Path :: binary(), Number :: integer()) ->
-    ok | {different, integer()} | {error, wrong_enpoind}.
+    true | {false, integer()} | {error, wrong_enpoind}.
 verify_rest_mock_endpoint(Port, Path, Number) ->
     rest_mock_server:verify_rest_mock_endpoint(Port, Path, Number).
 
@@ -90,7 +90,7 @@ verify_rest_mock_endpoint(Port, Path, Number) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_rest_mock_history(ExpectedHistory :: PortPathMap) ->
-    ok | {different, PortPathMap} | {error, term()} when PortPathMap :: [{Port :: integer(), Path :: binary()}].
+    true | {false, PortPathMap} | {error, term()} when PortPathMap :: [{Port :: integer(), Path :: binary()}].
 verify_rest_mock_history(ExpectedHistory) ->
     rest_mock_server:verify_rest_mock_history(ExpectedHistory).
 
