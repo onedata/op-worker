@@ -61,10 +61,7 @@ translate_from_protobuf(#'MessageStream'{stm_id = StmId, seq_num = SeqNum, eos =
 translate_from_protobuf(#'Token'{value = Val}) ->
     #token{value = Val};
 translate_from_protobuf(undefined) ->
-    undefined;
-translate_from_protobuf(Record) ->
-    ?error("~p:~p - unknown record ~p", [?MODULE, ?LINE, Record]),
-    throw({unknown_record, Record}).
+    undefined.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -118,10 +115,7 @@ translate_to_protobuf(#message_request{stm_id = StmId, lower_seq_num = LoSeqNum,
 translate_to_protobuf(#message_acknowledgement{stm_id = StmId, seq_num = SeqNum}) ->
     #'MessageAcknowledgement'{stm_id = StmId, seq_num = SeqNum};
 translate_to_protobuf(undefined) ->
-    undefined;
-translate_to_protobuf(Record) ->
-    ?error("~p:~p - unknown record ~p", [?MODULE, ?LINE, Record]),
-    throw({unknown_record, Record}).
+    undefined.
 
 %%%===================================================================
 %%% Internal functions
