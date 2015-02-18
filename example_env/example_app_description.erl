@@ -15,11 +15,12 @@
 -include_lib("appmock/include/appmock.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([response_mocks/0]).
+-export([rest_mocks/0, tcp_server_mocks/0]).
 
-% This function should return a list of mappings {Port, Path} -> {Response}.
+% This function should return a list of #rest_mock{} records,
+% which in essence hold mappings {Port, Path} -> {Response}.
 % If a request is performed on certain port and certain path, the response will be returned.
-response_mocks() -> [
+rest_mocks() -> [
     % First type of response can be static binary. It is returned every time the endpoint is requested.
     % #mock_resp has default values for code, content_type and headers. They can be easily overriden,
     % but in most cases it's enough to specify just the 'body' field.
@@ -76,4 +77,15 @@ response_mocks() -> [
             {#rest_response{body = ResponseBody, content_type = <<"text/plain">>}, whatever}
         end,
         initial_state = whatever}
+].
+
+
+% This function should return a list of #tcp_server_mock{} records. A TCP server will be
+% started for each such record. Later on in remote control, the port number is used to uniquely
+% identify a server.
+tcp_server_mocks() -> [
+    #tcp_server_mock{
+        port = 5555,
+        ssl = true
+    }
 ].
