@@ -123,10 +123,8 @@ void tls2tcp_session::handle_handshake(const boost::system::error_code &error)
             client_socket().set_option(boost::asio::ip::tcp::no_delay(true));
 
             // Send message with client's certificate information to the server
-            send_cert_info(verified); //todo check for possible race with start_reading
-
-            // Start reading...
-            start_reading(verified);
+            // and start reading...
+            send_cert_info(verified);
         }
         catch (boost::system::error_code &e) {
             LOG(ERROR) << "Cannot initialize proxy connection due to: "
@@ -173,13 +171,15 @@ void tls2tcp_session::send_cert_info(bool verified)
             {boost::asio::buffer(static_cast<void *>(&*header), sizeof(*header)),
                     boost::asio::buffer(*msg)}};
     auto handler = make_shared_handler([
-            this,
-            header = std::move(header),
-            msg = std::move(msg)
-    ](const boost::system::error_code & ec) mutable
+            t = shared_from_this(),
+            header = std::move(header), //boost asio needs header and msg in buffer
+            msg = std::move(msg),
+            verified
+    ](const boost::system::error_code & ec)
     {
         if (ec)
             LOG(ERROR) << "Cannot send CertificateInfo message.";
+        t->start_reading(verified);
     });
     boost::asio::async_write(
             proxy_socket_, buffers,

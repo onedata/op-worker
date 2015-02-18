@@ -24,7 +24,7 @@ tcp_server::tcp_server(boost::asio::io_service &client_io_service,
                        int verify_type, const std::string &cert_path,
                        uint16_t server_port,
                        std::vector<std::string> ca_crl_dirs)
-    : server(client_io_service, proxy_io_service, verify_type, server_port,
+    : server(client_io_service, proxy_io_service, verify_type,
              std::move(ca_crl_dirs))
     , acceptor_(
           client_io_service,

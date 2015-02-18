@@ -91,6 +91,7 @@ multicall(WorkerName, Request) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Synchronously send request to all workers with given timeout.
+%% Returns list of pairs: node and associated answer.
 %% @end
 %%--------------------------------------------------------------------
 -spec multicall(WorkerName :: worker_name(), Request :: term(), Timeout :: timeout()) ->
@@ -183,7 +184,7 @@ multicast(WorkerName, Request, ReplyTo) ->
 %% @doc
 %% Asynchronously send request to all workers, answer with given MsgId
 %% is expected at ReplyTo process/gen_server. The answer would be
-%% list of pairs: node and associated 'worker_answer' record.
+%% 'worker_answer' record.
 %% @end
 %%--------------------------------------------------------------------
 -spec multicast(WorkerName :: worker_name(), Request :: term(),
@@ -191,8 +192,8 @@ multicast(WorkerName, Request, ReplyTo) ->
     [{Node :: node(), ok | {error, term()}}].
 multicast(WorkerName, Request, ReplyTo, MsgId) ->
     {ok, Nodes} = worker_map:get_worker_nodes(WorkerName),
-    utils:pmap(fun(Node) ->
-        {Node, cast({WorkerName, Node}, Request, ReplyTo, MsgId)}
+    utils:pforeach(fun(Node) ->
+        cast({WorkerName, Node}, Request, ReplyTo, MsgId)
     end, Nodes).
 
 %%%===================================================================

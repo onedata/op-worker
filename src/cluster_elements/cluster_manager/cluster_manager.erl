@@ -263,8 +263,7 @@ heartbeat(State = #cm_state{nodes = Nodes}, SenderNode) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Initializes cluster by starting workers. Additionally sets timer that
-%% initiates checking of cluster state.
+%% Initializes cluster by starting workers.
 %% @end
 %%--------------------------------------------------------------------
 -spec init_cluster(State :: #cm_state{}) -> NewState :: #cm_state{}.

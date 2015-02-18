@@ -12,6 +12,7 @@
 -ifndef(DATASTORE_MODELS_HRL).
 -define(DATASTORE_MODELS_HRL, 1).
 
+%% Definition of session model
 -include("models/session.hrl").
 
 %% Wrapper for all models' records

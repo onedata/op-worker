@@ -222,6 +222,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle first message after opening connection - information from
 %% oneproxy about peer certificate
@@ -241,6 +242,7 @@ handle_oneproxy_certificate_info_message(State, Data) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle usual client data, it is decoded and passed to subsequent handler
 %% functions
@@ -262,6 +264,7 @@ handle_client_message(State = #sock_state{session_id = SessionId}, Data) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle client handshake_request, it is necessary to authenticate
 %% and obtain session
@@ -284,6 +287,7 @@ handle_handshake(State = #sock_state{certificate_info = Cert, socket = Sock,
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle nomal client_message
 %% @end
