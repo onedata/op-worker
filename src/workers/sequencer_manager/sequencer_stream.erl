@@ -113,8 +113,8 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(initialize, #state{seq_disp = SeqDisp, stm_id = StmId} = State) ->
-    {ok, MsgsAckWin} = application:get_env(?APP_NAME, sequencer_stream_msgs_ack_win),
-    {ok, TimeAckWin} = application:get_env(?APP_NAME, sequencer_stream_time_ack_win),
+    {ok, MsgsAckWin} = application:get_env(?APP_NAME, sequencer_stream_messages_ack_window),
+    {ok, TimeAckWin} = application:get_env(?APP_NAME, sequencer_stream_seconds_ack_window),
     erlang:send_after(timer:seconds(TimeAckWin), self(), periodic_ack),
     case gen_server:call(SeqDisp, {sequencer_stream_initialized, StmId}) of
         {ok, #state{} = SeqStmState} ->
