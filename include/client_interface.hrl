@@ -12,7 +12,7 @@
 %%%-------------------------------------------------------------------
 
 % Term that is sent back when an operation has completed successfully.
--define(OK_RESULT, [{<<"result">>, true}]).
+-define(TRUE_RESULT, [{<<"result">>, true}]).
 
 -define(NAGIOS_ENPOINT, "/nagios").
 
@@ -44,37 +44,37 @@
 ).
 
 
-% Endpoint used to verify if a mocked endpoint has been requested certain amount of times.
--define(VERIFY_REST_ENDPOINT_PATH, "/verify_rest_endpoint").
+-define(REST_ENDPOINT_REQUEST_COUNT_PATH, "/rest_endpoint_request_count").
 % Creates a term that is sent as JSON to verify_rest_endpoint endpoint (client side).
--define(VERIFY_REST_ENDPOINT_PACK_REQUEST(_Port, _Path, _Number),
+-define(REST_ENDPOINT_REQUEST_COUNT_REQUEST(_Port, _Path),
     [
         {<<"port">>, _Port},
-        {<<"path">>, _Path},
-        {<<"number">>, _Number}
+        {<<"path">>, _Path}
     ]
 ).
 % Retrieves params sent to verify_rest_endpoint endpoint (server side).
--define(VERIFY_REST_ENDPOINT_UNPACK_REQUEST(_Struct),
+-define(REST_ENDPOINT_REQUEST_COUNT_UNPACK_REQUEST(_Struct),
     {
         proplists:get_value(<<"port">>, _Struct),
-        proplists:get_value(<<"path">>, _Struct),
-        proplists:get_value(<<"number">>, _Struct)
+        proplists:get_value(<<"path">>, _Struct)
     }
 ).
-% Produces an error message if verification fails (server side).
--define(VERIFY_REST_ENDPOINT_PACK_ERROR(_Number),
-    [{<<"result">>, false}, {<<"number">>, _Number}]).
+% Produces success message which carries information of message count.
+-define(REST_ENDPOINT_REQUEST_COUNT_PACK_RESPONSE(_Count),
+    [{<<"result">>, _Count}]
+).
 % Produces an error message if the endpoint requested to be verified does not exis (server side).
--define(VERIFY_REST_ENDPOINT_PACK_ERROR_WRONG_ENDPOINT,
-    [{<<"result">>, false}, {<<"reason">>, <<"wrong_endpoint">>}]).
+-define(REST_ENDPOINT_REQUEST_COUNT_PACK_ERROR_WRONG_ENDPOINT,
+    [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}]).
 % Retrieves the error details from verify_rest_endpoint error (client side).
--define(VERIFY_REST_ENDPOINT_UNPACK_ERROR(_RespBody),
+% Retrieves the response from appmock server (client side).
+-define(REST_ENDPOINT_REQUEST_COUNT_UNPACK_RESPONSE(_RespBody),
     case _RespBody of
-        [{<<"result">>, false}, {<<"number">>, _Number}] -> {false, _Number};
-        [{<<"result">>, false}, {<<"reason">>, <<"wrong_endpoint">>}] -> {error, wrong_endpoint}
+        [{<<"result">>, _Count}] -> {ok, _Count};
+        [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}] -> {error, wrong_endpoint}
     end
 ).
+
 
 
 % Endpoint used to verify if a mocked TCP server has received a given packet.
@@ -98,7 +98,7 @@
 % Produces an error message if the tcp server requested to be verified does not exist (server side).
 -define(TCP_SERVER_MESSAGE_COUNT_PACK_ERROR_WRONG_ENDPOINT,
     [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}]).
-% Retrieves the error details from tcp_server_message_count error (client side).
+% Retrieves the response from appmock server (client side).
 -define(TCP_SERVER_MESSAGE_COUNT_UNPACK_RESPONSE(_RespBody),
     case _RespBody of
         [{<<"result">>, _Count}] -> {ok, _Count};

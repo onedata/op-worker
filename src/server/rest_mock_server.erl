@@ -22,7 +22,7 @@
 
 %% API
 -export([start_link/0, healthcheck/0]).
--export([produce_response/2, verify_rest_mock_endpoint/3, verify_rest_mock_history/1]).
+-export([produce_response/2, rest_endpoint_request_count/2, verify_rest_mock_history/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -88,10 +88,10 @@ produce_response(Req, ETSKey) ->
 %% Handles requests to verify if certain endpoint had been requested given amount of times.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_rest_mock_endpoint(Port :: integer(), Path :: binary(), Number :: integer()) ->
-    true | {false, integer()} | {error, wrong_enpoind}.
-verify_rest_mock_endpoint(Port, Path, Number) ->
-    gen_server:call(?SERVER, {verify_rest_mock_endpoint, Port, Path, Number}).
+-spec rest_endpoint_request_count(Port :: integer(), Path :: binary()) ->
+    {ok, integer()} | {error, wrong_endpoint}.
+rest_endpoint_request_count(Port, Path) ->
+    gen_server:call(?SERVER, {rest_endpoint_request_count, Port, Path}).
 
 
 %%--------------------------------------------------------------------
@@ -167,16 +167,13 @@ handle_call({produce_response, Req, ETSKey}, _From, State) ->
     {{Code, Headers, Body}, NewState} = internal_produce_response(Req, ETSKey, State),
     {reply, {ok, {Code, Headers, Body}}, NewState};
 
-handle_call({verify_rest_mock_endpoint, Port, Path, Number}, _From, State) ->
+handle_call({rest_endpoint_request_count, Port, Path}, _From, State) ->
     #state{mock_states = MockStatesDict} = State,
     Reply = case dict:find({Port, Path}, MockStatesDict) of
                 error ->
                     {error, wrong_endpoint};
                 {ok, [#rest_mock_state{counter = ActualNumber}]} ->
-                    case ActualNumber of
-                        Number -> true;
-                        _ -> {false, ActualNumber}
-                    end
+                    {ok, ActualNumber}
             end,
     {reply, Reply, State};
 

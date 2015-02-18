@@ -100,7 +100,7 @@ register_packet(Port, Data) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles requests to verify if a certain data packet has been received by a TCP server mock.
+%% Returns how many times has a TCP esrver received specific message.
 %% This task is delegated straight to tcp_mock_server, but this function is here
 %% for clear API.
 %% @end

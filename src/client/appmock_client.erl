@@ -18,7 +18,7 @@
 -include("appmock_internal.hrl").
 
 %% API
--export([verify_rest_endpoint/4, verify_rest_history/2]).
+-export([rest_endpoint_request_count/3, verify_rest_history/2]).
 -export([tcp_server_message_count/3, tcp_server_send/3]).
 
 %%%===================================================================
@@ -36,22 +36,16 @@
 %% procedure (this implies a bug in appmock).
 %% @end
 %%--------------------------------------------------------------------
--spec verify_rest_endpoint(Hostname :: binary(), Port :: integer(), Path :: binary(),
-    ExpectedCalls :: integer()) -> true | {false, integer()} | {error, term()}.
-verify_rest_endpoint(Hostname, Port, Path, ExpectedCalls) ->
+-spec rest_endpoint_request_count(Hostname :: binary(), Port :: integer(), Path :: binary()) ->
+    true | {false, integer()} | {error, term()}.
+rest_endpoint_request_count(Hostname, Port, Path) ->
     try
-        JSON = appmock_utils:encode_to_json(
-            ?VERIFY_REST_ENDPOINT_PACK_REQUEST(Port, Path, ExpectedCalls)),
+        JSON = appmock_utils:encode_to_json(?REST_ENDPOINT_REQUEST_COUNT_REQUEST(Port, Path)),
         {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
         {200, _, RespBodyJSON} = appmock_utils:https_request(Hostname, RemoteControlPort,
-            <<?VERIFY_REST_ENDPOINT_PATH>>, post, [], JSON),
+            <<?REST_ENDPOINT_REQUEST_COUNT_PATH>>, post, [], JSON),
         RespBody = appmock_utils:decode_from_json(RespBodyJSON),
-        case RespBody of
-            ?OK_RESULT ->
-                true;
-            _ ->
-                ?VERIFY_REST_ENDPOINT_UNPACK_ERROR(RespBody)
-        end
+        ?REST_ENDPOINT_REQUEST_COUNT_UNPACK_RESPONSE(RespBody)
     catch T:M ->
         ?error("Error in verify_rest_endpoint - ~p:~p", [T, M]),
         {error, M}
@@ -65,7 +59,7 @@ verify_rest_endpoint(Hostname, Port, Path, ExpectedCalls) ->
 %% that define the expected order of requests. Returns:
 %% true - when verification succeded
 %% {false, ActualOrder} - when verification failed;
-%%    ActualOrderis a list holding the requests in actual order.
+%%    ActualOrder is a list holding the requests in actual order.
 %% {error, term()} - when there has been an error in verification
 %% procedure (this implies a bug in appmock).
 %% @end
@@ -80,7 +74,7 @@ verify_rest_history(Hostname, ExpectedOrder) ->
             <<?VERIFY_REST_HISTORY_PATH>>, post, [], JSON),
         RespBody = appmock_utils:decode_from_json(RespBodyJSON),
         case RespBody of
-            ?OK_RESULT ->
+            ?TRUE_RESULT ->
                 true;
             _ ->
                 History = ?VERIFY_REST_HISTORY_UNPACK_ERROR(RespBody),
@@ -142,7 +136,7 @@ tcp_server_send(Hostname, Port, Data) ->
             <<(list_to_binary(Path))/binary>>, post, [], Binary),
         RespBody = appmock_utils:decode_from_json(RespBodyJSON),
         case RespBody of
-            ?OK_RESULT ->
+            ?TRUE_RESULT ->
                 true;
             _ ->
                 ?TCP_SERVER_SEND_UNPACK_ERROR(RespBody)

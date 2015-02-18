@@ -22,7 +22,7 @@
 
 %% API
 -export([start_link/0, healthcheck/0]).
--export([verify_rest_mock_endpoint/3, verify_rest_mock_history/1]).
+-export([rest_endpoint_request_count/2, verify_rest_mock_history/1]).
 -export([tcp_server_message_count/2, tcp_server_send/2]).
 
 %% gen_server callbacks
@@ -71,15 +71,15 @@ healthcheck() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles requests to verify if certain endpoint had been requested given amount of times.
+%% Returns how many times has an endpoint been requested.
 %% This task is delegated straight to rest_mock_server, but this function is here
 %% for clear API.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_rest_mock_endpoint(Port :: integer(), Path :: binary(), Number :: integer()) ->
-    true | {false, integer()} | {error, wrong_enpoind}.
-verify_rest_mock_endpoint(Port, Path, Number) ->
-    rest_mock_server:verify_rest_mock_endpoint(Port, Path, Number).
+-spec rest_endpoint_request_count(Port :: integer(), Path :: binary()) ->
+    {ok, integer()} | {error, wrong_endpoint}.
+rest_endpoint_request_count(Port, Path) ->
+    rest_mock_server:rest_endpoint_request_count(Port, Path).
 
 
 %%--------------------------------------------------------------------
@@ -97,7 +97,7 @@ verify_rest_mock_history(ExpectedHistory) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles requests to verify if a certain data packet has been received by a TCP server mock.
+%% Returns how many times has a TCP esrver received specific message.
 %% This task is delegated straight to tcp_mock_server, but this function is here
 %% for clear API.
 %% @end
@@ -133,9 +133,9 @@ tcp_server_send(Port, Data) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-        - spec(init(Args :: term()) ->
-{ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
-{stop, Reason :: term()} | ignore).
+-spec(init(Args :: term()) ->
+    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
+    {stop, Reason :: term()} | ignore).
 init([]) ->
     start_remote_control_listener(),
     {ok, #state{}}.
@@ -160,7 +160,7 @@ handle_call(healthcheck, _From, State) ->
         try
             {ok, RCPort} = application:get_env(?APP_NAME, remote_control_port),
             % Check connectivity to rest endpoint verification path with some random data
-            {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, <<?VERIFY_REST_ENDPOINT_PATH>>, get, [],
+            {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, <<?REST_ENDPOINT_REQUEST_COUNT_PATH>>, get, [],
                 <<"{\"port\":10, \"path\":\"/\", \"number\":7}">>),
             % Check connectivity to rest history verification path with some random data
             {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, <<?VERIFY_REST_HISTORY_PATH>>, get, [],
@@ -259,7 +259,7 @@ start_remote_control_listener() ->
         {'_', [
             {?NAGIOS_ENPOINT, remote_control_handler, [?NAGIOS_ENPOINT]},
             {?VERIFY_REST_HISTORY_PATH, remote_control_handler, [?VERIFY_REST_HISTORY_PATH]},
-            {?VERIFY_REST_ENDPOINT_PATH, remote_control_handler, [?VERIFY_REST_ENDPOINT_PATH]},
+            {?REST_ENDPOINT_REQUEST_COUNT_PATH, remote_control_handler, [?REST_ENDPOINT_REQUEST_COUNT_PATH]},
             {?TCP_SERVER_MESSAGE_COUNT_COWBOY_ROUTE, remote_control_handler, [?TCP_SERVER_MESSAGE_COUNT_COWBOY_ROUTE]},
             {?TCP_SERVER_SEND_COWBOY_ROUTE, remote_control_handler, [?TCP_SERVER_SEND_COWBOY_ROUTE]}
         ]}

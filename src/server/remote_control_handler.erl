@@ -74,21 +74,19 @@ handle(Req, ?NAGIOS_ENPOINT = State) ->
         end,
     {ok, NewReq, State};
 
-handle(Req, ?VERIFY_REST_ENDPOINT_PATH = State) ->
+handle(Req, ?REST_ENDPOINT_REQUEST_COUNT_PATH = State) ->
     {ok, NewReq} =
         try
-            % Unpack the request, getting a history list
+            % Unpack the request, getting port and path
             JSONBody = req:body(Req),
             Body = appmock_utils:decode_from_json(JSONBody),
-            {Port, Path, Number} = ?VERIFY_REST_ENDPOINT_UNPACK_REQUEST(Body),
+            {Port, Path} = ?REST_ENDPOINT_REQUEST_COUNT_UNPACK_REQUEST(Body),
             % Verify the endpoint and return the result encoded to JSON.
-            ReplyTerm = case remote_control_server:verify_rest_mock_endpoint(Port, Path, Number) of
-                            true ->
-                                ?OK_RESULT;
-                            {false, ActualNumber} ->
-                                ?VERIFY_REST_ENDPOINT_PACK_ERROR(ActualNumber);
+            ReplyTerm = case remote_control_server:rest_endpoint_request_count(Port, Path) of
+                            {ok, Count} ->
+                                ?REST_ENDPOINT_REQUEST_COUNT_PACK_RESPONSE(Count);
                             {error, wrong_endpoint} ->
-                                ?VERIFY_REST_ENDPOINT_PACK_ERROR_WRONG_ENDPOINT
+                                ?REST_ENDPOINT_REQUEST_COUNT_PACK_ERROR_WRONG_ENDPOINT
                         end,
             Req2 = cowboy_req:set_resp_body(appmock_utils:encode_to_json(ReplyTerm), Req),
             Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req2),
@@ -110,7 +108,7 @@ handle(Req, ?VERIFY_REST_HISTORY_PATH = State) ->
             % Verify the history and return the result encoded to JSON.
             ReplyTerm = case remote_control_server:verify_rest_mock_history(History) of
                             true ->
-                                ?OK_RESULT;
+                                ?TRUE_RESULT;
                             {false, ActualHistory} ->
                                 ?VERIFY_REST_HISTORY_PACK_ERROR(ActualHistory)
                         end,
@@ -158,7 +156,7 @@ handle(Req, ?TCP_SERVER_SEND_COWBOY_ROUTE = State) ->
             Data = ?TCP_SERVER_SEND_UNPACK_REQUEST(BodyRaw),
             ReplyTerm = case remote_control_server:tcp_server_send(Port, Data) of
                             true ->
-                                ?OK_RESULT;
+                                ?TRUE_RESULT;
                             {error, failed_to_send_data} ->
                                 ?TCP_SERVER_SEND_PACK_SEND_FAILED_ERROR;
                             {error, wrong_endpoint} ->
