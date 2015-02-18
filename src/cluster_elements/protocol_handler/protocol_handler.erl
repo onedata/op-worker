@@ -291,14 +291,10 @@ handle_handshake(State = #sock_state{certificate_info = Cert, socket = Sock,
 -spec handle_normal_message(#sock_state{}, #client_message{}) ->
     {noreply, NewState :: #sock_state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_normal_message(State = #sock_state{sequencer_manager = SeqMan,
-    socket = _Sock, transport = _Transp}, Msg) ->
+handle_normal_message(State = #sock_state{sequencer_manager = SeqMan}, Msg) ->
     case router:preroute_message(SeqMan, Msg) of
         ok ->
             {noreply, State, ?TIMEOUT}
-%%         {_, Response = #server_message{}} ->
-%%             send_server_message(Sock, Transp, Response),
-%%             {noreply, State, ?TIMEOUT};
 %%         {error, Reason} ->
 %%             ?warning("Message ~p handling error: ~p", [Msg, Reason]),
 %%             {stop, {error, Reason}, State}

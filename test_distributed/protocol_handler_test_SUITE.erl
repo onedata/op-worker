@@ -23,20 +23,22 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1,
     multi_message_test/1, client_send_test/1, client_communicate_test/1,
-    client_communiate_async_test/1]).
+    client_communiate_async_test/1, multi_ping_pong_test/1]).
 
+-perf_test({perf_cases, [multi_message_test, multi_ping_pong_test]}).
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
         multi_message_test, client_send_test, client_communicate_test,
-        client_communiate_async_test].
+        client_communiate_async_test, multi_ping_pong_test].
 
--define(CLEANUP, true).
+-define(CLEANUP, false).
 
 %%%===================================================================
 %%% Test function
@@ -109,16 +111,19 @@ protobuf_msg_test(Config) ->
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ok = ssl:close(Sock).
 
+-perf_test([
+    {repeats, 1},
+    {perf_configs, [
+        [{msg_num, 1000000}]
+    ]},
+    {ct_config, [{msg_num, 100}]}
+]).
 multi_message_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+    MsgNum = ?config(msg_num, Config),
     Self = self(),
-    test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_body = #read_event{counter = Counter}}) ->
-            Self ! Counter,
-            ok
-        end),
-    MsgNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    MsgNumbers = lists:seq(1, MsgNum),
     Events = lists:map(
         fun(N) ->
             #'ClientMessage'{message_body = {event, #'Event'{event =
@@ -130,10 +135,17 @@ multi_message_test(Config) ->
             }}}}}
         end, MsgNumbers),
     RawEvents = lists:map(fun(E) -> client_messages:encode_msg(E) end, Events),
+    test_utils:mock_expect(Workers, router, route_message,
+        fun(#client_message{message_body = #read_event{counter = Counter}}) ->
+            Self ! Counter,
+            ok
+        end),
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
+    T1 = os:timestamp(),
     lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
+    T2 = os:timestamp(),
 
     % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
@@ -141,6 +153,11 @@ multi_message_test(Config) ->
         fun(N) ->
             ?assertMatch({ok, N}, test_utils:receive_msg(N, timer:seconds(5)))
         end, MsgNumbers),
+    T3 = os:timestamp(),
+    SendingTime = {sending_time, timer:now_diff(T2, T1)},
+    ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
+    FullTime = {full_time, timer:now_diff(T3, T1)},
+    ct:print("~p ~p ~p", [SendingTime, ReceivingTime, FullTime]),
     ok = ssl:close(Sock).
 
 client_send_test(Config) ->
@@ -222,9 +239,9 @@ client_communiate_async_test(Config) ->
 
     % given
     test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_id = MsgId = #message_id{issuer = server,
+        fun(#client_message{message_id = Id = #message_id{issuer = server,
             recipient = undefined}}) ->
-            Self ! {router_message_called, MsgId},
+            Self ! {router_message_called, Id},
             ok
         end),
 
@@ -235,6 +252,76 @@ client_communiate_async_test(Config) ->
 
     % then
     ?assertEqual({ok, {router_message_called, MsgId2}}, RouterNotification),
+    ok = ssl:close(Sock).
+
+
+-perf_test([
+    {repeats, 1},
+    {perf_configs, [
+        [{msg_num, 100000}]
+    ]},
+    {ct_config, [{msg_num, 100}]}
+]).
+multi_ping_pong_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    MsgNum = ?config(msg_num, Config),
+    MsgNumbers = lists:seq(1, MsgNum),
+    MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
+    Events = lists:map(
+        fun(N) ->
+            ct:print("sending ~p", [N]),
+            #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
+        end, MsgNumbersBin),
+    RawEvents = lists:map(fun(E) -> client_messages:encode_msg(E) end, Events),
+
+    % when
+    {ok, {Sock, _}} = connect_via_token(Worker1),
+    T1 = os:timestamp(),
+    lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
+    T2 = os:timestamp(),
+
+    % then
+    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
+    UnknownMessages = lists:foldl(
+        fun(N, Queued) ->
+            case lists:filter(
+                fun(#'ServerMessage'{message_id = Id}) -> Id =:= N end,
+                Queued)
+            of
+                [] ->
+                    Data =
+                        receive
+                            {ssl, _, Binary} -> Binary
+                        after
+                            timer:seconds(5) -> {error, timeout}
+                        end,
+                    ?assertNotEqual({error, timeout}, Data),
+                    Msg = server_messages:decode_msg(Data, 'ServerMessage'),
+                    case N =:= Msg#'ServerMessage'.message_id of
+                        true ->
+                            ?assertMatch(
+                                #'ServerMessage'{message_body = {pong, #'Pong'{}}},
+                                Msg
+                            ),
+                            Queued;
+                        false ->
+                            [Msg | Queued]
+                    end;
+                [ExistingMsg] ->
+                    ?assertMatch(
+                        #'ServerMessage'{message_body = {pong, #'Pong'{}}},
+                        ExistingMsg
+                    ),
+                    Queued -- [ExistingMsg]
+            end
+        end, [], MsgNumbersBin),
+    ?assertEqual([], UnknownMessages),
+    T3 = os:timestamp(),
+    SendingTime = {sending_time, timer:now_diff(T2, T1)},
+    ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
+    FullTime = {full_time, timer:now_diff(T3, T1)},
+    ct:print("~p ~p ~p", [SendingTime, ReceivingTime, FullTime]),
     ok = ssl:close(Sock).
 
 %%%===================================================================

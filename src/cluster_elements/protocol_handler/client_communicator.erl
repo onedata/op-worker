@@ -37,7 +37,7 @@ send(Msg, SessionId) ->
     {ok, #document{value = #session{connections = Cons}}} = session:get(SessionId),
     RandomIndex = random:uniform(length(Cons)),
     Pid = lists:nth(RandomIndex, Cons),
-    protocol_handler:call(Pid, {send, Msg#server_message{message_id = undefined}}).
+    protocol_handler:call(Pid, {send, Msg}).
 
 %%--------------------------------------------------------------------
 %% @doc
