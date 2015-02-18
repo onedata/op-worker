@@ -33,13 +33,12 @@ public:
      * @param proxy_io_service io_service used for providers's I/O
      * @param verify_type OpenSSL/Boost verify type flag
      * (like @c boost::asio::ssl::verify_peer)
-     * @param server_port Port of the proxy server
      * @param ca_crl_paths Paths to directories with CAs and CRLs. All certs
      * have to be in DER format and have .der and .crl extension respectively.
      */
     server(boost::asio::io_service &client_io_service,
            boost::asio::io_service &proxy_io_service, int verify_type,
-           uint16_t server_port, std::vector<std::string> ca_crl_paths);
+           std::vector<std::string> ca_crl_paths);
 
     virtual ~server() = default;
 
