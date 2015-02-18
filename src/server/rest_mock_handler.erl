@@ -28,7 +28,7 @@
 %% Cowboy callback, called to initialize the state of the handler.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Type :: term(), Req :: cowboy_req:req(), [ETSKey]) -> {ok, term(), [ETSKey]} when ETSKey :: {Port :: integer(), Path :: binary()}.
+-spec init(Type :: term(), Req :: cowboy_req:req(), [ETSKey]) -> {ok, cowboy_req:req(), [ETSKey]} when ETSKey :: {Port :: integer(), Path :: binary()}.
 init(_Type, Req, [ETSKey]) ->
     % This is a REST endpoint, close connection after every request.
     {ok, cowboy_req:set([{connection, close}], Req), [ETSKey]}.
@@ -40,7 +40,7 @@ init(_Type, Req, [ETSKey]) ->
 %% Handles requests to mocked endpoints by delegating them to appmock_server.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Req :: cowboy_req:req(), [ETSKey]) -> {ok, term(), [ETSKey]} when ETSKey :: {Port :: integer(), Path :: binary()}.
+-spec handle(Req :: cowboy_req:req(), [ETSKey]) -> {ok, cowboy_req:req(), [ETSKey]} when ETSKey :: {Port :: integer(), Path :: binary()}.
 handle(Req, [ETSKey]) ->
     {ok, NewReq} =
         try

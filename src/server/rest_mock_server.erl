@@ -288,7 +288,8 @@ get_mappings(ModuleName) ->
 %% in description module and starts the listeners.
 %% @end
 %%--------------------------------------------------------------------
--spec convert_mappings_to_states_dict(Mappings :: [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #rest_mock_state{}}]}]) -> map().
+-spec convert_mappings_to_states_dict(Mappings) -> dict:dict() when
+    Mappings :: [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #rest_mock_state{}}]}].
 convert_mappings_to_states_dict(Mappings) ->
     Dict = dict:new(),
     lists:foldl(
@@ -364,7 +365,7 @@ start_listener(ListenerID, Port, Dispatch) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec internal_produce_response(Req :: cowboy_req:req(), ETSKey :: {Port :: integer(), Path :: binary()}, State :: #state{}) ->
-    {{ok, {Code :: integer(), Headers :: [{term(), term()}], Body :: binary()}}, NewState :: #state{}}.
+    {{Code :: integer(), Headers :: [{term(), term()}], Body :: binary()}, NewState :: #state{}}.
 internal_produce_response(Req, ETSKey, #state{request_history = History, mock_states = MockStatesDict} = ServerState) ->
     % Get the response term and current state by {Port, Path} key
     {ok, [MockStateRec]} = dict:find(ETSKey, MockStatesDict),

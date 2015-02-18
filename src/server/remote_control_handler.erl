@@ -28,7 +28,7 @@
 %% Cowboy callback, called to initialize the state of the handler.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Type :: term(), Req :: cowboy_req:req(), Args :: term()) -> {ok, term(), Path :: string()}.
+-spec init(Type :: term(), Req :: cowboy_req:req(), Args :: term()) -> {ok, cowboy_req:req(), Path :: string()}.
 init(_Type, Req, Args) ->
     % The request state is it's path, so we can easily create cases for handle function.
     [Path] = Args,

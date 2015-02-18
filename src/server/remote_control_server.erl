@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles all requests connected with remote control
+%%% This gen_server handles all requests connected with remote control
 %%% functionalities. Usually, it needs to call other gen_servers to
 %%% process the requests.
 %%% In addition, it starts and stops the remote control cowboy listener.
