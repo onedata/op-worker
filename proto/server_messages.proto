@@ -12,6 +12,7 @@ package one.clproto;
 import "event_messages.proto";
 import "stream_messages.proto";
 import "handshake_messages.proto";
+import "ping_messages.proto";
 
 message ServerMessage {
     optional bytes         message_id     = 1; // should be set when respons is
@@ -33,5 +34,8 @@ message ServerMessage {
 
         // event_messages.proto
         EventSubscription      event_subscription      = 8;
+
+        // ping_messages.proto
+        Pong                   pong                    = 9;
     }
 }

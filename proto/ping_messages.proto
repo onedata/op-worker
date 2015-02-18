@@ -1,0 +1,14 @@
+/**
+ * Ping messages used to check connection.
+ * @author Tomasz Lichon
+ * @copyright (C) 2015 ACK CYFRONET AGH
+ * @copyright This software is released under the MIT license cited in
+ * 'LICENSE.txt'
+ */
+package one.clproto;
+
+message Ping {
+}
+
+message Pong {
+}

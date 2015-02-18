@@ -12,6 +12,7 @@ package one.clproto;
 import "handshake_messages.proto";
 import "stream_messages.proto";
 import "event_messages.proto";
+import "ping_messages.proto";
 
 message ClientMessage {
     optional bytes         message_id     = 1; // should be set when response is
@@ -28,5 +29,8 @@ message ClientMessage {
 
         // event_messages.proto
         Event            event             = 5;
+
+        // ping_messages.proto
+        Ping             ping              = 6;
     }
 }
