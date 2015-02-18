@@ -38,7 +38,7 @@ all() ->
         multi_message_test, client_send_test, client_communicate_test,
         client_communiate_async_test, multi_ping_pong_test].
 
--define(CLEANUP, false).
+-define(CLEANUP, true).
 
 %%%===================================================================
 %%% Test function
@@ -270,7 +270,6 @@ multi_ping_pong_test(Config) ->
     MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
     Events = lists:map(
         fun(N) ->
-            ct:print("sending ~p", [N]),
             #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
         end, MsgNumbersBin),
     RawEvents = lists:map(fun(E) -> client_messages:encode_msg(E) end, Events),
