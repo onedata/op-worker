@@ -3,11 +3,13 @@ import os
 import sys
 import subprocess
 
-def run(image, docker_host=None, detach=False, dns_list=[], envs={}, hostname=None,
+
+# noinspection PyDefaultArgument
+def run(image, docker_host=None, detach=False, dns_list=[], envs={},
+        hostname=None,
         interactive=False, link={}, tty=False, rm=False, reflect=[],
         volumes=[], name=None, workdir=None, user=None, run_params=[],
         command=None):
-
     cmd = ['docker']
 
     if docker_host:

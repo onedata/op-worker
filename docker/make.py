@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
-"""
-Runs 'make' command in a dockerized development environment. The files are
+"""Runs 'make' command in a dockerized development environment. The files are
 copied from 'source directory' to 'output directory' and then the make is ran.
 The copy operation is optimized, so that only new and changed files are copied.
 The script uses user's SSH keys in case dependency fetching is needed.
@@ -9,51 +8,52 @@ The script uses user's SSH keys in case dependency fetching is needed.
 Run the script with -h flag to learn about script's running options.
 """
 
+from os.path import expanduser
 import argparse
-import docker
 import os
 import platform
 import sys
 
-from os.path import expanduser
+from environment import docker
+
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     description='Run make inside a dockerized development environment.')
 
 parser.add_argument(
-    '--image', '-i',
+    '-i', '--image',
     action='store',
     default='onedata/builder',
     help='docker image to use for building',
     dest='image')
 
 parser.add_argument(
-    '--src', '-s',
+    '-s', '--src',
     action='store',
     default=os.getcwd(),
     help='source directory to run make from',
     dest='src')
 
 parser.add_argument(
-    '--dst', '-d',
+    '-d', '--dst',
     action='store',
     default=os.getcwd(),
     help='destination directory where the build will be stored',
     dest='dst')
 
 parser.add_argument(
-    '--keys', '-k',
+    '-k', '--keys',
     action='store',
     default=expanduser("~/.ssh"),
     help='directory of ssh keys used for dependency fetching',
     dest='keys')
 
 parser.add_argument(
-    '--reflect-volume', '-r',
+    '-r', '--reflect-volume',
     action='append',
     default=[],
-    help="host's paths that will be directly reflected in container's filesystem",
+    help="host's paths to reflect in container's filesystem",
     dest='reflect')
 
 parser.add_argument(
