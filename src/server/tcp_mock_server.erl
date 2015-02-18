@@ -22,6 +22,7 @@
 
 %% API
 -export([start_link/0, healthcheck/0]).
+-export([register_packet/2, verify_tcp_server_received/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -32,13 +33,15 @@
     code_change/3]).
 
 -define(SERVER, ?MODULE).
-% Number of acceptors in cowboy listeners
+% Number of acceptors in ranch listeners
 -define(NUMBER_OF_ACCEPTORS, 10).
 
 % Internal state of the gen server
 -record(state, {
     listeners = [] :: [term()],
-    request_history = [] :: [{Port :: integer(), Path :: binary()}]
+    % The history dict holds mappings Packet -> boolean(), where the
+    % boolean value means if given packet was received.
+    request_history = [] :: [{Port :: integer(), History :: dict:dict()}]
 }).
 
 %%%===================================================================
@@ -69,6 +72,28 @@ healthcheck() ->
     gen_server:call(?SERVER, healthcheck, Timeout).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves in history that a certain packet has been received on given port.
+%% @end
+%%--------------------------------------------------------------------
+-spec register_packet(Port :: integer(), Data :: binary()) -> ok.
+register_packet(Port, Data) ->
+    gen_server:call(?SERVER, {register_packet, Port, Data}).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles requests to verify if a certain data packet has been received by a TCP server mock.
+%% This task is delegated straight to tcp_mock_server, but this function is here
+%% for clear API.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_tcp_server_received(Port :: integer(), Data :: binary()) -> ok | error.
+verify_tcp_server_received(Port, Data) ->
+    gen_server:call(?SERVER, {verify_tcp_server_received, Port, Data}).
+
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -86,8 +111,8 @@ healthcheck() ->
 init([]) ->
     {ok, AppDescriptionFile} = application:get_env(?APP_NAME, app_description_file),
     DescriptionModule = appmock_utils:load_description_module(AppDescriptionFile),
-    ListenersIDs = start_listeners(DescriptionModule),
-    {ok, #state{listeners = [ListenersIDs]}}.
+    {ListenersIDs, InitializedHistory} = start_listeners(DescriptionModule),
+    {ok, #state{listeners = ListenersIDs, request_history = InitializedHistory}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -106,6 +131,22 @@ init([]) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 handle_call(healthcheck, _From, #state{} = State) ->
     Reply = ok,
+    {reply, Reply, State};
+
+handle_call({register_packet, Port, Data}, _From, State) ->
+    #state{request_history = RequestHistory} = State,
+    HistoryForPort = proplists:get_value(Port, RequestHistory),
+    NewHistoryForPort = dict:update(Data, fun(_) -> [true] end, [true], HistoryForPort),
+    NewHistory = [{Port, NewHistoryForPort} | proplists:delete(Port, RequestHistory)],
+    {reply, ok, State#state{request_history = NewHistory}};
+
+handle_call({verify_tcp_server_received, Port, Data}, _From, State) ->
+    #state{request_history = RequestHistory} = State,
+    HistoryForPort = proplists:get_value(Port, RequestHistory),
+    Reply = case dict:find(Data, HistoryForPort) of
+                {ok, [true]} -> ok;
+                error -> error
+            end,
     {reply, Reply, State};
 
 handle_call(_Request, _From, State) ->
@@ -186,45 +227,42 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Starts all TCP servers that were specified in the app desription module.
+%% Starts all TCP servers that were specified in the app description module.
 %% @end
 %%--------------------------------------------------------------------
--spec start_listeners(AppDescriptionModule) -> ListenerIDs :: [term()].
+-spec start_listeners(AppDescriptionModule :: module()) ->
+    {ListenerIDs :: [term()], InitializedHistory :: [{Port :: integer(), History :: [binary()]}]}.
 start_listeners(AppDescriptionModule) ->
     TCPServerMocks = AppDescriptionModule:tcp_server_mocks(),
-    _ListenerIDs = lists:map(
+    ListenerIDsAndPorts = lists:map(
         fun(#tcp_server_mock{port = Port, ssl = UseSSL}) ->
             % Generate listener name
             ListenerID = "tcp" ++ integer_to_list(Port),
-
-            ListenerID
-        end, TCPServerMocks).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts a single cowboy https listener.
-%% @end
-%%--------------------------------------------------------------------
--spec start_listener(ListenerID :: term(), Port :: integer(), Dispatch :: term()) -> ok.
-start_listener(ListenerID, Port, Dispatch) ->
-    % Load certificates' paths from env
-    {ok, CaCertFile} = application:get_env(?APP_NAME, ca_cert_file),
-    {ok, CertFile} = application:get_env(?APP_NAME, cert_file),
-    {ok, KeyFile} = application:get_env(?APP_NAME, key_file),
-    % Start a https listener on given port
-    ?info("Starting cowboy listener: ~p (~p)", [ListenerID, Port]),
-    {ok, _} = cowboy:start_https(
-        ListenerID,
-        ?NUMBER_OF_ACCEPTORS,
-        [
-            {port, Port},
-            {cacertfile, CaCertFile},
-            {certfile, CertFile},
-            {keyfile, KeyFile}
-        ],
-        [
-            {env, [{dispatch, Dispatch}]}
-        ]),
-    ok.
+            Protocol = case UseSSL of
+                           true -> ranch_ssl;
+                           false -> ranch_tcp
+                       end,
+            Opts = case UseSSL of
+                       true ->
+                           {ok, CaCertFile} = application:get_env(?APP_NAME, ca_cert_file),
+                           {ok, CertFile} = application:get_env(?APP_NAME, cert_file),
+                           {ok, KeyFile} = application:get_env(?APP_NAME, key_file),
+                           [
+                               {port, Port},
+                               {cacertfile, CaCertFile},
+                               {certfile, CertFile},
+                               {keyfile, KeyFile}
+                           ];
+                       false ->
+                           [{port, Port}]
+                   end,
+            {ok, _} = ranch:start_listener(ListenerID, ?NUMBER_OF_ACCEPTORS,
+                Protocol, Opts, tcp_mock_handler, [Port]),
+            {ListenerID, Port}
+        end, TCPServerMocks),
+    {ListenerIDs, Ports} = lists:unzip(ListenerIDsAndPorts),
+    InitializedHistory = lists:map(
+        fun(Port) ->
+            {Port, dict:new()}
+        end, Ports),
+    {ListenerIDs, InitializedHistory}.

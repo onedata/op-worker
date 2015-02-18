@@ -10,6 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(remote_control_handler).
+-behaviour(cowboy_http_handler).
 -author("Lukasz Opiola").
 
 -include_lib("ctool/include/logging.hrl").
@@ -41,11 +42,42 @@ init(_Type, Req, Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Req :: cowboy_req:req(), State :: term()) -> {ok, term(), State :: term()}.
+handle(Req, ?NAGIOS_ENPOINT = State) ->
+    {ok, NewReq} =
+        try
+            HealthcheckResponses = [
+                rest_mock_server:healthcheck(),
+                remote_control_server:healthcheck(),
+                tcp_mock_server:healthcheck()
+            ],
+
+            AppStatus = case lists:duplicate(length(HealthcheckResponses), ok) of
+                            HealthcheckResponses -> ok;
+                            _ -> error
+                        end,
+
+            {{YY, MM, DD}, {Hour, Min, Sec}} = calendar:now_to_local_time(now()),
+            DateString = gui_str:format("~4..0w/~2..0w/~2..0w ~2..0w:~2..0w:~2..0w", [YY, MM, DD, Hour, Min, Sec]),
+            Healthdata = {healthdata, [{date, DateString}, {status, atom_to_list(AppStatus)}], []},
+            Content = lists:flatten([Healthdata]),
+            Export = xmerl:export_simple(Content, xmerl_xml),
+            Reply = io_lib:format("~s", [lists:flatten(Export)]),
+
+            % Send the reply
+            {ok, Req2} = cowboy_req:reply(200, [{<<"content-type">>, <<"application/xml">>}], Reply, Req),
+            {ok, Req2}
+        catch T:M ->
+            ?error_stacktrace("Error in remote_control_handler. Path: ~p. ~p:~p.",
+                [State, T, M]),
+            {ok, _ErrorReq} = cowboy_req:reply(500, Req)
+        end,
+    {ok, NewReq, State};
+
 handle(Req, ?VERIFY_REST_ENDPOINT_PATH = State) ->
     {ok, NewReq} =
         try
             % Unpack the request, getting a history list
-            {ok, JSONBody, _} = cowboy_req:body(Req),
+            JSONBody = req:body(Req),
             Body = appmock_utils:decode_from_json(JSONBody),
             {Port, Path, Number} = ?VERIFY_REST_ENDPOINT_UNPACK_REQUEST(Body),
             % Verify the endpoint and return the result encoded to JSON.
@@ -71,7 +103,7 @@ handle(Req, ?VERIFY_REST_HISTORY_PATH = State) ->
     {ok, NewReq} =
         try
             % Unpack the request, getting a history list
-            {ok, JSONBody, _} = cowboy_req:body(Req),
+            JSONBody = req:body(Req),
             BodyStruct = appmock_utils:decode_from_json(JSONBody),
             History = ?VERIFY_REST_HISTORY_UNPACK_REQUEST(BodyStruct),
             % Verify the history and return the result encoded to JSON.
@@ -91,30 +123,23 @@ handle(Req, ?VERIFY_REST_HISTORY_PATH = State) ->
         end,
     {ok, NewReq, State};
 
-handle(Req, ?NAGIOS_ENPOINT = State) ->
+handle(Req, ?VERIFY_TCP_SERVER_RECEIVED_COWBOY_ROUTE = State) ->
     {ok, NewReq} =
         try
-            HealthcheckResponses = [
-                rest_mock_server:healthcheck(),
-                remote_control_server:healthcheck(),
-                tcp_mock_server:healthcheck()
-            ],
-
-            AppStatus = case lists:duplicate(length(HealthcheckResponses), ok) of
-                            HealthcheckResponses -> ok;
-                            _ -> error
+            PortBin = req:binding(port, Req),
+            Port = binary_to_integer(PortBin),
+            % Unpack the request,
+            BodyRaw = req:body(Req),
+            Data = ?VERIFY_TCP_SERVER_RECEIVED_UNPACK_REQUEST(BodyRaw),
+            ReplyTerm = case remote_control_server:verify_tcp_server_received(Port, Data) of
+                            ok ->
+                                ?OK_RESULT;
+                            error ->
+                                ?VERIFY_TCP_SERVER_RECEIVED_PACK_ERROR
                         end,
-
-            {{YY, MM, DD}, {Hour, Min, Sec}} = calendar:now_to_local_time(now()),
-            DateString = gui_str:format("~4..0w/~2..0w/~2..0w ~2..0w:~2..0w:~2..0w", [YY, MM, DD, Hour, Min, Sec]),
-            Healthdata = {healthdata, [{date, DateString}, {status, atom_to_list(AppStatus)}], []},
-            Content = lists:flatten([Healthdata]),
-            Export = xmerl:export_simple(Content, xmerl_xml),
-            Reply = io_lib:format("~s", [lists:flatten(Export)]),
-
-            % Send the reply
-            {ok, Req2} = cowboy_req:reply(200, [{<<"content-type">>, <<"application/xml">>}], Reply, Req),
-            {ok, Req2}
+            Req2 = cowboy_req:set_resp_body(appmock_utils:encode_to_json(ReplyTerm), Req),
+            Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req2),
+            {ok, _NewReq} = cowboy_req:reply(200, Req3)
         catch T:M ->
             ?error_stacktrace("Error in remote_control_handler. Path: ~p. ~p:~p.",
                 [State, T, M]),

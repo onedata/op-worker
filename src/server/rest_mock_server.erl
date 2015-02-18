@@ -125,7 +125,7 @@ init([]) ->
     Mappings = get_mappings(DescriptionModule),
     StatesDict = convert_mappings_to_states_dict(Mappings),
     ListenersIDs = start_listeners_for_mappings(Mappings),
-    {ok, #state{mock_states = StatesDict, listeners = [ListenersIDs]}}.
+    {ok, #state{mock_states = StatesDict, listeners = ListenersIDs}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -266,7 +266,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Analyses the list of mappings returned by response_mocks() of the description module
+%% Analyses the list of mappings returned by rest_mocks() of the description module
 %% and produces a map {Port, Path} -> #mapping_state for every port.
 %% @end
 %%--------------------------------------------------------------------
@@ -274,7 +274,7 @@ code_change(_OldVsn, State, _Extra) ->
     [{Port :: integer(), [{{Port :: integer(), Path :: integer()}, #rest_mock_state{}}]}].
 get_mappings(ModuleName) ->
     % Get all mappings by calling request_mappings/0 function
-    Mappings = ModuleName:response_mocks(),
+    Mappings = ModuleName:rest_mocks(),
     lists:foldl(
         fun(#rest_mock{port = Port, path = Path, response = Resp, initial_state = InitState}, PortsProplist) ->
             EndpointsForPort = proplists:get_value(Port, PortsProplist, []),

@@ -22,7 +22,8 @@
 
 %% API
 -export([start_link/0, healthcheck/0]).
--export([verify_rest_mock_history/1, verify_rest_mock_endpoint/3]).
+-export([verify_rest_mock_endpoint/3, verify_rest_mock_history/1]).
+-export([verify_tcp_server_received/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -94,6 +95,18 @@ verify_rest_mock_history(ExpectedHistory) ->
     rest_mock_server:verify_rest_mock_history(ExpectedHistory).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles requests to verify if a certain data packet has been received by a TCP server mock.
+%% This task is delegated straight to tcp_mock_server, but this function is here
+%% for clear API.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_tcp_server_received(Port :: integer(), Data :: binary()) -> ok | error.
+verify_tcp_server_received(Port, Data) ->
+    tcp_mock_server:verify_tcp_server_received(Port, Data).
+
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -109,9 +122,9 @@ verify_rest_mock_history(ExpectedHistory) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
--spec(init(Args :: term()) ->
-    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore).
+        - spec(init(Args :: term()) ->
+{ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
+{stop, Reason :: term()} | ignore).
 init([]) ->
     start_remote_control_listener(),
     {ok, #state{}}.
@@ -229,9 +242,10 @@ start_remote_control_listener() ->
     {ok, RemoteControlPort} = application:get_env(?APP_NAME, remote_control_port),
     Dispatch = cowboy_router:compile([
         {'_', [
+            {?NAGIOS_ENPOINT, remote_control_handler, [?NAGIOS_ENPOINT]},
             {?VERIFY_REST_HISTORY_PATH, remote_control_handler, [?VERIFY_REST_HISTORY_PATH]},
             {?VERIFY_REST_ENDPOINT_PATH, remote_control_handler, [?VERIFY_REST_ENDPOINT_PATH]},
-            {?NAGIOS_ENPOINT, remote_control_handler, [?NAGIOS_ENPOINT]}
+            {?VERIFY_TCP_SERVER_RECEIVED_COWBOY_ROUTE, remote_control_handler, [?VERIFY_TCP_SERVER_RECEIVED_COWBOY_ROUTE]}
         ]}
     ]),
     % Load certificates' paths from env

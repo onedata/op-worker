@@ -17,8 +17,8 @@
 -define(NAGIOS_ENPOINT, "/nagios").
 
 % Endpoint used to verify if all mocked endpoint were requested in proper order.
--define(VERIFY_REST_HISTORY_PATH, "/verify_all").
-% Transform a proplist of pairs {Port, Path} into a term that is sent as JSON to verify_all endpoint (client side).
+-define(VERIFY_REST_HISTORY_PATH, "/verify_rest_history").
+% Transform a proplist of pairs {Port, Path} into a term that is sent as JSON to verify_rest_history endpoint (client side).
 -define(VERIFY_REST_HISTORY_PACK_REQUEST(_VerificationList),
     lists:map(
         fun({_Port, _Path}) ->
@@ -35,7 +35,7 @@
 % Produces an error message if verification fails (server side).
 -define(VERIFY_REST_HISTORY_PACK_ERROR(_History),
     [{<<"result">>, <<"error">>}, {<<"history">>, ?VERIFY_REST_HISTORY_PACK_REQUEST(_History)}]).
-% Retrieves the error details from verify_all error (actual request history) (client side).
+% Retrieves the error details from verify_rest_history error (actual request history) (client side).
 -define(VERIFY_REST_HISTORY_UNPACK_ERROR(_RespBody),
     begin
         [{<<"result">>, <<"error">>}, {<<"history">>, _Struct}] = _RespBody,
@@ -45,8 +45,8 @@
 
 
 % Endpoint used to verify if a mocked endpoint has been requested certain amount of times.
--define(VERIFY_REST_ENDPOINT_PATH, "/verify").
-% Creates a term that is sent as JSON to verify_mock endpoint (client side).
+-define(VERIFY_REST_ENDPOINT_PATH, "/verify_rest_endpoint").
+% Creates a term that is sent as JSON to verify_rest_endpoint endpoint (client side).
 -define(VERIFY_REST_ENDPOINT_PACK_REQUEST(_Port, _Path, _Number),
     [
         {<<"port">>, _Port},
@@ -54,7 +54,7 @@
         {<<"number">>, _Number}
     ]
 ).
-% Retrieves params sent to verify_mock endpoint (server side).
+% Retrieves params sent to verify_rest_endpoint endpoint (server side).
 -define(VERIFY_REST_ENDPOINT_UNPACK_REQUEST(_Struct),
     {
         proplists:get_value(<<"port">>, _Struct),
@@ -68,10 +68,29 @@
 % Produces an error message if the endpoint requested to be verified does not exis (server side).
 -define(VERIFY_REST_ENDPOINT_PACK_ERROR_WRONG_ENDPOINT,
     [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}]).
-% Retrieves the error details from verify_mock error (client side).
+% Retrieves the error details from verify_rest_endpoint error (client side).
 -define(VERIFY_REST_ENDPOINT_UNPACK_ERROR(_RespBody),
     case _RespBody of
         [{<<"result">>, <<"error">>}, {<<"number">>, _Number}] -> {error, _Number};
         [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}] -> {error, wrong_endpoint}
     end
 ).
+
+
+% Endpoint used to verify if a mocked TCP server has received a given packet.
+% The port binding is used to identify a tcp server.
+-define(VERIFY_TCP_SERVER_RECEIVED_PATH(_Port), "/verify_tcp_server_received/" ++ integer_to_list(_Port)).
+-define(VERIFY_TCP_SERVER_RECEIVED_COWBOY_ROUTE, "/verify_tcp_server_received/:port").
+% Creates message that is sent to verify_tcp_server_received endpoint (client side).
+% For now, its just bare bytes, but the macro stays so it can be easily changed -
+% for example to base64 encoded.
+-define(VERIFY_TCP_SERVER_RECEIVED_PACK_REQUEST(_BinaryData),
+    _BinaryData
+).
+% Retrieves params sent to verify_tcp_server_received endpoint (server side).
+-define(VERIFY_TCP_SERVER_RECEIVED_UNPACK_REQUEST(_BinaryData),
+    _BinaryData
+).
+% Produces an error message if verification fails (server side).
+-define(VERIFY_TCP_SERVER_RECEIVED_PACK_ERROR,
+    [{<<"result">>, <<"error">>}]).
