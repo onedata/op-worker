@@ -114,11 +114,11 @@ protobuf_msg_test(Config) ->
     ok = ssl:close(Sock).
 
 -perf_test([
-    {repeats, 1},
+    {repeats, 3},
     {perf_configs, [
         [{msg_num, 1000000}]
     ]},
-    {ct_config, [{msg_num, 100}]}
+    {ct_config, [{msg_num, 1000}]}
 ]).
 multi_message_test(Config) ->
     % given
@@ -156,10 +156,10 @@ multi_message_test(Config) ->
             ?assertMatch({ok, N}, test_utils:receive_msg(N, timer:seconds(5)))
         end, MsgNumbers),
     T3 = os:timestamp(),
-    SendingTime = {sending_time, timer:now_diff(T2, T1)},
-    ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
-    FullTime = {full_time, timer:now_diff(T3, T1)},
-    ct:print("~p ~p ~p", [SendingTime, ReceivingTime, FullTime]),
+    _SendingTime = {sending_time, timer:now_diff(T2, T1)},
+    _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
+    _FullTime = {full_time, timer:now_diff(T3, T1)},
+%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
     ok = ssl:close(Sock).
 
 client_send_test(Config) ->
