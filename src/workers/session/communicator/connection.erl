@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles client and provider requests
+%%% This module handles client and provider requests.
 %%% @end
 %%%-------------------------------------------------------------------
--module(protocol_handler).
+-module(connection).
 -author("Tomasz Lichon").
 
 -behaviour(ranch_protocol).
@@ -201,8 +201,7 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #sock_state{}) -> term().
-terminate(_Reason, #sock_state{session_id = SessionId}) ->
-    session:remove_connection(self(), SessionId),
+terminate(_Reason, _State) ->
     ok.
 
 %%--------------------------------------------------------------------
@@ -248,9 +247,9 @@ handle_oneproxy_certificate_info_message(State, Data) ->
 -spec handle_client_message(#sock_state{}, binary()) ->
     {noreply, NewState :: #sock_state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_client_message(State = #sock_state{session_id = SessionId}, Data) ->
-    try serializator:deserialize_client_message(Data, SessionId) of
-        {ok, Msg} when SessionId == undefined ->
+handle_client_message(State = #sock_state{session_id = SessId}, Data) ->
+    try serializator:deserialize_client_message(Data, SessId) of
+        {ok, Msg} when SessId == undefined ->
             handle_handshake(State, Msg);
         {ok, Msg} ->
             handle_normal_message(State, Msg)
@@ -271,11 +270,11 @@ handle_client_message(State = #sock_state{session_id = SessionId}, Data) ->
     {stop, Reason :: term(), NewState :: #sock_state{}}.
 handle_handshake(State = #sock_state{certificate_info = Cert, socket = Sock,
     transport = Transp}, Msg) ->
-    try client_auth:handle_handshake(Msg, Cert) of
+    try auth_manager:handle_handshake(Msg, Cert) of
         {ok, Response = #server_message{message_body =
-        #handshake_response{session_id = NewSessionId}}} ->
+        #handshake_response{session_id = NewSessId}}} ->
             send_server_message(Sock, Transp, Response),
-            {noreply, State#sock_state{session_id = NewSessionId}, ?TIMEOUT}
+            {noreply, State#sock_state{session_id = NewSessId}, ?TIMEOUT}
     catch
         _:Error ->
             ?warning_stacktrace("Handshake ~p, error ~p", [Msg, Error]),

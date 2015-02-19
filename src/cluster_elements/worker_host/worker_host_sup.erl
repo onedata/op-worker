@@ -60,7 +60,7 @@ start_link(Name, Args) ->
 init(Args) ->
     DefaultRestartStrategy = one_for_one,
     DefaultMaxR = 1000,
-    DefaultMaxT = timer:hours(1),
+    DefaultMaxT = 3600,
     SupervisorSpec = proplists:get_value(supervisor_spec, Args, {
         DefaultRestartStrategy,
         DefaultMaxR,

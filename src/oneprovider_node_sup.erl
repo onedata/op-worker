@@ -62,7 +62,7 @@ start_link(NodeType) ->
 init([ccm]) ->
     RestartStrategy = one_for_one,
     MaxR = 5,
-    MaxT = timer:seconds(10),
+    MaxT = 10,
     {ok, {{RestartStrategy, MaxR, MaxT}, [
         cluster_state_notifier_spec(),
         cluster_manager_spec(),
@@ -73,7 +73,7 @@ init([ccm]) ->
 init([worker]) ->
     RestartStrategy = one_for_one,
     MaxR = 5,
-    MaxT = timer:seconds(10),
+    MaxT = 10,
     {ok, {{RestartStrategy, MaxR, MaxT}, [
         main_worker_sup_spec(),
         request_dispatcher_spec(),

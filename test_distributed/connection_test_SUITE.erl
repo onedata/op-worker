@@ -8,7 +8,7 @@
 %%% @doc This module tests protocol handler
 %%% @end
 %%%--------------------------------------------------------------------
--module(protocol_handler_test_SUITE).
+-module(connection_test_SUITE).
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/client_messages.hrl").
@@ -31,7 +31,7 @@
 
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
-        multi_message_test, client_send_test].
+        multi_message_test].
 
 -define(CLEANUP, true).
 
@@ -51,7 +51,9 @@ token_connection_test(Config) ->
 cert_connection_test(Config) ->
     % given
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
-    HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{}}},
+    HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{
+        session_id = <<"session_id">>
+    }}},
     HandshakeReqRaw = client_messages:encode_msg(HandshakeReq),
     Pid = self(),
     test_utils:mock_expect(Workers, serializator, deserialize_oneproxy_certificate_info_message,
@@ -204,7 +206,6 @@ end_per_testcase(Case, Config) when Case =:= protobuf_msg_test
 end_per_testcase(_, _) ->
     ssl:stop().
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -218,7 +219,8 @@ end_per_testcase(_, _) ->
 connect_via_token(Node) ->
     % given
     TokenAuthMessage = #'ClientMessage'{message_body =
-    {handshake_request, #'HandshakeRequest'{token = #'Token'{value = <<"VAL">>}}}},
+    {handshake_request, #'HandshakeRequest'{session_id = <<"session_id">>,
+        token = #'Token'{value = <<"VAL">>}}}},
     TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
 
     % when

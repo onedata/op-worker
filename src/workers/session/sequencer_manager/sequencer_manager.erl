@@ -10,7 +10,7 @@
 %%% for dispatching messages associated with given session to sequencer streams.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer_dispatcher).
+-module(sequencer_manager).
 -author("Krzysztof Trzepla").
 
 -behaviour(gen_server).
@@ -22,20 +22,20 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/3]).
+-export([start_link/2, route_message/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
 %% sequencer dispatcher state:
-%% sess_id     - ID of session associated with event dispatcher
-%% seq_stm_sup - pid of sequencer stream supervisor
-%% seq_stms    - mapping from message ID to sequencer stream
+%% session_id           - ID of session associated with event dispatcher
+%% sequencer_stream_sup - pid of sequencer stream supervisor
+%% sequencer_streams    - mapping from message ID to sequencer stream
 -record(state, {
-    sess_id :: session:id(),
-    seq_stm_sup :: pid(),
-    seq_stms = #{} :: map()
+    session_id :: session:id(),
+    sequencer_stream_sup :: pid(),
+    sequencer_streams = #{} :: map()
 }).
 
 %%%===================================================================
@@ -47,10 +47,25 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SeqDispSup :: pid(), SeqStmSup :: pid(), SessId :: session:id()) ->
+-spec start_link(SeqManSup :: pid(), SessId :: session:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SeqDispSup, SeqStmSup, SessId) ->
-    gen_server:start_link(?MODULE, [SeqDispSup, SeqStmSup, SessId], []).
+start_link(SeqManSup, SessId) ->
+    gen_server:start_link(?MODULE, [SeqManSup, SessId], []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Routes message through sequencer manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec route_message(Msg :: #client_message{}, SessId :: session:id()) ->
+    ok | {error, Reason :: term()}.
+route_message(Msg, SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{sequencer_manager = SeqMan}}} ->
+            gen_server:cast(SeqMan, Msg);
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -65,17 +80,11 @@ start_link(SeqDispSup, SeqStmSup, SessId) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SeqDispSup, SeqStmSup, SessId]) ->
+init([SeqManSup, SessId]) ->
     process_flag(trap_exit, true),
-    case sequencer_dispatcher_data:create(#document{key = SessId,
-        value = #sequencer_dispatcher_data{node = node(), pid = self(), sup = SeqDispSup}
-    }) of
-        {ok, SessId} ->
-            ok = reset_message_stream(SessId),
-            {ok, #state{seq_stm_sup = SeqStmSup, sess_id = SessId}};
-        {error, Reason} ->
-            {stop, Reason}
-    end.
+    {ok, SessId} = session:update(SessId, #{sequencer_manager => self()}),
+    gen_server:cast(self(), {initialize, SeqManSup}),
+    {ok, #state{session_id = SessId}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -91,13 +100,15 @@ init([SeqDispSup, SeqStmSup, SessId]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_call({sequencer_stream_initialized, StmId}, {Pid, _}, #state{seq_stms = SeqStms} = State) ->
+handle_call({sequencer_stream_initialized, StmId}, {Pid, _},
+    #state{sequencer_streams = SeqStms} = State) ->
     case maps:find(StmId, SeqStms) of
         {ok, {state, SeqStmState, PendingMsgs}} ->
             lists:foreach(fun(Msg) ->
                 gen_server:cast(Pid, Msg)
             end, lists:reverse(PendingMsgs)),
-            {reply, {ok, SeqStmState}, State#state{seq_stms = maps:put(StmId, {pid, Pid}, SeqStms)}};
+            {reply, {ok, SeqStmState}, State#state{
+                sequencer_streams = maps:put(StmId, {pid, Pid}, SeqStms)}};
         _ ->
             {reply, undefined, State}
     end;
@@ -116,27 +127,36 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast({sequencer_stream_terminated, StmId, normal, _}, #state{seq_stms = SeqStms} = State) ->
-    {noreply, State#state{seq_stms = maps:remove(StmId, SeqStms)}};
+handle_cast({initialize, SeqManSup}, #state{session_id = SessId} = State) ->
+    {ok, SeqStmSup} = get_sequencer_stream_sup(SeqManSup),
+    reset_message_stream(SessId),
+    {noreply, State#state{sequencer_stream_sup = SeqStmSup}};
 
-handle_cast({sequencer_stream_terminated, StmId, _, SeqStmState}, #state{seq_stms = SeqStms} = State) ->
-    {noreply, State#state{seq_stms = maps:put(StmId, {state, SeqStmState, []}, SeqStms)}};
+handle_cast({sequencer_stream_terminated, StmId, shutdown, _},
+    #state{sequencer_streams = SeqStms} = State) ->
+    {noreply, State#state{sequencer_streams = maps:remove(StmId, SeqStms)}};
+
+handle_cast({sequencer_stream_terminated, StmId, _, SeqStmState},
+    #state{sequencer_streams = SeqStms} = State) ->
+    {noreply, State#state{
+        sequencer_streams = maps:put(StmId, {state, SeqStmState, []}, SeqStms)}};
 
 handle_cast(#client_message{message_stream = #message_stream{stm_id = StmId}} = Msg,
-    #state{seq_stm_sup = SeqStmSup, seq_stms = SeqStms, sess_id = SessId} = State) ->
+    #state{sequencer_stream_sup = SeqStmSup, sequencer_streams = SeqStms,
+        session_id = SessId} = State) ->
     case maps:find(StmId, SeqStms) of
         {ok, {pid, Pid}} ->
             gen_server:cast(Pid, Msg),
             {noreply, State};
         {ok, {state, SeqStmState, PendingMsgs}} ->
-            {noreply, State#state{seq_stms = maps:put(StmId, {state, SeqStmState,
-                [Msg | PendingMsgs]}, SeqStms)}};
-        _ ->
+            {noreply, State#state{sequencer_streams = maps:put(StmId, {state,
+                SeqStmState, [Msg | PendingMsgs]}, SeqStms)}};
+        error ->
             SeqDisp = self(),
             {ok, _SeqStm} = sequencer_stream_sup:start_sequencer_stream(SeqStmSup,
                 SeqDisp, SessId, StmId),
-            {noreply, State#state{seq_stms = maps:put(StmId, {state, undefined,
-                [Msg]}, SeqStms)}}
+            {noreply, State#state{sequencer_streams = maps:put(StmId, {state,
+                undefined, [Msg]}, SeqStms)}}
     end;
 
 handle_cast(_Request, State) ->
@@ -168,9 +188,9 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(Reason, #state{sess_id = SessId} = State) ->
-    ?warning("Sequencer dispatcher terminated in state ~p due to: ~p", [State, Reason]),
-    sequencer_dispatcher_data:delete(SessId).
+terminate(Reason, #state{session_id = SessId} = State) ->
+    ?warning("Sequencer manager terminated in state ~p due to: ~p", [State, Reason]),
+    session:update(SessId, #{sequencer_manager => undefined}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -190,11 +210,29 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Resets each client message stream, so that sequence number starts from '1'.
+%% Returns sequencer stream supervisor associated with sequencer manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_sequencer_stream_sup(SeqManSup :: pid()) ->
+    {ok, SeqStmSup :: pid()} | {error, not_found}.
+get_sequencer_stream_sup(SeqManSup) ->
+    Id = sequencer_stream_sup,
+    Children = supervisor:which_children(SeqManSup),
+    case lists:keyfind(Id, 1, Children) of
+        {Id, SeqStmSup, _, _} when is_pid(SeqStmSup) -> {ok, SeqStmSup};
+        _ -> {error, not_found}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends 'message_stream_reset' request to the client. Sequence numbers
+%% of each client stream should by reinitialized and unconfirmed messages
+%% should be resent.
 %% @end
 %%--------------------------------------------------------------------
 -spec reset_message_stream(SessId :: session:id()) ->
     ok | {error, Reason :: term()}.
 reset_message_stream(SessId) ->
-    Msg = #server_message{message_body = #message_stream_reset{}},
-    client_communicator:send(Msg, SessId).
+    Msg = #message_stream_reset{},
+    communicator:send(Msg, SessId).

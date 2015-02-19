@@ -39,11 +39,11 @@ start_link() ->
 %% Starts sequencer stream supervised by sequencer stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_sequencer_stream(SeqStmSup :: pid(), SeqDisp :: pid(),
+-spec start_sequencer_stream(SeqStmSup :: pid(), SeqMan :: pid(),
     SessId :: session:id(), StmId :: non_neg_integer()) ->
     supervisor:startchild_ret().
-start_sequencer_stream(SeqStmSup, SeqDisp, SessId, StmId) ->
-    supervisor:start_child(SeqStmSup, [SeqDisp, SessId, StmId]).
+start_sequencer_stream(SeqStmSup, SeqMan, SessId, StmId) ->
+    supervisor:start_child(SeqStmSup, [SeqMan, SessId, StmId]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -67,7 +67,7 @@ start_sequencer_stream(SeqStmSup, SeqDisp, SessId, StmId) ->
 init([]) ->
     RestartStrategy = simple_one_for_one,
     MaxR = 3,
-    MaxT = timer:minutes(1),
+    MaxT = 1,
     {ok, {{RestartStrategy, MaxR, MaxT}, [sequencer_stream_spec()]}}.
 
 %%%===================================================================

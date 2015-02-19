@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Session model definitions
+%%% Session model definitions.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -18,11 +18,14 @@
 }).
 
 %% session:
-%% credentials - owner credentials
-%% connections - list of connections' pids
--record(session,{
+%% cred - owner credentials
+-record(session, {
     credentials :: #credentials{},
-    connections :: list() %todo consider extracting connection to independent record
+    node :: node(),
+    session_sup :: pid(),
+    event_manager :: pid(),
+    sequencer_manager :: pid(),
+    communicator :: pid()
 }).
 
 -endif.

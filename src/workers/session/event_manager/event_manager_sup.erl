@@ -10,13 +10,13 @@
 %%% for supervising and restarting event managers.
 %%% @end
 %%%-------------------------------------------------------------------
--module(event_dispatcher_sup).
+-module(event_manager_sup).
 -author("Krzysztof Trzepla").
 
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_event_stream_sup/1, start_event_dispatcher/3]).
+-export([start_link/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -30,33 +30,10 @@
 %% Starts the supervisor
 %% @end
 %%--------------------------------------------------------------------
--spec start_link() -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link() ->
-    supervisor:start_link(?MODULE, []).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts event stream supervisor supervised by event manager
-%% supervisor.
-%% @end
-%%--------------------------------------------------------------------
--spec start_event_stream_sup(EvtDispSup :: pid()) ->
-    supervisor:startchild_ret().
-start_event_stream_sup(EvtDispSup) ->
-    ChildSpec = event_stream_sup_spec(),
-    supervisor:start_child(EvtDispSup, ChildSpec).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts event dispatcher supervised by event dispatcher
-%% supervisor.
-%% @end
-%%--------------------------------------------------------------------
--spec start_event_dispatcher(EvtDispSup :: pid(), EvtStmSup :: pid(),
-    SessionId :: session:id()) -> supervisor:startchild_ret().
-start_event_dispatcher(EvtDispSup, EvtStmSup, SessionId) ->
-    ChildSpec = event_dispatcher_spec(EvtDispSup, EvtStmSup, SessionId),
-    supervisor:start_child(EvtDispSup, ChildSpec).
+-spec start_link(SessId :: session:id()) ->
+    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+start_link(SessId) ->
+    supervisor:start_link(?MODULE, [SessId]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -77,11 +54,14 @@ start_event_dispatcher(EvtDispSup, EvtStmSup, SessionId) ->
         [ChildSpec :: supervisor:child_spec()]
     }} |
     ignore.
-init([]) ->
+init([SessId]) ->
     RestartStrategy = one_for_all,
     MaxR = 3,
-    MaxT = timer:minutes(1),
-    {ok, {{RestartStrategy, MaxR, MaxT}, []}}.
+    MaxT = 1,
+    {ok, {{RestartStrategy, MaxR, MaxT}, [
+        event_stream_sup_spec(),
+        event_manager_spec(self(), SessId)
+    ]}}.
 
 %%%===================================================================
 %%% Internal functions
@@ -90,29 +70,28 @@ init([]) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a supervisor child_spec for a event stream supervisor.
+%% Returns a supervisor child_spec for an event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
 -spec event_stream_sup_spec() -> supervisor:child_spec().
 event_stream_sup_spec() ->
     Id = Module = event_stream_sup,
     Restart = permanent,
-    Shutdown = timer:seconds(10),
+    Shutdown = infinity,
     Type = supervisor,
     {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a supervisor child_spec for a event dispatcher.
+%% Returns a worker child_spec for an event manager.
 %% @end
 %%--------------------------------------------------------------------
--spec event_dispatcher_spec(EvtDispSup :: pid(), EvtStmSup :: pid(),
-    SessionId :: session:id()) -> supervisor:child_spec().
-event_dispatcher_spec(EvtDispSup, EvtStmSup, SessionId) ->
-    Id = Module = event_dispatcher,
+-spec event_manager_spec(EvtManSup :: pid(), SessId :: session:id()) ->
+    supervisor:child_spec().
+event_manager_spec(EvtManSup, SessId) ->
+    Id = Module = event_manager,
     Restart = permanent,
     Shutdown = timer:seconds(10),
     Type = worker,
-    {Id, {Module, start_link, [EvtDispSup, EvtStmSup, SessionId]},
-        Restart, Shutdown, Type, [Module]}.
+    {Id, {Module, start_link, [EvtManSup, SessId]}, Restart, Shutdown, Type, [Module]}.

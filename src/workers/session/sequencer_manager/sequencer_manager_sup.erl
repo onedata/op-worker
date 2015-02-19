@@ -10,13 +10,13 @@
 %%% for supervising and restarting sequencer managers.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer_dispatcher_sup).
+-module(sequencer_manager_sup).
 -author("Krzysztof Trzepla").
 
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_sequencer_stream_sup/1, start_sequencer_dispatcher/3]).
+-export([start_link/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -30,33 +30,10 @@
 %% Starts the supervisor
 %% @end
 %%--------------------------------------------------------------------
--spec start_link() -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link() ->
-    supervisor:start_link(?MODULE, []).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts sequencer stream supervisor supervised by sequencer manager
-%% supervisor.
-%% @end
-%%--------------------------------------------------------------------
--spec start_sequencer_stream_sup(SeqDispSup :: pid()) ->
-    supervisor:startchild_ret().
-start_sequencer_stream_sup(SeqDispSup) ->
-    ChildSpec = sequencer_stream_sup_spec(),
-    supervisor:start_child(SeqDispSup, ChildSpec).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts sequencer dispatcher supervised by sequencer dispatcher
-%% supervisor.
-%% @end
-%%--------------------------------------------------------------------
--spec start_sequencer_dispatcher(SeqDispSup :: pid(), SeqStmSup :: pid(),
-    SessId :: session:id()) -> supervisor:startchild_ret().
-start_sequencer_dispatcher(SeqDispSup, SeqStmSup, SessId) ->
-    ChildSpec = sequencer_dispatcher_spec(SeqDispSup, SeqStmSup, SessId),
-    supervisor:start_child(SeqDispSup, ChildSpec).
+-spec start_link(SessId :: session:id()) ->
+    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+start_link(SessId) ->
+    supervisor:start_link(?MODULE, [SessId]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -77,11 +54,14 @@ start_sequencer_dispatcher(SeqDispSup, SeqStmSup, SessId) ->
         [ChildSpec :: supervisor:child_spec()]
     }} |
     ignore.
-init([]) ->
+init([SessId]) ->
     RestartStrategy = one_for_all,
     MaxR = 3,
     MaxT = timer:minutes(1),
-    {ok, {{RestartStrategy, MaxR, MaxT}, []}}.
+    {ok, {{RestartStrategy, MaxR, MaxT}, [
+        sequencer_stream_sup_spec(),
+        sequencer_manager_spec(self(), SessId)
+    ]}}.
 
 %%%===================================================================
 %%% Internal functions
@@ -97,22 +77,21 @@ init([]) ->
 sequencer_stream_sup_spec() ->
     Id = Module = sequencer_stream_sup,
     Restart = permanent,
-    Shutdown = timer:seconds(10),
+    Shutdown = infinity,
     Type = supervisor,
     {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a supervisor child_spec for a sequencer dispatcher.
+%% Returns a worker child_spec for a sequencer manager.
 %% @end
 %%--------------------------------------------------------------------
--spec sequencer_dispatcher_spec(SeqDispSup :: pid(), SeqStmSup :: pid(),
-    SessId :: session:id()) -> supervisor:child_spec().
-sequencer_dispatcher_spec(SeqDispSup, SeqStmSup, SessId) ->
-    Id = Module = sequencer_dispatcher,
+-spec sequencer_manager_spec(SeqManSup :: pid(), SessId :: session:id()) ->
+    supervisor:child_spec().
+sequencer_manager_spec(SeqManSup, SessId) ->
+    Id = Module = sequencer_manager,
     Restart = permanent,
     Shutdown = timer:seconds(10),
     Type = worker,
-    {Id, {Module, start_link, [SeqDispSup, SeqStmSup, SessId]},
-        Restart, Shutdown, Type, [Module]}.
+    {Id, {Module, start_link, [SeqManSup, SessId]}, Restart, Shutdown, Type, [Module]}.

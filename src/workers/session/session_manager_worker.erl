@@ -7,10 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements {@link worker_plugin_behaviour} and is responsible
-%%% for creating and removing sequencer dispatchers for clients' sessions.
+%%% for creation and removal of clients' sessions.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer_manager_worker).
+-module(session_manager_worker).
 -author("Krzysztof Trzepla").
 
 -behaviour(worker_plugin_behaviour).
@@ -24,7 +24,7 @@
 %% API
 -export([supervisor_spec/0, supervisor_child_spec/0]).
 
--define(SEQUENCER_MANAGER_WORKER_SUP, sequencer_manager_worker_sup).
+-define(SESSION_WORKER_SUP, session_manager_worker_sup).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -47,8 +47,9 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck |
-    {get_or_create_sequencer_dispatcher, SessId :: session:id()} |
-    {remove_sequencer_dispatcher, SessId :: session:id()},
+    {get_or_create_session, SessId :: session:id(), Cred :: session:credentials(),
+        Con :: pid()} |
+    {remove_session, SessId :: session:id()},
     Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: term(),
@@ -59,11 +60,11 @@ handle(ping, _) ->
 handle(healthcheck, _) ->
     ok;
 
-handle({get_or_create_sequencer_dispatcher, SessId}, _) ->
-    get_or_create_sequencer_dispatcher(SessId);
+handle({reuse_or_create_session, SessId, Cred, Con}, _) ->
+    reuse_or_create_session(SessId, Cred, Con);
 
-handle({remove_sequencer_dispatcher, SessId}, _) ->
-    remove_sequencer_dispatcher(SessId);
+handle({remove_session, SessId}, _) ->
+    remove_session(SessId);
 
 handle(_Request, _) ->
     ?log_bad_request(_Request).
@@ -85,27 +86,27 @@ cleanup() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns a supervisor spec for a sequencer manager worker supervisor.
+%% Returns a supervisor spec for a event manager worker supervisor.
 %% @end
 %%--------------------------------------------------------------------
 -spec supervisor_spec() ->
     {RestartStrategy :: supervisor:strategy(), MaxR :: integer(), MaxT :: integer()}.
 supervisor_spec() ->
     RestartStrategy = simple_one_for_one,
-    MaxR = 3,
-    MaxT = timer:minutes(1),
+    MaxR = 1,
+    MaxT = 1,
     {RestartStrategy, MaxR, MaxT}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns a supervisor child_spec for a sequencer dispatcher supervisor.
+%% Returns a supervisor child_spec for a event dispatcher supervisor.
 %% @end
 %%--------------------------------------------------------------------
 -spec supervisor_child_spec() -> [supervisor:child_spec()].
 supervisor_child_spec() ->
-    Id = Module = sequencer_dispatcher_sup,
-    Restart = permanent,
-    Shutdown = timer:seconds(10),
+    Id = Module = session_sup,
+    Restart = temporary,
+    Shutdown = infinity,
     Type = supervisor,
     [{Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}].
 
@@ -116,18 +117,36 @@ supervisor_child_spec() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns pid of sequencer dispatcher for client session. If sequencer
-%% dispatcher does not exist it is instantiated.
+%% Tries to reuse active session. If session does not exist it is created.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_sequencer_dispatcher(SessId :: session:id()) ->
-    {ok, SeqDisp :: pid()} | {error, Reason :: term()}.
-get_or_create_sequencer_dispatcher(SessId) ->
-    case get_sequencer_dispatcher_data(SessId) of
-        {ok, #sequencer_dispatcher_data{pid = SeqDisp}} ->
-            {ok, SeqDisp};
-        {error, {not_found, _}} ->
-            create_sequencer_dispatcher(SessId);
+-spec reuse_or_create_session(SessId :: session:id(),
+    Cred :: session:credentials(), Con :: pid()) ->
+    {ok, reused | created} | {error, Reason :: term()}.
+reuse_or_create_session(SessId, Cred, Con) ->
+    case reuse_session(SessId, Cred, Con) of
+        {ok, reused} -> {ok, reused};
+        {error, {not_found, _}} -> create_session(SessId, Cred, Con);
+        {error, Reason} -> {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Reuses active session or returns with an error.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_session(SessId :: session:id(), Cred :: session:credentials(),
+    Con :: pid()) -> {ok, reused} |{error, Reason :: invalid_credentials | term()}.
+reuse_session(SessId, Cred, Con) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{credentials = Cred, communicator = undefined}}} ->
+            reuse_session(SessId, Cred, Con);
+        {ok, #document{value = #session{credentials = Cred, communicator = Comm}}} ->
+            ok = communicator:add_connection(Comm, Con),
+            {ok, reused};
+        {ok, #document{}} ->
+            {error, invalid_credentials};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -135,15 +154,18 @@ get_or_create_sequencer_dispatcher(SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns model of existing sequencer dispatcher for client session.
+%% Creates new session or if session exists tries to reuse it.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sequencer_dispatcher_data(SessId :: session:id()) ->
-    {ok, #sequencer_dispatcher_data{}} | {error, Reason :: term()}.
-get_sequencer_dispatcher_data(SessId) ->
-    case sequencer_dispatcher_data:get(SessId) of
-        {ok, #document{value = SeqModel}} ->
-            {ok, SeqModel};
+-spec create_session(SessId :: session:id(), Cred :: session:credentials(),
+    Con :: pid()) -> {ok, created} | {error, Reason :: term()}.
+create_session(SessId, Cred, Con) ->
+    case session:create(#document{key = SessId, value = #session{credentials = Cred}}) of
+        {ok, SessId} ->
+            {ok, _} = start_session_sup(SessId, Con),
+            {ok, created};
+        {error, already_exists} ->
+            reuse_or_create_session(SessId, Cred, Con);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -151,21 +173,17 @@ get_sequencer_dispatcher_data(SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates sequencer dispatcher for client session.
+%% Removes session from cache and stops session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec create_sequencer_dispatcher(SessId :: session:id()) ->
-    {ok, Pid :: pid()} | {error, Reason :: term()}.
-create_sequencer_dispatcher(SessId) ->
-    {ok, SeqDispSup} = start_sequencer_dispatcher_sup(),
-    {ok, SeqStmSup} = sequencer_dispatcher_sup:start_sequencer_stream_sup(SeqDispSup),
-    case sequencer_dispatcher_sup:start_sequencer_dispatcher(SeqDispSup,
-        SeqStmSup, SessId) of
-        {ok, SeqDisp} ->
-            {ok, SeqDisp};
-        {error, {already_exists, _}} ->
-            ok = stop_sequencer_dispatcher_sup(node(), SeqDispSup),
-            get_or_create_sequencer_dispatcher(SessId);
+-spec remove_session(SessId :: session:id()) -> ok | {error, Reason :: term()}.
+remove_session(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{session_sup = undefined}}} ->
+            session:delete(SessId);
+        {ok, #document{value = #session{session_sup = SessSup, node = Node}}} ->
+            ok = session:delete(SessId),
+            stop_session_sup(Node, SessSup);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -173,37 +191,22 @@ create_sequencer_dispatcher(SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes sequencer dispatcher for client session.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_sequencer_dispatcher(SessId :: session:id()) ->
-    ok | {error, Reason :: term()}.
-remove_sequencer_dispatcher(SessId) ->
-    case get_sequencer_dispatcher_data(SessId) of
-        {ok, #sequencer_dispatcher_data{node = Node, sup = SeqDispSup}} ->
-            stop_sequencer_dispatcher_sup(Node, SeqDispSup);
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts sequencer dispatcher supervisor supervised by sequencer manager
+%% Starts session supervisor supervised by event manager
 %% worker supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_sequencer_dispatcher_sup() -> supervisor:startchild_ret().
-start_sequencer_dispatcher_sup() ->
-    supervisor:start_child(?SEQUENCER_MANAGER_WORKER_SUP, []).
+-spec start_session_sup(SessId :: session:id(), Con :: pid()) ->
+    supervisor:startchild_ret().
+start_session_sup(SessId, Con) ->
+    supervisor:start_child(?SESSION_WORKER_SUP, [SessId, Con]).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Stops sequencer dispatcher supervisor and its children.
+%% Stops event dispatcher supervisor and its children.
 %% @end
 %%--------------------------------------------------------------------
--spec stop_sequencer_dispatcher_sup(Node :: node(), SeqDispSup :: pid()) ->
+-spec stop_session_sup(Node :: node(), SessSup :: pid()) ->
     ok | {error, Reason :: term()}.
-stop_sequencer_dispatcher_sup(Node, SeqDispSup) ->
-    supervisor:terminate_child({?SEQUENCER_MANAGER_WORKER_SUP, Node}, SeqDispSup).
+stop_session_sup(Node, SessSup) ->
+    supervisor:terminate_child({?SESSION_WORKER_SUP, Node}, SessSup).

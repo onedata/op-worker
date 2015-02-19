@@ -30,26 +30,27 @@
     code_change/3]).
 
 %% sequencer stream state:
-%% stm_id       - stream ID associated with sequencer
-%% seq_num      - sequence number of message that can be processed by sequencer
-%%                stream
-%% seq_num_ack  - sequence number of last acknowledge message
-%% msgs         - mapping from sequence number to message for messages waiting to
-%%                be processed by sequencer stream
-%% seq_disp     - pid of sequencer dispatcher
-%% msgs_ack_win - amount of messages that have to be processed by sequencer stream
-%%                before emissions of acknowledgement message
-%% time_ack_win - amount of seconds that have to elapsed before emission of
-%%                acknowledgement message
+%% stream_id            - stream ID associated with sequencer
+%% sequence_number      - sequence number of message that can be processed by
+%%                        sequencer stream
+%% sequence_number_ack  - sequence number of last acknowledge message
+%% messages             - mapping from sequence number to message for messages
+%%                        waiting to be processed by sequencer stream
+%% sequencer_manager    - pid of sequencer dispatcher
+%% messages_ack_window  - amount of messages that have to be processed by
+%%                        sequencer stream before emissions of acknowledgement
+%%                        message
+%% time_ack_window      - amount of seconds that have to elapsed before emission
+%%                        of acknowledgement message
 -record(state, {
-    sess_id :: session:id(),
-    seq_disp :: pid(),
-    seq_num = 1 :: non_neg_integer(),
-    seq_num_ack = 0 :: non_neg_integer(),
-    stm_id :: integer(),
-    msgs = #{} :: map(),
-    msgs_ack_win :: non_neg_integer(),
-    time_ack_win :: non_neg_integer()
+    session_id :: session:id(),
+    sequencer_manager :: pid(),
+    sequence_number = 1 :: non_neg_integer(),
+    sequence_number_ack = 0 :: non_neg_integer(),
+    stream_id :: integer(),
+    messages = #{} :: map(),
+    messages_ack_window :: non_neg_integer(),
+    time_ack_window :: non_neg_integer()
 }).
 
 %%%===================================================================
@@ -61,10 +62,10 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SeqDisp :: pid(), SessId :: session:id(), StmId :: non_neg_integer()) ->
+-spec start_link(SeqMan :: pid(), SessId :: session:id(), StmId :: non_neg_integer()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SeqDisp, SessId, StmId) ->
-    gen_server:start_link(?MODULE, [SeqDisp, SessId, StmId], []).
+start_link(SeqMan, SessId, StmId) ->
+    gen_server:start_link(?MODULE, [SeqMan, SessId, StmId], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -79,10 +80,10 @@ start_link(SeqDisp, SessId, StmId) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SeqDisp, SessId, StmId]) ->
+init([SeqMan, SessId, StmId]) ->
     process_flag(trap_exit, true),
     gen_server:cast(self(), initialize),
-    {ok, #state{seq_disp = SeqDisp, sess_id = SessId, stm_id = StmId}}.
+    {ok, #state{sequencer_manager = SeqMan, session_id = SessId, stream_id = StmId}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -112,25 +113,29 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(initialize, #state{seq_disp = SeqDisp, stm_id = StmId} = State) ->
-    {ok, MsgsAckWin} = application:get_env(?APP_NAME, sequencer_stream_msgs_ack_win),
-    {ok, TimeAckWin} = application:get_env(?APP_NAME, sequencer_stream_time_ack_win),
+handle_cast(initialize, #state{sequencer_manager = SeqMan, stream_id = StmId} = State) ->
+    {ok, MsgsAckWin} = application:get_env(?APP_NAME,
+        sequencer_stream_messages_ack_window),
+    {ok, TimeAckWin} = application:get_env(?APP_NAME,
+        sequencer_stream_secs_ack_window),
     erlang:send_after(timer:seconds(TimeAckWin), self(), periodic_ack),
-    case gen_server:call(SeqDisp, {sequencer_stream_initialized, StmId}) of
+    case gen_server:call(SeqMan, {sequencer_stream_initialized, StmId}) of
         {ok, #state{} = SeqStmState} ->
             ?info("Sequencer stream reinitialized in state: ~p", [SeqStmState]),
-            {noreply, SeqStmState#state{msgs_ack_win = MsgsAckWin, time_ack_win = TimeAckWin}};
+            {noreply, SeqStmState#state{messages_ack_window = MsgsAckWin,
+                time_ack_window = TimeAckWin}};
         _ ->
-            {noreply, State#state{msgs_ack_win = MsgsAckWin, time_ack_win = TimeAckWin}}
+            {noreply, State#state{messages_ack_window = MsgsAckWin,
+                time_ack_window = TimeAckWin}}
     end;
 
-handle_cast(#client_message{message_stream = #message_stream{seq_num = SeqNum}} = Msg,
-    #state{seq_num = SeqNum} = State) ->
-    process_pending_msgs(process_msg(Msg, State));
+handle_cast(#client_message{message_stream = #message_stream{seq_num = SeqNum}} =
+    Msg, #state{sequence_number = SeqNum} = State) ->
+    process_pending_messages(process_message(Msg, State));
 
-handle_cast(#client_message{message_stream = #message_stream{seq_num = MsgSeqNum}} = Msg,
-    #state{seq_num = SeqNum} = State) when MsgSeqNum > SeqNum ->
-    {noreply, send_msg_req(Msg, store_msg(Msg, State))};
+handle_cast(#client_message{message_stream = #message_stream{seq_num = MsgSeqNum}} =
+    Msg, #state{sequence_number = SeqNum} = State) when MsgSeqNum > SeqNum ->
+    {noreply, send_message_request(Msg, store_message(Msg, State))};
 
 handle_cast(#client_message{}, State) ->
     {noreply, State};
@@ -149,12 +154,12 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_info(periodic_ack, #state{seq_num_ack = SeqNumAck,
-    seq_num = SeqNum, time_ack_win = TimeAckWin} = State) ->
+handle_info(periodic_ack, #state{sequence_number_ack = SeqNumAck,
+    sequence_number = SeqNum, time_ack_window = TimeAckWin} = State) ->
     erlang:send_after(timer:seconds(TimeAckWin), self(), periodic_ack),
     case SeqNumAck + 1 =:= SeqNum of
         true -> {noreply, State};
-        _ -> {noreply, send_msg_ack(State)}
+        _ -> {noreply, send_message_ack(State)}
     end;
 
 handle_info(_Info, State) ->
@@ -172,10 +177,10 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(Reason, #state{stm_id = StmId, seq_disp = SeqDisp} = State) ->
-    NewState = send_msg_ack(State),
+terminate(Reason, #state{stream_id = StmId, sequencer_manager = SeqMan} = State) ->
+    NewState = send_message_ack(State),
     ?warning("Sequencer stream closed in state ~p due to: ~p", [StmId, NewState, Reason]),
-    gen_server:cast(SeqDisp, {sequencer_stream_terminated, StmId, Reason, NewState}).
+    gen_server:cast(SeqMan, {sequencer_stream_terminated, StmId, Reason, NewState}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -199,39 +204,42 @@ code_change(_OldVsn, State, _Extra) ->
 %% Returns modified sequencer state.
 %% @end
 %%--------------------------------------------------------------------
--spec process_msg(Msg :: #client_message{}, State :: #state{}) ->
-    {stop, normal, NewState :: #state{}} |
+-spec process_message(Msg :: #client_message{}, State :: #state{}) ->
+    {stop, shutdown, NewState :: #state{}} |
     {noreply, NewState :: #state{}}.
-process_msg(#client_message{message_stream = #message_stream{eos = true}} = Msg, State) ->
-    NewState = send_msg(Msg, State),
-    {stop, normal, NewState};
+process_message(#client_message{message_stream = #message_stream{eos = true}} =
+    Msg, State) ->
+    NewState = send_message(Msg, State),
+    {stop, shutdown, NewState};
 
-process_msg(#client_message{message_stream = #message_stream{seq_num = MsgSeqNum}} = Msg,
-    #state{seq_num_ack = SeqNumAck, msgs_ack_win = MsgsAckWin} = State) ->
-    NewState = send_msg(Msg, State),
+process_message(#client_message{message_stream = #message_stream{
+    seq_num = MsgSeqNum}} = Msg, #state{sequence_number_ack = SeqNumAck,
+    messages_ack_window = MsgsAckWin} = State) ->
+    NewState = send_message(Msg, State),
     case MsgSeqNum =:= SeqNumAck + MsgsAckWin of
-        true -> {noreply, send_msg_ack(NewState)};
+        true -> {noreply, send_message_ack(NewState)};
         false -> {noreply, NewState}
     end.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Processes pending messages by calling process_msg/2 function on messages
+%% Processes pending messages by calling process_message/2 function on messages
 %% with sequence number equal to current sequence number. Returns modified
 %% sequencer state.
 %% @end
 %%--------------------------------------------------------------------
--spec process_pending_msgs({stop, normal, State :: #state{}} |{noreply,
-    State :: #state{}}) -> {stop, normal, NewState :: #state{}} |
+-spec process_pending_messages({stop, shutdown, State :: #state{}} |{noreply,
+    State :: #state{}}) -> {stop, shutdown, NewState :: #state{}} |
 {noreply, NewState :: #state{}}.
-process_pending_msgs({stop, normal, State}) ->
-    {stop, normal, State};
+process_pending_messages({stop, shutdown, State}) ->
+    {stop, shutdown, State};
 
-process_pending_msgs({noreply, #state{seq_num = SeqNum, msgs = Msgs} = State}) ->
+process_pending_messages({noreply, #state{sequence_number = SeqNum,
+    messages = Msgs} = State}) ->
     case maps:find(SeqNum, Msgs) of
         {ok, Msg} ->
-            process_pending_msgs(process_msg(Msg, remove_msg(Msg, State)));
+            process_pending_messages(process_message(Msg, remove_message(Msg, State)));
         _ ->
             {noreply, State}
     end.
@@ -242,11 +250,11 @@ process_pending_msgs({noreply, #state{seq_num = SeqNum, msgs = Msgs} = State}) -
 %% Forwards message to the router.
 %% @end
 %%--------------------------------------------------------------------
--spec send_msg(Msg :: #client_message{}, State :: #state{}) ->
+-spec send_message(Msg :: #client_message{}, State :: #state{}) ->
     NewState :: #state{}.
-send_msg(Msg, #state{seq_num = SeqNum} = State) ->
+send_message(Msg, #state{sequence_number = SeqNum} = State) ->
     router:route_message(Msg),
-    State#state{seq_num = SeqNum + 1}.
+    State#state{sequence_number = SeqNum + 1}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -254,14 +262,15 @@ send_msg(Msg, #state{seq_num = SeqNum} = State) ->
 %% Sends acknowledgement to sequencer dispatcher for last processed message.
 %% @end
 %%--------------------------------------------------------------------
--spec send_msg_ack(State :: #state{}) -> NewState :: #state{}.
-send_msg_ack(#state{stm_id = StmId, sess_id = SessId, seq_num = SeqNum} = State) ->
+-spec send_message_ack(State :: #state{}) -> NewState :: #state{}.
+send_message_ack(#state{stream_id = StmId, session_id = SessId,
+    sequence_number = SeqNum} = State) ->
     Msg = #server_message{message_body = #message_acknowledgement{
         stm_id = StmId,
         seq_num = SeqNum - 1
     }},
-    ok = client_communicator:send(Msg, SessId),
-    State#state{seq_num_ack = SeqNum - 1}.
+    communicator:send(Msg, SessId),
+    State#state{sequence_number_ack = SeqNum - 1}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -271,16 +280,17 @@ send_msg_ack(#state{stm_id = StmId, sess_id = SessId, seq_num = SeqNum} = State)
 %% number of received message minus one.
 %% @end
 %%--------------------------------------------------------------------
--spec send_msg_req(Msg :: #client_message{}, State :: #state{}) ->
+-spec send_message_request(Msg :: #client_message{}, State :: #state{}) ->
     NewState :: #state{}.
-send_msg_req(#client_message{message_stream = #message_stream{stm_id = StmId,
-    seq_num = MsgSeqNum}}, #state{sess_id = SessId, seq_num = SeqNum} = State) ->
+send_message_request(#client_message{message_stream = #message_stream{
+    stm_id = StmId, seq_num = MsgSeqNum}}, #state{session_id = SessId,
+    sequence_number = SeqNum} = State) ->
     Msg = #server_message{message_body = #message_request{
         stm_id = StmId,
         lower_seq_num = SeqNum,
         upper_seq_num = MsgSeqNum - 1
     }},
-    ok = client_communicator:send(Msg, SessId),
+    communicator:send(Msg, SessId),
     State.
 
 %%--------------------------------------------------------------------
@@ -289,11 +299,11 @@ send_msg_req(#client_message{message_stream = #message_stream{stm_id = StmId,
 %% Stores message in sequencer stream state.
 %% @end
 %%--------------------------------------------------------------------
--spec store_msg(Msg :: #client_message{}, State :: #state{}) ->
+-spec store_message(Msg :: #client_message{}, State :: #state{}) ->
     NewState :: #state{}.
-store_msg(#client_message{message_stream = #message_stream{seq_num = SeqNum}} = Msg,
-    #state{msgs = Msgs} = State) ->
-    State#state{msgs = maps:put(SeqNum, Msg, Msgs)}.
+store_message(#client_message{message_stream = #message_stream{seq_num = SeqNum}} =
+    Msg, #state{messages = Msgs} = State) ->
+    State#state{messages = maps:put(SeqNum, Msg, Msgs)}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -301,8 +311,8 @@ store_msg(#client_message{message_stream = #message_stream{seq_num = SeqNum}} = 
 %% Removes message from sequencer stream state.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_msg(Msg :: #client_message{}, State :: #state{}) ->
+-spec remove_message(Msg :: #client_message{}, State :: #state{}) ->
     NewState :: #state{}.
-remove_msg(#client_message{message_stream = #message_stream{seq_num = SeqNum}},
-    #state{msgs = Msgs} = State) ->
-    State#state{msgs = maps:remove(SeqNum, Msgs)}.
+remove_message(#client_message{message_stream = #message_stream{seq_num = SeqNum}},
+    #state{messages = Msgs} = State) ->
+    State#state{messages = maps:remove(SeqNum, Msgs)}.

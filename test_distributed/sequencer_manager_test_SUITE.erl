@@ -12,6 +12,7 @@
 -module(sequencer_manager_test_SUITE).
 -author("Krzysztof Trzepla").
 
+-include("workers/datastore/models/session.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/stream_messages.hrl").
@@ -22,9 +23,11 @@
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
--export([sequencer_manager_test/1, sequencer_stream_test/1]).
 
-all() -> [sequencer_manager_test, sequencer_stream_test].
+%% tests
+-export([sequencer_stream_test/1]).
+
+all() -> [sequencer_stream_test].
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -32,104 +35,24 @@ all() -> [sequencer_manager_test, sequencer_stream_test].
 %%% Test function
 %%%====================================================================
 
-%% Test creation and removal of sequencer dispatcher using sequencer manager.
-sequencer_manager_test(Config) ->
-    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
-
-    SessionId1 = <<"session_id_1">>,
-    SessionId2 = <<"session_id_2">>,
-
-    % Check whether sequencer worker returns the same sequencer dispatcher
-    % for given session dispite of node on which request is processed.
-    [SeqDisp1, SeqDisp2] = lists:map(fun({SessionId, Workers}) ->
-        CreateOrGetSeqDispAnswers = utils:pmap(fun(Worker) ->
-            rpc:call(Worker, sequencer_manager,
-                get_or_create_sequencer_dispatcher, [SessionId])
-        end, Workers),
-
-        lists:foreach(fun(CreateOrGetSeqDispAnswer) ->
-            ?assertMatch({ok, _}, CreateOrGetSeqDispAnswer)
-        end, CreateOrGetSeqDispAnswers),
-
-        {_, [FirstSeqDisp | SeqDisps]} = lists:unzip(CreateOrGetSeqDispAnswers),
-
-        lists:foreach(fun(SeqDisp) ->
-            ?assertEqual(FirstSeqDisp, SeqDisp)
-        end, SeqDisps),
-
-        FirstSeqDisp
-    end, [
-        {SessionId1, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)},
-        {SessionId2, lists:duplicate(2, Worker2) ++ lists:duplicate(2, Worker1)}
-    ]),
-
-    % Check whether sequencer worker returns different sequencer dispatchers for
-    % different sessions.
-    ?assertNotEqual(SeqDisp1, SeqDisp2),
-
-    % Check whether sequencer worker can remove sequencer manager
-    % for given session dispite of node on which request is processed.
-    utils:pforeach(fun({SessionId, Worker}) ->
-        ProcessesBeforeRemoval = processes([Worker1, Worker2]),
-        ?assertMatch([_], lists:filter(fun(P) ->
-            P =:= SeqDisp1
-        end, ProcessesBeforeRemoval)),
-
-        RemoveSeqDispAnswer1 = rpc:call(Worker, sequencer_manager,
-            remove_sequencer_dispatcher, [SessionId]),
-        ?assertMatch(ok, RemoveSeqDispAnswer1),
-        RemoveSeqDispAnswer2 = rpc:call(Worker, sequencer_manager,
-            remove_sequencer_dispatcher, [SessionId]),
-        ?assertMatch({error, _}, RemoveSeqDispAnswer2),
-
-        % Check whether sequencer dispatcher were deleted
-        ?assertMatch({error, {not_found, _}}, rpc:call(Worker1,
-            sequencer_dispatcher_data, get, [SessionId])),
-        ProcessesAfterRemoval = processes([Worker1, Worker2]),
-        ?assertMatch([], lists:filter(fun(Proces) ->
-            Proces =:= SeqDisp1
-        end, ProcessesAfterRemoval))
-    end, [
-        {SessionId1, Worker2},
-        {SessionId2, Worker1}
-    ]),
-
-    ok.
-
 %% Test sequencer stream behaviour.
 sequencer_stream_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-    Self = self(),
-    SessionId = <<"session_id">>,
+    SessionId = ?config(session_id, Config),
     StmId = 1,
     MsgCount = 100,
 
-    test_utils:mock_new(Worker, [router]),
-    test_utils:mock_expect(Worker, router, route_message, fun(Msg) ->
-        Self ! Msg, ok
-    end),
-    test_utils:mock_expect(Worker, client_communicator, send,
-        fun(Msg, Id) when Id =:= SessionId ->
-            Self ! Msg, ok
-        end
-    ),
-
-    %{ok, SeqDisp}
-    Ans = rpc:call(Worker, sequencer_manager,
-        get_or_create_sequencer_dispatcher, [SessionId]),
-    ?assertMatch({ok, _}, Ans),
-    {ok, SeqDisp} = Ans,
-
     %% Check whether reset stream message was sent
     ?assertMatch({ok, _}, test_utils:receive_msg(
-        #server_message{message_body = #message_stream_reset{}}, ?TIMEOUT
-    )),
+        #message_stream_reset{}, ?TIMEOUT)),
 
     %% Send 'MsgCount' messages in reverse order
     lists:foreach(fun(SeqNum) ->
-        gen_server:cast(SeqDisp, #client_message{message_stream = #message_stream{
-            stm_id = StmId, seq_num = SeqNum, eos = false
-        }})
+        ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message, [
+            #client_message{message_stream = #message_stream{
+                stm_id = StmId, seq_num = SeqNum, eos = false
+            }}, SessionId])
+        )
     end, lists:seq(MsgCount, 1, -1)),
 
     %% Check whether 'MsgCount' - 1 request messages were sent
@@ -158,9 +81,11 @@ sequencer_stream_test(Config) ->
     )),
 
     %% Send last message
-    gen_server:cast(SeqDisp, #client_message{message_stream = #message_stream{
-        stm_id = StmId, seq_num = MsgCount + 1, eos = true
-    }}),
+    ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message, [
+        #client_message{message_stream = #message_stream{
+            stm_id = StmId, seq_num = MsgCount + 1, eos = true
+        }}, SessionId])
+    ),
 
     %% Check whether last message was sent
     ?assertMatch({ok, _}, test_utils:receive_msg(
@@ -178,12 +103,6 @@ sequencer_stream_test(Config) ->
 
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
-    ok = rpc:call(Worker, sequencer_manager,
-        remove_sequencer_dispatcher, [SessionId]),
-
-    test_utils:mock_validate(Worker, [router]),
-    test_utils:mock_unload(Worker, [router]),
-
     ok.
 
 %%%===================================================================
@@ -196,32 +115,39 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
-init_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, client_communicator),
-    test_utils:mock_expect(Workers, client_communicator, send,
-        fun(_, _) -> ok end),
-    Config.
+init_per_testcase(sequencer_stream_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
+    SessId = <<"session_id">>,
+    Cred = #credentials{user_id = <<"user_id">>},
 
-end_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, client_communicator),
-    test_utils:mock_unload(Workers, client_communicator),
-    Config.
+    test_utils:mock_new(Worker, [communicator, router]),
+    test_utils:mock_expect(Worker, router, route_message, fun(Msg) ->
+        Self ! Msg, ok
+    end),
+    test_utils:mock_expect(Worker, communicator, send,
+        fun(Msg, Id) when Id =:= SessId ->
+            Self ! Msg, ok
+        end
+    ),
 
+    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
+        reuse_or_create_session, [SessId, Cred, Self])),
+
+    [{session_id, SessId} | Config].
+
+end_per_testcase(sequencer_stream_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session_id, Config),
+
+    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
+
+    test_utils:mock_validate(Worker, [communicator, router]),
+    test_utils:mock_unload(Worker, [communicator, router]),
+
+    [_ | NewConfig] = Config,
+    NewConfig.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns list of processes running on given nodes.
-%% @end
-%%--------------------------------------------------------------------
--spec processes(Nodes :: [node()]) -> [Pid :: pid()].
-processes(Nodes) ->
-    lists:foldl(fun(Node, Processes) ->
-        Processes ++ rpc:call(Node, erlang, processes, [])
-    end, [], Nodes).

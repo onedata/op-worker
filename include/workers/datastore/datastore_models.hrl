@@ -31,26 +31,6 @@
     field3 :: term()
 }).
 
-%% sequencer dispatcher model:
-%% node - node on which sequencer dispatcher has been started
-%% pid  - pid of sequencer dispatcher associated with client session
-%% sup  - pid of sequencer dispatcher supervisor
--record(sequencer_dispatcher_data, {
-    node :: node(),
-    pid :: pid(),
-    sup :: pid()
-}).
-
-%% event dispatcher model:
-%% node - node on which event dispatcher has been started
-%% pid  - pid of event dispatcher associated with client session
-%% sup  - pid of event dispatcher supervisor
--record(event_dispatcher_data, {
-    node :: node(),
-    pid :: pid(),
-    sup :: pid()
-}).
-
 %% event manager model:
 %% value - mapping from subscription ID to subscription
 -record(subscription, {

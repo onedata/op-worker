@@ -7,49 +7,47 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for creating and forwarding requests to
-%%% sequencer manager worker.
+%%% session worker.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer_manager).
+-module(session_manager).
 -author("Krzysztof Trzepla").
 
 %% API
--export([get_or_create_sequencer_dispatcher/1, remove_sequencer_dispatcher/1]).
+-export([reuse_or_create_session/3, remove_session/1]).
 
--define(TIMEOUT, timer:seconds(5)).
--define(SEQUENCER_MANAGER_WORKER, sequencer_manager_worker).
+-define(TIMEOUT, timer:seconds(10)).
+-define(SESSION_WORKER, session_manager_worker).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns pid of sequencer dispatcher for given session. If sequencer
-%% dispatcher does not exist it is instantiated.
+%% Reuses active session or creates one for user identified by credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_sequencer_dispatcher(SessId :: session:id()) ->
-    {ok, SeqDisp :: pid()} | {error, Reason :: term()}.
-get_or_create_sequencer_dispatcher(SessId) ->
+-spec reuse_or_create_session(SessId :: session:id(),
+    Cred :: session:credentials(), Con :: pid()) ->
+    {ok, reused | created} |{error, Reason :: term()}.
+reuse_or_create_session(SessId, Cred, Con) ->
     worker_proxy:call(
-        ?SEQUENCER_MANAGER_WORKER,
-        {get_or_create_sequencer_dispatcher, SessId},
+        ?SESSION_WORKER,
+        {reuse_or_create_session, SessId, Cred, Con},
         ?TIMEOUT,
         prefer_local
     ).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes sequencer dispatcher for client session.
+%% Removes session identified by session ID.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_sequencer_dispatcher(SessId :: session:id()) ->
-    ok | {error, Reason :: term()}.
-remove_sequencer_dispatcher(SessId) ->
+-spec remove_session(SessId :: session:id()) -> ok | {error, Reason :: term()}.
+remove_session(SessId) ->
     worker_proxy:call(
-        ?SEQUENCER_MANAGER_WORKER,
-        {remove_sequencer_dispatcher, SessId},
+        ?SESSION_WORKER,
+        {remove_session, SessId},
         ?TIMEOUT,
         prefer_local
     ).
@@ -57,4 +55,3 @@ remove_sequencer_dispatcher(SessId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-

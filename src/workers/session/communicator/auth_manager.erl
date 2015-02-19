@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Client authentication library
+%%% Client authentication library.
 %%% @end
 %%%-------------------------------------------------------------------
--module(client_auth).
+-module(auth_manager).
 -author("Tomasz Lichon").
 
 -include("workers/datastore/datastore_models.hrl").
@@ -35,16 +35,16 @@
 -spec handle_handshake(#client_message{}, #certificate_info{}) ->
     {ok, #server_message{}} | no_return().
 handle_handshake(#client_message{message_body = #handshake_request{
-    session_id = IdToReuse, token = Token = #token{}}}, _) ->
+    session_id = IdToReuse, token = Token = #token{}}}, _) when is_binary(IdToReuse) ->
     Cred = authenticate_using_token(Token),
-    {ok, SessionId} = session:create_or_reuse_session(Cred, self(), IdToReuse),
-    {ok, #server_message{message_body = #handshake_response{session_id = SessionId}}};
+    {ok, _} = session_manager:reuse_or_create_session(IdToReuse, Cred, self()),
+    {ok, #server_message{message_body = #handshake_response{session_id = IdToReuse}}};
 
 handle_handshake(#client_message{message_body = #handshake_request{
-    session_id = IdToReuse}}, CertInfo) ->
+    session_id = IdToReuse}}, CertInfo) when is_binary(IdToReuse) ->
     Cred = authenticate_using_certificate(CertInfo),
-    {ok, SessionId} = session:create_or_reuse_session(Cred, self(), IdToReuse),
-    {ok, #server_message{message_body = #handshake_response{session_id = SessionId}}}.
+    {ok, _} = session_manager:reuse_or_create_session(IdToReuse, Cred, self()),
+    {ok, #server_message{message_body = #handshake_response{session_id = IdToReuse}}}.
 
 %%%===================================================================
 %%% Internal functions

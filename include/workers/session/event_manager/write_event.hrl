@@ -26,7 +26,7 @@
     producer_counter_threshold :: non_neg_integer(),
     producer_time_threshold :: non_neg_integer(),
     producer_size_threshold :: non_neg_integer(),
-    event_stream_spec :: event_stream:event_stream()
+    event_stream :: event_stream:event_stream()
 }).
 
 -endif.

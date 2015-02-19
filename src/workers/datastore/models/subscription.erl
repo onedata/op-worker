@@ -15,7 +15,8 @@
 -include("workers/datastore/datastore.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, list/0, model_init/0, 'after'/5, before/4]).
+-export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
+    model_init/0, 'after'/5, before/4]).
 
 %%%===================================================================
 %%% model_behaviour callbacks

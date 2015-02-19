@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Session management model, frequently invoked by incomming tcp
-%%% connections in protocol_handler
+%%% connections in connection
 %%% @end
 %%%-------------------------------------------------------------------
 -module(session).
@@ -18,14 +18,15 @@
 -include("workers/datastore/models/session.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0, 'after'/5, before/4]).
+-export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
+    model_init/0, 'after'/5, before/4]).
 
 %% API
--export([remove_connection/2, create_or_reuse_session/3]).
 
--export_type([id/0]).
+-export_type([id/0, credentials/0]).
 
 -type id() :: binary().
+-type credentials() :: #credentials{}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -40,7 +41,6 @@
 save(Document) ->
     datastore:save(global_only, Document).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback update/2.
@@ -51,7 +51,6 @@ save(Document) ->
 update(Key, Diff) ->
     datastore:update(global_only, ?MODULE, Key, Diff).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback create/1.
@@ -60,7 +59,6 @@ update(Key, Diff) ->
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
     datastore:create(global_only, Document).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -71,6 +69,14 @@ create(Document) ->
 get(Key) ->
     datastore:get(global_only, ?MODULE, Key).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error().
+list() ->
+    mnesia_cache_driver:list(model_init()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -81,7 +87,6 @@ get(Key) ->
 delete(Key) ->
     datastore:delete(global_only, ?MODULE, Key).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback exists/1.
@@ -91,7 +96,6 @@ delete(Key) ->
 exists(Key) ->
     datastore:exists(global_only, ?MODULE, Key).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback model_init/0.
@@ -100,7 +104,6 @@ exists(Key) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     ?MODEL_CONFIG(session_bucket, []).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -112,7 +115,6 @@ model_init() ->
     ReturnValue :: term()) -> ok.
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -127,32 +129,3 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates new session or reuses existing one. The input args are user
-%% credentials and connection pid.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_reuse_session(Cred :: #credentials{}, Con :: pid(),
-    SessionIdToReuse :: undefined | id()) ->
-    {ok, SessionId :: id()} | datastore:create_error() | datastore:update_error().
-create_or_reuse_session(Cred, Con, undefined) ->
-    session:create(#document{value = #session{credentials = Cred, connections = [Con]}});
-create_or_reuse_session(Cred, Con, SessionIdToReuse) ->
-    {ok, #document{value = #session{credentials = Cred}}} = session:get(SessionIdToReuse),
-    session:update(SessionIdToReuse, fun(#session{connections = Cons} = Sess) ->
-        Sess#session{connections = [Con | Cons]}
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Remove connection from session
-%% @end
-%%--------------------------------------------------------------------
--spec remove_connection(Con :: pid(), SessionId :: id()) ->
-    {ok, SessionId :: id()} | datastore:generic_error() | datastore:update_error().
-remove_connection(Con, SessionId) ->
-    session:update(SessionId, fun(#session{connections = Cons} = Sess) ->
-        Sess#session{connections = Cons -- [Con]}
-    end). %todo atomically delete session when there are no connections left
