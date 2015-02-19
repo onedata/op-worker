@@ -24,11 +24,11 @@ namespace one {
 namespace proxy {
 
 tcp2tls_session::tcp2tls_session(std::weak_ptr<server> s,
-                                 boost::asio::io_service &client_io_service,
-                                 boost::asio::io_service &proxy_io_service,
+                                 boost::asio::io_service::strand &client_strand,
+                                 boost::asio::io_service::strand &proxy_strand,
                                  boost::asio::ssl::context &context,
                                  boost::asio::ssl::verify_mode verify_mode)
-    : session(std::move(s), client_io_service, proxy_io_service, context)
+    : session(std::move(s), client_strand, proxy_strand, context)
     , verify_mode_(verify_mode)
 {
 }
@@ -128,15 +128,21 @@ void tcp2tls_session::handle_handshake(const boost::system::error_code &error)
         }
 
         // Start reading...
-        proxy_socket_.async_read_some(
-            boost::asio::buffer(proxy_data_.data(), proxy_data_.size()),
-            std::bind(&tcp2tls_session::handle_proxy_read, shared_from_this(),
-                      std::placeholders::_1, std::placeholders::_2));
+        proxy_strand_.dispatch(
+                [this] {
+                    proxy_socket_.async_read_some(
+                            boost::asio::buffer(proxy_data_.data(), proxy_data_.size()),
+                            client_strand_.wrap(std::bind(&tcp2tls_session::handle_proxy_read, shared_from_this(),
+                                    std::placeholders::_1, std::placeholders::_2)));
 
-        client_socket_.async_read_some(
-            boost::asio::buffer(client_data_.data(), client_data_.size()),
-            std::bind(&tcp2tls_session::handle_client_read, shared_from_this(),
-                      std::placeholders::_1, std::placeholders::_2));
+                });
+        client_strand_.dispatch(
+                [this] {
+                    client_socket_.async_read_some(
+                            boost::asio::buffer(client_data_.data(), client_data_.size()),
+                            proxy_strand_.wrap(std::bind(&tcp2tls_session::handle_client_read, shared_from_this(),
+                                    std::placeholders::_1, std::placeholders::_2)));
+                });
     }
     catch (boost::system::error_code &e) {
         LOG(ERROR) << "Cannot initialize proxy connection due to: "

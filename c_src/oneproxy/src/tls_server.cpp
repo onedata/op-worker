@@ -22,16 +22,16 @@ namespace one {
 namespace proxy {
 
 template <class session_t>
-tls_server<session_t>::tls_server(boost::asio::io_service &client_io_service,
-                                  boost::asio::io_service &proxy_io_service,
+tls_server<session_t>::tls_server(boost::asio::io_service::strand &client_strand,
+                                  boost::asio::io_service::strand &proxy_strand,
                                   int verify_type, const std::string &cert_path,
                                   uint16_t server_port,
                                   std::string forward_host,
                                   uint16_t forward_port,
                                   std::vector<std::string> ca_crl_dirs)
-    : server(client_io_service, proxy_io_service, verify_type,
+    : server(client_strand, proxy_strand, verify_type,
              std::move(ca_crl_dirs))
-    , acceptor_(client_io_service, boost::asio::ip::tcp::endpoint(
+    , acceptor_(client_strand.get_io_service(), boost::asio::ip::tcp::endpoint(
                                        boost::asio::ip::tcp::v4(), server_port))
     , context_(boost::asio::ssl::context::sslv23_server)
     , forward_host_(std::move(forward_host))
@@ -43,8 +43,8 @@ tls_server<session_t>::tls_server(boost::asio::io_service &client_io_service,
 template <class session_t> void tls_server<session_t>::start_accept()
 {
     auto new_session = std::make_shared<session_t>(
-        tls_server<session_t>::shared_from_this(), client_io_service_,
-        proxy_io_service_, context_, forward_host_, forward_port_);
+        tls_server<session_t>::shared_from_this(), client_strand_,
+        proxy_strand_, context_, forward_host_, forward_port_);
 
     acceptor_.async_accept(
         new_session->client_socket(),

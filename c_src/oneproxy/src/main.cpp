@@ -83,6 +83,8 @@ int main(int argc, char *argv[])
 
         boost::asio::io_service client_io_service;
         boost::asio::io_service proxy_io_service;
+        boost::asio::io_service::strand client_strand(client_io_service);
+        boost::asio::io_service::strand proxy_strand(proxy_io_service);
         std::vector<std::thread> workers;
 
         {
@@ -114,12 +116,12 @@ int main(int argc, char *argv[])
 
                     if (http_mode == "http"s) {
                         s = std::make_shared<tls_server<tls2tcp_http_session>>(
-                            client_io_service, proxy_io_service, verify_type,
+                            client_strand, proxy_strand, verify_type,
                             cert_path, listen_port, forward_host, forward_port,
                             ca_dirs);
                     } else {
                         s = std::make_shared<tls_server<tls2tcp_session>>(
-                            client_io_service, proxy_io_service, verify_type,
+                            client_strand, proxy_strand, verify_type,
                             cert_path, listen_port, forward_host, forward_port,
                             ca_dirs);
                     }
@@ -131,7 +133,7 @@ int main(int argc, char *argv[])
                     const auto listen_port = atoi(argv[2]);
 
                     s = std::make_shared<tcp_server>(
-                        client_io_service, proxy_io_service, verify_type,
+                        client_strand, proxy_strand, verify_type,
                         cert_path, listen_port, ca_dirs);
                     break;
                 }

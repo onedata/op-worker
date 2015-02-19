@@ -35,8 +35,8 @@ public:
      * @param cert_path Path to proxy's certificate chain used on server
      * endpoint
      */
-    tcp_server(boost::asio::io_service &client_io_service,
-               boost::asio::io_service &proxy_io_service, int verify_type,
+    tcp_server(boost::asio::io_service::strand &client_strand,
+               boost::asio::io_service::strand &proxy_strand, int verify_type,
                const std::string &cert_path, uint16_t server_port,
                std::vector<std::string> ca_crl_paths);
 

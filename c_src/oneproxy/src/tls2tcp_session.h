@@ -37,8 +37,8 @@ public:
      * @param forward_port Provider's port
      */
     tls2tcp_session(std::weak_ptr<server> server,
-                    boost::asio::io_service &client_io_service,
-                    boost::asio::io_service &proxy_io_service,
+                    boost::asio::io_service::strand &client_strand,
+                    boost::asio::io_service::strand &proxy_strand,
                     boost::asio::ssl::context &context,
                     std::string forward_host, std::string forward_port);
 

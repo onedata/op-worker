@@ -30,12 +30,12 @@ namespace one {
 namespace proxy {
 
 tls2tcp_session::tls2tcp_session(std::weak_ptr<server> s,
-                                 boost::asio::io_service &client_io_service,
-                                 boost::asio::io_service &proxy_io_service,
+                                 boost::asio::io_service::strand &client_strand,
+                                 boost::asio::io_service::strand &proxy_strand,
                                  boost::asio::ssl::context &context,
                                  std::string forward_host,
                                  std::string forward_port)
-    : session(std::move(s), client_io_service, proxy_io_service, context)
+    : session(std::move(s), client_strand, proxy_strand, context)
     , forward_host_(std::move(forward_host))
     , forward_port_(std::move(forward_port))
 {
@@ -190,13 +190,21 @@ void tls2tcp_session::send_cert_info(bool verified)
 
 void tls2tcp_session::start_reading(bool /*verified*/)
 {
-    proxy_socket_.async_read_some(
-        boost::asio::buffer(proxy_data_.data(), proxy_data_.size()),
-        std::bind(&tls2tcp_session::handle_proxy_read, shared_from_this(), _1, _2));
+    proxy_strand_.dispatch(
+        [this] {
+        proxy_socket_.async_read_some(
+            boost::asio::buffer(proxy_data_.data(), proxy_data_.size()),
+            client_strand_.wrap(std::bind(&tls2tcp_session::handle_proxy_read,
+                shared_from_this(), _1, _2)));
+    });
 
-    client_socket_.async_read_some(
-        boost::asio::buffer(client_data_.data(), client_data_.size()),
-        std::bind(&tls2tcp_session::handle_client_read, shared_from_this(), _1, _2));
+    client_strand_.dispatch(
+        [this] {
+        client_socket_.async_read_some(
+            boost::asio::buffer(client_data_.data(), client_data_.size()),
+            proxy_strand_.wrap(std::bind(&tls2tcp_session::handle_client_read,
+                shared_from_this(), _1, _2)));
+    });
 }
 
 } // namespace proxy
