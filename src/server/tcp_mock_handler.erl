@@ -74,12 +74,14 @@ loop(Socket, Transport, Port, TimeoutIn) ->
     Now = now(),
     case Transport:recv(Socket, 0, ?POLLING_PERIOD) of
         {ok, Data} ->
+            ?dump({ok, Data}),
             % Received some data, save it to history
             tcp_mock_server:register_packet(Port, Data),
             {ok, Timeout} = application:get_env(?APP_NAME, tcp_connection_timeout),
             loop(Socket, Transport, Port, Timeout);
 
-        {_, timeout} ->
+        {A, timeout} ->
+            ?dump({A, timeout}),
             % No data came within the timeout period, check if there is something
             % to send to the client and loop again.
             receive
