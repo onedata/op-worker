@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import copy
 import json
+import os
 import sys
 import time
 
@@ -40,7 +41,7 @@ def _tweak_config(config, name, uid):
     return cfg
 
 
-def _node_up(image, bindir, uid, config, dns_servers):
+def _node_up(image, bindir, logdir, uid, config, dns_servers):
     node_type = config['nodes']['node']['sys.config']['node_type']
     node_name = config['nodes']['node']['vm.args']['name']
 
@@ -54,7 +55,13 @@ EOF
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 /root/bin/node/bin/oneprovider_node console'''
     command = command.format(
-        gen_dev_args=json.dumps({'oneprovider_node': config}))
+        gen_dev_args=json.dumps({'oneprovider_node': config}),
+        uid=os.geteuid(),
+        gid=os.getegid())
+
+    logdir = os.path.join(os.path.abspath(logdir), name)
+    volumes = [(bindir, '/root/build', 'ro')]
+    volumes.extend([(logdir, '/root/bin/node/log', 'rw')] if logdir else [])
 
     container = docker.run(
         image=image,
@@ -64,11 +71,12 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         tty=True,
         workdir='/root/build',
         name=common.format_dockername(name, uid),
-        volumes=[(bindir, '/root/build', 'ro')],
+        volumes=volumes,
         dns_list=dns_servers,
         command=command)
 
     return (
+        [container] if node_type == 'ccm' else [],
         [container] if node_type == 'worker' else [],
         {
             'docker_ids': [container],
@@ -103,19 +111,28 @@ def _wait_until_ready(workers):
         time.sleep(1)
 
 
-def up(image, bindir, dns, uid, config_path):
+def up(image, bindir, logdir, dns, uid, config_path):
     config = common.parse_json_file(config_path)['oneprovider_node']
     config['config']['target_dir'] = '/root/bin'
     configs = [_tweak_config(config, node, uid) for node in config['nodes']]
 
     dns_servers, output = common.set_up_dns(dns, uid)
+    ccms = []
     workers = []
 
     for cfg in configs:
-        worker, node_out = _node_up(image, bindir, uid, cfg, dns_servers)
+        ccm, worker, node_out = _node_up(image, bindir, logdir, uid, cfg,
+                                         dns_servers)
+        ccms.extend(ccm)
         workers.extend(worker)
         common.merge(output, node_out)
 
     _wait_until_ready(workers)
+
+    if logdir:
+        for node in ccms + workers:
+            docker.exec_(node, ['chown', '-R',
+                                '{0}:{1}'.format(os.geteuid(), os.getegid()),
+                                '/root/bin/node/log/'])
 
     return output

@@ -12,7 +12,15 @@ from environment import common, provider
 
 
 parser = common.standard_arg_parser('Bring up oneprovider nodes.')
+parser.add_argument(
+    '-l', '--logdir',
+    action='store',
+    default=None,
+    help='path to a directory where the logs will be stored',
+    dest='logdir')
 
 args = parser.parse_args()
-output = provider.up(args.image, args.bin, args.dns, args.uid, args.config_path)
+output = provider.up(args.image, args.bin, args.logdir, args.dns, args.uid,
+                     args.config_path)
+
 print(json.dumps(output))
