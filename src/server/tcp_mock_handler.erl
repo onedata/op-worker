@@ -84,6 +84,7 @@ loop(Socket, Transport, Port, TimeoutIn) ->
             % to send to the client and loop again.
             receive
                 {ReplyToPid, send, DataToSend} ->
+                    ?dump({ReplyToPid, send, DataToSend}),
                     % There is something to send, send it and
                     % inform the requesting process that it succeeded.
                     Transport:send(Socket, DataToSend),

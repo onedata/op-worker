@@ -37,7 +37,7 @@
 -define(NUMBER_OF_ACCEPTORS, 10).
 % Timeout of tcp_server_send function - if by this time all connection pids do not report
 % back, the sending is considered failed.
--define(SEND_TIMEOUT, 500).
+-define(SEND_TIMEOUT, 5000).
 
 % Internal state of the gen server
 -record(state, {
