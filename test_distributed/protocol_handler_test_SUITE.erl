@@ -33,7 +33,7 @@
     client_communiate_async_test/1, multi_ping_pong_test/1,
     sequential_ping_pong_test/1]).
 
--perf_test({perf_cases, [multi_message_test, multi_ping_pong_test]}).
+-perf_test({perf_cases, [multi_message_test, multi_ping_pong_test, sequential_ping_pong_test]}).
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
         multi_message_test, client_send_test, client_communicate_test,
