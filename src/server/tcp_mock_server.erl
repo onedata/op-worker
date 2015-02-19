@@ -117,7 +117,7 @@ tcp_server_message_count(Port, Data) ->
 %%--------------------------------------------------------------------
 -spec tcp_server_send(Port :: integer(), Data :: binary()) -> true | {error, term()}.
 tcp_server_send(Port, Data) ->
-    gen_server:call(?SERVER, {tcp_server_send, Port, Data}).
+    gen_server:call(?SERVER, {tcp_server_send, Port, Data}, 10000).
 
 
 %%%===================================================================
