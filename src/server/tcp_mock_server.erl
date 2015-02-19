@@ -117,7 +117,7 @@ tcp_server_message_count(Port, Data) ->
 %%--------------------------------------------------------------------
 -spec tcp_server_send(Port :: integer(), Data :: binary()) -> true | {error, term()}.
 tcp_server_send(Port, Data) ->
-    gen_server:call(?SERVER, {tcp_server_send, Port, Data}, 10000).
+    gen_server:call(?SERVER, {tcp_server_send, Port, Data}).
 
 
 %%%===================================================================
@@ -222,7 +222,6 @@ handle_call({tcp_server_send, Port, Data}, _From, State) ->
                 undefined ->
                     {error, wrong_endpoint};
                 _ ->
-                    ?dump(ConnectionsForPort),
                     Result = utils:pmap(
                         fun(Pid) ->
                             Pid ! {self(), send, Data},
