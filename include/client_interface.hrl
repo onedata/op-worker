@@ -34,11 +34,11 @@
 ).
 % Produces an error message if verification fails (server side).
 -define(VERIFY_REST_HISTORY_PACK_ERROR(_History),
-    [{<<"result">>, false}, {<<"history">>, ?VERIFY_REST_HISTORY_PACK_REQUEST(_History)}]).
+    [{<<"result">>, <<"error">>}, {<<"history">>, ?VERIFY_REST_HISTORY_PACK_REQUEST(_History)}]).
 % Retrieves the error details from verify_rest_history error (actual request history) (client side).
 -define(VERIFY_REST_HISTORY_UNPACK_ERROR(_RespBody),
     begin
-        [{<<"result">>, false}, {<<"history">>, _Struct}] = _RespBody,
+        [{<<"result">>, <<"error">>}, {<<"history">>, _Struct}] = _RespBody,
         ?VERIFY_REST_HISTORY_UNPACK_REQUEST(_Struct)
     end
 ).
@@ -123,14 +123,14 @@
 ).
 % Produces an error message if sending fails.
 -define(TCP_SERVER_SEND_PACK_SEND_FAILED_ERROR,
-    [{<<"result">>, false}, {<<"reason">>, <<"failed_to_send_data">>}]).
+    [{<<"result">>, <<"error">>}, {<<"reason">>, <<"failed_to_send_data">>}]).
 % Produces an error message if the tcp server requested to send data does not exist (server side).
 -define(TCP_SERVER_SEND_PACK_WRONG_ENDPOINT_ERROR,
-    [{<<"result">>, false}, {<<"reason">>, <<"wrong_endpoint">>}]).
+    [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}]).
 % Retrieves the error details from tcp_server_send error (client side).
 -define(TCP_SERVER_SEND_UNPACK_ERROR(_RespBody),
     case _RespBody of
-        [{<<"result">>, false}, {<<"reason">>, <<"failed_to_send_data">>}] -> {error, failed_to_send_data};
-        [{<<"result">>, false}, {<<"reason">>, <<"wrong_endpoint">>}] -> {error, wrong_endpoint}
+        [{<<"result">>, <<"error">>}, {<<"reason">>, <<"failed_to_send_data">>}] -> {error, failed_to_send_data};
+        [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}] -> {error, wrong_endpoint}
     end
 ).
