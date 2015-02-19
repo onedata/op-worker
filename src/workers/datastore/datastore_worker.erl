@@ -96,6 +96,7 @@ handle(healthcheck, _State) ->
 
 %% Proxy call to given datastore driver
 handle({driver_call, Module, Method, Args}, _State) ->
+    %% todo @Rafal This pattern matching fixes dialyzer but perhaps better solution would be more suitable
     case erlang:apply(Module, Method, Args) of
         ok -> ok;
         {ok, Response} -> {ok, Response};

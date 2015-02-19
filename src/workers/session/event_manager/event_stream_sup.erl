@@ -39,11 +39,11 @@ start_link() ->
 %% Starts event stream supervised by event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_event_stream(EvtStmSup :: pid(), EvtDisp :: pid(),
+-spec start_event_stream(EvtStmSup :: pid(), EvtMan :: pid(),
     SubId :: event_manager:subscription_id(),
     EvtStmSpec :: event_stream:event_stream()) -> ok | {error, Reason :: term()}.
-start_event_stream(EvtStmSup, EvtDisp, SubId, EvtStmSpec) ->
-    supervisor:start_child(EvtStmSup, [EvtDisp, SubId, EvtStmSpec]).
+start_event_stream(EvtStmSup, EvtMan, SubId, EvtStmSpec) ->
+    supervisor:start_child(EvtStmSup, [EvtMan, SubId, EvtStmSpec]).
 
 %%--------------------------------------------------------------------
 %% @doc

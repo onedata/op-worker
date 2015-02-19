@@ -30,12 +30,12 @@
 %% Check if message is sequential, if so - proxy it throught sequencer
 %% @end
 %%--------------------------------------------------------------------
--spec preroute_message(SeqMan :: pid(), Msg :: #client_message{}) ->
+-spec preroute_message(Msg :: #client_message{}, SessId :: session:id()) ->
     ok | {ok, #server_message{}} | {error, term()}.
-preroute_message(_SeqMan, #client_message{message_stream = undefined} = Msg) ->
+preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
     router:route_message(Msg);
-preroute_message(SeqMan, Msg) ->
-    gen_server:cast(SeqMan, Msg).
+preroute_message(Msg, SessId) ->
+    sequencer_manager:route_message(Msg, SessId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -51,7 +51,8 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = server,
     route_and_ignore_answer(Msg);
 route_message(Msg = #client_message{message_id = #message_id{issuer = server,
     recipient = Pid}}) ->
-    Pid ! Msg;
+    Pid ! Msg,
+    ok;
 route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) ->
     route_and_send_answer(Msg).
 

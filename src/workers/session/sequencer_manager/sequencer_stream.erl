@@ -36,7 +36,7 @@
 %% sequence_number_ack  - sequence number of last acknowledge message
 %% messages             - mapping from sequence number to message for messages
 %%                        waiting to be processed by sequencer stream
-%% sequencer_manager    - pid of sequencer dispatcher
+%% sequencer_manager    - pid of sequencer manager
 %% messages_ack_window  - amount of messages that have to be processed by
 %%                        sequencer stream before emissions of acknowledgement
 %%                        message
@@ -117,7 +117,7 @@ handle_cast(initialize, #state{sequencer_manager = SeqMan, stream_id = StmId} = 
     {ok, MsgsAckWin} = application:get_env(?APP_NAME,
         sequencer_stream_messages_ack_window),
     {ok, TimeAckWin} = application:get_env(?APP_NAME,
-        sequencer_stream_secs_ack_window),
+        sequencer_stream_seconds_ack_window),
     erlang:send_after(timer:seconds(TimeAckWin), self(), periodic_ack),
     case gen_server:call(SeqMan, {sequencer_stream_initialized, StmId}) of
         {ok, #state{} = SeqStmState} ->
@@ -259,7 +259,8 @@ send_message(Msg, #state{sequence_number = SeqNum} = State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sends acknowledgement to sequencer dispatcher for last processed message.
+%% Sends acknowledgement to the client informing about sequence number of last
+%% successfully processed message.
 %% @end
 %%--------------------------------------------------------------------
 -spec send_message_ack(State :: #state{}) -> NewState :: #state{}.
@@ -275,9 +276,9 @@ send_message_ack(#state{stream_id = StmId, session_id = SessId,
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sends request to sequencer dispatcher for messages with sequence number
-%% ranging expected sequence number to sequence number proceeding sequence
-%% number of received message minus one.
+%% Sends request to the client for messages with sequence number
+%% ranging from expected sequence number to sequence number proceeding sequence
+%% number of received message.
 %% @end
 %%--------------------------------------------------------------------
 -spec send_message_request(Msg :: #client_message{}, State :: #state{}) ->

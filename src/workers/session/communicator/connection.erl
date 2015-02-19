@@ -38,8 +38,7 @@
     socket :: port(),
     transport :: module(),
     certificate_info :: #certificate_info{},
-    session_id :: session:id(),
-    sequencer_manager :: pid()
+    session_id :: session:id()
 }).
 
 -define(TIMEOUT, timer:minutes(1)).
@@ -87,7 +86,8 @@ start_link(Ref, Socket, Transport, Opts) ->
 init(Ref, Socket, Transport, _Opts = []) ->
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
-    ok = Transport:setopts(Socket, [{active, once}, {packet, ?PACKET_VALUE}]),
+    ok = Transport:setopts(Socket, [binary, {active, once}, {reuseaddr, true},
+        {packet, ?PACKET_VALUE}]),
     {Ok, Closed, Error} = Transport:messages(),
     gen_server:enter_loop(?MODULE, [], #sock_state{
         socket = Socket,
@@ -220,6 +220,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle first message after opening connection - information from
 %% oneproxy about peer certificate
@@ -239,6 +240,7 @@ handle_oneproxy_certificate_info_message(State, Data) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle usual client data, it is decoded and passed to subsequent handler
 %% functions
@@ -260,6 +262,7 @@ handle_client_message(State = #sock_state{session_id = SessId}, Data) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle client handshake_request, it is necessary to authenticate
 %% and obtain session
@@ -282,6 +285,7 @@ handle_handshake(State = #sock_state{certificate_info = Cert, socket = Sock,
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle nomal client_message
 %% @end
@@ -289,9 +293,9 @@ handle_handshake(State = #sock_state{certificate_info = Cert, socket = Sock,
 -spec handle_normal_message(#sock_state{}, #client_message{}) ->
     {noreply, NewState :: #sock_state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_normal_message(State = #sock_state{sequencer_manager = SeqMan,
+handle_normal_message(State = #sock_state{session_id = SessId,
     socket = _Sock, transport = _Transp}, Msg) ->
-    case router:preroute_message(SeqMan, Msg) of
+    case router:preroute_message(Msg, SessId) of
         ok ->
             {noreply, State, ?TIMEOUT}
 %%         {_, Response = #server_message{}} ->

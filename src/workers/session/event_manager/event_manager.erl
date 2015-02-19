@@ -41,7 +41,7 @@
     AddRule :: event_stream:admission_rule(),
     PendingMsgs :: [{event, event()} | terminate]}.
 
-%% event dispatcher state:
+%% event manager state:
 %% session_id       - ID of session associated with event manager
 %% event_stream_sup - pid of event stream supervisor
 %% event_streams    - mapping from subscription ID to event stream status
@@ -60,7 +60,7 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(EvtDispSup :: pid(), SessId :: session:id()) ->
+-spec start_link(EvtManSup :: pid(), SessId :: session:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(EvtManSup, SessId) ->
     gen_server:start_link(?MODULE, [EvtManSup, SessId], []).

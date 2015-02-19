@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible
-%%% for dispatching messages associated with given session to sequencer streams.
+%%% for dispatching messages to sequencer streams.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(sequencer_manager).
@@ -28,8 +28,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
-%% sequencer dispatcher state:
-%% session_id           - ID of session associated with event dispatcher
+%% sequencer manager state:
+%% session_id           - ID of session associated with event manager
 %% sequencer_stream_sup - pid of sequencer stream supervisor
 %% sequencer_streams    - mapping from message ID to sequencer stream
 -record(state, {
@@ -152,9 +152,8 @@ handle_cast(#client_message{message_stream = #message_stream{stm_id = StmId}} = 
             {noreply, State#state{sequencer_streams = maps:put(StmId, {state,
                 SeqStmState, [Msg | PendingMsgs]}, SeqStms)}};
         error ->
-            SeqDisp = self(),
             {ok, _SeqStm} = sequencer_stream_sup:start_sequencer_stream(SeqStmSup,
-                SeqDisp, SessId, StmId),
+                self(), SessId, StmId),
             {noreply, State#state{sequencer_streams = maps:put(StmId, {state,
                 undefined, [Msg]}, SeqStms)}}
     end;

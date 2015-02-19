@@ -91,6 +91,7 @@ multicall(WorkerName, Request) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Synchronously send request to all workers with given timeout.
+%% Returns list of pairs: node and associated answer.
 %% @end
 %%--------------------------------------------------------------------
 -spec multicall(WorkerName :: worker_name(), Request :: term(), Timeout :: timeout()) ->
@@ -126,7 +127,7 @@ cast(WorkerRef, Request, ReplyTo) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Asynchronously send request to worker, answer with given MsgId is
-%% expected at ReplyTo process/gen_server. The answer would be
+%% expected at ReplyTo process/gen_server. The answer will be
 %% 'worker_answer' record.
 %% @equiv cast(WorkerName, Request, ReplyTo, MsgId, ?DEFAULT_WORKER_SELECTION_TYPE)
 %% @end
@@ -140,7 +141,7 @@ cast(WorkerRef, Request, ReplyTo, MsgId) ->
 %% @doc
 %% Asynchronously send request to worker (selected according to given
 %% 'SelectionType' algorithm), answer with given MsgId is
-%% expected at ReplyTo process/gen_server. The answer would be
+%% expected at ReplyTo process/gen_server. The answer will be
 %% 'worker_answer' record.
 %% @end
 %%--------------------------------------------------------------------
@@ -162,8 +163,7 @@ cast(WorkerRef, Request, ReplyTo, MsgId, SelectionType) ->
 %% @equiv multicast(WorkerName, Request, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec multicast(WorkerName :: worker_name(), Request :: term()) ->
-    [{Node :: node(), ok | {error, term()}}].
+-spec multicast(WorkerName :: worker_name(), Request :: term()) -> ok.
 multicast(WorkerName, Request) ->
     multicast(WorkerName, Request, undefined).
 
@@ -175,24 +175,23 @@ multicast(WorkerName, Request) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec multicast(WorkerName :: worker_name(), Request :: term(),
-    ReplyTo :: process_ref()) -> [{Node :: node(), ok | {error, term()}}].
+    ReplyTo :: process_ref()) -> ok.
 multicast(WorkerName, Request, ReplyTo) ->
     multicast(WorkerName, Request, ReplyTo, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Asynchronously send request to all workers, answer with given MsgId
-%% is expected at ReplyTo process/gen_server. The answer would be
-%% list of pairs: node and associated 'worker_answer' record.
+%% Asynchronously send request to all workers, answers with given MsgId
+%% are expected at ReplyTo process/gen_server. The answers will be
+%% 'worker_answer' records.
 %% @end
 %%--------------------------------------------------------------------
 -spec multicast(WorkerName :: worker_name(), Request :: term(),
-    ReplyTo :: process_ref(), MsgId :: term() | undefined) ->
-    [{Node :: node(), ok | {error, term()}}].
+    ReplyTo :: process_ref(), MsgId :: term() | undefined) -> ok.
 multicast(WorkerName, Request, ReplyTo, MsgId) ->
     {ok, Nodes} = worker_map:get_worker_nodes(WorkerName),
-    utils:pmap(fun(Node) ->
-        {Node, cast({WorkerName, Node}, Request, ReplyTo, MsgId)}
+    utils:pforeach(fun(Node) ->
+        cast({WorkerName, Node}, Request, ReplyTo, MsgId)
     end, Nodes).
 
 %%%===================================================================

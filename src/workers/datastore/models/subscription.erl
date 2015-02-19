@@ -66,6 +66,7 @@ get(Key) ->
 %% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
+%% todo Change to generic call to datastore worker.
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error().
 list() ->
     mnesia_cache_driver:list(model_init()).
