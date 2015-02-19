@@ -16,8 +16,9 @@ import os
 import platform
 import sys
 import time
+
 sys.path.insert(0, 'bamboos/docker')
-import docker
+from environment import docker
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,

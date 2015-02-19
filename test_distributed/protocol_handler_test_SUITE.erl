@@ -222,9 +222,9 @@ client_communiate_async_test(Config) ->
 
     % given
     test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_id = MsgId = #message_id{issuer = server,
+        fun(#client_message{message_id = Id = #message_id{issuer = server,
             recipient = undefined}}) ->
-            Self ! {router_message_called, MsgId},
+            Self ! {router_message_called, Id},
             ok
         end),
 
