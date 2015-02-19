@@ -12,64 +12,125 @@
 %%%-------------------------------------------------------------------
 
 % Term that is sent back when an operation has completed successfully.
--define(OK_RESULT, [{<<"result">>, <<"ok">>}]).
+-define(TRUE_RESULT, [{<<"result">>, true}]).
+
+-define(NAGIOS_ENPOINT, "/nagios").
 
 % Endpoint used to verify if all mocked endpoint were requested in proper order.
--define(VERIFY_ALL_PATH, "/verify_all").
-% Transform a proplist of pairs {Port, Path} into a term that is sent as JSON to verify_all endpoint (client side).
--define(VERIFY_ALL_PACK_REQUEST(_VerificationList),
+-define(VERIFY_REST_HISTORY_PATH, "/verify_rest_history").
+% Transform a proplist of pairs {Port, Path} into a term that is sent as JSON to verify_rest_history endpoint (client side).
+-define(VERIFY_REST_HISTORY_PACK_REQUEST(_VerificationList),
     lists:map(
         fun({_Port, _Path}) ->
-            {<<"mapping">>, [{<<"port">>, _Port}, {<<"path">>, _Path}]}
+            {<<"endpoint">>, [{<<"port">>, _Port}, {<<"path">>, _Path}]}
         end, _VerificationList)
 ).
 % Transform a struct obtained by decoding JSON into a proplist of pairs {Port, Path} (server side).
--define(VERIFY_ALL_UNPACK_REQUEST(_Struct),
+-define(VERIFY_REST_HISTORY_UNPACK_REQUEST(_Struct),
     lists:map(
-        fun({<<"mapping">>, [{<<"port">>, _Port}, {<<"path">>, _Path}]}) ->
+        fun({<<"endpoint">>, [{<<"port">>, _Port}, {<<"path">>, _Path}]}) ->
             {_Port, _Path}
         end, _Struct)
 ).
 % Produces an error message if verification fails (server side).
--define(VERIFY_ALL_PACK_ERROR(_History),
-    [{<<"result">>, <<"error">>}, {<<"history">>, ?VERIFY_ALL_PACK_REQUEST(_History)}]).
-% Retrieves the error details from verify_all error (actual request history) (client side).
--define(VERIFY_ALL_UNPACK_ERROR(_RespBody),
+-define(VERIFY_REST_HISTORY_PACK_ERROR(_History),
+    [{<<"result">>, false}, {<<"history">>, ?VERIFY_REST_HISTORY_PACK_REQUEST(_History)}]).
+% Retrieves the error details from verify_rest_history error (actual request history) (client side).
+-define(VERIFY_REST_HISTORY_UNPACK_ERROR(_RespBody),
     begin
-        [{<<"result">>, <<"error">>}, {<<"history">>, _Struct}] = _RespBody,
-        ?VERIFY_ALL_UNPACK_REQUEST(_Struct)
+        [{<<"result">>, false}, {<<"history">>, _Struct}] = _RespBody,
+        ?VERIFY_REST_HISTORY_UNPACK_REQUEST(_Struct)
     end
 ).
 
 
-% Endpoint used to verify if a mocked endpoint has been requested certain amount of times.
--define(VERIFY_MOCK_PATH, "/verify").
-% Creates a term that is sent as JSON to verify_mock endpoint (client side).
--define(VERIFY_MOCK_PACK_REQUEST(_Port, _Path, _Number),
+-define(REST_ENDPOINT_REQUEST_COUNT_PATH, "/rest_endpoint_request_count").
+% Creates a term that is sent as JSON to verify_rest_endpoint endpoint (client side).
+-define(REST_ENDPOINT_REQUEST_COUNT_REQUEST(_Port, _Path),
     [
         {<<"port">>, _Port},
-        {<<"path">>, _Path},
-        {<<"number">>, _Number}
+        {<<"path">>, _Path}
     ]
 ).
-% Retrieves params sent to verify_mock endpoint (server side).
--define(VERIFY_MOCK_UNPACK_REQUEST(_Struct),
+% Retrieves params sent to verify_rest_endpoint endpoint (server side).
+-define(REST_ENDPOINT_REQUEST_COUNT_UNPACK_REQUEST(_Struct),
     {
         proplists:get_value(<<"port">>, _Struct),
-        proplists:get_value(<<"path">>, _Struct),
-        proplists:get_value(<<"number">>, _Struct)
+        proplists:get_value(<<"path">>, _Struct)
     }
 ).
-% Produces an error message if verification fails (server side).
--define(VERIFY_MOCK_PACK_ERROR(_Number),
-    [{<<"result">>, <<"error">>}, {<<"number">>, _Number}]).
+% Produces success message which carries information of message count.
+-define(REST_ENDPOINT_REQUEST_COUNT_PACK_RESPONSE(_Count),
+    [{<<"result">>, _Count}]
+).
 % Produces an error message if the endpoint requested to be verified does not exis (server side).
--define(VERIFY_MOCK_PACK_ERROR_WRONG_ENDPOINT,
+-define(REST_ENDPOINT_REQUEST_COUNT_PACK_ERROR_WRONG_ENDPOINT,
     [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}]).
-% Retrieves the error details from verify_mock error (client side).
--define(VERIFY_MOCK_UNPACK_ERROR(_RespBody),
+% Retrieves the error details from verify_rest_endpoint error (client side).
+% Retrieves the response from appmock server (client side).
+-define(REST_ENDPOINT_REQUEST_COUNT_UNPACK_RESPONSE(_RespBody),
     case _RespBody of
-        [{<<"result">>, <<"error">>}, {<<"number">>, _Number}] -> {error, _Number};
+        [{<<"result">>, _Count}] -> {ok, _Count};
         [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}] -> {error, wrong_endpoint}
+    end
+).
+
+
+
+% Endpoint used to verify if a mocked TCP server has received a given packet.
+% The port binding is used to identify the TCP server.
+-define(TCP_SERVER_MESSAGE_COUNT_PATH(_Port), "/tcp_server_message_count/" ++ integer_to_list(_Port)).
+-define(TCP_SERVER_MESSAGE_COUNT_COWBOY_ROUTE, "/tcp_server_message_count/:port").
+% Creates message that is sent to tcp_server_message_count endpoint (client side).
+% For now, its just bare bytes, but the macro stays so it can be easily changed -
+% for example to base64 encoded.
+-define(TCP_SERVER_MESSAGE_COUNT_PACK_REQUEST(_BinaryData),
+    _BinaryData
+).
+% Retrieves data sent to tcp_server_message_count endpoint (server side).
+-define(TCP_SERVER_MESSAGE_COUNT_UNPACK_REQUEST(_BinaryData),
+    _BinaryData
+).
+% Produces success message which carries information of request count.
+-define(TCP_SERVER_MESSAGE_COUNT_PACK_RESPONSE(_Count),
+    [{<<"result">>, _Count}]
+).
+% Produces an error message if the tcp server requested to be verified does not exist (server side).
+-define(TCP_SERVER_MESSAGE_COUNT_PACK_ERROR_WRONG_ENDPOINT,
+    [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}]).
+% Retrieves the response from appmock server (client side).
+-define(TCP_SERVER_MESSAGE_COUNT_UNPACK_RESPONSE(_RespBody),
+    case _RespBody of
+        [{<<"result">>, _Count}] -> {ok, _Count};
+        [{<<"result">>, <<"error">>}, {<<"reason">>, <<"wrong_endpoint">>}] -> {error, wrong_endpoint}
+    end
+).
+
+
+% Endpoint used to send given data to all clients connected to specified server.
+% The port binding is used to identify the TCP server.
+-define(TCP_SERVER_SEND_PATH(_Port), "/tcp_server_send/" ++ integer_to_list(_Port)).
+-define(TCP_SERVER_SEND_COWBOY_ROUTE, "/tcp_server_send/:port").
+% Creates message that is sent to tcp_server_send endpoint (client side).
+% For now, its just bare bytes, but the macro stays so it can be easily changed -
+% for example to base64 encoded.
+-define(TCP_SERVER_SEND_PACK_REQUEST(_BinaryData),
+    _BinaryData
+).
+% Retrieves data sent to tcp_server_send endpoint (server side).
+-define(TCP_SERVER_SEND_UNPACK_REQUEST(_BinaryData),
+    _BinaryData
+).
+% Produces an error message if sending fails.
+-define(TCP_SERVER_SEND_PACK_SEND_FAILED_ERROR,
+    [{<<"result">>, false}, {<<"reason">>, <<"failed_to_send_data">>}]).
+% Produces an error message if the tcp server requested to send data does not exist (server side).
+-define(TCP_SERVER_SEND_PACK_WRONG_ENDPOINT_ERROR,
+    [{<<"result">>, false}, {<<"reason">>, <<"wrong_endpoint">>}]).
+% Retrieves the error details from tcp_server_send error (client side).
+-define(TCP_SERVER_SEND_UNPACK_ERROR(_RespBody),
+    case _RespBody of
+        [{<<"result">>, false}, {<<"reason">>, <<"failed_to_send_data">>}] -> {error, failed_to_send_data};
+        [{<<"result">>, false}, {<<"reason">>, <<"wrong_endpoint">>}] -> {error, wrong_endpoint}
     end
 ).

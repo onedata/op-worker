@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This behaviour defines an API that has to be implemented by app description modules.
-%%% App description module is an .erl file that contains list of mappings and other configuration
+%%% App description module is an .erl file that contains list of endpoints and other configuration
 %%% needed for appmock server to describe its behaviour. Such file is required to start an appmock instance,
 %%% and will be compiled and loaded dynamically.
 %%% @end
@@ -23,4 +23,13 @@
 %% HTTPS endpoint mocks. It is used to determine which ports and dispatch rules to use.
 %% @end
 %%--------------------------------------------------------------------
--callback response_mocks() -> [#mock_resp_mapping{}].
+-callback rest_mocks() -> [#rest_mock{}].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback called before the initialization of appmock instance. Must return a list of
+%% TCP server mocks.
+%% @end
+%%--------------------------------------------------------------------
+-callback tcp_server_mocks() -> [#tcp_server_mock{}].

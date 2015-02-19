@@ -16,7 +16,6 @@ import json
 import os
 import random
 import string
-import time
 
 
 def tweak_config(config, name, uid):
@@ -60,7 +59,7 @@ parser.add_argument(
 parser.add_argument(
     '--uid', '-u',
     action='store',
-    default=str(int(time.time())),
+    default=common.generate_uid(),
     help='uid that will be concatenated to docker names',
     dest='uid')
 
@@ -78,14 +77,8 @@ configs = [tweak_config(config, node, uid) for node in config['nodes']]
 
 output = collections.defaultdict(list)
 
-dns = args.dns
-if dns == 'auto':
-    dns_config = common.run_script_return_dict('dns_up.py', ['--uid', uid])
-    dns = dns_config['dns']
-    output['dns'] = dns_config['dns']
-    output['docker_ids'] = dns_config['docker_ids']
-elif dns == 'none':
-    dns = None
+(dns_servers, dns_output) = common.set_up_dns(args.dns, uid)
+common.merge(output, dns_output)
 
 for cfg in configs:
     node_name = cfg['nodes']['node']['vm.args']['name']
@@ -94,9 +87,11 @@ for cfg in configs:
     sys_config = cfg['nodes']['node']['sys.config']
     app_desc_file_path = sys_config['app_description_file']
     app_desc_file_name = os.path.basename(app_desc_file_path)
-    # App desc file can be an absolute path or relative to gen_dev_args.json
-    if not os.path.isabs(app_desc_file_path):
-        app_desc_file_path = common.get_file_dir(args.config_path) + '/' + app_desc_file_path
+    # app_desc_file_path can be an absolute path or relative to gen_dev_args.json
+    app_desc_file_path = os.path.join(common.get_file_dir(args.config_path), app_desc_file_path)
+
+    # app_desc_file_name must be preserved, as it is an .erl file and its module name
+    # must match its file name.
     sys_config['app_description_file'] = '/tmp/' + app_desc_file_name
 
     command = '''set -e
@@ -120,9 +115,9 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         interactive=True,
         tty=True,
         workdir='/root/build',
-        name='{0}_{1}'.format(name, uid),
+        name=common.format_dockername(name, uid),
         volumes=[(args.bin, '/root/build', 'ro')],
-        dns=[dns],
+        dns_list=dns_servers,
         command=command)
 
     output['docker_ids'].append(container)
@@ -130,9 +125,3 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 
 # Print JSON to output so it can be parsed by other scripts
 print(json.dumps(output))
-
-
-
-
-
-
