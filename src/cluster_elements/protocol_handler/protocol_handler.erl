@@ -203,6 +203,7 @@ handle_info(_Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #sock_state{}) -> term().
 terminate(_Reason, #sock_state{session_id = SessionId}) ->
+    ?info("TERMINATE ~p", [_Reason]), %todo remove when we figure out why connections are lost
     session:remove_connection(self(), SessionId),
     ok.
 

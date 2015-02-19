@@ -30,13 +30,15 @@
     end_per_testcase/2]).
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1,
     multi_message_test/1, client_send_test/1, client_communicate_test/1,
-    client_communiate_async_test/1, multi_ping_pong_test/1]).
+    client_communiate_async_test/1, multi_ping_pong_test/1,
+    sequential_ping_pong_test/1]).
 
 -perf_test({perf_cases, [multi_message_test, multi_ping_pong_test]}).
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
         multi_message_test, client_send_test, client_communicate_test,
-        client_communiate_async_test, multi_ping_pong_test].
+        client_communiate_async_test, multi_ping_pong_test,
+        sequential_ping_pong_test].
 
 -define(CLEANUP, true).
 
@@ -254,13 +256,12 @@ client_communiate_async_test(Config) ->
     ?assertEqual({ok, {router_message_called, MsgId2}}, RouterNotification),
     ok = ssl:close(Sock).
 
-
 -perf_test([
-    {repeats, 1},
+    {repeats, 3},
     {perf_configs, [
-        [{msg_num, 100000}]
+        [{msg_num, 1000000}]
     ]},
-    {ct_config, [{msg_num, 100}]}
+    {ct_config, [{msg_num, 1000}]}
 ]).
 multi_ping_pong_test(Config) ->
     % given
@@ -268,16 +269,16 @@ multi_ping_pong_test(Config) ->
     MsgNum = ?config(msg_num, Config),
     MsgNumbers = lists:seq(1, MsgNum),
     MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
-    Events = lists:map(
+    Pings = lists:map(
         fun(N) ->
             #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
         end, MsgNumbersBin),
-    RawEvents = lists:map(fun(E) -> client_messages:encode_msg(E) end, Events),
+    RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
     T1 = os:timestamp(),
-    lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
+    lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawPings),
     T2 = os:timestamp(),
 
     % then
@@ -317,10 +318,57 @@ multi_ping_pong_test(Config) ->
         end, [], MsgNumbersBin),
     ?assertEqual([], UnknownMessages),
     T3 = os:timestamp(),
-    SendingTime = {sending_time, timer:now_diff(T2, T1)},
-    ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
-    FullTime = {full_time, timer:now_diff(T3, T1)},
-    ct:print("~p ~p ~p", [SendingTime, ReceivingTime, FullTime]),
+    _SendingTime = {sending_time, timer:now_diff(T2, T1)},
+    _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
+    _FullTime = {full_time, timer:now_diff(T3, T1)},
+%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
+    ok = ssl:close(Sock).
+
+-perf_test([
+    {repeats, 3},
+    {perf_configs, [
+        [{msg_num, 100000}]
+    ]},
+    {ct_config, [{msg_num, 1000}]}
+]).
+sequential_ping_pong_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    MsgNum = ?config(msg_num, Config),
+    MsgNumbers = lists:seq(1, MsgNum),
+    MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
+    Pings = lists:map(
+        fun(N) ->
+            #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
+        end, MsgNumbersBin),
+    RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
+
+    % when
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+    T1 = os:timestamp(),
+    lists:foldl(fun(E, N) ->
+        % send ping & receive pong
+        ok = ssl:send(Sock, E),
+        Pong =
+            receive
+                {ssl, _, Data} -> server_messages:decode_msg(Data, 'ServerMessage')
+            after
+                timer:seconds(5) -> {error, timeout}
+            end,
+
+        % validate pong
+        BinaryN = integer_to_binary(N),
+        ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}},
+            message_id = BinaryN},
+            Pong),
+        N+1
+    end, 1, RawPings),
+    T2 = os:timestamp(),
+
+    % then
+    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
+    _FullTime = {full_time, timer:now_diff(T2, T1)},
+%%     ct:print("~p", [_FullTime]),
     ok = ssl:close(Sock).
 
 %%%===================================================================
