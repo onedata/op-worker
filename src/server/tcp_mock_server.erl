@@ -222,6 +222,7 @@ handle_call({tcp_server_send, Port, Data}, _From, State) ->
                 undefined ->
                     {error, wrong_endpoint};
                 _ ->
+                    ?dump(ConnectionsForPort),
                     Result = utils:pmap(
                         fun(Pid) ->
                             Pid ! {self(), send, Data},
