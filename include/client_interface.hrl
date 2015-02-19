@@ -28,8 +28,8 @@
 % Transform a struct obtained by decoding JSON into a proplist of pairs {Port, Path} (server side).
 -define(VERIFY_REST_HISTORY_UNPACK_REQUEST(_Struct),
     lists:map(
-        fun({<<"endpoint">>, [{<<"port">>, _Port}, {<<"path">>, _Path}]}) ->
-            {_Port, _Path}
+        fun({<<"endpoint">>, _Props}) ->
+            {proplists:get_value(<<"port">>, _Props), proplists:get_value(<<"path">>, _Props)}
         end, _Struct)
 ).
 % Produces an error message if verification fails (server side).
