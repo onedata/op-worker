@@ -22,6 +22,8 @@
     model_init/0, 'after'/5, before/4]).
 
 %% API
+-export([get_session_supervisor_and_node/1, get_event_manager/1,
+    get_sequencer_manager/1, get_communicator/1]).
 
 -export_type([id/0, credentials/0]).
 
@@ -129,3 +131,72 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns session supervisor and node on which supervisor is running.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_session_supervisor_and_node(SessId :: id()) ->
+    {ok, {SessSup :: pid(), Node :: node()}} | {error, Reason :: term()}.
+get_session_supervisor_and_node(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{session_sup = undefined}}} ->
+            {error, {not_found, missing}};
+        {ok, #document{value = #session{session_sup = SessSup, node = Node}}} ->
+            {ok, {SessSup, Node}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns event manager associated with session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_event_manager(SessId :: id()) ->
+    {ok, EvtMan :: pid()} | {error, Reason :: term()}.
+get_event_manager(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{event_manager = undefined}}} ->
+            {error, {not_found, missing}};
+        {ok, #document{value = #session{event_manager = EvtMan}}} ->
+            {ok, EvtMan};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns sequencer manager associated with session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_sequencer_manager(SessId :: id()) ->
+    {ok, SeqMan :: pid()} | {error, Reason :: term()}.
+get_sequencer_manager(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{sequencer_manager = undefined}}} ->
+            {error, {not_found, missing}};
+        {ok, #document{value = #session{sequencer_manager = SeqMan}}} ->
+            {ok, SeqMan};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns communicator associated with session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_communicator(SessId :: id()) ->
+    {ok, Comm :: pid()} | {error, Reason :: term()}.
+get_communicator(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{communicator = undefined}}} ->
+            {error, {not_found, missing}};
+        {ok, #document{value = #session{communicator = Comm}}} ->
+            {ok, Comm};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+

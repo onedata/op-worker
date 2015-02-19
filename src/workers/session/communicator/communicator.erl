@@ -147,7 +147,14 @@ init([SessId, Con]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_call({add_connection, Con}, _From, #state{connections = Cons} = State) ->
+    {reply, ok, State#state{connections = [Con | Cons]}};
+
+handle_call({remove_connection, Con}, _From, #state{connections = Cons} = State) ->
+    {reply, ok, State#state{connections = lists:delete(Con, Cons)}};
+
 handle_call(_Request, _From, State) ->
+    ?log_bad_request(_Request),
     {reply, ok, State}.
 
 %%--------------------------------------------------------------------
@@ -161,6 +168,7 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -174,6 +182,7 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info(_Info, State) ->
+    ?log_bad_request(_Info),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -188,7 +197,7 @@ handle_info(_Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
-    ?warning("Event manager terminated in state ~p due to: ~p", [State, Reason]),
+    ?warning("Communicator terminated in state ~p due to: ~p", [State, Reason]),
     session_manager:remove_session(SessId).
 
 %%--------------------------------------------------------------------

@@ -60,8 +60,8 @@ start_link(SeqManSup, SessId) ->
 -spec route_message(Msg :: #client_message{}, SessId :: session:id()) ->
     ok | {error, Reason :: term()}.
 route_message(Msg, SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{sequencer_manager = SeqMan}}} ->
+    case session:get_sequencer_manager(SessId) of
+        {ok, SeqMan} ->
             gen_server:cast(SeqMan, Msg);
         {error, Reason} ->
             {error, Reason}

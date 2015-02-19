@@ -22,9 +22,14 @@
     end_per_testcase/2]).
 
 %% tests
--export([session_creation_and_removal_test/1]).
+-export([session_creation_and_removal_test/1, session_getters_test/1,
+    session_supervisor_child_crash_test/1]).
 
-all() -> [session_creation_and_removal_test].
+all() -> [
+    session_creation_and_removal_test,
+    session_getters_test,
+    session_supervisor_child_crash_test
+].
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -60,7 +65,7 @@ session_creation_and_removal_test(Config) ->
         end, AnswersWithoutCreatedAnswer)),
 
         % Check connections have been added to communicator associated with
-        % reused session
+        % reused session.
         lists:foreach(fun(_) ->
             ?assertMatch({ok, _}, test_utils:receive_msg(add_connection, ?TIMEOUT))
         end, AnswersWithoutCreatedAnswer),
@@ -77,7 +82,7 @@ session_creation_and_removal_test(Config) ->
             communicator = Comm
         }}} = Doc,
 
-        % Check session infrastructure is running
+        % Check session infrastructure is running.
         lists:foreach(fun(Pid) ->
             ?assert(is_pid(Pid)),
             ?assertNotEqual(undefined, rpc:call(Node, erlang, process_info, [Pid]))
@@ -90,12 +95,12 @@ session_creation_and_removal_test(Config) ->
     ]),
 
     % Check whether session manager returns different session supervisors, event
-    % managers, sequencer managers and communicators for different sessions
+    % managers, sequencer managers and communicators for different sessions.
     lists:foreach(fun({Pid1, Pid2}) ->
         ?assertNotEqual(Pid1, Pid2)
     end, lists:zip(Pids1, Pids2)),
 
-    % Check supervision tree structure
+    % Check supervision tree structure.
     ?assert(is_child({session_manager_worker_sup, Node1}, SessSup1)),
     ?assert(is_child({session_manager_worker_sup, Node2}, SessSup2)),
     [
@@ -117,18 +122,16 @@ session_creation_and_removal_test(Config) ->
     % Check whether session manager can remove session dispite of node on which
     % request is processed.
     utils:pforeach(fun({SessId, Node, Pids, Worker}) ->
-        RemoveAnswer1 = rpc:call(Worker, session_manager,
-            remove_session, [SessId]),
-        ?assertMatch(ok, RemoveAnswer1),
-        RemoveAnswer2 = rpc:call(Worker, session_manager,
-            remove_session, [SessId]),
-        ?assertMatch({error, _}, RemoveAnswer2),
+        ?assertEqual(ok, rpc:call(Worker, session_manager,
+            remove_session, [SessId])),
+        ?assertMatch({error, _}, rpc:call(Worker, session_manager,
+            remove_session, [SessId])),
 
-        % Check whether session has been removed from cache
+        % Check whether session has been removed from cache.
         ?assertMatch({error, {not_found, _}}, rpc:call(Worker,
             session, get, [SessId])),
 
-        % Check session infrastructure has been stopped
+        % Check session infrastructure has been stopped.
         lists:foreach(fun(Pid) ->
             ?assertEqual(undefined, rpc:call(Node, erlang, process_info, [Pid]))
         end, Pids)
@@ -137,9 +140,60 @@ session_creation_and_removal_test(Config) ->
         {SessId2, Node2, Pids2, Worker1}
     ]),
 
-    % Check session manager supervisors have no children
+    % Check session manager supervisors have no children.
     ?assertEqual([], supervisor:which_children({session_manager_worker_sup, Node1})),
     ?assertEqual([], supervisor:which_children({session_manager_worker_sup, Node2})),
+
+    ok.
+
+%% Test of session getters.
+session_getters_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session_id, Config),
+
+    lists:foreach(fun(GetterName) ->
+        Answer = rpc:call(Worker, session, GetterName, [SessId]),
+        ?assertMatch({ok, _}, Answer),
+        {ok, Pid} = Answer,
+        ?assert(is_pid(Pid))
+    end, [get_event_manager, get_sequencer_manager, get_communicator]),
+
+    Answer = rpc:call(Worker, session, get_session_supervisor_and_node, [SessId]),
+    ?assertMatch({ok, {_, _}}, Answer),
+    {ok, {Pid, Node}} = Answer,
+    ?assert(is_pid(Pid)),
+    ?assert(is_atom(Node)),
+
+    ok.
+
+%% Test removal of session in case of crash of event manager supervisor, sequencer
+%% manager supervisor or communicator.
+session_supervisor_child_crash_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
+    SessId = <<"session_id">>,
+    Cred = #credentials{user_id = <<"user_id">>},
+
+    lists:foreach(fun({ChildId, Fun, Args}) ->
+        ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
+            reuse_or_create_session, [SessId, Cred, Self])),
+
+        {ok, {SessSup, Node}} = rpc:call(Worker, session,
+            get_session_supervisor_and_node, [SessId]),
+
+        {ok, Child} = get_child(SessSup, ChildId),
+
+        apply(Fun, [Child | Args]),
+
+        timer:sleep(?TIMEOUT),
+
+        ?assertMatch({error, {not_found, _}}, rpc:call(Worker, session, get, [SessId])),
+        ?assertEqual([], supervisor:which_children({session_manager_worker_sup, Node}))
+    end, [
+        {event_manager_sup, fun erlang:exit/2, [kill]},
+        {sequencer_manager_sup, fun erlang:exit/2, [kill]},
+        {communicator, fun gen_server:cast/2, [kill]}
+    ]),
 
     ok.
 
@@ -157,20 +211,60 @@ init_per_testcase(session_creation_and_removal_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     Self = self(),
 
-    test_utils:mock_new(Workers, [communicator]),
+    test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, add_connection,
         fun(_Comm, _Con) ->
             Self ! add_connection, ok
         end
     ),
 
+    Config;
+
+init_per_testcase(session_getters_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
+    SessId = <<"session_id">>,
+    Cred = #credentials{user_id = <<"user_id">>},
+
+    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
+        reuse_or_create_session, [SessId, Cred, Self])),
+
+    [{session_id, SessId} | Config];
+
+init_per_testcase(session_supervisor_child_crash_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    test_utils:mock_new(Worker, logger),
+    test_utils:mock_expect(Worker, logger, dispatch_log, fun
+        (_, _, _, [_, _, kill], _) -> meck:exception(throw, kill);
+        (A, B, C, D, E) -> meck:passthrough([A, B, C, D, E])
+    end),
+
     Config.
 
 end_per_testcase(session_creation_and_removal_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
 
-    test_utils:mock_validate(Workers, [communicator]),
-    test_utils:mock_unload(Workers, [communicator]),
+    test_utils:mock_validate(Workers, communicator),
+    test_utils:mock_unload(Workers, communicator),
+
+    Config;
+
+end_per_testcase(session_getters_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session_id, Config),
+
+    ?assertEqual(ok, rpc:call(Worker, session_manager,
+        remove_session, [SessId])),
+
+    [_ | NewConfig] = Config,
+    NewConfig;
+
+end_per_testcase(session_supervisor_child_crash_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    test_utils:mock_validate(Worker, logger),
+    test_utils:mock_unload(Worker, logger),
 
     Config.
 

@@ -77,7 +77,7 @@ stop_event_stream(EvtStmSup, EvtStm) ->
 init([]) ->
     RestartStrategy = simple_one_for_one,
     MaxR = 3,
-    MaxT = timer:minutes(1),
+    MaxT = 1,
     {ok, {{RestartStrategy, MaxR, MaxT}, [event_stream_spec()]}}.
 
 %%%===================================================================

@@ -33,7 +33,7 @@
 
 -type event() :: #read_event{} | #write_event{}.
 -type subscription() :: #read_event_subscription{}
-                      | #write_event_subscription{}.
+| #write_event_subscription{}.
 -type subscription_id() :: non_neg_integer().
 -type producer() :: gui | all.
 -type event_stream_status() :: {running, EvtStm :: pid(),
@@ -73,10 +73,8 @@ start_link(EvtManSup, SessId) ->
 -spec emit(Evt :: event(), SessId :: session:id()) ->
     ok | {error, Reason :: event_manager_not_found | term()}.
 emit(Evt, SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{event_manager = undefined}}} ->
-            {error, event_manager_not_found};
-        {ok, #document{value = #session{event_manager = EvtMan}}} ->
+    case session:get_event_manager(SessId) of
+        {ok, EvtMan} ->
             gen_server:cast(EvtMan, #client_message{message_body = Evt});
         {error, Reason} ->
             {error, Reason}

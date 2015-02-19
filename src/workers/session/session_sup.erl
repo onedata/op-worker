@@ -55,7 +55,7 @@ start_link(SessId, Con) ->
     ignore.
 init([SessId, Con]) ->
     RestartStrategy = one_for_all,
-    MaxR = 3,
+    MaxR = 0,
     MaxT = 1,
 
     {ok, SessId} = session:update(SessId, #{session_sup => self(), node => node()}),
@@ -80,7 +80,7 @@ init([SessId, Con]) ->
     supervisor:child_spec().
 communicator_spec(SessId, Con) ->
     Id = Module = communicator,
-    Restart = temporary,
+    Restart = transient,
     Shutdown = timer:seconds(5),
     Type = worker,
     {Id, {Module, start_link, [SessId, Con]}, Restart, Shutdown, Type, [Module]}.
@@ -95,7 +95,7 @@ communicator_spec(SessId, Con) ->
     supervisor:child_spec().
 sequencer_manager_sup_spec(SessId) ->
     Id = Module = sequencer_manager_sup,
-    Restart = temporary,
+    Restart = transient,
     Shutdown = infinity,
     Type = supervisor,
     {Id, {Module, start_link, [SessId]}, Restart, Shutdown, Type, [Module]}.
@@ -110,7 +110,7 @@ sequencer_manager_sup_spec(SessId) ->
     supervisor:child_spec().
 event_manager_sup_spec(SessId) ->
     Id = Module = event_manager_sup,
-    Restart = temporary,
+    Restart = transient,
     Shutdown = infinity,
     Type = supervisor,
     {Id, {Module, start_link, [SessId]}, Restart, Shutdown, Type, [Module]}.
