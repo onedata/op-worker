@@ -26,11 +26,13 @@
 %% tests
 -export([
     event_stream_test/1,
+    event_stream_crash_test/1,
     event_manager_test/1
 ]).
 
 all() -> [
     event_stream_test,
+    event_stream_crash_test,
     event_manager_test
 ].
 
@@ -110,6 +112,53 @@ event_stream_test(Config) ->
 
     ok.
 
+event_stream_crash_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session_id, Config),
+    Self = self(),
+    EvtsCount = 100,
+    HalfEvts = round(EvtsCount / 2),
+
+    {ok, SubId} = subscribe(Worker,
+        gui,
+        fun(#write_event{}) -> true; (_) -> false end,
+        fun(Meta) -> Meta >= EvtsCount end,
+        [fun(Evts) -> Self ! {handler, Evts} end]
+    ),
+
+    % Emit first part of events.
+    lists:foreach(fun(N) ->
+        emit(Worker, #write_event{size = 1, counter = 1, file_size = N + 1,
+            blocks = [#file_block{offset = N, size = 1}]}, SessId)
+    end, lists:seq(0, HalfEvts - 1)),
+
+    % Get event stream pid.
+    {ok, {SessSup, _}} = rpc:call(Worker, session,
+        get_session_supervisor_and_node, [SessId]),
+    {ok, EvtManSup} = get_child(SessSup, event_manager_sup),
+    {ok, EvtStmSup} = get_child(EvtManSup, event_stream_sup),
+    {ok, EvtStm} = get_child(EvtStmSup, undefined),
+
+    % Send crash message and wait for event stream recovery.
+    gen_server:cast(EvtStm, kill),
+    timer:sleep(?TIMEOUT),
+
+    % Emit second part of events.
+    lists:foreach(fun(N) ->
+        emit(Worker, #write_event{size = 1, counter = 1, file_size = N + 1,
+            blocks = [#file_block{offset = N, size = 1}]}, SessId)
+    end, lists:seq(HalfEvts, EvtsCount - 1)),
+
+    % Check whether event handlers have been executed.
+    ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
+        size = EvtsCount, counter = EvtsCount, file_size = EvtsCount,
+        blocks = [#file_block{offset = 0, size = EvtsCount}]}]}, ?TIMEOUT)),
+    ?assertEqual({error, timeout}, test_utils:receive_any()),
+
+    unsubscribe(Worker, SubId),
+
+    ok.
+
 %% Test multiple subscription and execution of event handlers.
 event_manager_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -177,6 +226,22 @@ init_per_testcase(event_stream_test, Config) ->
     end),
     Config;
 
+init_per_testcase(event_stream_crash_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
+    SessId = <<"session_id">>,
+    Cred = #credentials{user_id = <<"user_id">>},
+    test_utils:mock_new(Worker, [communicator, logger]),
+    test_utils:mock_expect(Worker, communicator, send, fun
+        (_, _) -> ok
+    end),
+    test_utils:mock_expect(Worker, logger, dispatch_log, fun
+        (_, _, _, [_, _, kill], _) -> meck:exception(throw, crash);
+        (A, B, C, D, E) -> meck:passthrough([A, B, C, D, E])
+    end),
+    session_setup(Worker, SessId, Cred, Self),
+    [{session_id, SessId} | Config];
+
 init_per_testcase(event_manager_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
@@ -194,6 +259,14 @@ end_per_testcase(event_stream_test, Config) ->
     test_utils:mock_validate(Workers, communicator),
     test_utils:mock_unload(Workers, communicator),
     Config;
+
+end_per_testcase(event_stream_crash_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session_id, Config),
+    session_teardown(Worker, SessId),
+    test_utils:mock_validate(Worker, [communicator, logger]),
+    test_utils:mock_unload(Worker, [communicator, logger]),
+    proplists:delete(session_id, Config);
 
 end_per_testcase(event_manager_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -275,3 +348,18 @@ subscribe(Worker, Producer, AdmRule, EmRule, Handlers) ->
     ok.
 unsubscribe(Worker, SubId) ->
     ?assertEqual(ok, rpc:call(Worker, event_manager, unsubscribe, [SubId])).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns supervisor child.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child(Sup :: pid(), ChildId :: term()) ->
+    {ok, Child :: pid()} | {error, not_found}.
+get_child(Sup, ChildId) ->
+    Children = supervisor:which_children(Sup),
+    case lists:keyfind(ChildId, 1, Children) of
+        {ChildId, Child, _, _} -> {ok, Child};
+        false -> {error, not_found}
+    end.
