@@ -116,6 +116,10 @@ end_per_suite(Config) ->
 -spec session_setup(Worker :: node(), SessId :: session:id(),
     Cred :: session:credentials(), Con :: pid()) -> ok.
 session_setup(Worker, SessId, Cred, Con) ->
+    test_utils:mock_new(Worker, communicator),
+    test_utils:mock_expect(Worker, communicator, send, fun
+        (_, _) -> ok
+    end),
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, Cred, Con])).
 
@@ -127,7 +131,9 @@ session_setup(Worker, SessId, Cred, Con) ->
 %%--------------------------------------------------------------------
 -spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
 session_teardown(Worker, SessId) ->
-    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])).
+    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
+    test_utils:mock_validate(Worker, communicator),
+    test_utils:mock_unload(Worker, communicator).
 
 %%--------------------------------------------------------------------
 %% @private

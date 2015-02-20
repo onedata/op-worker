@@ -210,8 +210,11 @@ end_per_suite(Config) ->
 init_per_testcase(session_manager_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     Self = self(),
-
+    
     test_utils:mock_new(Workers, communicator),
+    test_utils:mock_expect(Workers, communicator, send, fun
+        (_, _) -> ok
+    end),
     test_utils:mock_expect(Workers, communicator, add_connection,
         fun(_Comm, _Con) ->
             Self ! add_connection, ok
