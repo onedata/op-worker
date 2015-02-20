@@ -77,8 +77,8 @@ cert_connection_test(Config) ->
     % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ?assertMatch(#certificate_info{}, CertInfo),
-    ct:print("Client session id: ~p~n", [CertInfo#certificate_info.client_session_id]),
-    ct:print("Client subject dn: ~p~n", [CertInfo#certificate_info.client_subject_dn]),
+    ?assertNotEqual(undefined, CertInfo#certificate_info.client_session_id),
+    ?assertNotEqual(undefined, CertInfo#certificate_info.client_subject_dn),
     ?assert(is_binary(CertInfo#certificate_info.client_session_id)),
     ?assert(is_binary(CertInfo#certificate_info.client_subject_dn)),
     HandshakeResponse = server_messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
