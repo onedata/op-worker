@@ -18,7 +18,7 @@
     counter :: non_neg_integer(),
     file_id :: binary(),
     size :: non_neg_integer(),
-    blocks = [] :: [{non_neg_integer(), non_neg_integer()}]
+    blocks = [] :: [event_utils:file_block()]
 }).
 
 %% Default read event stream specification
@@ -31,7 +31,10 @@
                 file_id = Evt1#read_event.file_id,
                 counter = Evt1#read_event.counter + Evt2#read_event.counter,
                 size = Evt1#read_event.size + Evt2#read_event.size,
-                blocks = Evt1#read_event.blocks ++ Evt2#read_event.blocks
+                blocks = event_utils:aggregate_blocks(
+                    Evt1#read_event.blocks,
+                    Evt2#read_event.blocks
+                )
             }};
         (_, _) -> {error, different}
     end,

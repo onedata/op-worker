@@ -32,8 +32,8 @@
 -export_type([event/0, subscription/0, subscription_id/0, producer/0]).
 
 -type event() :: #read_event{} | #write_event{}.
--type subscription() :: #read_event_subscription{}
-| #write_event_subscription{}.
+-type subscription() :: #read_event_subscription{} |
+                        #write_event_subscription{}.
 -type subscription_id() :: non_neg_integer().
 -type producer() :: gui | all.
 -type event_stream_status() :: {running, EvtStm :: pid(),

@@ -13,6 +13,7 @@
 -author("Krzysztof Trzepla").
 
 -include("workers/datastore/models/session.hrl").
+-include("proto_internal/oneclient/common_messages.hrl").
 -include("workers/session/event_manager/read_event.hrl").
 -include("workers/session/event_manager/write_event.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -58,14 +59,17 @@ event_stream_test(Config) ->
     session_setup(Worker2, SessId2, Cred2, Self),
 
     lists:foldl(fun(Evt, N) ->
-        emit(Worker1, Evt#write_event{blocks = [N]}, SessId1),
+        emit(Worker1, Evt#write_event{
+            blocks = [#file_block{offset = N, size = 1}]
+        }, SessId1),
         N + 1
-    end, 1, lists:duplicate(6, #write_event{
+    end, 0, lists:duplicate(6, #write_event{
         counter = 1, size = 1, file_size = 1
     })),
 
     ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
-        counter = 6, size = 6, file_size = 1, blocks = [1, 2, 3, 4, 5, 6]
+        counter = 6, size = 6, file_size = 1,
+        blocks = [#file_block{offset = 0, size = 6}]
     }]}, ?TIMEOUT)),
     ?assertMatch({error, timeout}, test_utils:receive_any()),
 

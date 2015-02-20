@@ -19,7 +19,7 @@
     file_id :: binary(),
     file_size :: non_neg_integer(),
     size :: non_neg_integer(),
-    blocks = [] :: [{non_neg_integer(), non_neg_integer()}]
+    blocks = [] :: [event_utils:file_block()]
 }).
 
 %% Default write event stream specification
@@ -33,7 +33,10 @@
                 counter = Evt1#write_event.counter + Evt2#write_event.counter,
                 size = Evt1#write_event.size + Evt2#write_event.size,
                 file_size = Evt2#write_event.file_size,
-                blocks = Evt1#write_event.blocks ++ Evt2#write_event.blocks
+                blocks = event_utils:aggregate_blocks(
+                    Evt1#write_event.blocks,
+                    Evt2#write_event.blocks
+                )
             }};
         (_, _) -> {error, different}
     end,
