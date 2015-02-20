@@ -236,7 +236,7 @@ init_per_testcase(session_supervisor_child_crash_test, Config) ->
 
     test_utils:mock_new(Worker, logger),
     test_utils:mock_expect(Worker, logger, dispatch_log, fun
-        (_, _, _, [_, _, kill], _) -> meck:exception(throw, kill);
+        (_, _, _, [_, _, kill], _) -> meck:exception(throw, crash);
         (A, B, C, D, E) -> meck:passthrough([A, B, C, D, E])
     end),
 
@@ -257,8 +257,7 @@ end_per_testcase(session_getters_test, Config) ->
     ?assertEqual(ok, rpc:call(Worker, session_manager,
         remove_session, [SessId])),
 
-    [_ | NewConfig] = Config,
-    NewConfig;
+    proplists:delete(session_id, Config);
 
 end_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

@@ -234,4 +234,4 @@ get_sequencer_stream_sup(SeqManSup) ->
     ok | {error, Reason :: term()}.
 reset_message_stream(SessId) ->
     Msg = #message_stream_reset{},
-    communicator:send(Msg, SessId).
+    ok = communicator:send(Msg, SessId).

@@ -18,7 +18,6 @@
 
 -include("global_definitions.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/stream_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -45,8 +44,8 @@
 -record(state, {
     session_id :: session:id(),
     sequencer_manager :: pid(),
-    sequence_number = 1 :: non_neg_integer(),
-    sequence_number_ack = 0 :: non_neg_integer(),
+    sequence_number = 0 :: non_neg_integer(),
+    sequence_number_ack = -1 :: -1 | non_neg_integer(),
     stream_id :: integer(),
     messages = #{} :: map(),
     messages_ack_window :: non_neg_integer(),
@@ -134,7 +133,8 @@ handle_cast(#client_message{message_stream = #message_stream{seq_num = SeqNum}} 
     process_pending_messages(process_message(Msg, State));
 
 handle_cast(#client_message{message_stream = #message_stream{seq_num = MsgSeqNum}} =
-    Msg, #state{sequence_number = SeqNum} = State) when MsgSeqNum > SeqNum ->
+    Msg, #state{sequence_number = SeqNum} = State) when
+    is_integer(MsgSeqNum), MsgSeqNum > SeqNum ->
     {noreply, send_message_request(Msg, store_message(Msg, State))};
 
 handle_cast(#client_message{}, State) ->
@@ -179,7 +179,7 @@ handle_info(_Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{stream_id = StmId, sequencer_manager = SeqMan} = State) ->
     NewState = send_message_ack(State),
-    ?warning("Sequencer stream closed in state ~p due to: ~p", [StmId, NewState, Reason]),
+    ?warning("Sequencer stream closed in state ~p due to: ~p", [NewState, Reason]),
     gen_server:cast(SeqMan, {sequencer_stream_terminated, StmId, Reason, NewState}).
 
 %%--------------------------------------------------------------------
@@ -229,7 +229,7 @@ process_message(#client_message{message_stream = #message_stream{
 %% sequencer state.
 %% @end
 %%--------------------------------------------------------------------
--spec process_pending_messages({stop, shutdown, State :: #state{}} |{noreply,
+-spec process_pending_messages({stop, shutdown, State :: #state{}} | {noreply,
     State :: #state{}}) -> {stop, shutdown, NewState :: #state{}} |
 {noreply, NewState :: #state{}}.
 process_pending_messages({stop, shutdown, State}) ->
@@ -266,11 +266,8 @@ send_message(Msg, #state{sequence_number = SeqNum} = State) ->
 -spec send_message_ack(State :: #state{}) -> NewState :: #state{}.
 send_message_ack(#state{stream_id = StmId, session_id = SessId,
     sequence_number = SeqNum} = State) ->
-    Msg = #server_message{message_body = #message_acknowledgement{
-        stm_id = StmId,
-        seq_num = SeqNum - 1
-    }},
-    communicator:send(Msg, SessId),
+    Msg = #message_acknowledgement{stm_id = StmId, seq_num = SeqNum - 1},
+    ok = communicator:send(Msg, SessId),
     State#state{sequence_number_ack = SeqNum - 1}.
 
 %%--------------------------------------------------------------------
@@ -286,12 +283,10 @@ send_message_ack(#state{stream_id = StmId, session_id = SessId,
 send_message_request(#client_message{message_stream = #message_stream{
     stm_id = StmId, seq_num = MsgSeqNum}}, #state{session_id = SessId,
     sequence_number = SeqNum} = State) ->
-    Msg = #server_message{message_body = #message_request{
-        stm_id = StmId,
-        lower_seq_num = SeqNum,
-        upper_seq_num = MsgSeqNum - 1
-    }},
-    communicator:send(Msg, SessId),
+    Msg = #message_request{
+        stm_id = StmId, lower_seq_num = SeqNum, upper_seq_num = MsgSeqNum - 1
+    },
+    ok = communicator:send(Msg, SessId),
     State.
 
 %%--------------------------------------------------------------------

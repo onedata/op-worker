@@ -370,7 +370,7 @@ create_event_stream(EvtStmSup, SessId, #write_event_subscription{id = SubId,
 create_event_stream(EvtStmSup, SessId, SubId, Prod, AdmRule, EvtStmSpec, Sub) ->
     case Prod of
         gui -> ok;
-        _ -> communicator:send(Sub, SessId)
+        _ -> ok = communicator:send(Sub, SessId)
     end,
     {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), SubId,
         EvtStmSpec),
@@ -389,10 +389,10 @@ remove_event_stream(EvtStmSup, SessId, SubId, EvtStms) ->
     case lists:keyfind(SubId, 1, EvtStms) of
         {SubId, {running, EvtStm, _}} ->
             event_stream_sup:stop_event_stream(EvtStmSup, EvtStm),
-            communicator:send(#event_subscription_cancellation{id = SubId}, SessId),
+            ok = communicator:send(#event_subscription_cancellation{id = SubId}, SessId),
             {ok, lists:keydelete(SubId, 1, EvtStms)};
         {SubId, {terminated, EvtStmState, AdmRule, PendingMsgs}} ->
-            communicator:send(#event_subscription_cancellation{id = SubId}, SessId),
+            ok = communicator:send(#event_subscription_cancellation{id = SubId}, SessId),
             {ok, lists:keyreplace(SubId, 1, EvtStms, {SubId, {terminated,
                 EvtStmState, AdmRule, [terminate | PendingMsgs]}})};
         _ ->
