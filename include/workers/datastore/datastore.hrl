@@ -37,6 +37,12 @@
 
 
 %% List of all available models
--define(MODELS, [some_record]).
+-define(MODELS, [
+    some_record,
+    sequencer_dispatcher_data,
+    event_dispatcher_data,
+    subscription,
+    session
+]).
 
 -endif.

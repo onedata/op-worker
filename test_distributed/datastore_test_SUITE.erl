@@ -5,16 +5,15 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Tests datastore main API based on sample record 'some_record'.
+%%% @doc Tests datastore main API based on 'some_record' model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(datastore_test_SUITE).
 -author("Rafal Slota").
 
--include("test_utils.hrl").
 -include("global_definitions.hrl").
--include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 -include("workers/datastore/datastore_models.hrl").
@@ -101,27 +100,24 @@ global_cache_atomic_update_test(Config) ->
     ?assertMatch({ok, Key},
         ?call_store(Worker2, update, [Level,
             some_record, Key,
-                fun(#some_record{field1 = 0} = Record) ->
-                    Record#some_record{field2 = Pid}
-                end])),
+            fun(#some_record{field1 = 0} = Record) ->
+                Record#some_record{field2 = Pid}
+            end])),
 
     ?assertMatch({ok, #document{value = #some_record{field1 = 0, field2 = Pid}}},
         ?call_store(Worker1, get, [Level,
             some_record, Key])),
 
     UpdateFun = fun(#some_record{field1 = Value} = Record) ->
-                    Record#some_record{field1 = Value + 1}
-                end,
+        Record#some_record{field1 = Value + 1}
+    end,
 
     Self = self(),
     Timeout = timer:seconds(30),
-    lists:foreach(fun(Node) ->
-        spawn(
-            fun() ->
-                ?call_store(Node, update, [Level, some_record, Key, UpdateFun]),
-                Self ! done
-            end)
-        end, lists:duplicate(100, Worker1) ++ lists:duplicate(100, Worker2)),
+    utils:pforeach(fun(Node) ->
+        ?call_store(Node, update, [Level, some_record, Key, UpdateFun]),
+        Self ! done
+    end, lists:duplicate(100, Worker1) ++ lists:duplicate(100, Worker2)),
     [receive done -> ok after Timeout -> ok end || _ <- lists:seq(1, 200)],
 
     ?assertMatch({ok, #document{value = #some_record{field1 = 200}}},
@@ -130,18 +126,15 @@ global_cache_atomic_update_test(Config) ->
 
     ok.
 
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    test_node_starter:prepare_test_environment(
-        Config, ?TEST_FILE(Config, "env_desc.json"), ?MODULE).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config),
-    ok.
+    test_node_starter:clean_environment(Config).
 
 
 -spec local_access_only(Node :: atom(), Level :: datastore:store_level()) -> ok.
@@ -170,12 +163,10 @@ local_access_only(Node, Level) ->
         ?call_store(Node, get, [Level,
             some_record, Key])),
 
-
     Pid = self(),
     ?assertMatch({ok, Key},
         ?call_store(Node, update, [Level,
             some_record, Key, #{field2 => Pid}])),
-
 
     ?assertMatch({ok, #document{value = #some_record{field2 = Pid}}},
         ?call_store(Node, get, [Level,
@@ -186,8 +177,8 @@ local_access_only(Node, Level) ->
             some_record, Key])),
 
     ?assertMatch({error, {not_found, _}},
-         ?call_store(Node, get, [Level,
-             some_record, Key])),
+        ?call_store(Node, get, [Level,
+            some_record, Key])),
 
     ?assertMatch({error, {not_found, _}},
         ?call_store(Node, update, [Level,

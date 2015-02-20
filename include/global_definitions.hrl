@@ -10,8 +10,8 @@
 %%% used accross the application.
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(REGISTERED_NAMES_HRL).
--define(REGISTERED_NAMES_HRL, 1).
+-ifndef(GLOBAL_DEFINITIONS_HRL).
+-define(GLOBAL_DEFINITIONS_HRL, 1).
 
 %%%===================================================================
 %%% Global names
@@ -47,9 +47,6 @@
 %%% Global types
 %%%===================================================================
 
-% ErrorDesc will appear in xml as node status.
--type healthcheck_reponse() :: ok | {ok, term()} | {error, ErrorDesc :: atom()}.
--export_type([healthcheck_reponse/0]).
 % Macro that should be used to log an error during healthcheck
 -define(HEALTHCHECK_ERROR_LOG_MSG(_Msg),
     HEALTHCHECK_ERROR_LOG(_Msg, [])).

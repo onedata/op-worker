@@ -14,8 +14,8 @@
 
 -behaviour(gen_server).
 
--include("global_definitions.hrl").
 -include("modules_and_args.hrl").
+-include("global_definitions.hrl").
 -include("cluster_elements/request_dispatcher/request_dispatcher_state.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").
@@ -92,7 +92,7 @@ init(_) ->
     | {noreply, NewState, hibernate}
     | {stop, Reason, Reply, NewState}
     | {stop, Reason, NewState},
-    Reply :: healthcheck_reponse() | term(),
+    Reply :: nagios_handler:healthcheck_reponse() | term(),
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().

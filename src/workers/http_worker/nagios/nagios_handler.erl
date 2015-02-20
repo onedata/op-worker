@@ -21,6 +21,11 @@
 -export([init/3, handle/2, terminate/3]).
 -export([get_cluster_status/1]).
 
+-export_type([healthcheck_reponse/0]).
+
+% ErrorDesc will appear in xml as node status.
+-type healthcheck_reponse() :: ok | {ok, term()} | {error, ErrorDesc :: atom()}.
+
 -ifdef(TEST).
 -compile(export_all).
 -endif.

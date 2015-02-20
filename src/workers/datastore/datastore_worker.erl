@@ -34,9 +34,8 @@
 %% {@link worker_plugin_behaviour} callback init/1.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term()) -> Result when
-    Result :: {ok, #{term() => term()}} | {error, Error},
-    Error :: term().
+-spec init(Args :: term()) ->
+    {ok, #{term() => term()}} | {error, Reason :: term()}.
 init(_Args) ->
 
     %% Get Riak nodes
@@ -53,26 +52,29 @@ init(_Args) ->
         end,
 
     State = lists:foldl(
-      fun(Model, StateAcc) ->
-          #model_config{name = RecordName} = ModelConfig = Model:model_init(),
-          maps:put(RecordName, ModelConfig, StateAcc)
-      end, #{}, ?MODELS),
+        fun(Model, StateAcc) ->
+            #model_config{name = RecordName} = ModelConfig = Model:model_init(),
+            maps:put(RecordName, ModelConfig, StateAcc)
+        end, #{}, ?MODELS),
 
     {ok, State#{riak_nodes => RiakNodes}}.
 
-
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link worker_plugin_behaviour} callback handle/1. <br/>
+%% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Request, State :: term()) -> Result :: healthcheck_reponse() | term() when
+-spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck |
-    {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]}.
+    {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]},
+    Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
+    {error, Reason},
+    Response :: term(),
+    Reason :: term().
 handle(ping, _State) ->
     pong;
 
-handle(healthcheck, State) ->
+handle(healthcheck, _State) ->
     ok;
 %% TODO @Rafal
 %% healthcheck rzuca blad (bo Ryjaka nie ma), natomiast powinien zwracac healthcheck_reponse()
@@ -94,12 +96,16 @@ handle(healthcheck, State) ->
 
 %% Proxy call to given datastore driver
 handle({driver_call, Module, Method, Args}, _State) ->
-    erlang:apply(Module, Method, Args);
+    %% todo @Rafal This pattern matching fixes dialyzer but perhaps better solution would be more suitable
+    case erlang:apply(Module, Method, Args) of
+        ok -> ok;
+        {ok, Response} -> {ok, Response};
+        {error, Reason} -> {error, Reason}
+    end;
 
 %% Unknown request
-handle(_Msg, _State) ->
-    ?warning("datastore worker unknown message: ~p", [_Msg]).
-
+handle(_Request, _) ->
+    ?log_bad_request(_Request).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -110,7 +116,6 @@ handle(_Msg, _State) ->
     Result :: ok.
 cleanup() ->
     ok.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -123,7 +128,6 @@ state_put(Key, Value) ->
         fun(State) ->
             maps:put(Key, Value, State)
         end}).
-
 
 %%--------------------------------------------------------------------
 %% @doc

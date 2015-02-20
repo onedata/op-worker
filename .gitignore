@@ -4,11 +4,15 @@
 .dialyzer.plt
 .idea
 
+include/proto/oneclient/*.hrl
+include/proto/oneproxy/*.hrl
+
 src/gui_static/common
 src/gui_static/flatui
 src/gui_static/fonts
 src/gui_static/n2o
-src/proto
+src/proto/oneclient/*.erl
+src/proto/oneproxy/*.erl
 
 *.iml
 *.sublime*
@@ -19,7 +23,6 @@ rel/oneprovider_node
 rel/test_cluster
 rel/*.rpm
 
-include/*_pb.hrl
 test/eunit_results
 
 deps
@@ -33,6 +36,3 @@ c_src/rt_container/*.o
 c_src/oneproxy/build/*
 
 docs/_build/
-
-*.beam
-*.pyc

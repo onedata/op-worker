@@ -13,14 +13,13 @@
 -module(worker_plugin_behaviour).
 -author("Michal Wrzeszcz").
 
--include("global_definitions.hrl").
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Initialize module
 %% @end
 %%--------------------------------------------------------------------
--callback init(Args :: term()) -> {ok, State :: term()} | {error, Error :: any()}.
+-callback init(Args :: term()) ->
+    {ok, State :: term()} | {error, Reason :: term()}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -28,11 +27,12 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback handle(Request :: term(), State :: term()) ->
-    healthcheck_reponse() | ok | pong | {ok, Ans :: term()} | {error, Error :: any()}.
+    nagios_handler:healthcheck_reponse() | ok | pong | {ok, Answer :: term()} |
+    {error, Reason :: term()}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% The module will not be used anymore. Clean up!
 %% @end
 %%--------------------------------------------------------------------
--callback cleanup() -> ok | {error, Error :: any()}.
+-callback cleanup() -> ok | {error, Reason :: term()}.

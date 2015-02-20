@@ -29,13 +29,12 @@
 -record(host_state, {
     plugin = non :: module(),
     plugin_state = [] :: term(),
-    load_info = []
-    :: [{
+    load_info :: {
         Loads1 :: list(),
         Loads2 :: list(),
         NumberOfLoads :: integer(),
         LoadMemorySize :: integer()
-    }]}).
+    }}).
 
 %% API
 -export([start_link/3, stop/1]).
@@ -54,7 +53,7 @@
 %%--------------------------------------------------------------------
 -spec start_link(Plugin, PluginArgs, LoadMemorySize) -> Result when
     Plugin :: atom(),
-    PluginArgs :: any(),
+    PluginArgs :: term(),
     LoadMemorySize :: integer(),
     Result :: {ok, Pid}
     | ignore
@@ -261,8 +260,7 @@ send_response(Plugin, BeforeProcessingRequest, #worker_request{id = MsgId, reply
             case MsgId of
                 undefined -> Pid ! Response;
                 Id -> Pid ! #worker_answer{id = Id, response = Response}
-            end;
-        Other -> ?error("Wrong reply type: ~p", [Other])
+            end
     end,
 
     AfterProcessingRequest = os:timestamp(),

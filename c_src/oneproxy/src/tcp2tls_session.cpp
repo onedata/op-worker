@@ -11,7 +11,7 @@
 #include "log_message.h"
 #include "tls_server.h"
 #include "base64.h"
-#include "oneproxy.pb.h"
+#include "oneproxy_messages.pb.h"
 
 #include <boost/bind.hpp>
 #include <boost/algorithm/string/predicate.hpp>

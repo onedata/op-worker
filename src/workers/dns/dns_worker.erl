@@ -43,7 +43,8 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% dns_query_handler_behaviour callbacks
--export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1, handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
+-export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1,
+    handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -55,8 +56,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, #dns_worker_state{}} | {error, Error},
-    Error :: term().
+    Result :: {ok, #dns_worker_state{}} | {error, Reason :: term()}.
 init([]) ->
     {ok, #dns_worker_state{}};
 
@@ -71,7 +71,7 @@ init(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link worker_plugin_behaviour} callback handle/1. <br/>
+%% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
@@ -79,9 +79,10 @@ init(_) ->
     {update_state, list(), list()} |
     {get_worker, atom()} |
     get_nodes,
-    Result :: healthcheck_reponse() | ok | {ok, Response} | {error, Error} | pong,
+    Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
+    {error, Reason},
     Response :: [inet:ip4_address()],
-    Error :: term().
+    Reason :: term().
 handle(ping, _) ->
     pong;
 

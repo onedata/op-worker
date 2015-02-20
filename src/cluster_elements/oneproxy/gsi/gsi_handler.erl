@@ -22,7 +22,7 @@
 -define(GSI_SLAVE_COUNT, 2).
 
 %% Proxy Certificate Extension ID
--define(PROXY_CERT_EXT, {1,3,6,1,5,5,7,1,14}).
+-define(PROXY_CERT_EXT, {1, 3, 6, 1, 5, 5, 7, 1, 14}).
 
 -deprecated([proxy_subject/1]).
 
@@ -61,7 +61,8 @@ init() ->
                     {ok, CRLUpdateInterval} = application:get_env(?APP_NAME, crl_update_interval),
                     case timer:apply_interval(CRLUpdateInterval, ?MODULE, update_crls, [CADir]) of
                         {ok, _} -> ok;
-                        {error, Reason} -> ?error("GSI Handler: Setting CLR auto-update failed (reason: ~p)", [Reason])
+                        {error, Reason} ->
+                            ?error("GSI Handler: Setting CLR auto-update failed (reason: ~p)", [Reason])
                     end;
 
                 {error, Reason} ->
@@ -73,7 +74,8 @@ init() ->
     end,
 
     receive
-        {'DOWN', _, process, SSPid, normal} -> ?info("GSI Handler module successfully loaded");
+        {'DOWN', _, process, SSPid, normal} ->
+            ?info("GSI Handler module successfully loaded");
         {'DOWN', _, process, SSPid, Reason1} ->
             ?warning("GSI Handler: slave node loader unknown exit reason: ~p", [Reason1]),
             ?info("GSI Handler module partially loaded")
@@ -84,7 +86,6 @@ init() ->
 
     ok.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns client's certificates based on cowboy's request.
@@ -92,7 +93,8 @@ init() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_certs_from_req(OneProxyHandler :: pid() | atom(), Req :: term()) ->
-    {ok, {OtpCert :: #'OTPCertificate'{}, Chain :: [#'OTPCertificate'{}]}} | {error, no_gsi_session} | {error, Reason :: any()}.
+    {ok, {OtpCert :: #'OTPCertificate'{}, Chain :: [#'OTPCertificate'{}]}} |
+    {error, no_gsi_session} | {error, Reason :: term()}.
 get_certs_from_req(OneProxyHandler, Req) ->
     {SessionId, _} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
     case SessionId of
@@ -108,7 +110,6 @@ get_certs_from_req(OneProxyHandler, Req) ->
                     {ok, {OtpCert, Certs}}
             end
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -142,7 +143,8 @@ get_ca_certs_from_dir(CADir) ->
 
     %% Get only files with .pem extension
     CA1 = [{strip_filename_ext(Name), file:read_file(filename:join(CADir, Name))} || Name <- Files, lists:suffix(".pem", Name)],
-    CA2 = [lists:map(fun(Y) -> {Name, Y} end, public_key:pem_decode(X)) || {Name, {ok, X}} <- CA1],
+    CA2 = [lists:map(fun(Y) ->
+        {Name, Y} end, public_key:pem_decode(X)) || {Name, {ok, X}} <- CA1],
     _CA2 = [X || {_Name, {'Certificate', X, not_encrypted}} <- lists:flatten(CA2)].
 
 %%--------------------------------------------------------------------
@@ -169,7 +171,7 @@ strip_self_signed_ca(DERList) when is_list(DERList) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_callback(OtpCert :: #'OTPCertificate'{}, Status :: term(), Certs :: [#'OTPCertificate'{}]) ->
-    {valid, UserState :: any()} | {fail, Reason :: term()}.
+    {valid, UserState :: term()} | {fail, Reason :: term()}.
 verify_callback(OtpCert, valid_peer, Certs) ->
     Serial = save_cert_chain([OtpCert | Certs]),
     ?debug("Peer ~p connected", [Serial]),
@@ -183,7 +185,6 @@ verify_callback(OtpCert, _IgnoredError, Certs) ->
         _ -> {valid, [OtpCert | Certs]}
     end.
 
-
 %% load_certs/1
 %% ====================================================================
 %% @doc Loads all PEM encoded CA certificates from given directory along with their CRL certificates (if any). <br/>
@@ -196,8 +197,10 @@ load_certs(CADir) ->
     {ok, Files} = file:list_dir(CADir),
     CA1 = [{strip_filename_ext(Name), file:read_file(filename:join(CADir, Name))} || Name <- Files, lists:suffix(".pem", Name)],
     CRL1 = [{strip_filename_ext(Name), file:read_file(filename:join(CADir, strip_filename_ext(Name) ++ ".crl"))} || Name <- Files, lists:suffix(".pem", Name)],
-    CA2 = [lists:map(fun(Y) -> {Name, Y} end, public_key:pem_decode(X)) || {Name, {ok, X}} <- CA1],
-    CRL2 = [lists:map(fun(Y) -> {Name, Y} end, public_key:pem_decode(X)) || {Name, {ok, X}} <- CRL1],
+    CA2 = [lists:map(fun(Y) ->
+        {Name, Y} end, public_key:pem_decode(X)) || {Name, {ok, X}} <- CA1],
+    CRL2 = [lists:map(fun(Y) ->
+        {Name, Y} end, public_key:pem_decode(X)) || {Name, {ok, X}} <- CRL1],
 
     {Len1, Len2} =
         lists:foldl(
@@ -208,12 +211,13 @@ load_certs(CADir) ->
                             {ok, {SerialNumber, Issuer}} ->
                                 ets:insert(gsi_state, {{ca, {SerialNumber, Issuer}}, X, Name}),
                                 {CAs + 1, CRLs};
-                            _ -> case catch public_key:pkix_issuer_id(X, other) of
-                                     {ok, {SerialNumber, Issuer}} ->
-                                         ets:insert(gsi_state, {{ca, {SerialNumber, Issuer}}, X, Name}),
-                                         {CAs + 1, CRLs};
-                                     _ -> {CAs, CRLs}
-                                 end
+                            _ ->
+                                case catch public_key:pkix_issuer_id(X, other) of
+                                    {ok, {SerialNumber, Issuer}} ->
+                                        ets:insert(gsi_state, {{ca, {SerialNumber, Issuer}}, X, Name}),
+                                        {CAs + 1, CRLs};
+                                    _ -> {CAs, CRLs}
+                                end
                         end;
 
                     'CertificateList' ->
@@ -228,7 +232,6 @@ load_certs(CADir) ->
             end, {0, 0}, lists:flatten(CA2 ++ CRL2)),
     ?info("GSI Handler: ~p CA and ~p CRL certs successfully loaded", [Len1, Len2]),
     ok.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -297,7 +300,7 @@ save_cert_chain([OtpCert | Certs]) ->
 %% Initializes Count slave nodes. See {@link initialize_node/1}.
 %% @end
 %%--------------------------------------------------------------------
--spec start_slaves(Count :: non_neg_integer()) -> [any()].
+-spec start_slaves(Count :: non_neg_integer()) -> [term()].
 start_slaves(Count) when Count >= 0 ->
     [initialize_node(list_to_atom(atom_to_list(get_node_name()) ++ "_gsi" ++ integer_to_list(N))) || N <- lists:seq(1, Count)].
 
@@ -308,7 +311,7 @@ start_slaves(Count) when Count >= 0 ->
 %% If NIF load fails, slave node is stopped.
 %% @end
 %%--------------------------------------------------------------------
--spec initialize_node(NodeName :: atom()) -> any().
+-spec initialize_node(NodeName :: atom()) -> term().
 initialize_node(NodeName) when is_atom(NodeName) ->
     ?info("Trying to start GSI slave node: ~p @ ~p", [NodeName, get_host()]),
     case slave:start(get_host(), NodeName, make_code_path() ++ " -setcookie \"" ++ atom_to_list(erlang:get_cookie()) ++ "\"", no_link, erl) of
@@ -430,7 +433,6 @@ update_crl(CADir, {OtpCert, [URL | URLs], Name}) ->
             update_crl(CADir, {OtpCert, URLs, Name})
     end.
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -456,7 +458,8 @@ binary_to_crl(Binary) ->
 %% Retrieves public key from an OTP Certificate.
 %% @end
 %%--------------------------------------------------------------------
--spec get_pubkey(OtpCert :: #'OTPCertificate'{}) -> binary().
+-spec get_pubkey(OtpCert :: #'OTPCertificate'{}) ->
+    Key :: public_key:public_key().
 get_pubkey(OtpCert) ->
     #'OTPCertificate'{tbsCertificate = TbsCert} = OtpCert,
     #'OTPTBSCertificate'{subjectPublicKeyInfo = PKI} = TbsCert,
@@ -593,10 +596,11 @@ find_eec_cert(CurrentOtp, Chain, true) ->
     false = public_key:pkix_is_self_signed(CurrentOtp),
     {ok, NextCert} =
         lists:foldl(fun(_, {ok, Found}) -> {ok, Found};
-            (Cert, NotFound) -> case public_key:pkix_is_issuer(CurrentOtp, Cert) of
-                                    true -> {ok, Cert};
-                                    false -> NotFound
-                                end end,
+            (Cert, NotFound) ->
+                case public_key:pkix_is_issuer(CurrentOtp, Cert) of
+                    true -> {ok, Cert};
+                    false -> NotFound
+                end end,
             no_cert, Chain),
     find_eec_cert(NextCert, Chain, is_proxy_certificate(NextCert));
 find_eec_cert(CurrentOtp, _Chain, false) ->

@@ -17,7 +17,7 @@
 -type model_type() :: atom().
 -type model_config() :: #model_config{}.
 
--export_type([model_config/0]).
+-export_type([model_config/0, model_action/0, model_type/0]).
 
 
 %%--------------------------------------------------------------------

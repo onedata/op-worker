@@ -11,10 +11,10 @@
 -module(nagios_test_SUITE).
 -author("Lukasz Opiola").
 
--include("test_utils.hrl").
 -include("global_definitions.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% export for ct
@@ -73,7 +73,6 @@ nagios_test(Config) ->
             ?assertMatch([?DISPATCHER_NAME], [X#xmlElement.name || X <- Content, X#xmlElement.name == ?DISPATCHER_NAME])
         end, NodeStatuses).
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -97,17 +96,15 @@ perform_nagios_healthcheck(Node, Retries) ->
                 {body, Response}
             ]}};
         _ ->
-            timer:sleep(1000),
+            timer:sleep(timer:seconds(1)),
             perform_nagios_healthcheck(Node, Retries - 1)
     end.
-
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_testcase(nagios_test, Config) ->
-    test_node_starter:prepare_test_environment(
-        Config, ?TEST_FILE(Config, "env_desc.json"), ?MODULE).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_testcase(nagios_test, Config) ->
     test_node_starter:clean_environment(Config).

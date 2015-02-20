@@ -102,7 +102,7 @@ init(_) ->
     | {noreply, NewState, hibernate}
     | {stop, Reason, Reply, NewState}
     | {stop, Reason, NewState},
-    Reply :: healthcheck_reponse() | term(),
+    Reply :: nagios_handler:healthcheck_reponse() | term(),
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
@@ -222,7 +222,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% Receive heartbeat from node_manager
 %% @end
 %%--------------------------------------------------------------------
--spec heartbeat(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
+-spec heartbeat(State :: #cm_state{}, SenderNode :: node()) ->
+    NewState :: #cm_state{}.
 heartbeat(State = #cm_state{nodes = Nodes}, SenderNode) ->
     ?debug("Heartbeat from node: ~p", [SenderNode]),
     case lists:member(SenderNode, Nodes) orelse SenderNode =:= node() of
@@ -262,66 +263,55 @@ heartbeat(State = #cm_state{nodes = Nodes}, SenderNode) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Initializes cluster - decides at which nodes components should
-%% be started (and starts them). Additionally, it sets timer that
-%% initiates checking of cluster state.
+%% Initializes cluster by starting workers.
 %% @end
 %%--------------------------------------------------------------------
--spec init_cluster(State :: #cm_state{}) -> #cm_state{}.
+-spec init_cluster(State :: #cm_state{}) -> NewState :: #cm_state{}.
 init_cluster(State = #cm_state{nodes = []}) ->
     {ok, Interval} = application:get_env(?APP_NAME, initialization_time),
     erlang:send_after(Interval, self(), {timer, init_cluster}),
     State;
 init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}) ->
-    {_, RunningWorkers, _} = lists:unzip3(Workers),
-    JobsTodoWithArgs = lists:filter(fun({Job, _}) -> not lists:member(Job, RunningWorkers) end, ?MODULES_WITH_ARGS),
-    {JobsTodo, Args} = lists:unzip(JobsTodoWithArgs),
-    case JobsTodo of
-        [] ->
-            State;
-        _ ->
-            ?info("Initialization of jobs ~p using nodes ~p", [JobsTodo, Nodes]),
-            NewState =
-                case erlang:length(Nodes) >= erlang:length(JobsTodo) of
-                    true -> init_cluster_nodes_dominance(State, Nodes, JobsTodo, [], Args, []);
-                    false -> init_cluster_jobs_dominance(State, JobsTodo, Args, Nodes, [])
-                end,
-            update_node_managers_and_dns(NewState)
+    NewState = start_workers_on_nodes(Nodes, Workers, State),
+    update_node_managers_and_dns(NewState).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts workers defined in ?MODULES_WITH_ARGS list on given nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_workers_on_nodes(Nodes :: [node()], RunningWorkers :: [{Node :: node(),
+    Module :: module(), Args :: term()}], State :: #cm_state{}) -> #cm_state{}.
+start_workers_on_nodes([], _, State) ->
+    State;
+start_workers_on_nodes([Node | Nodes], RunningWorkers, State) ->
+    {_, RunningModulesOnNode, _} = lists:unzip3(lists:filter(fun
+        ({WorkerNode, _, _}) when WorkerNode =:= Node -> true;
+        (_) -> false
+    end, RunningWorkers)),
+    NewState = start_workers_on_node(Node, RunningModulesOnNode, ?MODULES_WITH_ARGS, State),
+    start_workers_on_nodes(Nodes, RunningWorkers, NewState).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts workers on given node.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_workers_on_node(Node :: node(), RunningModulesOnNode :: [module()],
+    ModulesWithArgs :: [{Module :: module(), Args :: term()}],
+    State :: #cm_state{}) -> #cm_state{}.
+start_workers_on_node(_, _, [], State) ->
+    State;
+start_workers_on_node(Node, RunningModulesOnNode, [{Module, Args} | ModulesWithArgs], State) ->
+    case lists:member(Module, RunningModulesOnNode) of
+        true ->
+            start_workers_on_node(Node, RunningModulesOnNode, ModulesWithArgs, State);
+        false ->
+            NewState = start_worker_on_node(Node, Module, Args, State),
+            start_workers_on_node(Node, RunningModulesOnNode, ModulesWithArgs, NewState)
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Chooses node for workers when there are more nodes than workers.
-%% @end
-%%--------------------------------------------------------------------
--spec init_cluster_nodes_dominance(State :: term(), Nodes :: list(), Jobs1 :: list(),
-    Jobs2 :: list(), Args1 :: list(), Args2 :: list()) -> NewState when
-    NewState :: term().
-init_cluster_nodes_dominance(State, [], _Jobs1, _Jobs2, _Args1, _Args2) ->
-    State;
-init_cluster_nodes_dominance(State, Nodes, [], Jobs2, [], Args2) ->
-    init_cluster_nodes_dominance(State, Nodes, Jobs2, [], Args2, []);
-init_cluster_nodes_dominance(State, [N | Nodes], [J | Jobs1], Jobs2, [A | Args1], Args2) ->
-    NewState = start_worker(N, J, A, State),
-    init_cluster_nodes_dominance(NewState, Nodes, Jobs1, [J | Jobs2], Args1, [A | Args2]).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Chooses node for workers when there are more workers than nodes.
-%% @end
-%%--------------------------------------------------------------------
--spec init_cluster_jobs_dominance(State :: term(), Jobs :: list(),
-    Args :: list(), Nodes1 :: list(), Nodes2 :: list()) -> NewState when
-    NewState :: term().
-init_cluster_jobs_dominance(State, [], [], _Nodes1, _Nodes2) ->
-    State;
-init_cluster_jobs_dominance(State, Jobs, Args, [], Nodes2) ->
-    init_cluster_jobs_dominance(State, Jobs, Args, Nodes2, []);
-init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2) ->
-    NewState = start_worker(N, J, A, State),
-    init_cluster_jobs_dominance(NewState, Jobs, Args, Nodes1, [N | Nodes2]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -330,18 +320,18 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 %% are started under MAIN_WORKER_SUPERVISOR supervision.
 %% @end
 %%--------------------------------------------------------------------
--spec start_worker(Node :: atom(), Module :: atom(), WorkerArgs :: term(), State :: term()) -> #cm_state{}.
-start_worker(Node, Module, WorkerArgs, State) ->
+-spec start_worker_on_node(Node :: atom(), Module :: atom(), Args :: term(), State :: term()) -> #cm_state{}.
+start_worker_on_node(Node, Module, Args, State) ->
     try
         {ok, LoadMemorySize} = application:get_env(?APP_NAME, worker_load_memory_size),
         WorkerSupervisorName = ?WORKER_HOST_SUPERVISOR_NAME(Module),
         {ok, ChildPid} = supervisor:start_child(
             {?MAIN_WORKER_SUPERVISOR_NAME, Node},
-            {Module, {worker_host, start_link, [Module, WorkerArgs, LoadMemorySize]}, transient, 5000, worker, [worker_host]}
+            {Module, {worker_host, start_link, [Module, Args, LoadMemorySize]}, transient, 5000, worker, [worker_host]}
         ),
         {ok, _} = supervisor:start_child(
             {?MAIN_WORKER_SUPERVISOR_NAME, Node},
-            {WorkerSupervisorName, {worker_host_sup, start_link, [WorkerSupervisorName]}, transient, infinity, supervisor, [worker_host_sup]}
+            {WorkerSupervisorName, {worker_host_sup, start_link, [WorkerSupervisorName, Args]}, transient, infinity, supervisor, [worker_host_sup]}
         ),
         Workers = State#cm_state.workers,
         ?info("Worker: ~s started at node: ~s", [Module, Node]),
@@ -470,7 +460,6 @@ update_node_managers_and_dns(State) ->
     update_node_manager_state(State#cm_state.nodes, NewStateNum),
     State#cm_state{state_num = NewStateNum}.
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -485,14 +474,13 @@ update_node_manager_state(Nodes, NewStateNum) ->
     lists:foreach(UpdateNode, Nodes),
     gen_server:cast(?NODE_MANAGER_NAME, {update_state, NewStateNum}).
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Updates dnses' states.
 %% @end
 %%--------------------------------------------------------------------
--spec update_dns_state(WorkersList :: list()) -> ok.
+-spec update_dns_state(WorkersList :: list()) -> ok | {error, ip_resolving}.
 update_dns_state(WorkersList) ->
     %prepare worker IPs with loads info
     Nodes = [Node || {Node, _, _} <- WorkersList],
@@ -514,13 +502,24 @@ update_dns_state(WorkersList) ->
         end, ModuleToNodeList),
     FilteredModuleToNodeListWithLoad = [{Module, NodeList} || {Module, NodeList} <- ModuleToNodeListWithLoad, NodeList =/= []],
 
-    % prepare average load
-    LoadAverage = utils:average([Load || {_, Load} <- FilteredUniqueNodesIpToLoad]),
+    case length(FilteredUniqueNodesIpToLoad) of
+        0 ->
+            ok;
+        _ ->
+            % prepare average load
+            LoadAverage = utils:average([Load || {_, Load} <- FilteredUniqueNodesIpToLoad]),
 
-    UpdateInfo = {update_state, FilteredModuleToNodeListWithLoad, FilteredUniqueNodesIpToLoad, LoadAverage},
-    ?debug("updating dns, update message: ~p", [UpdateInfo]),
-    [gen_server:cast(Pid, #worker_request{req = UpdateInfo}) || {_, dns_worker, Pid} <- WorkersList],
-    ok.
+            UpdateInfo = {update_state, FilteredModuleToNodeListWithLoad, FilteredUniqueNodesIpToLoad, LoadAverage},
+            ?debug("updating dns, update message: ~p", [UpdateInfo]),
+            [gen_server:cast(Pid, #worker_request{req = UpdateInfo}) || {_, dns_worker, Pid} <- WorkersList]
+    end,
+
+    case length(FilteredUniqueNodesIpToLoad) == length(WorkersList) of
+        true ->
+            ok;
+        false ->
+            {error, ip_resolving}
+    end.
 
 %%%===================================================================
 %%% Internal functions

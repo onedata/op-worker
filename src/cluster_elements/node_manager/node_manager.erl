@@ -88,7 +88,7 @@ stop() ->
     Timeout :: non_neg_integer() | infinity.
 init([worker]) ->
     try
-        listener_starter:start_dispatcher_listener(),
+        listener_starter:start_protocol_listener(),
         listener_starter:start_gui_listener(),
         listener_starter:start_rest_listener(),
         listener_starter:start_redirector_listener(),
@@ -121,7 +121,7 @@ init([_Type]) ->
     | {noreply, NewState, hibernate}
     | {stop, Reason, Reply, NewState}
     | {stop, Reason, NewState},
-    Reply :: healthcheck_reponse() | term(),
+    Reply :: nagios_handler:healthcheck_reponse() | term(),
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().

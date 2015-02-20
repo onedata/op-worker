@@ -150,7 +150,7 @@ get_socket_pid() ->
 %% Cowboy handler callback, called to initialize request handling flow.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Type :: any(), Req :: cowboy_req:req(), Opts :: [term()]) ->
+-spec init(Type :: term(), Req :: cowboy_req:req(), Opts :: [term()]) ->
     {ok, cowboy_req:req(), term()}
     | {loop, cowboy_req:req(), term()}
     | {loop, cowboy_req:req(), term(), hibernate}
@@ -598,7 +598,6 @@ spawn_handling_process() ->
             ?error("Cannot spawn handling process, error: ~p", [Error]),
             {error, Error}
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc

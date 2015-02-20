@@ -7,9 +7,7 @@ all: rel
 ##
 
 compile:
-	cp -R c_src/oneproxy/proto src
 	./rebar compile
-	rm -rf src/proto
 
 deps:
 	./rebar get-deps
@@ -55,7 +53,7 @@ plt:
 	if [ $$? != 0 ]; then \
 	    dialyzer --build_plt --output_plt ${PLT} --apps kernel stdlib sasl erts \
 	        ssl tools runtime_tools crypto inets xmerl snmp public_key eunit \
-	        syntax_tools compiler ./deps/*/ebin; \
+	        mnesia syntax_tools compiler ./deps/*/ebin; \
 	fi; exit 0
             
 
