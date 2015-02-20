@@ -15,6 +15,8 @@
 
 -behaviour(gen_server).
 
+-include("proto_internal/oneclient/message_id.hrl").
+-include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -28,6 +30,8 @@
     code_change/3]).
 
 -define(SERVER, ?MODULE).
+
+-define(DEFAULT_REQUEST_TIMEOUT, timer:seconds(30)).
 
 -record(state, {
     session_id :: session:id(),
@@ -55,8 +59,9 @@ start_link(SessId, Con) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send(Msg :: #server_message{} | term(), SessId :: session:id()) -> ok.
-send(#server_message{} = _Msg, _SessId) ->
-    ok;
+send(#server_message{} = Msg, SessId) ->
+    {ok, CommPid} = session:get_communicator(SessId),
+    gen_server:cast(CommPid, {send, Msg});
 send(Msg, SessId) ->
     send(#server_message{message_body = Msg}, SessId).
 
@@ -65,9 +70,16 @@ send(Msg, SessId) ->
 %% Sends a message to the server and waits for a reply.
 %% @end
 %%--------------------------------------------------------------------
--spec communicate(Msg :: #server_message{}, SessId :: session:id()) -> ok.
-communicate(_ServerMsg, _SessId) ->
-    ok.
+-spec communicate(Msg :: #server_message{}, SessId :: session:id()) ->
+    {ok, #client_message{}} | {error, timeout}.
+communicate(ServerMsg, SessId) ->
+    {ok, MsgId} = communicate_async(ServerMsg, SessId, self()),
+    receive
+        #client_message{message_id = MsgId} = ClientMsg -> {ok, ClientMsg}
+    after
+        ?DEFAULT_REQUEST_TIMEOUT ->
+            {error, timeout}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -75,7 +87,8 @@ communicate(_ServerMsg, _SessId) ->
 %% @equiv communicate_async(Msg, SessId, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec communicate_async(Msg :: #server_message{}, SessId :: session:id()) -> ok.
+-spec communicate_async(Msg :: #server_message{}, SessId :: session:id()) ->
+    {ok, #message_id{}}.
 communicate_async(Msg, SessId) ->
     communicate_async(Msg, SessId, undefined).
 
@@ -89,31 +102,35 @@ communicate_async(Msg, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate_async(Msg :: #server_message{}, SessId :: session:id(),
-    Recipient :: pid() | undefined) -> ok.
-communicate_async(_Msg, _SessId, _Recipient) ->
-    ok.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds new connection to communicator.
-%% @end
-%%--------------------------------------------------------------------
--spec add_connection(Comm :: pid(), Con :: pid()) -> ok.
-add_connection(Comm, Con) ->
-    gen_server:call(Comm, {add_connection, Con}).
+    Recipient :: pid() | undefined) -> {ok, #message_id{}}.
+communicate_async(Msg, SessId, Recipient) ->
+    {ok, GeneratedId} = message_id:generate(Recipient),
+    MsgWithId = Msg#server_message{message_id = GeneratedId},
+    {ok, CommPid} = session:get_communicator(SessId),
+    ok = gen_server:cast(CommPid, {send, MsgWithId}),
+    {ok, GeneratedId}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes new connection to communicator.
+%% Adds connection to the communicator given by pid or session_id
 %% @end
 %%--------------------------------------------------------------------
--spec remove_connection(Comm :: pid(), Con :: pid()) -> ok.
-remove_connection(Comm, Con) ->
-    gen_server:call(Comm, {remove_connection, Con}).
+-spec add_connection(session:id() | pid(), ConnectionPid :: pid()) -> ok.
+add_connection(CommPid, ConnectionPid) when is_pid(CommPid) ->
+    gen_server:call(CommPid, {add_connection, ConnectionPid});
+add_connection(SessId, ConnectionPid) ->
+    {ok, CommPid} = session:get_communicator(SessId),
+    add_connection(CommPid, ConnectionPid).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes connection from the communicator associated with given session
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_connection(SessId :: session:id(), ConnectionPid :: pid()) -> ok.
+remove_connection(SessId, ConnectionPid) ->
+    {ok, CommPid} = session:get_communicator(SessId),
+    gen_server:call(CommPid, {remove_connection, ConnectionPid}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -167,6 +184,10 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_cast({send, #server_message{} = Msg}, State = #state{connections = ConnList}) ->
+    try_send(Msg, ConnList),
+    {noreply, State};
+
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
@@ -214,3 +235,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Send Msg to random connection.
+%% @end
+%%--------------------------------------------------------------------
+-spec try_send(Msg :: #server_message{}, Connections :: [pid()]) ->
+    ok | {error, Reason :: term()}.
+try_send(Msg, Connections) ->
+    RandomIndex = random:uniform(length(Connections)),
+    RandomConnection = lists:nth(RandomIndex, Connections),
+    connection:send_async(RandomConnection, Msg).

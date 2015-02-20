@@ -33,7 +33,8 @@
 
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
-        multi_message_test].
+        multi_message_test, client_send_test, client_communicate_test,
+        client_communiate_async_test].
 
 -define(CLEANUP, true).
 
@@ -164,7 +165,7 @@ client_send_test(Config) ->
     },
 
     % when
-    rpc:call(Worker1, client_communicator, send, [ServerMsgInternal, SessionId]),
+    rpc:call(Worker1, communicator, send, [ServerMsgInternal, SessionId]),
 
     % then
     ReceivedMessage =
@@ -188,7 +189,7 @@ client_communicate_test(Config) ->
 
     % when
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
-    CommunicateResult = rpc:call(Worker1, client_communicator, communicate,
+    CommunicateResult = rpc:call(Worker1, communicator, communicate,
         [ServerMsgInternal, SessionId]),
 
     % then
@@ -207,7 +208,7 @@ client_communiate_async_test(Config) ->
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
 
     % when
-    {ok, MsgId} = rpc:call(Worker1, client_communicator, communicate_async,
+    {ok, MsgId} = rpc:call(Worker1, communicator, communicate_async,
         [ServerMsgInternal, SessionId, Self]),
     ReceivedMessage =
         receive
@@ -229,7 +230,7 @@ client_communiate_async_test(Config) ->
         end),
 
     % when
-    {ok, MsgId2} = rpc:call(Worker1, client_communicator, communicate_async,
+    {ok, MsgId2} = rpc:call(Worker1, communicator, communicate_async,
         [ServerMsgInternal, SessionId]),
     RouterNotification = test_utils:receive_any(timer:seconds(5)),
 
