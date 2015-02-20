@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/4, init/4, call/2, cast/2]).
+-export([start_link/4, init/4, send/2, send_async/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -49,21 +49,23 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv gen_server:call(Pid, Req).
+%% Send server_message to client, returns sending result info.
+%% @equiv gen_server:call(Pid, {send, Req}).
 %% @end
 %%--------------------------------------------------------------------
--spec call(Pid :: pid(), Req :: term()) -> ok | {error, term()}.
-call(Pid, Req) ->
-    gen_server:call(Pid, Req).
+-spec send(Pid :: pid(), Req :: #server_message{}) -> ok | {error, term()}.
+send(Pid, Req) ->
+    gen_server:call(Pid, {send, Req}).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv gen_server:cast(Pid, Req).
+%% Send server_message to client, returns 'ok'.
+%% @equiv gen_server:cast(Pid, {send, Req}).
 %% @end
 %%--------------------------------------------------------------------
--spec cast(Pid :: pid(), Req :: term()) -> ok.
-cast(Pid, Req) ->
-    gen_server:cast(Pid, Req).
+-spec send_async(Pid :: pid(), Req :: #server_message{}) -> ok.
+send_async(Pid, Req) ->
+    gen_server:cast(Pid, {send, Req}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -201,7 +203,8 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #sock_state{}) -> term().
-terminate(_Reason, _State) ->
+terminate(_Reason, #sock_state{session_id = Id}) ->
+    catch communicator:remove_connection(Id, self()),
     ok.
 
 %%--------------------------------------------------------------------
@@ -336,3 +339,4 @@ send_server_message(Socket, Transport, ServerMsg) ->
                 [Socket, ServerMsg, Error]),
             Error
     end.
+
