@@ -22,11 +22,11 @@
     end_per_testcase/2]).
 
 %% tests
--export([session_creation_and_removal_test/1, session_getters_test/1,
+-export([session_manager_test/1, session_getters_test/1,
     session_supervisor_child_crash_test/1]).
 
 all() -> [
-    session_creation_and_removal_test,
+    session_manager_test,
     session_getters_test,
     session_supervisor_child_crash_test
 ].
@@ -38,7 +38,7 @@ all() -> [
 %%%====================================================================
 
 %% Test creation and removal of session using session manager.
-session_creation_and_removal_test(Config) ->
+session_manager_test(Config) ->
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
     Self = self(),
@@ -207,7 +207,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
-init_per_testcase(session_creation_and_removal_test, Config) ->
+init_per_testcase(session_manager_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     Self = self(),
 
@@ -242,7 +242,7 @@ init_per_testcase(session_supervisor_child_crash_test, Config) ->
 
     Config.
 
-end_per_testcase(session_creation_and_removal_test, Config) ->
+end_per_testcase(session_manager_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
 
     test_utils:mock_validate(Workers, communicator),

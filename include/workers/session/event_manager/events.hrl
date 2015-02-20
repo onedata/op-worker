@@ -14,6 +14,5 @@
 
 -include("read_event.hrl").
 -include("write_event.hrl").
--include("event_stream.hrl").
 
 -endif.
