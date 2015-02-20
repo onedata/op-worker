@@ -33,6 +33,8 @@
 
 -define(DEFAULT_REQUEST_TIMEOUT, timer:seconds(30)).
 
+-define(MSG_RETRANSMISSION_INTERVAL, timer:seconds(5)).
+
 -record(state, {
     session_id :: session:id(),
     connections = [] :: [pid()]
@@ -247,4 +249,25 @@ code_change(_OldVsn, State, _Extra) ->
 try_send(Msg, Connections) ->
     RandomIndex = random:uniform(length(Connections)),
     RandomConnection = lists:nth(RandomIndex, Connections),
-    connection:send_async(RandomConnection, Msg).
+    CommunicatorPid = self(),
+    spawn_link( %todo test performance of spawning vs notifying about each message
+        fun() ->
+             try connection:send(RandomConnection, Msg) of
+                 ok -> ok;
+                 {error, serialization_error} ->
+                     ?error("Could not send message ~p, due to serialization problems, aborting.",
+                        [Msg]);
+                 Error ->
+                     ?warning("Could not send message ~p, due to connection problems: ~p, retrying in ~p seconds.",
+                        [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
+                     timer:sleep(?MSG_RETRANSMISSION_INTERVAL),
+                     gen_server:cast(CommunicatorPid, {send, Msg})
+             catch
+                 _:Error ->
+                     ?error_stacktrace("Could not send message ~p, due error: ~p, retrying in ~p seconds.",
+                         [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
+                     timer:sleep(?MSG_RETRANSMISSION_INTERVAL),
+                     gen_server:cast(CommunicatorPid, {send, Msg})
+             end
+        end),
+    ok.

@@ -130,8 +130,11 @@ init([]) -> {ok, undefined}.
     {stop, Reason :: term(), NewState :: #sock_state{}}.
 handle_call({send, ServerMsg}, _From, State = #sock_state{socket = Socket,
     transport = Transport}) ->
-    Ans = send_server_message(Socket, Transport, ServerMsg),
-    {reply, Ans, State};
+    case send_server_message(Socket, Transport, ServerMsg) of
+        ok -> {reply, ok, State};
+        {error, serialization_error} -> {reply, {error, serialization_error}, State};
+        Error -> {stop, Error, Error, State}
+    end;
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -149,8 +152,11 @@ handle_call(_Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #sock_state{}}.
 handle_cast({send, ServerMsg}, State = #sock_state{socket = Socket,
     transport = Transport}) ->
-    send_server_message(Socket, Transport, ServerMsg),
-    {noreply, State};
+    case send_server_message(Socket, Transport, ServerMsg) of
+        ok -> {noreply, State};
+        {error, serialization_error} -> {noreply, State};
+        Error -> {stop, Error, Error, State}
+    end;
 
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
@@ -279,8 +285,10 @@ handle_handshake(State = #sock_state{certificate_info = Cert, socket = Sock,
     try auth_manager:handle_handshake(Msg, Cert) of
         {ok, Response = #server_message{message_body =
         #handshake_response{session_id = NewSessId}}} ->
-            send_server_message(Sock, Transp, Response),
-            {noreply, State#sock_state{session_id = NewSessId}, ?TIMEOUT}
+            case send_server_message(Sock, Transp, Response) of
+                ok -> {noreply, State#sock_state{session_id = NewSessId}, ?TIMEOUT};
+                Error -> {stop, Error, State#sock_state{session_id = NewSessId}}
+            end
     catch
         _:Error ->
             ?warning_stacktrace("Handshake ~p, error ~p", [Msg, Error]),
@@ -301,9 +309,6 @@ handle_normal_message(State = #sock_state{session_id = SessId,
     case router:preroute_message(Msg, SessId) of
         ok ->
             {noreply, State, ?TIMEOUT}
-%%         {_, Response = #server_message{}} ->
-%%             send_server_message(Sock, Transp, Response),
-%%             {noreply, State, ?TIMEOUT};
 %%         {error, Reason} ->
 %%             ?warning("Message ~p handling error: ~p", [Msg, Reason]),
 %%             {stop, {error, Reason}, State}
@@ -332,11 +337,16 @@ activate_socket_once(Socket, Transport) ->
 send_server_message(Socket, Transport, ServerMsg) ->
     try serializator:serialize_server_message(ServerMsg) of
         {ok, Data} ->
-            ok = Transport:send(Socket, Data)
+            case Transport:send(Socket, Data) of
+                ok -> ok;
+                Error ->
+                    ?error("Connection error: ~p, when sending message: ~p", [Error, ServerMsg]),
+                    Error
+            end
     catch
         _:Error ->
-            ?error_stacktrace("Connection ~p, message ~p encoding error: ~p",
+            ?error_stacktrace("Connection ~p, message ~p serialization error: ~p",
                 [Socket, ServerMsg, Error]),
-            Error
+            {error, serialization_error}
     end.
 
