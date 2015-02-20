@@ -26,12 +26,14 @@
 %% tests
 -export([
     event_stream_test/1,
+    event_stream_periodic_emission_test/1,
     event_stream_crash_test/1,
     event_manager_test/1
 ]).
 
 all() -> [
     event_stream_test,
+    event_stream_periodic_emission_test,
     event_stream_crash_test,
     event_manager_test
 ].
@@ -112,12 +114,45 @@ event_stream_test(Config) ->
 
     ok.
 
+%% Test periodic emission of aggregated events.
+event_stream_periodic_emission_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session_id, Config),
+    Self = self(),
+    EmTime = timer:seconds(2),
+    EvtsCount = 100,
+
+    {ok, SubId} = subscribe(Worker,
+        gui,
+        EmTime,
+        fun(#write_event{}) -> true; (_) -> false end,
+        fun(_) -> false end,
+        [fun(Evts) -> Self ! {handler, Evts} end]
+    ),
+
+    % Emit events.
+    lists:foreach(fun(N) ->
+        emit(Worker, #write_event{size = 1, counter = 1, file_size = N + 1,
+            blocks = [#file_block{offset = N, size = 1}]}, SessId)
+    end, lists:seq(0, EvtsCount - 1)),
+
+    % Check whether event handlers have been executed.
+    ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
+        size = EvtsCount, counter = EvtsCount, file_size = EvtsCount,
+        blocks = [#file_block{offset = 0, size = EvtsCount}]}]}, ?TIMEOUT + EmTime)),
+    ?assertEqual({error, timeout}, test_utils:receive_any(EmTime)),
+
+    unsubscribe(Worker, SubId),
+
+    ok.
+
+%% Test event stream reinitialization in case of crash.
 event_stream_crash_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Self = self(),
     EvtsCount = 100,
-    HalfEvts = round(EvtsCount / 2),
+    HalfEvtsCount = round(EvtsCount / 2),
 
     {ok, SubId} = subscribe(Worker,
         gui,
@@ -130,7 +165,7 @@ event_stream_crash_test(Config) ->
     lists:foreach(fun(N) ->
         emit(Worker, #write_event{size = 1, counter = 1, file_size = N + 1,
             blocks = [#file_block{offset = N, size = 1}]}, SessId)
-    end, lists:seq(0, HalfEvts - 1)),
+    end, lists:seq(0, HalfEvtsCount - 1)),
 
     % Get event stream pid.
     {ok, {SessSup, _}} = rpc:call(Worker, session,
@@ -147,7 +182,7 @@ event_stream_crash_test(Config) ->
     lists:foreach(fun(N) ->
         emit(Worker, #write_event{size = 1, counter = 1, file_size = N + 1,
             blocks = [#file_block{offset = N, size = 1}]}, SessId)
-    end, lists:seq(HalfEvts, EvtsCount - 1)),
+    end, lists:seq(HalfEvtsCount, EvtsCount - 1)),
 
     % Check whether event handlers have been executed.
     ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
@@ -242,7 +277,9 @@ init_per_testcase(event_stream_crash_test, Config) ->
     session_setup(Worker, SessId, Cred, Self),
     [{session_id, SessId} | Config];
 
-init_per_testcase(event_manager_test, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= event_stream_periodic_emission_test;
+    Case =:= event_manager_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
@@ -268,7 +305,9 @@ end_per_testcase(event_stream_crash_test, Config) ->
     test_utils:mock_unload(Worker, [communicator, logger]),
     proplists:delete(session_id, Config);
 
-end_per_testcase(event_manager_test, Config) ->
+end_per_testcase(Case, Config) when
+    Case =:= event_stream_periodic_emission_test;
+    Case =:= event_manager_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
@@ -316,7 +355,7 @@ emit(Worker, Evt, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates event subscription.
+%% @equiv subscribe(Worker, Producer, infinity, AdmRule, EmRule, Handlers)
 %% @end
 %%--------------------------------------------------------------------
 -spec subscribe(Worker :: node(), Producer :: event_manager:producer(),
@@ -325,12 +364,27 @@ emit(Worker, Evt, SessId) ->
     Handlers :: [event_stream:event_handler()]) ->
     {ok, SubId :: event_manager:subscription_id()}.
 subscribe(Worker, Producer, AdmRule, EmRule, Handlers) ->
+    subscribe(Worker, Producer, infinity, AdmRule, EmRule, Handlers).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates event subscription.
+%% @end
+%%--------------------------------------------------------------------
+-spec subscribe(Worker :: node(), Producer :: event_manager:producer(),
+    EmTime :: timeout(), AdmRule :: event_stream:admission_rule(),
+    EmRule :: event_stream:emission_rule(),
+    Handlers :: [event_stream:event_handler()]) ->
+    {ok, SubId :: event_manager:subscription_id()}.
+subscribe(Worker, Producer, EmTime, AdmRule, EmRule, Handlers) ->
     Sub = #write_event_subscription{
         producer = Producer,
         event_stream = ?WRITE_EVENT_STREAM#event_stream{
             metadata = 0,
             admission_rule = AdmRule,
             emission_rule = EmRule,
+            emission_time = EmTime,
             handlers = Handlers
         }
     },
