@@ -83,8 +83,8 @@ stop() ->
 %% ====================================================================
 init(_) ->
     process_flag(trap_exit, true),
-    {ok, Interval} = application:get_env(?APP_NAME, initialization_time),
-    erlang:send_after(Interval * 1000, self(), {timer, init_cluster}),
+    {ok, Interval} = application:get_env(?APP_NAME, initialization_time_seconds),
+    erlang:send_after(timer:seconds(Interval), self(), {timer, init_cluster}),
     {ok, #cm_state{}}.
 
 %%--------------------------------------------------------------------
@@ -265,8 +265,8 @@ heartbeat(State = #cm_state{nodes = Nodes}, SenderNode) ->
 %%--------------------------------------------------------------------
 -spec init_cluster(State :: #cm_state{}) -> #cm_state{}.
 init_cluster(State = #cm_state{nodes = []}) ->
-    {ok, Interval} = application:get_env(?APP_NAME, initialization_time),
-    erlang:send_after(Interval * 1000, self(), {timer, init_cluster}),
+    {ok, Interval} = application:get_env(?APP_NAME, initialization_time_seconds),
+    erlang:send_after(timer:seconds(Interval), self(), {timer, init_cluster}),
     State;
 init_cluster(State = #cm_state{nodes = Nodes, workers = Workers}) ->
     {_, RunningWorkers, _} = lists:unzip3(Workers),

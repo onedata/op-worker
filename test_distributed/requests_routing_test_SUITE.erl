@@ -1,11 +1,12 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
-%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This test checks requests routing inside OP cluster.
+%%% @doc
+%%% This test checks requests routing inside OP cluster.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(requests_routing_test_SUITE).
@@ -60,7 +61,7 @@ direct_cast_test(Config) ->
             ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, MsgId, prefer_local]))
         end,
         for(1, ProcSendNum, SendReq),
-        check_ans(ProcSendNum)
+        count_answers(ProcSendNum)
     end,
 
     ?assertEqual(ok, spawn_and_check(TestProc, ProcNum)).
@@ -83,7 +84,7 @@ redirect_cast_test(Config) ->
             ?assertEqual(ok, rpc:call(Ccm, worker_proxy, cast, [http_worker, ping, {proc, Self}, MsgId, random]))
         end,
         for(1, ProcSendNum, SendReq),
-        check_ans(ProcSendNum)
+        count_answers(ProcSendNum)
     end,
 
     ?assertEqual(ok, spawn_and_check(TestProc, ProcNum)).
@@ -112,7 +113,7 @@ mixed_cast_test(Config) ->
             ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2*MsgId, prefer_local]))
         end,
         for(1, ProcSendNum, SendReq),
-        check_ans(2*ProcSendNum)
+        count_answers(2*ProcSendNum)
     end,
 
     ?assertEqual(ok, spawn_and_check(TestProc, ProcNum)).
@@ -154,17 +155,17 @@ spawn_and_check(Fun, Num) ->
 for(N, N, F) -> [F(N)];
 for(I, N, F) -> [F(I)|for(I+1, N, F)].
 
-check_ans(Exp) ->
-    check_ans(1, Exp).
+count_answers(Exp) ->
+    count_answers(0, Exp).
 
-check_ans(Exp, Exp) ->
+count_answers(Exp, Exp) ->
     ok;
 
-check_ans(Num, Exp) ->
+count_answers(Num, Exp) ->
     Ans = receive
               #worker_answer{id = Num, response = Response} -> Response
           after ?REQUEST_TIMEOUT ->
               {error, timeout}
           end,
     ?assertEqual(pong, Ans),
-    check_ans(Num + 1, Exp).
+    count_answers(Num + 1, Exp).

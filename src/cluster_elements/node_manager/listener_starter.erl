@@ -221,7 +221,7 @@ start_dns_listeners() ->
     {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
     {ok, EdnsMaxUdpSize} = application:get_env(?APP_NAME, edns_max_udp_size),
     {ok, TCPNumAcceptors} = application:get_env(?APP_NAME, dns_tcp_acceptor_pool_size),
-    {ok, TCPTImeout} = application:get_env(?APP_NAME, dns_tcp_timeout),
+    {ok, TCPTImeout} = application:get_env(?APP_NAME, dns_tcp_timeout_seconds),
     OnFailureFun = fun() ->
         ?error("Could not start DNS server on node ~p.", [node()])
     end,
