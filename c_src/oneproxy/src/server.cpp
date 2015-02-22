@@ -18,11 +18,10 @@ namespace proxy {
 
 server::server(boost::asio::io_service &client_io_service,
                boost::asio::io_service &proxy_io_service, int verify_type,
-               uint16_t server_port, std::vector<std::string> ca_crl_paths)
+               std::vector<std::string> ca_crl_paths)
     : client_io_service_(client_io_service)
     , proxy_io_service_(proxy_io_service)
     , verify_type_(verify_type)
-    , listen_port_(server_port)
     , ca_crl_dirs_(std::move(ca_crl_paths))
 {
 }

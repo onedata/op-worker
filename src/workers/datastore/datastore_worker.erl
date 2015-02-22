@@ -13,7 +13,7 @@
 
 -behaviour(worker_plugin_behaviour).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include("workers/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -34,9 +34,8 @@
 %% {@link worker_plugin_behaviour} callback init/1.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term()) -> Result when
-    Result :: {ok, #{term() => term()}} | {error, Error},
-    Error :: term().
+-spec init(Args :: term()) ->
+    {ok, #{term() => term()}} | {error, Reason :: term()}.
 init(_Args) ->
 
     %% Get Riak nodes
@@ -53,49 +52,60 @@ init(_Args) ->
         end,
 
     State = lists:foldl(
-      fun(Model, StateAcc) ->
-          #model_config{name = RecordName} = ModelConfig = Model:model_init(),
-          maps:put(RecordName, ModelConfig, StateAcc)
-      end, #{}, ?MODELS),
+        fun(Model, StateAcc) ->
+            #model_config{name = RecordName} = ModelConfig = Model:model_init(),
+            maps:put(RecordName, ModelConfig, StateAcc)
+        end, #{}, ?MODELS),
 
     {ok, State#{riak_nodes => RiakNodes}}.
 
-
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link worker_plugin_behaviour} callback handle/1. <br/>
+%% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Request, State :: term()) -> Result :: term() when
+-spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck |
-    {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]}.
+    {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]},
+    Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
+    {error, Reason},
+    Response :: term(),
+    Reason :: term().
 handle(ping, _State) ->
     pong;
 
-handle(healthcheck, State) ->
-    HC = #{
-        ?PERSISTENCE_DRIVER => ?PERSISTENCE_DRIVER:healthcheck(State),
-        ?LOCAL_CACHE_DRIVER => ?LOCAL_CACHE_DRIVER:healthcheck(State),
-        ?DISTRIBUTED_CACHE_DRIVER => ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
-    },
-
-    maps:fold(
-        fun
-            (_, ok, AccIn) ->
-                AccIn;
-            (K, {error, Reason}, _AccIn) ->
-                ?error("Driver ~p healthckeck error: ~p", [K, Reason]),
-                {error, {driver_failure, {K, Reason}}}
-        end, ok, HC);
+handle(healthcheck, _State) ->
+    ok;
+%% TODO @Rafal
+%% healthcheck rzuca blad (bo Ryjaka nie ma), natomiast powinien zwracac healthcheck_reponse()
+%%
+%%     HC = #{
+%%         ?PERSISTENCE_DRIVER => ?PERSISTENCE_DRIVER:healthcheck(State),
+%%         ?LOCAL_CACHE_DRIVER => ?LOCAL_CACHE_DRIVER:healthcheck(State),
+%%         ?DISTRIBUTED_CACHE_DRIVER => ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
+%%     },
+%%
+%%     maps:fold(
+%%         fun
+%%             (_, ok, AccIn) ->
+%%                 AccIn;
+%%             (K, {error, Reason}, _AccIn) ->
+%%                 ?error("Driver ~p healthckeck error: ~p", [K, Reason]),
+%%                 {error, {driver_failure, {K, Reason}}}
+%%         end, ok, HC);
 
 %% Proxy call to given datastore driver
 handle({driver_call, Module, Method, Args}, _State) ->
-    erlang:apply(Module, Method, Args);
+    %% todo @Rafal This pattern matching fixes dialyzer but perhaps better solution would be more suitable
+    case erlang:apply(Module, Method, Args) of
+        ok -> ok;
+        {ok, Response} -> {ok, Response};
+        {error, Reason} -> {error, Reason}
+    end;
 
 %% Unknown request
-handle(_Msg, _State) ->
-    ?warning("datastore worker unknown message: ~p", [_Msg]).
-
+handle(_Request, _) ->
+    ?log_bad_request(_Request).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -106,7 +116,6 @@ handle(_Msg, _State) ->
     Result :: ok.
 cleanup() ->
     ok.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -120,7 +129,6 @@ state_put(Key, Value) ->
             maps:put(Key, Value, State)
         end}).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Puts Value from datastore worker's state
@@ -128,4 +136,4 @@ state_put(Key, Value) ->
 %%--------------------------------------------------------------------
 -spec state_get(Key :: term()) -> Value :: term().
 state_get(Key) ->
-    maps:get(Key, gen_server:call(?MODULE, getPlugInState)).
+    maps:get(Key, gen_server:call(?MODULE, get_plugin_state)).

@@ -14,6 +14,7 @@
 extern "C" {
 #include "gpv/grid_proxy_verify.h"
 }
+#include "oneproxy_messages.pb.h"
 
 #include <boost/bind.hpp>
 #include <boost/algorithm/string/predicate.hpp>
@@ -23,6 +24,7 @@ extern "C" {
 #include <openssl/rand.h>
 
 using std::string;
+using namespace std::placeholders;
 
 namespace one {
 namespace proxy {
@@ -120,8 +122,9 @@ void tls2tcp_session::handle_handshake(const boost::system::error_code &error)
             proxy_socket_.set_option(boost::asio::ip::tcp::no_delay(true));
             client_socket().set_option(boost::asio::ip::tcp::no_delay(true));
 
-            // Start reading...
-            start_reading(verified);
+            // Send message with client's certificate information to the server
+            // and start reading...
+            send_cert_info(verified);
         }
         catch (boost::system::error_code &e) {
             LOG(ERROR) << "Cannot initialize proxy connection due to: "
@@ -136,17 +139,64 @@ void tls2tcp_session::handle_handshake(const boost::system::error_code &error)
     }
 }
 
+template <typename lambda>
+std::shared_ptr<lambda> make_shared_handler(lambda &&l)
+{
+    return std::make_shared<lambda>(std::forward<lambda>(l));
+}
+
+void tls2tcp_session::send_cert_info(bool verified)
+{
+    // Prepare
+    one::proxy::proto::CertificateInfo certificate_info;
+    if (verified) {
+        std::array<char, 2048> subject_name;
+        X509_NAME_oneline(X509_get_subject_name(peer_cert_),
+                subject_name.data(), subject_name.size());
+        certificate_info.set_client_subject_dn(subject_name.data());
+        certificate_info.set_client_session_id(session_id_);
+    }
+
+    // Encode
+    string certificate_info_data;
+    if(!certificate_info.SerializeToString(&certificate_info_data)) {
+        LOG(ERROR) << "Cannot serialize certificate info.";
+        return;
+    }
+    auto header = std::make_unique<std::uint32_t>(htonl(certificate_info_data.size()));
+    auto msg = std::make_unique<std::string>(std::move(certificate_info_data));
+
+    // Send
+    std::array<boost::asio::const_buffer, 2> buffers{
+            {boost::asio::buffer(static_cast<void *>(&*header), sizeof(*header)),
+                    boost::asio::buffer(*msg)}};
+    auto handler = make_shared_handler([
+            t = shared_from_this(),
+            header = std::move(header), //boost asio needs header and msg in buffer
+            msg = std::move(msg),
+            verified
+    ](const boost::system::error_code & ec)
+    {
+        if (ec)
+            LOG(ERROR) << "Cannot send CertificateInfo message.";
+        t->start_reading(verified);
+    });
+    boost::asio::async_write(
+            proxy_socket_, buffers,
+            [handler](const boost::system::error_code &ec, size_t) {
+                (*handler)(ec);
+            });
+}
+
 void tls2tcp_session::start_reading(bool /*verified*/)
 {
     proxy_socket_.async_read_some(
         boost::asio::buffer(proxy_data_.data(), proxy_data_.size()),
-        std::bind(&tls2tcp_session::handle_proxy_read, shared_from_this(),
-                  std::placeholders::_1, std::placeholders::_2));
+        std::bind(&tls2tcp_session::handle_proxy_read, shared_from_this(), _1, _2));
 
     client_socket_.async_read_some(
         boost::asio::buffer(client_data_.data(), client_data_.size()),
-        std::bind(&tls2tcp_session::handle_client_read, shared_from_this(),
-                  std::placeholders::_1, std::placeholders::_2));
+        std::bind(&tls2tcp_session::handle_client_read, shared_from_this(), _1, _2));
 }
 
 } // namespace proxy

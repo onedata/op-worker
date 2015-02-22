@@ -6,12 +6,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains definitions of names used to identify
-%%% different parts of application (or whole application).
+%%% This file contains global definitions of component names, macros and types
+%%% used accross the application.
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(REGISTERED_NAMES_HRL).
--define(REGISTERED_NAMES_HRL, 1).
+-ifndef(GLOBAL_DEFINITIONS_HRL).
+-define(GLOBAL_DEFINITIONS_HRL, 1).
+
+%%%===================================================================
+%%% Global names
+%%%===================================================================
 
 %% Name of the application.
 -define(APP_NAME, oneprovider_node).
@@ -37,6 +41,16 @@
 
 %% Local name (name and node is used to identify it) of supervisor that
 %% coordinates the processes started by concrete worker_host (given by arg)
--define(WORKER_HOST_SUPERVISOR_NAME(Module), list_to_atom(atom_to_list(Module) ++ "_sup") ).
+-define(WORKER_HOST_SUPERVISOR_NAME(Module), list_to_atom(atom_to_list(Module) ++ "_sup")).
+
+%%%===================================================================
+%%% Global types
+%%%===================================================================
+
+% Macro that should be used to log an error during healthcheck
+-define(HEALTHCHECK_ERROR_LOG_MSG(_Msg),
+    HEALTHCHECK_ERROR_LOG(_Msg, [])).
+-define(HEALTHCHECK_ERROR_LOG_MSG(_Msg, _Args),
+    lists:flatten(io_lib:format("Healthcheck error in ~p on node ~p: " ++ _Msg, [?MODULE, node()] ++ _Args))).
 
 -endif.

@@ -13,7 +13,6 @@
 
 -include("workers/datastore/datastore.hrl").
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Initializes given bucket locally (this method is executed per-node).
@@ -52,7 +51,7 @@
 %% Gets #document with given key.
 %% @end
 %%--------------------------------------------------------------------
--callback get(model_behaviour:model_config(), datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
+-callback get(model_behaviour:model_config(), datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 
 
 %%--------------------------------------------------------------------
@@ -76,6 +75,4 @@
 %% Checks driver state.
 %% @end
 %%--------------------------------------------------------------------
--spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: any()}.
-healthcheck(_) ->
-    ok.
+-callback healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.

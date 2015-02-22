@@ -12,7 +12,7 @@
 -module(listener_starter).
 -author("Tomasz Lichon").
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -31,16 +31,16 @@
 
 % Paths in gui static directory
 -define(STATIC_PATHS, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
--define(ONEPROXY_DISPATCHER, oneproxy_dispatcher).
+-define(ONEPROXY_PROTOCOL_LISTENER, oneproxy_protocol_listener).
 
 % Cowboy listener references
--define(WEBSOCKET_LISTENER, websocket).
 -define(HTTPS_LISTENER, https).
 -define(REST_LISTENER, rest).
 -define(HTTP_REDIRECTOR_LISTENER, http).
+-define(TCP_PROTO_LISTENER, tcp_proto).
 
 %% API
--export([start_dispatcher_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0,
+-export([start_protocol_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0,
     start_dns_listeners/0, stop_listeners/0]).
 
 %%%===================================================================
@@ -52,30 +52,20 @@
 %% Starts a cowboy listener for request_dispatcher.
 %% @end
 %%--------------------------------------------------------------------
--spec start_dispatcher_listener() -> {ok, pid()} | no_return().
-start_dispatcher_listener() ->
-    catch cowboy:stop_listener(?WEBSOCKET_LISTENER),
+-spec start_protocol_listener() -> {ok, pid()} | no_return().
+start_protocol_listener() ->
     {ok, Port} = application:get_env(?APP_NAME, dispatcher_port),
     {ok, DispatcherPoolSize} = application:get_env(?APP_NAME, dispatcher_pool_size),
     {ok, CertFile} = application:get_env(?APP_NAME, fuse_ssl_cert_path),
 
     LocalPort = oneproxy:get_local_port(Port),
-    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_none) end),
-    register(?ONEPROXY_DISPATCHER, Pid),
+    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_peer, no_http) end),
+    register(?ONEPROXY_PROTOCOL_LISTENER, Pid),
 
-    Dispatch = cowboy_router:compile([{'_', [
-        {?ONECLIENT_URI_PATH, client_handler, []},
-        {?ONEPROVIDER_URI_PATH, provider_handler, []}
-    ]}]),
-
-    {ok, _} = cowboy:start_http(?WEBSOCKET_LISTENER, DispatcherPoolSize,
-        [
-            {ip, {127, 0, 0, 1}},
-            {port, LocalPort}
-        ],
-        [
-            {env, [{dispatch, Dispatch}]}
-        ]).
+    {ok, _} = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
+        ranch_tcp, [{ip, {127, 0, 0, 1}}, {port, LocalPort}],
+        protocol_handler, []
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -92,6 +82,7 @@ start_gui_listener() ->
     {ok, GuiNbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_acceptors),
     {ok, MaxKeepAlive} = application:get_env(?APP_NAME, http_worker_max_keepalive),
     {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout),
+
     LocalPort = oneproxy:get_local_port(GuiPort),
     spawn_link(fun() -> oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none) end),
 
@@ -110,6 +101,12 @@ start_gui_listener() ->
         ]},
         % Proper requests are routed to handler modules
         {'_', static_dispatches(DocRoot, ?STATIC_PATHS) ++ [
+            {"/nagios/[...]", opn_cowboy_bridge,
+                [
+                    {delegation, true},
+                    {handler_module, nagios_handler},
+                    {handler_opts, []}
+                ]},
             {'_', opn_cowboy_bridge,
                 [
                     {delegation, true},
@@ -234,7 +231,7 @@ start_dns_listeners() ->
 %%--------------------------------------------------------------------
 -spec stop_listeners() -> ok.
 stop_listeners() ->
-    Listeners = [?WEBSOCKET_LISTENER, ?HTTP_REDIRECTOR_LISTENER, ?REST_LISTENER, ?HTTPS_LISTENER, ?SESSION_LOGIC_MODULE],
+    Listeners = [?HTTP_REDIRECTOR_LISTENER, ?REST_LISTENER, ?HTTPS_LISTENER, ?SESSION_LOGIC_MODULE],
     Results = lists:map(
         fun (?SESSION_LOGIC_MODULE) -> catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE);
             (X) -> {X, catch cowboy:stop_listener(X)}

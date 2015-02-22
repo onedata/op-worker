@@ -18,7 +18,7 @@
 -behaviour(worker_plugin_behaviour).
 -behaviour(dns_query_handler_behaviour).
 
--include("registered_names.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/dns/dns.hrl").
 
@@ -43,7 +43,8 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% dns_query_handler_behaviour callbacks
--export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1, handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
+-export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1,
+    handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -55,8 +56,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, #dns_worker_state{}} | {error, Error},
-    Error :: term().
+    Result :: {ok, #dns_worker_state{}} | {error, Reason :: term()}.
 init([]) ->
     {ok, #dns_worker_state{}};
 
@@ -71,7 +71,7 @@ init(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link worker_plugin_behaviour} callback handle/1. <br/>
+%% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
@@ -79,9 +79,10 @@ init(_) ->
     {update_state, list(), list()} |
     {get_worker, atom()} |
     get_nodes,
-    Result :: ok | {ok, Response} | {error, Error} | pong,
+    Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
+    {error, Reason},
     Response :: [inet:ip4_address()],
-    Error :: term().
+    Reason :: term().
 handle(ping, _) ->
     pong;
 
@@ -373,12 +374,12 @@ get_workers(Module) ->
                 end;
             UpdateError ->
                 ?error("DNS get_worker error: ~p", [UpdateError]),
-                {error, dns_update_state_error}
+                serv_fail
         end
     catch
         E1:E2 ->
             ?error("DNS get_worker error: ~p:~p", [E1, E2]),
-            {error, dns_get_worker_error}
+            serv_fail
     end.
 
 %%--------------------------------------------------------------------
@@ -424,7 +425,7 @@ get_nodes() ->
     catch
         E1:E2 ->
             ?error("DNS get_nodes error: ~p:~p", [E1, E2]),
-            {error, get_nodes}
+            serv_fail
     end.
 
 
@@ -476,6 +477,6 @@ make_ans_random(Result) ->
 %% DNS query processing to dns_worker.
 %% @end
 %%--------------------------------------------------------------------
--spec call_dns_worker(Request :: term()) -> term() | serv_fail.
+-spec call_dns_worker(Request :: term()) -> term().
 call_dns_worker(Request) ->
     worker_proxy:call(dns_worker, Request).

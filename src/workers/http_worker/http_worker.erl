@@ -14,7 +14,6 @@
 
 -behaviour(worker_plugin_behaviour).
 
--include("registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
@@ -30,20 +29,21 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, State :: term()} | {error, Error :: term()}.
+    Result :: {ok, State :: term()} | {error, Reason :: term()}.
 init(_Args) ->
     {ok, undefined}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link worker_plugin_behaviour} callback handle/1. <br/>
+%% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck | {spawn_handler, SocketPid :: pid()},
-    Result :: ok | {ok, Response} | {error, Error} | pong,
+    Result :: nagios_handler:healthcheck_reponse() | ok | {ok, Response} |
+    {error, Reason} | pong,
     Response :: term(),
-    Error :: term().
+    Reason :: term().
 handle(ping, _) ->
     pong;
 

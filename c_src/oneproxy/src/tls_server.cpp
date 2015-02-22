@@ -29,7 +29,7 @@ tls_server<session_t>::tls_server(boost::asio::io_service &client_io_service,
                                   std::string forward_host,
                                   uint16_t forward_port,
                                   std::vector<std::string> ca_crl_dirs)
-    : server(client_io_service, proxy_io_service, verify_type, server_port,
+    : server(client_io_service, proxy_io_service, verify_type,
              std::move(ca_crl_dirs))
     , acceptor_(client_io_service, boost::asio::ip::tcp::endpoint(
                                        boost::asio::ip::tcp::v4(), server_port))
