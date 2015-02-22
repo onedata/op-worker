@@ -135,6 +135,7 @@ spawn_and_check(_Fun, 0) ->
 
 spawn_and_check(Fun, Num) ->
     Master = self(),
+    ct:print("aaa ~p", [Master]),
     spawn_link(fun() ->
         Fun(),
         Master ! ok
@@ -142,11 +143,15 @@ spawn_and_check(Fun, Num) ->
     case spawn_and_check(Fun, Num - 1) of
         ok ->
             receive
-                ok -> ok
+                ok ->
+                    ct:print("bbb ~p", [Master]),
+                    ok
             after ?REQUEST_TIMEOUT ->
+                ct:print("ccc ~p", [Master]),
                 {error, timeout}
             end;
         E ->
+            ct:print("ddd ~p", [Master]),
             E
     end.
 
@@ -161,8 +166,11 @@ count_answers(Exp, Exp) ->
 
 count_answers(Num, Exp) ->
     Ans = receive
-              #worker_answer{id = Num, response = Response} -> Response
+              #worker_answer{id = Num, response = Response} ->
+                  ct:print("xxx ~p", [Response]),
+                  Response
           after ?REQUEST_TIMEOUT ->
+              ct:print("yyy ~p", [timeout]),
               {error, timeout}
           end,
     ?assertEqual(pong, Ans),
