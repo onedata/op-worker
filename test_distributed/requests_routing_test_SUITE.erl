@@ -151,7 +151,7 @@ spawn_and_check(Fun, Num) ->
                 {error, timeout}
             end;
         E ->
-            ct:print("ddd ~p", [Master]),
+            ct:print("ddd ~p ~p", [Master, E]),
             E
     end.
 
@@ -168,7 +168,10 @@ count_answers(Num, Exp) ->
     Ans = receive
               #worker_answer{id = Num, response = Response} ->
                   ct:print("xxx ~p", [Response]),
-                  Response
+                  Response;
+                X ->
+                    ct:print("zzz ~p", [X]),
+                    X
           after ?REQUEST_TIMEOUT ->
               ct:print("yyy ~p", [timeout]),
               {error, timeout}
