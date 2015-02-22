@@ -19,6 +19,10 @@ RUN apt-get install -y curl dnsutils erlang-base-hipe erlang-common-test \
                        libtbb2 openssl python python-pip rsync unzip && \
     apt-get clean
 
+# Add a recent docker binary
+ADD https://get.docker.com/builds/Linux/x86_64/docker-latest /usr/bin/docker
+RUN chmod a+x /usr/bin/docker
+
 # Install required Python packages
 RUN pip install dnspython pytest
 
