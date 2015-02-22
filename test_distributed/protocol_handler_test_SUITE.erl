@@ -31,14 +31,15 @@
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1,
     multi_message_test/1, client_send_test/1, client_communicate_test/1,
     client_communiate_async_test/1, multi_ping_pong_test/1,
-    sequential_ping_pong_test/1]).
+    sequential_ping_pong_test/1, multi_connection_test/1]).
 
--perf_test({perf_cases, [multi_message_test, multi_ping_pong_test, sequential_ping_pong_test]}).
+-perf_test({perf_cases, [multi_message_test, multi_ping_pong_test,
+    sequential_ping_pong_test, multi_connection_test]}).
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
         multi_message_test, client_send_test, client_communicate_test,
         client_communiate_async_test, multi_ping_pong_test,
-        sequential_ping_pong_test].
+        sequential_ping_pong_test, multi_connection_test].
 
 -define(CLEANUP, true).
 
@@ -259,11 +260,11 @@ client_communiate_async_test(Config) ->
     ok = ssl:close(Sock).
 
 -perf_test([
-    {repeats, 3},
+    {repeats, 10},
     {perf_configs, [
         [{msg_num, 1000000}]
     ]},
-    {ct_config, [{msg_num, 1000}]}
+    {ct_config, [{msg_num, 100}]}
 ]).
 multi_ping_pong_test(Config) ->
     % given
@@ -327,7 +328,7 @@ multi_ping_pong_test(Config) ->
     ok = ssl:close(Sock).
 
 -perf_test([
-    {repeats, 3},
+    {repeats, 10},
     {perf_configs, [
         [{msg_num, 100000}]
     ]},
@@ -353,7 +354,8 @@ sequential_ping_pong_test(Config) ->
         ok = ssl:send(Sock, E),
         Pong =
             receive
-                {ssl, _, Data} -> server_messages:decode_msg(Data, 'ServerMessage')
+                {ssl, _, Data} ->
+                    server_messages:decode_msg(Data, 'ServerMessage')
             after
                 timer:seconds(5) -> {error, timeout}
             end,
@@ -363,7 +365,7 @@ sequential_ping_pong_test(Config) ->
         ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}},
             message_id = BinaryN},
             Pong),
-        N+1
+        N + 1
     end, 1, RawPings),
     T2 = os:timestamp(),
 
@@ -372,6 +374,36 @@ sequential_ping_pong_test(Config) ->
     _FullTime = {full_time, timer:now_diff(T2, T1)},
 %%     ct:print("~p", [_FullTime]),
     ok = ssl:close(Sock).
+
+-perf_test([
+    {repeats, 10},
+    {perf_configs, [
+        [{connections_num, 100}]
+    ]},
+    {ct_config, [{connections_num, 1000}]}
+]).
+multi_connection_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    ConnNumbers = ?config(connections_num, Config),
+    ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
+
+    % when
+    Connections = lists:map(
+        fun(N) ->
+            connect_via_token(Worker1, [{reuse_sessions, false}]) % todo repair oneproxy and delete reuse_sessions flag
+        end, ConnNumbersList),
+
+    % then
+    lists:foreach(
+        fun(ConnectionAns) ->
+            ?assertMatch({ok, {_, _}}, ConnectionAns),
+            {ok, {Sock, SessId}} = ConnectionAns,
+            ?assert(is_binary(SessId)),
+            ?assertMatch({ok, _}, ssl:connection_info(Sock))
+        end, Connections),
+    lists:foreach(fun({ok, {Sock, _}}) -> ssl:close(Sock) end, Connections).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
