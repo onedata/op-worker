@@ -123,10 +123,10 @@ mixed_cast_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-  test_node_starter:prepare_test_environment(Config, ?TEST_FILE(Config, "env_desc.json")).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-  test_node_starter:clean_environment(Config).
+    test_node_starter:clean_environment(Config).
 
 %%%===================================================================
 %%% Internal functions
