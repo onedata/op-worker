@@ -380,7 +380,7 @@ sequential_ping_pong_test(Config) ->
     {perf_configs, [
         [{connections_num, 100}]
     ]},
-    {ct_config, [{connections_num, 1000}]}
+    {ct_config, [{connections_num, 100}]}
 ]).
 multi_connection_test(Config) ->
     % given
