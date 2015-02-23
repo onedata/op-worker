@@ -97,7 +97,6 @@ healthcheck(gui) ->
     {ok, GuiPort} = application:get_env(?APP_NAME, http_worker_https_port),
     case ibrowse:send_req("https://127.0.0.1:" ++ integer_to_list(GuiPort), [], get) of
         {ok, _, _, _} ->
-            ct:print("ok"),
             ok;
         _ -> {error, no_gui}
     end;

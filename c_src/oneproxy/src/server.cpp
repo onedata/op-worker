@@ -16,13 +16,11 @@
 namespace one {
 namespace proxy {
 
-server::server(boost::asio::io_service::strand &client_strand,
-               boost::asio::io_service::strand &proxy_strand, int verify_type,
+server::server(boost::asio::io_service &io_service,
+               boost::asio::io_service::strand &strand, int verify_type,
                std::vector<std::string> ca_crl_paths)
-    : client_io_service_(client_strand.get_io_service())
-    , proxy_io_service_(proxy_strand.get_io_service())
-    , client_strand_(client_strand)
-    , proxy_strand_(proxy_strand)
+    : io_service_(io_service)
+    , strand_(strand)
     , verify_type_(verify_type)
     , ca_crl_dirs_(std::move(ca_crl_paths))
 {

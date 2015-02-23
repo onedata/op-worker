@@ -64,8 +64,8 @@ protected:
      * @param context Client's TLS context
      */
     session(std::weak_ptr<server> server,
-            boost::asio::io_service::strand &client_strand,
-            boost::asio::io_service::strand &proxy_strand,
+            boost::asio::io_service &io_service,
+            boost::asio::io_service::strand &strand,
             boost::asio::ssl::context &context);
 
     /**
@@ -138,9 +138,8 @@ protected:
 
     client_socket_t client_socket_;
     proxy_socket_t proxy_socket_;
-    boost::asio::io_service::strand &client_strand_;
-    boost::asio::io_service::strand &proxy_strand_;
-    boost::asio::io_service &proxy_io_service_;
+    boost::asio::io_service &io_service_;
+    boost::asio::io_service::strand &strand_;
 
     std::array<char, buffer_size> client_data_;
     std::array<char, buffer_size> proxy_data_;
@@ -156,14 +155,14 @@ private:
 
 template <>
 session<tls2tcp_session, ssl_socket, tcp_socket>::session(
-    std::weak_ptr<server> s, boost::asio::io_service::strand &client_strand,
-    boost::asio::io_service::strand &proxy_strand,
+    std::weak_ptr<server> s, boost::asio::io_service &io_service,
+    boost::asio::io_service::strand &strand,
     boost::asio::ssl::context &context);
 
 template <>
 session<tcp2tls_session, tcp_socket, ssl_socket>::session(
-    std::weak_ptr<server> s, boost::asio::io_service::strand &client_strand,
-    boost::asio::io_service::strand &proxy_strand,
+    std::weak_ptr<server> s, boost::asio::io_service &io_service,
+    boost::asio::io_service::strand &strand,
     boost::asio::ssl::context &context);
 
 extern template class session<tcp2tls_session, tcp_socket, ssl_socket>;

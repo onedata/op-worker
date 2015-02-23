@@ -19,15 +19,15 @@
 namespace one {
 namespace proxy {
 
-tcp_server::tcp_server(boost::asio::io_service::strand &client_strand,
-                       boost::asio::io_service::strand &proxy_strand,
+tcp_server::tcp_server(boost::asio::io_service &io_service,
+                       boost::asio::io_service::strand &strand,
                        int verify_type, const std::string &cert_path,
                        uint16_t server_port,
                        std::vector<std::string> ca_crl_dirs)
-    : server(client_strand, proxy_strand, verify_type,
+    : server(io_service, strand, verify_type,
              std::move(ca_crl_dirs))
     , acceptor_(
-          client_strand.get_io_service(),
+          io_service,
           boost::asio::ip::tcp::endpoint(
               boost::asio::ip::address::from_string("127.0.0.1"), server_port))
     , context_(boost::asio::ssl::context::sslv23_client)
@@ -38,7 +38,7 @@ tcp_server::tcp_server(boost::asio::io_service::strand &client_strand,
 void tcp_server::start_accept()
 {
     auto new_session = std::make_shared<tcp2tls_session>(
-        shared_from_this(), client_strand_, proxy_strand_, context_,
+        shared_from_this(), io_service_, strand_, context_,
         verify_type_);
 
     acceptor_.async_accept(

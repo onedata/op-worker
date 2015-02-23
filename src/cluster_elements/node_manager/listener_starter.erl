@@ -63,7 +63,10 @@ start_protocol_listener() ->
     register(?ONEPROXY_PROTOCOL_LISTENER, Pid),
 
     {ok, _} = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
-        ranch_tcp, [{ip, {127, 0, 0, 1}}, {port, LocalPort}],
+        ranch_tcp, [
+            {ip, {127, 0, 0, 1}}, %todo listen 0.0.0.0 in tests
+            {port, LocalPort}
+        ],
         protocol_handler, []
     ).
 

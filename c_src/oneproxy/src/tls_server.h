@@ -39,8 +39,8 @@ public:
      * @param forward_host Host to which data shall be redirected
      * @param forward_port Port to which data shall be redirected
      */
-    tls_server(boost::asio::io_service::strand &client_strand,
-               boost::asio::io_service::strand &proxy_strand, int verify_type,
+    tls_server(boost::asio::io_service &io_service,
+               boost::asio::io_service::strand &strand, int verify_type,
                const std::string &cert_path, uint16_t server_port,
                std::string forward_host, uint16_t forward_port,
                std::vector<std::string> ca_crl_paths);

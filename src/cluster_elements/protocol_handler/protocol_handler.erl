@@ -87,8 +87,7 @@ start_link(Ref, Socket, Transport, Opts) ->
 init(Ref, Socket, Transport, _Opts = []) ->
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
-    ok = Transport:setopts(Socket, [binary, {active, once}, {reuseaddr, true},
-        {packet, ?PACKET_VALUE}]),
+    ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
     {Ok, Closed, Error} = Transport:messages(),
     gen_server:enter_loop(?MODULE, [], #sock_state{
         socket = Socket,
@@ -203,8 +202,12 @@ handle_info(_Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #sock_state{}) -> term().
 terminate(_Reason, #sock_state{session_id = SessionId}) ->
-    ?info("TERMINATE ~p", [_Reason]), %todo remove when we figure out why connections are lost
-    session:remove_connection(self(), SessionId),
+    try
+        session:remove_connection(self(), SessionId)
+    catch
+        _:Error ->
+            ?error_stacktrace("Connection termination error ~p", [Error])
+    end,
     ok.
 
 %%--------------------------------------------------------------------

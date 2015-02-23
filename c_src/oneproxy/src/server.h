@@ -36,8 +36,8 @@ public:
      * @param ca_crl_paths Paths to directories with CAs and CRLs. All certs
      * have to be in DER format and have .der and .crl extension respectively.
      */
-    server(boost::asio::io_service::strand &client_strand,
-           boost::asio::io_service::strand &proxy_strand, int verify_type,
+    server(boost::asio::io_service &io_service,
+           boost::asio::io_service::strand &strand, int verify_type,
            std::vector<std::string> ca_crl_paths);
 
     virtual ~server() = default;
@@ -101,10 +101,8 @@ protected:
                      boost::asio::ssl::context &context,
                      const std::string &cert_path);
 
-    boost::asio::io_service &client_io_service_;
-    boost::asio::io_service &proxy_io_service_;
-    boost::asio::io_service::strand &client_strand_;
-    boost::asio::io_service::strand &proxy_strand_;
+    boost::asio::io_service &io_service_;
+    boost::asio::io_service::strand &strand_;
     const int verify_type_;
 
 private:

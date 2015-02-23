@@ -41,14 +41,13 @@ std::string gen_session_id()
 
 template <>
 session<tls2tcp_session, ssl_socket, tcp_socket>::session(
-    std::weak_ptr<server> s, boost::asio::io_service::strand &client_strand,
-    boost::asio::io_service::strand &proxy_strand,
+    std::weak_ptr<server> s, boost::asio::io_service &io_service,
+    boost::asio::io_service::strand &strand,
     boost::asio::ssl::context &context)
-    : client_socket_(client_strand.get_io_service(), context)
-    , proxy_socket_(proxy_strand.get_io_service())
-    , client_strand_(client_strand)
-    , proxy_strand_(proxy_strand)
-    , proxy_io_service_(proxy_strand.get_io_service())
+    : client_socket_(io_service, context)
+    , proxy_socket_(io_service)
+    , io_service_(io_service)
+    , strand_(strand)
     , server_(s)
     , session_id_(gen_session_id())
 {
@@ -56,14 +55,13 @@ session<tls2tcp_session, ssl_socket, tcp_socket>::session(
 
 template <>
 session<tcp2tls_session, tcp_socket, ssl_socket>::session(
-    std::weak_ptr<server> s, boost::asio::io_service::strand &client_strand,
-    boost::asio::io_service::strand &proxy_strand,
+    std::weak_ptr<server> s, boost::asio::io_service &io_service,
+    boost::asio::io_service::strand &strand,
     boost::asio::ssl::context &context)
-    : client_socket_(client_strand.get_io_service())
-    , proxy_socket_(proxy_strand.get_io_service(), context)
-    , client_strand_(client_strand)
-    , proxy_strand_(proxy_strand)
-    , proxy_io_service_(proxy_strand.get_io_service())
+    : client_socket_(io_service)
+    , proxy_socket_(io_service, context)
+    , io_service_(io_service)
+    , strand_(strand)
     , server_(s)
     , session_id_(gen_session_id())
 {
@@ -187,10 +185,9 @@ void session<deriv, csock, psock>::handle_client_read(
     const boost::system::error_code &error, size_t bytes_transferred)
 {
     if (!error) {
-        boost::asio::async_write(
-            proxy_socket_, boost::asio::const_buffers_1(client_data_.data(),
-                                                        bytes_transferred),
-            client_strand_.wrap(std::bind(&session<deriv, csock, psock>::handle_proxy_write,
+        proxy_socket_.async_write_some(
+            boost::asio::const_buffers_1(client_data_.data(), bytes_transferred),
+                strand_.wrap(std::bind(&session<deriv, csock, psock>::handle_proxy_write,
                       static_cast<deriv *>(this)->shared_from_this(),
                       std::placeholders::_1)));
     } else {
@@ -203,10 +200,9 @@ void session<deriv, csock, psock>::handle_proxy_read(
     const boost::system::error_code &error, size_t bytes_transferred)
 {
     if (!error) {
-        boost::asio::async_write(
-            client_socket_,
+        client_socket_.async_write_some(
             boost::asio::const_buffers_1(proxy_data_.data(), bytes_transferred),
-                proxy_strand_.wrap(std::bind(&session<deriv, csock, psock>::handle_client_write,
+                strand_.wrap(std::bind(&session<deriv, csock, psock>::handle_client_write,
                       static_cast<deriv *>(this)->shared_from_this(),
                       std::placeholders::_1)));
     } else {
@@ -222,7 +218,7 @@ void session<deriv, csock, psock>::handle_client_write(
         proxy_socket_.async_read_some(
             boost::asio::mutable_buffers_1(proxy_data_.data(),
                                            proxy_data_.size()),
-                client_strand_.wrap(std::bind(&session<deriv, csock, psock>::handle_proxy_read,
+                strand_.wrap(std::bind(&session<deriv, csock, psock>::handle_proxy_read,
                       static_cast<deriv *>(this)->shared_from_this(),
                       std::placeholders::_1, std::placeholders::_2)));
     } else {
@@ -238,7 +234,7 @@ void session<deriv, csock, psock>::handle_proxy_write(
         client_socket_.async_read_some(
             boost::asio::mutable_buffers_1(client_data_.data(),
                                            client_data_.size()),
-                proxy_strand_.wrap(std::bind(&session<deriv, csock, psock>::handle_client_read,
+                strand_.wrap(std::bind(&session<deriv, csock, psock>::handle_client_read,
                       static_cast<deriv *>(this)->shared_from_this(),
                       std::placeholders::_1, std::placeholders::_2)));
     } else {
