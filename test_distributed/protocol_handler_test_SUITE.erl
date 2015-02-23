@@ -263,15 +263,17 @@ client_communiate_async_test(Config) ->
     ok = ssl:close(Sock).
 
 -perf_test([
-    {repeats, 10},
+    {repeats, 1},
     {perf_configs, [
-        [{msg_num, 1000000}]
+        [{msg_num, 1000000}, {transport, ssl}],
+        [{msg_num, 1000000}, {transport, gen_tcp}]
     ]},
-    {ct_config, [{msg_num, 100}]}
+    {ct_config, [{msg_num, 100}, {transport, ssl}]}
 ]).
 multi_ping_pong_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
+    Transport = ?config(transport, Config),
     MsgNum = ?config(msg_num, Config),
     MsgNumbers = lists:seq(1, MsgNum),
     MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
@@ -282,13 +284,12 @@ multi_ping_pong_test(Config) ->
     RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
     T1 = os:timestamp(),
-    lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawPings),
+    lists:foreach(fun(E) -> ok = Transport:send(Sock, E) end, RawPings),
     T2 = os:timestamp(),
 
     % then
-    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     UnknownMessages = lists:foldl(
         fun(N, Queued) ->
             case lists:filter(
@@ -298,7 +299,7 @@ multi_ping_pong_test(Config) ->
                 [] ->
                     Data =
                         receive
-                            {ssl, _, Binary} -> Binary
+                            {_, _, Binary} -> Binary
                         after
                             timer:seconds(5) -> {error, timeout}
                         end,
@@ -328,7 +329,7 @@ multi_ping_pong_test(Config) ->
     _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
     _FullTime = {full_time, timer:now_diff(T3, T1)},
 %%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
-    ok = ssl:close(Sock).
+    ok = Transport:close(Sock).
 
 -perf_test([
     {repeats, 10},
