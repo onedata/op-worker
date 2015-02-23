@@ -108,7 +108,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODULE_CONFIG(event_dispatcher_bucket, []).
+    ?MODEL_CONFIG(event_dispatcher_bucket, []).
 
 %%--------------------------------------------------------------------
 %% @doc
