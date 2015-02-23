@@ -70,10 +70,10 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error().
 list() ->
-    {ok, Handle} = datastore:list_init(global_only, ?MODEL_NAME, ?BATCH_SIZE),
+    {ok, Handle} = datastore:list_init(global_only, ?MODULE, ?BATCH_SIZE),
     list(Handle, []).
 list(Handle, Acc) ->
-    case datastore:list_next(global_only, ?MODEL_NAME, Handle) of
+    case datastore:list_next(global_only, ?MODULE, Handle) of
         {ok, {[], _}} ->
             {ok, lists:flatten(Acc)};
         {ok, {[_ | _] = Items, NewHandle}} ->
@@ -108,7 +108,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(event_dispatcher_bucket, []).
+    ?MODULE_CONFIG(event_dispatcher_bucket, []).
 
 %%--------------------------------------------------------------------
 %% @doc
