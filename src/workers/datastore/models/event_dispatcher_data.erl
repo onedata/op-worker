@@ -77,7 +77,7 @@ list() ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(global_only, ?MODULE, Key).
+    datastore:delete(global_only, ?MODULE, Key, ?PRED_ALWAYS).
 
 %%--------------------------------------------------------------------
 %% @doc

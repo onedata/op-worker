@@ -17,7 +17,7 @@
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
--export([save/2, update/3, create/2, exists/2, get/2, list/1, delete/2]).
+-export([save/2, update/3, create/2, exists/2, get/2, list_init/2, list_next/2, delete/3]).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
@@ -140,36 +140,75 @@ get(#model_config{} = ModelConfig, Key) ->
         end
     end).
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of all records.
+%% Initializes list operation. In order to get records, use list_next/2 afterwards.
 %% @end
 %%--------------------------------------------------------------------
--spec list(model_behaviour:model_config()) ->
-    {ok, [datastore:document()]} | datastore:generic_error().
-list(#model_config{} = ModelConfig) ->
+-spec list_init(model_behaviour:model_config(), BatchSize :: non_neg_integer()) ->
+    {ok, Handle :: term()} | datastore:generic_error().
+list_init(#model_config{} = ModelConfig, BatchSize) ->
     SelectAll = [{'_', [], ['$_']}],
     transaction(fun() ->
-        Values = lists:map(fun(Value) ->
-            #document{key = get_key(Value), value = strip_key(Value)}
-        end, mnesia:select(table_name(ModelConfig), SelectAll)),
-        {ok, Values}
+        case mnesia:select(table_name(ModelConfig), SelectAll, BatchSize, read) of
+            {Obj, Handle} ->
+                {ok, {Obj, Handle}};
+            '$end_of_table' ->
+                {ok, {[], eot}};
+            Other ->
+                {error, Other}
+        end
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of next records for given table cursor.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_next(model_behaviour:model_config(), Handle :: term()) ->
+    {ok, {[datastore:document()], Handle :: term()}} | datastore:generic_error().
+list_next(#model_config{} = _ModelConfig, {_Obj, eot}) ->
+    {ok, {[], {[], eot}}};
+list_next(#model_config{} = _ModelConfig, {[_ | _] = Obj, Cont}) ->
+    Values = lists:map(fun(Value) ->
+        #document{key = get_key(Value), value = strip_key(Value)}
+    end, Obj),
+    {ok, {Values, {[], Cont}}};
+list_next(#model_config{} = ModelConfig, {[], Cont}) ->
+    transaction(fun() ->
+        case mnesia:select(Cont) of
+            {[_ | _] = Obj, ContNew} ->
+                list_next(ModelConfig, {Obj, ContNew});
+            '$end_of_table' ->
+                {ok, {[], {[], eot}}};
+            Other ->
+                {error, Other}
+        end
+    end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(model_behaviour:model_config(), datastore:key()) ->
+-spec delete(model_behaviour:model_config(), datastore:key(), datastore:delete_predicate()) ->
     ok | datastore:generic_error().
-delete(#model_config{} = ModelConfig, Key) ->
+delete(#model_config{} = ModelConfig, Key, Pred) ->
     transaction(fun() ->
-        case mnesia:delete(table_name(ModelConfig), Key, write) of
-            ok -> ok;
-            Reason -> {error, Reason}
+        case Pred() of
+            true ->
+                case mnesia:delete(table_name(ModelConfig), Key, write) of
+                    ok -> ok;
+                    Reason -> {error, Reason}
+                end;
+            false ->
+                ok
         end
     end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -185,6 +224,7 @@ exists(#model_config{} = ModelConfig, Key) ->
             [_Record] -> true
         end
     end).
+
 
 %%--------------------------------------------------------------------
 %% @doc

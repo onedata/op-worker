@@ -16,7 +16,7 @@
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
--export([save/2, update/3, create/2, exists/2, get/2, delete/2]).
+-export([save/2, update/3, create/2, exists/2, get/2, list_init/2, list_next/2, delete/3]).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
@@ -93,16 +93,48 @@ get(#model_config{} = ModelConfig, Key) ->
             {error, {not_found, missing_or_deleted}}
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes list operation. In order to get records, use list_next/2 afterwards.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_init(model_behaviour:model_config(), BatchSize :: non_neg_integer()) ->
+    {ok, Handle :: term()} | datastore:generic_error().
+list_init(#model_config{} = _ModelConfig, _BatchSize) ->
+    error(not_supported).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of next records for given table cursor.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_next(model_behaviour:model_config(), Handle :: term()) ->
+    {ok, {[datastore:document()], Handle :: term()}} | datastore:generic_error().
+list_next(#model_config{} = _ModelConfig, _Handle) ->
+    error(not_supported).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(model_behaviour:model_config(), datastore:key()) ->
+-spec delete(model_behaviour:model_config(), datastore:key(), datastore:delete_predicate()) ->
     ok | datastore:generic_error().
-delete(#model_config{} = ModelConfig, Key) ->
-    true = ets:delete(table_name(ModelConfig), Key),
-    ok.
+delete(#model_config{} = ModelConfig, Key, Pred) ->
+    case Pred() of
+        true ->
+            case ets:delete(table_name(ModelConfig), Key) of
+                true ->
+                    ok;
+                false ->
+                    {error, driver_failure}
+            end;
+        false ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

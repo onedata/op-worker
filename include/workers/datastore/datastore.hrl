@@ -36,6 +36,10 @@
                                                 hooks = Hooks}).
 
 
+%% Common predicates
+-define(PRED_ALWAYS, fun() -> true end).
+
+
 %% List of all available models
 -define(MODELS, [
     some_record,

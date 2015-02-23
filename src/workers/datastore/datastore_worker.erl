@@ -74,29 +74,24 @@ init(_Args) ->
 handle(ping, _State) ->
     pong;
 
-handle(healthcheck, _State) ->
-    ok;
-%% TODO @Rafal
-%% healthcheck rzuca blad (bo Ryjaka nie ma), natomiast powinien zwracac healthcheck_reponse()
-%%
-%%     HC = #{
-%%         ?PERSISTENCE_DRIVER => ?PERSISTENCE_DRIVER:healthcheck(State),
-%%         ?LOCAL_CACHE_DRIVER => ?LOCAL_CACHE_DRIVER:healthcheck(State),
-%%         ?DISTRIBUTED_CACHE_DRIVER => ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
-%%     },
-%%
-%%     maps:fold(
-%%         fun
-%%             (_, ok, AccIn) ->
-%%                 AccIn;
-%%             (K, {error, Reason}, _AccIn) ->
-%%                 ?error("Driver ~p healthckeck error: ~p", [K, Reason]),
-%%                 {error, {driver_failure, {K, Reason}}}
-%%         end, ok, HC);
+handle(healthcheck, State) ->
+    HC = #{
+        ?PERSISTENCE_DRIVER => ?PERSISTENCE_DRIVER:healthcheck(State),
+        ?LOCAL_CACHE_DRIVER => ?LOCAL_CACHE_DRIVER:healthcheck(State),
+        ?DISTRIBUTED_CACHE_DRIVER => ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
+    },
+
+    maps:fold(
+        fun
+            (_, ok, AccIn) ->
+                AccIn;
+            (K, {error, Reason}, _AccIn) when is_atom(K) ->
+                ?error("Driver ~p healthckeck error: ~p", [K, Reason]),
+                {error, K}
+        end, ok, HC);
 
 %% Proxy call to given datastore driver
 handle({driver_call, Module, Method, Args}, _State) ->
-    %% todo @Rafal This pattern matching fixes dialyzer but perhaps better solution would be more suitable
     case erlang:apply(Module, Method, Args) of
         ok -> ok;
         {ok, Response} -> {ok, Response};
