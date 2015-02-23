@@ -157,6 +157,7 @@ set(COMMON_LIBRARIES
     ${PROTOBUF_LIBRARY}
     ${OPENSSL_LIBRARIES}
     ${GLOG_LIBRARIES}
+    ${TBB_LIBRARIES}
     clproto
     ${PLATFORM_EXTRA_LIBS}
 )
@@ -175,3 +176,4 @@ install(DIRECTORY ${GMOCK_INCLUDE_DIR}/gmock DESTINATION include)
 install(DIRECTORY ${GLOG_INCLUDE_DIR}/glog DESTINATION include)
 
 enable_testing()
+add_subdirectory(test)
