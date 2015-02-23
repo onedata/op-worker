@@ -63,6 +63,8 @@ translate_from_protobuf(#'Token'{value = Val}) ->
     #token{value = Val};
 translate_from_protobuf(#'Ping'{}) ->
     #ping{};
+translate_from_protobuf(#'Data'{data = Data}) ->
+    #data{data = Data};
 translate_from_protobuf(undefined) ->
     undefined.
 

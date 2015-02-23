@@ -33,15 +33,15 @@
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1,
     multi_message_test/1, client_send_test/1, client_communicate_test/1,
     client_communiate_async_test/1, multi_ping_pong_test/1,
-    sequential_ping_pong_test/1, multi_connection_test/1]).
+    sequential_ping_pong_test/1, multi_connection_test/1, bandwidth_test/1]).
 
 -perf_test({perf_cases, [multi_message_test, multi_ping_pong_test,
-    sequential_ping_pong_test, multi_connection_test]}).
+    sequential_ping_pong_test, multi_connection_test, bandwidth_test]}).
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
         multi_message_test, client_send_test, client_communicate_test,
         client_communiate_async_test, multi_ping_pong_test,
-        sequential_ping_pong_test, multi_connection_test].
+        sequential_ping_pong_test, multi_connection_test, bandwidth_test].
 
 -define(CLEANUP, true).
 
@@ -408,6 +408,46 @@ multi_connection_test(Config) ->
         end, Connections),
     lists:foreach(fun({ok, {Sock, _}}) -> ssl:close(Sock) end, Connections).
 
+-perf_test([
+    {repeats, 10},
+    {perf_configs, [
+        [{packet_size_kilobytes, 1024}, {packet_num, 100}]
+    ]},
+    {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 100}]}
+]).
+bandwidth_test(Config) ->
+    % given
+    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+    PacketSize = ?config(packet_size_kilobytes, Config),
+    PacketNum = ?config(packet_num, Config),
+    Data = crypto:rand_bytes(PacketSize*1024),
+    Packet = #'ClientMessage'{message_body = {data, #'Data'{data = Data}}},
+    PacketRaw = client_messages:encode_msg(Packet),
+    Self = self(),
+    test_utils:mock_expect(Workers, router, route_message,
+        fun(#client_message{message_body = #data{}}) ->
+            Self ! router_message_called,
+            ok
+        end),
+
+    % when
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+    T1 = os:timestamp(),
+    lists:foreach(fun(_) -> ok = ssl:send(Sock, PacketRaw) end, lists:seq(1, PacketNum)),
+    T2 = os:timestamp(),
+
+    % then
+    lists:foreach(
+        fun(_) ->
+            ?assertEqual({ok, router_message_called},
+                test_utils:receive_msg(router_message_called, timer:seconds(5)))
+        end, lists:seq(1, PacketNum)),
+    T3 = os:timestamp(),
+    _SendingTime = {sending_time, timer:now_diff(T2, T1)},
+    _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
+    _FullTime = {full_time, timer:now_diff(T3, T1)},
+%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
+    ssl:close(Sock).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -430,7 +470,8 @@ init_per_testcase(cert_connection_test, Config) ->
 
 init_per_testcase(Case, Config) when Case =:= protobuf_msg_test
     orelse Case =:= multi_message_test
-    orelse Case =:= client_communiate_async_test ->
+    orelse Case =:= client_communiate_async_test
+    orelse Case =:= bandwidth_test ->
     ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, router),
@@ -448,7 +489,8 @@ end_per_testcase(cert_connection_test, Config) ->
 
 end_per_testcase(Case, Config) when Case =:= protobuf_msg_test
     orelse Case =:= multi_message_test
-    orelse Case =:= client_communiate_async_test ->
+    orelse Case =:= client_communiate_async_test
+    orelse Case =:= bandwidth_test ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate(Workers, router),
     test_utils:mock_unload(Workers, router),

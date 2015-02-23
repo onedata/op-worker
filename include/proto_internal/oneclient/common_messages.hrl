@@ -38,4 +38,8 @@
     size :: non_neg_integer()
 }).
 
+-record(data, {
+    data :: binary()
+}).
+
 -endif.
