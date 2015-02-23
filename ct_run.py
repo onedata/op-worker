@@ -24,8 +24,16 @@ parser.add_argument(
     help='docker image to use as a test master',
     dest='image')
 
+parser.add_argument(
+    '--release',
+    action='store',
+    default='release',
+    help='release directory to run tests from',
+    dest='release')
+
 [args, pass_args] = parser.parse_known_args()
 script_dir = os.path.dirname(os.path.realpath(__file__))
+test_dir = os.path.join(os.path.realpath(args.release), 'test', 'integration')
 
 command = '''
 import os, subprocess, sys, stat
@@ -38,7 +46,7 @@ if {shed_privileges}:
     os.setregid({gid}, {gid})
     os.setreuid({uid}, {uid})
 
-command = ['py.test'] + {args} + ['release/test']
+command = ['py.test'] + {args} + ['{test_dir}']
 ret = subprocess.call(command)
 sys.exit(ret)
 '''
@@ -46,6 +54,7 @@ command = command.format(
     args=pass_args,
     uid=os.geteuid(),
     gid=os.getegid(),
+    test_dir=test_dir,
     shed_privileges=(platform.system() == 'Linux'))
 
 ret = docker.run(tty=True,
