@@ -22,11 +22,8 @@ foreach(TEST_FILE ${HELPER_TEST_SOURCES})
     add_dependencies(${TEST_NAME} gmock gtest)
     target_link_libraries(${TEST_NAME}
         ${GTEST_LIBRARIES}
-        ${Boost_LIBRARIES_SHARED}
         ${GMOCK_LIBRARIES}
-        ${FUSE_LIBRARIES}
-        helpers
-        ${PLATFORM_EXTRA_LIBS})
+        helpersShared)
     add_test(${TEST_NAME} ${TEST_NAME})
     run_test(${TEST_NAME})
 endforeach()

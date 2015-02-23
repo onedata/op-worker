@@ -2,12 +2,9 @@ import os
 import sys
 import time
 
-
 script_dir = os.path.dirname(os.path.realpath(__file__))
-project_dir = os.path.join(script_dir, '..', '..', '..')
-appmock_dir = os.path.join(project_dir, 'appmock')
-docker_dir = os.path.join(project_dir, 'bamboos', 'docker')
-sys.path = [appmock_dir, docker_dir] + sys.path
+sys.path.insert(0, os.path.dirname(script_dir))
+from test_common import *
 
 from environment import appmock, common, docker
 import connection_pool

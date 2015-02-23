@@ -1,5 +1,6 @@
 file(COPY ${PROJECT_SOURCE_DIR}/appmock DESTINATION ${PROJECT_BINARY_DIR})
 file(COPY ${PROJECT_SOURCE_DIR}/bamboos DESTINATION ${PROJECT_BINARY_DIR})
+file(COPY test_common.py DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 set(APPMOCK_BINARY ${PROJECT_BINARY_DIR}/appmock/rel/appmock/bin/appmock)
 add_custom_command(OUTPUT ${APPMOCK_BINARY}
@@ -7,7 +8,6 @@ add_custom_command(OUTPUT ${APPMOCK_BINARY}
     WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/appmock)
 add_custom_target(appmock ALL DEPENDS ${APPMOCK_BINARY})
 
-set(Boost_OTHER_LIBRARIES ${Boost_LIBRARIES})
 find_package(Boost COMPONENTS python REQUIRED)
 find_package(PythonLibs REQUIRED)
 include_directories(SYSTEM ${PYTHON_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
@@ -31,7 +31,5 @@ foreach(TEST_DIR ${TEST_DIRS})
     target_link_libraries(${TEST_NAME}
         helpersShared
         ${Boost_LIBRARIES}
-        ${Boost_OTHER_LIBRARIES}
-        ${PYTHON_LIBRARIES}
-        ${OPENSSL_LIBRARIES})
+        ${PYTHON_LIBRARIES})
 endforeach()
