@@ -126,12 +126,7 @@ list_next(#model_config{} = _ModelConfig, _Handle) ->
 delete(#model_config{} = ModelConfig, Key, Pred) ->
     case Pred() of
         true ->
-            case ets:delete(table_name(ModelConfig), Key) of
-                true ->
-                    ok;
-                false ->
-                    {error, driver_failure}
-            end;
+            true = ets:delete(table_name(ModelConfig), Key);
         false ->
             ok
     end.
