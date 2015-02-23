@@ -411,15 +411,16 @@ multi_connection_test(Config) ->
 -perf_test([
     {repeats, 10},
     {perf_configs, [
-        [{packet_size_kilobytes, 1024}, {packet_num, 100}]
+        [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, gen_tcp}]
     ]},
-    {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 100}]}
+    {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 100}, {transport, ssl}]}
 ]).
 bandwidth_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size_kilobytes, Config),
     PacketNum = ?config(packet_num, Config),
+    Transport = ?config(transport, Config),
     Data = crypto:rand_bytes(PacketSize*1024),
     Packet = #'ClientMessage'{message_body = {data, #'Data'{data = Data}}},
     PacketRaw = client_messages:encode_msg(Packet),
@@ -431,9 +432,9 @@ bandwidth_test(Config) ->
         end),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
     T1 = os:timestamp(),
-    lists:foreach(fun(_) -> ok = ssl:send(Sock, PacketRaw) end, lists:seq(1, PacketNum)),
+    lists:foreach(fun(_) -> ok = Transport:send(Sock, PacketRaw) end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
 
     % then
@@ -446,8 +447,8 @@ bandwidth_test(Config) ->
     _SendingTime = {sending_time, timer:now_diff(T2, T1)},
     _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
     _FullTime = {full_time, timer:now_diff(T3, T1)},
-%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
-    ssl:close(Sock).
+    ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
+    Transport:close(Sock).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
