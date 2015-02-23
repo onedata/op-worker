@@ -17,6 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
@@ -25,6 +26,7 @@
     event_manager_subscription_and_emission_test/1
 ]).
 
+-perf_test({perf_cases, []}).
 all() -> [
     event_manager_creation_and_removal_test,
     event_manager_subscription_and_emission_test

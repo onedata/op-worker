@@ -36,10 +36,18 @@ simple_call_test(Config) ->
     [Ccm] = ?config(op_ccm_nodes, Config),
     [Worker] = ?config(op_worker_nodes, Config),
 
+    T1 = os:timestamp(),
     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, random])),
+    T2 = os:timestamp(),
     ?assertEqual(pong, rpc:call(Worker, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, random])),
+    T3 = os:timestamp(),
     ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])),
-    ?assertEqual(pong, rpc:call(Worker, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])).
+    T4 = os:timestamp(),
+    ?assertEqual(pong, rpc:call(Worker, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])),
+    T5 = os:timestamp(),
+
+    [{redirect_random, timer:now_diff(T2, T1)}, {direct_random, timer:now_diff(T3, T2)},
+        {redirect_prefer_local, timer:now_diff(T4, T3)}, {direct_prefer_local, timer:now_diff(T5, T4)}].
 
 %%%===================================================================
 
@@ -58,11 +66,18 @@ direct_cast_test(Config) ->
         SendReq = fun(MsgId) ->
             ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, MsgId, prefer_local]))
         end,
+
+        BeforeProcessing = os:timestamp(),
         for(1, ProcSendNum, SendReq),
-        count_answers(ProcSendNum)
+        count_answers(ProcSendNum),
+        AfterProcessing = os:timestamp(),
+        timer:now_diff(AfterProcessing, BeforeProcessing)
     end,
 
-    ?assertEqual(ok, spawn_and_check(TestProc, ProcNum)).
+    Ans = spawn_and_check(TestProc, ProcNum),
+    ?assertMatch({ok, _}, Ans),
+    {_, Times} = Ans,
+    {routing_time, Times}.
 
 %%%===================================================================
 
@@ -81,11 +96,18 @@ redirect_cast_test(Config) ->
         SendReq = fun(MsgId) ->
             ?assertEqual(ok, rpc:call(Ccm, worker_proxy, cast, [http_worker, ping, {proc, Self}, MsgId, random]))
         end,
+
+        BeforeProcessing = os:timestamp(),
         for(1, ProcSendNum, SendReq),
-        count_answers(ProcSendNum)
+        count_answers(ProcSendNum),
+        AfterProcessing = os:timestamp(),
+        timer:now_diff(AfterProcessing, BeforeProcessing)
     end,
 
-    ?assertEqual(ok, spawn_and_check(TestProc, ProcNum)).
+    Ans = spawn_and_check(TestProc, ProcNum),
+    ?assertMatch({ok, _}, Ans),
+    {_, Times} = Ans,
+    {routing_time, Times}.
 
 %%%===================================================================
 
@@ -110,11 +132,18 @@ mixed_cast_test(Config) ->
             ?assertEqual(ok, rpc:call(Ccm, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2*MsgId-1, random])),
             ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2*MsgId, prefer_local]))
         end,
+
+        BeforeProcessing = os:timestamp(),
         for(1, ProcSendNum, SendReq),
-        count_answers(2*ProcSendNum)
+        count_answers(2*ProcSendNum),
+        AfterProcessing = os:timestamp(),
+        timer:now_diff(AfterProcessing, BeforeProcessing)
     end,
 
-    ?assertEqual(ok, spawn_and_check(TestProc, ProcNum)).
+    Ans = spawn_and_check(TestProc, ProcNum),
+    ?assertMatch({ok, _}, Ans),
+    {_, Times} = Ans,
+    {routing_time, Times}.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -131,18 +160,18 @@ end_per_suite(Config) ->
 %%%===================================================================
 
 spawn_and_check(_Fun, 0) ->
-    ok;
+    {ok, 0};
 
 spawn_and_check(Fun, Num) ->
     Master = self(),
     spawn_link(fun() ->
-        Fun(),
-        Master ! ok
+        Ans = Fun(),
+        Master ! {ok, Ans}
     end),
     case spawn_and_check(Fun, Num - 1) of
-        ok ->
+        {ok, Sum} ->
             receive
-                ok -> ok
+                {ok, Time} -> {ok, Time + Sum}
             after ?REQUEST_TIMEOUT ->
                 {error, timeout}
             end;

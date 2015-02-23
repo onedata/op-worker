@@ -16,11 +16,13 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([nagios_test/1]).
 
+-perf_test({perf_cases, []}).
 all() -> [nagios_test].
 
 % Path to nagios endpoint
