@@ -78,6 +78,8 @@ cert_connection_test(Config) ->
     % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ?assertMatch(#certificate_info{}, CertInfo),
+    ?assertNotEqual(undefined, CertInfo#certificate_info.client_session_id),
+    ?assertNotEqual(undefined, CertInfo#certificate_info.client_subject_dn),
     ?assert(is_binary(CertInfo#certificate_info.client_session_id)),
     ?assert(is_binary(CertInfo#certificate_info.client_subject_dn)),
     HandshakeResponse = server_messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
@@ -223,9 +225,9 @@ client_communiate_async_test(Config) ->
 
     % given
     test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_id = MsgId = #message_id{issuer = server,
+        fun(#client_message{message_id = Id = #message_id{issuer = server,
             recipient = undefined}}) ->
-            Self ! {router_message_called, MsgId},
+            Self ! {router_message_called, Id},
             ok
         end),
 

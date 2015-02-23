@@ -480,7 +480,7 @@ update_node_manager_state(Nodes, NewStateNum) ->
 %% Updates dnses' states.
 %% @end
 %%--------------------------------------------------------------------
--spec update_dns_state(WorkersList :: list()) -> ok.
+-spec update_dns_state(WorkersList :: list()) -> ok | {error, ip_resolving}.
 update_dns_state(WorkersList) ->
     %prepare worker IPs with loads info
     Nodes = [Node || {Node, _, _} <- WorkersList],
@@ -502,13 +502,24 @@ update_dns_state(WorkersList) ->
         end, ModuleToNodeList),
     FilteredModuleToNodeListWithLoad = [{Module, NodeList} || {Module, NodeList} <- ModuleToNodeListWithLoad, NodeList =/= []],
 
-    % prepare average load
-    LoadAverage = utils:average([Load || {_, Load} <- FilteredUniqueNodesIpToLoad]),
+    case length(FilteredUniqueNodesIpToLoad) of
+        0 ->
+            ok;
+        _ ->
+            % prepare average load
+            LoadAverage = utils:average([Load || {_, Load} <- FilteredUniqueNodesIpToLoad]),
 
-    UpdateInfo = {update_state, FilteredModuleToNodeListWithLoad, FilteredUniqueNodesIpToLoad, LoadAverage},
-    ?debug("updating dns, update message: ~p", [UpdateInfo]),
-    [gen_server:cast(Pid, #worker_request{req = UpdateInfo}) || {_, dns_worker, Pid} <- WorkersList],
-    ok.
+            UpdateInfo = {update_state, FilteredModuleToNodeListWithLoad, FilteredUniqueNodesIpToLoad, LoadAverage},
+            ?debug("updating dns, update message: ~p", [UpdateInfo]),
+            [gen_server:cast(Pid, #worker_request{req = UpdateInfo}) || {_, dns_worker, Pid} <- WorkersList]
+    end,
+
+    case length(FilteredUniqueNodesIpToLoad) == length(WorkersList) of
+        true ->
+            ok;
+        false ->
+            {error, ip_resolving}
+    end.
 
 %%%===================================================================
 %%% Internal functions
