@@ -3,9 +3,6 @@ DEBUG_DIR = debug
 
 CMAKE = $(shell which cmake || which cmake28)
 CPACK = $(shell which cpack || which cpack28)
-ifdef PREFER_STATIC_LINK
-ARGS += '-DPREFER_STATIC_LINK=TRUE'
-endif
 
 .PHONY: build release debug clean all
 all: release test
@@ -19,13 +16,13 @@ build: release
 
 release: 
 	mkdir -p ${RELEASE_DIR}
-	cd ${RELEASE_DIR} && ${CMAKE} -GNinja -DCMAKE_BUILD_TYPE=Release ${ARGS} ..
+	cd ${RELEASE_DIR} && ${CMAKE} -GNinja -DCMAKE_BUILD_TYPE=Release ..
 	cd ${RELEASE_DIR} && ninja
 	ln -sfn release build
 
 debug: 
 	mkdir -p ${DEBUG_DIR}
-	cd ${DEBUG_DIR} && ${CMAKE} -GNinja -DCMAKE_BUILD_TYPE=Debug ${ARGS} ..
+	cd ${DEBUG_DIR} && ${CMAKE} -GNinja -DCMAKE_BUILD_TYPE=Debug ..
 	cd ${DEBUG_DIR} && ninja
 	ln -sfn debug build
 

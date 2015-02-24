@@ -32,29 +32,11 @@ find_package(Git REQUIRED)
 # Setup ProtoBuf
 message(STATUS "Checking for Protobuf...")
 find_package(Protobuf REQUIRED)
-
-if(${PREFER_STATIC_LINK})
-    find_library(PROTOBUF_LIBRARY NAMES libprotobuf.a protobuf)
-endif(${PREFER_STATIC_LINK})
-
 include_directories(SYSTEM ${PROTOBUF_INCLUDE_DIR})
 
 # Setup OpenSSL
 message(STATUS "Checking for OpenSSL...")
 find_package(OpenSSL REQUIRED)
-
-if(${PREFER_STATIC_LINK})
-    find_library(SSL_LIBRARY NAMES libssl.a ssl)
-    find_library(CRYPTO_LIBRARY NAMES libcrypto.a crypto)
-    find_library(KRB5_LIBRARY krb5)
-
-    if(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
-	set(OPENSSL_LIBRARIES ${SSL_LIBRARY} ${CRYPTO_LIBRARY})
-    else(NOT ${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
-	set(OPENSSL_LIBRARIES ${SSL_LIBRARY} ${CRYPTO_LIBRARY} ${KRB5_LIBRARY})
-    endif(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
-endif(${PREFER_STATIC_LINK})
-
 include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
 
 # Setup pthreads
@@ -69,32 +51,18 @@ include_directories(SYSTEM ${FUSE_INCLUDE_DIRS})
 # Setup Intel TBB
 message(STATUS "Checking for Intel TBB...")
 find_package(TBB REQUIRED)
-link_directories(${TBB_LIBRARY_DIRS})
 include_directories(SYSTEM ${TBB_INCLUDE_DIRS})
 
 # Setup Boost
-if(${PREFER_STATIC_LINK})
-    set(Boost_USE_STATIC_LIBS       ON)
-else(NOT ${PREFER_STATIC_LINK})
-    set(Boost_USE_STATIC_LIBS       OFF)
-endif(${PREFER_STATIC_LINK})
-
+set(Boost_USE_STATIC_LIBS       OFF)
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME    OFF)
 find_package(Boost COMPONENTS thread filesystem system random REQUIRED)
-
-link_directories(${Boost_LIBRARY_DIRS})
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
 # Utility libs
-if(${PREFER_STATIC_LINK})
-    find_library(LTDL_LIBRARY NAMES libltdl.a ltdl)
-    find_library(ZLIB_LIBRARY NAMES libz.a z)
-else(NOT ${PREFER_STATIC_LINK})
-    find_library(LTDL_LIBRARY ltdl)
-    find_library(ZLIB_LIBRARY z)
-endif(${PREFER_STATIC_LINK})
-
+find_library(LTDL_LIBRARY ltdl)
+find_library(ZLIB_LIBRARY z)
 find_library(RT_LIBRARY rt)
 find_library(DL_LIBRARY dl)
 
@@ -116,14 +84,6 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 file(GLOB_RECURSE HELPER_SOURCES src/*.cc include/*.h)
 
 # Setup compile flags
-if(${PREFER_STATIC_LINK}) # Try to link libstdc++.a
-    execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libstdc++.a OUTPUT_VARIABLE LIBSTD_NAME)
-    string(STRIP ${LIBSTD_NAME} LIBSTD_NAME)
-    if(EXISTS ${LIBSTD_NAME})
-	execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${LIBSTD_NAME} ${PROJECT_BINARY_DIR}/libstdc++.a)
-    endif(EXISTS ${LIBSTD_NAME})
-endif(${PREFER_STATIC_LINK})
-
 set(PLATFORM_EXTRA_LIBS ${CMAKE_THREAD_LIBS_INIT} ${LTDL_LIBRARY} ${ZLIB_LIBRARY} ${DL_LIBRARY})
 
 if(APPLE)
