@@ -65,7 +65,7 @@ nagios_test(Config) ->
     lists:foreach(
         fun({WNode, WName}) ->
             WorkersOnNode = proplists:get_value(atom_to_list(WNode), WorkersByNodeXML),
-            ?assert(lists:member(WName, WorkersOnNode))
+            ?assertEqual(true, lists:member(WName, WorkersOnNode))
         end, Workers),
 
     % Check if every node's status contains dispatcher and node manager status

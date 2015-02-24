@@ -140,13 +140,13 @@ event_manager_subscription_and_emission_test(Config) ->
         get_or_create_event_dispatcher, [SessionId2]),
 
     lists:foldl(fun(Evt, N) ->
-        EmitAns = rpc:call(Worker1, event_manager, emit, [Evt#write_event{blocks = [N]}, SessionId1]),
+        EmitAns = rpc:call(Worker1, event_manager, emit, [Evt#write_event{blocks = [{N, N}]}, SessionId1]),
         ?assertEqual(ok, EmitAns),
         N + 1
     end, 1, lists:duplicate(6, #write_event{counter = 1, size = 1, file_size = 1})),
 
     ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{counter = 6,
-        size = 6, file_size = 1, blocks = [1, 2, 3, 4, 5, 6]}]}, ?TIMEOUT)),
+        size = 6, file_size = 1, blocks = [{1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}, {6, 6}]}]}, ?TIMEOUT)),
     ?assertMatch({error, timeout}, test_utils:receive_any()),
 
     FileId1 = <<"file_id_1">>,
