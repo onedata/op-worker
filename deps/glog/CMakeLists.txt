@@ -34,9 +34,8 @@ if(${GLOG_FIND_LIBRARY} MATCHES GLOG_FIND_LIBRARY-NOTFOUND)
     # Export dep includes and lib paths
     ExternalProject_Get_Property(glogBuild prefix)
     ExternalProject_Get_Property(glogBuild source_dir)
-    set(GLOG_INCLUDE_DIR ${source_dir}/src PARENT_SCOPE)
-    set(GLOG_LIBRARIES ${source_dir}/.libs/libglog.a)
-    set(GLOG_LIBRARIES ${GLOG_LIBRARIES} PARENT_SCOPE)
+    set(GLOG_INCLUDE_DIR ${source_dir}/src CACHE PATH "")
+    set(GLOG_LIBRARIES ${source_dir}/.libs/libglog.a CACHE FILEPATH "")
 
     add_custom_command(OUTPUT ${GLOG_LIBRARIES} DEPENDS glogBuild)
 
@@ -44,8 +43,8 @@ else()
 
     get_filename_component(GLOG_TMP_PATH ${GLOG_FIND_LIBRARY} PATH)
 
-    set(GLOG_INCLUDE_DIR "${GLOG_TMP_PATH}/../include" PARENT_SCOPE)
-    set(GLOG_LIBRARIES ${GLOG_FIND_LIBRARY} PARENT_SCOPE)
+    set(GLOG_INCLUDE_DIR "${GLOG_TMP_PATH}/../include" CACHE PATH "")
+    set(GLOG_LIBRARIES ${GLOG_FIND_LIBRARY} CACHE FILEPATH "")
 
 endif()
 

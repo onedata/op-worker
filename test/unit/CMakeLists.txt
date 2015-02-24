@@ -18,12 +18,14 @@ endmacro()
 file(GLOB_RECURSE HELPER_TEST_SOURCES *_test.cc)
 foreach(TEST_FILE ${HELPER_TEST_SOURCES})
     get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
-    add_executable(${TEST_NAME} ${TEST_FILE} ${HELPER_TEST_HEADERS} $<TARGET_OBJECTS:testRunner>)
-    add_dependencies(${TEST_NAME} gmock gtest)
+    add_executable(${TEST_NAME}
+        ${TEST_FILE}
+        ${HELPER_TEST_HEADERS}
+        $<TARGET_OBJECTS:testRunner>)
     target_link_libraries(${TEST_NAME}
+        helpersShared
         ${GTEST_LIBRARIES}
-        ${GMOCK_LIBRARIES}
-        helpersShared)
+        ${GMOCK_LIBRARIES})
     add_test(${TEST_NAME} ${TEST_NAME})
     run_test(${TEST_NAME})
 endforeach()

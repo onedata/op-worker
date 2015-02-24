@@ -12,4 +12,4 @@ ExternalProject_Add(websocketpp
 ExternalProject_Get_Property(websocketpp install_dir)
 
 # Export dep includes and lib paths
-set(WSPP_INCLUDE_DIR ${install_dir}/include PARENT_SCOPE)
+set(WSPP_INCLUDE_DIR ${install_dir}/include CACHE PATH "")
