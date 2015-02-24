@@ -9,9 +9,10 @@
  */
 package one.clproto;
 
-import "handshake_messages.proto";
-import "stream_messages.proto";
 import "event_messages.proto";
+import "stream_messages.proto";
+import "common_messages.proto";
+import "handshake_messages.proto";
 
 message ClientMessage {
     optional bytes         message_id     = 1; // should be set when response is

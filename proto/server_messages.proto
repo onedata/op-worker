@@ -11,6 +11,7 @@ package one.clproto;
 
 import "event_messages.proto";
 import "stream_messages.proto";
+import "common_messages.proto";
 import "handshake_messages.proto";
 
 message ServerMessage {
