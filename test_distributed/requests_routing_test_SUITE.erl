@@ -114,9 +114,9 @@ redirect_cast_test(Config) ->
 -perf_test([
     {repeats, 100},
     {perf_configs, [
-        [{proc_num, 100}, {proc_repeats, 1}],
-        [{proc_num, 1}, {proc_repeats, 100}],
-        [{proc_num, 100}, {proc_repeats, 100}]
+        {short_procs, [{proc_num, 100}, {proc_repeats, 1}]},
+        {one_proc, [{proc_num, 1}, {proc_repeats, 100}]},
+        {long_procs, [{proc_num, 100}, {proc_repeats, 100}]}
     ]},
     {ct_config, [{proc_num, 10}, {proc_repeats, 10}]}
 ]).
