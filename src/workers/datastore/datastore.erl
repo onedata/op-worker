@@ -43,7 +43,7 @@
 -export_type([store_level/0, delete_predicate/0]).
 
 %% API
--export([save/2, update/4, create/2, get/3, list_init/3, list_next/3, delete/4, exists/3]).
+-export([save/2, update/4, create/2, get/3, list_init/3, list_next/3, delete/4, delete/3, exists/3]).
 -export([configs_per_bucket/1, ensure_state_loaded/0]).
 
 %%%===================================================================
@@ -125,6 +125,18 @@ list_next(Level, ModelName, Handle) ->
     Key :: datastore:key(), Pred :: delete_predicate()) -> ok | datastore:generic_error().
 delete(Level, ModelName, Key, Pred) ->
     exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes #document with given key.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+    Key :: datastore:key()) -> ok | datastore:generic_error().
+delete(Level, ModelName, Key) ->
+    delete(Level, ModelName, Key, ?PRED_ALWAYS).
+
 
 
 %%--------------------------------------------------------------------
