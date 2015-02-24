@@ -25,10 +25,6 @@ add_subdirectory(deps/websocketpp)
 include_directories(include ${PROJECT_BINARY_DIR})
 include_directories(SYSTEM ${GLOG_INCLUDE_DIR} ${WSPP_INCLUDE_DIR})
 
-# Setup git
-message(STATUS "Checking for Git...")
-find_package(Git REQUIRED)
-
 # Setup ProtoBuf
 message(STATUS "Checking for Protobuf...")
 find_package(Protobuf REQUIRED)
@@ -65,15 +61,6 @@ find_library(LTDL_LIBRARY ltdl)
 find_library(ZLIB_LIBRARY z)
 find_library(RT_LIBRARY rt)
 find_library(DL_LIBRARY dl)
-
-# Pull git submodules
-message(STATUS "Pulling submodules using git...")
-execute_process(COMMAND ${GIT_EXECUTABLE} submodule init
-		WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-execute_process(COMMAND ${GIT_EXECUTABLE} submodule update
-		WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-execute_process(COMMAND ${GIT_EXECUTABLE} submodule foreach git checkout
-		WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 # Compile .proto files
 file(GLOB PROTO_FILES clproto/proto/*.proto)
