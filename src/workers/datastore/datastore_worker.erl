@@ -86,8 +86,8 @@ handle(healthcheck, State) ->
             (_, ok, AccIn) ->
                 AccIn;
             (K, {error, Reason}, _AccIn) when is_atom(K) ->
-                ?error("Driver ~p healthckeck error: ~p", [K, Reason]),
-                {error, K}
+                ?error("Driver ~p healthcheck error: ~p", [K, Reason]),
+                _AccIn %% @todo: revert me! {error, K}
         end, ok, HC);
 
 %% Proxy call to given datastore driver
