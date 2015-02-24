@@ -126,7 +126,8 @@ list_next(#model_config{} = _ModelConfig, _Handle) ->
 delete(#model_config{} = ModelConfig, Key, Pred) ->
     case Pred() of
         true ->
-            true = ets:delete(table_name(ModelConfig), Key);
+            true = ets:delete(table_name(ModelConfig), Key),
+            ok;
         false ->
             ok
     end.
