@@ -20,6 +20,7 @@
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneproxy/oneproxy_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
+-include("workers/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -36,7 +37,9 @@ all() ->
         multi_message_test, client_send_test, client_communicate_test,
         client_communiate_async_test].
 
--define(CLEANUP, true).
+-define(CLEANUP, false).
+
+-define(TOKEN, <<"TOKEN_VALUE">>).
 
 %%%===================================================================
 %%% Test function
@@ -256,6 +259,7 @@ init_per_testcase(cert_connection_test, Config) ->
     ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, serializator),
+    mock_identity(Workers),
     Config;
 
 init_per_testcase(Case, Config) when Case =:= protobuf_msg_test
@@ -264,14 +268,18 @@ init_per_testcase(Case, Config) when Case =:= protobuf_msg_test
     ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, router),
+    mock_identity(Workers),
     Config;
 
 init_per_testcase(_, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    mock_identity(Workers),
     ssl:start(),
     Config.
 
 end_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    unmock_identity(Workers),
     test_utils:mock_validate(Workers, serializator),
     test_utils:mock_unload(Workers, serializator),
     ssl:stop();
@@ -280,11 +288,14 @@ end_per_testcase(Case, Config) when Case =:= protobuf_msg_test
     orelse Case =:= multi_message_test
     orelse Case =:= client_communiate_async_test ->
     Workers = ?config(op_worker_nodes, Config),
+    unmock_identity(Workers),
     test_utils:mock_validate(Workers, router),
     test_utils:mock_unload(Workers, router),
     ssl:stop();
 
-end_per_testcase(_, _) ->
+end_per_testcase(_, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    unmock_identity(Workers),
     ssl:stop().
 
 %%%===================================================================
@@ -313,7 +324,7 @@ connect_via_token(Node, SocketOpts) ->
     % given
     TokenAuthMessage = #'ClientMessage'{message_body =
     {handshake_request, #'HandshakeRequest'{session_id = <<"session_id">>,
-        token = #'Token'{value = <<"VAL">>}}}},
+        token = #'Token'{value = ?TOKEN}}}},
     TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
     ActiveOpt =
         case proplists:get_value(active, SocketOpts) of
@@ -373,3 +384,15 @@ spawn_ssl_echo_client(NodeToConnect) ->
         end,
     spawn_link(SslEchoClient),
     {ok, {Sock, SessionId}}.
+
+mock_identity(Workers) ->
+    test_utils:mock_new(Workers, identity),
+    test_utils:mock_expect(Workers, identity, get_or_fetch,
+        fun(#token{value = ?TOKEN}) ->
+            {ok, #identity{}}
+        end
+    ).
+
+unmock_identity(Workers) ->
+    test_utils:mock_validate(Workers, identity),
+    test_utils:mock_unload(Workers, identity).

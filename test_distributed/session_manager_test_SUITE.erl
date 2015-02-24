@@ -44,18 +44,18 @@ session_manager_test(Config) ->
     Self = self(),
     SessId1 = <<"session_id_1">>,
     SessId2 = <<"session_id_2">>,
-    Cred1 = #credentials{user_id = <<"user_id_1">>},
-    Cred2 = #credentials{user_id = <<"user_id_2">>},
+    Iden1 = #identity{user_id = <<"user_id_1">>},
+    Iden2 = #identity{user_id = <<"user_id_2">>},
 
     % Check whether session manager creates session for the first time and then
     % reuses it dispite of node on which request is processed.
     [
         {Node1, [SessSup1, EvtMan1, SeqMan1, Comm1] = Pids1},
         {Node2, [SessSup2, EvtMan2, SeqMan2, Comm2] = Pids2}
-    ] = lists:map(fun({SessId, Cred, Workers}) ->
+    ] = lists:map(fun({SessId, Iden, Workers}) ->
         Answers = utils:pmap(fun(Worker) ->
             rpc:call(Worker, session_manager,
-                reuse_or_create_session, [SessId, Cred, Self])
+                reuse_or_create_session, [SessId, Iden, Self])
         end, Workers),
 
         AnswersWithoutCreatedAnswer = lists:delete({ok, created}, Answers),
@@ -74,7 +74,7 @@ session_manager_test(Config) ->
         Doc = rpc:call(Worker1, session, get, [SessId]),
         ?assertMatch({ok, #document{key = SessId, value = #session{}}}, Doc),
         {ok, #document{value = #session{
-            credentials = Cred,
+            identity = Iden,
             node = Node,
             session_sup = SessSup,
             event_manager = EvtMan,
@@ -90,8 +90,8 @@ session_manager_test(Config) ->
 
         {Node, [SessSup, EvtMan, SeqMan, Comm]}
     end, [
-        {SessId1, Cred1, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)},
-        {SessId2, Cred2, lists:duplicate(2, Worker2) ++ lists:duplicate(2, Worker1)}
+        {SessId1, Iden1, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)},
+        {SessId2, Iden2, lists:duplicate(2, Worker2) ++ lists:duplicate(2, Worker1)}
     ]),
 
     % Check whether session manager returns different session supervisors, event
@@ -172,11 +172,11 @@ session_supervisor_child_crash_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Cred = #credentials{user_id = <<"user_id">>},
+    Iden = #identity{user_id = <<"user_id">>},
 
     lists:foreach(fun({ChildId, Fun, Args}) ->
         ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-            reuse_or_create_session, [SessId, Cred, Self])),
+            reuse_or_create_session, [SessId, Iden, Self])),
 
         {ok, {SessSup, Node}} = rpc:call(Worker, session,
             get_session_supervisor_and_node, [SessId]),
@@ -227,10 +227,10 @@ init_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Cred = #credentials{user_id = <<"user_id">>},
+    Iden = #identity{user_id = <<"user_id">>},
 
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Cred, Self])),
+        reuse_or_create_session, [SessId, Iden, Self])),
 
     [{session_id, SessId} | Config];
 

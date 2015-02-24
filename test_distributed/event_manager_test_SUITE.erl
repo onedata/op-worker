@@ -12,7 +12,7 @@
 -module(event_manager_test_SUITE).
 -author("Krzysztof Trzepla").
 
--include("workers/datastore/models/session.hrl").
+-include("workers/datastore/datastore_models.hrl").
 -include("proto_internal/oneclient/common_messages.hrl").
 -include("proto_internal/oneclient/event_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -50,10 +50,10 @@ event_stream_test(Config) ->
     Self = self(),
     SessId1 = <<"session_id_1">>,
     SessId2 = <<"session_id_2">>,
-    Cred1 = #credentials{user_id = <<"user_id_1">>},
-    Cred2 = #credentials{user_id = <<"user_id_2">>},
+    Iden1 = #identity{user_id = <<"user_id_1">>},
+    Iden2 = #identity{user_id = <<"user_id_2">>},
 
-    session_setup(Worker1, SessId1, Cred1, Self),
+    session_setup(Worker1, SessId1, Iden1, Self),
 
     {ok, SubId} = subscribe(Worker2,
         all,
@@ -62,7 +62,7 @@ event_stream_test(Config) ->
         [fun(Evts) -> Self ! {handler, Evts} end]
     ),
 
-    session_setup(Worker2, SessId2, Cred2, Self),
+    session_setup(Worker2, SessId2, Iden2, Self),
 
     % Check whether subscription message has been sent to clients.
     ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
@@ -265,7 +265,7 @@ init_per_testcase(event_stream_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Cred = #credentials{user_id = <<"user_id">>},
+    Ident = #identity{user_id = <<"user_id">>},
     test_utils:mock_new(Worker, [communicator, logger]),
     test_utils:mock_expect(Worker, communicator, send, fun
         (_, _) -> ok
@@ -274,7 +274,7 @@ init_per_testcase(event_stream_crash_test, Config) ->
         (_, _, _, [_, _, kill], _) -> meck:exception(throw, crash);
         (A, B, C, D, E) -> meck:passthrough([A, B, C, D, E])
     end),
-    session_setup(Worker, SessId, Cred, Self),
+    session_setup(Worker, SessId, Ident, Self),
     [{session_id, SessId} | Config];
 
 init_per_testcase(Case, Config) when
@@ -283,12 +283,12 @@ init_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Cred = #credentials{user_id = <<"user_id">>},
+    Iden = #identity{user_id = <<"user_id">>},
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send, fun
         (_, _) -> ok
     end),
-    session_setup(Worker, SessId, Cred, Self),
+    session_setup(Worker, SessId, Iden, Self),
     [{session_id, SessId} | Config].
 
 end_per_testcase(event_stream_test, Config) ->
@@ -326,10 +326,10 @@ end_per_testcase(Case, Config) when
 %% @end
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), SessId :: session:id(),
-    Cred :: session:credentials(), Con :: pid()) -> ok.
-session_setup(Worker, SessId, Cred, Con) ->
+    Iden :: session:identity(), Con :: pid()) -> ok.
+session_setup(Worker, SessId, Iden, Con) ->
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Cred, Con])).
+        reuse_or_create_session, [SessId, Iden, Con])).
 
 %%--------------------------------------------------------------------
 %% @private

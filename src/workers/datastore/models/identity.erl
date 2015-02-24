@@ -6,28 +6,27 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Session management model, frequently invoked by incomming tcp
-%%% connections in connection
+%%% Cache that maps credentials to users' identities
 %%% @end
 %%%-------------------------------------------------------------------
--module(session).
+-module(identity).
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
 -include("workers/datastore/datastore.hrl").
+-include("proto_internal/oneclient/handshake_messages.hrl").
+-include("proto_internal/oneproxy/oneproxy_messages.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([get_session_supervisor_and_node/1, get_event_manager/1,
-    get_sequencer_manager/1, get_communicator/1]).
+-export([fetch/1, get_or_fetch/1]).
 
--export_type([id/0, identity/0]).
+-export_type([credentials/0]).
 
--type id() :: binary().
--type identity() :: #identity{}.
+-type credentials() :: #token{}. %todo certifica_info support
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -40,7 +39,7 @@
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(global_only, Document).
+    datastore:save(local_only, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -50,7 +49,7 @@ save(Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(global_only, ?MODULE, Key, Diff).
+    datastore:update(local_only, ?MODULE, Key, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,7 +58,7 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    datastore:create(global_only, Document).
+    datastore:create(local_only, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -68,7 +67,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(global_only, ?MODULE, Key).
+    datastore:get(local_only, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -86,7 +85,7 @@ list() ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(global_only, ?MODULE, Key).
+    datastore:delete(local_only, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -95,7 +94,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> true | false | datastore:generic_error().
 exists(Key) ->
-    datastore:exists(global_only, ?MODULE, Key).
+    datastore:exists(local_only, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -104,7 +103,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(session_bucket, []).
+    ?MODEL_CONFIG(identity_bucket, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -133,68 +132,30 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns session supervisor and node on which supervisor is running.
+%% Fetch user from globalregistry and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_session_supervisor_and_node(SessId :: id()) ->
-    {ok, {SessSup :: pid(), Node :: node()}} | {error, Reason :: term()}.
-get_session_supervisor_and_node(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{session_sup = undefined}}} ->
-            {error, {not_found, missing}};
-        {ok, #document{value = #session{session_sup = SessSup, node = Node}}} ->
-            {ok, {SessSup, Node}};
-        {error, Reason} ->
-            {error, Reason}
+-spec fetch(identity:credentials()) ->
+    {ok, datastore:document()} | datastore:get_error().
+fetch(Cred) ->
+    case onedata_user:fetch(Cred) of
+        {ok, #document{key = Id}} ->
+            identity:save(#document{key = Cred, value = #identity{user_id = Id}});
+        Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns event manager associated with session.
+%% Get user's identity from cache, or fetch user from globalregistry
+%% and store its identity
 %% @end
 %%--------------------------------------------------------------------
--spec get_event_manager(SessId :: id()) ->
-    {ok, EvtMan :: pid()} | {error, Reason :: term()}.
-get_event_manager(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{event_manager = undefined}}} ->
-            {error, {not_found, missing}};
-        {ok, #document{value = #session{event_manager = EvtMan}}} ->
-            {ok, EvtMan};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns sequencer manager associated with session.
-%% @end
-%%--------------------------------------------------------------------
--spec get_sequencer_manager(SessId :: id()) ->
-    {ok, SeqMan :: pid()} | {error, Reason :: term()}.
-get_sequencer_manager(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{sequencer_manager = undefined}}} ->
-            {error, {not_found, missing}};
-        {ok, #document{value = #session{sequencer_manager = SeqMan}}} ->
-            {ok, SeqMan};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns communicator associated with session.
-%% @end
-%%--------------------------------------------------------------------
--spec get_communicator(SessId :: id()) ->
-    {ok, Comm :: pid()} | {error, Reason :: term()}.
-get_communicator(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{communicator = undefined}}} ->
-            {error, {not_found, missing}};
-        {ok, #document{value = #session{communicator = Comm}}} ->
-            {ok, Comm};
-        {error, Reason} ->
-            {error, Reason}
+-spec get_or_fetch(identity:credentials()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Cred) ->
+    case identity:get(Cred) of
+        {ok, Doc} -> {ok, Doc};
+        {error, not_found} -> fetch(Cred);
+        Error -> Error
     end.

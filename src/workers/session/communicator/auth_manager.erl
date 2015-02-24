@@ -36,14 +36,14 @@
     {ok, #server_message{}} | no_return().
 handle_handshake(#client_message{message_body = #handshake_request{
     session_id = IdToReuse, token = Token = #token{}}}, _) when is_binary(IdToReuse) ->
-    Cred = authenticate_using_token(Token),
-    {ok, _} = session_manager:reuse_or_create_session(IdToReuse, Cred, self()),
+    {ok, Iden} = authenticate_using_token(Token),
+    {ok, _} = session_manager:reuse_or_create_session(IdToReuse, Iden, self()),
     {ok, #server_message{message_body = #handshake_response{session_id = IdToReuse}}};
 
 handle_handshake(#client_message{message_body = #handshake_request{
     session_id = IdToReuse}}, CertInfo) when is_binary(IdToReuse) ->
-    Cred = authenticate_using_certificate(CertInfo),
-    {ok, _} = session_manager:reuse_or_create_session(IdToReuse, Cred, self()),
+    {ok, Iden} = authenticate_using_certificate(CertInfo),
+    {ok, _} = session_manager:reuse_or_create_session(IdToReuse, Iden, self()),
     {ok, #server_message{message_body = #handshake_response{session_id = IdToReuse}}}.
 
 %%%===================================================================
@@ -52,21 +52,20 @@ handle_handshake(#client_message{message_body = #handshake_request{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticate client using given token, returns client credentials.
+%% Authenticate client using given token, returns client identity.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_token(#token{}) -> #credentials{}.
-authenticate_using_token(_Token) ->
-    ?dump(_Token),
-    #credentials{}. %todo
+-spec authenticate_using_token(#token{}) -> {ok, #identity{}} | {error, term()}.
+authenticate_using_token(Token) ->
+    identity:get_or_fetch(Token).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticate client using given certificate. Returns client credentials.
+%% Authenticate client using given certificate. Returns client identity.
 %% @end
 %%--------------------------------------------------------------------
 -spec authenticate_using_certificate(#certificate_info{}) ->
-    #credentials{}.
+    #identity{}.
 authenticate_using_certificate(_CertInfo) ->
-    ?dump(_CertInfo),
-    #credentials{}. %todo
+    %identity:get_or_fetch(_CertInfo). todo integrate with identity model
+    {ok, #identity{}}.

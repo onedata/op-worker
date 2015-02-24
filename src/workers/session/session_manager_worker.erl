@@ -47,7 +47,7 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck |
-    {get_or_create_session, SessId :: session:id(), Cred :: session:credentials(),
+    {get_or_create_session, SessId :: session:id(), Iden :: session:identity(),
         Con :: pid()} |
     {remove_session, SessId :: session:id()},
     Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
@@ -60,8 +60,8 @@ handle(ping, _) ->
 handle(healthcheck, _) ->
     ok;
 
-handle({reuse_or_create_session, SessId, Cred, Con}, _) ->
-    reuse_or_create_session(SessId, Cred, Con);
+handle({reuse_or_create_session, SessId, Iden, Con}, _) ->
+    reuse_or_create_session(SessId, Iden, Con);
 
 handle({remove_session, SessId}, _) ->
     remove_session(SessId);
@@ -121,12 +121,12 @@ supervisor_child_spec() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(SessId :: session:id(),
-    Cred :: session:credentials(), Con :: pid()) ->
+    Iden :: session:identity(), Con :: pid()) ->
     {ok, reused | created} | {error, Reason :: term()}.
-reuse_or_create_session(SessId, Cred, Con) ->
-    case reuse_session(SessId, Cred, Con) of
+reuse_or_create_session(SessId, Iden, Con) ->
+    case reuse_session(SessId, Iden, Con) of
         {ok, reused} -> {ok, reused};
-        {error, {not_found, _}} -> create_session(SessId, Cred, Con);
+        {error, {not_found, _}} -> create_session(SessId, Iden, Con);
         {error, Reason} -> {error, Reason}
     end.
 
@@ -136,17 +136,17 @@ reuse_or_create_session(SessId, Cred, Con) ->
 %% Reuses active session or returns with an error.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_session(SessId :: session:id(), Cred :: session:credentials(),
-    Con :: pid()) -> {ok, reused} |{error, Reason :: invalid_credentials | term()}.
-reuse_session(SessId, Cred, Con) ->
+-spec reuse_session(SessId :: session:id(), Iden :: session:identity(),
+    Con :: pid()) -> {ok, reused} |{error, Reason :: invalid_identity | term()}.
+reuse_session(SessId, Iden, Con) ->
     case session:get(SessId) of
-        {ok, #document{value = #session{credentials = Cred, communicator = undefined}}} ->
-            reuse_session(SessId, Cred, Con);
-        {ok, #document{value = #session{credentials = Cred, communicator = Comm}}} ->
+        {ok, #document{value = #session{identity = Iden, communicator = undefined}}} ->
+            reuse_session(SessId, Iden, Con);
+        {ok, #document{value = #session{identity = Iden, communicator = Comm}}} ->
             ok = communicator:add_connection(Comm, Con),
             {ok, reused};
         {ok, #document{}} ->
-            {error, invalid_credentials};
+            {error, invalid_identity};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -157,15 +157,15 @@ reuse_session(SessId, Cred, Con) ->
 %% Creates new session or if session exists tries to reuse it.
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(SessId :: session:id(), Cred :: session:credentials(),
+-spec create_session(SessId :: session:id(), Iden :: session:identity(),
     Con :: pid()) -> {ok, created} | {error, Reason :: term()}.
-create_session(SessId, Cred, Con) ->
-    case session:create(#document{key = SessId, value = #session{credentials = Cred}}) of
+create_session(SessId, Iden, Con) ->
+    case session:create(#document{key = SessId, value = #session{identity = Iden}}) of
         {ok, SessId} ->
             {ok, _} = start_session_sup(SessId, Con),
             {ok, created};
         {error, already_exists} ->
-            reuse_or_create_session(SessId, Cred, Con);
+            reuse_or_create_session(SessId, Iden, Con);
         {error, Reason} ->
             {error, Reason}
     end.

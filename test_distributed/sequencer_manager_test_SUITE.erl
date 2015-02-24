@@ -13,7 +13,7 @@
 -author("Krzysztof Trzepla").
 
 -include("global_definitions.hrl").
--include("workers/datastore/models/session.hrl").
+-include("workers/datastore/datastore_models.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/stream_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -275,29 +275,29 @@ init_per_testcase(Case, Config) when
     Case =:= sequencer_stream_periodic_ack_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = <<"session_id">>,
-    Cred = #credentials{user_id = <<"user_id">>},
+    Iden = #identity{user_id = <<"user_id">>},
     router_echo_mock_setup(Worker),
     communicator_echo_mock_setup(Worker, SessId),
-    session_setup(Worker, SessId, Cred, Config);
+    session_setup(Worker, SessId, Iden, Config);
 
 init_per_testcase(sequencer_stream_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = <<"session_id">>,
-    Cred = #credentials{user_id = <<"user_id">>},
+    Iden = #identity{user_id = <<"user_id">>},
     router_echo_mock_setup(Worker),
     communicator_retransmission_mock_setup(Worker),
     logger_crash_mock_setup(Worker),
-    session_setup(Worker, SessId, Cred, Config);
+    session_setup(Worker, SessId, Iden, Config);
 
 init_per_testcase(Case, Config) when
     Case =:= sequencer_stream_duplication_test;
     Case =:= sequencer_manager_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = <<"session_id">>,
-    Cred = #credentials{user_id = <<"user_id">>},
+    Iden = #identity{user_id = <<"user_id">>},
     router_echo_mock_setup(Worker),
     communicator_retransmission_mock_setup(Worker),
-    session_setup(Worker, SessId, Cred, Config).
+    session_setup(Worker, SessId, Iden, Config).
 
 end_per_testcase(Case, Config) when
     Case =:= sequencer_stream_test;
@@ -326,12 +326,12 @@ end_per_testcase(sequencer_stream_crash_test, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), SessId :: session:id(),
-    Cred :: session:credentials(), Config :: term()) -> NewConfig :: term().
-session_setup(Worker, SessId, Cred, Config) ->
+    Iden :: session:identity(), Config :: term()) -> NewConfig :: term().
+session_setup(Worker, SessId, Iden, Config) ->
     Self = self(),
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Cred, Self])),
-    [{session_id, SessId}, {credentials, Cred} | Config].
+        reuse_or_create_session, [SessId, Iden, Self])),
+    [{session_id, SessId}, {identity, Iden} | Config].
 
 %%--------------------------------------------------------------------
 %% @private
@@ -343,7 +343,7 @@ session_setup(Worker, SessId, Cred, Config) ->
 session_teardown(Worker, Config) ->
     SessId = ?config(session_id, Config),
     ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
-    proplists:delete(session_id, proplists:delete(credentials, Config)).
+    proplists:delete(session_id, proplists:delete(identity, Config)).
 
 %%--------------------------------------------------------------------
 %% @private

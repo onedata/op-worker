@@ -12,9 +12,6 @@
 -ifndef(DATASTORE_MODELS_HRL).
 -define(DATASTORE_MODELS_HRL, 1).
 
-%% Definition of session model
--include("models/session.hrl").
-
 %% Wrapper for all models' records
 -record(document, {
     key :: datastore:key(),
@@ -36,6 +33,27 @@
 %% value - mapping from subscription ID to subscription
 -record(subscription, {
     value :: event_manager:subscription()
+}).
+
+%% Identity containing user_id
+-record(identity, {
+    user_id :: onedata_user:id()
+}).
+
+%% session:
+%% identity - user identity
+-record(session, {
+    identity :: #identity{},
+    node :: node(),
+    session_sup :: pid(),
+    event_manager :: pid(),
+    sequencer_manager :: pid(),
+    communicator :: pid()
+}).
+
+%% Local, cached version of globalregistry user
+-record(onedata_user, {
+    name :: binary()
 }).
 
 -endif.
