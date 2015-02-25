@@ -204,6 +204,8 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_info({'EXIT', _, normal}, State) ->
+    {noreply, State};
 handle_info(_Info, State) ->
     ?log_bad_request(_Info),
     {noreply, State}.
@@ -249,10 +251,10 @@ code_change(_OldVsn, State, _Extra) ->
 try_send(Msg, Connections) ->
     RandomConnection =
         try utils:random_element(Connections)
-        catch _:_ -> {error, empty_connection_pool}
+        catch _:_ -> error_empty_connection_pool
         end,
     CommunicatorPid = self(),
-    spawn( %todo test performance of spawning vs notifying about each message
+    spawn_link( %todo test performance of spawning vs notifying about each message
         fun() ->
              try connection:send(RandomConnection, Msg) of
                  ok -> ok;

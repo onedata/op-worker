@@ -302,6 +302,7 @@ multi_ping_pong_test(Config) ->
                 end,
             ?assertNotEqual({error, timeout}, Data),
             Msg = server_messages:decode_msg(Data, 'ServerMessage'),
+            ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}}}, Msg),
             {binary_to_integer(Msg#'ServerMessage'.message_id), Msg}
         end, MsgNumbersBin),
     T3 = os:timestamp(),
