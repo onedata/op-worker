@@ -50,7 +50,7 @@ all() ->
 
 %%%===================================================================
 %%% Test function
-%% ====================================================================
+%%%===================================================================
 
 token_connection_test(Config) ->
     % given
@@ -78,7 +78,7 @@ cert_connection_test(Config) ->
     Cert = ?TEST_FILE(Config, "peer.pem"),
 
     % when
-    {ok, Sock} = ssl:connect(?GET_HOST(Worker1), 5555, [binary, {packet, 4},
+    {ok, Sock} = ssl:connect(utils:get_host_as_atom(Worker1), 5555, [binary, {packet, 4},
         {active, true}, {certfile, Cert}, {cacertfile, Cert}]),
     {ok, {certificate_info_message, {ok, CertInfo}}} =
         test_utils:receive_any(timer:seconds(5)),
@@ -524,7 +524,7 @@ connect_via_token(Node, SocketOpts, Transport) ->
             gen_tcp -> rpc:call(Node, oneproxy, get_local_port, [ExternalPort]);
             ssl -> ExternalPort
         end,
-    {ok, Sock} = Transport:connect(?GET_HOST(Node), Port, [binary,
+    {ok, Sock} = Transport:connect(utils:get_host_as_atom(Node), Port, [binary,
         {packet, 4}, {active, once}] ++ OtherOpts),
     case Transport of
         gen_tcp -> ok = Transport:send(Sock, CertInfoMessageRaw);

@@ -156,6 +156,6 @@ fetch(Cred) ->
 get_or_fetch(Cred) ->
     case identity:get(Cred) of
         {ok, Doc} -> {ok, Doc};
-        {error, not_found} -> fetch(Cred);
+        {error, {not_found, missing_or_deleted}} -> fetch(Cred);
         Error -> Error
     end.

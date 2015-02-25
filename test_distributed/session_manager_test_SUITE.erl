@@ -202,7 +202,8 @@ session_supervisor_child_crash_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    test_node_starter:prepare_test_environment(Config,
+        ?TEST_FILE(Config, "env_desc.json"), ?MODULE).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
