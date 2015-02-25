@@ -247,8 +247,10 @@ code_change(_OldVsn, State, _Extra) ->
 -spec try_send(Msg :: #server_message{}, Connections :: [pid()]) ->
     ok | {error, Reason :: term()}.
 try_send(Msg, Connections) ->
-    RandomIndex = random:uniform(length(Connections)),
-    RandomConnection = lists:nth(RandomIndex, Connections),
+    RandomConnection =
+        try utils:random_element(Connections)
+        catch _:_ -> {error, empty_connection_pool}
+        end,
     CommunicatorPid = self(),
     spawn( %todo test performance of spawning vs notifying about each message
         fun() ->
@@ -264,7 +266,7 @@ try_send(Msg, Connections) ->
                      gen_server:cast(CommunicatorPid, {send, Msg})
              catch
                  _:Error ->
-                     ?error_stacktrace("Could not send message ~p, due error: ~p, retrying in ~p seconds.",
+                     ?warning_stacktrace("Could not send message ~p, due error: ~p, retrying in ~p seconds.",
                          [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
                      timer:sleep(?MSG_RETRANSMISSION_INTERVAL),
                      gen_server:cast(CommunicatorPid, {send, Msg})
