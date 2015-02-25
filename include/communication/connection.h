@@ -1,5 +1,5 @@
 /**
- * @file sslConnection.h
+ * @file connection.h
  * @author Konrad Zemek
  * @copyright (C) 2015 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in
@@ -25,21 +25,21 @@
 namespace one {
 namespace communication {
 
-class SSLConnection : public std::enable_shared_from_this<SSLConnection> {
+class Connection : public std::enable_shared_from_this<Connection> {
 public:
     /// Callbacks can't block
-    SSLConnection(boost::asio::io_service &ioService,
+    Connection(boost::asio::io_service &ioService,
         boost::asio::ssl::context &context, const bool verifyServerCertificate,
         std::function<void(std::vector<char>)> onMessageReceived,
-        std::function<void(std::shared_ptr<SSLConnection>)> onReady,
-        std::function<void(std::shared_ptr<SSLConnection>)> onClosed);
+        std::function<void(std::shared_ptr<Connection>)> onReady,
+        std::function<void(std::shared_ptr<Connection>)> onClosed);
 
-    ~SSLConnection();
+    ~Connection();
 
-    SSLConnection(const SSLConnection &) = delete;
-    SSLConnection(SSLConnection &&) = delete;
-    SSLConnection &operator=(const SSLConnection &) = delete;
-    SSLConnection &operator=(SSLConnection &&) = delete;
+    Connection(const Connection &) = delete;
+    Connection(Connection &&) = delete;
+    Connection &operator=(const Connection &) = delete;
+    Connection &operator=(Connection &&) = delete;
 
     /// Can only be called at the beginning
     void start(boost::asio::ip::tcp::resolver::iterator endpointIt);
@@ -58,8 +58,8 @@ private:
 
     const bool m_verifyServerCertificate;
     std::function<void(std::vector<char>)> m_onMessageReceived;
-    std::function<void(std::shared_ptr<SSLConnection>)> m_onReady;
-    std::function<void(std::shared_ptr<SSLConnection>)> m_onClosed;
+    std::function<void(std::shared_ptr<Connection>)> m_onReady;
+    std::function<void(std::shared_ptr<Connection>)> m_onClosed;
 
     boost::asio::io_service::strand m_strand;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_socket;

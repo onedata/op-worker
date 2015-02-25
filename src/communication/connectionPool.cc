@@ -1,16 +1,16 @@
 /**
- * @file sslConnectionPool.cc
+ * @file connectionPool.cc
  * @author Konrad Zemek
  * @copyright (C) 2015 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in
  * 'LICENSE.txt'
  */
 
-#include "communication/sslConnectionPool.h"
+#include "communication/connectionPool.h"
 
 #include "communication/certificateData.h"
 #include "communication/exception.h"
-#include "communication/sslConnection.h"
+#include "communication/connection.h"
 #include "logging.h"
 
 #include <boost/asio.hpp>
@@ -33,7 +33,7 @@ static constexpr auto RECREATE_DELAY = 1s;
 namespace one {
 namespace communication {
 
-SSLConnectionPool::SSLConnectionPool(const unsigned int connectionsNumber,
+ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
     std::string host, std::string port,
     std::shared_ptr<const CertificateData> certificateData,
     const bool verifyServerCertificate,
@@ -92,7 +92,7 @@ SSLConnectionPool::SSLConnectionPool(const unsigned int connectionsNumber,
         createConnection();
 }
 
-std::future<void> SSLConnectionPool::send(std::vector<char> message)
+std::future<void> ConnectionPool::send(std::vector<char> message)
 {
     std::promise<void> promise;
     auto future = promise.get_future();
@@ -104,16 +104,16 @@ std::future<void> SSLConnectionPool::send(std::vector<char> message)
     return future;
 }
 
-void SSLConnectionPool::onMessageReceived(std::vector<char> message)
+void ConnectionPool::onMessageReceived(std::vector<char> message)
 {
     m_ioService.post([ this, message = std::move(message) ] {
         m_onMessage(message);
     });
 }
 
-void SSLConnectionPool::onConnectionReady(std::shared_ptr<SSLConnection> conn)
+void ConnectionPool::onConnectionReady(std::shared_ptr<Connection> conn)
 {
-    m_blockingStrand.post([ this, c = std::weak_ptr<SSLConnection>{conn} ] {
+    m_blockingStrand.post([ this, c = std::weak_ptr<Connection>{conn} ] {
         std::shared_ptr<SendTask> task;
         if (!m_rejects.try_pop(task))
             m_outbox.pop(task);
@@ -129,7 +129,7 @@ void SSLConnectionPool::onConnectionReady(std::shared_ptr<SSLConnection> conn)
 }
 
 /// TODO: Take an exception pointer (and then what?)
-void SSLConnectionPool::onConnectionClosed(std::shared_ptr<SSLConnection> conn)
+void ConnectionPool::onConnectionClosed(std::shared_ptr<Connection> conn)
 {
     m_connectionsStrand.post([this, conn] { m_connections.erase(conn); });
     auto timer = std::make_shared<steady_timer>(m_ioService, RECREATE_DELAY);
@@ -139,19 +139,19 @@ void SSLConnectionPool::onConnectionClosed(std::shared_ptr<SSLConnection> conn)
     });
 }
 
-void SSLConnectionPool::createConnection()
+void ConnectionPool::createConnection()
 {
-    auto conn = std::make_shared<SSLConnection>(m_ioService, m_context,
+    auto conn = std::make_shared<Connection>(m_ioService, m_context,
         m_verifyServerCertificate,
-        std::bind(&SSLConnectionPool::onMessageReceived, this, _1),
-        std::bind(&SSLConnectionPool::onConnectionReady, this, _1),
-        std::bind(&SSLConnectionPool::onConnectionClosed, this, _1));
+        std::bind(&ConnectionPool::onMessageReceived, this, _1),
+        std::bind(&ConnectionPool::onConnectionReady, this, _1),
+        std::bind(&ConnectionPool::onConnectionClosed, this, _1));
 
     m_connectionsStrand.post([this, conn] { m_connections.emplace(conn); });
     conn->start(m_endpointIterator);
 }
 
-SSLConnectionPool::~SSLConnectionPool()
+ConnectionPool::~ConnectionPool()
 {
     m_connectionsStrand.dispatch([this] {
         for (auto &conn : m_connections)

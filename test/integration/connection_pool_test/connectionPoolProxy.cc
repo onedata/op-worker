@@ -1,4 +1,4 @@
-#include "communication/sslConnectionPool.h"
+#include "communication/connectionPool.h"
 #include "communication/certificateData.h"
 
 #include <boost/make_shared.hpp>
@@ -34,7 +34,7 @@ public:
     size_t size() { return messages.size(); }
 
 private:
-    SSLConnectionPool pool;
+    ConnectionPool pool;
     std::vector<std::vector<char>> messages;
 };
 
@@ -47,7 +47,7 @@ boost::shared_ptr<ConnectionPoolProxy> create(
 
 BOOST_PYTHON_MODULE(connection_pool)
 {
-    class_<one::communication::SSLConnectionPool, boost::noncopyable>(
+    class_<one::communication::ConnectionPool, boost::noncopyable>(
         "ConnectionPoolProxy", no_init)
         .def("__init__", make_constructor(create))
         .def("send", &ConnectionPoolProxy::send)

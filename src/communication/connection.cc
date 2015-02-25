@@ -1,12 +1,12 @@
 /**
- * @file sslConnection.cc
+ * @file connection.cc
  * @author Konrad Zemek
  * @copyright (C) 2015 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in
  * 'LICENSE.txt'
  */
 
-#include "communication/sslConnection.h"
+#include "communication/connection.h"
 
 #include "communication/exception.h"
 #include "logging.h"
@@ -21,12 +21,12 @@ using namespace std::placeholders;
 namespace one {
 namespace communication {
 
-SSLConnection::SSLConnection(
+Connection::Connection(
     boost::asio::io_service &ioService, boost::asio::ssl::context &context,
     const bool verifyServerCertificate,
     std::function<void(std::vector<char>)> onMessageReceived,
-    std::function<void(std::shared_ptr<SSLConnection>)> onReady,
-    std::function<void(std::shared_ptr<SSLConnection>)> onClosed)
+    std::function<void(std::shared_ptr<Connection>)> onReady,
+    std::function<void(std::shared_ptr<Connection>)> onClosed)
     : m_verifyServerCertificate{verifyServerCertificate}
     , m_onMessageReceived{std::move(onMessageReceived)}
     , m_onReady{std::move(onReady)}
@@ -36,7 +36,7 @@ SSLConnection::SSLConnection(
 {
 }
 
-SSLConnection::~SSLConnection()
+Connection::~Connection()
 {
     m_strand.dispatch([this] {
         if (m_socket.lowest_layer().is_open())
@@ -44,15 +44,15 @@ SSLConnection::~SSLConnection()
     });
 }
 
-void SSLConnection::send(std::vector<char> message, std::promise<void> promise)
+void Connection::send(std::vector<char> message, std::promise<void> promise)
 {
     m_outHeader = htonl(message.size());
     m_outBuffer = std::move(message);
     m_outPromise = std::move(promise);
-    m_strand.post(std::bind(&SSLConnection::startWriting, shared_from_this()));
+    m_strand.post(std::bind(&Connection::startWriting, shared_from_this()));
 }
 
-void SSLConnection::start(boost::asio::ip::tcp::resolver::iterator endpointIt)
+void Connection::start(boost::asio::ip::tcp::resolver::iterator endpointIt)
 {
     m_strand.dispatch([this, endpointIt] {
         boost::asio::async_connect(
@@ -94,7 +94,7 @@ void SSLConnection::start(boost::asio::ip::tcp::resolver::iterator endpointIt)
     });
 }
 
-void SSLConnection::close()
+void Connection::close()
 {
     m_strand.dispatch([this] {
         boost::system::error_code ec;
@@ -117,7 +117,7 @@ void SSLConnection::close()
     });
 }
 
-void SSLConnection::startReading()
+void Connection::startReading()
 {
     boost::asio::async_read(
         m_socket, headerToBuffer(m_inHeader),
@@ -148,7 +148,7 @@ void SSLConnection::startReading()
         }));
 }
 
-void SSLConnection::startWriting()
+void Connection::startWriting()
 {
     std::array<boost::asio::const_buffer, 2> compositeBuffer{
         {headerToBuffer(m_outHeader), boost::asio::buffer(m_outBuffer)}};
@@ -170,7 +170,7 @@ void SSLConnection::startWriting()
         }));
 }
 
-std::string SSLConnection::close(std::string what,
+std::string Connection::close(std::string what,
                                  const boost::system::error_code &ec)
 {
     auto msg = what + ": " + ec.message();
@@ -180,7 +180,7 @@ std::string SSLConnection::close(std::string what,
 }
 
 boost::asio::mutable_buffers_1
-SSLConnection::headerToBuffer(std::uint32_t &header)
+Connection::headerToBuffer(std::uint32_t &header)
 {
     return {static_cast<void *>(&header), sizeof(header)};
 }

@@ -1,5 +1,5 @@
 /**
- * @file sslConnectionPool.h
+ * @file connectionPool.h
  * @author Konrad Zemek
  * @copyright (C) 2015 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in
@@ -32,13 +32,13 @@ namespace one {
 namespace communication {
 
 class CertificateData;
-class SSLConnection;
+class Connection;
 
 /**
  * A @c one::communication::ConnectionPool specialization for managing
  * SSL based connections.
  */
-class SSLConnectionPool {
+class ConnectionPool {
     using SendTask = std::tuple<std::vector<char>, std::promise<void>>;
 
 public:
@@ -53,7 +53,7 @@ public:
      * @param verifyServerCertificate Determines whether to verify server's
      * certificate.
      */
-    SSLConnectionPool(const unsigned int connectionsNumber, std::string host,
+    ConnectionPool(const unsigned int connectionsNumber, std::string host,
         std::string port,
         std::shared_ptr<const CertificateData> certificateData,
         const bool verifyServerCertificate,
@@ -66,13 +66,13 @@ public:
      * Stops the underlying ASIO endpoint and the worker thread and closes
      * maintained connections.
      */
-    ~SSLConnectionPool();
+    ~ConnectionPool();
 
 private:
     void createConnection();
     void onMessageReceived(std::vector<char> message);
-    void onConnectionReady(std::shared_ptr<SSLConnection> conn);
-    void onConnectionClosed(std::shared_ptr<SSLConnection> conn);
+    void onConnectionReady(std::shared_ptr<Connection> conn);
+    void onConnectionClosed(std::shared_ptr<Connection> conn);
 
     std::shared_ptr<const CertificateData> m_certificateData;
     const bool m_verifyServerCertificate;
@@ -84,7 +84,7 @@ private:
     boost::asio::ip::tcp::resolver::iterator m_endpointIterator;
     tbb::concurrent_bounded_queue<std::shared_ptr<SendTask>> m_outbox;
     tbb::concurrent_queue<std::shared_ptr<SendTask>> m_rejects;
-    std::unordered_set<std::shared_ptr<SSLConnection>> m_connections;
+    std::unordered_set<std::shared_ptr<Connection>> m_connections;
     boost::asio::ssl::context m_context;
     std::function<void(std::vector<char>)> m_onMessage;
 };
