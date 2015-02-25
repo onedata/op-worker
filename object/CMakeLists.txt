@@ -1,7 +1,6 @@
 # Deps
 add_subdirectory(../deps/gmock ${CMAKE_CURRENT_BINARY_DIR}/../deps/gmock)
 add_subdirectory(../deps/glog ${CMAKE_CURRENT_BINARY_DIR}/../deps/glog)
-add_subdirectory(../deps/websocketpp ${CMAKE_CURRENT_BINARY_DIR}/../deps/websocketpp)
 
 # Add clproto target
 add_subdirectory(../clproto ${CMAKE_CURRENT_BINARY_DIR}/../clproto)
@@ -9,7 +8,7 @@ add_subdirectory(../clproto ${CMAKE_CURRENT_BINARY_DIR}/../clproto)
 # Set up helpers
 file(GLOB_RECURSE HELPER_SOURCES ../src/*.cc ../include/*.h)
 add_library(helpers OBJECT ${HELPER_SOURCES})
-add_dependencies(helpers websocketpp glog)
+add_dependencies(helpers glog)
 target_include_directories(helpers PRIVATE ../include)
 target_include_directories(helpers SYSTEM PRIVATE
     ${GLOG_INCLUDE_DIR}

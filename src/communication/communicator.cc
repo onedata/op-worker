@@ -9,7 +9,6 @@
 
 #include "communication/connection.h"
 #include "communication/exception.h"
-#include "communication/websocket/connectionPool.h"
 #include "fuse_messages.pb.h"
 #include "logging.h"
 #include "oneErrors.h"
@@ -203,37 +202,6 @@ CommunicationHandler::Pool Communicator::poolType(const google::protobuf::Messag
     return dataPoolMessages.count(describe(*msg.GetDescriptor()).second)
             ? CommunicationHandler::Pool::DATA
             : CommunicationHandler::Pool::META;
-}
-
-std::shared_ptr<Communicator> createWebsocketCommunicator(
-        std::shared_ptr<Scheduler> scheduler,
-        const unsigned int dataPoolSize,
-        const unsigned int metaPoolSize,
-        std::string hostname,
-        unsigned int port,
-        std::string endpoint,
-        const bool verifyServerCertificate,
-        std::function<std::unordered_map<std::string, std::string>()> additionalHeadersFun,
-        std::shared_ptr<const CertificateData> certificateData)
-{
-    const auto uri = "wss://"+hostname+":"+std::to_string(port)+endpoint;
-
-    LOG(INFO) << "Creating a WebSocket++ based Communicator instance with " <<
-                 dataPoolSize << " data pool connections, " << metaPoolSize <<
-                 " metadata pool connections. Connecting to " << uri << "with "
-                 "certificate verification " <<
-                 (verifyServerCertificate ? "enabled" : "disabled") << ".";
-
-    auto createDataPool = [&](const unsigned int poolSize) {
-        return std::make_unique<websocket::ConnectionPool>(
-                    poolSize, uri, scheduler, additionalHeadersFun,
-                    certificateData, verifyServerCertificate);
-    };
-
-    auto communicationHandler = std::make_unique<CommunicationHandler>(
-                createDataPool(dataPoolSize), createDataPool(metaPoolSize));
-
-    return std::make_shared<Communicator>(std::move(communicationHandler));
 }
 
 } // namespace communication

@@ -61,7 +61,6 @@ add_compile_options(${SECTION_FRAGMENTATION_FLAGS} -Wall -std=c++14)
 add_definitions(
     ${FUSE_DEFINITIONS}
     -DFUSE_USE_VERSION=29
-    -D_WEBSOCKETPP_CPP11_STL_
     -DBOOST_BIND_NO_PLACEHOLDERS)
 
 include_directories(${PROJECT_BINARY_DIR}/version)
