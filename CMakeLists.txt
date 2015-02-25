@@ -11,8 +11,6 @@ set(helpers_VERSION $(helpers_VERSION_MAJOR).$(helpers_VERSION_MINOR).$(helpers_
 set(CMAKE_POSITION_INDEPENDENT_CODE True)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 
-configure_file(include/version.h.in ${PROJECT_BINARY_DIR}/version/version.h)
-
 # Setup OpenSSL
 message(STATUS "Checking for OpenSSL...")
 find_package(OpenSSL REQUIRED)
@@ -62,8 +60,6 @@ add_definitions(
     ${FUSE_DEFINITIONS}
     -DFUSE_USE_VERSION=29
     -DBOOST_BIND_NO_PLACEHOLDERS)
-
-include_directories(${PROJECT_BINARY_DIR}/version)
 
 add_subdirectory(object)
 include_directories(${HELPERS_INCLUDE_DIRS})

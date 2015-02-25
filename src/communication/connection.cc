@@ -21,13 +21,14 @@ using namespace std::placeholders;
 namespace one {
 namespace communication {
 
-Connection::Connection(
-    boost::asio::io_service &ioService, boost::asio::ssl::context &context,
-    const bool verifyServerCertificate,
-    std::function<void(std::vector<char>)> onMessageReceived,
+Connection::Connection(boost::asio::io_service &ioService,
+    boost::asio::ssl::context &context, const bool verifyServerCertificate,
+    std::function<std::string()> getHandshake,
+    std::function<void(std::string)> onMessageReceived,
     std::function<void(std::shared_ptr<Connection>)> onReady,
     std::function<void(std::shared_ptr<Connection>)> onClosed)
     : m_verifyServerCertificate{verifyServerCertificate}
+    , m_getHandshake{std::move(getHandshake)}
     , m_onMessageReceived{std::move(onMessageReceived)}
     , m_onReady{std::move(onReady)}
     , m_onClosed{std::move(onClosed)}
@@ -44,7 +45,7 @@ Connection::~Connection()
     });
 }
 
-void Connection::send(std::vector<char> message, std::promise<void> promise)
+void Connection::send(std::string message, std::promise<void> promise)
 {
     m_outHeader = htonl(message.size());
     m_outBuffer = std::move(message);
@@ -58,7 +59,7 @@ void Connection::start(boost::asio::ip::tcp::resolver::iterator endpointIt)
         boost::asio::async_connect(
             m_socket.lowest_layer(), endpointIt,
             [t = shared_from_this()](const boost::system::error_code &ec,
-                                     boost::asio::ip::tcp::resolver::iterator) {
+                boost::asio::ip::tcp::resolver::iterator) {
 
                 if (ec) {
                     t->close("Failed to establish TCP connection", ec);
@@ -79,15 +80,18 @@ void Connection::start(boost::asio::ip::tcp::resolver::iterator endpointIt)
                                 t->m_verifyServerCertificate) {
                                 t->close("Server certificate verification "
                                          "failed. OpenSSL error",
-                                         ec);
-                            } else {
+                                    ec);
+                            }
+                            else {
                                 t->close("Failed to perform SSL handshake", ec);
                             }
 
                             return;
                         }
 
-                        t->m_onReady(t);
+                        // Start by sending a handshake with an empty promise,
+                        // after which onReady will be called.
+                        t->send(m_getHandshake(), std::promise<void>{});
                         t->startReading();
                     });
             });
@@ -119,8 +123,7 @@ void Connection::close()
 
 void Connection::startReading()
 {
-    boost::asio::async_read(
-        m_socket, headerToBuffer(m_inHeader),
+    boost::asio::async_read(m_socket, headerToBuffer(m_inHeader),
         m_strand.wrap([t = shared_from_this()](
             const boost::system::error_code &ec, size_t) {
 
@@ -132,9 +135,9 @@ void Connection::startReading()
             const auto messageSize = ntohl(t->m_inHeader);
             t->m_inBuffer.resize(messageSize);
 
-            boost::asio::async_read(
-                t->m_socket, boost::asio::mutable_buffers_1{
-                                 &t->m_inBuffer[0], t->m_inBuffer.size()},
+            boost::asio::async_read(t->m_socket,
+                boost::asio::mutable_buffers_1{
+                    &t->m_inBuffer[0], t->m_inBuffer.size()},
                 t->m_strand.wrap(
                     [t](const boost::system::error_code &ec, size_t) {
                         if (ec) {
@@ -153,8 +156,7 @@ void Connection::startWriting()
     std::array<boost::asio::const_buffer, 2> compositeBuffer{
         {headerToBuffer(m_outHeader), boost::asio::buffer(m_outBuffer)}};
 
-    boost::asio::async_write(
-        m_socket, compositeBuffer,
+    boost::asio::async_write(m_socket, compositeBuffer,
         m_strand.wrap([t = shared_from_this()](
             const boost::system::error_code &ec, size_t) {
 
@@ -170,8 +172,8 @@ void Connection::startWriting()
         }));
 }
 
-std::string Connection::close(std::string what,
-                                 const boost::system::error_code &ec)
+std::string Connection::close(
+    std::string what, const boost::system::error_code &ec)
 {
     auto msg = what + ": " + ec.message();
     LOG(ERROR) << msg;
@@ -179,8 +181,7 @@ std::string Connection::close(std::string what,
     return msg;
 }
 
-boost::asio::mutable_buffers_1
-Connection::headerToBuffer(std::uint32_t &header)
+boost::asio::mutable_buffers_1 Connection::headerToBuffer(std::uint32_t &header)
 {
     return {static_cast<void *>(&header), sizeof(header)};
 }

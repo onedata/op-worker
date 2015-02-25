@@ -6,7 +6,7 @@ add_subdirectory(../deps/glog ${CMAKE_CURRENT_BINARY_DIR}/../deps/glog)
 add_subdirectory(../clproto ${CMAKE_CURRENT_BINARY_DIR}/../clproto)
 
 # Set up helpers
-file(GLOB_RECURSE HELPER_SOURCES ../src/*.cc ../include/*.h)
+file(GLOB_RECURSE HELPER_SOURCES ../src/*.cc ../src/*.h)
 add_library(helpers OBJECT ${HELPER_SOURCES})
 add_dependencies(helpers glog)
 target_include_directories(helpers PRIVATE ../include)
@@ -16,7 +16,7 @@ target_include_directories(helpers SYSTEM PRIVATE
     ${CLPROTO_SYSTEM_INCLUDE_DIRS})
 
 set(HELPERS_INCLUDE_DIRS
-    ${CMAKE_CURRENT_SOURCE_DIR}/../include/
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
     PARENT_SCOPE)
 
 set(HELPERS_SYSTEM_INCLUDE_DIRS

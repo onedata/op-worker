@@ -6,11 +6,11 @@
  * 'LICENSE.txt'
  */
 
-#include "communication/connectionPool.h"
+#include "connectionPool.h"
 
-#include "communication/certificateData.h"
-#include "communication/exception.h"
-#include "communication/connection.h"
+#include "certificateData.h"
+#include "exception.h"
+#include "connection.h"
 #include "logging.h"
 
 #include <boost/asio.hpp>
@@ -35,16 +35,17 @@ namespace communication {
 
 ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
     std::string host, std::string port,
+    std::function<std::string()> getHandshake,
     std::shared_ptr<const CertificateData> certificateData,
     const bool verifyServerCertificate,
-    std::function<void(std::vector<char>)> onMessage)
-    : m_certificateData{std::move(certificateData)}
+    std::function<void(std::string)> onMessage)
+    : m_getHandshake{std::move(getHandshake)}
+    , m_certificateData{std::move(certificateData)}
     , m_verifyServerCertificate{verifyServerCertificate}
     , m_idleWork{m_ioService}
     , m_blockingStrand{m_ioService}
     , m_connectionsStrand{m_ioService}
     , m_context{boost::asio::ssl::context::tlsv12_client}
-    , m_onMessage{std::move(onMessage)}
 {
     m_outbox.set_capacity(OUTBOX_SIZE);
 
@@ -92,19 +93,24 @@ ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
         createConnection();
 }
 
-std::future<void> ConnectionPool::send(std::vector<char> message)
+void ConnectionPool::setOnMessageCallback(
+    std::function<void(std::string)> onMessage)
+{
+    m_onMessage = std::move(onMessage);
+}
+
+std::future<void> ConnectionPool::send(std::string message)
 {
     std::promise<void> promise;
     auto future = promise.get_future();
-    auto data =
-        std::make_shared<std::tuple<std::vector<char>, std::promise<void>>>(
-            std::forward_as_tuple(std::move(message), std::move(promise)));
+    auto data = std::make_shared<std::tuple<std::string, std::promise<void>>>(
+        std::forward_as_tuple(std::move(message), std::move(promise)));
 
     m_outbox.emplace(std::move(data));
     return future;
 }
 
-void ConnectionPool::onMessageReceived(std::vector<char> message)
+void ConnectionPool::onMessageReceived(std::string message)
 {
     m_ioService.post([ this, message = std::move(message) ] {
         m_onMessage(message);

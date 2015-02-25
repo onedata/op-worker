@@ -30,7 +30,8 @@ public:
     /// Callbacks can't block
     Connection(boost::asio::io_service &ioService,
         boost::asio::ssl::context &context, const bool verifyServerCertificate,
-        std::function<void(std::vector<char>)> onMessageReceived,
+        std::function<std::string()> getHandshake,
+        std::function<void(std::string)> onMessageReceived,
         std::function<void(std::shared_ptr<Connection>)> onReady,
         std::function<void(std::shared_ptr<Connection>)> onClosed);
 
@@ -45,7 +46,7 @@ public:
     void start(boost::asio::ip::tcp::resolver::iterator endpointIt);
 
     /// Can only be called after onReady
-    void send(std::vector<char> message, std::promise<void> promise);
+    void send(std::string message, std::promise<void> promise);
 
     /// Can only be called at the end
     void close();
@@ -57,7 +58,8 @@ private:
     boost::asio::mutable_buffers_1 headerToBuffer(std::uint32_t &header);
 
     const bool m_verifyServerCertificate;
-    std::function<void(std::vector<char>)> m_onMessageReceived;
+    std::function<std::string()> m_getHandshake;
+    std::function<void(std::string)> m_onMessageReceived;
     std::function<void(std::shared_ptr<Connection>)> m_onReady;
     std::function<void(std::shared_ptr<Connection>)> m_onClosed;
 
@@ -65,10 +67,10 @@ private:
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_socket;
 
     std::uint32_t m_inHeader;
-    std::vector<char> m_inBuffer;
+    std::string m_inBuffer;
 
     std::uint32_t m_outHeader;
-    std::vector<char> m_outBuffer;
+    std::string m_outBuffer;
     std::promise<void> m_outPromise;
 };
 

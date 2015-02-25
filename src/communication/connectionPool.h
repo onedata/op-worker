@@ -39,7 +39,7 @@ class Connection;
  * SSL based connections.
  */
 class ConnectionPool {
-    using SendTask = std::tuple<std::vector<char>, std::promise<void>>;
+    using SendTask = std::tuple<std::string, std::promise<void>>;
 
 public:
     /**
@@ -54,12 +54,13 @@ public:
      * certificate.
      */
     ConnectionPool(const unsigned int connectionsNumber, std::string host,
-        std::string port,
+        std::string port, std::function<std::string()> getHandshake,
         std::shared_ptr<const CertificateData> certificateData,
-        const bool verifyServerCertificate,
-        std::function<void(std::vector<char>)> onMessage);
+        const bool verifyServerCertificate);
 
-    std::future<void> send(std::vector<char> message);
+    void setOnMessageCallback(std::function<void(std::string)> onMessage);
+
+    std::future<void> send(std::string message);
 
     /**
      * Destructor.
@@ -70,10 +71,11 @@ public:
 
 private:
     void createConnection();
-    void onMessageReceived(std::vector<char> message);
+    void onMessageReceived(std::string message);
     void onConnectionReady(std::shared_ptr<Connection> conn);
     void onConnectionClosed(std::shared_ptr<Connection> conn);
 
+    std::function<std::string()> m_getHandshake;
     std::shared_ptr<const CertificateData> m_certificateData;
     const bool m_verifyServerCertificate;
     boost::asio::io_service m_ioService;
@@ -86,7 +88,7 @@ private:
     tbb::concurrent_queue<std::shared_ptr<SendTask>> m_rejects;
     std::unordered_set<std::shared_ptr<Connection>> m_connections;
     boost::asio::ssl::context m_context;
-    std::function<void(std::vector<char>)> m_onMessage;
+    std::function<void(std::string)> m_onMessage = [](auto){};
 };
 
 } // namespace communication
