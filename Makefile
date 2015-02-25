@@ -8,6 +8,7 @@ all: rel
 
 compile:
 	./rebar compile
+	cp ebin/*SUITE* test_distributed/
 
 deps:
 	./rebar get-deps

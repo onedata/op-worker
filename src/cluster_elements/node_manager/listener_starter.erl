@@ -54,16 +54,19 @@
 %%--------------------------------------------------------------------
 -spec start_protocol_listener() -> {ok, pid()} | no_return().
 start_protocol_listener() ->
-    {ok, Port} = application:get_env(?APP_NAME, dispatcher_port),
-    {ok, DispatcherPoolSize} = application:get_env(?APP_NAME, dispatcher_pool_size),
-    {ok, CertFile} = application:get_env(?APP_NAME, fuse_ssl_cert_path),
+    {ok, Port} = application:get_env(?APP_NAME, protocol_handler_port),
+    {ok, DispatcherPoolSize} = application:get_env(?APP_NAME, protocol_handler_pool_size),
+    {ok, CertFile} = application:get_env(?APP_NAME, protocol_handler_ssl_cert_path),
 
     LocalPort = oneproxy:get_local_port(Port),
     Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_peer, no_http) end),
     register(?ONEPROXY_PROTOCOL_LISTENER, Pid),
 
     {ok, _} = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
-        ranch_tcp, [{ip, {127, 0, 0, 1}}, {port, LocalPort}],
+        ranch_tcp, [
+            {ip, {127, 0, 0, 1}}, %todo listen 0.0.0.0 in tests
+            {port, LocalPort}
+        ],
         connection, []
     ).
 

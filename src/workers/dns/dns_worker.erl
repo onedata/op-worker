@@ -87,7 +87,7 @@ handle(ping, _) ->
     pong;
 
 handle(healthcheck, _) ->
-    ok;
+    healthcheck();
 
 handle({update_state, ModulesToNodes, NLoads, AvgLoad}, _) ->
     ?info("DNS state update: ~p", [{ModulesToNodes, NLoads, AvgLoad}]),
@@ -480,3 +480,32 @@ make_ans_random(Result) ->
 -spec call_dns_worker(Request :: term()) -> term().
 call_dns_worker(Request) ->
     worker_proxy:call(dns_worker, Request).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% healthcheck dns endpoint
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck() -> ok | {error, Reason :: atom()}.
+healthcheck() ->
+    {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
+    Query = inet_dns:encode(
+        #dns_rec{
+            header = #dns_header{
+                id = crypto:rand_uniform(1, 16#FFFF),
+                opcode = 'query',
+                rd = true
+            },
+            qdlist = [#dns_query{
+                domain = "localhost",
+                type = soa,
+                class = in
+            }],
+            arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, <<>>}]
+        }),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    gen_udp:send(Socket, "127.0.0.1", DNSPort, Query),
+    case gen_udp:recv(Socket, 65535, timer:seconds(5)) of
+        {ok, _} -> ok;
+        _ -> {error, no_dns}
+    end.

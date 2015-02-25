@@ -87,8 +87,7 @@ start_link(Ref, Socket, Transport, Opts) ->
 init(Ref, Socket, Transport, _Opts = []) ->
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
-    ok = Transport:setopts(Socket, [binary, {active, once}, {reuseaddr, true},
-        {packet, ?PACKET_VALUE}]),
+    ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
     {Ok, Closed, Error} = Transport:messages(),
     gen_server:enter_loop(?MODULE, [], #sock_state{
         socket = Socket,
@@ -348,4 +347,3 @@ send_server_message(Socket, Transport, ServerMsg) ->
                 [Socket, ServerMsg, Error]),
             {error, serialization_error}
     end.
-

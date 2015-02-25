@@ -11,33 +11,40 @@
 -module(connection_test_SUITE).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
--include("proto_internal/oneclient/message_id.hrl").
--include("proto_internal/oneclient/event_messages.hrl").
+-include("proto/oneproxy/oneproxy_messages.hrl").
 -include("proto_internal/oneclient/common_messages.hrl").
+-include("proto_internal/oneclient/event_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneproxy/oneproxy_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
+-include("proto_internal/oneclient/message_id.hrl").
+-include("proto_internal/oneproxy/oneproxy_messages.hrl").
 -include("workers/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1,
     multi_message_test/1, client_send_test/1, client_communicate_test/1,
-    client_communiate_async_test/1]).
+    client_communiate_async_test/1, multi_ping_pong_test/1,
+    sequential_ping_pong_test/1, multi_connection_test/1, bandwidth_test/1]).
 
+-perf_test({perf_cases, [multi_message_test, multi_ping_pong_test,
+    sequential_ping_pong_test, multi_connection_test, bandwidth_test]}).
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
         multi_message_test, client_send_test, client_communicate_test,
-        client_communiate_async_test].
+        client_communiate_async_test, multi_ping_pong_test,
+        sequential_ping_pong_test, multi_connection_test, bandwidth_test].
 
--define(CLEANUP, false).
+-define(CLEANUP, true).
 
 -define(TOKEN, <<"TOKEN_VALUE">>).
 
@@ -115,16 +122,21 @@ protobuf_msg_test(Config) ->
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ok = ssl:close(Sock).
 
+-perf_test([
+    {repeats, 1},
+    {perf_configs, [
+        [{msg_num, 1000000}, {transport, ssl}],
+        [{msg_num, 1000000}, {transport, gen_tcp}]
+    ]},
+    {ct_config, [{msg_num, 1000}, {transport, ssl}]}
+]).
 multi_message_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+    MsgNum = ?config(msg_num, Config),
+    Transport = ?config(transport, Config),
     Self = self(),
-    test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_body = #read_event{counter = Counter}}) ->
-            Self ! Counter,
-            ok
-        end),
-    MsgNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    MsgNumbers = lists:seq(1, MsgNum),
     Events = lists:map(
         fun(N) ->
             #'ClientMessage'{message_body = {event, #'Event'{event =
@@ -136,18 +148,29 @@ multi_message_test(Config) ->
             }}}}}
         end, MsgNumbers),
     RawEvents = lists:map(fun(E) -> client_messages:encode_msg(E) end, Events),
+    test_utils:mock_expect(Workers, router, route_message,
+        fun(#client_message{message_body = #read_event{counter = Counter}}) ->
+            Self ! Counter,
+            ok
+        end),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1),
-    lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
+    T1 = os:timestamp(),
+    lists:foreach(fun(E) -> ok = Transport:send(Sock, E) end, RawEvents),
+    T2 = os:timestamp(),
 
     % then
-    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     lists:foreach(
         fun(N) ->
             ?assertMatch({ok, N}, test_utils:receive_msg(N, timer:seconds(5)))
         end, MsgNumbers),
-    ok = ssl:close(Sock).
+    T3 = os:timestamp(),
+    _SendingTime = {sending_time, timer:now_diff(T2, T1)},
+    _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
+    _FullTime = {full_time, timer:now_diff(T3, T1)},
+%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
+    ok = Transport:close(Sock).
 
 client_send_test(Config) ->
     % given
@@ -243,11 +266,200 @@ client_communiate_async_test(Config) ->
     ?assertEqual({ok, {router_message_called, MsgId2}}, RouterNotification),
     ok = ssl:close(Sock).
 
+-perf_test([
+    {repeats, 1},
+    {perf_configs, [
+        [{msg_num, 1000000}, {transport, ssl}],
+        [{msg_num, 1000000}, {transport, gen_tcp}]
+    ]},
+    {ct_config, [{msg_num, 100}, {transport, ssl}]}
+]).
+multi_ping_pong_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    Transport = ?config(transport, Config),
+    MsgNum = ?config(msg_num, Config),
+    MsgNumbers = lists:seq(1, MsgNum),
+    MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
+    Pings = lists:map(
+        fun(N) ->
+            #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
+        end, MsgNumbersBin),
+    RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
+
+    % when
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
+    T1 = os:timestamp(),
+    lists:foreach(fun(E) -> ok = Transport:send(Sock, E) end, RawPings),
+    T2 = os:timestamp(),
+
+    % then
+    UnknownMessages = lists:foldl(
+        fun(N, Queued) ->
+            case lists:filter(
+                fun(#'ServerMessage'{message_id = Id}) -> Id =:= N end,
+                Queued)
+            of
+                [] ->
+                    Data =
+                        receive
+                            {_, _, Binary} -> Binary
+                        after
+                            timer:seconds(5) -> {error, timeout}
+                        end,
+                    ?assertNotEqual({error, timeout}, Data),
+                    Msg = server_messages:decode_msg(Data, 'ServerMessage'),
+                    case N =:= Msg#'ServerMessage'.message_id of
+                        true ->
+                            ?assertMatch(
+                                #'ServerMessage'{message_body = {pong, #'Pong'{}}},
+                                Msg
+                            ),
+                            Queued;
+                        false ->
+                            [Msg | Queued]
+                    end;
+                [ExistingMsg] ->
+                    ?assertMatch(
+                        #'ServerMessage'{message_body = {pong, #'Pong'{}}},
+                        ExistingMsg
+                    ),
+                    Queued -- [ExistingMsg]
+            end
+        end, [], MsgNumbersBin),
+    ?assertEqual([], UnknownMessages),
+    T3 = os:timestamp(),
+    _SendingTime = {sending_time, timer:now_diff(T2, T1)},
+    _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
+    _FullTime = {full_time, timer:now_diff(T3, T1)},
+%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
+    ok = Transport:close(Sock).
+
+-perf_test([
+    {repeats, 10},
+    {perf_configs, [
+        [{msg_num, 100000}]
+    ]},
+    {ct_config, [{msg_num, 1000}]}
+]).
+sequential_ping_pong_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    MsgNum = ?config(msg_num, Config),
+    MsgNumbers = lists:seq(1, MsgNum),
+    MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
+    Pings = lists:map(
+        fun(N) ->
+            #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
+        end, MsgNumbersBin),
+    RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
+
+    % when
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+    T1 = os:timestamp(),
+    lists:foldl(fun(E, N) ->
+        % send ping & receive pong
+        ok = ssl:send(Sock, E),
+        Pong =
+            receive
+                {ssl, _, Data} ->
+                    server_messages:decode_msg(Data, 'ServerMessage')
+            after
+                timer:seconds(5) -> {error, timeout}
+            end,
+
+        % validate pong
+        BinaryN = integer_to_binary(N),
+        ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}},
+            message_id = BinaryN},
+            Pong),
+        N + 1
+    end, 1, RawPings),
+    T2 = os:timestamp(),
+
+    % then
+    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
+    _FullTime = {full_time, timer:now_diff(T2, T1)},
+%%     ct:print("~p", [_FullTime]),
+    ok = ssl:close(Sock).
+
+-perf_test([
+    {repeats, 10},
+    {perf_configs, [
+        [{connections_num, 100}]
+    ]},
+    {ct_config, [{connections_num, 100}]}
+]).
+multi_connection_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    ConnNumbers = ?config(connections_num, Config),
+    ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
+
+    % when
+    Connections = lists:map(
+        fun(N) ->
+            connect_via_token(Worker1, [{reuse_sessions, false}]) % todo repair oneproxy and delete reuse_sessions flag
+        end, ConnNumbersList),
+
+    % then
+    lists:foreach(
+        fun(ConnectionAns) ->
+            ?assertMatch({ok, {_, _}}, ConnectionAns),
+            {ok, {Sock, SessId}} = ConnectionAns,
+            ?assert(is_binary(SessId)),
+            ?assertMatch({ok, _}, ssl:connection_info(Sock))
+        end, Connections),
+    lists:foreach(fun({ok, {Sock, _}}) -> ssl:close(Sock) end, Connections).
+
+-perf_test([
+    {repeats, 10},
+    {perf_configs, [
+        [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, gen_tcp}]
+    ]},
+    {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 100}, {transport, ssl}]}
+]).
+bandwidth_test(Config) ->
+    % given
+    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+    PacketSize = ?config(packet_size_kilobytes, Config),
+    PacketNum = ?config(packet_num, Config),
+    Transport = ?config(transport, Config),
+    Data = crypto:rand_bytes(PacketSize*1024),
+    Packet = #'ClientMessage'{message_body = {data, #'Data'{data = Data}}},
+    PacketRaw = client_messages:encode_msg(Packet),
+    Self = self(),
+    test_utils:mock_expect(Workers, router, route_message,
+        fun(#client_message{message_body = #data{}}) ->
+            Self ! router_message_called,
+            ok
+        end),
+
+    % when
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
+    T1 = os:timestamp(),
+    lists:foreach(fun(_) -> ok = Transport:send(Sock, PacketRaw) end, lists:seq(1, PacketNum)),
+    T2 = os:timestamp(),
+
+    % then
+    lists:foreach(
+        fun(_) ->
+            ?assertEqual({ok, router_message_called},
+                test_utils:receive_msg(router_message_called, timer:seconds(5)))
+        end, lists:seq(1, PacketNum)),
+    T3 = os:timestamp(),
+    _SendingTime = {sending_time, timer:now_diff(T2, T1)},
+    _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
+    _FullTime = {full_time, timer:now_diff(T3, T1)},
+    ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
+    Transport:close(Sock).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    test_node_starter:prepare_test_environment(Config,
+        ?TEST_FILE(Config, "env_desc.json"), ?MODULE).
 
 end_per_suite(Config) ->
     case ?CLEANUP of
@@ -264,7 +476,8 @@ init_per_testcase(cert_connection_test, Config) ->
 
 init_per_testcase(Case, Config) when Case =:= protobuf_msg_test
     orelse Case =:= multi_message_test
-    orelse Case =:= client_communiate_async_test ->
+    orelse Case =:= client_communiate_async_test
+    orelse Case =:= bandwidth_test ->
     ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, router),
@@ -286,7 +499,8 @@ end_per_testcase(cert_connection_test, Config) ->
 
 end_per_testcase(Case, Config) when Case =:= protobuf_msg_test
     orelse Case =:= multi_message_test
-    orelse Case =:= client_communiate_async_test ->
+    orelse Case =:= client_communiate_async_test
+    orelse Case =:= bandwidth_test ->
     Workers = ?config(op_worker_nodes, Config),
     unmock_identity(Workers),
     test_utils:mock_validate(Workers, router),
@@ -305,22 +519,25 @@ end_per_testcase(_, Config) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Connect to given node using token, with default socket_opts
-%% @equiv connect_via_token(Node, [{active, true}]).
+%% @equiv connect_via_token(Node, [{active, true}], ssl).
 %% @end
 %%--------------------------------------------------------------------
 -spec connect_via_token(Node :: node()) ->
     {ok, {Sock :: ssl:sslsocket(), SessId :: session:id()}}.
 connect_via_token(Node) ->
-    connect_via_token(Node, [{active, true}]).
+    connect_via_token(Node, [{active, true}], ssl).
+
+connect_via_token(Node, SocketOpts) ->
+    connect_via_token(Node, SocketOpts, ssl).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Connect to given node using token, with custom socket opts
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node(), SocketOpts :: list()) ->
-    {ok, {Sock :: ssl:sslsocket(), SessId :: session:id()}}.
-connect_via_token(Node, SocketOpts) ->
+-spec connect_via_token(Node :: node(), SocketOpts :: list(), ssl | tcp) ->
+    {ok, {Sock :: term(), SessId :: session:id()}}.
+connect_via_token(Node, SocketOpts, Transport) ->
     % given
     TokenAuthMessage = #'ClientMessage'{message_body =
     {handshake_request, #'HandshakeRequest'{session_id = <<"session_id">>,
@@ -332,25 +549,36 @@ connect_via_token(Node, SocketOpts) ->
             Other -> [{active, Other}]
         end,
     OtherOpts = proplists:delete(active, SocketOpts),
+    CertInfoMessageRaw = oneproxy_messages:encode_msg(#'CertificateInfo'{}),
 
     % when
-    {ok, Sock} = ssl:connect(?GET_HOST(Node), 5555, [binary, {packet, 4}, {active, once}] ++ OtherOpts),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    {ok, ExternalPort} = rpc:call(Node, application, get_env, [?APP_NAME, protocol_handler_port]),
+    Port =
+        case Transport of
+            gen_tcp -> rpc:call(Node, oneproxy, get_local_port, [ExternalPort]);
+            ssl -> ExternalPort
+        end,
+    {ok, Sock} = Transport:connect(?GET_HOST(Node), Port, [binary,
+        {packet, 4}, {active, once}] ++ OtherOpts),
+    case Transport of
+        gen_tcp -> ok = Transport:send(Sock, CertInfoMessageRaw);
+        _ -> ok
+    end,
+    ok = Transport:send(Sock, TokenAuthMessageRaw),
 
     % then
     Data =
         receive
-            {ssl, _, Ans} -> Ans
+            {_, _, Ans} -> Ans
         after timer:seconds(5) ->
             {error, timeout}
         end,
     ?assert(is_binary(Data)),
     ServerMsg = server_messages:decode_msg(Data, 'ServerMessage'),
     ?assertMatch(#'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{}}}, ServerMsg),
-    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     #'ServerMessage'{message_body = {handshake_response,
         #'HandshakeResponse'{session_id = SessionId}}} = ServerMsg,
-    ssl:setopts(Sock, ActiveOpt),
+    setopts(Transport, Sock, ActiveOpt),
     {ok, {Sock, SessionId}}.
 
 %%--------------------------------------------------------------------
@@ -384,6 +612,18 @@ spawn_ssl_echo_client(NodeToConnect) ->
         end,
     spawn_link(SslEchoClient),
     {ok, {Sock, SessionId}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Set ssl/tcp socket opts
+%% @end
+%%--------------------------------------------------------------------
+-spec setopts(ssl | tcp, Sock :: term(), list()) ->
+    ok | {error, term()}.
+setopts(ssl, Sock, Opts) ->
+    ssl:setopts(Sock, Opts);
+setopts(gen_tcp, Sock, Opts) ->
+    inet:setopts(Sock, Opts).
 
 mock_identity(Workers) ->
     test_utils:mock_new(Workers, identity),
