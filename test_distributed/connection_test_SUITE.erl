@@ -196,14 +196,7 @@ client_send_test(Config) ->
     rpc:call(Worker1, communicator, send, [ServerMsgInternal, SessionId]),
 
     % then
-    ReceivedMessage =
-        receive
-            {ssl, _, Data} ->
-                server_messages:decode_msg(Data, 'ServerMessage')
-        after timer:seconds(5) ->
-            {error, timeout}
-        end,
-    ?assertEqual(ServerMessageProtobuf, ReceivedMessage),
+    ?assertEqual(ServerMessageProtobuf, receive_server_message()),
     ok = ssl:close(Sock).
 
 client_communicate_test(Config) ->
@@ -294,16 +287,9 @@ multi_ping_pong_test(Config) ->
     T2 = os:timestamp(),
     Received = lists:map(
         fun(_) ->
-            Data =
-                receive
-                    {_, _, Binary} -> Binary
-                after
-                    timer:seconds(5) -> {error, timeout}
-                end,
-            ?assertNotEqual({error, timeout}, Data),
-            Msg = server_messages:decode_msg(Data, 'ServerMessage'),
-            ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}}}, Msg),
-            {binary_to_integer(Msg#'ServerMessage'.message_id), Msg}
+            Pong = receive_server_message(),
+            ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}}}, Pong),
+            {binary_to_integer(Pong#'ServerMessage'.message_id), Pong}
         end, MsgNumbersBin),
     T3 = os:timestamp(),
 
@@ -345,13 +331,7 @@ sequential_ping_pong_test(Config) ->
     lists:foldl(fun(E, N) ->
         % send ping & receive pong
         ok = ssl:send(Sock, E),
-        Pong =
-            receive
-                {ssl, _, Data} ->
-                    server_messages:decode_msg(Data, 'ServerMessage')
-            after
-                timer:seconds(5) -> {error, timeout}
-            end,
+        Pong = receive_server_message(),
 
         % validate pong
         BinaryN = integer_to_binary(N),
@@ -553,17 +533,10 @@ connect_via_token(Node, SocketOpts, Transport) ->
     ok = Transport:send(Sock, TokenAuthMessageRaw),
 
     % then
-    Data =
-        receive
-            {_, _, Ans} -> Ans
-        after timer:seconds(5) ->
-            {error, timeout}
-        end,
-    ?assert(is_binary(Data)),
-    ServerMsg = server_messages:decode_msg(Data, 'ServerMessage'),
-    ?assertMatch(#'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{}}}, ServerMsg),
+    HandshakeResponse = receive_server_message(),
+    ?assertMatch(#'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{}}}, HandshakeResponse),
     #'ServerMessage'{message_body = {handshake_response,
-        #'HandshakeResponse'{session_id = SessionId}}} = ServerMsg,
+        #'HandshakeResponse'{session_id = SessionId}}} = HandshakeResponse,
     setopts(Transport, Sock, ActiveOpt),
     {ok, {Sock, SessionId}}.
 
@@ -622,3 +595,21 @@ mock_identity(Workers) ->
 unmock_identity(Workers) ->
     test_utils:mock_validate(Workers, identity),
     test_utils:mock_unload(Workers, identity).
+
+receive_server_message() ->
+    receive_server_message([message_stream_reset]).
+
+receive_server_message(IgnoredMsgList) ->
+    receive
+        {_, _, Data} ->
+            % ignore listed messages
+            Msg = server_messages:decode_msg(Data, 'ServerMessage'),
+            MsgType = element(1, Msg#'ServerMessage'.message_body),
+            case lists:member(MsgType, IgnoredMsgList) of
+                true ->
+                    receive_server_message(IgnoredMsgList);
+                false -> Msg
+            end
+    after timer:seconds(5) ->
+        {error, timeout}
+    end.
