@@ -126,7 +126,7 @@ protobuf_msg_test(Config) ->
     {repeats, 1},
     {perf_configs, [
         [{msg_num, 1000000}, {transport, ssl}],
-        [{msg_num, 1000000}, {transport, gen_tcp}]
+        [{msg_num, 100000}, {transport, gen_tcp}]
     ]},
     {ct_config, [{msg_num, 1000}, {transport, ssl}]}
 ]).
@@ -270,7 +270,7 @@ client_communiate_async_test(Config) ->
     {repeats, 1},
     {perf_configs, [
         [{msg_num, 1000000}, {transport, ssl}],
-        [{msg_num, 1000000}, {transport, gen_tcp}]
+        [{msg_num, 100000}, {transport, gen_tcp}]
     ]},
     {ct_config, [{msg_num, 100}, {transport, ssl}]}
 ]).
@@ -320,7 +320,7 @@ multi_ping_pong_test(Config) ->
     ok = Transport:close(Sock).
 
 -perf_test([
-    {repeats, 10},
+    {repeats, 1},
     {perf_configs, [
         [{msg_num, 100000}]
     ]},
@@ -397,11 +397,12 @@ multi_connection_test(Config) ->
     lists:foreach(fun({ok, {Sock, _}}) -> ssl:close(Sock) end, Connections).
 
 -perf_test([
-    {repeats, 10},
+    {repeats, 1},
     {perf_configs, [
-        [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, gen_tcp}]
+        [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, gen_tcp}],
+        [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, ssl}]
     ]},
-    {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 100}, {transport, ssl}]}
+    {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 10}, {transport, ssl}]}
 ]).
 bandwidth_test(Config) ->
     % given
