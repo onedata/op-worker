@@ -25,13 +25,13 @@
 all() -> [simple_call_test, direct_cast_test, redirect_cast_test, mixed_cast_test].
 
 -define(REQUEST_TIMEOUT, timer:seconds(10)).
+-define(REPEATS, 100).
 
 %%%===================================================================
 %%% Test function
 %% ====================================================================
 
-%% -perf_test(). % to execute test once
--perf_test({repeats, 100}).
+-perf_test({repeats, ?REPEATS}).
 simple_call_test(Config) ->
     [Ccm] = ?config(op_ccm_nodes, Config),
     [Worker] = ?config(op_worker_nodes, Config),
@@ -52,7 +52,7 @@ simple_call_test(Config) ->
 %%%===================================================================
 
 -perf_test([
-    {repeats, 100},
+    {repeats, ?REPEATS},
     {perf_config, [{proc_num, 100}, {proc_repeats, 100}]},
     {ct_config, [{proc_num, 10}, {proc_repeats, 10}]}
 ]).
@@ -82,7 +82,7 @@ direct_cast_test(Config) ->
 %%%===================================================================
 
 -perf_test([
-    {repeats, 100},
+    {repeats, ?REPEATS},
     {perf_config, [{proc_num, 100}, {proc_repeats, 100}]},
     {ct_config, [{proc_num, 10}, {proc_repeats, 10}]}
 ]).
@@ -112,7 +112,7 @@ redirect_cast_test(Config) ->
 %%%===================================================================
 
 -perf_test([
-    {repeats, 100},
+    {repeats, ?REPEATS},
     {perf_configs, [
         {short_procs, [{proc_num, 100}, {proc_repeats, 1}]},
         {one_proc, [{proc_num, 1}, {proc_repeats, 100}]},
