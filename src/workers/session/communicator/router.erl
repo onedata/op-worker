@@ -85,10 +85,9 @@ route_and_ignore_answer(Msg = #client_message{}) ->
 %%--------------------------------------------------------------------
 -spec route_and_send_answer(#client_message{}) -> ok.
 route_and_send_answer(#client_message{message_id = Id,
-    message_body = #ping{}}) ->
-    protocol_handler:cast(self(), {send, #server_message{message_id = Id,
-        message_body = #pong{}}}), %todo send through communicator
-    ok;
+    message_body = #ping{}, session_id = SessId}) ->
+    Pong = #server_message{message_id = Id, message_body = #pong{}},
+    communicator:send(Pong, SessId);
 route_and_send_answer(Msg = #client_message{}) ->
     ?info("route_and_send_answer(~p)", [Msg]),
     ok. %todo

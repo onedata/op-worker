@@ -292,43 +292,27 @@ multi_ping_pong_test(Config) ->
     T1 = os:timestamp(),
     lists:foreach(fun(E) -> ok = Transport:send(Sock, E) end, RawPings),
     T2 = os:timestamp(),
+    Received = lists:map(
+        fun(_) ->
+            Data =
+                receive
+                    {_, _, Binary} -> Binary
+                after
+                    timer:seconds(5) -> {error, timeout}
+                end,
+            ?assertNotEqual({error, timeout}, Data),
+            Msg = server_messages:decode_msg(Data, 'ServerMessage'),
+            {binary_to_integer(Msg#'ServerMessage'.message_id), Msg}
+        end, MsgNumbersBin),
+    T3 = os:timestamp(),
 
     % then
-    UnknownMessages = lists:foldl(
-        fun(N, Queued) ->
-            case lists:filter(
-                fun(#'ServerMessage'{message_id = Id}) -> Id =:= N end,
-                Queued)
-            of
-                [] ->
-                    Data =
-                        receive
-                            {_, _, Binary} -> Binary
-                        after
-                            timer:seconds(5) -> {error, timeout}
-                        end,
-                    ?assertNotEqual({error, timeout}, Data),
-                    Msg = server_messages:decode_msg(Data, 'ServerMessage'),
-                    case N =:= Msg#'ServerMessage'.message_id of
-                        true ->
-                            ?assertMatch(
-                                #'ServerMessage'{message_body = {pong, #'Pong'{}}},
-                                Msg
-                            ),
-                            Queued;
-                        false ->
-                            [Msg | Queued]
-                    end;
-                [ExistingMsg] ->
-                    ?assertMatch(
-                        #'ServerMessage'{message_body = {pong, #'Pong'{}}},
-                        ExistingMsg
-                    ),
-                    Queued -- [ExistingMsg]
-            end
-        end, [], MsgNumbersBin),
-    ?assertEqual([], UnknownMessages),
-    T3 = os:timestamp(),
+    {_, ReceivedInOrder} = lists:unzip(lists:keysort(1, Received)),
+    IdToMessage = lists:zip(MsgNumbersBin, ReceivedInOrder),
+    lists:foreach(
+        fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
+            ?assertEqual(Id, MsgId)
+        end, IdToMessage),
     _SendingTime = {sending_time, timer:now_diff(T2, T1)},
     _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
     _FullTime = {full_time, timer:now_diff(T3, T1)},
@@ -451,7 +435,7 @@ bandwidth_test(Config) ->
     _SendingTime = {sending_time, timer:now_diff(T2, T1)},
     _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
     _FullTime = {full_time, timer:now_diff(T3, T1)},
-    ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
+%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
     Transport:close(Sock).
 
 %%%===================================================================

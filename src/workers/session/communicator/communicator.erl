@@ -250,7 +250,7 @@ try_send(Msg, Connections) ->
     RandomIndex = random:uniform(length(Connections)),
     RandomConnection = lists:nth(RandomIndex, Connections),
     CommunicatorPid = self(),
-    spawn_link( %todo test performance of spawning vs notifying about each message
+    spawn( %todo test performance of spawning vs notifying about each message
         fun() ->
              try connection:send(RandomConnection, Msg) of
                  ok -> ok;
