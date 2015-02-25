@@ -81,7 +81,7 @@ start_gui_listener() ->
     {ok, GuiPort} = application:get_env(?APP_NAME, http_worker_https_port),
     {ok, GuiNbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_acceptors),
     {ok, MaxKeepAlive} = application:get_env(?APP_NAME, http_worker_max_keepalive),
-    {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout),
+    {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
 
     LocalPort = oneproxy:get_local_port(GuiPort),
     spawn_link(fun() -> oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none) end),
@@ -128,7 +128,7 @@ start_gui_listener() ->
         [
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
             {max_keepalive, MaxKeepAlive},
-            {timeout, Timeout},
+            {timeout, timer:seconds(Timeout)},
             % On every request, add headers that improve security to the response
             {onrequest, fun gui_utils:onrequest_adjust_headers/1}
         ]).
@@ -143,7 +143,7 @@ start_gui_listener() ->
 start_redirector_listener() ->
     {ok, RedirectPort} = application:get_env(?APP_NAME, http_worker_redirect_port),
     {ok, RedirectNbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_http_acceptors),
-    {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout),
+    {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
     RedirectDispatch = [
         {'_', [
             {'_', opn_cowboy_bridge,
@@ -161,7 +161,7 @@ start_redirector_listener() ->
         [
             {env, [{dispatch, cowboy_router:compile(RedirectDispatch)}]},
             {max_keepalive, 1},
-            {timeout, Timeout}
+            {timeout, timer:seconds(Timeout)}
         ]).
 
 %%--------------------------------------------------------------------
@@ -172,7 +172,7 @@ start_redirector_listener() ->
 -spec start_rest_listener() -> {ok, pid()} | no_return().
 start_rest_listener() ->
     {ok, NbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_acceptors),
-    {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout),
+    {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
     {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
     {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
     LocalPort = oneproxy:get_local_port(RestPort),
@@ -205,7 +205,7 @@ start_rest_listener() ->
         [
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
             {max_keepalive, 1},
-            {timeout, Timeout}
+            {timeout, timer:seconds(Timeout)}
         ]).
 
 %%--------------------------------------------------------------------

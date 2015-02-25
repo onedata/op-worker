@@ -38,8 +38,6 @@ all() ->
         multi_message_test, client_send_test, client_communicate_test,
         client_communiate_async_test].
 
--define(CLEANUP, true).
-
 %%%===================================================================
 %%% Test function
 %% ====================================================================

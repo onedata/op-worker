@@ -58,8 +58,8 @@ init() ->
                 ok ->
                     update_crls(CADir),
                     catch oneproxy:ca_crl_to_der(oneproxy:get_der_certs_dir()),
-                    {ok, CRLUpdateInterval} = application:get_env(?APP_NAME, crl_update_interval),
-                    case timer:apply_interval(CRLUpdateInterval, ?MODULE, update_crls, [CADir]) of
+                    {ok, CRLUpdateInterval} = application:get_env(?APP_NAME, crl_update_interval_minutes),
+                    case timer:apply_interval(timer:minutes(CRLUpdateInterval), ?MODULE, update_crls, [CADir]) of
                         {ok, _} -> ok;
                         {error, Reason} ->
                             ?error("GSI Handler: Setting CLR auto-update failed (reason: ~p)", [Reason])

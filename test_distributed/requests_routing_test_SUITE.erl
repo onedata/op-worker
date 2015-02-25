@@ -174,13 +174,14 @@ spawn_and_check(Fun, Num) ->
                 {ok, Time} -> {ok, Time + Sum}
             after ?REQUEST_TIMEOUT ->
                 {error, timeout}
-            end;
-        E ->
-            E
+            end
     end.
 
-for(N, N, F) -> [F(N)];
-for(I, N, F) -> [F(I)|for(I+1, N, F)].
+for(N, N, F) ->
+    F(N);
+for(I, N, F) ->
+    F(I),
+    for(I+1, N, F).
 
 count_answers(Exp) ->
     count_answers(0, Exp).
