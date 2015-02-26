@@ -101,7 +101,7 @@ def _is_up(ip):
 
 def _wait_until_ready(workers):
     worker_ip = docker.inspect(workers[0])['NetworkSettings']['IPAddress']
-    deadline = time.time() + 300
+    deadline = time.time() + 500
     while not _is_up(worker_ip):
         if time.time() > deadline:
             print('WARNING: did not get "ok" healthcheck status for 5 minutes',
