@@ -12,7 +12,7 @@
 -author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
--include("op_test_utils.hrl").
+-include("test_utils.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -36,14 +36,6 @@ all() -> [nagios_test].
 %%% Test function
 %%%===================================================================
 nagios_test(Config) ->
-    W = ?config(op_worker_nodes, Config),
-    cluster_state_notifier:cast({subscribe_for_init, self(), length(W)}),
-    receive
-        init_finished -> ok
-    after
-        timer:seconds(50) -> throw(timeout)
-    end,
-
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
 
     {ok, XMLString} = perform_nagios_healthcheck(Worker1),
@@ -69,6 +61,8 @@ nagios_test(Config) ->
         end, WorkerNodes),
 
     % Check if all workers are in the report.
+    ct:print("aaa ~p~n~p~n", [nodes(), XMLString]),
+    global:synch(),
     {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
     lists:foreach(
         fun({WNode, WName}) ->
