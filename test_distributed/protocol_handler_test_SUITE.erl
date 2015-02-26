@@ -20,8 +20,8 @@
 -include("proto_internal/oneclient/handshake_messages.hrl").
 -include("proto_internal/oneclient/message_id.hrl").
 -include("proto_internal/oneproxy/oneproxy_messages.hrl").
+-include("test_utils.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("annotations/include/annotations.hrl").
 

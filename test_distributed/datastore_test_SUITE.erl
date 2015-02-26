@@ -1,4 +1,4 @@
-%%%-------------------------------------------------------------------
+a%%%-------------------------------------------------------------------
 %%% @author Rafal Slota
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -12,8 +12,8 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
+-include("test_utils.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("annotations/include/annotations.hrl").
 -include("workers/datastore/datastore_models.hrl").
