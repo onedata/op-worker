@@ -16,7 +16,7 @@
 
 %% Initializes test environment
 -define(TEST_INIT(Config, EnvDescription),
-    ?TEST_INIT(Config, EnvDescription, "providera_up.py")
+    ?TEST_INIT(Config, EnvDescription, "provider_up.py")
 ).
 
 -endif.
