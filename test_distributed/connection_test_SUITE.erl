@@ -478,8 +478,8 @@ python_client_test(Config) ->
         end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
     _FullTime = {full_time, timer:now_diff(T2, T1)},
-    catch port_close(PythonClient),
-    ct:print("~p", [_FullTime]).
+    catch port_close(PythonClient).
+%%     ct:print("~p", [_FullTime]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -532,6 +532,13 @@ end_per_testcase(Case, Config) when Case =:= protobuf_msg_test
     unmock_identity(Workers),
     test_utils:mock_validate(Workers, router),
     test_utils:mock_unload(Workers, router),
+    ssl:stop();
+
+end_per_testcase(python_client_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    file:delete(?TEST_FILE(Config, "ssl_client.py")),
+    file:delete(?TEST_FILE(Config, "message.arg")),
+    unmock_identity(Workers),
     ssl:stop();
 
 end_per_testcase(_, Config) ->
