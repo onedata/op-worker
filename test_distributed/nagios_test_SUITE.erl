@@ -61,9 +61,7 @@ nagios_test(Config) ->
         end, WorkerNodes),
 
     % Check if all workers are in the report.
-    ct:print("aaa ~p~n~p~n", [nodes(), XMLString]),
     global:sync(),
-    timer:sleep(15000),
     {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
     lists:foreach(
         fun({WNode, WName}) ->
