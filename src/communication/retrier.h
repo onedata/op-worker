@@ -11,17 +11,16 @@
 
 #include "exception.h"
 
+#include <chrono>
 #include <functional>
 #include <future>
 #include <memory>
-
-using namespace std::literals::chrono_literals;
 
 namespace one {
 namespace communication {
 
 constexpr int DEFAULT_RETRIES = 2;
-constexpr auto DEFAULT_SEND_TIMEOUT = 5s;
+constexpr std::chrono::seconds DEFAULT_SEND_TIMEOUT{5};
 
 /**
  * Retrier is responsible for retrying message send operation handled by

@@ -77,8 +77,8 @@ public:
      * @param retries Number of retries in case of sending error.
      */
     virtual void reply(const ServerMessage &originalMsg,
-        ClientMessage &replyMsg, const Pool poolType,
-        const unsigned int retries)
+        ClientMessage &replyMsg, const unsigned int retries,
+        const Pool poolType = Pool::META)
     {
         DLOG(INFO) << "Replying to message (id: " << originalMsg->message_id()
                    << ") through "
@@ -94,8 +94,8 @@ public:
      * @param poolType Type of a pool through which the message should be sent.
      * @param retries Number of retries in case of sending error.
      */
-    virtual void send(const ClientMessage &message, const Pool poolType,
-        const unsigned int retries)
+    virtual void send(const ClientMessage &message, const unsigned int retries,
+        const Pool poolType = Pool::META)
     {
         DLOG(INFO) << "Sending a message through "
                    << (poolType == Pool::DATA ? "data" : "metadata") << " pool";
@@ -112,7 +112,8 @@ public:
      * @return A future which should be fulfiled with server's reply.
      */
     virtual std::future<std::unique_ptr<ServerMessage>> communicate(
-        ClientMessage &message, const Pool poolType, const unsigned int retries)
+        ClientMessage &message, const unsigned int retries,
+        const Pool poolType = Pool::META)
     {
         std::lock_guard<std::mutex> guard{m_promisesMutex};
         message.set_message_id(nextId());
