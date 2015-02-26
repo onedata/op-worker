@@ -7,7 +7,6 @@
 
 #include "helpers/storageHelperFactory.h"
 
-#include "communication/communicator.h"
 #include "directIOHelper.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
