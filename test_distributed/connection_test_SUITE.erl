@@ -34,7 +34,8 @@
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1,
     multi_message_test/1, client_send_test/1, client_communicate_test/1,
     client_communiate_async_test/1, multi_ping_pong_test/1,
-    sequential_ping_pong_test/1, multi_connection_test/1, bandwidth_test/1]).
+    sequential_ping_pong_test/1, multi_connection_test/1, bandwidth_test/1,
+    python_client_test/1]).
 
 -perf_test({perf_cases, [multi_message_test, multi_ping_pong_test,
     sequential_ping_pong_test, multi_connection_test, bandwidth_test]}).
@@ -42,7 +43,8 @@ all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
         multi_message_test, client_send_test, client_communicate_test,
         client_communiate_async_test, multi_ping_pong_test,
-        sequential_ping_pong_test, multi_connection_test, bandwidth_test].
+        sequential_ping_pong_test, multi_connection_test, bandwidth_test,
+        python_client_test].
 
 -define(CLEANUP, true).
 
@@ -419,6 +421,65 @@ bandwidth_test(Config) ->
     _FullTime = {full_time, timer:now_diff(T3, T1)},
 %%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
     Transport:close(Sock).
+
+-perf_test([
+    {repeats, 1},
+    {perf_configs, [
+        [{packet_size_kilobytes, 1024}, {packet_num, 1000}]
+    ]},
+    {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 10}]}
+]).
+python_client_test(Config) ->
+    % given
+    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+    PacketSize = ?config(packet_size_kilobytes, Config),
+    PacketNum = ?config(packet_num, Config),
+
+    Data = crypto:rand_bytes(PacketSize * 1024),
+    Packet = #'ClientMessage'{message_body = {data, #'Data'{data = Data}}},
+    PacketRaw = client_messages:encode_msg(Packet),
+
+    HandshakeMessage = #'ClientMessage'{message_body =
+    {handshake_request, #'HandshakeRequest'{session_id = <<"session_id">>,
+        token = #'Token'{value = ?TOKEN}}}},
+    HandshakeMessageRaw = client_messages:encode_msg(HandshakeMessage),
+
+    Self = self(),
+    test_utils:mock_expect(Workers, router, route_message,
+        fun(#client_message{message_body = #data{}}) ->
+            Self ! router_message_called,
+            ok
+        end),
+
+    ClientPath = ?TEST_FILE(Config, "ssl_client.py"),
+    MessagePath = ?TEST_FILE(Config, "message.arg"),
+    HandshakeMsgPath = ?TEST_FILE(Config, "handshake.arg"),
+    file:write_file(MessagePath, PacketRaw),
+    file:write_file(HandshakeMsgPath, HandshakeMessageRaw),
+    Host = utils:get_host(Worker1),
+    {ok, Port} = rpc:call(Worker1, application, get_env, [?APP_NAME, protocol_handler_port]),
+
+    % when
+    T1 = os:timestamp(),
+    Args = [
+        "--host", Host,
+        "--port", integer_to_list(Port),
+        "--handshake-message", HandshakeMsgPath,
+        "--message", MessagePath,
+        "--count", integer_to_list(PacketNum)
+    ],
+    PythonClient = open_port({spawn_executable, ClientPath}, [{args, Args}]),
+
+    % then
+    lists:foreach(
+        fun(_) ->
+            ?assertEqual({ok, router_message_called},
+                test_utils:receive_msg(router_message_called, timer:seconds(5)))
+        end, lists:seq(1, PacketNum)),
+    T2 = os:timestamp(),
+    _FullTime = {full_time, timer:now_diff(T2, T1)},
+    catch port_close(PythonClient),
+    ct:print("~p", [_FullTime]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
