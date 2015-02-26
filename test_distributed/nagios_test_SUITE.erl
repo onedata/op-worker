@@ -36,6 +36,14 @@ all() -> [nagios_test].
 %%% Test function
 %%%===================================================================
 nagios_test(Config) ->
+    W = ?config(op_worker_nodes, Config),
+    cluster_state_notifier:cast({subscribe_for_init, self(), length(W)}),
+    receive
+        init_finished -> ok
+    after
+        timer:seconds(50) -> throw(timeout)
+    end,
+
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
 
     {ok, XMLString} = perform_nagios_healthcheck(Worker1),
