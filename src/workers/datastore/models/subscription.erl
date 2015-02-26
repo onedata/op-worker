@@ -70,8 +70,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error().
 list() ->
-    {ok, Objects} = datastore:list(global_only, ?MODULE, ?GET_ALL, []),
-    Objects.
+    datastore:list(global_only, ?MODULE, ?GET_ALL, []).
 
 
 %%--------------------------------------------------------------------
