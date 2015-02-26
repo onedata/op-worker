@@ -17,14 +17,24 @@
 -include_lib("ctool/include/test/assertions.hrl").
 
 -include("workers/datastore/datastore_models.hrl").
+-include("workers/datastore/datastore.hrl").
 
 -define(call_store(N, M, A), rpc:call(N, datastore, M, A)).
+-define(upload_test_code(CONFIG),
+    begin
+        {Mod, Bin, File} = code:get_object_code(?MODULE),
+        {_Replies, _} = rpc:multicall(?config(op_worker_nodes, CONFIG), code, load_binary,
+            [Mod, File, Bin])
+    end).
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1]).
+-export([local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
+            global_cache_list_test/1]).
 
-all() -> [local_cache_test, global_cache_test, global_cache_atomic_update_test].
+all() ->
+    [local_cache_test, global_cache_test, global_cache_atomic_update_test,
+     global_cache_list_test].
 
 %%%===================================================================
 %%% Test function
@@ -85,9 +95,7 @@ global_cache_atomic_update_test(Config) ->
     Key = some_key_atomic,
 
     %% Load this module into oneprovider nodes so that update fun() will be available
-    {Mod, Bin, File} = code:get_object_code(?MODULE),
-    {_Replies, _} = rpc:multicall([Worker1, Worker2], code, load_binary,
-        [Mod, File, Bin]),
+    ?upload_test_code(Config),
 
     ?assertMatch({ok, _},
         ?call_store(Worker1, create, [Level,
@@ -125,6 +133,46 @@ global_cache_atomic_update_test(Config) ->
             some_record, Key])),
 
     ok.
+
+global_cache_list_test(Config) ->
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+
+    Level = global_only,
+
+    ?upload_test_code(Config),
+
+    Ret0 = ?call_store(Worker1, list, [Level, some_record, ?GET_ALL, []]),
+    ?assertMatch({ok, _}, Ret0),
+    {ok, Objects0} = Ret0,
+
+    ?assertMatch({ok, _},
+        ?call_store(Worker1, create, [Level,
+            #document{
+                key = obj1,
+                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+            }])),
+
+    ?assertMatch({ok, _},
+        ?call_store(Worker1, create, [Level,
+            #document{
+                key = obj2,
+                value = #some_record{field1 = 2, field2 = <<"abc">>, field3 = {test, tuple}}
+            }])),
+
+    ?assertMatch({ok, _},
+        ?call_store(Worker2, create, [Level,
+            #document{
+                key = obj3,
+                value = #some_record{field1 = 3, field2 = <<"abc">>, field3 = {test, tuple}}
+            }])),
+
+    Ret1 = ?call_store(Worker2, list, [Level, some_record, ?GET_ALL, []]),
+    ?assertMatch({ok, _}, Ret1),
+    {ok, Objects1} = Ret1,
+    ?assertMatch(3, erlang:length(Objects1) - erlang:length(Objects0)),
+
+    ok.
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -167,6 +215,14 @@ local_access_only(Node, Level) ->
     ?assertMatch({ok, Key},
         ?call_store(Node, update, [Level,
             some_record, Key, #{field2 => Pid}])),
+
+    ?assertMatch({ok, #document{value = #some_record{field2 = Pid}}},
+        ?call_store(Node, get, [Level,
+            some_record, Key])),
+
+    ?assertMatch(ok,
+        ?call_store(Node, delete, [Level,
+            some_record, Key, fun() -> false end])),
 
     ?assertMatch({ok, #document{value = #some_record{field2 = Pid}}},
         ?call_store(Node, get, [Level,

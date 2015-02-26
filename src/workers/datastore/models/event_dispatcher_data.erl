@@ -15,8 +15,6 @@
 -include("workers/datastore/datastore.hrl").
 -include("workers/datastore/datastore_internal.hrl").
 
--define(BATCH_SIZE, 100).
-
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0, 'after'/5, before/4]).
 
@@ -70,17 +68,9 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error().
 list() ->
-    {ok, Handle} = datastore:list_init(global_only, ?MODULE, ?BATCH_SIZE),
-    list(Handle, []).
-list(Handle, Acc) ->
-    case datastore:list_next(global_only, ?MODULE, Handle) of
-        {ok, {[], _}} ->
-            {ok, lists:flatten(Acc)};
-        {ok, {[_ | _] = Items, NewHandle}} ->
-            list(NewHandle, [Items | Acc]);
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    {ok, Objects} = datastore:list(global_only, ?MODULE, ?GET_ALL, []),
+    Objects.
+
 
 %%--------------------------------------------------------------------
 %% @doc

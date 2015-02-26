@@ -39,11 +39,12 @@
 %% API utility types
 -type store_level() :: disk_only | local_only | global_only | locally_cached | globally_cached.
 -type delete_predicate() :: fun(() -> boolean()).
+-type list_fun() :: fun((Obj :: term(), AccIn :: term()) -> {next, Acc :: term()} | {abort, Acc :: term()}).
 
--export_type([store_level/0, delete_predicate/0]).
+-export_type([store_level/0, delete_predicate/0, list_fun/0]).
 
 %% API
--export([save/2, update/4, create/2, get/3, list_init/3, list_next/3, delete/4, delete/3, exists/3]).
+-export([save/2, update/4, create/2, get/3, list/4, delete/4, delete/3, exists/3]).
 -export([configs_per_bucket/1, ensure_state_loaded/0]).
 
 %%%===================================================================
@@ -99,21 +100,10 @@ get(Level, ModelName, Key) ->
 %% Initializes list operation. In order to get records, use list_next/2 afterwards.
 %% @end
 %%--------------------------------------------------------------------
--spec list_init(Level :: store_level(), ModelName :: model_behaviour:model_type(), BatchSize :: non_neg_integer()) ->
+-spec list(Level :: store_level(), ModelName :: model_behaviour:model_type(), Fun :: list_fun(), AccIn :: term()) ->
     {ok, Handle :: term()} | datastore:generic_error().
-list_init(Level, ModelName, BatchSize) ->
-    exec_driver(ModelName, level_to_driver(Level), list_init, [BatchSize]).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of next records for given table cursor.
-%% @end
-%%--------------------------------------------------------------------
--spec list_next(Level :: store_level(), ModelName :: model_behaviour:model_type(), Handle :: term()) ->
-    {ok, {[datastore:document()], Handle :: term()}} | datastore:generic_error().
-list_next(Level, ModelName, Handle) ->
-    exec_driver(ModelName, level_to_driver(Level), list_next, [Handle]).
+list(Level, ModelName, Fun, AccIn) ->
+    exec_driver(ModelName, level_to_driver(Level), list, [Fun, AccIn]).
 
 
 %%--------------------------------------------------------------------

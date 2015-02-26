@@ -17,7 +17,7 @@
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
--export([save/2, update/3, create/2, exists/2, get/2, list_init/2, list_next/2, delete/3]).
+-export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
@@ -146,16 +146,17 @@ get(#model_config{} = ModelConfig, Key) ->
 %% Initializes list operation. In order to get records, use list_next/2 afterwards.
 %% @end
 %%--------------------------------------------------------------------
--spec list_init(model_behaviour:model_config(), BatchSize :: non_neg_integer()) ->
+-spec list(model_behaviour:model_config(),
+    Fun :: datastore:list_fun(), AccIn :: term()) ->
     {ok, Handle :: term()} | datastore:generic_error().
-list_init(#model_config{} = ModelConfig, BatchSize) ->
+list(#model_config{} = ModelConfig, Fun, AccIn) ->
     SelectAll = [{'_', [], ['$_']}],
     transaction(fun() ->
-        case mnesia:select(table_name(ModelConfig), SelectAll, BatchSize, read) of
+        case mnesia:select(table_name(ModelConfig), SelectAll, 1, read) of
             {Obj, Handle} ->
-                {ok, {Obj, Handle}};
+                list_next(Obj, Handle, Fun, AccIn);
             '$end_of_table' ->
-                {ok, {[], eot}};
+                list_next('$end_of_table', undefined, Fun, AccIn);
             Other ->
                 {error, Other}
         end
@@ -167,26 +168,28 @@ list_init(#model_config{} = ModelConfig, BatchSize) ->
 %% Returns list of next records for given table cursor.
 %% @end
 %%--------------------------------------------------------------------
--spec list_next(model_behaviour:model_config(), Handle :: term()) ->
-    {ok, {[datastore:document()], Handle :: term()}} | datastore:generic_error().
-list_next(#model_config{} = _ModelConfig, {_Obj, eot}) ->
-    {ok, {[], {[], eot}}};
-list_next(#model_config{} = _ModelConfig, {[_ | _] = Obj, Cont}) ->
-    Values = lists:map(fun(Value) ->
-        #document{key = get_key(Value), value = strip_key(Value)}
-    end, Obj),
-    {ok, {Values, {[], Cont}}};
-list_next(#model_config{} = ModelConfig, {[], Cont}) ->
-    transaction(fun() ->
-        case mnesia:select(Cont) of
-            {[_ | _] = Obj, ContNew} ->
-                list_next(ModelConfig, {Obj, ContNew});
-            '$end_of_table' ->
-                {ok, {[], {[], eot}}};
-            Other ->
-                {error, Other}
-        end
-    end).
+list_next([Obj | R], Handle, Fun, AccIn) ->
+    Doc =  #document{key = get_key(Obj), value = strip_key(Obj)},
+    case Fun(Doc, AccIn) of
+        {next, NewAcc} ->
+            list_next(R, Handle, Fun, NewAcc);
+        {abort, NewAcc} ->
+            {ok, NewAcc}
+    end;
+list_next('$end_of_table' = EoT, Handle, Fun, AccIn) ->
+    case Fun(EoT, AccIn) of
+        {next, NewAcc} ->
+            list_next(EoT, Handle, Fun, NewAcc);
+        {abort, NewAcc} ->
+            {ok, NewAcc}
+    end;
+list_next([], Handle, Fun, AccIn) ->
+    case mnesia:select(Handle) of
+        {Objects, NewHandle} ->
+            list_next(Objects, NewHandle, Fun, AccIn);
+        '$end_of_table' ->
+            list_next('$end_of_table', undefined, Fun, AccIn)
+    end.
 
 
 %%--------------------------------------------------------------------

@@ -75,18 +75,8 @@
 %% Initializes list operation. In order to get records, use list_next/2 afterwards.
 %% @end
 %%--------------------------------------------------------------------
--callback list_init(model_behaviour:model_config(), BatchSize :: non_neg_integer()) ->
-    {ok, Handle :: term()} | datastore:generic_error().
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of next records for given table cursor.
-%% @end
-%%--------------------------------------------------------------------
--callback list_next(model_behaviour:model_config(), Handle :: term()) ->
-    {ok, {[datastore:document()], Handle :: term()}} | datastore:generic_error().
-
+-callback list(model_behaviour:model_config(), Fun :: datastore:list_fun(), AccIn :: term()) ->
+    {ok, Acc :: term()} | datastore:generic_error().
 
 %%--------------------------------------------------------------------
 %% @doc
