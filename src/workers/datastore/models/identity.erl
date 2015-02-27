@@ -140,7 +140,11 @@ before(_ModelName, _Method, _Level, _Context) ->
 fetch(Cred) ->
     case onedata_user:fetch(Cred) of
         {ok, #document{key = Id}} ->
-            identity:save(#document{key = Cred, value = #identity{user_id = Id}});
+            NewDoc = #document{key = Cred, value = #identity{user_id = Id}},
+            case identity:save(NewDoc) of
+                {ok, _} -> {ok, NewDoc};
+                Error_ -> Error_
+            end;
         Error ->
             Error
     end.

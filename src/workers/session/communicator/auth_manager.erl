@@ -57,7 +57,8 @@ handle_handshake(#client_message{message_body = #handshake_request{
 %%--------------------------------------------------------------------
 -spec authenticate_using_token(#token{}) -> {ok, #identity{}} | {error, term()}.
 authenticate_using_token(Token) ->
-    identity:get_or_fetch(Token).
+    {ok, #document{value = Iden}} = identity:get_or_fetch(Token),
+    {ok, Iden}.
 
 %%--------------------------------------------------------------------
 %% @doc

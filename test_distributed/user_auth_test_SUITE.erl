@@ -14,6 +14,8 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include("proto_internal/oneclient/handshake_messages.hrl").
+-include("workers/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -25,6 +27,10 @@
 
 -export([token_authentication/1]).
 
+-define(TOKEN, <<"TOKEN">>).
+-define(USER_ID, <<"test_id">>).
+-define(USER_NAME, <<"test_name">>).
+
 all() -> [token_authentication].
 
 %%%===================================================================
@@ -32,14 +38,28 @@ all() -> [token_authentication].
 %%%===================================================================
 
 token_authentication(Config) ->
+    timer:sleep(timer:seconds(5)), % waiting for appmock. todo integrate with nagios
     % given
     [Worker1, _] = ?config(op_worker_nodes, Config),
     mock_gr_certificates(Config),
-    Token = <<"Token">>,
     SessionId = <<"SessionId">>,
 
+    % when
+    {ok, Sock} = connect_via_token(Worker1, ?TOKEN, SessionId),
+
     % then
-    {ok, Sock} = connect_via_token(Worker1, Token, SessionId),
+    ?assertMatch(
+        {ok, #document{value = #onedata_user{name = ?USER_NAME}}},
+        rpc:call(Worker1, onedata_user, get, [?USER_ID])
+    ),
+    ?assertMatch(
+        {ok, #document{value = #session{identity = #identity{user_id = ?USER_ID}}}},
+        rpc:call(Worker1, session, get, [SessionId])
+    ),
+    ?assertMatch(
+        {ok, #document{value = #identity{user_id = ?USER_ID}}},
+        rpc:call(Worker1, identity, get, [#token{value = ?TOKEN}])
+    ),
     unmock_gr_certificates(Config),
     ok = ssl:close(Sock).
 

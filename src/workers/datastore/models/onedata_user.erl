@@ -139,7 +139,11 @@ before(_ModelName, _Method, _Level, _Context) ->
 fetch(#token{value = Token}) ->
     case gr_users:get_details({user, Token}) of
         {ok, #user_details{id = Id, name = Name}} ->
-            onedata_user:save(#document{key = Id, value = #onedata_user{name = Name}});
+            NewDoc = #document{key = Id, value = #onedata_user{name = Name}},
+            case onedata_user:save(NewDoc) of
+                {ok, _} -> {ok, NewDoc};
+                Error -> Error
+            end;
         Error ->
             Error
     end.
