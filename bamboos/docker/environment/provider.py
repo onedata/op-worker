@@ -34,6 +34,8 @@ def _tweak_config(config, name, uid):
     sys_config = cfg['nodes']['node']['sys.config']
     sys_config['ccm_nodes'] = [common.format_hostname(n, uid) for n in
                                sys_config['ccm_nodes']]
+    sys_config['global_registry_node'] = common.format_hostname(
+        sys_config['global_registry_node'], uid)
 
     vm_args = cfg['nodes']['node']['vm.args']
     vm_args['name'] = common.format_hostname(vm_args['name'], uid)
@@ -111,7 +113,7 @@ def _wait_until_ready(workers):
         time.sleep(1)
 
 
-def up(image, bindir, logdir, dns, uid, config_path):
+def up(image, bindir, dns, uid, logdir, config_path):
     config = common.parse_json_file(config_path)['oneprovider_node']
     config['config']['target_dir'] = '/root/bin'
     configs = [_tweak_config(config, node, uid) for node in config['nodes']]

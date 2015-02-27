@@ -53,7 +53,8 @@
         "nodes": {
             "appmock": {
                 "vm.args": {
-                    "name": "gr@"
+                    "name": "gr@",
+                    "setcookie": "oneprovider_node"
                 },
                 "sys.config": {
                     "app_description_file": "./gr_mock_description.erl"

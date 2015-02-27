@@ -25,7 +25,7 @@
 
 -export([token_authentication/1]).
 
-all() -> [].
+all() -> [token_authentication].
 
 %%%===================================================================
 %%% Test function
