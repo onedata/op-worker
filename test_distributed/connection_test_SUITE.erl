@@ -656,7 +656,7 @@ mock_identity(Workers) ->
     test_utils:mock_new(Workers, identity),
     test_utils:mock_expect(Workers, identity, get_or_fetch,
         fun(#token{value = ?TOKEN}) ->
-            {ok, #identity{}}
+            {ok, #document{value = #identity{}}}
         end
     ).
 
