@@ -72,7 +72,8 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes list operation. In order to get records, use list_next/2 afterwards.
+%% Traverses entire or part of table. Acts simililar to erlang:foldl except that it may be interrupted
+%% by returning {abort, Acc} from given fun.
 %% @end
 %%--------------------------------------------------------------------
 -callback list(model_behaviour:model_config(), Fun :: datastore:list_fun(), AccIn :: term()) ->
