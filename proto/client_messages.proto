@@ -15,9 +15,9 @@ import "event_messages.proto";
 import "ping_messages.proto";
 
 message ClientMessage {
-    optional bytes         message_id     = 1; // should be set when response is
+    optional bytes         message_id      = 1; // should be set when response is
                                                // expected
-    optional MessageStream message_stream = 2; // identifies message as part of
+    optional MessageStream message_stream  = 2; // identifies message as part of
                                                // a stream
     oneof message_body { // list of messages that can be sent from
                          // the client to the server
