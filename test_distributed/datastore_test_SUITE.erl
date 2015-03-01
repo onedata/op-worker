@@ -132,8 +132,7 @@ global_cache_atomic_update_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    test_node_starter:prepare_test_environment(Config,
-        ?TEST_FILE(Config, "env_desc.json"), ?MODULE).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

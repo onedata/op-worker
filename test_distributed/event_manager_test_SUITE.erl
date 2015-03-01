@@ -18,6 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -31,6 +32,7 @@
     event_manager_test/1
 ]).
 
+-perf_test({perf_cases, []}).
 all() -> [
     event_stream_test,
     event_stream_periodic_emission_test,
@@ -245,8 +247,7 @@ event_manager_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    test_node_starter:prepare_test_environment(Config,
-        ?TEST_FILE(Config, "env_desc.json"), ?MODULE).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

@@ -29,7 +29,7 @@
 %% with ccm (connected or not_connected).
 -record(node_state, {
     node_type = worker :: worker | ccm,
-    ccm_con_status = not_connected :: not_connected | connected | ok,
+    ccm_con_status = not_connected :: not_connected | connected | registered,
     state_num = 0 :: integer(),
     dispatcher_state = 0 :: integer()
 }).
@@ -243,32 +243,30 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_heartbeat(State :: #node_state{}) -> #node_state{}.
-do_heartbeat(State = #node_state{ccm_con_status = ok}) ->
-    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_success_interval),
+do_heartbeat(State = #node_state{ccm_con_status = registered}) ->
+    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_success_interval_seconds),
     gen_server:cast({global, ?CCM}, {heartbeat, node()}),
-    erlang:send_after(Interval * 1000, self(), {timer, do_heartbeat}),
+    erlang:send_after(timer:seconds(Interval), self(), {timer, do_heartbeat}),
     State;
 do_heartbeat(State = #node_state{ccm_con_status = connected}) ->
-    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_fail_interval),
+    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_fail_interval_seconds),
     gen_server:cast({global, ?CCM}, {heartbeat, node()}),
-    erlang:send_after(Interval * 1000, self(), {timer, do_heartbeat}),
+    erlang:send_after(timer:seconds(Interval), self(), {timer, do_heartbeat}),
     State;
 do_heartbeat(State = #node_state{ccm_con_status = not_connected}) ->
     {ok, CcmNodes} = application:get_env(?APP_NAME, ccm_nodes),
+    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_fail_interval_seconds),
+    erlang:send_after(timer:seconds(Interval), self(), {timer, do_heartbeat}),
     case (catch init_net_connection(CcmNodes)) of
         ok ->
-            {ok, Interval} = application:get_env(?APP_NAME, heartbeat_fail_interval),
             gen_server:cast({global, ?CCM}, {heartbeat, node()}),
-            erlang:send_after(Interval * 1000, self(), {timer, do_heartbeat}),
 
             %% Initialize datastore
             datastore:ensure_state_loaded(),
 
             State#node_state{ccm_con_status = connected};
         Err ->
-            {ok, Interval} = application:get_env(?APP_NAME, heartbeat_fail_interval),
             ?debug("No connection with CCM: ~p, retrying in ~p s", [Err, Interval]),
-            erlang:send_after(Interval * 1000, self(), {timer, do_heartbeat}),
             State#node_state{ccm_con_status = not_connected}
     end.
 
@@ -280,12 +278,12 @@ do_heartbeat(State = #node_state{ccm_con_status = not_connected}) ->
 %%--------------------------------------------------------------------
 -spec on_ccm_state_change(NewStateNum :: integer(), State :: term()) -> #node_state{}.
 on_ccm_state_change(NewStateNum, State = #node_state{state_num = NewStateNum, dispatcher_state = NewStateNum}) ->
-    ?debug("heartbeat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
-    State#node_state{ccm_con_status = ok};
+    ?debug("heartbeat on node: ~p: answered, new state_num: ~p", [node(), NewStateNum]),
+    State#node_state{ccm_con_status = registered};
 on_ccm_state_change(NewStateNum, State) ->
-    ?debug("heartbeat on node: ~p: answered, new state_num: ~p, new callback_num: ~p", [node(), NewStateNum]),
+    ?debug("heartbeat on node: ~p: answered, new state_num: ~p", [node(), NewStateNum]),
     update_dispatcher(NewStateNum),
-    State#node_state{state_num = NewStateNum, ccm_con_status = ok}.
+    State#node_state{state_num = NewStateNum, ccm_con_status = registered}.
 
 %%--------------------------------------------------------------------
 %% @private

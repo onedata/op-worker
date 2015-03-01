@@ -51,10 +51,10 @@ init(_Type, Req, _Opts) ->
 %%--------------------------------------------------------------------
 -spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
 handle(Req, State) ->
-    {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
+    {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout_seconds),
 
     NewReq =
-        case get_cluster_status(Timeout) of
+        case get_cluster_status(timer:seconds(Timeout)) of
             error ->
                 {ok, Req2} = opn_cowboy_bridge:apply(cowboy_req, reply, [500, Req]),
                 Req2;
