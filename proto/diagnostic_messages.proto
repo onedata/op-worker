@@ -12,3 +12,11 @@ message Ping {
 
 message Pong {
 }
+
+message GetProtocolVersion {
+}
+
+message ProtocolVersion {
+  required uint32 version_major = 1;
+  required uint32 version_minor = 2;
+}
