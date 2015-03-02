@@ -35,7 +35,8 @@ message ServerMessage {
         // event_messages.proto
         EventSubscription      event_subscription      = 8;
 
-        // ping_messages.proto
+        // diagnostic_messages.proto
         Pong                   pong                    = 9;
+        ProtocolVersion        protocol_version        = 10;
     }
 }

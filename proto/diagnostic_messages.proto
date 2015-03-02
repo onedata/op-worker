@@ -1,5 +1,5 @@
 /**
- * Ping messages used to check connection.
+ * Diagnostic messages used to check connection, and get protocol version.
  * @author Tomasz Lichon
  * @copyright (C) 2015 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in
