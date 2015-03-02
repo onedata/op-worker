@@ -17,6 +17,6 @@ message GetProtocolVersion {
 }
 
 message ProtocolVersion {
-  required uint32 version_major = 1;
-  required uint32 version_minor = 2;
+  optional uint32 version_major = 1 [default = 3];
+  optional uint32 version_minor = 2 [default = 0];
 }
