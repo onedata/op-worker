@@ -19,9 +19,6 @@
 
 -export([rest_mocks/0, tcp_server_mocks/0]).
 
-% This function should return a list of #rest_mock{} records,
-% which in essence hold mappings {Port, Path} -> {Response}.
-% If a request is performed on certain port and certain path, the response will be returned.
 rest_mocks() -> [
     #rest_mock{port = 8443, path = <<"/user">>,
         response = fun(Req, State) ->
@@ -39,8 +36,4 @@ rest_mocks() -> [
         initial_state = undefined}
 ].
 
-
-% This function should return a list of #tcp_server_mock{} records. A TCP server will be
-% started for each such record. Later on in remote control, the port number is used to uniquely
-% identify a server.
 tcp_server_mocks() -> [].

@@ -46,8 +46,6 @@ all() ->
         sequential_ping_pong_test, multi_connection_test, bandwidth_test,
         python_client_test].
 
--define(CLEANUP, true).
-
 -define(TOKEN, <<"TOKEN_VALUE">>).
 
 %%%===================================================================
@@ -489,10 +487,7 @@ init_per_suite(Config) ->
         ?TEST_FILE(Config, "env_desc.json"), ?MODULE).
 
 end_per_suite(Config) ->
-    case ?CLEANUP of
-        true -> test_node_starter:clean_environment(Config);
-        false -> ok
-    end.
+    test_node_starter:clean_environment(Config).
 
 init_per_testcase(cert_connection_test, Config) ->
     ssl:start(),

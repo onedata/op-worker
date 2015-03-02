@@ -40,7 +40,7 @@ get_gr_url() ->
 %% Should return a path to file containing provider's private key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_key_path() -> string().
+-spec get_key_path() -> file:name_all().
 get_key_path() ->
     {ok, KeyFile} = application:get_env(?APP_NAME, global_registry_provider_key_path),
     KeyFile.
@@ -51,7 +51,7 @@ get_key_path() ->
 %% public certificate signed by Global Registry.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cert_path() -> string().
+-spec get_cert_path() -> file:name_all().
 get_cert_path() ->
     {ok, CertFile} = application:get_env(?APP_NAME, global_registry_provider_cert_path),
     CertFile.
@@ -62,7 +62,7 @@ get_cert_path() ->
 %% CA certificate.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cacert_path() -> string().
+-spec get_cacert_path() -> file:name_all().
 get_cacert_path() ->
     {ok, CACertFile} = application:get_env(?APP_NAME, global_registry_ca_cert_path),
     CACertFile.

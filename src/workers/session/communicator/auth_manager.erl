@@ -65,8 +65,7 @@ authenticate_using_token(Token) ->
 %% Authenticate client using given certificate. Returns client identity.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_certificate(#certificate_info{}) ->
-    #identity{}.
+-spec authenticate_using_certificate(#certificate_info{}) -> {ok, #identity{}}.
 authenticate_using_certificate(_CertInfo) ->
     %identity:get_or_fetch(_CertInfo). todo integrate with identity model
     {ok, #identity{}}.
