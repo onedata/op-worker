@@ -57,14 +57,20 @@ start_protocol_listener() ->
     {ok, Port} = application:get_env(?APP_NAME, protocol_handler_port),
     {ok, DispatcherPoolSize} = application:get_env(?APP_NAME, protocol_handler_pool_size),
     {ok, CertFile} = application:get_env(?APP_NAME, protocol_handler_ssl_cert_path),
+    Ip = case application:get_env(?APP_NAME, protocol_handler_bind_addr) of
+             {ok, loopback} -> {127, 0, 0, 1};
+             {ok, all} -> {0, 0, 0, 0}
+         end,
 
     LocalPort = oneproxy:get_local_port(Port),
-    Pid = spawn_link(fun() -> oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_peer, no_http) end),
+    Pid = spawn_link(fun() ->
+        oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_peer, no_http)
+    end),
     register(?ONEPROXY_PROTOCOL_LISTENER, Pid),
 
     {ok, _} = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
         ranch_tcp, [
-            {ip, {127, 0, 0, 1}}, %todo listen 0.0.0.0 in tests
+            {ip, Ip},
             {port, LocalPort}
         ],
         connection, []
@@ -87,7 +93,9 @@ start_gui_listener() ->
     {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
 
     LocalPort = oneproxy:get_local_port(GuiPort),
-    spawn_link(fun() -> oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none) end),
+    spawn_link(fun() ->
+        oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none)
+    end),
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
@@ -179,7 +187,9 @@ start_rest_listener() ->
     {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
     {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
     LocalPort = oneproxy:get_local_port(RestPort),
-    Pid = spawn_link(fun() -> oneproxy:start_rproxy(RestPort, LocalPort, Cert, verify_peer) end),
+    Pid = spawn_link(fun() ->
+        oneproxy:start_rproxy(RestPort, LocalPort, Cert, verify_peer)
+    end),
     register(?ONEPROXY_REST, Pid),
 
     RestDispatch = [
@@ -236,13 +246,15 @@ start_dns_listeners() ->
 stop_listeners() ->
     Listeners = [?HTTP_REDIRECTOR_LISTENER, ?REST_LISTENER, ?HTTPS_LISTENER, ?SESSION_LOGIC_MODULE],
     Results = lists:map(
-        fun (?SESSION_LOGIC_MODULE) -> catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE);
+        fun(?SESSION_LOGIC_MODULE) ->
+            catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE);
             (X) -> {X, catch cowboy:stop_listener(X)}
         end, Listeners),
     lists:foreach(
-        fun ({_, ok}) -> ok;
+        fun({_, ok}) -> ok;
             (ok) -> ok;
-            ({X, Error}) -> ?error("Error on stopping listener ~p: ~p", [X, Error])
+            ({X, Error}) ->
+                ?error("Error on stopping listener ~p: ~p", [X, Error])
         end, Results).
 
 %%%===================================================================

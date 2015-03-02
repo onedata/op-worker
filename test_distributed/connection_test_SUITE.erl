@@ -529,7 +529,8 @@ init_per_testcase(cert_connection_test, Config) ->
 init_per_testcase(Case, Config) when Case =:= protobuf_msg_test
     orelse Case =:= multi_message_test
     orelse Case =:= client_communiate_async_test
-    orelse Case =:= bandwidth_test ->
+    orelse Case =:= bandwidth_test
+    orelse Case =:= python_client_test ->
     ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, router),
@@ -564,6 +565,8 @@ end_per_testcase(python_client_test, Config) ->
     file:delete(?TEST_FILE(Config, "ssl_client.py")),
     file:delete(?TEST_FILE(Config, "message.arg")),
     unmock_identity(Workers),
+    test_utils:mock_validate(Workers, router),
+    test_utils:mock_unload(Workers, router),
     ssl:stop();
 
 end_per_testcase(_, Config) ->
