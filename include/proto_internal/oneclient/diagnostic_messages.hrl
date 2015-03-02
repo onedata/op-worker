@@ -6,15 +6,22 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Internal version of Ping and Pong protocol messages
+%%% Internal version of diagnostic protocol messages
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(PING_MESSAGES_HRL).
--define(PING_MESSAGES_HRL, 1).
+-ifndef(DIAGNOSTIC_MESSAGES_HRL).
+-define(DIAGNOSTIC_MESSAGES_HRL, 1).
 
 -record(ping,{}).
 
 -record(pong,{}).
+
+-record(get_protocol_version, {}).
+
+-record(protocol_version, {
+    major = 3 :: non_neg_integer(),
+    minor = 0 :: non_neg_integer()
+}).
 
 -endif.

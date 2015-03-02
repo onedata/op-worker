@@ -35,7 +35,7 @@
     multi_message_test/1, client_send_test/1, client_communicate_test/1,
     client_communiate_async_test/1, multi_ping_pong_test/1,
     sequential_ping_pong_test/1, multi_connection_test/1, bandwidth_test/1,
-    python_client_test/1]).
+    python_client_test/1, proto_version_test/1]).
 
 -perf_test({perf_cases, [multi_message_test, multi_ping_pong_test,
     sequential_ping_pong_test, multi_connection_test, bandwidth_test]}).
@@ -44,7 +44,7 @@ all() ->
         multi_message_test, client_send_test, client_communicate_test,
         client_communiate_async_test, multi_ping_pong_test,
         sequential_ping_pong_test, multi_connection_test, bandwidth_test,
-        python_client_test].
+        python_client_test, proto_version_test].
 
 -define(TOKEN, <<"TOKEN_VALUE">>).
 
@@ -478,6 +478,36 @@ python_client_test(Config) ->
     _FullTime = {full_time, timer:now_diff(T2, T1)},
     catch port_close(PythonClient).
 %%     ct:print("~p", [_FullTime]).
+
+proto_version_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    MsgId = <<"message_id">>,
+    GetProtoVersion = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {get_protocol_version, #'GetProtocolVersion'{}}
+    },
+    GetProtoVersionRaw = client_messages:encode_msg(GetProtoVersion),
+    {ok, {Sock, _}} = connect_via_token(Worker1),
+
+    % when
+    ok = ssl:send(Sock, GetProtoVersionRaw),
+    ProtoVersion = receive_server_message(),
+
+    %then
+    ?assertMatch(
+        #'ServerMessage'{
+            message_id = MsgId,
+            message_body = {protocol_version, #'ProtocolVersion'{}}
+        },
+        ProtoVersion
+    ),
+    #'ServerMessage'{
+        message_body = {_, #'ProtocolVersion'{major = Major, minor = Minor}}
+    } = ProtoVersion,
+    ?assert(is_integer(Major)),
+    ?assert(is_integer(Minor)),
+    ok = ssl:close(Sock).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

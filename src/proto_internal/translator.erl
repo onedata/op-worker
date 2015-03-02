@@ -19,7 +19,7 @@
 -include("proto_internal/oneclient/stream_messages.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
 -include("proto_internal/oneclient/event_messages.hrl").
--include("proto_internal/oneclient/ping_messages.hrl").
+-include("proto_internal/oneclient/diagnostic_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -63,6 +63,8 @@ translate_from_protobuf(#'Token'{value = Val}) ->
     #token{value = Val};
 translate_from_protobuf(#'Ping'{}) ->
     #ping{};
+translate_from_protobuf(#'GetProtocolVersion'{}) ->
+    #get_protocol_version{};
 translate_from_protobuf(#'Data'{data = Data}) ->
     #data{data = Data};
 translate_from_protobuf(undefined) ->
@@ -121,6 +123,8 @@ translate_to_protobuf(#message_acknowledgement{stm_id = StmId, seq_num = SeqNum}
     #'MessageAcknowledgement'{stm_id = StmId, seq_num = SeqNum};
 translate_to_protobuf(#pong{}) ->
     #'Pong'{};
+translate_to_protobuf(#protocol_version{major = Major, minor = Minor}) ->
+    #'ProtocolVersion'{major = Major, minor = Minor};
 translate_to_protobuf(undefined) ->
     undefined.
 
