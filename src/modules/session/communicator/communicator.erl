@@ -204,6 +204,10 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_info({timer, Msg}, State) ->
+    gen_server:cast(self(), Msg),
+    {noreply, State};
+
 handle_info(_Info, State) ->
     ?log_bad_request(_Info),
     {noreply, State}.
@@ -247,27 +251,24 @@ code_change(_OldVsn, State, _Extra) ->
 -spec try_send(Msg :: #server_message{}, Connections :: [pid()]) ->
     ok | {error, Reason :: term()}.
 try_send(Msg, Connections) ->
-    RandomIndex = random:uniform(length(Connections)),
-    RandomConnection = lists:nth(RandomIndex, Connections),
+    [RandomConnection | _] =
+        try utils:random_shuffle(Connections)
+        catch _:_ -> error_empty_connection_pool
+        end,
     CommunicatorPid = self(),
     spawn_link( %todo test performance of spawning vs notifying about each message
         fun() ->
-             try connection:send(RandomConnection, Msg) of
-                 ok -> ok;
-                 {error, serialization_error} ->
-                     ?error("Could not send message ~p, due to serialization problems, aborting.",
-                        [Msg]);
-                 Error ->
-                     ?warning("Could not send message ~p, due to connection problems: ~p, retrying in ~p seconds.",
+            try connection:send(RandomConnection, Msg) of
+                ok -> ok;
+                Error ->
+                    ?warning("Could not send message ~p, due to error: ~p, retrying in ~p seconds.",
                         [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
-                     timer:sleep(?MSG_RETRANSMISSION_INTERVAL),
-                     gen_server:cast(CommunicatorPid, {send, Msg})
-             catch
-                 _:Error ->
-                     ?error_stacktrace("Could not send message ~p, due error: ~p, retrying in ~p seconds.",
-                         [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
-                     timer:sleep(?MSG_RETRANSMISSION_INTERVAL),
-                     gen_server:cast(CommunicatorPid, {send, Msg})
-             end
+                    erlang:send_after(?MSG_RETRANSMISSION_INTERVAL, CommunicatorPid, {timer, {send, Msg}})
+            catch
+                _:Error ->
+                    ?warning_stacktrace("Could not send message ~p, due error: ~p, retrying in ~p seconds.",
+                        [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
+                    erlang:send_after(?MSG_RETRANSMISSION_INTERVAL, CommunicatorPid, {timer, {send, Msg}})
+            end
         end),
     ok.
