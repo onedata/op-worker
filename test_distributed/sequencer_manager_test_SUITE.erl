@@ -13,7 +13,7 @@
 -author("Krzysztof Trzepla").
 
 -include("global_definitions.hrl").
--include("workers/datastore/models/session.hrl").
+-include("modules/datastore/models/session.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/stream_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
