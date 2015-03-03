@@ -56,7 +56,7 @@
                     "name": "gr@"
                 },
                 "sys.config": {
-                    "app_description_file": "./gr_mock_description.erl"
+                    "app_description_file": "./gr_mock_description.erl.cfg"
                 }
             }
         }

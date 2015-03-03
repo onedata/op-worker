@@ -26,6 +26,7 @@ distclean:
 ##
 
 rel: generate
+	make -C appmock/ rel
 
 relclean:
 	rm -rf rel/test_cluster
