@@ -211,7 +211,7 @@ create_users(Config, SetupDir) ->
 %% source_provider_key_and_cert/1
 %% ====================================================================
 %% @doc Copies oneprovider's private key and certificate, signed by globalregistry,
-%% from given source to certificate directory on all workers.
+%% from given source to certificate directory on all modules.
 %% @end
 -spec source_provider_key_and_cert(Config :: [{Key :: binary(), Values :: term()}]) -> ok.
 %% ====================================================================
