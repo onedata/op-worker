@@ -156,7 +156,7 @@ handle_call({event_stream_initialized, SubId}, {EvtStm, _}, #state{
                 gen_server:cast(EvtStm, Msg)
             end, lists:reverse(PendingMsgs)),
             {reply, {ok, EvtStmState}, State#state{event_streams =
-            lists:keyreplace(SubId, 1, EvtStms, {SubId, {running, EvtStm, AdmRule}})
+                lists:keyreplace(SubId, 1, EvtStms, {SubId, {running, EvtStm, AdmRule}})
             }};
         _ ->
             {reply, undefined, State}

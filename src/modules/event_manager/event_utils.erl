@@ -60,14 +60,11 @@ aggregate_blocks([], [Block | Blocks], AggBlocks) ->
 aggregate_blocks([Block | Blocks], [], AggBlocks) ->
     aggregate_blocks(Blocks, [], aggregate_block(Block, AggBlocks));
 aggregate_blocks([#file_block{offset = Offset1} = Block1 | Blocks1],
-    [#file_block{offset = Offset2} = Block2 | Blocks2], AggBlocks)
+    [#file_block{offset = Offset2} | _] = Blocks2, AggBlocks)
     when Offset1 < Offset2 ->
-    NewAggBlocks = aggregate_block(Block1, AggBlocks),
-    aggregate_blocks(Blocks1, [Block2 | Blocks2], NewAggBlocks);
-aggregate_blocks([#file_block{} = Block1 | Blocks1],
-    [#file_block{} = Block2 | Blocks2], AggBlocks) ->
-    NewAggBlocks = aggregate_block(Block2, AggBlocks),
-    aggregate_blocks([Block1 | Blocks1], Blocks2, NewAggBlocks).
+    aggregate_blocks(Blocks1, Blocks2, aggregate_block(Block1, AggBlocks));
+aggregate_blocks(Blocks1, [#file_block{} = Block2 | Blocks2], AggBlocks) ->
+    aggregate_blocks(Blocks1, Blocks2, aggregate_block(Block2, AggBlocks)).
 
 %%--------------------------------------------------------------------
 %% @private
