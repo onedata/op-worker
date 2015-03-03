@@ -55,12 +55,12 @@ start_link(SessId, Con) ->
     ignore.
 init([SessId, Con]) ->
     RestartStrategy = one_for_all,
-    MaxR = 0,
-    MaxT = 1,
+    MaxRestarts = 0,
+    RestartTimeWindowSecs = 1,
 
     {ok, SessId} = session:update(SessId, #{session_sup => self(), node => node()}),
 
-    {ok, {{RestartStrategy, MaxR, MaxT}, [
+    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
         communicator_spec(SessId, Con),
         sequencer_manager_sup_spec(SessId),
         event_manager_sup_spec(SessId)

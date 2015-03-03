@@ -56,9 +56,9 @@ start_link(SessId) ->
     ignore.
 init([SessId]) ->
     RestartStrategy = one_for_all,
-    MaxR = 3,
-    MaxT = 1,
-    {ok, {{RestartStrategy, MaxR, MaxT}, [
+    MaxRestarts = 3,
+    RestartTimeWindowSecs = 1,
+    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
         event_stream_sup_spec(),
         event_manager_spec(self(), SessId)
     ]}}.

@@ -16,11 +16,13 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([nagios_test/1]).
 
+-perf_test({perf_cases, []}).
 all() -> [nagios_test].
 
 % Path to nagios endpoint
@@ -63,7 +65,7 @@ nagios_test(Config) ->
     lists:foreach(
         fun({WNode, WName}) ->
             WorkersOnNode = proplists:get_value(atom_to_list(WNode), WorkersByNodeXML),
-            ?assert(lists:member(WName, WorkersOnNode))
+            ?assertEqual(true, lists:member(WName, WorkersOnNode))
         end, Workers),
 
     % Check if every node's status contains dispatcher and node manager status

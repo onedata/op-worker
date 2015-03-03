@@ -179,7 +179,7 @@ handle_info(_Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{stream_id = StmId, sequencer_manager = SeqMan} = State) ->
     NewState = send_message_ack(State),
-    ?warning("Sequencer stream closed in state ~p due to: ~p", [NewState, Reason]),
+    ?log_terminate(Reason, NewState),
     gen_server:cast(SeqMan, {sequencer_stream_terminated, StmId, Reason, NewState}).
 
 %%--------------------------------------------------------------------

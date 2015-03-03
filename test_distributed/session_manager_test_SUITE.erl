@@ -60,7 +60,7 @@ session_manager_test(Config) ->
 
         AnswersWithoutCreatedAnswer = lists:delete({ok, created}, Answers),
         ?assertNotEqual(Answers, AnswersWithoutCreatedAnswer),
-        ?assert(lists:all(fun(Answer) ->
+        ?assertEqual(true, lists:all(fun(Answer) ->
             Answer =:= {ok, reused}
         end, AnswersWithoutCreatedAnswer)),
 
@@ -84,7 +84,7 @@ session_manager_test(Config) ->
 
         % Check session infrastructure is running.
         lists:foreach(fun(Pid) ->
-            ?assert(is_pid(Pid)),
+            ?assertEqual(true, is_pid(Pid)),
             ?assertNotEqual(undefined, rpc:call(Node, erlang, process_info, [Pid]))
         end, [SessSup, EvtMan, SeqMan, Comm]),
 
@@ -101,8 +101,8 @@ session_manager_test(Config) ->
     end, lists:zip(Pids1, Pids2)),
 
     % Check supervision tree structure.
-    ?assert(is_child({session_manager_worker_sup, Node1}, SessSup1)),
-    ?assert(is_child({session_manager_worker_sup, Node2}, SessSup2)),
+    ?assertEqual(true, is_child({session_manager_worker_sup, Node1}, SessSup1)),
+    ?assertEqual(true, is_child({session_manager_worker_sup, Node2}, SessSup2)),
     [
         [EvtManSup1, SeqManSup1, Comm1],
         [EvtManSup2, SeqManSup2, Comm2]
@@ -115,7 +115,7 @@ session_manager_test(Config) ->
         end, [event_manager_sup, sequencer_manager_sup, communicator])
     end, [SessSup1, SessSup2]),
     lists:foreach(fun({Sup, Child}) ->
-        ?assert(is_child(Sup, Child))
+        ?assertEqual(true, is_child(Sup, Child))
     end, [{EvtManSup1, EvtMan1}, {SeqManSup1, SeqMan1},
         {EvtManSup2, EvtMan2}, {SeqManSup2, SeqMan2}]),
 
@@ -155,14 +155,14 @@ session_getters_test(Config) ->
         Answer = rpc:call(Worker, session, GetterName, [SessId]),
         ?assertMatch({ok, _}, Answer),
         {ok, Pid} = Answer,
-        ?assert(is_pid(Pid))
+        ?assertEqual(true, is_pid(Pid))
     end, [get_event_manager, get_sequencer_manager, get_communicator]),
 
     Answer = rpc:call(Worker, session, get_session_supervisor_and_node, [SessId]),
     ?assertMatch({ok, {_, _}}, Answer),
     {ok, {Pid, Node}} = Answer,
-    ?assert(is_pid(Pid)),
-    ?assert(is_atom(Node)),
+    ?assertEqual(true, is_pid(Pid)),
+    ?assertEqual(true, is_atom(Node)),
 
     ok.
 
@@ -210,7 +210,7 @@ end_per_suite(Config) ->
 init_per_testcase(session_manager_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     Self = self(),
-    
+
     test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun
         (_, _) -> ok

@@ -209,7 +209,8 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #sock_state{}) -> term().
-terminate(_Reason, #sock_state{session_id = Id}) ->
+terminate(Reason, #sock_state{session_id = Id} = State) ->
+    ?log_terminate(Reason, State),
     catch communicator:remove_connection(Id, self()),
     ok.
 

@@ -56,9 +56,9 @@ start_link(SessId) ->
     ignore.
 init([SessId]) ->
     RestartStrategy = one_for_all,
-    MaxR = 3,
-    MaxT = timer:minutes(1),
-    {ok, {{RestartStrategy, MaxR, MaxT}, [
+    MaxRestarts = 3,
+    RestartTimeWindowSecs = 1,
+    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
         sequencer_stream_sup_spec(),
         sequencer_manager_spec(self(), SessId)
     ]}}.

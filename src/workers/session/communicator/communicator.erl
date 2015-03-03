@@ -220,7 +220,7 @@ handle_info(_Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
-    ?warning("Communicator terminated in state ~p due to: ~p", [State, Reason]),
+    ?log_terminate(Reason, State),
     session_manager:remove_session(SessId).
 
 %%--------------------------------------------------------------------

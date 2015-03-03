@@ -93,9 +93,9 @@ cleanup() ->
     {RestartStrategy :: supervisor:strategy(), MaxR :: integer(), MaxT :: integer()}.
 supervisor_spec() ->
     RestartStrategy = simple_one_for_one,
-    MaxR = 1,
-    MaxT = 1,
-    {RestartStrategy, MaxR, MaxT}.
+    MaxRestarts = 0,
+    RestartTimeWindowSecs = 1,
+    {RestartStrategy, MaxRestarts, RestartTimeWindowSecs}.
 
 %%--------------------------------------------------------------------
 %% @doc

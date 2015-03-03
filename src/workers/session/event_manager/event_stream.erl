@@ -173,7 +173,7 @@ handle_info(_Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
 terminate(Reason, #state{subscription_id = SubId, event_manager = EvtMan} = State) ->
-    ?warning("Event stream closed in state ~p due to: ~p", [State, Reason]),
+    ?log_terminate(Reason, State),
     gen_server:cast(EvtMan, {event_stream_terminated, SubId, Reason, State}).
 
 %%--------------------------------------------------------------------

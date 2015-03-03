@@ -76,9 +76,11 @@ stop_event_stream(EvtStmSup, EvtStm) ->
     ignore.
 init([]) ->
     RestartStrategy = simple_one_for_one,
-    MaxR = 3,
-    MaxT = 1,
-    {ok, {{RestartStrategy, MaxR, MaxT}, [event_stream_spec()]}}.
+    MaxRestarts = 3,
+    RestartTimeWindowSecs = 1,
+    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
+        event_stream_spec()
+    ]}}.
 
 %%%===================================================================
 %%% Internal functions

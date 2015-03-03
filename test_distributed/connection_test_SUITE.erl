@@ -23,6 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -31,12 +32,11 @@
     multi_message_test/1, client_send_test/1, client_communicate_test/1,
     client_communiate_async_test/1]).
 
+-perf_test({perf_cases, []}).
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
         multi_message_test, client_send_test, client_communicate_test,
         client_communiate_async_test].
-
--define(CLEANUP, true).
 
 %%%===================================================================
 %%% Test function
@@ -78,14 +78,12 @@ cert_connection_test(Config) ->
     % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ?assertMatch(#certificate_info{}, CertInfo),
-    ?assertNotEqual(undefined, CertInfo#certificate_info.client_session_id),
-    ?assertNotEqual(undefined, CertInfo#certificate_info.client_subject_dn),
-    ?assert(is_binary(CertInfo#certificate_info.client_session_id)),
-    ?assert(is_binary(CertInfo#certificate_info.client_subject_dn)),
+    ?assertMatch(<<_/binary>>, CertInfo#certificate_info.client_session_id),
+    ?assertMatch(<<_/binary>>, CertInfo#certificate_info.client_subject_dn),
     HandshakeResponse = server_messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{session_id =
     SessionId}}} = HandshakeResponse,
-    ?assert(is_binary(SessionId)),
+    ?assertMatch(<<_/binary>>, SessionId),
     ok = ssl:close(Sock),
     ?assertMatch({error, _}, ssl:connection_info(Sock)).
 
@@ -247,15 +245,12 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    case ?CLEANUP of
-        true -> test_node_starter:clean_environment(Config);
-        false -> ok
-    end.
+    test_node_starter:clean_environment(Config).
 
 init_per_testcase(cert_connection_test, Config) ->
     ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, serializator),
+    test_utils:mock_new(Workers, [serializator]),
     Config;
 
 init_per_testcase(Case, Config) when Case =:= protobuf_msg_test
@@ -263,7 +258,7 @@ init_per_testcase(Case, Config) when Case =:= protobuf_msg_test
     orelse Case =:= client_communiate_async_test ->
     ssl:start(),
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, router),
+    test_utils:mock_new(Workers, [router]),
     Config;
 
 init_per_testcase(_, Config) ->
@@ -333,7 +328,7 @@ connect_via_token(Node, SocketOpts) ->
         after timer:seconds(5) ->
             {error, timeout}
         end,
-    ?assert(is_binary(Data)),
+    ?assertMatch(<<_/binary>>, Data),
     ServerMsg = server_messages:decode_msg(Data, 'ServerMessage'),
     ?assertMatch(#'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{}}}, ServerMsg),
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
