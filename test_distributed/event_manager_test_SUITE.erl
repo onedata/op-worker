@@ -26,18 +26,26 @@
 
 %% tests
 -export([
-    event_stream_test/1,
-    event_stream_periodic_emission_test/1,
+    subscription_creation_and_cancellation_test/1,
+    events_with_the_same_file_id_aggregation_test/1,
+    events_with_different_file_id_aggregation_test/1,
+    event_stream_emission_rule_test/1,
+    event_stream_emission_time_test/1,
     event_stream_crash_test/1,
-    event_manager_test/1
+    multiple_subscription_test/1,
+    multiple_handlers_test/1
 ]).
 
 -perf_test({perf_cases, []}).
 all() -> [
-    event_stream_test,
-    event_stream_periodic_emission_test,
+    subscription_creation_and_cancellation_test,
+    events_with_the_same_file_id_aggregation_test,
+    events_with_different_file_id_aggregation_test,
+    event_stream_emission_rule_test,
+    event_stream_emission_time_test,
     event_stream_crash_test,
-    event_manager_test
+    multiple_subscription_test,
+    multiple_handlers_test
 ].
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -46,8 +54,7 @@ all() -> [
 %%% Test function
 %%%====================================================================
 
-%% Test single subscription and execution of event handler.
-event_stream_test(Config) ->
+subscription_creation_and_cancellation_test(Config) ->
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId1 = <<"session_id_1">>,
@@ -71,36 +78,8 @@ event_stream_test(Config) ->
     ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
-    % Emit events.
-    lists:foreach(fun(N) ->
-        emit(Worker1, #write_event{size = 1, counter = 1, file_size = N + 1,
-            blocks = [#file_block{offset = N, size = 1}]}, SessId1)
-    end, lists:seq(0, 5)),
-
-    % Check whether handlers have been executed.
-    ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
-        counter = 6, size = 6, file_size = 6,
-        blocks = [#file_block{offset = 0, size = 6}]
-    }]}, ?TIMEOUT)),
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
-
-    FileId1 = <<"file_id_1">>,
-    FileId2 = <<"file_id_2">>,
-
-    % Check aggregation of 'different' events.
-    lists:foreach(fun(FileId) ->
-        lists:foreach(fun(Evt) ->
-            emit(Worker1, Evt, SessId2)
-        end, lists:duplicate(3, #write_event{
-            file_id = FileId, counter = 1, size = 1, file_size = 1
-        }))
-    end, [FileId1, FileId2]),
-
-    ?assertMatch({ok, _}, test_utils:receive_msg({handler, [
-        #write_event{file_id = FileId2, counter = 3, size = 3, file_size = 1},
-        #write_event{file_id = FileId1, counter = 3, size = 3, file_size = 1}
-    ]}, ?TIMEOUT)),
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
+    % Check subscription has been added to distributed cache.
+    ?assertMatch({ok, [_]}, rpc:call(Worker1, subscription, list, [])),
 
     % Unsubscribe and check subscription cancellation message has been sent to
     % clients
@@ -111,13 +90,119 @@ event_stream_test(Config) ->
         test_utils:receive_any(?TIMEOUT)),
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
+    % Check subscription has been removed from distributed cache.
+    ?assertEqual({ok, []}, rpc:call(Worker1, subscription, list, [])),
+
     session_teardown(Worker1, SessId2),
     session_teardown(Worker2, SessId1),
 
     ok.
 
-%% Test periodic emission of aggregated events.
-event_stream_periodic_emission_test(Config) ->
+events_with_the_same_file_id_aggregation_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
+    FileId = <<"file_id">>,
+    SessId = <<"session_id">>,
+    Cred = #credentials{user_id = <<"user_id">>},
+
+    session_setup(Worker, SessId, Cred, Self),
+
+    {ok, SubId} = subscribe(Worker,
+        all,
+        fun(#write_event{}) -> true; (_) -> false end,
+        fun(Meta) -> Meta >= 6 end,
+        [fun(Evts) -> Self ! {handler, Evts} end]
+    ),
+
+    % Emit events.
+    lists:foreach(fun(N) ->
+        emit(Worker, #write_event{file_id = FileId, size = 1, counter = 1,
+            file_size = N + 1, blocks = [#file_block{offset = N, size = 1}]}, SessId)
+    end, lists:seq(0, 5)),
+
+    % Check whether events have been aggregated and handler has been executed.
+    ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
+        file_id = FileId, counter = 6, size = 6, file_size = 6,
+        blocks = [#file_block{offset = 0, size = 6}]
+    }]}, ?TIMEOUT)),
+
+    unsubscribe(Worker, SubId),
+    session_teardown(Worker, SessId),
+
+    ok.
+
+events_with_different_file_id_aggregation_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
+    SessId = <<"session_id">>,
+    Cred = #credentials{user_id = <<"user_id">>},
+
+    session_setup(Worker, SessId, Cred, Self),
+
+    {ok, SubId} = subscribe(Worker,
+        all,
+        fun(#write_event{}) -> true; (_) -> false end,
+        fun(Meta) -> Meta >= 6 end,
+        [fun(Evts) -> Self ! {handler, Evts} end]
+    ),
+
+    FileId1 = <<"file_id_1">>,
+    FileId2 = <<"file_id_2">>,
+
+    % Emit events for different files.
+    lists:foreach(fun(FileId) ->
+        lists:foreach(fun(Evt) ->
+            emit(Worker, Evt, SessId)
+        end, lists:duplicate(3, #write_event{
+            file_id = FileId, counter = 1, size = 1, file_size = 1
+        }))
+    end, [FileId1, FileId2]),
+
+    % Check whether events have been aggregated in terms of the same file ID
+    % and handler has been executed.
+    ?assertMatch({ok, _}, test_utils:receive_msg({handler, [
+        #write_event{file_id = FileId2, counter = 3, size = 3, file_size = 1},
+        #write_event{file_id = FileId1, counter = 3, size = 3, file_size = 1}
+    ]}, ?TIMEOUT)),
+
+    unsubscribe(Worker, SubId),
+    session_teardown(Worker, SessId),
+
+    ok.
+
+event_stream_emission_rule_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
+    FileId = <<"file_id">>,
+    SessId = ?config(session_id, Config),
+
+    {ok, SubId} = subscribe(Worker,
+        all,
+        fun(#write_event{}) -> true; (_) -> false end,
+        fun(Meta) -> Meta >= 10 end,
+        [fun(Evts) -> Self ! {handler, Evts} end]
+    ),
+
+    % Emit events.
+    lists:foreach(fun(N) ->
+        emit(Worker, #write_event{file_id = FileId, size = 1, counter = 1,
+            file_size = N + 1, blocks = [#file_block{offset = N, size = 1}]}, SessId)
+    end, lists:seq(0, 99)),
+
+    % Check whether events have been aggregated and handler has been executed
+    % when emission rule has been satisfied.
+    lists:foreach(fun(N) ->
+        ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
+            file_id = FileId, counter = 10, size = 10, file_size = (N + 1) * 10,
+            blocks = [#file_block{offset = N * 10, size = 10}]
+        }]}, ?TIMEOUT))
+    end, lists:seq(0, 9)),
+
+    unsubscribe(Worker, SubId),
+
+    ok.
+
+event_stream_emission_time_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Self = self(),
@@ -148,7 +233,6 @@ event_stream_periodic_emission_test(Config) ->
 
     ok.
 
-%% Test event stream reinitialization in case of crash.
 event_stream_crash_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
@@ -196,8 +280,7 @@ event_stream_crash_test(Config) ->
 
     ok.
 
-%% Test multiple subscription and execution of event handlers.
-event_manager_test(Config) ->
+multiple_subscription_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Self = self(),
@@ -242,6 +325,45 @@ event_manager_test(Config) ->
 
     ok.
 
+multiple_handlers_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
+    FileId = <<"file_id">>,
+    SessId = <<"session_id">>,
+    Cred = #credentials{user_id = <<"user_id">>},
+
+    session_setup(Worker, SessId, Cred, Self),
+
+    {ok, SubId} = subscribe(Worker,
+        all,
+        fun(#write_event{}) -> true; (_) -> false end,
+        fun(Meta) -> Meta >= 10 end,
+        [
+            fun(Evts) -> Self ! {handler1, Evts} end,
+            fun(Evts) -> Self ! {handler2, Evts} end,
+            fun(Evts) -> Self ! {handler3, Evts} end
+        ]
+    ),
+
+    % Emit events.
+    lists:foreach(fun(N) ->
+        emit(Worker, #write_event{file_id = FileId, size = 1, counter = 1,
+            file_size = N + 1, blocks = [#file_block{offset = N, size = 1}]}, SessId)
+    end, lists:seq(0, 9)),
+
+    % Check whether events have been aggregated and each handler has been executed.
+    lists:foreach(fun(Handler) ->
+        ?assertMatch({ok, _}, test_utils:receive_msg({Handler, [#write_event{
+            file_id = FileId, counter = 10, size = 10, file_size = 10,
+            blocks = [#file_block{offset = 0, size = 10}]
+        }]}, ?TIMEOUT))
+    end, [handler1, handler2, handler3]),
+
+    unsubscribe(Worker, SubId),
+    session_teardown(Worker, SessId),
+
+    ok.
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -252,7 +374,11 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
-init_per_testcase(event_stream_test, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= subscription_creation_and_cancellation_test;
+    Case =:= events_with_the_same_file_id_aggregation_test;
+    Case =:= events_with_different_file_id_aggregation_test;
+    Case =:= multiple_handlers_test ->
     Self = self(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, communicator),
@@ -280,8 +406,9 @@ init_per_testcase(event_stream_crash_test, Config) ->
     [{session_id, SessId} | Config];
 
 init_per_testcase(Case, Config) when
-    Case =:= event_stream_periodic_emission_test;
-    Case =:= event_manager_test ->
+    Case =:= event_stream_emission_rule_test;
+    Case =:= event_stream_emission_time_test;
+    Case =:= multiple_subscription_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
@@ -293,8 +420,13 @@ init_per_testcase(Case, Config) when
     session_setup(Worker, SessId, Cred, Self),
     [{session_id, SessId} | Config].
 
-end_per_testcase(event_stream_test, Config) ->
+end_per_testcase(Case, Config) when
+    Case =:= subscription_creation_and_cancellation_test;
+    Case =:= events_with_the_same_file_id_aggregation_test;
+    Case =:= events_with_different_file_id_aggregation_test;
+    Case =:= multiple_handlers_test ->
     Workers = ?config(op_worker_nodes, Config),
+    remove_pending_messages(),
     test_utils:mock_validate(Workers, communicator),
     test_utils:mock_unload(Workers, communicator),
     Config;
@@ -302,16 +434,19 @@ end_per_testcase(event_stream_test, Config) ->
 end_per_testcase(event_stream_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
+    remove_pending_messages(),
     session_teardown(Worker, SessId),
     test_utils:mock_validate(Worker, [communicator, logger]),
     test_utils:mock_unload(Worker, [communicator, logger]),
     proplists:delete(session_id, Config);
 
 end_per_testcase(Case, Config) when
-    Case =:= event_stream_periodic_emission_test;
-    Case =:= event_manager_test ->
+    Case =:= event_stream_emission_rule_test;
+    Case =:= event_stream_emission_time_test;
+    Case =:= multiple_subscription_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
+    remove_pending_messages(),
     session_teardown(Worker, SessId),
     test_utils:mock_validate(Worker, communicator),
     test_utils:mock_unload(Worker, communicator),
@@ -418,4 +553,17 @@ get_child(Sup, ChildId) ->
     case lists:keyfind(ChildId, 1, Children) of
         {ChildId, Child, _, _} -> {ok, Child};
         false -> {error, not_found}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes messages for process messages queue.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_pending_messages() -> ok.
+remove_pending_messages() ->
+    case test_utils:receive_any() of
+        {error, timeout} -> ok;
+        _ -> remove_pending_messages()
     end.
