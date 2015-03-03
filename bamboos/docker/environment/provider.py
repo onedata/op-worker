@@ -92,7 +92,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 def _is_up(ip):
     url = 'https://{0}/nagios'.format(ip)
     try:
-        fo = urlopen(url, timeout=1)
+        fo = urlopen(url, timeout=5)
         tree = eTree.parse(fo)
         healthdata = tree.getroot()
         status = healthdata.attrib['status']
