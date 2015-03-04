@@ -382,21 +382,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
-init_per_testcase(Case, Config) when
-    Case =:= event_manager_subscription_creation_and_cancellation_test;
-    Case =:= event_stream_the_same_file_id_aggregation_test;
-    Case =:= event_stream_different_file_id_aggregation_test;
-    Case =:= event_manager_multiple_handlers_test ->
-    Self = self(),
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send, fun
-        (#write_event_subscription{} = Msg, _) -> Self ! Msg, ok;
-        (#event_subscription_cancellation{} = Msg, _) -> Self ! Msg, ok;
-        (_, _) -> ok
-    end),
-    Config;
-
 init_per_testcase(event_stream_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
@@ -414,6 +399,21 @@ init_per_testcase(event_stream_crash_test, Config) ->
     [{session_id, SessId} | Config];
 
 init_per_testcase(Case, Config) when
+    Case =:= event_manager_subscription_creation_and_cancellation_test;
+    Case =:= event_stream_the_same_file_id_aggregation_test;
+    Case =:= event_stream_different_file_id_aggregation_test;
+    Case =:= event_manager_multiple_handlers_test ->
+    Self = self(),
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, communicator),
+    test_utils:mock_expect(Workers, communicator, send, fun
+        (#write_event_subscription{} = Msg, _) -> Self ! Msg, ok;
+        (#event_subscription_cancellation{} = Msg, _) -> Self ! Msg, ok;
+        (_, _) -> ok
+    end),
+    Config;
+
+init_per_testcase(Case, Config) when
     Case =:= event_stream_emission_rule_test;
     Case =:= event_stream_emission_time_test;
     Case =:= event_manager_multiple_subscription_test ->
@@ -428,6 +428,15 @@ init_per_testcase(Case, Config) when
     session_setup(Worker, SessId, Cred, Self),
     [{session_id, SessId} | Config].
 
+end_per_testcase(event_stream_crash_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session_id, Config),
+    remove_pending_messages(),
+    session_teardown(Worker, SessId),
+    test_utils:mock_validate(Worker, [communicator, logger]),
+    test_utils:mock_unload(Worker, [communicator, logger]),
+    proplists:delete(session_id, Config);
+
 end_per_testcase(Case, Config) when
     Case =:= event_manager_subscription_creation_and_cancellation_test;
     Case =:= event_stream_the_same_file_id_aggregation_test;
@@ -438,15 +447,6 @@ end_per_testcase(Case, Config) when
     test_utils:mock_validate(Workers, communicator),
     test_utils:mock_unload(Workers, communicator),
     Config;
-
-end_per_testcase(event_stream_crash_test, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config(session_id, Config),
-    remove_pending_messages(),
-    session_teardown(Worker, SessId),
-    test_utils:mock_validate(Worker, [communicator, logger]),
-    test_utils:mock_unload(Worker, [communicator, logger]),
-    proplists:delete(session_id, Config);
 
 end_per_testcase(Case, Config) when
     Case =:= event_stream_emission_rule_test;

@@ -343,6 +343,15 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
+init_per_testcase(sequencer_stream_crash_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = <<"session_id">>,
+    Cred = #credentials{user_id = <<"user_id">>},
+    router_echo_mock_setup(Worker),
+    communicator_retransmission_mock_setup(Worker),
+    logger_crash_mock_setup(Worker),
+    session_setup(Worker, SessId, Cred, Config);
+
 init_per_testcase(Case, Config) when
     Case =:= sequencer_stream_reset_stream_message_test;
     Case =:= sequencer_stream_messages_ordering_test;
@@ -357,15 +366,6 @@ init_per_testcase(Case, Config) when
     communicator_echo_mock_setup(Worker, SessId),
     session_setup(Worker, SessId, Cred, Config);
 
-init_per_testcase(sequencer_stream_crash_test, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = <<"session_id">>,
-    Cred = #credentials{user_id = <<"user_id">>},
-    router_echo_mock_setup(Worker),
-    communicator_retransmission_mock_setup(Worker),
-    logger_crash_mock_setup(Worker),
-    session_setup(Worker, SessId, Cred, Config);
-
 init_per_testcase(Case, Config) when
     Case =:= sequencer_stream_duplication_test;
     Case =:= sequencer_manager_multiple_streams_messages_ordering_test ->
@@ -375,6 +375,13 @@ init_per_testcase(Case, Config) when
     router_echo_mock_setup(Worker),
     communicator_retransmission_mock_setup(Worker),
     session_setup(Worker, SessId, Cred, Config).
+
+end_per_testcase(sequencer_stream_crash_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    remove_pending_messages(),
+    NewConfig = session_teardown(Worker, Config),
+    mocks_teardown(Worker, [router, communicator, logger]),
+    NewConfig;
 
 end_per_testcase(Case, Config) when
     Case =:= sequencer_stream_reset_stream_message_test;
@@ -389,13 +396,6 @@ end_per_testcase(Case, Config) when
     remove_pending_messages(),
     NewConfig = session_teardown(Worker, Config),
     mocks_teardown(Worker, [router, communicator]),
-    NewConfig;
-
-end_per_testcase(sequencer_stream_crash_test, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    remove_pending_messages(),
-    NewConfig = session_teardown(Worker, Config),
-    mocks_teardown(Worker, [router, communicator, logger]),
     NewConfig.
 
 %%%===================================================================
