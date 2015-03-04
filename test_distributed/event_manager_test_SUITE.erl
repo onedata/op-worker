@@ -26,26 +26,26 @@
 
 %% tests
 -export([
-    subscription_creation_and_cancellation_test/1,
-    events_with_the_same_file_id_aggregation_test/1,
-    events_with_different_file_id_aggregation_test/1,
+    event_stream_the_same_file_id_aggregation_test/1,
+    event_stream_different_file_id_aggregation_test/1,
     event_stream_emission_rule_test/1,
     event_stream_emission_time_test/1,
     event_stream_crash_test/1,
-    multiple_subscription_test/1,
-    multiple_handlers_test/1
+    event_manager_subscription_creation_and_cancellation_test/1,
+    event_manager_multiple_subscription_test/1,
+    event_manager_multiple_handlers_test/1
 ]).
 
 -perf_test({perf_cases, []}).
 all() -> [
-    subscription_creation_and_cancellation_test,
-    events_with_the_same_file_id_aggregation_test,
-    events_with_different_file_id_aggregation_test,
+    event_stream_the_same_file_id_aggregation_test,
+    event_stream_different_file_id_aggregation_test,
     event_stream_emission_rule_test,
     event_stream_emission_time_test,
     event_stream_crash_test,
-    multiple_subscription_test,
-    multiple_handlers_test
+    event_manager_subscription_creation_and_cancellation_test,
+    event_manager_multiple_subscription_test,
+    event_manager_multiple_handlers_test
 ].
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -54,51 +54,8 @@ all() -> [
 %%% Test function
 %%%====================================================================
 
-subscription_creation_and_cancellation_test(Config) ->
-    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
-    Self = self(),
-    SessId1 = <<"session_id_1">>,
-    SessId2 = <<"session_id_2">>,
-    Cred1 = #credentials{user_id = <<"user_id_1">>},
-    Cred2 = #credentials{user_id = <<"user_id_2">>},
-
-    session_setup(Worker1, SessId1, Cred1, Self),
-
-    {ok, SubId} = subscribe(Worker2,
-        all,
-        fun(#write_event{}) -> true; (_) -> false end,
-        fun(Meta) -> Meta >= 6 end,
-        [fun(Evts) -> Self ! {handler, Evts} end]
-    ),
-
-    session_setup(Worker2, SessId2, Cred2, Self),
-
-    % Check whether subscription message has been sent to clients.
-    ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
-    ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
-
-    % Check subscription has been added to distributed cache.
-    ?assertMatch({ok, [_]}, rpc:call(Worker1, subscription, list, [])),
-
-    % Unsubscribe and check subscription cancellation message has been sent to
-    % clients
-    unsubscribe(Worker1, SubId),
-    ?assertEqual({ok, #event_subscription_cancellation{id = SubId}},
-        test_utils:receive_any(?TIMEOUT)),
-    ?assertEqual({ok, #event_subscription_cancellation{id = SubId}},
-        test_utils:receive_any(?TIMEOUT)),
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
-
-    % Check subscription has been removed from distributed cache.
-    ?assertEqual({ok, []}, rpc:call(Worker1, subscription, list, [])),
-
-    session_teardown(Worker1, SessId2),
-    session_teardown(Worker2, SessId1),
-
-    ok.
-
-events_with_the_same_file_id_aggregation_test(Config) ->
+%% Check whether events for the same file are properly aggregated.
+event_stream_the_same_file_id_aggregation_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     FileId = <<"file_id">>,
@@ -131,7 +88,8 @@ events_with_the_same_file_id_aggregation_test(Config) ->
 
     ok.
 
-events_with_different_file_id_aggregation_test(Config) ->
+%% Check whether events for different files are properly aggregated.
+event_stream_different_file_id_aggregation_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
@@ -170,6 +128,7 @@ events_with_different_file_id_aggregation_test(Config) ->
 
     ok.
 
+%% Check whether event stream executes handlers when emission rule is satisfied.
 event_stream_emission_rule_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
@@ -202,6 +161,7 @@ event_stream_emission_rule_test(Config) ->
 
     ok.
 
+%% Check whether event stream executes handlers when emission time expires.
 event_stream_emission_time_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
@@ -233,6 +193,7 @@ event_stream_emission_time_test(Config) ->
 
     ok.
 
+%% Check whether event stream is reinitialized in previous state in case of crash.
 event_stream_crash_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
@@ -280,7 +241,53 @@ event_stream_crash_test(Config) ->
 
     ok.
 
-multiple_subscription_test(Config) ->
+%% Check whether subscription can be created and cancelled.
+event_manager_subscription_creation_and_cancellation_test(Config) ->
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
+    SessId1 = <<"session_id_1">>,
+    SessId2 = <<"session_id_2">>,
+    Cred1 = #credentials{user_id = <<"user_id_1">>},
+    Cred2 = #credentials{user_id = <<"user_id_2">>},
+
+    session_setup(Worker1, SessId1, Cred1, Self),
+
+    {ok, SubId} = subscribe(Worker2,
+        all,
+        fun(#write_event{}) -> true; (_) -> false end,
+        fun(Meta) -> Meta >= 6 end,
+        [fun(Evts) -> Self ! {handler, Evts} end]
+    ),
+
+    session_setup(Worker2, SessId2, Cred2, Self),
+
+    % Check whether subscription message has been sent to clients.
+    ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
+    ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
+    ?assertEqual({error, timeout}, test_utils:receive_any()),
+
+    % Check subscription has been added to distributed cache.
+    ?assertMatch({ok, [_]}, rpc:call(Worker1, subscription, list, [])),
+
+    % Unsubscribe and check subscription cancellation message has been sent to
+    % clients
+    unsubscribe(Worker1, SubId),
+    ?assertEqual({ok, #event_subscription_cancellation{id = SubId}},
+        test_utils:receive_any(?TIMEOUT)),
+    ?assertEqual({ok, #event_subscription_cancellation{id = SubId}},
+        test_utils:receive_any(?TIMEOUT)),
+    ?assertEqual({error, timeout}, test_utils:receive_any()),
+
+    % Check subscription has been removed from distributed cache.
+    ?assertEqual({ok, []}, rpc:call(Worker1, subscription, list, [])),
+
+    session_teardown(Worker1, SessId2),
+    session_teardown(Worker2, SessId1),
+
+    ok.
+
+%% Check whether multiple subscriptions are properly processed.
+event_manager_multiple_subscription_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Self = self(),
@@ -325,7 +332,8 @@ multiple_subscription_test(Config) ->
 
     ok.
 
-multiple_handlers_test(Config) ->
+%% Check whether multiple handlers are executed in terms of one event stream.
+event_manager_multiple_handlers_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     FileId = <<"file_id">>,
@@ -375,10 +383,10 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(Case, Config) when
-    Case =:= subscription_creation_and_cancellation_test;
-    Case =:= events_with_the_same_file_id_aggregation_test;
-    Case =:= events_with_different_file_id_aggregation_test;
-    Case =:= multiple_handlers_test ->
+    Case =:= event_manager_subscription_creation_and_cancellation_test;
+    Case =:= event_stream_the_same_file_id_aggregation_test;
+    Case =:= event_stream_different_file_id_aggregation_test;
+    Case =:= event_manager_multiple_handlers_test ->
     Self = self(),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, communicator),
@@ -408,7 +416,7 @@ init_per_testcase(event_stream_crash_test, Config) ->
 init_per_testcase(Case, Config) when
     Case =:= event_stream_emission_rule_test;
     Case =:= event_stream_emission_time_test;
-    Case =:= multiple_subscription_test ->
+    Case =:= event_manager_multiple_subscription_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
@@ -421,10 +429,10 @@ init_per_testcase(Case, Config) when
     [{session_id, SessId} | Config].
 
 end_per_testcase(Case, Config) when
-    Case =:= subscription_creation_and_cancellation_test;
-    Case =:= events_with_the_same_file_id_aggregation_test;
-    Case =:= events_with_different_file_id_aggregation_test;
-    Case =:= multiple_handlers_test ->
+    Case =:= event_manager_subscription_creation_and_cancellation_test;
+    Case =:= event_stream_the_same_file_id_aggregation_test;
+    Case =:= event_stream_different_file_id_aggregation_test;
+    Case =:= event_manager_multiple_handlers_test ->
     Workers = ?config(op_worker_nodes, Config),
     remove_pending_messages(),
     test_utils:mock_validate(Workers, communicator),
@@ -443,7 +451,7 @@ end_per_testcase(event_stream_crash_test, Config) ->
 end_per_testcase(Case, Config) when
     Case =:= event_stream_emission_rule_test;
     Case =:= event_stream_emission_time_test;
-    Case =:= multiple_subscription_test ->
+    Case =:= event_manager_multiple_subscription_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     remove_pending_messages(),
