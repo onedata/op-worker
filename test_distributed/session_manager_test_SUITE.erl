@@ -30,6 +30,7 @@
     session_getters_test/1,
     session_supervisor_child_crash_test/1]).
 
+-perf_test({perf_cases, []}).
 all() -> [
     session_manager_session_creation_and_reuse_test,
     session_manager_session_components_running_test,
