@@ -64,7 +64,7 @@ start_protocol_listener() ->
 
     {ok, _} = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
         ranch_tcp, [{ip, {127, 0, 0, 1}}, {port, LocalPort}],
-        protocol_handler, []
+        connection, []
     ).
 
 

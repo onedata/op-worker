@@ -1,23 +1,18 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
+%%% @author Krzysztof Trzepla
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Internal protocol event messages.
+%%% This file includes all definitions concerning events.
 %%% @end
 %%%-------------------------------------------------------------------
+-ifndef(EVENTS_HRL).
+-define(EVENTS_HRL, 1).
 
--ifndef(EVENT_MESSAGES_HRL).
--define(EVENT_MESSAGES_HRL, 1).
-
--include("modules/event_manager/read_event.hrl").
--include("modules/event_manager/write_event.hrl").
-
--record(event_subscription_cancellation, {
-    id :: non_neg_integer()
-}).
+-include("read_event.hrl").
+-include("write_event.hrl").
 
 -endif.

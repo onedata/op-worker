@@ -6,18 +6,26 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Internal protocol event messages.
+%%% Session model definitions.
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(EVENT_MESSAGES_HRL).
--define(EVENT_MESSAGES_HRL, 1).
+-ifndef(SESSION_HRL).
+-define(SESSION_HRL, 1).
 
--include("modules/event_manager/read_event.hrl").
--include("modules/event_manager/write_event.hrl").
+-record(credentials, {
+    user_id :: binary()
+}).
 
--record(event_subscription_cancellation, {
-    id :: non_neg_integer()
+%% session:
+%% cred - owner credentials
+-record(session, {
+    credentials :: #credentials{},
+    node :: node(),
+    session_sup :: pid(),
+    event_manager :: pid(),
+    sequencer_manager :: pid(),
+    communicator :: pid()
 }).
 
 -endif.

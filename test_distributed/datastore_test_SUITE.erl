@@ -16,7 +16,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("annotations/include/annotations.hrl").
--include("workers/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 -define(call_store(N, M, A), rpc:call(N, datastore, M, A)).
 
