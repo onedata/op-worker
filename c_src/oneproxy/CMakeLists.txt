@@ -69,6 +69,7 @@ set(SOURCE_FILES
     src/session.cpp
     src/tcp2tls_session.cpp
     src/tls2tcp_session.cpp
+    src/tls2tcp_cert_aware_session.cpp
     src/tls2tcp_http_session.cpp
     src/base64.cpp)
 
