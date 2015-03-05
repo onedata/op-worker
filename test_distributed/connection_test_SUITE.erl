@@ -562,7 +562,7 @@ end_per_testcase(Case, Config) when Case =:= protobuf_msg_test
 
 end_per_testcase(python_client_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    file:delete(?TEST_FILE(Config, "ssl_client.py")),
+    file:delete(?TEST_FILE(Config, "handshake.arg")),
     file:delete(?TEST_FILE(Config, "message.arg")),
     unmock_identity(Workers),
     test_utils:mock_validate(Workers, router),
