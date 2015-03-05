@@ -125,8 +125,8 @@ protobuf_msg_test(Config) ->
 -perf_test([
     {repeats, 1},
     {perf_configs, [
-        [{msg_num, 1000000}, {transport, ssl}],
-        [{msg_num, 100000}, {transport, gen_tcp}]
+        {ssl_through_oneproxy, [{msg_num, 1000000}, {transport, ssl}]},
+        {tcp_direct, [{msg_num, 100000}, {transport, gen_tcp}]}
     ]},
     {ct_config, [{msg_num, 1000}, {transport, ssl}]}
 ]).
@@ -155,7 +155,7 @@ multi_message_test(Config) ->
         end),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}, {reuse_sessions, false}], Transport),
     T1 = os:timestamp(),
     lists:foreach(fun(E) -> ok = Transport:send(Sock, E) end, RawEvents),
     T2 = os:timestamp(),
@@ -166,11 +166,12 @@ multi_message_test(Config) ->
             ?assertMatch({ok, N}, test_utils:receive_msg(N, timer:seconds(5)))
         end, MsgNumbers),
     T3 = os:timestamp(),
-    _SendingTime = {sending_time, timer:now_diff(T2, T1)},
-    _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
-    _FullTime = {full_time, timer:now_diff(T3, T1)},
-%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
-    ok = Transport:close(Sock).
+    ok = Transport:close(Sock),
+    [
+        {sending_time, timer:now_diff(T2, T1)},
+        {receiving_time, timer:now_diff(T3, T2)},
+        {full_time, timer:now_diff(T3, T1)}
+    ].
 
 client_send_test(Config) ->
     % given
@@ -262,11 +263,12 @@ client_communiate_async_test(Config) ->
 -perf_test([
     {repeats, 1},
     {perf_configs, [
-        [{msg_num, 1000000}, {transport, ssl}],
-        [{msg_num, 100000}, {transport, gen_tcp}]
+        {ssl_through_oneproxy, [{msg_num, 1000000}, {transport, ssl}]},
+        {tcp_direct, [{msg_num, 100000}, {transport, gen_tcp}]}
     ]},
     {ct_config, [{msg_num, 100}, {transport, ssl}]}
 ]).
+% open connection and send 'msg_num' pings, then receive 'msg_num' pongs
 multi_ping_pong_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
@@ -281,7 +283,7 @@ multi_ping_pong_test(Config) ->
     RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}, {reuse_sessions, false}], Transport),
     T1 = os:timestamp(),
     lists:foreach(fun(E) -> ok = Transport:send(Sock, E) end, RawPings),
     T2 = os:timestamp(),
@@ -300,11 +302,12 @@ multi_ping_pong_test(Config) ->
         fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
             ?assertEqual(Id, MsgId)
         end, IdToMessage),
-    _SendingTime = {sending_time, timer:now_diff(T2, T1)},
-    _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
-    _FullTime = {full_time, timer:now_diff(T3, T1)},
-%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
-    ok = Transport:close(Sock).
+    ok = Transport:close(Sock),
+    [
+        {sending_time, timer:now_diff(T2, T1)},
+        {receiving_time, timer:now_diff(T3, T2)},
+        {full_time, timer:now_diff(T3, T1)}
+    ].
 
 -perf_test([
     {repeats, 1},
@@ -313,6 +316,7 @@ multi_ping_pong_test(Config) ->
     ]},
     {ct_config, [{msg_num, 1000}]}
 ]).
+% open connection and: (send ping -> receive pong) * 'msg_num' times
 sequential_ping_pong_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
@@ -326,7 +330,7 @@ sequential_ping_pong_test(Config) ->
     RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}, {reuse_sessions, false}]),
     T1 = os:timestamp(),
     lists:foldl(fun(E, N) ->
         % send ping & receive pong
@@ -344,9 +348,8 @@ sequential_ping_pong_test(Config) ->
 
     % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
-    _FullTime = {full_time, timer:now_diff(T2, T1)},
-%%     ct:print("~p", [_FullTime]),
-    ok = ssl:close(Sock).
+    ok = ssl:close(Sock),
+    {full_time, timer:now_diff(T2, T1)}.
 
 -perf_test([
     {repeats, 10},
@@ -355,6 +358,7 @@ sequential_ping_pong_test(Config) ->
     ]},
     {ct_config, [{connections_num, 100}]}
 ]).
+% Open 'connections_num' connections to the server, check their state, and close them
 multi_connection_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
@@ -363,7 +367,7 @@ multi_connection_test(Config) ->
 
     % when
     Connections = lists:map(
-        fun(N) ->
+        fun(_) ->
             connect_via_token(Worker1, [{reuse_sessions, false}]) % todo repair oneproxy and delete reuse_sessions flag
         end, ConnNumbersList),
 
@@ -380,8 +384,8 @@ multi_connection_test(Config) ->
 -perf_test([
     {repeats, 1},
     {perf_configs, [
-        [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, gen_tcp}],
-        [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, ssl}]
+        {tcp_direct, [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, ssl}]},
+        {ssl_through_oneproxy, [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, gen_tcp}]}
     ]},
     {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 10}, {transport, ssl}]}
 ]).
@@ -402,7 +406,7 @@ bandwidth_test(Config) ->
         end),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}, {reuse_sessions, false}], Transport),
     T1 = os:timestamp(),
     lists:foreach(fun(_) -> ok = Transport:send(Sock, PacketRaw) end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
@@ -414,11 +418,12 @@ bandwidth_test(Config) ->
                 test_utils:receive_msg(router_message_called, timer:seconds(5)))
         end, lists:seq(1, PacketNum)),
     T3 = os:timestamp(),
-    _SendingTime = {sending_time, timer:now_diff(T2, T1)},
-    _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
-    _FullTime = {full_time, timer:now_diff(T3, T1)},
-%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
-    Transport:close(Sock).
+    Transport:close(Sock),
+    [
+        {sending_time, timer:now_diff(T2, T1)},
+        {receiving_time, timer:now_diff(T3, T2)},
+        {full_time, timer:now_diff(T3, T1)}
+    ].
 
 -perf_test([
     {repeats, 1},
@@ -427,6 +432,7 @@ bandwidth_test(Config) ->
     ]},
     {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 10}]}
 ]).
+% same as bandwidth_test, but with ssl client written in python
 python_client_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -475,9 +481,8 @@ python_client_test(Config) ->
                 test_utils:receive_msg(router_message_called, timer:seconds(5)))
         end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
-    _FullTime = {full_time, timer:now_diff(T2, T1)},
-    catch port_close(PythonClient).
-%%     ct:print("~p", [_FullTime]).
+    catch port_close(PythonClient),
+    {full_time, timer:now_diff(T2, T1)}.
 
 proto_version_test(Config) ->
     % given
