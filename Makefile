@@ -1,39 +1,27 @@
-RELEASE_DIR = release
-DEBUG_DIR = debug
-
-CMAKE = $(shell which cmake || which cmake28)
-CPACK = $(shell which cpack || which cpack28)
-
-.PHONY: build release debug clean all
+.PHONY: cmake release debug clean test cunit install all
 all: release test
 
-## Obsolete target, use 'make release' instead
-build: release 
-	@echo "*****************************************************"
-	@echo "'build' target is obsolete, use 'release' instead !"
-	@echo "*****************************************************"
-	@ln -sfn ${RELEASE_DIR} build
+cmake: BUILD_DIR = $$(echo $(BUILD_TYPE) | tr '[:upper:]' '[:lower:]')
+cmake:
+	mkdir -p ${BUILD_DIR}
+	cd ${BUILD_DIR} && cmake -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ..
 
-release: 
-	mkdir -p ${RELEASE_DIR}
-	cd ${RELEASE_DIR} && ${CMAKE} -GNinja -DCMAKE_BUILD_TYPE=Release `if [[ "$$PREFER_STATIC_LINK" != ""  ]]; then echo "-DPREFER_STATIC_LINK=1"; fi` ..
-	(cd ${RELEASE_DIR} && ninja)
-	ln -sfn release build
+release: BUILD_TYPE = Release
+release: cmake
+	ninja -C release
 
-debug: 
-	@mkdir -p ${DEBUG_DIR}
-	@cd ${DEBUG_DIR} && ${CMAKE} -GNinja -DCMAKE_BUILD_TYPE=Debug `if [[ "$$PREFER_STATIC_LINK" != ""  ]]; then echo "-DPREFER_STATIC_LINK=1"; fi` ..
-	@(cd ${DEBUG_DIR} && ninja)
-	ln -sfn debug build
+debug: BUILD_TYPE = Debug
+debug: cmake
+	ninja -C debug
 
 test: release
-	@cd ${RELEASE_DIR} && ninja test
+	ninja -C release test
 
 cunit: release
-	@cd ${RELEASE_DIR} && ninja cunit
+	ninja -C release cunit
 
 install: release
-	@cd ${RELEASE_DIR} && ninja install
+	ninja -C release install
 
-clean: 
-	@rm -rf ${DEBUG_DIR} ${RELEASE_DIR} build
+clean:
+	rm -rf debug release

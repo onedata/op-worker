@@ -53,6 +53,15 @@ public:
     using Exception::Exception;
 };
 
+/**
+ * An @c one::communication::ConnectionError specialization for connection
+ * errors occuring due to invalid server certificate.
+ */
+class InvalidServerCertificate : public ConnectionError {
+public:
+    using ConnectionError::ConnectionError;
+};
+
 } // namespace communication
 } // namespace one
 
