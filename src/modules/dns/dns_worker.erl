@@ -38,6 +38,7 @@
 }).
 
 -define(EXTERNALLY_VISIBLE_MODULES, [http_worker, dns_worker]).
+-define(HEALTHCHECK_TIMEOUT, timer:seconds(5)).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/2, cleanup/0]).
@@ -505,7 +506,7 @@ healthcheck() ->
         }),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
     gen_udp:send(Socket, "127.0.0.1", DNSPort, Query),
-    case gen_udp:recv(Socket, 65535, timer:seconds(5)) of
+    case gen_udp:recv(Socket, 65535, HEALTHCHECK_TIMEOUT) of
         {ok, _} -> ok;
         _ -> {error, no_dns}
     end.
