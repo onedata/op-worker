@@ -13,7 +13,7 @@
 -author("Krzysztof Trzepla").
 
 -include("global_definitions.hrl").
--include("workers/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
 -include("proto_internal/oneclient/stream_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -27,20 +27,28 @@
 
 %% tests
 -export([
-    sequencer_stream_test/1,
+    sequencer_stream_reset_stream_message_test/1,
+    sequencer_stream_messages_ordering_test/1,
+    sequencer_stream_request_messages_test/1,
+    sequencer_stream_messages_acknowledgement_test/1,
+    sequencer_stream_end_of_stream_test/1,
     sequencer_stream_periodic_ack_test/1,
     sequencer_stream_duplication_test/1,
     sequencer_stream_crash_test/1,
-    sequencer_manager_test/1
+    sequencer_manager_multiple_streams_messages_ordering_test/1
 ]).
 
 -perf_test({perf_cases, []}).
 all() -> [
-    sequencer_stream_test,
+    sequencer_stream_reset_stream_message_test,
+    sequencer_stream_messages_ordering_test,
+    sequencer_stream_request_messages_test,
+    sequencer_stream_messages_acknowledgement_test,
+    sequencer_stream_end_of_stream_test,
     sequencer_stream_periodic_ack_test,
     sequencer_stream_duplication_test,
     sequencer_stream_crash_test,
-    sequencer_manager_test
+    sequencer_manager_multiple_streams_messages_ordering_test
 ].
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -49,17 +57,50 @@ all() -> [
 %%% Test function
 %%%====================================================================
 
-%% Test sequencer stream behaviour.
-sequencer_stream_test(Config) ->
+%% Check whether sequencer manager sends reset streams message at the start.
+sequencer_stream_reset_stream_message_test(_) ->
+    % Check whether reset stream message was sent.
+    ?assertMatch({ok, _}, test_utils:receive_msg(
+        #message_stream_reset{}, ?TIMEOUT)),
+
+    ok.
+
+%% Check whether sequencer stream forwards messages in right order.
+sequencer_stream_messages_ordering_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     StmId = 1,
     {ok, MsgsCount} = test_utils:get_env(Worker, ?APP_NAME,
         sequencer_stream_messages_ack_window),
 
-    % Check whether reset stream message was sent.
-    ?assertMatch({ok, _}, test_utils:receive_msg(
-        #message_stream_reset{}, ?TIMEOUT)),
+    % Send 'MsgsCount' messages in reverse order.
+    lists:foreach(fun(SeqNum) ->
+        ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message, [
+            #client_message{message_stream = #message_stream{
+                stm_id = StmId, seq_num = SeqNum, eos = false
+            }}, SessId
+        ]))
+    end, lists:seq(MsgsCount - 1, 0, -1)),
+
+    % Check whether messages were forwarded in right order.
+    lists:foreach(fun(SeqNum) ->
+        ?assertMatch({ok, _}, test_utils:receive_msg(#client_message{
+            message_stream = #message_stream{
+                stm_id = StmId, seq_num = SeqNum, eos = false
+            }
+        }, ?TIMEOUT))
+    end, lists:seq(0, MsgsCount - 1)),
+
+    ok.
+
+%% Check whether sequencer stream sends requests for messages when they arrive
+%% in wrong order.
+sequencer_stream_request_messages_test(Config) ->
+    [Worker, _] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session_id, Config),
+    StmId = 1,
+    {ok, MsgsCount} = test_utils:get_env(Worker, ?APP_NAME,
+        sequencer_stream_messages_ack_window),
 
     % Send 'MsgsCount' messages in reverse order.
     lists:foreach(fun(SeqNum) ->
@@ -72,46 +113,75 @@ sequencer_stream_test(Config) ->
 
     % Check whether 'MsgsCount' - 1 request messages were sent.
     lists:foreach(fun(SeqNum) ->
-        ?assertEqual({ok, #message_request{
+        ?assertMatch({ok, _}, test_utils:receive_msg(#message_request{
             stm_id = StmId, lower_seq_num = 0, upper_seq_num = SeqNum
-        }}, test_utils:receive_any(?TIMEOUT))
+        }, ?TIMEOUT))
     end, lists:seq(MsgsCount - 2, 0, -1)),
 
-    % Check whether messages were forwarded in right order.
+    ok.
+
+%% Check whether sequencer stream sends acknowledgement message when more than
+%% 'sequencer_stream_messages_ack_window' messages have been forwarded.
+sequencer_stream_messages_acknowledgement_test(Config) ->
+    [Worker, _] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session_id, Config),
+    StmId = 1,
+    {ok, MsgsCount} = test_utils:get_env(Worker, ?APP_NAME,
+        sequencer_stream_messages_ack_window),
+
+    % Send 'MsgsCount' messages in reverse order.
     lists:foreach(fun(SeqNum) ->
-        ?assertEqual({ok, #client_message{message_stream = #message_stream{
-            stm_id = StmId, seq_num = SeqNum, eos = false
-        }}}, test_utils:receive_any(?TIMEOUT))
-    end, lists:seq(0, MsgsCount - 1)),
+        ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message, [
+            #client_message{message_stream = #message_stream{
+                stm_id = StmId, seq_num = SeqNum, eos = false
+            }}, SessId
+        ]))
+    end, lists:seq(MsgsCount - 1, 0, -1)),
 
     % Check whether messages acknowledgement was sent.
-    ?assertEqual({ok, #message_acknowledgement{
+    ?assertMatch({ok, _}, test_utils:receive_msg(#message_acknowledgement{
         stm_id = StmId, seq_num = MsgsCount - 1
-    }}, test_utils:receive_any(?TIMEOUT)),
+    }, ?TIMEOUT)),
+
+    ok.
+
+%% Check whether sequencer stream forward last message in the stream, sends
+%% acknowledgement message and finally closes.
+sequencer_stream_end_of_stream_test(Config) ->
+    [Worker, _] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session_id, Config),
+    StmId = 1,
+    SeqNum = 0,
 
     % Send last message.
     ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message, [
         #client_message{message_stream = #message_stream{
-            stm_id = StmId, seq_num = MsgsCount, eos = true
-        }}, SessId])
-    ),
+            stm_id = StmId, seq_num = SeqNum, eos = true
+        }}, SessId
+    ])),
 
     % Check whether last message was sent.
     ?assertMatch({ok, _}, test_utils:receive_msg(
         #client_message{message_stream = #message_stream{
-            stm_id = StmId, seq_num = MsgsCount, eos = true
+            stm_id = StmId, seq_num = SeqNum, eos = true
         }}, ?TIMEOUT
     )),
 
     % Check whether last message acknowledgement was sent.
     ?assertMatch({ok, _}, test_utils:receive_msg(#message_acknowledgement{
-        stm_id = StmId, seq_num = MsgsCount}, ?TIMEOUT)),
+        stm_id = StmId, seq_num = SeqNum
+    }, ?TIMEOUT)),
 
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
+    % Check whether sequencer stream process has terminated normaly.
+    {ok, {SessSup, _}} = rpc:call(Worker, session,
+        get_session_supervisor_and_node, [SessId]),
+    {ok, SeqManSup} = get_child(SessSup, sequencer_manager_sup),
+    {ok, SeqStmSup} = get_child(SeqManSup, sequencer_stream_sup),
+    ?assertEqual([], supervisor:which_children(SeqStmSup)),
 
     ok.
 
-%% Test periodic emission of acknowledgement messages.
+%% Check whether sequencer stream emits periodic acknowledgement messages.
 sequencer_stream_periodic_ack_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
@@ -144,7 +214,7 @@ sequencer_stream_periodic_ack_test(Config) ->
 
     ok.
 
-%% Test sequencer stream does not forward the same message twice.
+%% Check whether sequencer stream does not forward the same message twice.
 sequencer_stream_duplication_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
@@ -170,7 +240,7 @@ sequencer_stream_duplication_test(Config) ->
 
     ok.
 
-%% Test sequencer stream reinitialization in case of crash.
+%% Check whether sequencer stream is reinitialized in previous state in case of crash.
 sequencer_stream_crash_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
@@ -217,8 +287,9 @@ sequencer_stream_crash_test(Config) ->
 
     ok.
 
-%% Test sequencer stream behaviour.
-sequencer_manager_test(Config) ->
+%% Check whether messages are forwarded in right order for each stream despite of
+%% worker routing the message.
+sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     MsgsCount = 100,
@@ -267,21 +338,10 @@ sequencer_manager_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    test_node_starter:prepare_test_environment(Config,
-        ?TEST_FILE(Config, "env_desc.json"), ?MODULE).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
-
-init_per_testcase(Case, Config) when
-    Case =:= sequencer_stream_test;
-    Case =:= sequencer_stream_periodic_ack_test ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = <<"session_id">>,
-    Iden = #identity{user_id = <<"user_id">>},
-    router_echo_mock_setup(Worker),
-    communicator_echo_mock_setup(Worker, SessId),
-    session_setup(Worker, SessId, Iden, Config);
 
 init_per_testcase(sequencer_stream_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -293,8 +353,22 @@ init_per_testcase(sequencer_stream_crash_test, Config) ->
     session_setup(Worker, SessId, Iden, Config);
 
 init_per_testcase(Case, Config) when
+    Case =:= sequencer_stream_reset_stream_message_test;
+    Case =:= sequencer_stream_messages_ordering_test;
+    Case =:= sequencer_stream_request_messages_test;
+    Case =:= sequencer_stream_messages_acknowledgement_test;
+    Case =:= sequencer_stream_end_of_stream_test;
+    Case =:= sequencer_stream_periodic_ack_test ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = <<"session_id">>,
+    Iden = #identity{user_id = <<"user_id">>},
+    router_echo_mock_setup(Worker),
+    communicator_echo_mock_setup(Worker, SessId),
+    session_setup(Worker, SessId, Iden, Config);
+
+init_per_testcase(Case, Config) when
     Case =:= sequencer_stream_duplication_test;
-    Case =:= sequencer_manager_test ->
+    Case =:= sequencer_manager_multiple_streams_messages_ordering_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
@@ -302,20 +376,26 @@ init_per_testcase(Case, Config) when
     communicator_retransmission_mock_setup(Worker),
     session_setup(Worker, SessId, Iden, Config).
 
-end_per_testcase(Case, Config) when
-    Case =:= sequencer_stream_test;
-    Case =:= sequencer_stream_periodic_ack_test;
-    Case =:= sequencer_stream_duplication_test;
-    Case =:= sequencer_manager_test ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    NewConfig = session_teardown(Worker, Config),
-    mocks_teardown(Worker, [router, communicator]),
-    NewConfig;
-
 end_per_testcase(sequencer_stream_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    remove_pending_messages(),
     NewConfig = session_teardown(Worker, Config),
     mocks_teardown(Worker, [router, communicator, logger]),
+    NewConfig;
+
+end_per_testcase(Case, Config) when
+    Case =:= sequencer_stream_reset_stream_message_test;
+    Case =:= sequencer_stream_messages_ordering_test;
+    Case =:= sequencer_stream_request_messages_test;
+    Case =:= sequencer_stream_messages_acknowledgement_test;
+    Case =:= sequencer_stream_end_of_stream_test;
+    Case =:= sequencer_stream_periodic_ack_test;
+    Case =:= sequencer_stream_duplication_test;
+    Case =:= sequencer_manager_multiple_streams_messages_ordering_test ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    remove_pending_messages(),
+    NewConfig = session_teardown(Worker, Config),
+    mocks_teardown(Worker, [router, communicator]),
     NewConfig.
 
 %%%===================================================================
@@ -442,4 +522,17 @@ get_child(Sup, ChildId) ->
     case lists:keyfind(ChildId, 1, Children) of
         {ChildId, Child, _, _} -> {ok, Child};
         false -> {error, not_found}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes messages for process messages queue.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_pending_messages() -> ok.
+remove_pending_messages() ->
+    case test_utils:receive_any() of
+        {error, timeout} -> ok;
+        _ -> remove_pending_messages()
     end.
