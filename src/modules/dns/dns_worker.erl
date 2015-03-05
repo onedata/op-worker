@@ -506,7 +506,7 @@ healthcheck() ->
         }),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
     gen_udp:send(Socket, "127.0.0.1", DNSPort, Query),
-    case gen_udp:recv(Socket, 65535, HEALTHCHECK_TIMEOUT) of
+    case gen_udp:recv(Socket, 65535, ?HEALTHCHECK_TIMEOUT) of
         {ok, _} -> ok;
         _ -> {error, no_dns}
     end.
