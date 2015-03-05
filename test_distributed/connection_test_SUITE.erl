@@ -54,6 +54,7 @@ all() ->
 
 token_connection_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
 
     % then
@@ -63,6 +64,7 @@ token_connection_test(Config) ->
 
 cert_connection_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{
         session_id = <<"session_id">>
@@ -101,6 +103,7 @@ cert_connection_test(Config) ->
 
 protobuf_msg_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message,
         fun(#client_message{message_body = #read_event{}}) ->
@@ -132,6 +135,7 @@ protobuf_msg_test(Config) ->
 ]).
 multi_message_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     MsgNum = ?config(msg_num, Config),
     Transport = ?config(transport, Config),
@@ -175,6 +179,7 @@ multi_message_test(Config) ->
 
 client_send_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
     {ok, {Sock, SessionId}} = connect_via_token(Worker1),
     Code = 'VOK',
@@ -202,6 +207,7 @@ client_send_test(Config) ->
 
 client_communicate_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
     Status = #status{
         code = 'VOK',
@@ -220,6 +226,7 @@ client_communicate_test(Config) ->
 
 client_communiate_async_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Status = #status{
         code = 'VOK',
@@ -271,6 +278,7 @@ client_communiate_async_test(Config) ->
 % open connection and send 'msg_num' pings, then receive 'msg_num' pongs
 multi_ping_pong_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     Transport = ?config(transport, Config),
     MsgNum = ?config(msg_num, Config),
@@ -319,6 +327,7 @@ multi_ping_pong_test(Config) ->
 % open connection and: (send ping -> receive pong) * 'msg_num' times
 sequential_ping_pong_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     MsgNum = ?config(msg_num, Config),
     MsgNumbers = lists:seq(1, MsgNum),
@@ -361,6 +370,7 @@ sequential_ping_pong_test(Config) ->
 % Open 'connections_num' connections to the server, check their state, and close them
 multi_connection_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     ConnNumbers = ?config(connections_num, Config),
     ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
@@ -391,6 +401,7 @@ multi_connection_test(Config) ->
 ]).
 bandwidth_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size_kilobytes, Config),
     PacketNum = ?config(packet_num, Config),
@@ -435,6 +446,7 @@ bandwidth_test(Config) ->
 % same as bandwidth_test, but with ssl client written in python
 python_client_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size_kilobytes, Config),
     PacketNum = ?config(packet_num, Config),
@@ -486,6 +498,7 @@ python_client_test(Config) ->
 
 proto_version_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     MsgId = <<"message_id">>,
     GetProtoVersion = #'ClientMessage'{
@@ -712,4 +725,17 @@ receive_server_message(IgnoredMsgList) ->
             end
     after timer:seconds(5) ->
         {error, timeout}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes messages for process messages queue.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_pending_messages() -> ok.
+remove_pending_messages() ->
+    case test_utils:receive_any() of
+        {error, timeout} -> ok;
+        _ -> remove_pending_messages()
     end.
