@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
--include("workers/datastore/datastore.hrl").
+-include("modules/datastore/datastore.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
 -include("proto_internal/oneproxy/oneproxy_messages.hrl").
 

@@ -471,10 +471,10 @@ end_per_testcase(Case, Config) when
 %% @end
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), SessId :: session:id(),
-    Cred :: session:credentials(), Con :: pid()) -> ok.
-session_setup(Worker, SessId, Cred, Con) ->
+    Iden :: session:identity(), Con :: pid()) -> ok.
+session_setup(Worker, SessId, Iden, Con) ->
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Cred, Con])).
+        reuse_or_create_session, [SessId, Iden, Con])).
 
 %%--------------------------------------------------------------------
 %% @private
