@@ -1,25 +1,22 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
+%%% @author Krzysztof Trzepla
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This is the supervisor for worker_host usage. It is started as a brother
-%%% of worker_host, under main_worker_sup. All permanent processes
-%%% started by worker_host should be children of this supervisor.
-%%% Every worker has its own supervisor, registered as ${worker_name}_sup,
-%%% i.e. dns_worker <-> dns_worker_sup
+%%% This module implements supervisor behaviour and is responsible
+%%% for supervising and restarting event managers.
 %%% @end
 %%%-------------------------------------------------------------------
--module(worker_host_sup).
--author("Tomasz Lichon").
+-module(event_manager_sup).
+-author("Krzysztof Trzepla").
 
 -behaviour(supervisor).
 
 %% API
--export([start_link/2]).
+-export([start_link/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -33,10 +30,10 @@
 %% Starts the supervisor
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Name :: atom(), Args :: term()) ->
+-spec start_link(SessId :: session:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(Name, Args) ->
-    supervisor:start_link({local, Name}, ?MODULE, Args).
+start_link(SessId) ->
+    supervisor:start_link(?MODULE, [SessId]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -57,19 +54,44 @@ start_link(Name, Args) ->
         [ChildSpec :: supervisor:child_spec()]
     }} |
     ignore.
-init(Args) ->
-    DefaultRestartStrategy = one_for_one,
-    DefaultMaxRestarts = 1000,
-    DefaultRestartTimeWindowSecs = 3600,
-    SupervisorSpec = proplists:get_value(supervisor_spec, Args, {
-        DefaultRestartStrategy,
-        DefaultMaxRestarts,
-        DefaultRestartTimeWindowSecs
-    }),
-    ChildrenSpec = proplists:get_value(supervisor_child_spec, Args, []),
-
-    {ok, {SupervisorSpec, ChildrenSpec}}.
+init([SessId]) ->
+    RestartStrategy = one_for_all,
+    MaxRestarts = 3,
+    RestartTimeWindowSecs = 1,
+    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
+        event_stream_sup_spec(),
+        event_manager_spec(self(), SessId)
+    ]}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a supervisor child_spec for an event stream supervisor.
+%% @end
+%%--------------------------------------------------------------------
+-spec event_stream_sup_spec() -> supervisor:child_spec().
+event_stream_sup_spec() ->
+    Id = Module = event_stream_sup,
+    Restart = permanent,
+    Shutdown = infinity,
+    Type = supervisor,
+    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a worker child_spec for an event manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec event_manager_spec(EvtManSup :: pid(), SessId :: session:id()) ->
+    supervisor:child_spec().
+event_manager_spec(EvtManSup, SessId) ->
+    Id = Module = event_manager,
+    Restart = permanent,
+    Shutdown = timer:seconds(10),
+    Type = worker,
+    {Id, {Module, start_link, [EvtManSup, SessId]}, Restart, Shutdown, Type, [Module]}.

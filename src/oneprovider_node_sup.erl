@@ -61,9 +61,9 @@ start_link(NodeType) ->
     ignore.
 init([ccm]) ->
     RestartStrategy = one_for_one,
-    MaxR = 5,
-    MaxT = 10,
-    {ok, {{RestartStrategy, MaxR, MaxT}, [
+    MaxRestarts = 5,
+    RestartTimeWindowSecs = 10,
+    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
         cluster_state_notifier_spec(),
         cluster_manager_spec(),
         main_worker_sup_spec(),
@@ -72,9 +72,9 @@ init([ccm]) ->
     ]}};
 init([worker]) ->
     RestartStrategy = one_for_one,
-    MaxR = 5,
-    MaxT = 10,
-    {ok, {{RestartStrategy, MaxR, MaxT}, [
+    MaxRestarts = 5,
+    RestartTimeWindowSecs = 10,
+    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
         main_worker_sup_spec(),
         request_dispatcher_spec(),
         node_manager_spec(worker)
