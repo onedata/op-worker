@@ -13,14 +13,17 @@
 -author("Lukasz Opiola").
 
 -include("modules/http_worker/http_common.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % the state of request, it is created in rest_init function, and passed to every cowboy callback functions
 -record(state, {
+    identity :: #identity{}
 }).
 
 %% API
--export([init/3, terminate/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
+-export([init/3, terminate/3, rest_init/2, allowed_methods/2, malformed_request/2,
+    is_authorized/2, resource_exists/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
 -export([get_json/2, put_json/2]).
@@ -82,6 +85,26 @@ allowed_methods(Req, State) ->
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}}.
 malformed_request(Req, State) ->
     {false, Req, State}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Cowboy callback function
+%% Return whether the user is authorized to perform the action.
+%% This function should be used to perform any necessary authentication of the
+%% user before attempting to perform any action on the resource.
+%% If the authentication fails, the value returned will be sent as the value for
+%% the www-authenticate header in the 401 Unauthorized response.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_authorized(req(), #state{}) -> {boolean(), req(), #state{}}.
+is_authorized(Req, State) ->
+    case rest_auth:authenticate(Req) of
+        {{ok, Iden}, NewReq} ->
+            {true, NewReq, State#state{identity = Iden}};
+        {{error, Error}, NewReq} ->
+            ?debug("Authentication error ~p", [Error]),
+            {{false, <<"authentication_error">>}, NewReq, State}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
