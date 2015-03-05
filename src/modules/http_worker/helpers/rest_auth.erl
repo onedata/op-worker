@@ -13,8 +13,8 @@
 -author("Tomasz Lichon").
 
 -include("cluster_elements/oneproxy/oneproxy.hrl").
--include("workers/http_worker/http_common.hrl").
--include("workers/datastore/datastore_models.hrl").
+-include("modules/http_worker/http_common.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
 -include("proto_internal/oneproxy/oneproxy_messages.hrl").
 
