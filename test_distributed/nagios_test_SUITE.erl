@@ -19,7 +19,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([nagios_test/1]).
 
 -perf_test({perf_cases, []}).
@@ -82,9 +82,8 @@ nagios_test(Config) ->
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
-init_per_suite(Config) ->
-    test_node_starter:prepare_test_environment(Config,
-        ?TEST_FILE(Config, "env_desc.json"), ?MODULE).
+init_per_testcase(nagios_test, Config) ->
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
-end_per_suite(Config) ->
+end_per_testcase(nagios_test, Config) ->
     test_node_starter:clean_environment(Config).

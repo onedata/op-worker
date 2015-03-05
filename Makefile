@@ -31,6 +31,7 @@ rel: generate
 relclean:
 	rm -rf rel/test_cluster
 	rm -rf rel/oneprovider_node
+	rm -rf appmock/rel/appmock
 
 ##
 ## Testing targets
