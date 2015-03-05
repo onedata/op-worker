@@ -101,6 +101,19 @@ is_authorized(Req, State) ->
     case rest_auth:authenticate(Req) of
         {{ok, Iden}, NewReq} ->
             {true, NewReq, State#state{identity = Iden}};
+        {{error, {not_found, missing_or_deleted}}, NewReq} ->
+            GrUrl = gr_plugin:get_gr_url(),
+            ProviderId = oneprovider:get_provider_id(),
+            {ok, NewReq2} = cowboy_req:reply(
+                305,
+                [
+                    {<<"location">>, <<(list_to_binary(GrUrl))/binary,
+                        "/user/providers/", ProviderId/binary, "/auth_proxy">>}
+                ],
+                <<"">>,
+                NewReq
+            ),
+            {halt, NewReq2, State};
         {{error, Error}, NewReq} ->
             ?debug("Authentication error ~p", [Error]),
             {{false, <<"authentication_error">>}, NewReq, State}

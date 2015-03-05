@@ -21,9 +21,9 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([rest_token_auth/1]).
+-export([rest_token_auth/1, rest_cert_auth/1]).
 
-all() -> [rest_token_auth].
+all() -> [rest_token_auth, rest_cert_auth].
 
 -define(TOKEN, "TOKEN").
 
@@ -32,14 +32,30 @@ all() -> [rest_token_auth].
 %%%===================================================================
 
 rest_token_auth(Config) ->
-    timer:sleep(timer:seconds(5)), % waiting for appmock. todo integrate with nagios
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
 
     % when
-    AuthFail = ibrowse:send_req(Endpoint ++ "unknown", [{"X-Auth-Token", <<"invalid">>}], get),
-    AuthSuccess = ibrowse:send_req(Endpoint ++ "unknown", [{"X-Auth-Token", ?TOKEN}], get),
+    AuthFail = ibrowse:send_req(Endpoint ++ "random_path", [{"X-Auth-Token", "invalid"}], get),
+    AuthSuccess = ibrowse:send_req(Endpoint ++ "random_path", [{"X-Auth-Token", ?TOKEN}], get),
+
+    % then
+    ?assertMatch({ok, "401", _, _}, AuthFail),
+    ?assertMatch({ok, "404", _, _}, AuthSuccess).
+
+rest_cert_auth(Config) ->
+    % given
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Endpoint = rest_endpoint(Worker),
+    CertUnknown = ?TEST_FILE(Config, "unknown_peer.pem"),
+    UnknownCertOpt = {ssl_options, [{certfile, CertUnknown}]},
+    KnownCertOpt = {ssl_options, [{certfile, ?TEST_FILE(Config, "known_peer.pem")}]},
+
+    % when
+%%     ct:print("~p", [utils:cmd(["curl", "-k", "--cert", CertUnknown, "-L", "-v", Endpoint ++ "random_path"])]),
+    AuthFail = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], [UnknownCertOpt]),
+    AuthSuccess = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], [KnownCertOpt]),
 
     % then
     ?assertMatch({ok, "401", _, _}, AuthFail),
@@ -49,8 +65,9 @@ rest_token_auth(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_suite(Config) ->
-    test_node_starter:prepare_test_environment(Config,
-        ?TEST_FILE(Config, "env_desc.json"), ?MODULE).
+    Config2 = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    timer:sleep(timer:seconds(5)), % waiting for appmock. todo integrate with nagios
+    Config2.
 
 end_per_suite(Config) ->
 %%     test_node_starter:clean_environment(Config).
