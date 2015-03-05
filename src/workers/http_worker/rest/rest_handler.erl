@@ -12,12 +12,12 @@
 -module(rest_handler).
 -author("Lukasz Opiola").
 
--include("cluster_elements/oneproxy/oneproxy.hrl").
 -include("workers/http_worker/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % the state of request, it is created in rest_init function, and passed to every cowboy callback functions
--record(state, {}).
+-record(state, {
+}).
 
 %% API
 -export([init/3, terminate/3, rest_init/2, resource_exists/2, malformed_request/2, allowed_methods/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
@@ -38,14 +38,7 @@
 %%--------------------------------------------------------------------
 -spec init(term(), term(), term()) -> {upgrade, protocol, cowboy_rest, req(), term()}.
 init(_, Req, Opts) ->
-    NewOpts =
-        case gsi_handler:get_certs_from_req(?ONEPROXY_REST, Req) of
-            {ok, {OtpCert, Certs}} ->
-                [{certs, {OtpCert, Certs}}];
-            {error, _} ->
-                []
-        end,
-    {upgrade, protocol, cowboy_rest, Req, NewOpts ++ Opts}.
+    {upgrade, protocol, cowboy_rest, Req, Opts}.
 
 %%--------------------------------------------------------------------
 %% @doc
