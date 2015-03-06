@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 
-<<<<<<< HEAD
-"""Runs 'make' command in a dockerized development environment. The files are
-copied from 'source directory' to 'output directory' and then the make is ran.
-=======
 """Runs a command in a dockerized development environment. The files are copied
 from 'source directory' to 'output directory' and then the command is ran.
->>>>>>> 0de40ab1c085f50d87cfdca4417e6665a4ccbc82
 The copy operation is optimized, so that only new and changed files are copied.
 The script uses user's SSH keys in case dependency fetching is needed.
 
