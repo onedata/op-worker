@@ -35,13 +35,10 @@ def _tweak_config(config, name, uid):
     sys_config['ccm_nodes'] = [common.format_hostname(n, uid) for n in
                                sys_config['ccm_nodes']]
 
-<<<<<<< HEAD
     if 'global_registry_node' in sys_config:
         sys_config['global_registry_node'] = \
             common.format_hostname(sys_config['global_registry_node'], uid)
 
-=======
->>>>>>> 0de40ab1c085f50d87cfdca4417e6665a4ccbc82
     vm_args = cfg['nodes']['node']['vm.args']
     vm_args['name'] = common.format_hostname(vm_args['name'], uid)
 
@@ -95,11 +92,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 def _is_up(ip):
     url = 'https://{0}/nagios'.format(ip)
     try:
-<<<<<<< HEAD
         fo = urlopen(url, timeout=5)
-=======
-        fo = urlopen(url, timeout=1)
->>>>>>> 0de40ab1c085f50d87cfdca4417e6665a4ccbc82
         tree = eTree.parse(fo)
         healthdata = tree.getroot()
         status = healthdata.attrib['status']
@@ -112,28 +105,17 @@ def _is_up(ip):
 
 def _wait_until_ready(workers):
     worker_ip = docker.inspect(workers[0])['NetworkSettings']['IPAddress']
-<<<<<<< HEAD
     deadline = time.time() + 300
     while not _is_up(worker_ip):
         if time.time() > deadline:
             print('WARNING: did not get "ok" healthcheck status for 5 minutes',
-=======
-    deadline = time.time() + 60
-    while not _is_up(worker_ip):
-        if time.time() > deadline:
-            print('WARNING: did not get "ok" healthcheck status for 1 minute',
->>>>>>> 0de40ab1c085f50d87cfdca4417e6665a4ccbc82
                   file=sys.stderr)
             break
 
         time.sleep(1)
 
 
-<<<<<<< HEAD
-def up(image, bindir, dns, uid, logdir, config_path):
-=======
 def up(image, bindir, logdir, dns, uid, config_path):
->>>>>>> 0de40ab1c085f50d87cfdca4417e6665a4ccbc82
     config = common.parse_json_file(config_path)['oneprovider_node']
     config['config']['target_dir'] = '/root/bin'
     configs = [_tweak_config(config, node, uid) for node in config['nodes']]

@@ -95,7 +95,7 @@ if 'globalregistry' in config:
 
 # Start oneprovider_node instances
 if 'oneprovider_node' in config:
-    op_output = provider.up(args.image, args.bin_op, dns, uid, args.logdir,
+    op_output = provider.up(args.image, args.bin_op, args.logdir, dns, uid,
                             args.config_path)
     common.merge(output, op_output)
 
