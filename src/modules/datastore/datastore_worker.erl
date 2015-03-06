@@ -76,9 +76,9 @@ handle(ping, _State) ->
 
 handle(healthcheck, State) ->
     HC = #{
-        ?PERSISTENCE_DRIVER => catch ?PERSISTENCE_DRIVER:healthcheck(State),
-        ?LOCAL_CACHE_DRIVER => catch ?LOCAL_CACHE_DRIVER:healthcheck(State),
-        ?DISTRIBUTED_CACHE_DRIVER => catch ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
+        %?PERSISTENCE_DRIVER => catch ?PERSISTENCE_DRIVER:healthcheck(State),
+        %?LOCAL_CACHE_DRIVER => catch ?LOCAL_CACHE_DRIVER:healthcheck(State),
+        %?DISTRIBUTED_CACHE_DRIVER => catch ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
     },
 
     maps:fold(
