@@ -20,7 +20,11 @@ parser.add_argument(
     dest='logdir')
 
 args = parser.parse_args()
+<<<<<<< HEAD
 output = provider.up(args.image, args.bin, args.dns, args.uid, args.logdir,
+=======
+output = provider.up(args.image, args.bin, args.logdir, args.dns, args.uid,
+>>>>>>> 0de40ab1c085f50d87cfdca4417e6665a4ccbc82
                      args.config_path)
 
 print(json.dumps(output))
