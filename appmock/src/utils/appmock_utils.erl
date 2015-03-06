@@ -68,8 +68,7 @@ decode_from_json(JSON) ->
 %% Compiles and loads a given .erl file.
 %% @end
 %%--------------------------------------------------------------------
-<<<<<<< HEAD
--spec load_description_module(FilePath :: string() | atom()) -> module() | no_return().
+-spec load_description_module(FilePath :: string() | module()) -> module() | no_return().
 load_description_module(FilePath) when is_atom(FilePath) ->
     load_description_module(atom_to_list(FilePath));
 load_description_module(FilePath) ->
@@ -127,16 +126,3 @@ cleanup_tmp_copy(FilePath, TmpCopyPath) when FilePath =:= TmpCopyPath ->
     ok;
 cleanup_tmp_copy(_, TmpCopyPath) ->
     file:delete(TmpCopyPath).
-=======
--spec load_description_module(FilePath :: string()) -> module() | no_return().
-load_description_module(FilePath) ->
-    try
-        FileName = filename:basename(FilePath),
-        {ok, ModuleName} = compile:file(FilePath),
-        {ok, Bin} = file:read_file(filename:rootname(FileName) ++ ".beam"),
-        erlang:load_module(ModuleName, Bin),
-        ModuleName
-    catch T:M ->
-        throw({invalid_app_description_module, {type, T}, {message, M}, {stacktrace, erlang:get_stacktrace()}})
-    end.
->>>>>>> 015d57c74328c0dda792de394f291847bd801bff
