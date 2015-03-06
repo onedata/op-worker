@@ -15,9 +15,9 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
-
--include("workers/datastore/datastore_models.hrl").
--include("workers/datastore/datastore.hrl").
+-include_lib("annotations/include/annotations.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore.hrl").
 
 -define(call_store(N, M, A), rpc:call(N, datastore, M, A)).
 -define(upload_test_code(CONFIG),
@@ -32,6 +32,7 @@
 -export([local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
             global_cache_list_test/1]).
 
+-perf_test({perf_cases, []}).
 all() ->
     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
      global_cache_list_test].

@@ -59,12 +59,12 @@ start_link(Name, Args) ->
     ignore.
 init(Args) ->
     DefaultRestartStrategy = one_for_one,
-    DefaultMaxR = 1000,
-    DefaultMaxT = timer:hours(1),
+    DefaultMaxRestarts = 1000,
+    DefaultRestartTimeWindowSecs = 3600,
     SupervisorSpec = proplists:get_value(supervisor_spec, Args, {
         DefaultRestartStrategy,
-        DefaultMaxR,
-        DefaultMaxT
+        DefaultMaxRestarts,
+        DefaultRestartTimeWindowSecs
     }),
     ChildrenSpec = proplists:get_value(supervisor_child_spec, Args, []),
 

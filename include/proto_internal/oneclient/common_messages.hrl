@@ -15,18 +15,18 @@
 
 % POSIX error code
 -type code() :: 'VOK' |
-'VENOENT' |
-'VEACCES' |
-'VEEXIST' |
-'VEIO' |
-'VENOTSUP' |
-'VENOTEMPTY' |
-'VEREMOTEIO' |
-'VEPERM' |
-'VEINVAL' |
-'VEDQUOT' |
-'VENOATTR' |
-'VECOMM'.
+                'VENOENT' |
+                'VEACCES' |
+                'VEEXIST' |
+                'VEIO' |
+                'VENOTSUP' |
+                'VENOTEMPTY' |
+                'VEREMOTEIO' |
+                'VEPERM' |
+                'VEINVAL' |
+                'VEDQUOT' |
+                'VENOATTR' |
+                'VECOMM'.
 
 -record(status, {
     code :: code(),
