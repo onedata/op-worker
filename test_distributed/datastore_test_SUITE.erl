@@ -30,12 +30,12 @@
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
-            global_cache_list_test/1]).
+            global_cache_list_test/1, persistance_test/1]).
 
 -perf_test({perf_cases, []}).
 all() ->
     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
-     global_cache_list_test].
+     global_cache_list_test, persistance_test].
 
 %%%===================================================================
 %%% Test function
@@ -78,6 +78,21 @@ global_cache_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     Level = global_only,
+
+    local_access_only(CCM, Level),
+    local_access_only(Worker1, Level),
+    local_access_only(Worker2, Level),
+
+    global_access(Config, Level),
+
+    ok.
+
+
+persistance_test(Config) ->
+    [CCM] = ?config(op_ccm_nodes, Config),
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+
+    Level = disk_only,
 
     local_access_only(CCM, Level),
     local_access_only(Worker1, Level),
