@@ -9,6 +9,9 @@ import common
 import docker
 
 
+RIAK_READY_WAIT_SECONDS = 60 * 5
+
+
 def _riak(num):
     return 'riak{0}'.format(num)
 
@@ -53,7 +56,7 @@ def _bucket_ready(bucket, container):
 
 
 def _wait_until(condition, containers):
-    deadline = time.time() + 60 * 5
+    deadline = time.time() + RIAK_READY_WAIT_SECONDS
     for container in containers:
         while not condition(container):
             if time.time() > deadline:

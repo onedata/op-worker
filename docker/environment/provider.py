@@ -27,6 +27,8 @@ except ImportError:  # Python 3
     from urllib.error import URLError
     from http.client import BadStatusLine
 
+PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60 * 5
+
 
 def _tweak_config(config, name, uid):
     cfg = copy.deepcopy(config)
@@ -105,7 +107,7 @@ def _is_up(ip):
 
 def _wait_until_ready(workers):
     worker_ip = docker.inspect(workers[0])['NetworkSettings']['IPAddress']
-    deadline = time.time() + 60
+    deadline = time.time() + PROVIDER_WAIT_FOR_NAGIOS_SECONDS
     while not _is_up(worker_ip):
         if time.time() > deadline:
             print('WARNING: did not get "ok" healthcheck status for 1 minute',
