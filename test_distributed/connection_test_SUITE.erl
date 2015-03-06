@@ -41,7 +41,7 @@
 % todo [error] <0.1099.0>@oneproxy:main_loop:234 [ oneproxy 5555 ] handle_client_read failed due to: tlsv1 alert internal error
 % todo and activate 'proto_version_test'
 -perf_test({perf_cases, [multi_message_test, multi_ping_pong_test,
-    sequential_ping_pong_test, multi_connection_test, bandwidth_test]}).
+    sequential_ping_pong_test, multi_connection_test, bandwidth_test, python_client_test]}).
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
         multi_message_test, client_send_test, client_communicate_test,
