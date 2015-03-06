@@ -126,10 +126,10 @@ protobuf_msg_test(Config) ->
     ok = ssl:close(Sock).
 
 -perf_test([
-    {repeats, 1},
+    {repeats, 3},
     {perf_configs, [
         {ssl_through_oneproxy, [{msg_num, 1000000}, {transport, ssl}]},
-        {tcp_direct, [{msg_num, 100000}, {transport, gen_tcp}]}
+        {tcp_direct, [{msg_num, 1000000}, {transport, gen_tcp}]}
     ]},
     {ct_config, [{msg_num, 1000}, {transport, ssl}]}
 ]).
@@ -159,7 +159,7 @@ multi_message_test(Config) ->
         end),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}, {reuse_sessions, false}], Transport),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
     T1 = os:timestamp(),
     lists:foreach(fun(E) -> ok = Transport:send(Sock, E) end, RawEvents),
     T2 = os:timestamp(),
@@ -268,10 +268,10 @@ client_communiate_async_test(Config) ->
     ok = ssl:close(Sock).
 
 -perf_test([
-    {repeats, 1},
+    {repeats, 3},
     {perf_configs, [
         {ssl_through_oneproxy, [{msg_num, 1000000}, {transport, ssl}]},
-        {tcp_direct, [{msg_num, 100000}, {transport, gen_tcp}]}
+        {tcp_direct, [{msg_num, 1000000}, {transport, gen_tcp}]}
     ]},
     {ct_config, [{msg_num, 100}, {transport, ssl}]}
 ]).
@@ -291,7 +291,7 @@ multi_ping_pong_test(Config) ->
     RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}, {reuse_sessions, false}], Transport),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
     T1 = os:timestamp(),
     lists:foreach(fun(E) -> ok = Transport:send(Sock, E) end, RawPings),
     T2 = os:timestamp(),
@@ -318,7 +318,7 @@ multi_ping_pong_test(Config) ->
     ].
 
 -perf_test([
-    {repeats, 1},
+    {repeats, 3},
     {perf_configs, [
         [{msg_num, 100000}]
     ]},
@@ -339,7 +339,7 @@ sequential_ping_pong_test(Config) ->
     RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}, {reuse_sessions, false}]),
+    {ok, {Sock, _}} = connect_via_token(Worker1),
     T1 = os:timestamp(),
     lists:foldl(fun(E, N) ->
         % send ping & receive pong
@@ -378,7 +378,7 @@ multi_connection_test(Config) ->
     % when
     Connections = lists:map(
         fun(_) ->
-            connect_via_token(Worker1, [{reuse_sessions, false}]) % todo repair oneproxy and delete reuse_sessions flag
+            connect_via_token(Worker1, [])
         end, ConnNumbersList),
 
     % then
@@ -392,7 +392,7 @@ multi_connection_test(Config) ->
     lists:foreach(fun({ok, {Sock, _}}) -> ssl:close(Sock) end, Connections).
 
 -perf_test([
-    {repeats, 1},
+    {repeats, 3},
     {perf_configs, [
         {tcp_direct, [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, ssl}]},
         {ssl_through_oneproxy, [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, gen_tcp}]}
@@ -417,7 +417,7 @@ bandwidth_test(Config) ->
         end),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}, {reuse_sessions, false}], Transport),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
     T1 = os:timestamp(),
     lists:foreach(fun(_) -> ok = Transport:send(Sock, PacketRaw) end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
@@ -437,7 +437,7 @@ bandwidth_test(Config) ->
     ].
 
 -perf_test([
-    {repeats, 1},
+    {repeats, 3},
     {perf_configs, [
         [{packet_size_kilobytes, 1024}, {packet_num, 1000}]
     ]},
@@ -629,16 +629,16 @@ connect_via_token(Node, SocketOpts, Transport) ->
         end,
     OtherOpts = proplists:delete(active, SocketOpts),
     CertInfoMessageRaw = oneproxy_messages:encode_msg(#'CertificateInfo'{}),
+    {ok, ExternalPort} = rpc:call(Node, application, get_env, [?APP_NAME, protocol_handler_port]),
+    {Port, AdditionalOpts} =
+        case Transport of
+            gen_tcp -> {rpc:call(Node, oneproxy, get_local_port, [ExternalPort]), []};
+            ssl -> {ExternalPort, [{reuse_sessions, false}]} % todo repair oneproxy and delete reuse_sessions flag
+        end,
 
     % when
-    {ok, ExternalPort} = rpc:call(Node, application, get_env, [?APP_NAME, protocol_handler_port]),
-    Port =
-        case Transport of
-            gen_tcp -> rpc:call(Node, oneproxy, get_local_port, [ExternalPort]);
-            ssl -> ExternalPort
-        end,
     {ok, Sock} = Transport:connect(utils:get_host_as_atom(Node), Port, [binary,
-        {packet, 4}, {active, once}] ++ OtherOpts),
+        {packet, 4}, {active, once}] ++ OtherOpts ++ AdditionalOpts),
     case Transport of
         gen_tcp -> ok = Transport:send(Sock, CertInfoMessageRaw);
         _ -> ok
