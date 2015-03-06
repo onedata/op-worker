@@ -13,7 +13,7 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore.hrl").
--include("workers/datastore/datastore_internal.hrl").
+-include("modules/datastore/datastore_internal.hrl").
 
 -define(BATCH_SIZE, 100).
 
