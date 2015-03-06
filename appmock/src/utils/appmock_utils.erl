@@ -68,7 +68,7 @@ decode_from_json(JSON) ->
 %% Compiles and loads a given .erl file.
 %% @end
 %%--------------------------------------------------------------------
--spec load_description_module(FilePath :: string() | atom()) -> module() | no_return().
+-spec load_description_module(FilePath :: string() | module()) -> module() | no_return().
 load_description_module(FilePath) when is_atom(FilePath) ->
     load_description_module(atom_to_list(FilePath));
 load_description_module(FilePath) ->

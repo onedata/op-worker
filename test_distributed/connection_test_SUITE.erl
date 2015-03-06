@@ -54,6 +54,7 @@ all() ->
 
 token_connection_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
 
     % then
@@ -63,6 +64,7 @@ token_connection_test(Config) ->
 
 cert_connection_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{
         session_id = <<"session_id">>
@@ -101,6 +103,7 @@ cert_connection_test(Config) ->
 
 protobuf_msg_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message,
         fun(#client_message{message_body = #read_event{}}) ->
@@ -123,15 +126,16 @@ protobuf_msg_test(Config) ->
     ok = ssl:close(Sock).
 
 -perf_test([
-    {repeats, 1},
+    {repeats, 3},
     {perf_configs, [
-        [{msg_num, 1000000}, {transport, ssl}],
-        [{msg_num, 100000}, {transport, gen_tcp}]
+        {ssl_through_oneproxy, [{msg_num, 1000000}, {transport, ssl}]},
+        {tcp_direct, [{msg_num, 1000000}, {transport, gen_tcp}]}
     ]},
     {ct_config, [{msg_num, 1000}, {transport, ssl}]}
 ]).
 multi_message_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     MsgNum = ?config(msg_num, Config),
     Transport = ?config(transport, Config),
@@ -166,14 +170,16 @@ multi_message_test(Config) ->
             ?assertMatch({ok, N}, test_utils:receive_msg(N, timer:seconds(5)))
         end, MsgNumbers),
     T3 = os:timestamp(),
-    _SendingTime = {sending_time, timer:now_diff(T2, T1)},
-    _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
-    _FullTime = {full_time, timer:now_diff(T3, T1)},
-%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
-    ok = Transport:close(Sock).
+    ok = Transport:close(Sock),
+    [
+        {sending_time, timer:now_diff(T2, T1)},
+        {receiving_time, timer:now_diff(T3, T2)},
+        {full_time, timer:now_diff(T3, T1)}
+    ].
 
 client_send_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
     {ok, {Sock, SessionId}} = connect_via_token(Worker1),
     Code = 'VOK',
@@ -201,6 +207,7 @@ client_send_test(Config) ->
 
 client_communicate_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
     Status = #status{
         code = 'VOK',
@@ -219,6 +226,7 @@ client_communicate_test(Config) ->
 
 client_communiate_async_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Status = #status{
         code = 'VOK',
@@ -260,15 +268,17 @@ client_communiate_async_test(Config) ->
     ok = ssl:close(Sock).
 
 -perf_test([
-    {repeats, 1},
+    {repeats, 3},
     {perf_configs, [
-        [{msg_num, 1000000}, {transport, ssl}],
-        [{msg_num, 100000}, {transport, gen_tcp}]
+        {ssl_through_oneproxy, [{msg_num, 1000000}, {transport, ssl}]},
+        {tcp_direct, [{msg_num, 1000000}, {transport, gen_tcp}]}
     ]},
     {ct_config, [{msg_num, 100}, {transport, ssl}]}
 ]).
+% open connection and send 'msg_num' pings, then receive 'msg_num' pongs
 multi_ping_pong_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     Transport = ?config(transport, Config),
     MsgNum = ?config(msg_num, Config),
@@ -300,21 +310,24 @@ multi_ping_pong_test(Config) ->
         fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
             ?assertEqual(Id, MsgId)
         end, IdToMessage),
-    _SendingTime = {sending_time, timer:now_diff(T2, T1)},
-    _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
-    _FullTime = {full_time, timer:now_diff(T3, T1)},
-%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
-    ok = Transport:close(Sock).
+    ok = Transport:close(Sock),
+    [
+        {sending_time, timer:now_diff(T2, T1)},
+        {receiving_time, timer:now_diff(T3, T2)},
+        {full_time, timer:now_diff(T3, T1)}
+    ].
 
 -perf_test([
-    {repeats, 1},
+    {repeats, 3},
     {perf_configs, [
         [{msg_num, 100000}]
     ]},
     {ct_config, [{msg_num, 1000}]}
 ]).
+% open connection and: (send ping -> receive pong) * 'msg_num' times
 sequential_ping_pong_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     MsgNum = ?config(msg_num, Config),
     MsgNumbers = lists:seq(1, MsgNum),
@@ -326,7 +339,7 @@ sequential_ping_pong_test(Config) ->
     RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+    {ok, {Sock, _}} = connect_via_token(Worker1),
     T1 = os:timestamp(),
     lists:foldl(fun(E, N) ->
         % send ping & receive pong
@@ -344,9 +357,8 @@ sequential_ping_pong_test(Config) ->
 
     % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
-    _FullTime = {full_time, timer:now_diff(T2, T1)},
-%%     ct:print("~p", [_FullTime]),
-    ok = ssl:close(Sock).
+    ok = ssl:close(Sock),
+    {full_time, timer:now_diff(T2, T1)}.
 
 -perf_test([
     {repeats, 10},
@@ -355,16 +367,18 @@ sequential_ping_pong_test(Config) ->
     ]},
     {ct_config, [{connections_num, 100}]}
 ]).
+% Open 'connections_num' connections to the server, check their state, and close them
 multi_connection_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     ConnNumbers = ?config(connections_num, Config),
     ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
 
     % when
     Connections = lists:map(
-        fun(N) ->
-            connect_via_token(Worker1, [{reuse_sessions, false}]) % todo repair oneproxy and delete reuse_sessions flag
+        fun(_) ->
+            connect_via_token(Worker1, [])
         end, ConnNumbersList),
 
     % then
@@ -378,15 +392,16 @@ multi_connection_test(Config) ->
     lists:foreach(fun({ok, {Sock, _}}) -> ssl:close(Sock) end, Connections).
 
 -perf_test([
-    {repeats, 1},
+    {repeats, 3},
     {perf_configs, [
-        [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, gen_tcp}],
-        [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, ssl}]
+        {tcp_direct, [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, ssl}]},
+        {ssl_through_oneproxy, [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, gen_tcp}]}
     ]},
     {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 10}, {transport, ssl}]}
 ]).
 bandwidth_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size_kilobytes, Config),
     PacketNum = ?config(packet_num, Config),
@@ -414,21 +429,24 @@ bandwidth_test(Config) ->
                 test_utils:receive_msg(router_message_called, timer:seconds(5)))
         end, lists:seq(1, PacketNum)),
     T3 = os:timestamp(),
-    _SendingTime = {sending_time, timer:now_diff(T2, T1)},
-    _ReceivingTime = {receiving_time, timer:now_diff(T3, T2)},
-    _FullTime = {full_time, timer:now_diff(T3, T1)},
-%%     ct:print("~p ~p ~p", [_SendingTime, _ReceivingTime, _FullTime]),
-    Transport:close(Sock).
+    Transport:close(Sock),
+    [
+        {sending_time, timer:now_diff(T2, T1)},
+        {receiving_time, timer:now_diff(T3, T2)},
+        {full_time, timer:now_diff(T3, T1)}
+    ].
 
 -perf_test([
-    {repeats, 1},
+    {repeats, 3},
     {perf_configs, [
         [{packet_size_kilobytes, 1024}, {packet_num, 1000}]
     ]},
     {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 10}]}
 ]).
+% same as bandwidth_test, but with ssl client written in python
 python_client_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size_kilobytes, Config),
     PacketNum = ?config(packet_num, Config),
@@ -475,12 +493,12 @@ python_client_test(Config) ->
                 test_utils:receive_msg(router_message_called, timer:seconds(5)))
         end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
-    _FullTime = {full_time, timer:now_diff(T2, T1)},
-    catch port_close(PythonClient).
-%%     ct:print("~p", [_FullTime]).
+    catch port_close(PythonClient),
+    {full_time, timer:now_diff(T2, T1)}.
 
 proto_version_test(Config) ->
     % given
+    remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     MsgId = <<"message_id">>,
     GetProtoVersion = #'ClientMessage'{
@@ -611,16 +629,16 @@ connect_via_token(Node, SocketOpts, Transport) ->
         end,
     OtherOpts = proplists:delete(active, SocketOpts),
     CertInfoMessageRaw = oneproxy_messages:encode_msg(#'CertificateInfo'{}),
+    {ok, ExternalPort} = rpc:call(Node, application, get_env, [?APP_NAME, protocol_handler_port]),
+    {Port, AdditionalOpts} =
+        case Transport of
+            gen_tcp -> {rpc:call(Node, oneproxy, get_local_port, [ExternalPort]), []};
+            ssl -> {ExternalPort, [{reuse_sessions, false}]} % todo repair oneproxy and delete reuse_sessions flag
+        end,
 
     % when
-    {ok, ExternalPort} = rpc:call(Node, application, get_env, [?APP_NAME, protocol_handler_port]),
-    Port =
-        case Transport of
-            gen_tcp -> rpc:call(Node, oneproxy, get_local_port, [ExternalPort]);
-            ssl -> ExternalPort
-        end,
     {ok, Sock} = Transport:connect(utils:get_host_as_atom(Node), Port, [binary,
-        {packet, 4}, {active, once}] ++ OtherOpts),
+        {packet, 4}, {active, once}] ++ OtherOpts ++ AdditionalOpts),
     case Transport of
         gen_tcp -> ok = Transport:send(Sock, CertInfoMessageRaw);
         _ -> ok
@@ -707,4 +725,17 @@ receive_server_message(IgnoredMsgList) ->
             end
     after timer:seconds(5) ->
         {error, timeout}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes messages for process messages queue.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_pending_messages() -> ok.
+remove_pending_messages() ->
+    case test_utils:receive_any() of
+        {error, timeout} -> ok;
+        _ -> remove_pending_messages()
     end.

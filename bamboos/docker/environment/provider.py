@@ -115,7 +115,7 @@ def _wait_until_ready(workers):
         time.sleep(1)
 
 
-def up(image, bindir, dns, uid, logdir, config_path):
+def up(image, bindir, logdir, dns, uid, config_path):
     config = common.parse_json_file(config_path)['oneprovider_node']
     config['config']['target_dir'] = '/root/bin'
     configs = [_tweak_config(config, node, uid) for node in config['nodes']]

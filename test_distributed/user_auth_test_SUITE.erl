@@ -31,6 +31,7 @@
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
 
+-perf_test({perf_cases, []}).
 all() -> [token_authentication].
 
 %%%===================================================================
