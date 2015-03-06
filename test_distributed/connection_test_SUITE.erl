@@ -131,8 +131,8 @@ protobuf_msg_test(Config) ->
 -perf_test([
     {repeats, 3},
     {perf_configs, [
-        {ssl_through_oneproxy, [{msg_num, 1000000}, {transport, ssl}]},
-        {tcp_direct, [{msg_num, 1000000}, {transport, gen_tcp}]}
+        {ssl_through_oneproxy, [{msg_num, 100000}, {transport, ssl}]},
+        {tcp_direct, [{msg_num, 100000}, {transport, gen_tcp}]}
     ]},
     {ct_config, [{msg_num, 1000}, {transport, ssl}]}
 ]).
@@ -273,8 +273,8 @@ client_communiate_async_test(Config) ->
 -perf_test([
     {repeats, 3},
     {perf_configs, [
-        {ssl_through_oneproxy, [{msg_num, 1000000}, {transport, ssl}]},
-        {tcp_direct, [{msg_num, 1000000}, {transport, gen_tcp}]}
+        {ssl_through_oneproxy, [{msg_num, 100000}, {transport, ssl}]},
+        {tcp_direct, [{msg_num, 100000}, {transport, gen_tcp}]}
     ]},
     {ct_config, [{msg_num, 100}, {transport, ssl}]}
 ]).
