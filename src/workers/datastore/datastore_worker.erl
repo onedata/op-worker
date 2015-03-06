@@ -92,10 +92,14 @@ handle(healthcheck, State) ->
 
 %% Proxy call to given datastore driver
 handle({driver_call, Module, Method, Args}, _State) ->
-    case erlang:apply(Module, Method, Args) of
+    try erlang:apply(Module, Method, Args) of
         ok -> ok;
         {ok, Response} -> {ok, Response};
         {error, Reason} -> {error, Reason}
+    catch
+        _:Reason ->
+            ?error_stacktrace("datastore request failed due to ~p", [Reason]),
+            {error, Reason}
     end;
 
 %% Unknown request
@@ -131,4 +135,4 @@ state_put(Key, Value) ->
 %%--------------------------------------------------------------------
 -spec state_get(Key :: term()) -> Value :: term().
 state_get(Key) ->
-    maps:get(Key, gen_server:call(?MODULE, get_plugin_state)).
+    maps:get(Key, gen_server:call(?MODULE, get_plugin_state), undefined).
