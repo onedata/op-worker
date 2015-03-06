@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
-"""Runs 'make' command in a dockerized development environment. The files are
-copied from 'source directory' to 'output directory' and then the make is ran.
+"""Runs a command in a dockerized development environment. The files are copied
+from 'source directory' to 'output directory' and then the command is ran.
 The copy operation is optimized, so that only new and changed files are copied.
 The script uses user's SSH keys in case dependency fetching is needed.
+
+Unknown arguments will be passed to the command.
 
 Run the script with -h flag to learn about script's running options.
 """
@@ -19,7 +21,7 @@ from environment import docker
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    description='Run make inside a dockerized development environment.')
+    description='Run a command inside a dockerized development environment.')
 
 parser.add_argument(
     '-i', '--image',
@@ -38,8 +40,9 @@ parser.add_argument(
 parser.add_argument(
     '-d', '--dst',
     action='store',
-    default=os.getcwd(),
-    help='destination directory where the build will be stored',
+    default=None,
+    help='destination directory where the build will be stored; defaults '
+          'to source dir if unset',
     dest='dst')
 
 parser.add_argument(
@@ -57,13 +60,25 @@ parser.add_argument(
     dest='reflect')
 
 parser.add_argument(
-    'params',
+    '-c', '--command',
     action='store',
-    nargs='*',
-    help='parameters passed to `make`')
+    default='make',
+    help='command to run in the container',
+    dest='command')
 
-args = parser.parse_args()
+parser.add_argument(
+    '-w', '--workdir',
+    action='store',
+    default=None,
+    help='path to the working directory; defaults to destination dir if unset',
+    dest='workdir'
+)
+
+[args, pass_args] = parser.parse_known_args()
 home = expanduser('~')
+
+destination = args.dst if args.dst else args.src
+workdir = args.workdir if args.workdir else destination
 
 command = '''
 import os, shutil, subprocess, sys
@@ -89,20 +104,21 @@ for root, dirs, files in os.walk(ssh_home):
     for file in files:
         os.chmod(os.path.join(root, file), 0o600)
 
-sh_command = 'eval $(ssh-agent) > /dev/null; ssh-add 2>&1; make {params}'
+sh_command = 'eval $(ssh-agent) > /dev/null; ssh-add 2>&1; {command} {params}'
 ret = subprocess.call(['sh', '-c', sh_command])
 sys.exit(ret)
 '''
 command = command.format(
-    params=' '.join(args.params),
+    command=args.command,
+    params=' '.join(pass_args),
     uid=os.geteuid(),
     gid=os.getegid(),
     src=args.src,
-    dst=args.dst,
+    dst=destination,
     home=home,
     shed_privileges=(platform.system() == 'Linux'))
 
-reflect = [(home, 'ro'), (args.dst, 'rw')]
+reflect = [(home, 'ro'), (destination, 'rw')]
 reflect.extend(zip(args.reflect, ['rw'] * len(args.reflect)))
 
 ret = docker.run(tty=True,
@@ -111,7 +127,7 @@ ret = docker.run(tty=True,
                  reflect=reflect,
                  volumes=[(args.keys, '/tmp/keys', 'ro'),
                           (args.src, '/tmp/src', 'ro')],
-                 workdir=args.dst,
+                 workdir=workdir,
                  image=args.image,
                  command=['python', '-c', command])
 sys.exit(ret)
