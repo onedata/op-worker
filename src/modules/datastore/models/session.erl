@@ -15,6 +15,7 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_internal.hrl").
 -include("modules/datastore/models/session.hrl").
 
 %% model_behaviour callbacks
@@ -78,7 +79,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error().
 list() ->
-    mnesia_cache_driver:list(model_init()).
+    datastore:list(global_only, ?MODEL_NAME, ?GET_ALL, []).
 
 %%--------------------------------------------------------------------
 %% @doc
