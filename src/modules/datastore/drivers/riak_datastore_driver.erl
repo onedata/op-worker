@@ -123,7 +123,7 @@ get(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         {ok, Result} ->
             {ok, #document{key = Key, rev = Result,
-                value = datastore_utils:shallow_to_record(form_riak_obj(map, Result))}};
+                value = form_riak_obj(map, Result)}};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -205,14 +205,17 @@ healthcheck(_) ->
 %%--------------------------------------------------------------------
 -spec form_riak_obj(map | counter | register, Obj :: term()) -> term().
 form_riak_obj(map, Obj) ->
+    %% somehow, sometimes, riak's client returns orddict instead of #map{}
     FoldMod = case Obj of
                   [_ | _] -> orddict;
                   _       -> riakc_map
               end,
-    FoldMod:fold(
-        fun({K, Type}, V, Acc) ->
-            maps:put(from_binary(K), form_riak_obj(Type, V), Acc)
-        end, #{}, Obj);
+    datastore_utils:shallow_to_record(
+        FoldMod:fold(
+            fun({K, Type}, V, Acc) ->
+                maps:put(from_binary(K), form_riak_obj(Type, V), Acc)
+            end, #{}, Obj)
+    );
 form_riak_obj(counter, Obj) when is_integer(Obj) ->
     Obj;
 form_riak_obj(counter, Obj) ->
