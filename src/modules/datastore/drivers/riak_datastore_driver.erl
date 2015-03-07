@@ -98,6 +98,7 @@ update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Dif
 -spec create(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
 create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value = Value}) ->
+    %% @todo: fix me! somehow riak's context allows to override existing record
     case exists(_ModelConfig, Key) of
         true ->
             {error, already_exists};
@@ -167,7 +168,7 @@ delete(#model_config{bucket = Bucket} = _ModelConfig, Key, Pred) ->
     true | false | datastore:generic_error().
 exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
-        {ok, {notfound, _}} ->
+        {error, {notfound, _}} ->
             false;
         {error, Reason} ->
             {error, Reason};
