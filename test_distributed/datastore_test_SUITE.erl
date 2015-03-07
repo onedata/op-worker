@@ -58,15 +58,15 @@ local_cache_test(Config) ->
                 value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
             }])),
 
-    ?assertMatch(false,
+    ?assertMatch({ok, false},
         ?call_store(Worker2, exists, [Level,
             some_record, some_other_key])),
 
-    ?assertMatch(false,
+    ?assertMatch({ok, false},
         ?call_store(CCM, exists, [Level,
             some_record, some_other_key])),
 
-    ?assertMatch(true,
+    ?assertMatch({ok, true},
         ?call_store(Worker1, exists, [Level,
             some_record, some_other_key])),
 
@@ -219,7 +219,7 @@ local_access_only(Node, Level) ->
                 value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
             }])),
 
-    ?assertMatch(true,
+    ?assertMatch({ok, true},
         ?call_store(Node, exists, [Level,
             some_record, Key])),
 
@@ -273,15 +273,15 @@ global_access(Config, Level) ->
                 value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
             }])),
 
-    ?assertMatch(true,
+    ?assertMatch({ok, true},
         ?call_store(Worker2, exists, [Level,
             some_record, Key])),
 
-    ?assertMatch(true,
+    ?assertMatch({ok, true},
         ?call_store(CCM, exists, [Level,
             some_record, Key])),
 
-    ?assertMatch(true,
+    ?assertMatch({ok, true},
         ?call_store(Worker1, exists, [Level,
             some_record, Key])),
 
