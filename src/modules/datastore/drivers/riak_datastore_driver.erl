@@ -87,6 +87,8 @@ update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Dif
                 ok -> {ok, Key};
                 {error, Reason} -> {error, Reason}
             end;
+        {error, {notfound, _}} ->
+            {error, {not_found, missing_or_deleted}};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -124,6 +126,8 @@ get(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
         {ok, Result} ->
             {ok, #document{key = Key, rev = Result,
                 value = form_riak_obj(map, Result)}};
+        {error, {notfound, _}} ->
+            {error, {not_found, missing_or_deleted}};
         {error, Reason} ->
             {error, Reason}
     end.
