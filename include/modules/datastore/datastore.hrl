@@ -42,7 +42,7 @@
 
 %% Utils
 -define(RESPONSE(R), begin
-                         {ok, Reponse} = R,
+                         {ok, Response} = R,
                          Response
                      end
 ).
