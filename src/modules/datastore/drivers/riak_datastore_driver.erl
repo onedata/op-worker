@@ -72,7 +72,8 @@ update(#model_config{bucket = _Bucket} = _ModelConfig, _Key, Diff) when is_funct
     erlang:error(not_implemented);
 update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Diff) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
-        {ok, Result} ->
+        {ok, Result}
+            ->
             NewRMap =
                 maps:fold(
                     fun(K, V, Acc) ->
@@ -204,7 +205,11 @@ healthcheck(_) ->
 %%--------------------------------------------------------------------
 -spec form_riak_obj(map | counter | register, Obj :: term()) -> term().
 form_riak_obj(map, Obj) ->
-    riakc_map:fold(
+    FoldMod = case Obj of
+                  [_ | _] -> orddict;
+                  _       -> riakc_map
+              end,
+    FoldMod:fold(
         fun({K, Type}, V, Acc) ->
             maps:put(from_binary(K), form_riak_obj(Type, V), Acc)
         end, #{}, Obj);
