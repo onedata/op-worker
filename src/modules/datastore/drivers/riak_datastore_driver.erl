@@ -165,15 +165,15 @@ delete(#model_config{bucket = Bucket} = _ModelConfig, Key, Pred) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(model_behaviour:model_config(), datastore:key()) ->
-    true | false | datastore:generic_error().
+    {ok, boolean()} | datastore:generic_error().
 exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         {error, {notfound, _}} ->
-            false;
+            {ok, false};
         {error, Reason} ->
             {error, Reason};
         {ok, _} ->
-            true
+            {ok, true}
     end.
 
 %%--------------------------------------------------------------------

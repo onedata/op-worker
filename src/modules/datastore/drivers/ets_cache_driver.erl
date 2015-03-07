@@ -129,9 +129,9 @@ delete(#model_config{} = ModelConfig, Key, Pred) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(model_behaviour:model_config(), datastore:key()) ->
-    true | false | datastore:generic_error().
+    {ok, boolean()} | datastore:generic_error().
 exists(#model_config{} = ModelConfig, Key) ->
-    ets:member(table_name(ModelConfig), Key).
+    {ok, ets:member(table_name(ModelConfig), Key)}.
 
 %%--------------------------------------------------------------------
 %% @doc

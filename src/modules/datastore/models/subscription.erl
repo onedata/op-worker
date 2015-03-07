@@ -88,10 +88,9 @@ delete(Key) ->
 %% {@link model_behaviour} callback exists/1. 
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) ->
-    true | false | datastore:generic_error().
+-spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    datastore:exists(global_only, ?MODEL_NAME, Key).
+    ?RESPONSE(datastore:exists(global_only, ?MODEL_NAME, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc

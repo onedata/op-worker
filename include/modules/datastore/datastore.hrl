@@ -40,6 +40,14 @@
 -define(PRED_ALWAYS, fun() -> true end).
 
 
+%% Utils
+-define(RESPONSE(R), begin
+                         {ok, Reponse} = R,
+                         Response
+                     end
+).
+
+
 %% Common funs
 -define(GET_ALL,
     fun

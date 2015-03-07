@@ -65,7 +65,7 @@
 %% Checks if #document with given key exists.
 %% @end
 %%--------------------------------------------------------------------
--callback exists(datastore:key()) -> true | false | datastore:generic_error().
+-callback exists(datastore:key()) -> datastore:exists_return().
 
 
 

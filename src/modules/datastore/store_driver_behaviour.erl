@@ -67,7 +67,7 @@
 %% Checks if #document with given key exists.
 %% @end
 %%--------------------------------------------------------------------
--callback exists(model_behaviour:model_config(), datastore:key()) -> true | false | datastore:generic_error().
+-callback exists(model_behaviour:model_config(), datastore:key()) -> {ok, boolean()} | datastore:generic_error().
 
 
 %%--------------------------------------------------------------------

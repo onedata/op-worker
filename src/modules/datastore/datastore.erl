@@ -40,8 +40,9 @@
 -type store_level() :: disk_only | local_only | global_only | locally_cached | globally_cached.
 -type delete_predicate() :: fun(() -> boolean()).
 -type list_fun() :: fun((Obj :: term(), AccIn :: term()) -> {next, Acc :: term()} | {abort, Acc :: term()}).
+-type exists_return() :: boolean() | no_return().
 
--export_type([store_level/0, delete_predicate/0, list_fun/0]).
+-export_type([store_level/0, delete_predicate/0, list_fun/0, exists_return/0]).
 
 %% API
 -export([save/2, update/4, create/2, get/3, list/4, delete/4, delete/3, exists/3]).
@@ -135,7 +136,7 @@ delete(Level, ModelName, Key) ->
 %% multiple drivers at once - use *_only levels.
 %%--------------------------------------------------------------------
 -spec exists(Level :: store_level(), ModelName :: model_behaviour:model_type(),
-    Key :: datastore:key()) -> true | false | datastore:generic_error().
+    Key :: datastore:key()) -> {ok, boolean()} | datastore:generic_error().
 exists(Level, ModelName, Key) ->
     exec_driver(ModelName, level_to_driver(Level), exists, [Key]).
 
