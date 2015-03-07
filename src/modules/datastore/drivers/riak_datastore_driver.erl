@@ -382,7 +382,7 @@ to_binary(Term) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec from_binary(binary()) -> term().
-from_binary(<<?OBJ_PREFIX, _>> = Bin) ->
+from_binary(<<?OBJ_PREFIX, _/binary>> = Bin) ->
     base64_to_term(Bin);
 from_binary(<<?ATOM_PREFIX, Atom/binary>>) ->
     binary_to_atom(Atom, utf8);
