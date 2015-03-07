@@ -100,9 +100,9 @@ update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Dif
 create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value = Value}) ->
     %% @todo: fix me! somehow riak's context allows to override existing record
     case exists(_ModelConfig, Key) of
-        true ->
+        {ok, true} ->
             {error, already_exists};
-        false ->
+        {ok, false} ->
             RiakOP = riakc_map:to_op(to_riak_obj(Value)),
             case call(riakc_pb_socket, update_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key), RiakOP]) of
                 ok -> {ok, Key};
