@@ -258,9 +258,6 @@ to_riak_obj(Term, Rev) when is_tuple(Term) ->
 -spec to_riak_obj(term()) -> term().
 to_riak_obj(Term) when is_tuple(Term) ->
     to_riak_obj(Term, riakc_map:new());
-%% to_riak_obj(Int) when is_integer(Int) ->
-%%     Counter = riakc_counter:new(),
-%%     riakc_counter:increment(Int, Counter);
 to_riak_obj(Bin) when is_binary(Bin) ->
     Register = riakc_register:new(),
     riakc_register:set(Bin, Register);
