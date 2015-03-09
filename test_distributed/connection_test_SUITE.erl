@@ -493,7 +493,7 @@ python_client_test(Config) ->
     lists:foreach(
         fun(_) ->
             ?assertEqual({ok, router_message_called},
-                test_utils:receive_msg(router_message_called, timer:seconds(5)))
+                test_utils:receive_msg(router_message_called, timer:seconds(15)))
         end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
     catch port_close(PythonClient),
