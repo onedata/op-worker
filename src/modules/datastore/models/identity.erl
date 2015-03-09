@@ -143,8 +143,8 @@ before(_ModelName, _Method, _Level, _Context) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(CertInfo = #certificate_info{}) ->
     case gsi_handler:get_certs_from_oneproxy(?ONEPROXY_REST, CertInfo) of
-        {ok, Cert} ->
-            case identity:get(Cert) of
+        {ok, #certificate{otp_cert = OtpCert}} ->
+            case identity:get(OtpCert) of
                 {ok, Doc = #document{value = Iden}} ->
                     identity:save(#document{key = CertInfo, value = Iden}),
                     {ok, Doc};

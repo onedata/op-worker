@@ -49,17 +49,22 @@ rest_cert_auth(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
     CertUnknown = ?TEST_FILE(Config, "unknown_peer.pem"),
-    UnknownCertOpt = {ssl_options, [{certfile, CertUnknown}]},
-    KnownCertOpt = {ssl_options, [{certfile, ?TEST_FILE(Config, "known_peer.pem")}]},
+    CertKnown = ?TEST_FILE(Config, "known_peer.pem"),
+    UnknownCertOpt = {ssl_options, [{certfile, CertUnknown}, {reuse_sessions, false}]},
+    KnownCertOpt = {ssl_options, [{certfile, CertKnown}, {reuse_sessions, false}]},
 
-    % when
-%%     ct:print("~p", [utils:cmd(["curl", "-k", "--cert", CertUnknown, "-L", "-v", Endpoint ++ "random_path"])]),
-    AuthFail = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], [UnknownCertOpt]),
-    AuthSuccess = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], [KnownCertOpt]),
+    % then - unauthorized access
+    {ok, "307", Headers, _} = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], [UnknownCertOpt]),
+    Loc = proplists:get_value("location", Headers),
+    ?assertMatch({ok, "401", _, _}, ibrowse:send_req(Loc, [], get, [], [UnknownCertOpt])),
 
-    % then
-    ?assertMatch({ok, "401", _, _}, AuthFail),
-    ?assertMatch({ok, "404", _, _}, AuthSuccess).
+    % then - authorized access
+%%     ct:print("~p", [utils:cmd(["curl", "-k", "--cert", CertKnown, "-L", "-v","-H", "'content-type: application/json'", "-X", "PUT", Endpoint ++ "random_path?aa=bb"])]).
+    {ok, "307", Headers2, _} = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], [KnownCertOpt]),
+    Loc2 = proplists:get_value("location", Headers2),
+    {ok, "307", Headers3, _} = ibrowse:send_req(Loc2, [], get, [], [KnownCertOpt]),
+    Loc3 = proplists:get_value("location", Headers3),
+    ?assertMatch({ok, "404", _, _}, ibrowse:send_req(Loc3, [], get, [], [KnownCertOpt])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -70,8 +75,7 @@ init_per_suite(Config) ->
     Config2.
 
 end_per_suite(Config) ->
-%%     test_node_starter:clean_environment(Config).
-ok.
+    test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
     ssl:start(),
@@ -103,24 +107,48 @@ rest_endpoint(Node) ->
 %todo move to ctool
 mock_gr_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
+    Url = rpc:call(Worker1, gr_plugin, get_gr_url, []),
     KeyPath = rpc:call(Worker1, gr_plugin, get_key_path, []),
     CertPath = rpc:call(Worker1, gr_plugin, get_cert_path, []),
     CacertPath = rpc:call(Worker1, gr_plugin, get_cacert_path, []),
     {ok, Key} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
     {ok, Cert} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
-    {ok, Cacert} = file:read_file(?TEST_FILE(Config, "grpCA.pem")),
-    test_utils:mock_new(Workers, [file]),
-    test_utils:mock_expect(Workers, file, read_file,
+    {ok, CACert} = file:read_file(?TEST_FILE(Config, "grpCA.pem")),
+    [{KeyType, KeyEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [Key]),
+    [{_, CertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [Cert]),
+    [{_, CACertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [CACert]),
+    SSLOptions = {ssl_options, [{cacerts, [CACertEncoded]}, {key, {KeyType, KeyEncoded}}, {cert, CertEncoded}]},
+
+    test_utils:mock_new(Workers, [wrapper]),
+    test_utils:mock_expect(Workers, wrapper, read_file,
         fun
             (Path) when Path =:= KeyPath -> {ok, Key};
             (Path) when Path =:= CertPath -> {ok, Cert};
-            (Path) when Path =:= CacertPath -> {ok, Cacert};
+            (Path) when Path =:= CacertPath -> {ok, CACert};
             (Path) -> meck:passthrough([Path])
+        end
+    ),
+
+    test_utils:mock_new(Workers, [gr_endpoint]),
+    test_utils:mock_expect(Workers, gr_endpoint, auth_request,
+        fun
+            (provider, URN, Method, Headers, Body, Options) ->
+                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+            (client, URN, Method, Headers, Body, Options) ->
+                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+            ({_, undefined}, URN, Method, Headers, Body, Options) ->
+                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+            ({_, AccessToken}, URN, Method, Headers, Body, Options) ->
+                AuthorizationHeader = {"authorization", "Bearer " ++ binary_to_list(AccessToken)},
+                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"}, AuthorizationHeader | Headers], Method, Body, [SSLOptions | Options])
+
         end
     ).
 
 %todo move to ctool
 unmock_gr_certificates(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, [file]),
-    test_utils:mock_unload(Workers, [file]).
+    test_utils:mock_validate(Workers, [gr_endpoint]),
+    test_utils:mock_unload(Workers, [gr_endpoint]),
+    test_utils:mock_validate(Workers, [wrapper]),
+    test_utils:mock_unload(Workers, [wrapper]).

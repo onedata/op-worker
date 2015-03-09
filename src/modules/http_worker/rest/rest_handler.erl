@@ -12,6 +12,7 @@
 -module(rest_handler).
 -author("Lukasz Opiola").
 
+-include("global_definitions.hrl").
 -include("modules/http_worker/http_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -26,7 +27,7 @@
     is_authorized/2, resource_exists/2, content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
--export([get_json/2, put_json/2]).
+-export([get_resource/2, handle_json_data/2]).
 
 %%%===================================================================
 %%% API
@@ -104,16 +105,19 @@ is_authorized(Req, State) ->
         {{error, {not_found, missing_or_deleted}}, NewReq} ->
             GrUrl = gr_plugin:get_gr_url(),
             ProviderId = oneprovider:get_provider_id(),
-            {ok, NewReq2} = cowboy_req:reply(
-                305,
+            {_, NewReq2} = cowboy_req:host(NewReq),
+            {<<"http://", Url/binary>>, NewReq3} = cowboy_req:url(NewReq2),
+
+            {ok, NewReq4} = cowboy_req:reply(
+                307,
                 [
                     {<<"location">>, <<(list_to_binary(GrUrl))/binary,
-                        "/user/providers/", ProviderId/binary, "/auth_proxy">>}
+                        "/user/providers/", ProviderId/binary, "/auth_proxy?ref=https://", Url/binary>>}
                 ],
                 <<"">>,
-                NewReq
+                NewReq3
             ),
-            {halt, NewReq2, State};
+            {halt, NewReq4, State};
         {{error, Error}, NewReq} ->
             ?debug("Authentication error ~p", [Error]),
             {{false, <<"authentication_error">>}, NewReq, State}
@@ -138,7 +142,7 @@ resource_exists(Req, State) ->
 -spec content_types_provided(req(), #state{}) -> {[{binary(), atom()}], req(), #state{}}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, get_cdmi_container}
+        {<<"application/cdmi-container">>, get_resource}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -150,7 +154,7 @@ content_types_provided(Req, State) ->
 -spec content_types_accepted(req(), #state{}) -> {[{binary(), atom()}], req(), #state{}}.
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, put_cdmi_container}
+        {<<"application/json">>, handle_json_data}
     ], Req, State}.
 
 
@@ -178,8 +182,8 @@ delete_resource(Req, State) ->
 %% Handles GET with "application/json" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec get_json(req(), #state{}) -> {term(), req(), #state{}}.
-get_json(Req, State) ->
+-spec get_resource(req(), #state{}) -> {term(), req(), #state{}}.
+get_resource(Req, State) ->
     {<<"ok">>, Req, State}.
 
 %%--------------------------------------------------------------------
@@ -187,6 +191,28 @@ get_json(Req, State) ->
 %% Handles PUT with "application/json" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec put_json(req(), #state{}) -> {term(), req(), #state{}}.
-put_json(Req, State) ->
-    {true, Req, State}.
+-spec handle_json_data(req(), #state{}) -> {term(), req(), #state{}}.
+handle_json_data(Req, State = #state{identity = ?GLOBALREGISTRY_IDENTITY}) ->
+    case cowboy_req:path_info(Req) of
+        {[<<"auth">>], _}  ->
+            {ok, Body, Req2} = cowboy_req:body(Req),
+            Json = mochijson2:decode(Body, [{format, proplist}]),
+            User = proplists:get_value(<<"user">>, Json),
+            Cert = proplists:get_value(<<"cert">>, Json),
+
+            UserId = proplists:get_value(<<"userId">>, User),
+            UserName = proplists:get_value(<<"name">>, User),
+
+            case lists:any(fun(X) -> X =:= undefined end, [UserId, UserName, Cert]) of
+                true -> {false, Req2, State};
+                false ->
+                    {ok, _} = onedata_user:save(#document{key = UserId, value = #onedata_user{name = UserName}}),
+                    [{'Certificate', DerCert, _}] = public_key:pem_decode(Cert),
+                    OtpCert = public_key:pkix_decode_cert(DerCert, otp),
+                    {ok, _} = identity:save(#document{key = OtpCert, value = #identity{user_id = UserId}}),
+                    {true, Req2, State}
+            end
+    end;
+handle_json_data(Req, State) ->
+    {ok, Req2} = cowboy_req:reply(401, [], <<"">>, Req),
+    {halt, Req2, State}.
