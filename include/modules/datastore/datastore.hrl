@@ -40,9 +40,9 @@
 -define(MODELS, [
     some_record,
     subscription,
-    session
+    session,
+    onedata_user,
+    identity
 ]).
 
 -endif.
-
-%% worker_proxy:call(session_manager_worker, {reuse_or_create_session, id, cred, self()}).

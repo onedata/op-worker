@@ -16,6 +16,7 @@
 -include("proto_internal/oneclient/event_messages.hrl").
 -include("proto_internal/oneclient/server_messages.hrl").
 -include("proto_internal/oneclient/client_messages.hrl").
+-include("proto_internal/oneclient/diagnostic_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -83,6 +84,14 @@ route_and_ignore_answer(Msg = #client_message{}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec route_and_send_answer(#client_message{}) -> ok.
+route_and_send_answer(#client_message{message_id = Id,
+    message_body = #ping{}, session_id = SessId}) ->
+    Pong = #server_message{message_id = Id, message_body = #pong{}},
+    communicator:send(Pong, SessId);
+route_and_send_answer(#client_message{message_id = Id,
+    message_body = #get_protocol_version{}, session_id = SessId}) ->
+    ProtoV = #server_message{message_id = Id, message_body = #protocol_version{}},
+    communicator:send(ProtoV, SessId);
 route_and_send_answer(Msg = #client_message{}) ->
     ?info("route_and_send_answer(~p)", [Msg]),
     ok. %todo

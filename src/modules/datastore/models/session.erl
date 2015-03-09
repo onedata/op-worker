@@ -15,7 +15,6 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore.hrl").
--include("modules/datastore/models/session.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
@@ -25,10 +24,10 @@
 -export([get_session_supervisor_and_node/1, get_event_manager/1,
     get_sequencer_manager/1, get_communicator/1]).
 
--export_type([id/0, credentials/0]).
+-export_type([id/0, identity/0]).
 
 -type id() :: binary().
--type credentials() :: #credentials{}.
+-type identity() :: #identity{}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -199,4 +198,3 @@ get_communicator(SessId) ->
         {error, Reason} ->
             {error, Reason}
     end.
-

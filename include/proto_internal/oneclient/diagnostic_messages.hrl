@@ -6,26 +6,22 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Session model definitions.
+%%% Internal version of diagnostic protocol messages
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(SESSION_HRL).
--define(SESSION_HRL, 1).
+-ifndef(DIAGNOSTIC_MESSAGES_HRL).
+-define(DIAGNOSTIC_MESSAGES_HRL, 1).
 
--record(credentials, {
-    user_id :: binary()
-}).
+-record(ping,{}).
 
-%% session:
-%% cred - owner credentials
--record(session, {
-    credentials :: #credentials{},
-    node :: node(),
-    session_sup :: pid(),
-    event_manager :: pid(),
-    sequencer_manager :: pid(),
-    communicator :: pid()
+-record(pong,{}).
+
+-record(get_protocol_version, {}).
+
+-record(protocol_version, {
+    major = 3 :: non_neg_integer(),
+    minor = 0 :: non_neg_integer()
 }).
 
 -endif.

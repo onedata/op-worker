@@ -55,18 +55,18 @@ session_manager_session_creation_and_reuse_test(Config) ->
     Self = self(),
     SessId1 = <<"session_id_1">>,
     SessId2 = <<"session_id_2">>,
-    Cred1 = #credentials{user_id = <<"user_id_1">>},
-    Cred2 = #credentials{user_id = <<"user_id_2">>},
+    Iden1 = #identity{user_id = <<"user_id_1">>},
+    Iden2 = #identity{user_id = <<"user_id_2">>},
 
-    lists:foreach(fun({SessId, Cred, Workers}) ->
+    lists:foreach(fun({SessId, Iden, Workers}) ->
         Answers = utils:pmap(fun(Worker) ->
             rpc:call(Worker, session_manager,
-                reuse_or_create_session, [SessId, Cred, Self])
+                reuse_or_create_session, [SessId, Iden, Self])
         end, Workers),
 
         AnswersWithoutCreatedAnswer = lists:delete({ok, created}, Answers),
         ?assertNotEqual(Answers, AnswersWithoutCreatedAnswer),
-        ?assertEqual(true, lists:all(fun(Answer) ->
+        ?assert(lists:all(fun(Answer) ->
             Answer =:= {ok, reused}
         end, AnswersWithoutCreatedAnswer)),
 
@@ -78,8 +78,8 @@ session_manager_session_creation_and_reuse_test(Config) ->
         ?assertEqual({error, timeout}, test_utils:receive_any())
 
     end, [
-        {SessId1, Cred1, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)},
-        {SessId2, Cred2, lists:duplicate(2, Worker2) ++ lists:duplicate(2, Worker1)}
+        {SessId1, Iden1, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)},
+        {SessId2, Iden2, lists:duplicate(2, Worker2) ++ lists:duplicate(2, Worker1)}
     ]),
 
     ?assertEqual(ok, rpc:call(Worker1, session_manager, remove_session, [SessId1])),
@@ -97,6 +97,7 @@ session_manager_session_components_running_test(Config) ->
 
         ?assertMatch({ok, #document{key = SessId, value = #session{}}}, Doc),
         {ok, #document{value = #session{
+            identity = Iden,
             node = Node,
             session_sup = SessSup,
             event_manager = EvtMan,
@@ -106,7 +107,7 @@ session_manager_session_components_running_test(Config) ->
 
         % Check session infrastructure is running.
         lists:foreach(fun(Pid) ->
-            ?assertEqual(true, is_pid(Pid)),
+            ?assert(is_pid(Pid)),
             ?assertNotEqual(undefined, rpc:call(Node, erlang, process_info, [Pid]))
         end, [SessSup, EvtMan, SeqMan, Comm]),
 
@@ -125,17 +126,17 @@ session_manager_session_components_running_test(Config) ->
 session_manager_supervision_tree_structure_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessIds = ?config(session_ids, Config),
-    Creds = ?config(credentials, Config),
+    Idents = ?config(identities, Config),
 
     [
         {Node1, [SessSup1, EvtMan1, SeqMan1, Comm1]},
         {Node2, [SessSup2, EvtMan2, SeqMan2, Comm2]}
-    ] = lists:map(fun({SessId, Cred}) ->
+    ] = lists:map(fun({SessId, Iden}) ->
         Doc = rpc:call(Worker, session, get, [SessId]),
 
         ?assertMatch({ok, #document{key = SessId, value = #session{}}}, Doc),
         {ok, #document{value = #session{
-            credentials = Cred,
+            identity = Iden,
             node = Node,
             session_sup = SessSup,
             event_manager = EvtMan,
@@ -144,7 +145,7 @@ session_manager_supervision_tree_structure_test(Config) ->
         }}} = Doc,
 
         {Node, [SessSup, EvtMan, SeqMan, Comm]}
-    end, lists:zip(SessIds, Creds)),
+    end, lists:zip(SessIds, Idents)),
 
     % Check supervision tree structure.
     ?assertEqual(true, is_child({session_manager_worker_sup, Node1}, SessSup1)),
@@ -161,7 +162,7 @@ session_manager_supervision_tree_structure_test(Config) ->
         end, [event_manager_sup, sequencer_manager_sup, communicator])
     end, [SessSup1, SessSup2]),
     lists:foreach(fun({Sup, Child}) ->
-        ?assertEqual(true, is_child(Sup, Child))
+        ?assert(is_child(Sup, Child))
     end, [{EvtManSup1, EvtMan1}, {SeqManSup1, SeqMan1},
         {EvtManSup2, EvtMan2}, {SeqManSup2, SeqMan2}]),
 
@@ -172,14 +173,14 @@ session_manager_supervision_tree_structure_test(Config) ->
 session_manager_session_removal_test(Config) ->
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
     [SessId1, SessId2] = SessIds = ?config(session_ids, Config),
-    Creds = ?config(credentials, Config),
+    Idents = ?config(identities, Config),
 
-    [{Node1, Pids1}, {Node2, Pids2}] = lists:map(fun({SessId, Cred}) ->
+    [{Node1, Pids1}, {Node2, Pids2}] = lists:map(fun({SessId, Iden}) ->
         Doc = rpc:call(Worker1, session, get, [SessId]),
 
         ?assertMatch({ok, #document{key = SessId, value = #session{}}}, Doc),
         {ok, #document{value = #session{
-            credentials = Cred,
+            identity = Iden,
             node = Node,
             session_sup = SessSup,
             event_manager = EvtMan,
@@ -188,7 +189,7 @@ session_manager_session_removal_test(Config) ->
         }}} = Doc,
 
         {Node, [SessSup, EvtMan, SeqMan, Comm]}
-    end, lists:zip(SessIds, Creds)),
+    end, lists:zip(SessIds, Idents)),
 
     utils:pforeach(fun({SessId, Node, Pids, Worker}) ->
         ?assertEqual(ok, rpc:call(Worker, session_manager,
@@ -224,14 +225,14 @@ session_getters_test(Config) ->
         Answer = rpc:call(Worker, session, GetterName, [SessId]),
         ?assertMatch({ok, _}, Answer),
         {ok, Pid} = Answer,
-        ?assertEqual(true, is_pid(Pid))
+        ?assert(is_pid(Pid))
     end, [get_event_manager, get_sequencer_manager, get_communicator]),
 
     Answer = rpc:call(Worker, session, get_session_supervisor_and_node, [SessId]),
     ?assertMatch({ok, {_, _}}, Answer),
     {ok, {Pid, Node}} = Answer,
-    ?assertEqual(true, is_pid(Pid)),
-    ?assertEqual(true, is_atom(Node)),
+    ?assert(is_pid(Pid)),
+    ?assert(is_atom(Node)),
 
     ok.
 
@@ -241,11 +242,11 @@ session_supervisor_child_crash_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Cred = #credentials{user_id = <<"user_id">>},
+    Iden = #identity{user_id = <<"user_id">>},
 
     lists:foreach(fun({ChildId, Fun, Args}) ->
         ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-            reuse_or_create_session, [SessId, Cred, Self])),
+            reuse_or_create_session, [SessId, Iden, Self])),
 
         {ok, {SessSup, Node}} = rpc:call(Worker, session,
             get_session_supervisor_and_node, [SessId]),
@@ -294,10 +295,10 @@ init_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Cred = #credentials{user_id = <<"user_id">>},
+    Iden = #identity{user_id = <<"user_id">>},
 
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Cred, Self])),
+        reuse_or_create_session, [SessId, Iden, Self])),
 
     [{session_id, SessId} | Config];
 
@@ -320,13 +321,13 @@ init_per_testcase(Case, Config) when
     Self = self(),
     SessId1 = <<"session_id_1">>,
     SessId2 = <<"session_id_2">>,
-    Cred1 = #credentials{user_id = <<"user_id_1">>},
-    Cred2 = #credentials{user_id = <<"user_id_2">>},
+    Iden1 = #identity{user_id = <<"user_id_1">>},
+    Iden2 = #identity{user_id = <<"user_id_2">>},
 
     ?assertEqual({ok, created}, rpc:call(hd(Workers), session_manager,
-        reuse_or_create_session, [SessId1, Cred1, Self])),
+        reuse_or_create_session, [SessId1, Iden1, Self])),
     ?assertEqual({ok, created}, rpc:call(hd(Workers), session_manager,
-        reuse_or_create_session, [SessId2, Cred2, Self])),
+        reuse_or_create_session, [SessId2, Iden2, Self])),
 
     test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun
@@ -336,7 +337,7 @@ init_per_testcase(Case, Config) when
         (_, _) -> ok
     end),
 
-    [{session_ids, [SessId1, SessId2]}, {credentials, [Cred1, Cred2]} | Config].
+    [{session_ids, [SessId1, SessId2]}, {identities, [Iden1, Iden2]} | Config].
 
 end_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -363,7 +364,7 @@ end_per_testcase(Case, Config) when
     test_utils:mock_validate(Workers, communicator),
     test_utils:mock_unload(Workers, communicator),
 
-    proplists:delete(session_ids, proplists:delete(credentials, Config));
+    proplists:delete(session_ids, proplists:delete(identities, Config));
 
 end_per_testcase(Case, Config) when
     Case =:= session_manager_session_components_running_test;
@@ -379,7 +380,7 @@ end_per_testcase(Case, Config) when
     test_utils:mock_validate(Workers, communicator),
     test_utils:mock_unload(Workers, communicator),
 
-    proplists:delete(session_ids, proplists:delete(credentials, Config)).
+    proplists:delete(session_ids, proplists:delete(identities, Config)).
 
 %%%===================================================================
 %%% Internal functions
