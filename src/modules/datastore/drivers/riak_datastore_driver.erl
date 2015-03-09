@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Riak database driver.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(riak_datastore_driver).

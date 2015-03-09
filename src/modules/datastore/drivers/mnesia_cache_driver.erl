@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Riak database driver.
+%%% @doc Mnesia database driver.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(mnesia_cache_driver).
