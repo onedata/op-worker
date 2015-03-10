@@ -1,0 +1,161 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          oneprovider-ccm
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: oneprovider CCM
+# Description:       Central Cluster Manager (CCM) is a part of oneprovider
+#                    application. It supervises oneprovider workers.
+### END INIT INFO
+
+# Author: Krzysztof Trzepla <krzysztof.trzepla@gmail.com>
+
+# Do NOT "set -e"
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+DESC="oneprovider CCM"
+NAME=oneprovider-ccm
+DAEMON=/opt/oneprovider/nodes/ccm/bin/oneprovider_node
+DAEMON_ARGS="start"
+PIDDIR=/var/run/${NAME}
+PIDFILE=${PIDDIR}/${NAME}.pid
+SCRIPTNAME=/etc/init.d/${NAME}
+
+# Exit if the package is not installed
+[ -x "${DAEMON}" ] || exit 0
+
+# Read configuration variable file if it is present
+[ -r /etc/default/${NAME} ] && . /etc/default/${NAME}
+
+# Load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.2-14) to ensure that this file is present
+# and status_of_proc is working.
+. /lib/lsb/init-functions
+
+wait_for_node()
+{
+    WAIT=${WAIT_FOR_NODE:-15}
+    while [ ${WAIT} -gt 0 ]; do
+        WAIT=`expr $WAIT - 1`
+        sleep 1
+
+        ${DAEMON} ping > /dev/null
+        if [ "$?" -ne 0 ]; then
+            continue
+        else
+            mkdir -p ${PIDDIR} && echo `${DAEMON} getpid` > ${PIDFILE}
+            return  0
+        fi
+    done
+    echo "${DAEMON} failed to start within ${WAIT_FOR_NODE:-15} seconds,"
+    echo "see the output of '${DAEMON} console' for more information."
+    echo "If you want to wait longer, set the environment variable"
+    echo "WAIT_FOR_NODE to the number of seconds to wait."
+    return 2
+}
+
+#
+# Function that starts the daemon/service
+#
+do_start()
+{
+    # Return
+    #   0 if daemon has been started
+    #   1 if daemon was already running
+    #   2 if daemon could not be started
+
+    start-stop-daemon --start \
+                      --quiet \
+                      --pidfile ${PIDFILE} \
+                      --test \
+                      --startas ${DAEMON} -- ${DAEMON_ARGS} >/dev/null \
+    || return 1
+
+    start-stop-daemon --start \
+                      --quiet \
+                      --pidfile ${PIDFILE} \
+                      --startas ${DAEMON} -- ${DAEMON_ARGS} \
+    || return 2
+
+    wait_for_node
+}
+
+#
+# Function that stops the daemon/service
+#
+do_stop()
+{
+    # Return
+    #   0 if daemon has been stopped
+    #   1 if daemon was already stopped
+    #   2 if daemon could not be stopped
+    #   other if a failure occurred
+
+    # Attempt a clean shutdown.
+    ${DAEMON} stop >/dev/null 2>&1
+    RETVAL="$?"
+
+    if [ ${RETVAL} -ne 0 ]; then
+        start-stop-daemon --stop \
+                          --quiet \
+                          --pidfile ${PIDFILE} \
+                          --retry=TERM/30/KILL/5
+        RETVAL="$?"
+        [ ${RETVAL} = 2 ] && return 2
+    fi
+
+    rm -rf ${PIDDIR}
+
+    return ${RETVAL}
+}
+
+case "$1" in
+  start)
+    [ ${VERBOSE} != no ] && log_daemon_msg "Starting $DESC" ${NAME}
+    do_start
+    case "$?" in
+        0|1) [ ${VERBOSE} != no ] && log_end_msg 0 ;;
+        2) [ ${VERBOSE} != no ] && log_end_msg 1 ;;
+    esac
+    ;;
+  stop)
+    [ ${VERBOSE} != no ] && log_daemon_msg "Stopping $DESC" ${NAME}
+    do_stop
+    case "$?" in
+        0|1) [ ${VERBOSE} != no ] && log_end_msg 0 ;;
+        2) [ ${VERBOSE} != no ] && log_end_msg 1 ;;
+    esac
+    ;;
+  status)
+    status_of_proc -p ${PIDFILE} ${DAEMON} ${NAME} && exit 0 || exit $?
+    ;;
+  restart|force-reload)
+    log_daemon_msg "Restarting $DESC" ${NAME}
+    do_stop
+    case "$?" in
+      0|1)
+        do_start
+        case "$?" in
+            0) log_end_msg 0 ;;
+            1) log_end_msg 1 ;; # Old process is still running
+            *) log_end_msg 1 ;; # Failed to start
+        esac
+        ;;
+      *)
+        # Failed to stop
+        log_end_msg 1
+        ;;
+    esac
+    ;;
+  *)
+    echo "Usage: $SCRIPTNAME {start|stop|status|restart|force-reload}" >&2
+    exit 3
+    ;;
+esac
+
+:
