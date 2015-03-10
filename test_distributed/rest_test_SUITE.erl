@@ -61,7 +61,6 @@ rest_cert_auth(Config) ->
     ?assertMatch({ok, "401", _, _}, ibrowse:send_req(Loc, [], get, [], [UnknownCertOpt])),
 
     % then - authorized access
-%%     ct:print("~p", [utils:cmd(["curl", "-k", "--cert", CertKnown, "-L", "-v","-H", "'content-type: application/json'", "-X", "PUT", Endpoint ++ "random_path?aa=bb"])]).
     {ok, "307", Headers2, _} = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], [KnownCertOpt]),
     Loc2 = proplists:get_value("location", Headers2),
     {ok, "307", Headers3, _} = ibrowse:send_req(Loc2, [], get, [], [KnownCertOpt]),
@@ -106,7 +105,6 @@ rest_endpoint(Node) ->
         end,
     string:join(["https://", utils:get_host(Node), ":", Port, "/rest/latest/"], "").
 
-%todo move to ctool
 mock_gr_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Url = rpc:call(Worker1, gr_plugin, get_gr_url, []),
@@ -147,7 +145,6 @@ mock_gr_certificates(Config) ->
         end
     ).
 
-%todo move to ctool
 unmock_gr_certificates(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate(Workers, [gr_endpoint]),
