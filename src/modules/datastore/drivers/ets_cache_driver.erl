@@ -101,7 +101,7 @@ get(#model_config{} = ModelConfig, Key) ->
 %%--------------------------------------------------------------------
 -spec list(model_behaviour:model_config(),
     Fun :: datastore:list_fun(), AccIn :: term()) ->
-    {ok, Handle :: term()} | datastore:generic_error().
+    {ok, Handle :: term()} | datastore:generic_error() | no_return().
 list(#model_config{} = _ModelConfig, _Fun, _AccIn) ->
     error(not_supported).
 

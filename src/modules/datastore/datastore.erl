@@ -102,7 +102,7 @@ get(Level, ModelName, Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list(Level :: store_level(), ModelName :: model_behaviour:model_type(), Fun :: list_fun(), AccIn :: term()) ->
-    {ok, Handle :: term()} | datastore:generic_error().
+    {ok, Handle :: term()} | datastore:generic_error() | no_return().
 list(Level, ModelName, Fun, AccIn) ->
     exec_driver(ModelName, level_to_driver(Level), list, [Fun, AccIn]).
 

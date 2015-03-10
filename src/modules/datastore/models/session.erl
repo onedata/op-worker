@@ -76,7 +76,7 @@ get(Key) ->
 %% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error().
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
     datastore:list(global_only, ?MODEL_NAME, ?GET_ALL, []).
 
