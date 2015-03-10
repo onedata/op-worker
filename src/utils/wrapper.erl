@@ -21,15 +21,15 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv file:read_file(File)
+%% @equiv file:read_file(Filename)
 %% @end
 %%--------------------------------------------------------------------
 -spec read_file(Filename) -> {ok, Binary} | {error, Reason} when
     Filename :: file:name_all(),
     Binary :: binary(),
     Reason :: file:posix() | badarg | terminated | system_limit.
-read_file(File) ->
-    file:read_file(File).
+read_file(Filename) ->
+    file:read_file(Filename).
 
 %%%===================================================================
 %%% Internal functions

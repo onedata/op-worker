@@ -105,7 +105,8 @@ get_certs_from_oneproxy(OneProxyHandler, #certificate_info{client_session_id = G
                     {error, Reason};
                 {ok, SessionData} ->
                     ClientCerts = base64:decode(SessionData),
-                    [OtpCert | Certs] = lists:reverse([public_key:pkix_decode_cert(DER, otp) || {'Certificate', DER, _} <- public_key:pem_decode(ClientCerts)]),
+                    [OtpCert | Certs] = lists:reverse([public_key:pkix_decode_cert(DER, otp)
+                        || {'Certificate', DER, _} <- public_key:pem_decode(ClientCerts)]),
                     {ok, #certificate{otp_cert = OtpCert, chain = Certs}}
             end
     end.
