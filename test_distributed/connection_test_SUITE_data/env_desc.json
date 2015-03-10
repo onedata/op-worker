@@ -25,7 +25,8 @@
                 "sys.config": {
                     "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
-                    "db_nodes": [ "127.0.0.1:49161" ]
+                    "db_nodes": [ "127.0.0.1:49161" ],
+                    "protocol_handler_bind_addr": "all"
                 }
             },
             "worker2": {
@@ -36,7 +37,8 @@
                 "sys.config": {
                     "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
-                    "db_nodes": [ "127.0.0.1:49161" ]
+                    "db_nodes": [ "127.0.0.1:49161" ],
+                    "protocol_handler_bind_addr": "all"
                 }
             }
         }

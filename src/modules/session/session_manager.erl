@@ -24,16 +24,16 @@
 %%%===================================================================
 %%--------------------------------------------------------------------
 %% @doc
-%% Reuses active session or creates one for user identified by credentials.
+%% Reuses active session or creates one for user with given identity.
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(SessId :: session:id(),
-    Cred :: session:credentials(), Con :: pid()) ->
+    Iden :: session:identity(), Con :: pid()) ->
     {ok, reused | created} |{error, Reason :: term()}.
-reuse_or_create_session(SessId, Cred, Con) ->
+reuse_or_create_session(SessId, Iden, Con) ->
     worker_proxy:call(
         ?SESSION_WORKER,
-        {reuse_or_create_session, SessId, Cred, Con},
+        {reuse_or_create_session, SessId, Iden, Con},
         ?TIMEOUT,
         prefer_local
     ).

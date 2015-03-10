@@ -26,10 +26,10 @@
 -export([get_session_supervisor_and_node/1, get_event_manager/1,
     get_sequencer_manager/1, get_communicator/1]).
 
--export_type([id/0, credentials/0]).
+-export_type([id/0, identity/0]).
 
 -type id() :: binary().
--type credentials() :: #credentials{}.
+-type identity() :: #identity{}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -200,4 +200,3 @@ get_communicator(SessId) ->
         {error, Reason} ->
             {error, Reason}
     end.
-

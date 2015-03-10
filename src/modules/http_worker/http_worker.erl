@@ -14,6 +14,7 @@
 
 -behaviour(worker_plugin_behaviour).
 
+-include_lib("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
@@ -48,7 +49,12 @@ handle(ping, _) ->
     pong;
 
 handle(healthcheck, _) ->
-    ok;
+    Endpoints = [protocol_handler, gui, redirector, rest],
+    lists:foldl(
+        fun
+            (Endpoint, ok) -> healthcheck(Endpoint);
+            (_, Error) -> Error
+        end, ok, Endpoints);
 
 handle({spawn_handler, SocketPid}, _) ->
     Pid = spawn(
@@ -72,3 +78,38 @@ handle(_Request, _) ->
     Error :: timeout | term().
 cleanup() ->
     ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% healthcheck given endpoint
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck(Endpoint :: atom()) -> ok | {error, Reason :: atom()}.
+healthcheck(protocol_handler) ->
+    {ok, ProtocolHandlerPort} = application:get_env(?APP_NAME, protocol_handler_port),
+    case ssl:connect("127.0.0.1", ProtocolHandlerPort, [{packet, 4}, {active, false}]) of
+        {ok, Sock} ->
+            ssl:close(Sock),
+            ok;
+        _ -> {error, no_protocol_handler}
+    end;
+healthcheck(gui) ->
+    {ok, GuiPort} = application:get_env(?APP_NAME, http_worker_https_port),
+    case ibrowse:send_req("https://127.0.0.1:" ++ integer_to_list(GuiPort), [], get) of
+        {ok, _, _, _} ->
+            ok;
+        _ -> {error, no_gui}
+    end;
+healthcheck(redirector) ->
+    {ok, RedirectPort} = application:get_env(?APP_NAME, http_worker_redirect_port),
+    case ibrowse:send_req("http://127.0.0.1:" ++ integer_to_list(RedirectPort), [], get) of
+        {ok, _, _, _} -> ok;
+        _ -> {error, no_http_redirector}
+    end;
+healthcheck(rest) ->
+    {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
+    case ibrowse:send_req("https://127.0.0.1:" ++ integer_to_list(RestPort), [], get) of
+        {ok, _, _, _} -> ok;
+        _ -> {error, no_rest}
+    end.
+

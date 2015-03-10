@@ -1,0 +1,64 @@
+{
+    "oneprovider_node": {
+        "config": {
+            "input_dir": "rel/oneprovider_node",
+            "target_dir": "rel/test_cluster"
+        },
+        "nodes": {
+            "ccm": {
+                "vm.args": {
+                    "name": "ccm@",
+                    "setcookie": "oneprovider_node"
+                },
+                "sys.config": {
+                    "node_type": "ccm",
+                    "ccm_nodes": [ "ccm@" ],
+                    "db_nodes": [ "127.0.0.1:49161" ],
+                    "global_registry_node": "gr@",
+                    "workers_to_trigger_init": 2
+                }
+            },
+            "worker1": {
+                "vm.args": {
+                    "name": "worker1@",
+                    "setcookie": "oneprovider_node"
+                },
+                "sys.config": {
+                    "node_type": "worker",
+                    "ccm_nodes": [ "ccm@"],
+                    "db_nodes": [ "127.0.0.1:49161" ],
+                    "global_registry_node": "gr@"
+
+                }
+            },
+            "worker2": {
+                "vm.args": {
+                    "name": "worker2@",
+                    "setcookie": "oneprovider_node"
+                },
+                "sys.config": {
+                    "node_type": "worker",
+                    "ccm_nodes": [ "ccm@"],
+                    "db_nodes": [ "127.0.0.1:49161" ],
+                    "global_registry_node": "gr@"
+                }
+            }
+        }
+    },
+    "appmock": {
+        "config": {
+            "input_dir": "rel/appmock",
+            "target_dir": "rel/test_cluster"
+        },
+        "nodes": {
+            "appmock": {
+                "vm.args": {
+                    "name": "gr@"
+                },
+                "sys.config": {
+                    "app_description_file": "./gr_mock_description.erl.cfg"
+                }
+            }
+        }
+    }
+}

@@ -208,6 +208,9 @@ handle_info({timer, Msg}, State) ->
     gen_server:cast(self(), Msg),
     {noreply, State};
 
+handle_info({'EXIT', _, normal}, State) ->
+    {noreply, State};
+
 handle_info(_Info, State) ->
     ?log_bad_request(_Info),
     {noreply, State}.
@@ -251,8 +254,8 @@ code_change(_OldVsn, State, _Extra) ->
 -spec try_send(Msg :: #server_message{}, Connections :: [pid()]) ->
     ok | {error, Reason :: term()}.
 try_send(Msg, Connections) ->
-    [RandomConnection | _] =
-        try utils:random_shuffle(Connections)
+    RandomConnection =
+        try utils:random_element(Connections)
         catch _:_ -> error_empty_connection_pool
         end,
     CommunicatorPid = self(),
