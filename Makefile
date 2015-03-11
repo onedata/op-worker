@@ -26,10 +26,12 @@ distclean:
 ##
 
 rel: generate
+	make -C appmock/ rel
 
 relclean:
 	rm -rf rel/test_cluster
 	rm -rf rel/oneprovider_node
+	rm -rf appmock/rel/appmock
 
 ##
 ## Testing targets

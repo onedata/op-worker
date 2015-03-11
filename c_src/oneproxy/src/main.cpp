@@ -81,8 +81,8 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
 
-        boost::asio::io_service client_io_service;
-        boost::asio::io_service proxy_io_service;
+        boost::asio::io_service io_service;
+        boost::asio::io_service::strand strand(io_service);
         std::vector<std::thread> workers;
 
         {
@@ -114,12 +114,12 @@ int main(int argc, char *argv[])
 
                     if (http_mode == "http"s) {
                         s = std::make_shared<tls_server<tls2tcp_http_session>>(
-                            client_io_service, proxy_io_service, verify_type,
+                                io_service, strand, verify_type,
                             cert_path, listen_port, forward_host, forward_port,
                             ca_dirs);
                     } else {
                         s = std::make_shared<tls_server<tls2tcp_session>>(
-                            client_io_service, proxy_io_service, verify_type,
+                                io_service, strand, verify_type,
                             cert_path, listen_port, forward_host, forward_port,
                             ca_dirs);
                     }
@@ -131,7 +131,7 @@ int main(int argc, char *argv[])
                     const auto listen_port = atoi(argv[2]);
 
                     s = std::make_shared<tcp_server>(
-                        client_io_service, proxy_io_service, verify_type,
+                            io_service, strand, verify_type,
                         cert_path, listen_port, ca_dirs);
                     break;
                 }
@@ -139,12 +139,11 @@ int main(int argc, char *argv[])
 
             s->start_accept();
 
-            boost::asio::io_service::work client_work(client_io_service);
-            boost::asio::io_service::work proxy_work(proxy_io_service);
+            boost::asio::io_service::work work(io_service);
 
-            auto worker_count = std::thread::hardware_concurrency() / 2;
+            auto worker_count = std::thread::hardware_concurrency();
             if (!worker_count)
-                worker_count = WORKER_COUNT / 2;
+                worker_count = WORKER_COUNT;
 
             if (worker_count <= 0) {
                 LOG(ERROR) << "Incorrect number of workers";
@@ -153,9 +152,7 @@ int main(int argc, char *argv[])
 
             for (auto i = 0u; i < WORKER_COUNT; ++i) {
                 workers.push_back(
-                    std::thread{[&]() { client_io_service.run(); }});
-                workers.push_back(
-                    std::thread{[&]() { proxy_io_service.run(); }});
+                    std::thread{[&]() { io_service.run(); }});
             }
 
             if (type == proxy_type::reverse) {
@@ -192,8 +189,7 @@ int main(int argc, char *argv[])
 
         LOG(INFO) << "Stopping proxy on port " << atoi(argv[1]) << "...";
 
-        client_io_service.stop();
-        proxy_io_service.stop();
+        io_service.stop();
 
         for (auto &worker : workers) {
             worker.join();

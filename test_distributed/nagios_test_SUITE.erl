@@ -38,7 +38,7 @@ all() -> [nagios_test].
 nagios_test(Config) ->
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
 
-    {ok, XMLString} = perform_nagios_healthcheck(Worker1),
+    {ok, "200", _, XMLString} = rpc:call(Worker1, ibrowse, send_req, [?HEALTHCHECK_PATH, [], get]),
 
     {Xml, _} = xmerl_scan:string(XMLString),
 
@@ -78,29 +78,6 @@ nagios_test(Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-% TODO remove retries when cluster init is checked with use of nagios
-perform_nagios_healthcheck(Node) ->
-    perform_nagios_healthcheck(Node, 20).
-
-perform_nagios_healthcheck(_, 0) ->
-    {error, max_retries_to_nagios_reached};
-
-% Requests health report from nagios endpoint.
-perform_nagios_healthcheck(Node, Retries) ->
-    case rpc:call(Node, ibrowse, send_req, [?HEALTHCHECK_PATH, [], get]) of
-        {ok, "200", _, Response} ->
-            {ok, Response};
-        {ok, OtherCode, Headers, Response} ->
-            {error, {wrong_nagios_response, [
-                {code, OtherCode},
-                {headers, Headers},
-                {body, Response}
-            ]}};
-        _ ->
-            timer:sleep(timer:seconds(1)),
-            perform_nagios_healthcheck(Node, Retries - 1)
-    end.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
