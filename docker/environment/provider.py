@@ -35,6 +35,10 @@ def _tweak_config(config, name, uid):
     sys_config['ccm_nodes'] = [common.format_hostname(n, uid) for n in
                                sys_config['ccm_nodes']]
 
+    if 'global_registry_node' in sys_config:
+        sys_config['global_registry_node'] = \
+            common.format_hostname(sys_config['global_registry_node'], uid)
+
     vm_args = cfg['nodes']['node']['vm.args']
     vm_args['name'] = common.format_hostname(vm_args['name'], uid)
 
@@ -88,7 +92,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 def _is_up(ip):
     url = 'https://{0}/nagios'.format(ip)
     try:
-        fo = urlopen(url, timeout=1)
+        fo = urlopen(url, timeout=5)
         tree = eTree.parse(fo)
         healthdata = tree.getroot()
         status = healthdata.attrib['status']
