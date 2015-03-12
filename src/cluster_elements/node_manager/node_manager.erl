@@ -22,20 +22,21 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include("modules_and_args.hrl").
+-include("cluster_elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% This record is used by node_manager (it contains its state).
 %% It describes node type (ccm or worker) and status of connection
 %% with ccm (connected or not_connected).
 -record(node_state, {
-    node_type = worker :: worker | ccm,
     ccm_con_status = not_connected :: not_connected | connected | registered,
     state_num = 0 :: integer(),
     dispatcher_state = 0 :: integer()
 }).
 
 %% API
--export([start_link/1, stop/0]).
+-export([start_link/0, stop/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -49,15 +50,15 @@
 %% Starts node manager
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Type) -> Result when
+-spec start_link() -> Result when
     Type :: worker | ccm,
     Result :: {ok, Pid}
     | ignore
     | {error, Error},
     Pid :: pid(),
     Error :: {already_started, Pid} | term().
-start_link(Type) ->
-    gen_server:start_link({local, ?NODE_MANAGER_NAME}, ?MODULE, [Type], []).
+start_link() ->
+    gen_server:start_link({local, ?NODE_MANAGER_NAME}, ?MODULE, [], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -86,7 +87,7 @@ stop() ->
     | ignore,
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
-init([worker]) ->
+init(_Opts) ->
     try
         listener_starter:start_protocol_listener(),
         listener_starter:start_gui_listener(),
@@ -94,17 +95,12 @@ init([worker]) ->
         listener_starter:start_redirector_listener(),
         listener_starter:start_dns_listeners(),
         gen_server:cast(self(), do_heartbeat),
-        {ok, #node_state{node_type = worker, ccm_con_status = not_connected}}
+        {ok, #node_state{ccm_con_status = not_connected}}
     catch
         _:Error ->
             ?error_stacktrace("Cannot initialize listeners: ~p", [Error]),
             {stop, cannot_initialize_listeners}
-    end;
-init([ccm]) ->
-    gen_server:cast(self(), do_heartbeat),
-    {ok, #node_state{node_type = ccm, ccm_con_status = not_connected}};
-init([_Type]) ->
-    {stop, wrong_type}.
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -125,9 +121,6 @@ init([_Type]) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
-handle_call(get_node_type, _From, State = #node_state{node_type = NodeType}) ->
-    {reply, NodeType, State};
-
 handle_call(get_state_num, _From, State = #node_state{state_num = StateNum}) ->
     {reply, StateNum, State};
 
@@ -277,13 +270,22 @@ do_heartbeat(State = #node_state{ccm_con_status = not_connected}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec on_ccm_state_change(NewStateNum :: integer(), State :: term()) -> #node_state{}.
+on_ccm_state_change(NewStateNum, State = #node_state{ccm_con_status = connected}) ->
+    ?debug("Node ~p successfully connected to ccm, starting workers...", [node(), NewStateNum]),
+    init_workers(),
+    update_dispatcher_and_dns(NewStateNum),
+    State#node_state{state_num = NewStateNum, ccm_con_status = registered};
 on_ccm_state_change(NewStateNum, State = #node_state{state_num = NewStateNum, dispatcher_state = NewStateNum}) ->
     ?debug("heartbeat on node: ~p: answered, new state_num: ~p", [node(), NewStateNum]),
     State#node_state{ccm_con_status = registered};
 on_ccm_state_change(NewStateNum, State) ->
     ?debug("heartbeat on node: ~p: answered, new state_num: ~p", [node(), NewStateNum]),
-    update_dispatcher(NewStateNum),
+    update_dispatcher_and_dns(NewStateNum),
     State#node_state{state_num = NewStateNum, ccm_con_status = registered}.
+
+update_dispatcher_and_dns(NewStateNum) ->
+    update_dispatcher(NewStateNum),
+    update_dns().
 
 %%--------------------------------------------------------------------
 %% @private
@@ -295,6 +297,40 @@ on_ccm_state_change(NewStateNum, State) ->
 update_dispatcher(NewStateNum) ->
     ?debug("Message sent to update dispatcher, state num: ~p", [NewStateNum]),
     gen_server:cast(?DISPATCHER_NAME, {check_state, NewStateNum}).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates dnses' states.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_dns() -> ok | {error, ip_resolving}.
+update_dns() ->
+    %prepare worker IPs with loads info
+    Nodes = gen_server:call({global, ?CCM}, get_nodes),
+    NodesIpToLoad = [{node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- Nodes],
+    FilteredNodesIpToLoad = [{IP, Load} || {IP, Load} <- NodesIpToLoad, IP =/= unknownaddress],
+
+    %prepare modules with their nodes and loads info
+    ModuleToNodeList = [{Module, NodesIpToLoad} || Module <- ?MODULES],
+
+    case FilteredNodesIpToLoad of
+        [] -> ok;
+        _ ->
+            % prepare average load
+            LoadAverage = utils:average([Load || {_, Load} <- FilteredNodesIpToLoad]),
+
+            UpdateInfo = {update_state, ModuleToNodeList, FilteredNodesIpToLoad, LoadAverage},
+            ?debug("updating dns, update message: ~p", [UpdateInfo]),
+            gen_server:cast(dns_worker, #worker_request{req = UpdateInfo})
+    end,
+
+    case length(FilteredNodesIpToLoad) == length(Nodes) of
+        true ->
+            ok;
+        false ->
+            {error, ip_resolving}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -323,4 +359,60 @@ init_net_connection([Node | Nodes]) ->
         pang ->
             ?error("Cannot connect to node ~p", [Node]),
             init_net_connection(Nodes)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts all workers defined in "modules_and_args.hrl" on node, and notifies
+%% ccm about successfull init
+%% @end
+%%--------------------------------------------------------------------
+-spec init_workers() -> ok.
+init_workers() ->
+    lists:foreach(fun({Module, Args}) -> ok = start_worker(Module, Args) end, ?MODULES_WITH_ARGS),
+    gen_server:cast({global, ?CCM}, {init_ok, node()}).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts worker node with dedicated supervisor as brother. Both entities
+%% are started under MAIN_WORKER_SUPERVISOR supervision.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_worker(Module :: atom(), Args :: term()) -> ok | {error, term()}.
+start_worker(Module, Args) ->
+    try
+        {ok, LoadMemorySize} = application:get_env(?APP_NAME, worker_load_memory_size),
+        WorkerSupervisorName = ?WORKER_HOST_SUPERVISOR_NAME(Module),
+        {ok, _} = supervisor:start_child(
+            ?MAIN_WORKER_SUPERVISOR_NAME,
+            {Module, {worker_host, start_link, [Module, Args, LoadMemorySize]}, transient, 5000, worker, [worker_host]}
+        ),
+        {ok, _} = supervisor:start_child(
+            ?MAIN_WORKER_SUPERVISOR_NAME,
+            {WorkerSupervisorName, {worker_host_sup, start_link, [WorkerSupervisorName, Args]}, transient, infinity, supervisor, [worker_host_sup]}
+        ),
+        ?info("Worker: ~s started", [Module])
+    catch
+        _:Error ->
+            ?error_stacktrace("Error: ~p during start of worker: ~s", [Error, Module]),
+            {error, Error}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Resolve ipv4 address of node.
+%% @end
+%%--------------------------------------------------------------------
+-spec node_to_ip(Node :: atom()) -> inet:ip4_address() | unknownaddress.
+node_to_ip(Node) ->
+    StrNode = atom_to_list(Node),
+    AddressWith@ = lists:dropwhile(fun(Char) -> Char =/= $@ end, StrNode),
+    Address = lists:dropwhile(fun(Char) -> Char =:= $@ end, AddressWith@),
+    case inet:getaddr(Address, inet) of
+        {ok, Ip} -> Ip;
+        {error, Error} ->
+            ?error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
+            unknownaddress
     end.

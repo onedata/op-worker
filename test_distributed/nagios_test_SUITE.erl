@@ -12,6 +12,7 @@
 -author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
+-include("modules_and_args.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -61,12 +62,12 @@ nagios_test(Config) ->
         end, WorkerNodes),
 
     % Check if all workers are in the report.
-    {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
+    Nodes = gen_server:call({global, ?CCM}, get_nodes, 1000),
     lists:foreach(
         fun({WNode, WName}) ->
             WorkersOnNode = proplists:get_value(atom_to_list(WNode), WorkersByNodeXML),
             ?assertEqual(true, lists:member(WName, WorkersOnNode))
-        end, Workers),
+        end, [{Node, Worker} || Node <- Nodes, Worker <- ?MODULES ]),
 
     % Check if every node's status contains dispatcher and node manager status
     lists:foreach(

@@ -35,21 +35,20 @@ all() -> [simple_call_test, direct_cast_test, redirect_cast_test, mixed_cast_tes
 
 -perf_test({repeats, ?REPEATS}).
 simple_call_test(Config) ->
-    [Ccm] = ?config(op_ccm_nodes, Config),
-    [Worker] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     T1 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, random])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, random])),
     T2 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Worker, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, random])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [{http_worker, Worker1}, ping, ?REQUEST_TIMEOUT])),
     T3 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [{http_worker, Worker2}, ping, ?REQUEST_TIMEOUT])),
     T4 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Worker, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])),
     T5 = os:timestamp(),
 
-    [{redirect_random, timer:now_diff(T2, T1)}, {direct_random, timer:now_diff(T3, T2)},
-        {redirect_prefer_local, timer:now_diff(T4, T3)}, {direct_prefer_local, timer:now_diff(T5, T4)}].
+    [{random, timer:now_diff(T2, T1)}, {direct, timer:now_diff(T3, T2)},
+        {redirect, timer:now_diff(T4, T3)}, {prefer_local, timer:now_diff(T5, T4)}].
 
 %%%===================================================================
 
@@ -59,7 +58,7 @@ simple_call_test(Config) ->
     {ct_config, [{proc_num, 10}, {proc_repeats, 10}]}
 ]).
 direct_cast_test(Config) ->
-    [Worker] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     ProcSendNum = ?config(proc_repeats, Config),
     ProcNum = ?config(proc_num, Config),
 
@@ -89,14 +88,14 @@ direct_cast_test(Config) ->
     {ct_config, [{proc_num, 10}, {proc_repeats, 10}]}
 ]).
 redirect_cast_test(Config) ->
-    [Ccm] = ?config(op_ccm_nodes, Config),
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     ProcSendNum = ?config(proc_repeats, Config),
     ProcNum = ?config(proc_num, Config),
 
     TestProc = fun() ->
         Self = self(),
         SendReq = fun(MsgId) ->
-            ?assertEqual(ok, rpc:call(Ccm, worker_proxy, cast, [http_worker, ping, {proc, Self}, MsgId, random]))
+            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [{http_worker, Worker2}, ping, {proc, Self}, MsgId]))
         end,
 
         BeforeProcessing = os:timestamp(),
@@ -123,16 +122,15 @@ redirect_cast_test(Config) ->
     {ct_config, [{proc_num, 10}, {proc_repeats, 10}]}
 ]).
 mixed_cast_test(Config) ->
-    [Ccm] = ?config(op_ccm_nodes, Config),
-    [Worker] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     ProcSendNum = ?config(proc_repeats, Config),
     ProcNum = ?config(proc_num, Config),
 
     TestProc = fun() ->
         Self = self(),
         SendReq = fun(MsgId) ->
-            ?assertEqual(ok, rpc:call(Ccm, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2*MsgId-1, random])),
-            ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2*MsgId, prefer_local]))
+            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2*MsgId-1, random])),
+            ?assertEqual(ok, rpc:call(Worker2, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2*MsgId, prefer_local]))
         end,
 
         BeforeProcessing = os:timestamp(),

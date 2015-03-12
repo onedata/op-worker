@@ -15,7 +15,7 @@
                     "ccm_nodes": [ "ccm@" ],
                     "db_nodes": [ "127.0.0.1:49161" ],
                     "global_registry_node": "gr@",
-                    "workers_to_trigger_init": 2
+                    "worker_num": 2
                 }
             },
             "worker1": {
