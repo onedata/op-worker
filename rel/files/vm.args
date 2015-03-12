@@ -1,0 +1,14 @@
+## Name of the node
+-name nonode@nohost
+
+## Cookie for distributed erlang
+-setcookie oneprovider_node
+
+## Treat lager warnings as warnings
++W w
+
+## Increase number of concurrent ports/sockets
+-env ERL_MAX_PORTS 4096
+
+## Increase number of processes
++P 1000000
