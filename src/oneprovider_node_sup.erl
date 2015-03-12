@@ -16,7 +16,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1]).
+-export([start_link/0]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -30,15 +30,15 @@
 %% Starts the supervisor
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Args :: term()) -> Result when
+-spec start_link() -> Result when
     Result :: {ok, pid()}
     | ignore
     | {error, Error},
     Error :: {already_started, pid()}
     | {shutdown, term()}
     | term().
-start_link(NodeType) ->
-    supervisor:start_link({local, ?APPLICATION_SUPERVISOR_NAME}, ?MODULE, [NodeType]).
+start_link() ->
+    supervisor:start_link({local, ?APPLICATION_SUPERVISOR_NAME}, ?MODULE, []).
 
 %%%===================================================================
 %% Supervisor callbacks
@@ -59,14 +59,7 @@ start_link(NodeType) ->
         [ChildSpec :: supervisor:child_spec()]
     }} |
     ignore.
-init([ccm]) ->
-    RestartStrategy = one_for_one,
-    MaxRestarts = 5,
-    RestartTimeWindowSecs = 10,
-    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
-        cluster_manager_spec()
-    ]}};
-init([worker]) ->
+init([]) ->
     RestartStrategy = one_for_one,
     MaxRestarts = 5,
     RestartTimeWindowSecs = 10,
@@ -122,17 +115,4 @@ node_manager_spec() ->
     Type = worker,
     {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates a worker child_spec for a cluster manager child.
-%% @end
-%%--------------------------------------------------------------------
--spec cluster_manager_spec() -> supervisor:child_spec().
-cluster_manager_spec() ->
-    Id = Module = cluster_manager,
-    Restart = permanent,
-    Shutdown = timer:seconds(5),
-    Type = worker,
-    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
 
