@@ -4,6 +4,7 @@ They can create separate clusters.
 
 import copy
 import json
+import os
 
 import common
 import docker
