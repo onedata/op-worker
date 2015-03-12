@@ -2,25 +2,22 @@
  * @file exception.h
  * @author Konrad Zemek
  * @copyright (C) 2014 ACK CYFRONET AGH
- * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
+ * @copyright This software is released under the MIT license cited in
+ * 'LICENSE.txt'
  */
 
 #ifndef HELPERS_COMMUNICATION_EXCEPTION_H
 #define HELPERS_COMMUNICATION_EXCEPTION_H
 
-
 #include <stdexcept>
 
-namespace one
-{
-namespace communication
-{
+namespace one {
+namespace communication {
 
 /**
  * A base class for communication exceptions.
  */
-class Exception: public std::runtime_error
-{
+class Exception : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
 };
@@ -28,8 +25,7 @@ public:
 /**
  * An @c Exception specialization for errors occuring while sending messages.
  */
-class SendError: public Exception
-{
+class SendError : public Exception {
 public:
     using Exception::Exception;
 };
@@ -37,8 +33,7 @@ public:
 /**
  * An @c Exception specialization for errors occuring while receiving messages.
  */
-class ReceiveError: public Exception
-{
+class ReceiveError : public Exception {
 public:
     using Exception::Exception;
 };
@@ -47,8 +42,7 @@ public:
  * An @c Exception specialization for errors occuring while connecting to the
  * server.
  */
-class ConnectionError: public Exception
-{
+class ConnectionError : public Exception {
 public:
     using Exception::Exception;
 };
@@ -64,6 +58,5 @@ public:
 
 } // namespace communication
 } // namespace one
-
 
 #endif // HELPERS_COMMUNICATION_EXCEPTION_H

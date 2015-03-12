@@ -20,11 +20,11 @@ class ServerMessage;
 namespace communication {
 
 /**
- * The SubscriptionData is a pair holding predicate and callback for a single
+ * @c SubscriptionData is a pair holding predicate and callback for a single
  * subscription.
- * @see subscribe()
+ * @see one::communication::layers::Inbox::subscribe()
  */
-class SubscriptionData {
+struct SubscriptionData {
     using ServerMessage = clproto::ServerMessage;
 
 public:
@@ -40,16 +40,18 @@ public:
         std::function<bool(const ServerMessage &, const bool)> predicate,
         std::function<void(const ServerMessage &)> callback);
 
+    SubscriptionData() = default;
+
     /**
      * The stored predicate.
      */
-    const std::function<bool(const ServerMessage &, const bool)> predicate =
-        [](auto, auto) { return false; };
+    std::function<bool(const ServerMessage &, const bool)> predicate =
+        [](auto &, auto) { return false; };
 
     /**
      * The stored callback.
      */
-    const std::function<void(const ServerMessage &)> callback;
+    std::function<void(const ServerMessage &)> callback;
 };
 
 } // namespace communication

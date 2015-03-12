@@ -8,10 +8,10 @@
 
 #include "connectionPool.h"
 
-#include "certificateData.h"
 #include "exception.h"
 #include "connection.h"
 #include "logging.h"
+#include "cert/certificateData.h"
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
@@ -34,21 +34,24 @@ namespace one {
 namespace communication {
 
 ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
-    std::string host, std::string port,
-    std::function<std::string()> getHandshake,
-    std::shared_ptr<const CertificateData> certificateData,
-    const bool verifyServerCertificate,
-    std::function<void(std::string)> onMessage)
-    : m_getHandshake{std::move(getHandshake)}
-    , m_certificateData{std::move(certificateData)}
+    std::string host, std::string service, const bool verifyServerCertificate,
+    std::shared_ptr<const cert::CertificateData> certificateData)
+    : m_connectionsNumber{connectionsNumber}
+    , m_host{std::move(host)}
+    , m_service{std::move(service)}
     , m_verifyServerCertificate{verifyServerCertificate}
+    , m_certificateData{std::move(certificateData)}
     , m_idleWork{m_ioService}
     , m_blockingStrand{m_ioService}
     , m_connectionsStrand{m_ioService}
     , m_context{boost::asio::ssl::context::tlsv12_client}
 {
     m_outbox.set_capacity(OUTBOX_SIZE);
+}
 
+void ConnectionPool::connect()
+{
+    m_workers.clear();
     std::generate_n(std::back_inserter(m_workers),
         std::max<int>(std::thread::hardware_concurrency(), 2), [=] {
             return std::thread{[=] {
@@ -62,7 +65,7 @@ ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
         });
 
     boost::asio::ip::tcp::resolver resolver{m_ioService};
-    boost::asio::ip::tcp::resolver::query query{host, port};
+    boost::asio::ip::tcp::resolver::query query{m_host, m_service};
 
     try {
         m_endpointIterator = resolver.resolve(query);
@@ -89,8 +92,15 @@ ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
         throw ConnectionError{ec.message()};
     }
 
-    for (auto i = 0u; i < connectionsNumber; ++i)
+    for (auto i = 0u; i < m_connectionsNumber; ++i)
         createConnection();
+}
+
+void ConnectionPool::setHandshake(std::function<std::string()> getHandshake,
+    std::function<bool(std::string)> onHandshakeResponse)
+{
+    m_getHandshake = std::move(getHandshake);
+    m_onHandshakeResponse = std::move(onHandshakeResponse);
 }
 
 void ConnectionPool::setOnMessageCallback(
@@ -99,7 +109,7 @@ void ConnectionPool::setOnMessageCallback(
     m_onMessage = std::move(onMessage);
 }
 
-std::future<void> ConnectionPool::send(std::string message)
+std::future<void> ConnectionPool::send(std::string message, const int)
 {
     std::promise<void> promise;
     auto future = promise.get_future();
@@ -148,13 +158,13 @@ void ConnectionPool::onConnectionClosed(std::shared_ptr<Connection> conn)
 void ConnectionPool::createConnection()
 {
     auto conn = std::make_shared<Connection>(m_ioService, m_context,
-        m_verifyServerCertificate,
+        m_verifyServerCertificate, m_getHandshake, m_onHandshakeResponse,
         std::bind(&ConnectionPool::onMessageReceived, this, _1),
         std::bind(&ConnectionPool::onConnectionReady, this, _1),
         std::bind(&ConnectionPool::onConnectionClosed, this, _1));
 
     m_connectionsStrand.post([this, conn] { m_connections.emplace(conn); });
-    conn->start(m_endpointIterator);
+    conn->connect(m_endpointIterator);
 }
 
 ConnectionPool::~ConnectionPool()

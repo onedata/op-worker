@@ -12,7 +12,6 @@ add_dependencies(helpers glog)
 target_include_directories(helpers PRIVATE ../include)
 target_include_directories(helpers SYSTEM PRIVATE
     ${GLOG_INCLUDE_DIR}
-    ${WSPP_INCLUDE_DIR}
     ${CLPROTO_SYSTEM_INCLUDE_DIRS})
 
 set(HELPERS_INCLUDE_DIRS
@@ -22,7 +21,6 @@ set(HELPERS_INCLUDE_DIRS
 set(HELPERS_SYSTEM_INCLUDE_DIRS
     ${CLPROTO_SYSTEM_INCLUDE_DIRS}
     ${GLOG_INCLUDE_DIR}
-    ${WSPP_INCLUDE_DIR}
     PARENT_SCOPE)
 
 set(HELPERS_LIBRARIES
