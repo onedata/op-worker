@@ -48,7 +48,7 @@ boost::shared_ptr<ConnectionPoolProxy> create(
 
 BOOST_PYTHON_MODULE(connection_pool)
 {
-    class_<one::communication::ConnectionPool, boost::noncopyable>(
+    class_<ConnectionPoolProxy, boost::noncopyable>(
         "ConnectionPoolProxy", no_init)
         .def("__init__", make_constructor(create))
         .def("send", &ConnectionPoolProxy::send)

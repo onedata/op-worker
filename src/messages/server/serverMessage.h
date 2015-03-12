@@ -16,7 +16,7 @@ class ServerMessage;
 }
 
 namespace messages {
-namespace client {
+namespace server {
 
 /**
 * The ServerMessage class represents a message that can by sent form the server

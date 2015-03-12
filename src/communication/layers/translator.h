@@ -73,8 +73,10 @@ public:
     {
         auto protoMsg = msg.createSerializer()->serialize(msg);
         auto future = LowerLayer::communicate(std::move(protoMsg), retries);
-        return std::async(std::launch::deferred,
-            [future = std::move(future)] { return SvrMsg{future.get()}; });
+        return std::async(
+            std::launch::deferred, [future = std::move(future)]() mutable {
+                return SvrMsg{future.get()};
+            });
     }
 };
 
