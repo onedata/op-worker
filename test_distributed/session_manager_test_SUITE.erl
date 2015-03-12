@@ -14,7 +14,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
--include("op_test_utils.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("annotations/include/annotations.hrl").
 

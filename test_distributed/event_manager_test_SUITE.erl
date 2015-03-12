@@ -16,7 +16,7 @@
 -include("proto_internal/oneclient/common_messages.hrl").
 -include("proto_internal/oneclient/event_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include("op_test_utils.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
