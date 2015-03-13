@@ -1,16 +1,12 @@
-.git
-.settings
-.eunit
-.idea
-
-*.iml
-*.beam
-*.pyc
+.idea/
+.rebar/
 
 rel/oneprovider_ccm
 rel/test_cluster
+ebin/
+deps/*/
 
-deps
-doc
-logs
-ebin
+*.plt
+*.pyc
+*.beam
+*.iml

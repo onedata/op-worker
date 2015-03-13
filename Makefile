@@ -38,11 +38,13 @@ distclean:
 
 rel: generate
 	make -C appmock/ rel
+	make -C oneprovider_ccm/ rel
 
 relclean:
 	rm -rf rel/test_cluster
 	rm -rf rel/oneprovider_node
 	rm -rf appmock/rel/appmock
+	rm -rf oneprovider_ccm/rel/oneprovider_ccm
 
 ##
 ## Testing targets

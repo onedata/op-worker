@@ -1,12 +1,10 @@
-"""Brings up a set of oneprovider worker nodes. They can create separate clusters."""
+"""Brings up a set of oneprovider ccm nodes. They can create separate clusters."""
 
 from __future__ import print_function
 
 import copy
 import json
 import os
-import sys
-import time
 
 import common
 import docker
@@ -35,10 +33,6 @@ def _tweak_config(config, name, uid):
     sys_config['ccm_nodes'] = [common.format_hostname(n, uid) for n in
                                sys_config['ccm_nodes']]
 
-    if 'global_registry_node' in sys_config:
-        sys_config['global_registry_node'] = \
-            common.format_hostname(sys_config['global_registry_node'], uid)
-
     vm_args = cfg['nodes']['node']['vm.args']
     vm_args['name'] = common.format_hostname(vm_args['name'], uid)
 
@@ -56,9 +50,9 @@ cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
-/root/bin/node/bin/oneprovider_node console'''
+/root/bin/node/bin/oneprovider_ccm console'''
     command = command.format(
-        gen_dev_args=json.dumps({'oneprovider_node': config}),
+        gen_dev_args=json.dumps({'oneprovider_ccm': config}),
         uid=os.geteuid(),
         gid=os.getegid())
 
@@ -82,55 +76,26 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         [container],
         {
             'docker_ids': [container],
-            'op_worker_nodes': [node_name]
+            'op_ccm_nodes' : [node_name]
         }
     )
 
-
-def _is_up(ip):
-    url = 'https://{0}/nagios'.format(ip)
-    try:
-        fo = urlopen(url, timeout=5)
-        tree = eTree.parse(fo)
-        healthdata = tree.getroot()
-        status = healthdata.attrib['status']
-        return status == 'ok'
-    except URLError:
-        return False
-    except BadStatusLine:
-        return False
-
-
-def _wait_until_ready(workers):
-    worker_ip = docker.inspect(workers[0])['NetworkSettings']['IPAddress']
-    deadline = time.time() + 300
-    while not _is_up(worker_ip):
-        if time.time() > deadline:
-            print('WARNING: did not get "ok" healthcheck status for 5 minutes',
-                  file=sys.stderr)
-            break
-
-        time.sleep(1)
-
-
 def up(image, bindir, logdir, dns, uid, config_path):
-    config = common.parse_json_file(config_path)['oneprovider_node']
+    config = common.parse_json_file(config_path)['oneprovider_ccm']
     config['config']['target_dir'] = '/root/bin'
     configs = [_tweak_config(config, node, uid) for node in config['nodes']]
 
     dns_servers, output = common.set_up_dns(dns, uid)
-    workers = []
+    ccms = []
 
     for cfg in configs:
-        worker, node_out = _node_up(image, bindir, logdir, uid, cfg,
+        ccm, node_out = _node_up(image, bindir, logdir, uid, cfg,
                                          dns_servers)
-        workers.extend(worker)
+        ccms.extend(ccm)
         common.merge(output, node_out)
 
-    _wait_until_ready(workers)
-
     if logdir:
-        for node in workers:
+        for node in ccms:
             docker.exec_(node, ['chown', '-R',
                                 '{0}:{1}'.format(os.geteuid(), os.getegid()),
                                 '/root/bin/node/log/'])

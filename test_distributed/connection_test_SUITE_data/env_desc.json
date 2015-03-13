@@ -1,7 +1,7 @@
 {
-    "oneprovider_node": {
+    "oneprovider_ccm" : {
         "config": {
-            "input_dir": "rel/oneprovider_node",
+            "input_dir": "rel/oneprovider_ccm",
             "target_dir": "rel/test_cluster"
         },
         "nodes": {
@@ -11,19 +11,24 @@
                     "setcookie": "oneprovider_node"
                 },
                 "sys.config": {
-                    "node_type": "ccm",
                     "ccm_nodes": [ "ccm@" ],
-                    "db_nodes": [ "127.0.0.1:49161" ],
                     "worker_num": 2
                 }
-            },
+            }
+        }
+    },
+    "oneprovider_node": {
+        "config": {
+            "input_dir": "rel/oneprovider_node",
+            "target_dir": "rel/test_cluster"
+        },
+        "nodes": {
             "worker1": {
                 "vm.args": {
                     "name": "worker1@",
                     "setcookie": "oneprovider_node"
                 },
                 "sys.config": {
-                    "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
                     "db_nodes": [ "127.0.0.1:49161" ],
                     "protocol_handler_bind_addr": "all"
@@ -35,7 +40,6 @@
                     "setcookie": "oneprovider_node"
                 },
                 "sys.config": {
-                    "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
                     "db_nodes": [ "127.0.0.1:49161" ],
                     "protocol_handler_bind_addr": "all"

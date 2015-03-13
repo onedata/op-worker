@@ -10,7 +10,7 @@ import argparse
 import json
 import os
 
-from environment import appmock, client, common, globalregistry, provider
+from environment import appmock, client, common, globalregistry, provider, provider_ccm
 
 
 parser = argparse.ArgumentParser(
@@ -30,6 +30,13 @@ parser.add_argument(
     default=os.getcwd() + '/oneprovider',
     help='the path to oneprovider repository (precompiled)',
     dest='bin_op')
+
+parser.add_argument(
+    '-bccm', '--bin-ccm',
+    action='store',
+    default=os.getcwd() + '/oneprovider_ccm',
+    help='the path to oneprovider_ccm repository (precompiled)',
+    dest='bin_op_ccm')
 
 parser.add_argument(
     '-bg', '--bin-gr',
@@ -92,6 +99,12 @@ if 'globalregistry' in config:
     gr_output = globalregistry.up(args.image, args.bin_gr, dns, uid,
                                   args.config_path)
     common.merge(output, gr_output)
+
+# Start oneprovider_ccm instances
+if 'oneprovider_ccm' in config:
+    op_ccm_output = provider_ccm.up(args.image, args.bin_op_ccm, args.logdir,
+                                    dns, uid, args.config_path)
+    common.merge(output, op_ccm_output)
 
 # Start oneprovider_node instances
 if 'oneprovider_node' in config:

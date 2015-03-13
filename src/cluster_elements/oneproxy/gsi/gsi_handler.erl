@@ -41,11 +41,6 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    case application:get_env(?APP_NAME, node_type) of
-        {ok, ccm} ->
-            throw(ccm_node); % ccm node doesn't have socket interface, so GSI would be useless
-        _ -> ok
-    end,
     ?info("GSI Handler module is starting"),
     ets:new(gsi_state, [{read_concurrency, true}, public, ordered_set, named_table]),
     {ok, CADir} = application:get_env(?APP_NAME, ca_dir),

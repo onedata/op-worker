@@ -8,11 +8,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is a gen_server that coordinates the
-%%% life cycle of node. It starts/stops appropriate services (according
-%%% to node type) and communicates with ccm (if node works as worker).
-%%%
-%%% Node can be ccm or worker. However, worker_hosts can be also
-%%% started at ccm nodes.
+%%% life cycle of node. It starts/stops appropriate services and communicates
+%%% with ccm.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(node_manager).
@@ -51,7 +48,6 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link() -> Result when
-    Type :: worker | ccm,
     Result :: {ok, Pid}
     | ignore
     | {error, Error},
@@ -87,7 +83,7 @@ stop() ->
     | ignore,
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
-init(_Opts) ->
+init([]) ->
     try
         listener_starter:start_protocol_listener(),
         listener_starter:start_gui_listener(),

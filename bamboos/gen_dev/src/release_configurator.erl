@@ -14,7 +14,7 @@
 -author("Tomasz Lichon").
 
 % oneprovider specific config
--define(ONEPROVIDER_APP_NAME, oneprovider_node).
+-define(ONEPROVIDER_CCM_APP_NAME, oneprovider_ccm).
 -define(DIST_APP_FAILOVER_TIMEOUT, timer:seconds(5)).
 -define(SYNC_NODES_TIMEOUT, timer:minutes(1)).
 
@@ -38,28 +38,27 @@
 %%--------------------------------------------------------------------
 -spec configure_release(ApplicationName :: atom(), ReleaseRootPath :: string(),
     SysConfig :: list(), VmArgs :: list()) -> ok | no_return().
-configure_release(?ONEPROVIDER_APP_NAME, ReleaseRootPath, SysConfig, VmArgs) ->
-    {SysConfigPath, VmArgsPath} = find_config_location(?ONEPROVIDER_APP_NAME, ReleaseRootPath),
+configure_release(?ONEPROVIDER_CCM_APP_NAME, ReleaseRootPath, SysConfig, VmArgs) ->
+    {SysConfigPath, VmArgsPath} = find_config_location(?ONEPROVIDER_CCM_APP_NAME, ReleaseRootPath),
     lists:foreach(
         fun({Key, Value}) -> replace_vm_arg(VmArgsPath, "-" ++ atom_to_list(Key), Value) end,
         VmArgs
     ),
     lists:foreach(
-        fun({Key, Value}) -> replace_env(SysConfigPath, ?ONEPROVIDER_APP_NAME, Key, Value) end,
+        fun({Key, Value}) -> replace_env(SysConfigPath, ?ONEPROVIDER_CCM_APP_NAME, Key, Value) end,
         SysConfig
     ),
 
     % configure kernel distributed erlang app
     NodeName = proplists:get_value(name, VmArgs),
-    NodeType = proplists:get_value(type, SysConfig),
     CcmNodes = proplists:get_value(ccm_nodes, SysConfig),
-    case NodeType =:= ccm andalso length(CcmNodes) > 1 of
+    case length(CcmNodes) > 1 of
         true ->
             OptCcms = CcmNodes -- [list_to_atom(NodeName)],
             replace_application_config(SysConfigPath, kernel,
                 [
                     {distributed, [{
-                        ?ONEPROVIDER_APP_NAME,
+                        ?ONEPROVIDER_CCM_APP_NAME,
                         ?DIST_APP_FAILOVER_TIMEOUT,
                         [list_to_atom(NodeName), list_to_tuple(OptCcms)]
                     }]},

@@ -293,7 +293,8 @@ node_down(Node, State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes
 %% @end
 %%--------------------------------------------------------------------
 -spec healthcheck(State :: #cm_state{}) ->
-    {ok, {Nodes, StateNum}} | {error, invalid_worker_num}.
+    {ok, {Nodes :: [node()], StateNum :: non_neg_integer()}} |
+    {error, invalid_worker_num}.
 healthcheck(#cm_state{nodes = Nodes, state_num = StateNum}) ->
     case application:get_env(?APP_NAME, worker_num) of
         {ok, N} when N =:= length(Nodes)->
