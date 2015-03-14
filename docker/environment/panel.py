@@ -32,7 +32,7 @@ def _tweak_config(config, name, uid):
     cfg['nodes'] = {'node': cfg['nodes'][name]}
 
     vm_args = cfg['nodes']['node']['vm.args']
-    vm_args['name'] = common.format_hostname(vm_args['name'], uid)
+    vm_args['name'] = common.format_nodename(vm_args['name'], uid)
 
     sys_config = cfg['nodes']['node']['sys.config']
     sys_config['application_release_path'] = '/tmp/release'
