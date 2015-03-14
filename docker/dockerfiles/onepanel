@@ -1,0 +1,40 @@
+FROM onedata/worker:v5
+MAINTAINER Krzysztof Trzepla <krzysztof.trzepla@gmail.com>
+
+# Get the image up to date
+RUN apt-get update && \
+    apt-get dist-upgrade -y && \
+    apt-get clean
+
+# Install Riak
+RUN apt-get install -y apt-transport-https curl && \
+    apt-get clean
+RUN curl https://packagecloud.io/gpg.key | apt-key add -
+RUN curl "https://packagecloud.io/install/repositories/basho/riak/config_file.list?os=ubuntu&dist=trusty" > /etc/apt/sources.list.d/basho.list
+RUN apt-get update && \
+    apt-get install riak && \
+    apt-get clean
+
+# Install erlang R15B03-1
+ADD https://raw.githubusercontent.com/spawngrid/kerl/master/kerl /root/kerl
+RUN chmod a+x /root/kerl
+RUN apt-get install -y openssl libssl-dev libmozjs185-dev libicu-dev \
+                       libcurl4-gnutls-dev ncurses-dev libtool && \
+    apt-get clean
+RUN /root/kerl build R15B03-1 R15B03-1 && \
+    /root/kerl install R15B03-1 /opt/erlang/R15B03 && \
+    . /opt/erlang/R15B03/activate
+
+# Set up the environment
+ENV HOME /root
+ENV PATH /opt/erlang/R15B03/bin:$PATH
+
+# Install bigcouch
+RUN git clone https://github.com/cloudant/bigcouch.git /root/bigcouch && \
+    cd /root/bigcouch && \
+    ./configure -c bigcouch && \
+    make && \
+    make install && \
+    printf "[admins]\nadmin = password\n" >> /opt/bigcouch/etc/local.ini && \
+    sed -i s/"127.0.0.1"/"0.0.0.0"/g /opt/bigcouch/etc/default.ini && \
+    sed -i s/"require_valid_user = false"/"require_valid_user = true"/g /opt/bigcouch/etc/default.ini

@@ -93,8 +93,11 @@ def format_hostname(node_name, uid):
     node_name can be in format 'somename@' or 'somename'.
     This is needed so different components are resolvable through DNS.
     """
-    (name, _, _) = node_name.partition('@')
-    return '{0}@{0}.{1}.dev.docker'.format(name, uid)
+    (name, _, hostname) = node_name.partition('@')
+    if hostname:
+        return '{0}@{1}.{2}.dev.docker'.format(name, hostname.replace('.', '-'), uid)
+    else:
+        return '{0}@{0}.{1}.dev.docker'.format(name, uid)
 
 
 def format_dockername(node_name, uid):
@@ -102,8 +105,11 @@ def format_dockername(node_name, uid):
     node_name can be in format 'somename@' or 'somename'.
     This is needed so different components are resolvable through DNS.
     """
-    (name, _, _) = node_name.partition('@')
-    return '{0}_{1}'.format(name, uid)
+    (name, _, hostname) = node_name.partition('@')
+    if hostname:
+        return hostname.replace('.', '_')
+    else:
+        return '{0}_{1}'.format(name, uid)
 
 
 def generate_uid():
