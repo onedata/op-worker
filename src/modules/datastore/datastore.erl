@@ -44,8 +44,20 @@
 
 -export_type([store_level/0, delete_predicate/0, list_fun/0, exists_return/0]).
 
+%% Links' types
+-type normalized_link_target() :: {key(), model_behaviour:model_type()}.
+-type link_target() :: #document{} | normalized_link_target().
+-type link_name() :: atom() | binary().
+-type link_spec() :: {link_name(), link_target()}.
+-type normalized_link_spec() :: {link_name(), normalized_link_target()}.
+
+-export_type([link_target/0, link_name/0, link_spec/0, normalized_link_spec/0, normalized_link_target/0]).
+
 %% API
 -export([save/2, update/4, create/2, get/3, list/4, delete/4, delete/3, exists/3]).
+-export([fetch_link/2, fetch_link/3, add_links/2, add_links/3, delete_links/2, delete_links/3,
+         foreach_link/3, foreach_link/4, fetch_link_target/2, fetch_link_target/3,
+         link_walk/3, link_walk/4]).
 -export([configs_per_bucket/1, ensure_state_loaded/0]).
 
 %%%===================================================================
@@ -115,7 +127,13 @@ list(Level, ModelName, Fun, AccIn) ->
 -spec delete(Level :: store_level(), ModelName :: model_behaviour:model_type(),
     Key :: datastore:key(), Pred :: delete_predicate()) -> ok | datastore:generic_error().
 delete(Level, ModelName, Key, Pred) ->
-    exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]).
+    case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
+        ok ->
+            spawn(fun() -> delete_links(Key, ModelName, all) end),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -141,9 +159,93 @@ exists(Level, ModelName, Key) ->
     exec_driver(ModelName, level_to_driver(Level), exists, [Key]).
 
 
+-spec add_links(document(), link_spec() | [link_spec()]) -> ok | generic_error().
+add_links(#document{key = Key} = Doc, Links) ->
+    add_links(Key, model_name(Doc), Links).
+
+-spec add_links(key(), model_behaviour:model_type(), link_spec() | [link_spec()]) ->
+    ok | generic_error().
+add_links(Key, ModelName, {_LinkName, _LinkTarget} = LinkSpec) ->
+    add_links(Key, ModelName, [LinkSpec]);
+add_links(Key, ModelName, Links) when is_list(Links) ->
+    _ModelConfig = ModelName:model_init(),
+    exec_driver(ModelName, ?PERSISTENCE_DRIVER, add_links, [Key, normalize_link_target(Links)]).
+
+
+-spec delete_links(document(), link_name() | [link_name()] | all) -> ok | generic_error().
+delete_links(#document{key = Key} = Doc, LinkNames) ->
+    delete_links(Key, model_name(Doc), LinkNames).
+
+-spec delete_links(key(), model_behaviour:model_type(), link_name() | [link_name()] | all) -> ok | generic_error().
+delete_links(Key, ModelName, LinkNames) when is_list(LinkNames); LinkNames =:= all ->
+    _ModelConfig = ModelName:model_init(),
+    exec_driver(ModelName, ?PERSISTENCE_DRIVER, delete_links, [Key, LinkNames]);
+delete_links(Key, ModelName, LinkName) ->
+    delete_links(Key, ModelName, [LinkName]).
+
+
+-spec fetch_link(document(), link_name()) -> {ok, normalized_link_target()} | generic_error().
+fetch_link(#document{key = Key} = Doc, LinkName) ->
+    fetch_link(Key, model_name(Doc), LinkName).
+
+-spec fetch_link(key(), model_behaviour:model_type(), link_name()) ->
+    {ok, normalized_link_target()} | generic_error().
+fetch_link(Key, ModelName, LinkName) ->
+    _ModelConfig = ModelName:model_init(),
+    exec_driver(ModelName, ?PERSISTENCE_DRIVER, fetch_link, [Key, LinkName]).
+
+-spec fetch_link_target(document(), link_name()) -> {ok, document()} | generic_error().
+fetch_link_target(#document{key = Key} = Doc, LinkName) ->
+    fetch_link_target(Key, model_name(Doc), LinkName).
+
+-spec fetch_link_target(key(), model_behaviour:model_type(), link_name()) ->
+    {ok, document()} | generic_error().
+fetch_link_target(Key, ModelName, LinkName) ->
+    case fetch_link(Key, ModelName, LinkName) of
+        {ok, _Target = {TargetKey, TargetModel}} ->
+            TargetModel:get(TargetKey);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+foreach_link(#document{key = Key} = Doc, Fun, AccIn) ->
+    foreach_link(Key, model_name(Doc), Fun, AccIn).
+foreach_link(Key, ModelName, Fun, AccIn) ->
+    exec_driver(ModelName, ?PERSISTENCE_DRIVER, foreach_link, [Key, Fun, AccIn]).
+
+link_walk(#document{key = StartKey} = StartDoc, LinkNames, Mode) when is_atom(Mode) ->
+    link_walk(StartKey, model_name(StartDoc), LinkNames, Mode).
+
+link_walk(Key, ModelName, [LastLink], get_leaf) ->
+    case fetch_link_target(Key, ModelName, LastLink) of
+        {ok, #document{} = Leaf} ->
+            {ok, Leaf};
+        {error, Reason} ->
+            {error, Reason}
+    end;
+link_walk(Key, ModelName, [NextLink | R], get_leaf) ->
+    case fetch_link(Key, ModelName, NextLink) of
+        {ok, {TargetKey, TargetMod}} ->
+            link_walk(TargetKey, TargetMod, R, get_leaf);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+normalize_link_target([]) ->
+    [];
+normalize_link_target([Link | R]) ->
+    [normalize_link_target(Link) | normalize_link_target(R)];
+normalize_link_target({LinkName, #document{key = TargetKey} = Doc}) ->
+    normalize_link_target({LinkName, {TargetKey, model_name(Doc)}});
+normalize_link_target({_LinkName, {_TargetKey, ModelName}} = ValidLink) when is_atom(ModelName) ->
+    ValidLink.
+
+
 
 %%--------------------------------------------------------------------
 %% @private

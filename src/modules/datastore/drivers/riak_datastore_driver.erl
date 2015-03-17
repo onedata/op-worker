@@ -24,12 +24,15 @@
 %% Encoded atom prefix
 -define(ATOM_PREFIX, "ATOM::").
 
+-define(LINKS_KEY_SUFFIX, "$$").
+
 -type riak_node() :: {HostName :: binary(), Port :: non_neg_integer()}.
 -type riak_connection() :: {riak_node(), ConnectionHandle :: term()}.
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
 -export([save/2, create/2, update/3, exists/2, get/2, list/3, delete/3]).
+-export([fetch_link/3, add_links/3, delete_links/3, foreach_link/4]).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
@@ -111,7 +114,9 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
                 ok -> {ok, Key};
                 {error, Reason} ->
                     {error, Reason}
-            end
+            end;
+        {error, Reason0} ->
+            {error, Reason0}
     end.
 
 %%--------------------------------------------------------------------
@@ -179,6 +184,105 @@ exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
         {ok, _} ->
             {ok, true}
     end.
+
+-spec add_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()]) -> ok | datastore:generic_error().
+add_links(#model_config{bucket = Bucket} = ModelConfig, Key, Links) when is_list(Links) ->
+    case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key))]) of
+        {ok, Result} ->
+            add_links4(ModelConfig, Key, Links, Result);
+        {error, {notfound, _}} ->
+            add_links4(ModelConfig, Key, Links, riakc_map:new());
+        {error, Reason} ->
+            {error, Reason}
+    end.
+add_links4(#model_config{bucket = Bucket} = _ModelConfig, Key, [], Ctx) ->
+    case call(riakc_pb_socket, update_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key)), riakc_map:to_op(Ctx)]) of
+        ok ->
+            ?info("3 ===========> ~p ~p", [to_binary(links_doc_key(Key)), riakc_map:to_op(Ctx)]),
+            ok;
+        {error, Reason} -> {error, Reason}
+    end;
+add_links4(#model_config{bucket = _Bucket} = ModelConfig, Key, [Link | R], Ctx) ->
+    {LinkName, {_TargetKey, _TargetModel} = Target} = Link,
+    NewCtx = riakc_map:update(
+        {to_binary(LinkName), riakc_register:type()},
+        fun(_) -> to_riak_obj(to_binary(Target)) end, Ctx),
+    add_links4(ModelConfig, Key, R, NewCtx).
+
+
+
+-spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all) -> ok | datastore:generic_error().
+delete_links(#model_config{bucket = Bucket} = _ModelConfig, Key, all) ->
+    case call(riakc_pb_socket, delete, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key))]) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end;
+delete_links(#model_config{bucket = Bucket} = ModelConfig, Key, Links) ->
+    case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key))]) of
+        {ok, Result} ->
+            delete_links4(ModelConfig, Key, Links, Result);
+        {error, {notfound, _}} ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+delete_links4(#model_config{bucket = Bucket} = _ModelConfig, Key, [], Ctx) ->
+    case call(riakc_pb_socket, update_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key)), riakc_map:to_op(Ctx)]) of
+        ok ->
+            ?info("5 ===============> ~p ~p", [to_binary(links_doc_key(Key)), riakc_map:to_op(Ctx)]),
+            ok;
+        {error, Reason} -> {error, Reason}
+    end;
+delete_links4(#model_config{} = ModelConfig, Key, [Link | R], Ctx) ->
+    NewCtx = riakc_map:erase({to_binary(Link), register}, Ctx),
+    delete_links4(ModelConfig, Key, R, NewCtx).
+
+
+-spec fetch_link(model_behaviour:model_config(), datastore:key(), datastore:link_name()) ->
+    {ok, datastore:link_target()} | datastore:generic_error().
+fetch_link(#model_config{bucket = Bucket} = ModelConfig, Key, LinkName) ->
+    case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key))]) of
+        {ok, Result} ->
+            ?info("4 ===============> ~p ~p", [to_binary(links_doc_key(Key)), Result]),
+            try riakc_map:fetch({to_binary(LinkName), register}, Result) of
+                EncodedLink ->
+                    ?info("1 =========> ~p", [EncodedLink]),
+                    {_TargetKey, _TargetModel} = Target = from_binary(form_riak_obj(register, EncodedLink)),
+                    {ok, Target}
+            catch
+                _:_E ->
+                    ?info_stacktrace("2 =========> ~p", [_E]),
+                    {error, link_not_found}
+            end;
+        {error, {notfound, _}} ->
+            {error, link_not_found};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+foreach_link(#model_config{bucket = Bucket} = _ModelConfig, Key, Fun, AccIn) ->
+    case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key))]) of
+        {ok, Result} ->
+            try
+                FoldRet = riakc_map:fold(
+                    fun({LinkName, DataType}, EncodedLink, Acc) ->
+                        {_TargetKey, _TargetModel} = Target = from_binary(form_riak_obj(DataType, EncodedLink)),
+                        Fun(from_binary(LinkName), Target, Acc)
+                    end, AccIn, Result),
+                {ok, FoldRet}
+            catch
+                _:Reason1 ->
+                    {error, Reason1}
+            end;
+        {error, {notfound, _}} ->
+            {error, link_not_found};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -400,3 +504,7 @@ bucket_encode(Bucket) when is_atom(Bucket) ->
     atom_to_binary(Bucket, utf8);
 bucket_encode(Bucket) when is_binary(Bucket) ->
     Bucket.
+
+links_doc_key(Key) ->
+    BinKey = to_binary(Key),
+    <<BinKey/binary, ?LINKS_KEY_SUFFIX>>.

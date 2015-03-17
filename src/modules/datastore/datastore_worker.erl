@@ -126,7 +126,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec state_put(Key :: term(), Value :: term()) -> ok.
 state_put(Key, Value) ->
-    gen_server:call(?MODULE, {updatePlugInState,
+    gen_server:call(?MODULE, {update_plugin_state,
         fun(State) ->
             maps:put(Key, Value, State)
         end}).

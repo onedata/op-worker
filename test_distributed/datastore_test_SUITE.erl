@@ -19,7 +19,8 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore.hrl").
 
--define(call_store(N, M, A), rpc:call(N, datastore, M, A)).
+-define(call_store(N, M, A), ?call_store(N, datastore, M, A)).
+-define(call_store(N, Mod, M, A), rpc:call(N, Mod, M, A)).
 -define(upload_test_code(CONFIG),
     begin
         {Mod, Bin, File} = code:get_object_code(?MODULE),
@@ -30,12 +31,12 @@
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
-            global_cache_list_test/1, persistance_test/1]).
+            global_cache_list_test/1, persistance_test/1, links_test/1, link_walk_test/1]).
 
 -perf_test({perf_cases, []}).
 all() ->
     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
-     global_cache_list_test, persistance_test].
+     global_cache_list_test, persistance_test, links_test, link_walk_test].
 
 %%%===================================================================
 %%% Test function
@@ -189,6 +190,128 @@ global_cache_list_test(Config) ->
 
     ok.
 
+%% Simple usege of link_walk
+link_walk_test(Config) ->
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    ?upload_test_code(Config),
+
+    Doc1 = #document{
+        key = k1,
+        value = #some_record{field1 = 1}
+    },
+
+    Doc2 = #document{
+        key = k2,
+        value = #some_record{field1 = 2}
+    },
+
+    Doc3 = #document{
+        key = k3,
+        value = #some_record{field1 = 3}
+    },
+
+    %% Create some documents and links
+    ?assertMatch({ok, _},
+        ?call_store(Worker1, some_record, create, [Doc1])),
+
+    ?assertMatch({ok, _},
+        ?call_store(Worker1, some_record, create, [Doc2])),
+
+    ?assertMatch({ok, _},
+        ?call_store(Worker1, some_record, create, [Doc3])),
+
+    ?assertMatch(ok, ?call_store(Worker2, add_links, [Doc1, [{some, Doc2}, {other, Doc1}]])),
+    ?assertMatch(ok, ?call_store(Worker1, add_links, [Doc2, [{link, Doc3}, {parent, Doc1}]])),
+
+    Res0 = ?call_store(Worker1, link_walk, [Doc1, [some, link], get_leaf]),
+    Res1 = ?call_store(Worker2, link_walk, [Doc1, [some, parent], get_leaf]),
+
+    ?assertMatch({ok, #document{key = k3, value = #some_record{field1 = 3}}}, Res0),
+    ?assertMatch({ok, #document{key = k1, value = #some_record{field1 = 1}}}, Res1),
+
+    ok.
+
+%% Simple usege of (add/fetch/delete/foreach)_link
+links_test(Config) ->
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    ?upload_test_code(Config),
+
+    Doc1 = #document{
+        key = doc1,
+        value = #some_record{field1 = 1}
+    },
+
+    Doc2 = #document{
+        key = doc2,
+        value = #some_record{field1 = 2}
+    },
+
+    Doc3 = #document{
+        key = doc3,
+        value = #some_record{field1 = 3}
+    },
+
+
+    %% Create some documents and links
+    ?assertMatch({ok, _},
+        ?call_store(Worker1, some_record, create, [Doc1])),
+
+    ?assertMatch({ok, _},
+        ?call_store(Worker2, some_record, create, [Doc2])),
+
+    ?assertMatch({ok, _},
+        ?call_store(Worker1, some_record, create, [Doc3])),
+
+    ?assertMatch(ok, ?call_store(Worker2, add_links, [Doc1, [{link2, Doc2}, {link3, Doc3}]])),
+
+    %% Fetch all links and theirs targets
+    Ret0 = ?call_store(Worker2, fetch_link_target, [Doc1, link2]),
+    Ret1 = ?call_store(Worker1, fetch_link_target, [Doc1, link3]),
+    Ret2 = ?call_store(Worker2, fetch_link, [Doc1, link2]),
+    Ret3 = ?call_store(Worker1, fetch_link, [Doc1, link3]),
+
+    ?assertMatch({ok, {doc2, some_record}}, Ret2),
+    ?assertMatch({ok, {doc3, some_record}}, Ret3),
+    ?assertMatch({ok, #document{key = doc2, value = #some_record{field1 = 2}}}, Ret0),
+    ?assertMatch({ok, #document{key = doc3, value = #some_record{field1 = 3}}}, Ret1),
+
+    ?assertMatch(ok, ?call_store(Worker1, delete_links, [Doc1, [link2, link3]])),
+
+    Ret4 = ?call_store(Worker2, fetch_link_target, [Doc1, link2]),
+    Ret5 = ?call_store(Worker1, fetch_link_target, [Doc1, link3]),
+    Ret6 = ?call_store(Worker2, fetch_link, [Doc1, link2]),
+    Ret7 = ?call_store(Worker1, fetch_link, [Doc1, link3]),
+
+    ?assertMatch({error, link_not_found}, Ret6),
+    ?assertMatch({error, link_not_found}, Ret7),
+    ?assertMatch({error, link_not_found}, Ret4),
+    ?assertMatch({error, link_not_found}, Ret5),
+
+    ?assertMatch(ok, ?call_store(Worker2, add_links, [Doc1, [{link2, Doc2}, {link3, Doc3}]])),
+    ?assertMatch(ok,
+        ?call_store(Worker1, some_record, delete, [doc2])),
+    ?assertMatch(ok, ?call_store(Worker1, delete_links, [Doc1, link3])),
+
+    Ret8 = ?call_store(Worker1, fetch_link_target, [Doc1, link2]),
+    Ret9 = ?call_store(Worker2, fetch_link_target, [Doc1, link3]),
+    Ret10 = ?call_store(Worker1, fetch_link, [Doc1, link2]),
+    Ret11 = ?call_store(Worker2, fetch_link, [Doc1, link3]),
+
+    ?assertMatch({ok, {doc2, some_record}}, Ret10),
+    ?assertMatch({error, link_not_found}, Ret11),
+    ?assertMatch({error, link_not_found}, Ret9),
+    ?assertMatch({error, {not_found, _}}, Ret8),
+
+    %% Delete on document shall delete all its links
+    ?assertMatch(ok,
+        ?call_store(Worker1, some_record, delete, [doc1])),
+    timer:sleep(timer:seconds(1)),
+
+    Ret12 = ?call_store(Worker2, fetch_link, [Doc1, link2]),
+    ?assertMatch({error, link_not_found}, Ret12),
+
+    ok.
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -198,7 +321,8 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    %test_node_starter:clean_environment(Config).
+    ok.
 
 
 -spec local_access_only(Node :: atom(), Level :: datastore:store_level()) -> ok.
