@@ -51,7 +51,7 @@ parser.add_argument(
     dest='perf')
 
 args = parser.parse_args()
-script_dir = os.path.abspath('.')
+script_dir = os.path.dirname(os.path.abspath(__file__))
 uid = str(int(time.time()))
 
 ct_command = ['ct_run',
