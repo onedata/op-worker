@@ -24,7 +24,7 @@ deps:
 	./rebar get-deps
 
 generate: deps compile
-	./rebar generate
+	./rebar generate $(OVERLAY_VARS)
 
 clean:
 	./rebar clean
