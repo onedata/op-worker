@@ -68,7 +68,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(local_only, ?MODULE, Key, ?PRED_ALWAYS).
+    datastore:delete(local_only, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc

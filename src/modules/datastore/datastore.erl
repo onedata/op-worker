@@ -98,7 +98,7 @@ get(Level, ModelName, Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes list operation. In order to get records, use list_next/2 afterwards.
+%% Executes given funcion for each model's record. After each record function may interrupt operation.
 %% @end
 %%--------------------------------------------------------------------
 -spec list(Level :: store_level(), ModelName :: model_behaviour:model_type(), Fun :: list_fun(), AccIn :: term()) ->

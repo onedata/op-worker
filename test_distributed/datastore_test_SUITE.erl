@@ -41,6 +41,7 @@ all() ->
 %%% Test function
 %% ====================================================================
 
+%% Simple usage of get/update/create/exists/delete on local cache driver (on several nodes)
 local_cache_test(Config) ->
     [CCM] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
@@ -73,6 +74,7 @@ local_cache_test(Config) ->
     ok.
 
 
+%% Simple usage of get/update/create/exists/delete on global cache driver (on several nodes)
 global_cache_test(Config) ->
     [CCM] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
@@ -88,6 +90,7 @@ global_cache_test(Config) ->
     ok.
 
 
+%% Simple usage of get/update/create/exists/delete on persistamce driver (on several nodes)
 persistance_test(Config) ->
     [CCM] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
@@ -103,6 +106,7 @@ persistance_test(Config) ->
     ok.
 
 
+%% Atomic update on global cache driver (on several nodes)
 global_cache_atomic_update_test(Config) ->
     [_CCM] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
@@ -150,6 +154,8 @@ global_cache_atomic_update_test(Config) ->
 
     ok.
 
+
+%% list operation on global cache driver (on several nodes)
 global_cache_list_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
