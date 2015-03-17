@@ -7,7 +7,7 @@ RUN apt-get update && \
     apt-get clean
 
 # Install Riak
-RUN apt-get install -y apt-transport-https curl && \
+RUN apt-get install -y apt-transport-https curl libbotan1.10-dev && \
     apt-get clean
 RUN curl https://packagecloud.io/gpg.key | apt-key add -
 RUN curl "https://packagecloud.io/install/repositories/basho/riak/config_file.list?os=ubuntu&dist=trusty" > /etc/apt/sources.list.d/basho.list
