@@ -113,8 +113,7 @@ get_certs_from_req(OneProxyHandler, Req) ->
 %%--------------------------------------------------------------------
 -spec get_ca_certs_from_all_cert_dirs() -> [binary()] | no_return().
 get_ca_certs_from_all_cert_dirs() ->
-    {ok, CertDir1} = application:get_env(?APP_NAME, certs_dir),
-    CertDir = atom_to_list(CertDir1),
+    {ok, CertDir} = application:get_env(?APP_NAME, certs_dir),
     get_ca_certs() ++ get_ca_certs_from_dir(CertDir).
 
 %%--------------------------------------------------------------------
