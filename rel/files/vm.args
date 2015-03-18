@@ -12,3 +12,6 @@
 
 ## Increase number of processes
 +P 1000000
+
+## Set the location of crash dumps
+-env ERL_CRASH_DUMP {{crash_dump}}
