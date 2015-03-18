@@ -18,12 +18,6 @@
 -define(DIST_APP_FAILOVER_TIMEOUT, timer:seconds(5)).
 -define(SYNC_NODES_TIMEOUT, timer:minutes(1)).
 
--define(SED_COMMAND,
-    case os:type() of
-        {unix, darwin}  -> "sed -i '' -e ";
-        _               -> "sed -i "
-    end).
-
 %% API
 -export([configure_release/4]).
 
@@ -91,12 +85,18 @@ configure_release(ApplicationName, ReleaseRootPath, SysConfig, VmArgs) ->
 -spec find_config_location(ApplicationName :: atom(), ReleaseRootPath :: atom()) ->
     {SysConfigPath :: string(), VmArgsPath :: string()}.
 find_config_location(ApplicationName, ReleaseRootPath) ->
-    ApplicationNameString = atom_to_list(ApplicationName),
-    {ok, [[{release, ApplicationNameString, AppVsn, _, _, _}]]} =
-        file:consult(filename:join([ReleaseRootPath, "releases", "RELEASES"])),
-    SysConfigPath = filename:join([ReleaseRootPath, "releases", AppVsn, "sys.config"]),
-    VmArgsPath = filename:join([ReleaseRootPath, "releases", AppVsn, "vm.args"]),
-    {SysConfigPath, VmArgsPath}.
+    EtcDir = filename:join(ReleaseRootPath, "etc"),
+    case filelib:is_dir(EtcDir) of
+        true ->
+            {filename:join(EtcDir, "app.config"), filename:join(EtcDir, "vm.args")};
+        false ->
+            ApplicationNameString = atom_to_list(ApplicationName),
+            {ok, [[{release, ApplicationNameString, AppVsn, _, _, _}]]} =
+                file:consult(filename:join([ReleaseRootPath, "releases", "RELEASES"])),
+            SysConfigPath = filename:join([ReleaseRootPath, "releases", AppVsn, "sys.config"]),
+            VmArgsPath = filename:join([ReleaseRootPath, "releases", AppVsn, "vm.args"]),
+            {SysConfigPath, VmArgsPath}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
