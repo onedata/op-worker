@@ -33,8 +33,9 @@
 -type update_error() :: not_found_error(term()) | generic_error().
 -type create_error() :: generic_error() | {error, already_exists}.
 -type get_error() :: not_found_error(term()) | generic_error().
+-type link_error() :: generic_error() | {error, link_not_found}.
 
--export_type([generic_error/0, not_found_error/1, update_error/0, create_error/0, get_error/0]).
+-export_type([generic_error/0, not_found_error/1, update_error/0, create_error/0, get_error/0, link_error/0]).
 
 %% API utility types
 -type store_level() :: disk_only | local_only | global_only | locally_cached | globally_cached.
@@ -50,6 +51,7 @@
 -type link_name() :: atom() | binary().
 -type link_spec() :: {link_name(), link_target()}.
 -type normalized_link_spec() :: {link_name(), normalized_link_target()}.
+
 
 -export_type([link_target/0, link_name/0, link_spec/0, normalized_link_spec/0, normalized_link_target/0]).
 
@@ -159,10 +161,19 @@ exists(Level, ModelName, Key) ->
     exec_driver(ModelName, level_to_driver(Level), exists, [Key]).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds links to given document.
+%%--------------------------------------------------------------------
 -spec add_links(document(), link_spec() | [link_spec()]) -> ok | generic_error().
 add_links(#document{key = Key} = Doc, Links) ->
     add_links(Key, model_name(Doc), Links).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds given links to the document with given key.
+%%--------------------------------------------------------------------
 -spec add_links(key(), model_behaviour:model_type(), link_spec() | [link_spec()]) ->
     ok | generic_error().
 add_links(Key, ModelName, {_LinkName, _LinkTarget} = LinkSpec) ->
@@ -172,10 +183,19 @@ add_links(Key, ModelName, Links) when is_list(Links) ->
     exec_driver(ModelName, ?PERSISTENCE_DRIVER, add_links, [Key, normalize_link_target(Links)]).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes links from given document. There is special link name 'all' which removes all links.
+%%--------------------------------------------------------------------
 -spec delete_links(document(), link_name() | [link_name()] | all) -> ok | generic_error().
 delete_links(#document{key = Key} = Doc, LinkNames) ->
     delete_links(Key, model_name(Doc), LinkNames).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes links from the document with given key. There is special link name 'all' which removes all links.
+%%--------------------------------------------------------------------
 -spec delete_links(key(), model_behaviour:model_type(), link_name() | [link_name()] | all) -> ok | generic_error().
 delete_links(Key, ModelName, LinkNames) when is_list(LinkNames); LinkNames =:= all ->
     _ModelConfig = ModelName:model_init(),
@@ -184,20 +204,39 @@ delete_links(Key, ModelName, LinkName) ->
     delete_links(Key, ModelName, [LinkName]).
 
 
--spec fetch_link(document(), link_name()) -> {ok, normalized_link_target()} | generic_error().
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets specified link from given document.
+%%--------------------------------------------------------------------
+-spec fetch_link(document(), link_name()) -> {ok, normalized_link_target()} | link_error().
 fetch_link(#document{key = Key} = Doc, LinkName) ->
     fetch_link(Key, model_name(Doc), LinkName).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets specified link from the document given by key.
+%%--------------------------------------------------------------------
 -spec fetch_link(key(), model_behaviour:model_type(), link_name()) ->
     {ok, normalized_link_target()} | generic_error().
 fetch_link(Key, ModelName, LinkName) ->
     _ModelConfig = ModelName:model_init(),
     exec_driver(ModelName, ?PERSISTENCE_DRIVER, fetch_link, [Key, LinkName]).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets document pointed by given link of given document.
+%%--------------------------------------------------------------------
 -spec fetch_link_target(document(), link_name()) -> {ok, document()} | generic_error().
 fetch_link_target(#document{key = Key} = Doc, LinkName) ->
     fetch_link_target(Key, model_name(Doc), LinkName).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets document pointed by given link of document given by key.
+%%--------------------------------------------------------------------
 -spec fetch_link_target(key(), model_behaviour:model_type(), link_name()) ->
     {ok, document()} | generic_error().
 fetch_link_target(Key, ModelName, LinkName) ->
@@ -209,14 +248,47 @@ fetch_link_target(Key, ModelName, LinkName) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes given function for each link of given document - similar to 'foldl'.
+%%--------------------------------------------------------------------
+-spec foreach_link(document(), fun((link_name(), link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
+    {ok, Acc :: term()} | link_error().
 foreach_link(#document{key = Key} = Doc, Fun, AccIn) ->
     foreach_link(Key, model_name(Doc), Fun, AccIn).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes given function for each link of the document given by key - similar to 'foldl'.
+%%--------------------------------------------------------------------
+-spec foreach_link(Key :: key(), ModelName :: model_behaviour:model_type(),
+    fun((link_name(), link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
+    {ok, Acc :: term()} | link_error().
 foreach_link(Key, ModelName, Fun, AccIn) ->
     exec_driver(ModelName, ?PERSISTENCE_DRIVER, foreach_link, [Key, Fun, AccIn]).
 
-link_walk(#document{key = StartKey} = StartDoc, LinkNames, Mode) when is_atom(Mode) ->
+
+%%--------------------------------------------------------------------
+%% @doc
+%% "Walks" from link to link and fetches either all encountered documents (for Mode == get_all - not yet implemted),
+%% or just last document (for Mode == get_leaf). Starts on given document.
+%%--------------------------------------------------------------------
+-spec link_walk(document(), [link_name()], get_leaf | get_all) ->
+    {ok, document() | [document()]} | link_error() | get_error().
+link_walk(#document{key = StartKey} = StartDoc, LinkNames, Mode) when is_atom(Mode), is_list(LinkNames) ->
     link_walk(StartKey, model_name(StartDoc), LinkNames, Mode).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% "Walks" from link to link and fetches either all encountered documents (for Mode == get_all - not yet implemted),
+%% or just last document (for Mode == get_leaf). Starts on the document given by key.
+%%--------------------------------------------------------------------
+-spec link_walk(Key :: key(), ModelName :: model_behaviour:model_type(), [link_name()], get_leaf | get_all) ->
+    {ok, document() | [document()]} | link_error() | get_error().
+link_walk(_Key, _ModelName, _Links, get_all) ->
+    erlang:error(not_inplemented);
 link_walk(Key, ModelName, [LastLink], get_leaf) ->
     case fetch_link_target(Key, ModelName, LastLink) of
         {ok, #document{} = Leaf} ->
