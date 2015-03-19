@@ -154,6 +154,7 @@ delete(Level, ModelName, Key) ->
 %% @doc
 %% Checks if #document with given key exists. This method shall not be used with
 %% multiple drivers at once - use *_only levels.
+%% @end
 %%--------------------------------------------------------------------
 -spec exists(Level :: store_level(), ModelName :: model_behaviour:model_type(),
     Key :: datastore:key()) -> {ok, boolean()} | datastore:generic_error().
@@ -164,6 +165,7 @@ exists(Level, ModelName, Key) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Adds links to given document.
+%% @end
 %%--------------------------------------------------------------------
 -spec add_links(document(), link_spec() | [link_spec()]) -> ok | generic_error().
 add_links(#document{key = Key} = Doc, Links) ->
@@ -173,6 +175,7 @@ add_links(#document{key = Key} = Doc, Links) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Adds given links to the document with given key.
+%% @end
 %%--------------------------------------------------------------------
 -spec add_links(key(), model_behaviour:model_type(), link_spec() | [link_spec()]) ->
     ok | generic_error().
@@ -186,6 +189,7 @@ add_links(Key, ModelName, Links) when is_list(Links) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes links from given document. There is special link name 'all' which removes all links.
+%% @end
 %%--------------------------------------------------------------------
 -spec delete_links(document(), link_name() | [link_name()] | all) -> ok | generic_error().
 delete_links(#document{key = Key} = Doc, LinkNames) ->
@@ -195,6 +199,7 @@ delete_links(#document{key = Key} = Doc, LinkNames) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes links from the document with given key. There is special link name 'all' which removes all links.
+%% @end
 %%--------------------------------------------------------------------
 -spec delete_links(key(), model_behaviour:model_type(), link_name() | [link_name()] | all) -> ok | generic_error().
 delete_links(Key, ModelName, LinkNames) when is_list(LinkNames); LinkNames =:= all ->
@@ -207,6 +212,7 @@ delete_links(Key, ModelName, LinkName) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets specified link from given document.
+%% @end
 %%--------------------------------------------------------------------
 -spec fetch_link(document(), link_name()) -> {ok, normalized_link_target()} | link_error().
 fetch_link(#document{key = Key} = Doc, LinkName) ->
@@ -216,6 +222,7 @@ fetch_link(#document{key = Key} = Doc, LinkName) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets specified link from the document given by key.
+%% @end
 %%--------------------------------------------------------------------
 -spec fetch_link(key(), model_behaviour:model_type(), link_name()) ->
     {ok, normalized_link_target()} | generic_error().
@@ -227,6 +234,7 @@ fetch_link(Key, ModelName, LinkName) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets document pointed by given link of given document.
+%% @end
 %%--------------------------------------------------------------------
 -spec fetch_link_target(document(), link_name()) -> {ok, document()} | generic_error().
 fetch_link_target(#document{key = Key} = Doc, LinkName) ->
@@ -236,6 +244,7 @@ fetch_link_target(#document{key = Key} = Doc, LinkName) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets document pointed by given link of document given by key.
+%% @end
 %%--------------------------------------------------------------------
 -spec fetch_link_target(key(), model_behaviour:model_type(), link_name()) ->
     {ok, document()} | generic_error().
@@ -251,6 +260,7 @@ fetch_link_target(Key, ModelName, LinkName) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Executes given function for each link of given document - similar to 'foldl'.
+%% @end
 %%--------------------------------------------------------------------
 -spec foreach_link(document(), fun((link_name(), link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
     {ok, Acc :: term()} | link_error().
@@ -261,6 +271,7 @@ foreach_link(#document{key = Key} = Doc, Fun, AccIn) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Executes given function for each link of the document given by key - similar to 'foldl'.
+%% @end
 %%--------------------------------------------------------------------
 -spec foreach_link(Key :: key(), ModelName :: model_behaviour:model_type(),
     fun((link_name(), link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
@@ -273,6 +284,7 @@ foreach_link(Key, ModelName, Fun, AccIn) ->
 %% @doc
 %% "Walks" from link to link and fetches either all encountered documents (for Mode == get_all - not yet implemted),
 %% or just last document (for Mode == get_leaf). Starts on given document.
+%% @end
 %%--------------------------------------------------------------------
 -spec link_walk(document(), [link_name()], get_leaf | get_all) ->
     {ok, document() | [document()]} | link_error() | get_error().
@@ -284,6 +296,7 @@ link_walk(#document{key = StartKey} = StartDoc, LinkNames, Mode) when is_atom(Mo
 %% @doc
 %% "Walks" from link to link and fetches either all encountered documents (for Mode == get_all - not yet implemted),
 %% or just last document (for Mode == get_leaf). Starts on the document given by key.
+%% @end
 %%--------------------------------------------------------------------
 -spec link_walk(Key :: key(), ModelName :: model_behaviour:model_type(), [link_name()], get_leaf | get_all) ->
     {ok, document() | [document()]} | link_error() | get_error().

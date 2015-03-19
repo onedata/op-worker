@@ -21,6 +21,7 @@
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
 -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
+-export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
@@ -164,6 +165,39 @@ list(#model_config{} = ModelConfig, Fun, AccIn) ->
                 {error, Other}
         end
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback add_links/3.
+%% @end
+%%--------------------------------------------------------------------
+add_links(_, _, _) ->
+    erlang:error(not_implemented).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback delete_links/3.
+%% @end
+%%--------------------------------------------------------------------
+delete_links(_, _, _) ->
+    erlang:error(not_implemented).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback fetch_link/3.
+%% @end
+%%--------------------------------------------------------------------
+fetch_link(_, _, _) ->
+    erlang:error(not_implemented).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback foreach_link/4.
+%% @end
+%%--------------------------------------------------------------------
+foreach_link(_, _Key, _, _AccIn) ->
+    erlang:error(not_implemented).
 
 
 %%--------------------------------------------------------------------

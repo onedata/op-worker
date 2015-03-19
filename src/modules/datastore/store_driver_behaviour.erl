@@ -85,3 +85,42 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds given links to the document with given key.
+%% @end
+%%--------------------------------------------------------------------
+-callback add_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()]) ->
+    ok | datastore:generic_error().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes links from the document with given key. There is special link name 'all' which removes all links.
+%% @end
+%%--------------------------------------------------------------------
+-callback delete_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all) ->
+    ok | datastore:generic_error().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets specified link from the document given by key.
+%% @end
+%%--------------------------------------------------------------------
+-callback fetch_link(model_behaviour:model_config(), datastore:key(), datastore:link_name()) ->
+    {ok, datastore:link_target()} | datastore:link_error().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% "Walks" from link to link and fetches either all encountered documents (for Mode == get_all - not yet implemted),
+%% or just last document (for Mode == get_leaf). Starts on the document given by key.
+%% @end
+%%--------------------------------------------------------------------
+-callback foreach_link(model_behaviour:model_config(), Key :: key(),
+    fun((link_name(), link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
+    {ok, Acc :: term()} | link_error().
+
