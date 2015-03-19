@@ -287,9 +287,9 @@ fetch_link(#model_config{bucket = Bucket} = _ModelConfig, Key, LinkName) ->
 %% {@link store_driver_behaviour} callback foreach_link/4.
 %% @end
 %%--------------------------------------------------------------------
--spec foreach_link(model_behaviour:model_config(), Key :: key(),
-    fun((link_name(), link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
-    {ok, Acc :: term()} | link_error().
+-spec foreach_link(model_behaviour:model_config(), Key :: datastore:key(),
+    fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
+    {ok, Acc :: term()} | datastore:link_error().
 foreach_link(#model_config{bucket = Bucket} = _ModelConfig, Key, Fun, AccIn) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key))]) of
         {ok, Result} ->

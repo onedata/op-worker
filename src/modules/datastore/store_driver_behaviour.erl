@@ -124,7 +124,7 @@
 %% or just last document (for Mode == get_leaf). Starts on the document given by key.
 %% @end
 %%--------------------------------------------------------------------
--callback foreach_link(model_behaviour:model_config(), Key :: key(),
-    fun((link_name(), link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
-    {ok, Acc :: term()} | link_error().
+-callback foreach_link(model_behaviour:model_config(), Key :: datastore:key(),
+    fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
+    {ok, Acc :: term()} | datastore:link_error().
 
