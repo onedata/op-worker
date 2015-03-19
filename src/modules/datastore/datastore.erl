@@ -510,7 +510,7 @@ driver_to_level(?DISTRIBUTED_CACHE_DRIVER) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec exec_driver(model_behaviour:model_type(), [Driver] | Driver,
-    Method :: model_behaviour:model_action(), [term()]) ->
+    Method :: store_driver_behaviour:driver_action(), [term()]) ->
     ok | {ok, term()} | {error, term()} when Driver :: atom().
 exec_driver(ModelName, [Driver], Method, Args) when is_atom(Driver) ->
     exec_driver(ModelName, Driver, Method, Args);

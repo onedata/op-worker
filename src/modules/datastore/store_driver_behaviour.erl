@@ -11,6 +11,10 @@
 -module(store_driver_behaviour).
 -author("Rafal Slota").
 
+-type driver_action() :: model_behaviour:model_action() | add_links | delete_links | fetch_link | foreach_link.
+
+-export_type([driver_action/0]).
+
 -include("modules/datastore/datastore.hrl").
 
 %%--------------------------------------------------------------------
