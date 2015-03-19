@@ -1,0 +1,24 @@
+%%%-------------------------------------------------------------------
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% It is the description of op_ccm application.
+%%% @end
+%%%-------------------------------------------------------------------
+{application, op_ccm, [
+    {description, "Application starts central manager of oneprovider cluster"},
+    {vsn, git},
+    {registered, [op_ccm_sup]},
+    {applications, [
+        kernel,
+        stdlib,
+        sasl,
+        lager
+    ]},
+    {mod, {op_ccm, []}},
+    {env, []}
+]}.
