@@ -9,7 +9,7 @@
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
--module(oneprovider_ccm).
+-module(op_ccm).
 -author("Tomasz Lichon").
 
 -behaviour(application).
@@ -38,7 +38,7 @@
     {ok, pid(), State :: term()} |
     {error, Reason :: term()}).
 start(_StartType, _StartArgs) ->
-    oneprovider_ccm_sup:start_link().
+    op_ccm_sup:start_link().
 
 %%--------------------------------------------------------------------
 %% @private

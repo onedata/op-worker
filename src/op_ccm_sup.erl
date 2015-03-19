@@ -9,7 +9,7 @@
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
--module(oneprovider_ccm_sup).
+-module(op_ccm_sup).
 -author("Tomasz Lichon").
 
 -behaviour(supervisor).

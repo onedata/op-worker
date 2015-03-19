@@ -6,19 +6,19 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% It is the description of oneprovider_ccm application.
+%%% It is the description of op_ccm application.
 %%% @end
 %%%-------------------------------------------------------------------
-{application, oneprovider_ccm, [
+{application, op_ccm, [
     {description, "Application starts central manager of oneprovider cluster"},
     {vsn, git},
-    {registered, [oneprovider_ccm_sup]},
+    {registered, [op_ccm_sup]},
     {applications, [
         kernel,
         stdlib,
         sasl,
         lager
     ]},
-    {mod, {oneprovider_ccm, []}},
+    {mod, {op_ccm, []}},
     {env, []}
 ]}.

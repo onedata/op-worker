@@ -34,8 +34,8 @@ parser.add_argument(
 parser.add_argument(
     '-bccm', '--bin-ccm',
     action='store',
-    default=os.getcwd() + '/oneprovider_ccm',
-    help='the path to oneprovider_ccm repository (precompiled)',
+    default=os.getcwd() + '/op_ccm',
+    help='the path to op_ccm repository (precompiled)',
     dest='bin_op_ccm')
 
 parser.add_argument(
@@ -100,8 +100,8 @@ if 'globalregistry' in config:
                                   args.config_path)
     common.merge(output, gr_output)
 
-# Start oneprovider_ccm instances
-if 'oneprovider_ccm' in config:
+# Start op_ccm instances
+if 'op_ccm' in config:
     op_ccm_output = provider_ccm.up(args.image, args.bin_op_ccm, args.logdir,
                                     dns, uid, args.config_path)
     common.merge(output, op_ccm_output)

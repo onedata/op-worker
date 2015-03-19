@@ -11,7 +11,7 @@ import json
 from environment import common, provider_ccm
 
 
-parser = common.standard_arg_parser('Bring up oneprovider_ccm nodes.')
+parser = common.standard_arg_parser('Bring up op_ccm nodes.')
 parser.add_argument(
     '-l', '--logdir',
     action='store',

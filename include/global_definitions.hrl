@@ -18,11 +18,11 @@
 %%%===================================================================
 
 %% Name of the application.
--define(APP_NAME, oneprovider_ccm).
+-define(APP_NAME, op_ccm).
 
 %% Local name (name and node is used to identify it) of supervisor that
 %% coordinates application at each node (one supervisor per node).
--define(APPLICATION_SUPERVISOR_NAME, oneprovider_ccm_sup).
+-define(APPLICATION_SUPERVISOR_NAME, op_ccm_sup).
 
 %% Global name of gen_server that provides ccm functionality.
 -define(CCM, cluster_manager).

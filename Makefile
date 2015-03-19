@@ -1,4 +1,4 @@
-REPO		        ?= oneprovider_ccm
+REPO		        ?= op-ccm
 
 PKG_REVISION    ?= $(shell git describe --tags --always)
 PKG_VERSION	    ?= $(shell git describe --tags --always | tr - .)
@@ -40,7 +40,7 @@ rel: generate
 
 relclean:
 	rm -rf rel/test_cluster
-	rm -rf rel/oneprovider_ccm
+	rm -rf rel/op_ccm
 
 ##
 ## Packaging targets
