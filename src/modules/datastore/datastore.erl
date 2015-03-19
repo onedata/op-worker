@@ -38,11 +38,14 @@
 
 %% API utility types
 -type store_level() :: disk_only | local_only | global_only | locally_cached | globally_cached.
+-type delete_predicate() :: fun(() -> boolean()).
+-type list_fun() :: fun((Obj :: term(), AccIn :: term()) -> {next, Acc :: term()} | {abort, Acc :: term()}).
+-type exists_return() :: boolean() | no_return().
 
--export_type([store_level/0]).
+-export_type([store_level/0, delete_predicate/0, list_fun/0, exists_return/0]).
 
 %% API
--export([save/2, update/4, create/2, get/3, delete/3, exists/3]).
+-export([save/2, update/4, create/2, get/3, list/4, delete/4, delete/3, exists/3]).
 -export([configs_per_bucket/1, ensure_state_loaded/0]).
 
 %%%===================================================================
@@ -92,6 +95,29 @@ create(Level, #document{} = Document) ->
 get(Level, ModelName, Key) ->
     exec_driver(ModelName, level_to_driver(Level), get, [Key]).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes given funcion for each model's record. After each record function may interrupt operation.
+%% @end
+%%--------------------------------------------------------------------
+-spec list(Level :: store_level(), ModelName :: model_behaviour:model_type(), Fun :: list_fun(), AccIn :: term()) ->
+    {ok, Handle :: term()} | datastore:generic_error() | no_return().
+list(Level, ModelName, Fun, AccIn) ->
+    exec_driver(ModelName, level_to_driver(Level), list, [Fun, AccIn]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes #document with given key.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+    Key :: datastore:key(), Pred :: delete_predicate()) -> ok | datastore:generic_error().
+delete(Level, ModelName, Key, Pred) ->
+    exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes #document with given key.
@@ -100,7 +126,9 @@ get(Level, ModelName, Key) ->
 -spec delete(Level :: store_level(), ModelName :: model_behaviour:model_type(),
     Key :: datastore:key()) -> ok | datastore:generic_error().
 delete(Level, ModelName, Key) ->
-    exec_driver(ModelName, level_to_driver(Level), delete, [Key]).
+    delete(Level, ModelName, Key, ?PRED_ALWAYS).
+
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -108,9 +136,10 @@ delete(Level, ModelName, Key) ->
 %% multiple drivers at once - use *_only levels.
 %%--------------------------------------------------------------------
 -spec exists(Level :: store_level(), ModelName :: model_behaviour:model_type(),
-    Key :: datastore:key()) -> true | false | datastore:generic_error().
+    Key :: datastore:key()) -> {ok, boolean()} | datastore:generic_error().
 exists(Level, ModelName, Key) ->
     exec_driver(ModelName, level_to_driver(Level), exists, [Key]).
+
 
 %%%===================================================================
 %%% Internal functions
