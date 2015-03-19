@@ -1,7 +1,7 @@
 {
-    "oneprovider_ccm" : {
+    "op_ccm" : {
         "config": {
-            "input_dir": "rel/oneprovider_ccm",
+            "input_dir": "rel/op_ccm",
             "target_dir": "rel/test_cluster"
         },
         "nodes": {
