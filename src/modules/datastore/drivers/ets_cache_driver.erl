@@ -148,6 +148,8 @@ healthcheck(_) ->
 %% {@link store_driver_behaviour} callback add_links/3.
 %% @end
 %%--------------------------------------------------------------------
+-spec add_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()]) ->
+    no_return().
 add_links(_, _, _) ->
     erlang:error(not_implemented).
 
@@ -156,6 +158,8 @@ add_links(_, _, _) ->
 %% {@link store_driver_behaviour} callback delete_links/3.
 %% @end
 %%--------------------------------------------------------------------
+-spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all) ->
+    no_return().
 delete_links(_, _, _) ->
     erlang:error(not_implemented).
 
@@ -164,6 +168,8 @@ delete_links(_, _, _) ->
 %% {@link store_driver_behaviour} callback fetch_link/3.
 %% @end
 %%--------------------------------------------------------------------
+-spec fetch_link(model_behaviour:model_config(), datastore:key(), datastore:link_name()) ->
+    no_return().
 fetch_link(_, _, _) ->
     erlang:error(not_implemented).
 
@@ -172,6 +178,9 @@ fetch_link(_, _, _) ->
 %% {@link store_driver_behaviour} callback foreach_link/4.
 %% @end
 %%--------------------------------------------------------------------
+-spec foreach_link(model_behaviour:model_config(), Key :: datastore:key(),
+    fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
+    no_return().
 foreach_link(_, _Key, _, _AccIn) ->
     erlang:error(not_implemented).
 

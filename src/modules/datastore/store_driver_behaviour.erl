@@ -97,7 +97,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback add_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()]) ->
-    ok | datastore:generic_error().
+    ok | datastore:generic_error() | no_return().
 
 
 %%--------------------------------------------------------------------
@@ -106,7 +106,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback delete_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all) ->
-    ok | datastore:generic_error().
+    ok | datastore:generic_error() | no_return().
 
 
 %%--------------------------------------------------------------------
@@ -115,7 +115,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback fetch_link(model_behaviour:model_config(), datastore:key(), datastore:link_name()) ->
-    {ok, datastore:link_target()} | datastore:link_error().
+    {ok, datastore:link_target()} | datastore:link_error() | no_return().
 
 
 %%--------------------------------------------------------------------
@@ -126,5 +126,5 @@
 %%--------------------------------------------------------------------
 -callback foreach_link(model_behaviour:model_config(), Key :: datastore:key(),
     fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
-    {ok, Acc :: term()} | datastore:link_error().
+    {ok, Acc :: term()} | datastore:link_error() | no_return().
 
