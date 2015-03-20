@@ -7,6 +7,7 @@ PKG_BUILD        = 1
 BASE_DIR         = $(shell pwd)
 ERLANG_BIN       = $(shell dirname $(shell which erl))
 REBAR           ?= $(BASE_DIR)/rebar
+PKG_VARS_CONFIG  = pkg.vars.config
 OVERLAY_VARS    ?=
 
 .PHONY: deps test package
@@ -46,7 +47,7 @@ relclean:
 ## Packaging targets
 ##
 
-export PKG_VERSION PKG_ID PKG_BUILD BASE_DIR ERLANG_BIN REBAR OVERLAY_VARS RELEASE
+export PKG_VERSION PKG_ID PKG_BUILD BASE_DIR ERLANG_BIN REBAR OVERLAY_VARS RELEASE PKG_VARS_CONFIG
 
 package.src: deps
 	mkdir -p package
