@@ -7,6 +7,7 @@ PKG_BUILD        = 1
 BASE_DIR         = $(shell pwd)
 ERLANG_BIN       = $(shell dirname $(shell which erl))
 REBAR           ?= $(BASE_DIR)/rebar
+PKG_VARS_CONFIG  = pkg.vars.config
 OVERLAY_VARS    ?=
 
 .PHONY: deps test package
