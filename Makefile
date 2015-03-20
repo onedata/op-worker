@@ -38,8 +38,8 @@ distclean:
 ##
 
 rel: generate
-	make -C appmock/ rel
-	make -C op_ccm/ rel
+	OVERLAY_VARS="" make -C appmock/ rel
+	OVERLAY_VARS="" make -C op_ccm/ rel
 
 relclean:
 	rm -rf rel/test_cluster
