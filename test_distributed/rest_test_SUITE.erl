@@ -108,9 +108,6 @@ rest_endpoint(Node) ->
 mock_gr_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Url = rpc:call(Worker1, gr_plugin, get_gr_url, []),
-    KeyPath = rpc:call(Worker1, gr_plugin, get_key_path, []),
-    CertPath = rpc:call(Worker1, gr_plugin, get_cert_path, []),
-    CacertPath = rpc:call(Worker1, gr_plugin, get_cacert_path, []),
     {ok, Key} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
     {ok, Cert} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
     {ok, CACert} = file:read_file(?TEST_FILE(Config, "grpCA.pem")),
@@ -119,15 +116,11 @@ mock_gr_certificates(Config) ->
     [{_, CACertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [CACert]),
     SSLOptions = {ssl_options, [{cacerts, [CACertEncoded]}, {key, {KeyType, KeyEncoded}}, {cert, CertEncoded}]},
 
-    test_utils:mock_new(Workers, [wrapper]),
-    test_utils:mock_expect(Workers, wrapper, read_file,
-        fun
-            (Path) when Path =:= KeyPath -> {ok, Key};
-            (Path) when Path =:= CertPath -> {ok, Cert};
-            (Path) when Path =:= CacertPath -> {ok, CACert};
-            (Path) -> meck:passthrough([Path])
-        end
-    ),
+    test_utils:mock_new(Workers, [oneprovider]),
+    test_utils:mock_expect(Workers, oneprovider, get_provider_id,
+        fun() -> <<"050fec8f157d6e4b31fd6d2924923c7a">> end),
+    test_utils:mock_expect(Workers, oneprovider, get_globalregistry_cert,
+        fun() -> public_key:pkix_decode_cert(CACertEncoded, otp) end),
 
     test_utils:mock_new(Workers, [gr_endpoint]),
     test_utils:mock_expect(Workers, gr_endpoint, auth_request,
@@ -149,5 +142,5 @@ unmock_gr_certificates(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate(Workers, [gr_endpoint]),
     test_utils:mock_unload(Workers, [gr_endpoint]),
-    test_utils:mock_validate(Workers, [wrapper]),
-    test_utils:mock_unload(Workers, [wrapper]).
+    test_utils:mock_validate(Workers, [oneprovider]),
+    test_utils:mock_unload(Workers, [oneprovider]).

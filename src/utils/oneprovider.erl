@@ -37,7 +37,7 @@ get_provider_id() ->
         {ok, ProviderId} ->
             ProviderId;
         _ ->
-            {ok, Bin} = wrapper:read_file(gr_plugin:get_cert_path()),
+            {ok, Bin} = file:read_file(gr_plugin:get_cert_path()),
             [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
             PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
             ProviderId = get_provider_id(PeerCert),
@@ -57,7 +57,7 @@ get_globalregistry_cert() ->
         {ok, GrCert} ->
             GrCert;
         _ ->
-            {ok, PemCert} = wrapper:read_file(gr_plugin:get_cacert_path()),
+            {ok, PemCert} = file:read_file(gr_plugin:get_cacert_path()),
             [{'Certificate', DerCert, _}] = public_key:pem_decode(PemCert),
             GrCert = #'OTPCertificate'{} = public_key:pkix_decode_cert(DerCert, otp),
             application:set_env(?APP_NAME, globalregistry_certificate, GrCert),
