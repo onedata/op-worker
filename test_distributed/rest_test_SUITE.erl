@@ -72,7 +72,7 @@ rest_cert_auth(Config) ->
 %%%===================================================================
 init_per_suite(Config) ->
     Config2 = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
-    timer:sleep(timer:seconds(5)), % waiting for appmock. todo integrate with nagios
+    timer:sleep(timer:seconds(15)), % waiting for appmock. todo integrate with nagios
     Config2.
 
 end_per_suite(Config) ->
