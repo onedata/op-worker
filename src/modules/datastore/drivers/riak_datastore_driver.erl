@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Riak database driver.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(riak_datastore_driver).
@@ -29,7 +29,7 @@
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
--export([save/2, create/2, update/3, exists/2, get/2, delete/2]).
+-export([save/2, create/2, update/3, exists/2, get/2, list/3, delete/3]).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
@@ -72,7 +72,8 @@ update(#model_config{bucket = _Bucket} = _ModelConfig, _Key, Diff) when is_funct
     erlang:error(not_implemented);
 update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Diff) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
-        {ok, Result} ->
+        {ok, Result}
+            ->
             NewRMap =
                 maps:fold(
                     fun(K, V, Acc) ->
@@ -86,6 +87,8 @@ update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Dif
                 ok -> {ok, Key};
                 {error, Reason} -> {error, Reason}
             end;
+        {error, {notfound, _}} ->
+            {error, {not_found, missing_or_deleted}};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -98,11 +101,17 @@ update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Dif
 -spec create(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
 create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value = Value}) ->
-    RiakOP = riakc_map:to_op(to_riak_obj(Value)),
-    case call(riakc_pb_socket, update_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key), RiakOP]) of
-        ok -> {ok, Key};
-        {error, Reason} ->
-            {error, Reason}
+    %% @todo: fix me! somehow riak's context allows to override existing record
+    case exists(_ModelConfig, Key) of
+        {ok, true} ->
+            {error, already_exists};
+        {ok, false} ->
+            RiakOP = riakc_map:to_op(to_riak_obj(Value)),
+            case call(riakc_pb_socket, update_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key), RiakOP]) of
+                ok -> {ok, Key};
+                {error, Reason} ->
+                    {error, Reason}
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -116,24 +125,42 @@ get(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         {ok, Result} ->
             {ok, #document{key = Key, rev = Result,
-                value = datastore_utils:shallow_to_record(form_riak_obj(map, Result))}};
+                value = form_riak_obj(map, Result)}};
+        {error, {notfound, _}} ->
+            {error, {not_found, missing_or_deleted}};
         {error, Reason} ->
             {error, Reason}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback list/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec list(model_behaviour:model_config(),
+    Fun :: datastore:list_fun(), AccIn :: term()) -> no_return().
+list(#model_config{} = _ModelConfig, _Fun, _AccIn) ->
+    error(not_supported).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(model_behaviour:model_config(), datastore:key()) ->
+-spec delete(model_behaviour:model_config(), datastore:key(), datastore:delete_predicate()) ->
     ok | datastore:generic_error().
-delete(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
-    case call(riakc_pb_socket, delete, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
-        ok ->
-            ok;
-        {error, Reason} ->
-            {error, Reason}
+delete(#model_config{bucket = Bucket} = _ModelConfig, Key, Pred) ->
+    case Pred() of
+        true ->
+            case call(riakc_pb_socket, delete, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
+                ok ->
+                    ok;
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        false ->
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -142,15 +169,15 @@ delete(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(model_behaviour:model_config(), datastore:key()) ->
-    true | false | datastore:generic_error().
+    {ok, boolean()} | datastore:generic_error().
 exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
-        {ok, {notfound, _}} ->
-            false;
+        {error, {notfound, _}} ->
+            {ok, false};
         {error, Reason} ->
             {error, Reason};
         {ok, _} ->
-            true
+            {ok, true}
     end.
 
 %%--------------------------------------------------------------------
@@ -160,10 +187,13 @@ exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
 %%--------------------------------------------------------------------
 -spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
 healthcheck(_) ->
-    case call(riakc_pb_socket, ping, []) of
+    try call(riakc_pb_socket, ping, []) of
         pong -> ok;
         _Other ->
             {error, no_riak_connection}
+    catch
+        _:Reason ->
+            {error, Reason}
     end.
 
 %%%===================================================================
@@ -178,10 +208,17 @@ healthcheck(_) ->
 %%--------------------------------------------------------------------
 -spec form_riak_obj(map | counter | register, Obj :: term()) -> term().
 form_riak_obj(map, Obj) ->
-    riakc_map:fold(
-        fun({K, Type}, V, Acc) ->
-            maps:put(from_binary(K), form_riak_obj(Type, V), Acc)
-        end, #{}, Obj);
+    %% somehow, sometimes, riak's client returns orddict instead of #map{}
+    FoldMod = case Obj of
+                  [_ | _] -> orddict;
+                  _       -> riakc_map
+              end,
+    datastore_utils:shallow_to_record(
+        FoldMod:fold(
+            fun({K, Type}, V, Acc) ->
+                maps:put(from_binary(K), form_riak_obj(Type, V), Acc)
+            end, #{}, Obj)
+    );
 form_riak_obj(counter, Obj) when is_integer(Obj) ->
     Obj;
 form_riak_obj(counter, Obj) ->
@@ -220,9 +257,6 @@ to_riak_obj(Term, Rev) when is_tuple(Term) ->
 -spec to_riak_obj(term()) -> term().
 to_riak_obj(Term) when is_tuple(Term) ->
     to_riak_obj(Term, riakc_map:new());
-to_riak_obj(Int) when is_integer(Int) ->
-    Counter = riakc_counter:new(),
-    riakc_counter:increment(Int, Counter);
 to_riak_obj(Bin) when is_binary(Bin) ->
     Register = riakc_register:new(),
     riakc_register:set(Bin, Register);
@@ -348,7 +382,7 @@ to_binary(Term) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec from_binary(binary()) -> term().
-from_binary(<<?OBJ_PREFIX, _>> = Bin) ->
+from_binary(<<?OBJ_PREFIX, _/binary>> = Bin) ->
     base64_to_term(Bin);
 from_binary(<<?ATOM_PREFIX, Atom/binary>>) ->
     binary_to_atom(Atom, utf8);

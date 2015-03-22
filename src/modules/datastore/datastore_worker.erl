@@ -74,33 +74,35 @@ init(_Args) ->
 handle(ping, _State) ->
     pong;
 
-handle(healthcheck, _State) ->
-    ok;
-%% TODO @Rafal
-%% healthcheck rzuca blad (bo Ryjaka nie ma), natomiast powinien zwracac healthcheck_reponse()
-%%
-%%     HC = #{
-%%         ?PERSISTENCE_DRIVER => ?PERSISTENCE_DRIVER:healthcheck(State),
-%%         ?LOCAL_CACHE_DRIVER => ?LOCAL_CACHE_DRIVER:healthcheck(State),
-%%         ?DISTRIBUTED_CACHE_DRIVER => ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
-%%     },
-%%
-%%     maps:fold(
-%%         fun
-%%             (_, ok, AccIn) ->
-%%                 AccIn;
-%%             (K, {error, Reason}, _AccIn) ->
-%%                 ?error("Driver ~p healthckeck error: ~p", [K, Reason]),
-%%                 {error, {driver_failure, {K, Reason}}}
-%%         end, ok, HC);
+handle(healthcheck, State) ->
+    HC = #{
+        %?PERSISTENCE_DRIVER => catch ?PERSISTENCE_DRIVER:healthcheck(State),
+        %?LOCAL_CACHE_DRIVER => catch ?LOCAL_CACHE_DRIVER:healthcheck(State),
+        %?DISTRIBUTED_CACHE_DRIVER => catch ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
+    },
+
+    maps:fold(
+        fun
+            (_, ok, AccIn) ->
+                AccIn;
+            (K, {error, Reason}, _AccIn) when is_atom(K) ->
+                ?error("Driver ~p healthcheck error: ~p", [K, Reason]),
+                _AccIn; %% @todo: revert me! {error, K}
+            (K, Reason, _AccIn) ->
+                ?error("Unknown status of driver ~p, healthcheck error: ~p", [K, Reason]),
+                _AccIn %% @todo: revert me! {error, unknown_driver_status}
+        end, ok, HC);
 
 %% Proxy call to given datastore driver
 handle({driver_call, Module, Method, Args}, _State) ->
-    %% todo @Rafal This pattern matching fixes dialyzer but perhaps better solution would be more suitable
-    case erlang:apply(Module, Method, Args) of
+    try erlang:apply(Module, Method, Args) of
         ok -> ok;
         {ok, Response} -> {ok, Response};
         {error, Reason} -> {error, Reason}
+    catch
+        _:Reason ->
+            ?error_stacktrace("datastore request failed due to ~p", [Reason]),
+            {error, Reason}
     end;
 
 %% Unknown request
@@ -136,4 +138,4 @@ state_put(Key, Value) ->
 %%--------------------------------------------------------------------
 -spec state_get(Key :: term()) -> Value :: term().
 state_get(Key) ->
-    maps:get(Key, gen_server:call(?MODULE, get_plugin_state)).
+    maps:get(Key, gen_server:call(?MODULE, get_plugin_state), undefined).

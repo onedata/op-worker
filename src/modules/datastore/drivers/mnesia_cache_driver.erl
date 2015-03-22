@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Riak database driver.
+%%% @doc Mnesia database driver.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(mnesia_cache_driver).
@@ -15,9 +15,12 @@
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% Batch size for list operation
+-define(LIST_BATCH_SIZE, 100).
+
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
--export([save/2, update/3, create/2, exists/2, get/2, list/1, delete/2]).
+-export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
@@ -72,10 +75,8 @@ init_bucket(_BucketName, Models) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Document) ->
     transaction(fun() ->
-        case mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write) of
-            ok -> {ok, Key};
-            Reason -> {error, Reason}
-        end
+        ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
+        {ok, Key}
     end).
 
 %%--------------------------------------------------------------------
@@ -98,9 +99,7 @@ update(#model_config{} = ModelConfig, Key, Diff) ->
             [Value] when is_function(Diff) ->
                 NewValue = Diff(strip_key(Value)),
                 ok = mnesia:write(table_name(ModelConfig), inject_key(Key, NewValue), write),
-                {ok, Key};
-            Reason ->
-                {error, Reason}
+                {ok, Key}
         end
     end).
 
@@ -118,9 +117,7 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
                 ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
                 {ok, Key};
             [_Record] ->
-                {error, already_exists};
-            Reason ->
-                {error, Reason}
+                {error, already_exists}
         end
     end).
 
@@ -135,41 +132,79 @@ get(#model_config{} = ModelConfig, Key) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
             [] -> {error, {not_found, missing_or_deleted}};
-            [Value] -> {ok, #document{key = Key, value = strip_key(Value)}};
-            Reason -> {error, Reason}
+            [Value] -> {ok, #document{key = Key, value = strip_key(Value)}}
         end
     end).
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of all records.
+%% {@link store_driver_behaviour} callback list/3.
 %% @end
 %%--------------------------------------------------------------------
--spec list(model_behaviour:model_config()) ->
-    {ok, [datastore:document()]} | datastore:generic_error().
-list(#model_config{} = ModelConfig) ->
+-spec list(model_behaviour:model_config(),
+    Fun :: datastore:list_fun(), AccIn :: term()) ->
+    {ok, Handle :: term()} | datastore:generic_error() | no_return().
+list(#model_config{} = ModelConfig, Fun, AccIn) ->
     SelectAll = [{'_', [], ['$_']}],
     transaction(fun() ->
-        Values = lists:map(fun(Value) ->
-            #document{key = get_key(Value), value = strip_key(Value)}
-        end, mnesia:select(table_name(ModelConfig), SelectAll)),
-        {ok, Values}
+        case mnesia:select(table_name(ModelConfig), SelectAll, ?LIST_BATCH_SIZE, read) of
+            {Obj, Handle} ->
+                list_next(Obj, Handle, Fun, AccIn);
+            '$end_of_table' ->
+                list_next('$end_of_table', undefined, Fun, AccIn)
+        end
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Internat helper - accumulator for list/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_next([term()] | '$end_of_table', term(), datastore:list_fun(), term()) ->
+    {ok, Acc :: term()} | datastore:generic_error().
+list_next([Obj | R], Handle, Fun, AccIn) ->
+    Doc =  #document{key = get_key(Obj), value = strip_key(Obj)},
+    case Fun(Doc, AccIn) of
+        {next, NewAcc} ->
+            list_next(R, Handle, Fun, NewAcc);
+        {abort, NewAcc} ->
+            {ok, NewAcc}
+    end;
+list_next('$end_of_table' = EoT, Handle, Fun, AccIn) ->
+    case Fun(EoT, AccIn) of
+        {next, NewAcc} ->
+            list_next(EoT, Handle, Fun, NewAcc);
+        {abort, NewAcc} ->
+            {ok, NewAcc}
+    end;
+list_next([], Handle, Fun, AccIn) ->
+    case mnesia:select(Handle) of
+        {Objects, NewHandle} ->
+            list_next(Objects, NewHandle, Fun, AccIn);
+        '$end_of_table' ->
+            list_next('$end_of_table', undefined, Fun, AccIn)
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(model_behaviour:model_config(), datastore:key()) ->
+-spec delete(model_behaviour:model_config(), datastore:key(), datastore:delete_predicate()) ->
     ok | datastore:generic_error().
-delete(#model_config{} = ModelConfig, Key) ->
+delete(#model_config{} = ModelConfig, Key, Pred) ->
     transaction(fun() ->
-        case mnesia:delete(table_name(ModelConfig), Key, write) of
-            ok -> ok;
-            Reason -> {error, Reason}
+        case Pred() of
+            true ->
+                ok = mnesia:delete(table_name(ModelConfig), Key, write);
+            false ->
+                ok
         end
     end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -177,14 +212,15 @@ delete(#model_config{} = ModelConfig, Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(model_behaviour:model_config(), datastore:key()) ->
-    true | false | datastore:generic_error().
+    {ok, boolean()} | datastore:generic_error().
 exists(#model_config{} = ModelConfig, Key) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
-            [] -> false;
-            [_Record] -> true
+            [] -> {ok, false};
+            [_Record] -> {ok, true}
         end
     end).
+
 
 %%--------------------------------------------------------------------
 %% @doc

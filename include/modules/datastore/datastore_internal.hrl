@@ -17,4 +17,6 @@
 -define(LOCAL_CACHE_DRIVER, ets_cache_driver).
 -define(DISTRIBUTED_CACHE_DRIVER, mnesia_cache_driver).
 
+-define(MODEL_NAME, ?MODULE).
+
 -endif.

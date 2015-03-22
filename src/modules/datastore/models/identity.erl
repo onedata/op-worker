@@ -14,12 +14,13 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_internal.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
 -include("proto_internal/oneproxy/oneproxy_messages.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
 %% API
@@ -75,15 +76,6 @@ get(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error().
-list() ->
-    mnesia_cache_driver:list(model_init()).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -96,9 +88,9 @@ delete(Key) ->
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) -> true | false | datastore:generic_error().
+-spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    datastore:exists(local_only, ?MODULE, Key).
+    ?RESPONSE(datastore:exists(local_only, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc

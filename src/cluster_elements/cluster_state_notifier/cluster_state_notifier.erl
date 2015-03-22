@@ -50,7 +50,13 @@ cast(Req) ->
 -spec start_link() ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link() ->
-    gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+    case gen_server:start_link(?MODULE, [], []) of
+        {ok, Pid} ->
+            global:re_register_name(?SERVER, Pid),
+            {ok, Pid};
+        Error ->
+            Error
+    end.
 
 %%%===================================================================
 %%% gen_server callbacks

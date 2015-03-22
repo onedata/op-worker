@@ -59,7 +59,7 @@
 %% Deletes #document with given key.
 %% @end
 %%--------------------------------------------------------------------
--callback delete(model_behaviour:model_config(), datastore:key()) -> ok | datastore:generic_error().
+-callback delete(model_behaviour:model_config(), datastore:key(), datastore:delete_predicate()) -> ok | datastore:generic_error().
 
 
 %%--------------------------------------------------------------------
@@ -67,8 +67,17 @@
 %% Checks if #document with given key exists.
 %% @end
 %%--------------------------------------------------------------------
--callback exists(model_behaviour:model_config(), datastore:key()) -> true | false | datastore:generic_error().
+-callback exists(model_behaviour:model_config(), datastore:key()) -> {ok, boolean()} | datastore:generic_error().
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Traverses entire or part of table. Acts simililar to erlang:foldl except that it may be interrupted
+%% by returning {abort, Acc} from given fun.
+%% @end
+%%--------------------------------------------------------------------
+-callback list(model_behaviour:model_config(), Fun :: datastore:list_fun(), AccIn :: term()) ->
+    {ok, Acc :: term()} | datastore:generic_error() | no_return().
 
 %%--------------------------------------------------------------------
 %% @doc
