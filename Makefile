@@ -1,4 +1,4 @@
-REPO		        ?= oneprovider
+REPO            ?= oneprovider
 
 PKG_REVISION    ?= $(shell git describe --tags --always)
 PKG_VERSION	    ?= $(shell git describe --tags --always | tr - .)
@@ -38,8 +38,8 @@ distclean:
 ##
 
 rel: generate
-#	make -C appmock/ rel
-#	make -C op_ccm/ rel
+	make -C appmock/ rel
+	make -C op_ccm/ rel
 
 relclean:
 	rm -rf rel/test_cluster
