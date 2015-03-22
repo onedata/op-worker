@@ -279,6 +279,13 @@ on_ccm_state_change(NewStateNum, State) ->
     update_dispatcher_and_dns(NewStateNum),
     State#node_state{state_num = NewStateNum, ccm_con_status = registered}.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Notifies dispatcher and dns, about new state of cluster
+%% @end
+%%--------------------------------------------------------------------
+-spec update_dispatcher_and_dns(NewStateNum :: integer()) -> ok | {error, term()}.
 update_dispatcher_and_dns(NewStateNum) ->
     update_dispatcher(NewStateNum),
     update_dns().
@@ -289,7 +296,7 @@ update_dispatcher_and_dns(NewStateNum) ->
 %% Tells dispatcher that cluster state has changed.
 %% @end
 %%--------------------------------------------------------------------
--spec update_dispatcher(NewStateNum :: integer()) -> atom().
+-spec update_dispatcher(NewStateNum :: integer()) -> ok.
 update_dispatcher(NewStateNum) ->
     ?debug("Message sent to update dispatcher, state num: ~p", [NewStateNum]),
     gen_server:cast(?DISPATCHER_NAME, {check_state, NewStateNum}).
