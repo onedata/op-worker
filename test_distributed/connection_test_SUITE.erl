@@ -175,9 +175,9 @@ multi_message_test(Config) ->
     T3 = os:timestamp(),
     ok = Transport:close(Sock),
     [
-        {sending_time, timer:now_diff(T2, T1)},
-        {receiving_time, timer:now_diff(T3, T2)},
-        {full_time, timer:now_diff(T3, T1)}
+        {sending_time, utils:milliseconds_diff(T2, T1), ms},
+        {receiving_time, utils:milliseconds_diff(T3, T2), ms},
+        {full_time, utils:milliseconds_diff(T3, T1), ms}
     ].
 
 client_send_test(Config) ->
@@ -315,9 +315,9 @@ multi_ping_pong_test(Config) ->
         end, IdToMessage),
     ok = Transport:close(Sock),
     [
-        {sending_time, timer:now_diff(T2, T1)},
-        {receiving_time, timer:now_diff(T3, T2)},
-        {full_time, timer:now_diff(T3, T1)}
+        {sending_time, utils:milliseconds_diff(T2, T1), ms},
+        {receiving_time, utils:milliseconds_diff(T3, T2), ms},
+        {full_time, utils:milliseconds_diff(T3, T1), ms}
     ].
 
 -perf_test([
@@ -361,7 +361,7 @@ sequential_ping_pong_test(Config) ->
     % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ok = ssl:close(Sock),
-    {full_time, timer:now_diff(T2, T1)}.
+    {full_time, utils:milliseconds_diff(T2, T1), ms}.
 
 -perf_test([
     {repeats, 10},
@@ -434,9 +434,9 @@ bandwidth_test(Config) ->
     T3 = os:timestamp(),
     Transport:close(Sock),
     [
-        {sending_time, timer:now_diff(T2, T1)},
-        {receiving_time, timer:now_diff(T3, T2)},
-        {full_time, timer:now_diff(T3, T1)}
+        {sending_time, utils:milliseconds_diff(T2, T1), ms},
+        {receiving_time, utils:milliseconds_diff(T3, T2), ms},
+        {full_time, utils:milliseconds_diff(T3, T1), ms}
     ].
 
 -perf_test([
@@ -497,7 +497,7 @@ python_client_test(Config) ->
         end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
     catch port_close(PythonClient),
-    {full_time, timer:now_diff(T2, T1)}.
+    {full_time, utils:milliseconds_diff(T2, T1), ms}.
 
 proto_version_test(Config) ->
     % given
