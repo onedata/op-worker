@@ -327,8 +327,7 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    %test_node_starter:clean_environment(Config).
-    ok.
+    test_node_starter:clean_environment(Config).
 
 
 -spec local_access_only(Node :: atom(), Level :: datastore:store_level()) -> ok.
