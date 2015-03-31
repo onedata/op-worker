@@ -56,4 +56,10 @@
     name :: binary()
 }).
 
+
+-record(file, {
+    name :: binary(),
+    mode :: non_neg_integer()
+}).
+
 -endif.
