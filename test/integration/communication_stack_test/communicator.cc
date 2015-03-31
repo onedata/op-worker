@@ -39,7 +39,9 @@ public:
         return LowerLayer::setHandshake(std::move(getHandshake),
             [ this, onHandshakeResponse = std::move(onHandshakeResponse) ](
                                             std::string response) {
-                m_handshakeResponsePromise.set_value(response);
+                try {
+                    m_handshakeResponsePromise.set_value(response);
+                } catch(std::future_error) {}
                 return onHandshakeResponse(std::move(response));
             });
     }
@@ -125,7 +127,7 @@ public:
 
     std::string send(const std::string &description)
     {
-        m_communicator.send(ExampleClientMessage{description}).get();
+        m_communicator.send(ExampleClientMessage{description});
         return m_communicator.lastMessageSent();
     }
 
