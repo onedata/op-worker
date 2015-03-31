@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Behaviour for all models implemented on top of datastore API.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(model_behaviour).

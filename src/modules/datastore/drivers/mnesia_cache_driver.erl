@@ -76,10 +76,8 @@ init_bucket(_BucketName, Models) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Document) ->
     transaction(fun() ->
-        case mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write) of
-            ok -> {ok, Key};
-            Reason -> {error, Reason}
-        end
+        ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
+        {ok, Key}
     end).
 
 %%--------------------------------------------------------------------
@@ -102,9 +100,7 @@ update(#model_config{} = ModelConfig, Key, Diff) ->
             [Value] when is_function(Diff) ->
                 NewValue = Diff(strip_key(Value)),
                 ok = mnesia:write(table_name(ModelConfig), inject_key(Key, NewValue), write),
-                {ok, Key};
-            Reason ->
-                {error, Reason}
+                {ok, Key}
         end
     end).
 
@@ -122,9 +118,7 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
                 ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
                 {ok, Key};
             [_Record] ->
-                {error, already_exists};
-            Reason ->
-                {error, Reason}
+                {error, already_exists}
         end
     end).
 
@@ -139,8 +133,7 @@ get(#model_config{} = ModelConfig, Key) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
             [] -> {error, {not_found, missing_or_deleted}};
-            [Value] -> {ok, #document{key = Key, value = strip_key(Value)}};
-            Reason -> {error, Reason}
+            [Value] -> {ok, #document{key = Key, value = strip_key(Value)}}
         end
     end).
 
@@ -160,9 +153,7 @@ list(#model_config{} = ModelConfig, Fun, AccIn) ->
             {Obj, Handle} ->
                 list_next(Obj, Handle, Fun, AccIn);
             '$end_of_table' ->
-                list_next('$end_of_table', undefined, Fun, AccIn);
-            Other ->
-                {error, Other}
+                list_next('$end_of_table', undefined, Fun, AccIn)
         end
     end).
 
@@ -251,10 +242,7 @@ delete(#model_config{} = ModelConfig, Key, Pred) ->
     transaction(fun() ->
         case Pred() of
             true ->
-                case mnesia:delete(table_name(ModelConfig), Key, write) of
-                    ok -> ok;
-                    Reason -> {error, Reason}
-                end;
+                ok = mnesia:delete(table_name(ModelConfig), Key, write);
             false ->
                 ok
         end

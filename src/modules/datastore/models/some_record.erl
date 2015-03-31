@@ -68,7 +68,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(globally_cached, ?MODULE, Key, ?PRED_ALWAYS).
+    datastore:delete(globally_cached, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
