@@ -58,7 +58,7 @@
 %% API
 -export([save/2, update/4, create/2, get/3, list/4, delete/4, delete/3, exists/3]).
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
-         foreach_link/4, foreach_link/5, fetch_link_target/4, fetch_link_target/4,
+         foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
 -export([configs_per_bucket/1, ensure_state_loaded/0]).
 
