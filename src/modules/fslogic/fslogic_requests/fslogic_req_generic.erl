@@ -27,9 +27,10 @@
 %% @doc Changes file permissions.
 %% @end
 %%--------------------------------------------------------------------
--check_permissions({owner, 2}).
+
 -spec chmod(fslogic:ctx(), File :: fslogic:file(), Perms :: non_neg_integer()) ->
     #atom{} | no_return().
+-check_permissions({owner, 2}).
 chmod(_, _File, _Mode) ->
     ?NOT_IMPLEMENTED.
 
@@ -48,9 +49,9 @@ get_attrs(_, _File) ->
 %% @doc Deletes file.
 %% @end
 %%--------------------------------------------------------------------
--check_permissions({write, {parent, 2}}).
 -spec delete_file(fslogic:ctx(), File :: fslogic:file()) ->
     #atom{} | no_return().
+-check_permissions({write, {parent, 2}}).
 delete_file(_, _File) ->
     ?NOT_IMPLEMENTED.
 
@@ -59,9 +60,9 @@ delete_file(_, _File) ->
 %% @doc Renames file.
 %% @end
 %%--------------------------------------------------------------------
--check_permissions([{write, {parent, {path, 2}}}, {write, {parent, {path, 3}}}]).
 -spec rename_file(fslogic:ctx(), SourcePath :: file:path(), TargetPath :: file:path()) ->
     #atom{} | no_return().
+-check_permissions([{write, {parent, {path, 2}}}, {write, {parent, {path, 3}}}]).
 rename_file(_, _SourcePath, _TargetPath) ->
     ?NOT_IMPLEMENTED.
 

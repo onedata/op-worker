@@ -14,8 +14,9 @@
 -define(FSLOGIC_COMMON_HRL, 1).
 
 %% Remove after protocol impl.
--include("modules/fslogic/fslogic_mock.hrl").
+-include("modules/fslogic/fslogic_stubs.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% helper macro for not implemented functions
 -define(NOT_IMPLEMENTED, erlang:error(not_yet_implemented)).

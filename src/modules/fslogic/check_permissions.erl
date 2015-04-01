@@ -13,7 +13,6 @@
 -author("Rafal Slota").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([before_advice/4, after_advice/5]).

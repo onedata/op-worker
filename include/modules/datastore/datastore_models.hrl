@@ -57,7 +57,7 @@
 }).
 
 
--record(file, {
+-record(mfile, {
     name :: binary(),
     mode :: non_neg_integer()
 }).

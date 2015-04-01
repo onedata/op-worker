@@ -5,11 +5,13 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc stubs for protocol
 %%% @end
 %%%-------------------------------------------------------------------
 -author("Rafal Slota").
 
+-ifndef(FSLOGIC_STUBS_HRL).
+-define(FSLOGIC_STUBS_HRL, 1).
 
 -record(fusemessage, {input, message_type}).
 -record(chmod, {uuid, mode}).
@@ -20,3 +22,5 @@
 -record(linkinfo, {}).
 -record(fileattr, {}).
 -record(filelocation, {}).
+
+-endif.

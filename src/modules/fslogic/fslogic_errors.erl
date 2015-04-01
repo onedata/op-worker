@@ -27,7 +27,7 @@
 %% @doc Translates given error that was thrown to {ErrorCode :: fslogic_error(), ErrorDetails :: term()}.
 %%      This function is intended to be extended when new translation is needed.
 %%--------------------------------------------------------------------
--spec gen_error_code(Error :: term()) -> {ErrorCode :: fslogic_error(), ErrorDetails :: term()}.
+-spec gen_error_code(Error :: term()) -> {ErrorCode :: posix_error(), ErrorDetails :: term()}.
 gen_error_code({error, Reason}) ->
     gen_error_code(Reason);
 
@@ -88,7 +88,7 @@ posix_to_oneerror(_Unkwn) ->
 %%--------------------------------------------------------------------
 %% @doc Translates internal fslogic_error() to POSIX error code.
 %%--------------------------------------------------------------------
--spec oneerror_to_posix(ErrorCode :: fslogic_error()) -> POSIXErrorCode :: non_neg_integer().
+-spec oneerror_to_posix(ErrorCode :: posix_error()) -> POSIXErrorCode :: non_neg_integer().
 oneerror_to_posix(?OK) ->
     0;
 oneerror_to_posix(?EPERM) ->

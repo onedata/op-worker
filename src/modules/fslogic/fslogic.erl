@@ -13,7 +13,6 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/fslogic_mock.hrl").
 -include("errors.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
