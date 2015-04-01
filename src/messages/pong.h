@@ -1,13 +1,13 @@
 /**
-* @file handshakeResponse.h
+* @file pong.h
 * @author Krzysztof Trzepla
 * @copyright (C) 2015 ACK CYFRONET AGH
 * @copyright This software is released under the MIT license cited in
 * 'LICENSE.txt'
 */
 
-#ifndef HELPERS_MESSAGES_HANDSHAKE_RESPONSE_H
-#define HELPERS_MESSAGES_HANDSHAKE_RESPONSE_H
+#ifndef HELPERS_MESSAGES_PONG_H
+#define HELPERS_MESSAGES_PONG_H
 
 #include "messages/serverMessage.h"
 
@@ -17,23 +17,20 @@ namespace one {
 namespace messages {
 
 /**
-* The HandshakeResponse class represents a message that is sent by the server to
+* The Pong class represents a message that is sent by the server to
 * confirm session establishment.
 */
-class HandshakeResponse : public ServerMessage {
+class Pong : public ServerMessage {
 public:
     /**
     * Constructor.
     * @param serverMessage Protocol Buffers message representing @c
-    * HandshakeResponse counterpart.
+    * Pong counterpart.
     */
-    HandshakeResponse(std::unique_ptr<ProtocolServerMessage> serverMessage);
-
-private:
-    std::string m_sessionId;
+    Pong(std::unique_ptr<ProtocolServerMessage> serverMessage);
 };
 
 } // namespace messages
 } // namespace one
 
-#endif // HELPERS_MESSAGES_HANDSHAKE_RESPONSE_H
+#endif // HELPERS_MESSAGES_PONG_H
