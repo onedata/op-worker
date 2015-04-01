@@ -12,7 +12,10 @@
 #include "communication/declarations.h"
 #include "messages/clientMessage.h"
 #include "messages/serverMessage.h"
+#include "messages/handshakeRequest.h"
+#include "messages/handshakeResponse.h"
 
+#include <functional>
 #include <future>
 #include <type_traits>
 
@@ -28,6 +31,7 @@ template <class LowerLayer> class Translator : public LowerLayer {
 public:
     using LowerLayer::LowerLayer;
     using LowerLayer::send;
+    using LowerLayer::setHandshake;
     virtual ~Translator() = default;
 
     /**
@@ -44,6 +48,18 @@ public:
      */
     auto send(const messages::ClientMessage &msg,
         const int retries = DEFAULT_RETRY_NUMBER);
+
+    /**
+     * Wraps lower layer's @c setHandshake.
+     * The handshake message is serialized into @c one::clproto::ClientMessage
+     * and handshake response is deserialized into a
+     * @c one::clproto::ServerMessage instance.
+     * @see ConnectionPool::setHandshake()
+     */
+    auto setHandshake(
+        std::function<one::messages::HandshakeRequest()> getHandshake,
+        std::function<bool(one::messages::HandshakeResponse)>
+            onHandshakeResponse);
 
     /**
      * Wraps lower layer's @c reply.
@@ -86,6 +102,21 @@ auto Translator<LowerLayer>::send(
 {
     auto protoMsg = msg.serialize();
     return LowerLayer::send(std::move(protoMsg), retries);
+}
+
+template <class LowerLayer>
+auto Translator<LowerLayer>::setHandshake(
+    std::function<one::messages::HandshakeRequest()> getHandshake,
+    std::function<bool(one::messages::HandshakeResponse)> onHandshakeResponse)
+{
+    return LowerLayer::setHandshake(
+        [getHandshake = std::move(getHandshake)] {
+            return getHandshake().serialize();
+        },
+        [onHandshakeResponse = std::move(onHandshakeResponse)](
+            ServerMessagePtr msg) {
+            return onHandshakeResponse({std::move(msg)});
+        });
 }
 
 } // namespace layers
