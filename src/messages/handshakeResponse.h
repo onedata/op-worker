@@ -30,7 +30,7 @@ public:
     HandshakeResponse(std::unique_ptr<ProtocolServerMessage> serverMessage);
 
 private:
-    std::string m_session_id;
+    std::string m_sessionId;
 };
 
 } // namespace messages

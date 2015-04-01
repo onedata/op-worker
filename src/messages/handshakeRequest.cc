@@ -13,12 +13,18 @@
 namespace one {
 namespace messages {
 
+HandshakeRequest::HandshakeRequest(std::string sessionId, std::string token)
+    : m_sessionId{std::move(sessionId)}
+    , m_token{std::move(token)}
+{
+}
+
 std::unique_ptr<ProtocolClientMessage> HandshakeRequest::serialize() const
 {
     auto clientMsg = std::make_unique<ProtocolClientMessage>();
     auto handshakeRequestMsg = clientMsg->mutable_handshake_request();
     auto tokenMsg = handshakeRequestMsg->mutable_token();
-    handshakeRequestMsg->set_session_id(m_session_id);
+    handshakeRequestMsg->set_session_id(m_sessionId);
     tokenMsg->set_value(m_token);
 
     return clientMsg;

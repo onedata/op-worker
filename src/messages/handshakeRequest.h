@@ -22,10 +22,17 @@ namespace messages {
 */
 class HandshakeRequest : public ClientMessage {
 public:
+    /**
+     * Constructor.
+     * @param sessionId Id of session to be used in handshake
+     * @param token Access token used to established session
+     */
+    HandshakeRequest(std::string sessionId, std::string token);
+
     virtual std::unique_ptr<ProtocolClientMessage> serialize() const override;
 
 private:
-    std::string m_session_id;
+    std::string m_sessionId;
     std::string m_token;
 };
 
