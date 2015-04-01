@@ -8,7 +8,7 @@
 %%% @doc @todo: Write me!
 %%% @end
 %%%-------------------------------------------------------------------
--module(file).
+-module(mfile).
 -author("Rafal Slota").
 -behaviour(model_behaviour).
 

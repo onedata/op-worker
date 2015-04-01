@@ -14,6 +14,15 @@
 % For example
 % -define(EACCESS, eaccess).
 -define(EREMOTEIO, eremoteio).
+-define(EPERM, eperm).
+-define(ENOENT, enoent).
+-define(EEXIST, eexist).
+-define(EACCES, eacces).
+-define(EDQUOT, edquot).
+-define(EINVAL, einval).
+-define(ENOTEMPTY, enotempty).
+-define(ENOTSUP, enotsup).
+-define(OK, ok).
 
 %% This macro shall return all errors from above.
 -define(ALL_ERROR_CODES, [?EREMOTEIO]).

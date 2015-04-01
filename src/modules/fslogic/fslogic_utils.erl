@@ -12,10 +12,11 @@
 
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([random_ascii_lowercase_sequence/1, gen_storage_uid/1]).
+-export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1]).
 
 
 %%%===================================================================
@@ -42,4 +43,9 @@ random_ascii_lowercase_sequence(Length) ->
     lists:foldl(fun(_, Acc) -> [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, Length)).
 
 
-
+%%--------------------------------------------------------------------
+%% @doc Returns parent of given file.
+%%--------------------------------------------------------------------
+-spec get_parent(fslogic:file()) -> fslogic:file() | no_return().
+get_parent(_File) ->
+    ?NOT_IMPLEMENTED.

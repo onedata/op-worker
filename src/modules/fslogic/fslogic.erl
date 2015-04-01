@@ -28,7 +28,7 @@
 %%%===================================================================
 
 -type ctx() :: #fslogic_ctx{}.
--type file() :: file:entry().
+-type file() :: mfile:entry().
 -type open_mode() :: read | write | rwrd.
 
 -export_type([ctx/0, file/0, open_mode/0]).
