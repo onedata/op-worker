@@ -14,6 +14,7 @@
 #include <boost/optional.hpp>
 
 #include <memory>
+#include <string>
 
 namespace one {
 namespace messages {

@@ -12,6 +12,7 @@
 #include "messages/serverMessage.h"
 
 #include <memory>
+#include <string>
 
 namespace one {
 namespace messages {
@@ -28,6 +29,11 @@ public:
     * HandshakeResponse counterpart.
     */
     HandshakeResponse(std::unique_ptr<ProtocolServerMessage> serverMessage);
+
+    /**
+     * @return Session id returned by the server.
+     */
+    const std::string &sessionId() const;
 
 private:
     std::string m_sessionId;
