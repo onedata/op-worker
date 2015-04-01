@@ -73,13 +73,13 @@ direct_cast_test(Config) ->
         for(1, ProcSendNum, SendReq),
         count_answers(ProcSendNum),
         AfterProcessing = os:timestamp(),
-        timer:now_diff(AfterProcessing, BeforeProcessing)
+        utils:milliseconds_diff(AfterProcessing, BeforeProcessing)
     end,
 
     Ans = spawn_and_check(TestProc, ProcNum),
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
-    {routing_time, Times}.
+    {routing_time, Times, ms}.
 
 %%%===================================================================
 
@@ -103,13 +103,13 @@ redirect_cast_test(Config) ->
         for(1, ProcSendNum, SendReq),
         count_answers(ProcSendNum),
         AfterProcessing = os:timestamp(),
-        timer:now_diff(AfterProcessing, BeforeProcessing)
+        utils:milliseconds_diff(AfterProcessing, BeforeProcessing)
     end,
 
     Ans = spawn_and_check(TestProc, ProcNum),
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
-    {routing_time, Times}.
+    {routing_time, Times, ms}.
 
 %%%===================================================================
 
@@ -139,13 +139,13 @@ mixed_cast_test(Config) ->
         for(1, ProcSendNum, SendReq),
         count_answers(2*ProcSendNum),
         AfterProcessing = os:timestamp(),
-        timer:now_diff(AfterProcessing, BeforeProcessing)
+        utils:milliseconds_diff(AfterProcessing, BeforeProcessing)
     end,
 
     Ans = spawn_and_check(TestProc, ProcNum),
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
-    {routing_time, Times}.
+    {routing_time, Times, ms}.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
