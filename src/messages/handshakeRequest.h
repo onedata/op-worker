@@ -11,6 +11,8 @@
 
 #include "messages/clientMessage.h"
 
+#include <boost/optional.hpp>
+
 #include <memory>
 
 namespace one {
@@ -25,6 +27,12 @@ public:
     /**
      * Constructor.
      * @param sessionId Id of session to be used in handshake
+     * */
+    HandshakeRequest(std::string sessionId);
+
+    /**
+     * Constructor.
+     * @param sessionId Id of session to be used in handshake
      * @param token Access token used to established session
      */
     HandshakeRequest(std::string sessionId, std::string token);
@@ -33,7 +41,7 @@ public:
 
 private:
     std::string m_sessionId;
-    std::string m_token;
+    boost::optional<std::string> m_token;
 };
 
 } // namespace messages
