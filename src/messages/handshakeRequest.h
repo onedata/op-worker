@@ -1,5 +1,5 @@
 /**
-* @file HandshakeRequest.h
+* @file handshakeRequest.h
 * @author Krzysztof Trzepla
 * @copyright (C) 2015 ACK CYFRONET AGH
 * @copyright This software is released under the MIT license cited in
@@ -21,10 +21,8 @@ class ClientMessage;
 
 namespace messages {
 
-class HandshakeRequestSerializer;
-
 /**
-* The HandshakeRequest class represents a message that is sent by client to
+* The HandshakeRequest class represents a message that is sent by the client to
 * establish session.
 */
 class HandshakeRequest : public ClientMessage {
