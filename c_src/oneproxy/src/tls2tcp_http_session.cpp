@@ -17,7 +17,7 @@
 namespace one {
 namespace proxy {
 
-void tls2tcp_http_session::start_reading(bool verified)
+void tls2tcp_http_session::post_handshake(bool verified)
 {
     boost::asio::streambuf request(buffer_size);
     boost::asio::streambuf forward_request;

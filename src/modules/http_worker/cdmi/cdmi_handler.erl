@@ -40,14 +40,7 @@
 %%--------------------------------------------------------------------
 -spec init(term(), term(), term()) -> {upgrade, protocol, cowboy_rest, req(), term()}.
 init(_, Req, Opts) ->
-    NewOpts =
-        case gsi_handler:get_certs_from_req(?ONEPROXY_REST, Req) of
-            {ok, {OtpCert, Certs}} ->
-                [{certs, {OtpCert, Certs}}];
-            {error, _} ->
-                []
-        end,
-    {upgrade, protocol, cowboy_rest, Req, NewOpts ++ Opts}.
+    {upgrade, protocol, cowboy_rest, Req, Opts}.
 
 %%--------------------------------------------------------------------
 %% @doc

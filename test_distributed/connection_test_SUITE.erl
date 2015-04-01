@@ -39,7 +39,6 @@
 
 % todo repair oneproxy error:
 % todo [error] <0.1099.0>@oneproxy:main_loop:234 [ oneproxy 5555 ] handle_client_read failed due to: tlsv1 alert internal error
-% todo and activate 'proto_version_test'
 -perf_test({perf_cases, [multi_message_test, multi_ping_pong_test,
     sequential_ping_pong_test, multi_connection_test, bandwidth_test, python_client_test]}).
 all() ->
@@ -47,7 +46,7 @@ all() ->
         multi_message_test, client_send_test, client_communicate_test,
         client_communiate_async_test, multi_ping_pong_test,
         sequential_ping_pong_test, multi_connection_test, bandwidth_test,
-        python_client_test].
+        python_client_test, proto_version_test].
 
 -define(TOKEN, <<"TOKEN_VALUE">>).
 
@@ -273,18 +272,20 @@ client_communiate_async_test(Config) ->
 -perf_test([
     {repeats, 3},
     {perf_configs, [
-        {ssl_through_oneproxy, [{msg_num, 100000}, {transport, ssl}]},
-        {tcp_direct, [{msg_num, 100000}, {transport, gen_tcp}]}
+        {ssl_through_oneproxy, [{connections_num, 10}, {msg_num, 100000}, {transport, ssl}]},
+        {tcp_direct, [{connections_num, 10}, {msg_num, 100000}, {transport, gen_tcp}]}
     ]},
-    {ct_config, [{msg_num, 100}, {transport, ssl}]}
+    {ct_config, [{connections_num, 10}, {msg_num, 1000}, {transport, ssl}]}
 ]).
-% open connection and send 'msg_num' pings, then receive 'msg_num' pongs
+% open 'connections_num' connections and for each connection: send 'msg_num' pings, then receive 'msg_num' pongs
 multi_ping_pong_test(Config) ->
     % given
     remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     Transport = ?config(transport, Config),
+    ConnNumbers = ?config(connections_num, Config),
     MsgNum = ?config(msg_num, Config),
+    ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
     MsgNumbers = lists:seq(1, MsgNum),
     MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
     Pings = lists:map(
@@ -292,32 +293,42 @@ multi_ping_pong_test(Config) ->
             #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
         end, MsgNumbersBin),
     RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
+    Self = self(),
 
-    % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
     T1 = os:timestamp(),
-    lists:foreach(fun(E) -> ok = Transport:send(Sock, E) end, RawPings),
-    T2 = os:timestamp(),
-    Received = lists:map(
-        fun(_) ->
-            Pong = receive_server_message(),
-            ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}}}, Pong),
-            {binary_to_integer(Pong#'ServerMessage'.message_id), Pong}
-        end, MsgNumbersBin),
-    T3 = os:timestamp(),
-
-    % then
-    {_, ReceivedInOrder} = lists:unzip(lists:keysort(1, Received)),
-    IdToMessage = lists:zip(MsgNumbersBin, ReceivedInOrder),
-    lists:foreach(
-        fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
-            ?assertEqual(Id, MsgId)
-        end, IdToMessage),
-    ok = Transport:close(Sock),
     [
-        {sending_time, utils:milliseconds_diff(T2, T1), ms},
-        {receiving_time, utils:milliseconds_diff(T3, T2), ms},
-        {full_time, utils:milliseconds_diff(T3, T1), ms}
+        spawn_link(
+            fun() ->
+                % when
+                {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
+                lists:foreach(fun(E) ->
+                    ok = Transport:send(Sock, E)
+                end, RawPings),
+                Received = lists:map(
+                    fun(_) ->
+                        Pong = receive_server_message(),
+                        ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}}}, Pong),
+                        {binary_to_integer(Pong#'ServerMessage'.message_id), Pong}
+                    end, MsgNumbersBin),
+
+                % then
+                {_, ReceivedInOrder} = lists:unzip(lists:keysort(1, Received)),
+                IdToMessage = lists:zip(MsgNumbersBin, ReceivedInOrder),
+                lists:foreach(
+                    fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
+                        ?assertEqual(Id, MsgId)
+                    end, IdToMessage),
+                ok = Transport:close(Sock),
+                Self ! success
+            end)
+        || _ <- ConnNumbersList
+    ],
+    lists:foreach(fun(_) ->
+        {ok, success} = test_utils:receive_msg(success, infinity)
+    end, ConnNumbersList),
+    T2 = os:timestamp(),
+    [
+        {full_time, timer:now_diff(T2, T1), ms}
     ].
 
 -perf_test([
@@ -409,7 +420,7 @@ bandwidth_test(Config) ->
     PacketSize = ?config(packet_size_kilobytes, Config),
     PacketNum = ?config(packet_num, Config),
     Transport = ?config(transport, Config),
-    Data = crypto:rand_bytes(PacketSize*1024),
+    Data = crypto:rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {data, #'Data'{data = Data}}},
     PacketRaw = client_messages:encode_msg(Packet),
     Self = self(),
@@ -422,7 +433,9 @@ bandwidth_test(Config) ->
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
     T1 = os:timestamp(),
-    lists:foreach(fun(_) -> ok = Transport:send(Sock, PacketRaw) end, lists:seq(1, PacketNum)),
+    lists:foreach(fun(_) ->
+        ok = Transport:send(Sock, PacketRaw)
+    end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
 
     % then
@@ -612,17 +625,21 @@ connect_via_token(Node) ->
 connect_via_token(Node, SocketOpts) ->
     connect_via_token(Node, SocketOpts, ssl).
 
+connect_via_token(Node, SocketOpts, Transport) ->
+connect_via_token(Node, SocketOpts, Transport, crypto:rand_bytes(10)).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Connect to given node using token, with custom socket opts
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node(), SocketOpts :: list(), ssl | tcp) ->
+-spec connect_via_token(Node :: node(), SocketOpts :: list(), ssl | tcp, session:id()) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
-connect_via_token(Node, SocketOpts, Transport) ->
+connect_via_token(Node, SocketOpts, Transport, SessId) ->
     % given
     TokenAuthMessage = #'ClientMessage'{message_body =
-    {handshake_request, #'HandshakeRequest'{session_id = <<"session_id">>,
+    {handshake_request, #'HandshakeRequest'{session_id = SessId,
         token = #'Token'{value = ?TOKEN}}}},
     TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
     ActiveOpt =
@@ -635,8 +652,10 @@ connect_via_token(Node, SocketOpts, Transport) ->
     {ok, ExternalPort} = rpc:call(Node, application, get_env, [?APP_NAME, protocol_handler_port]),
     {Port, AdditionalOpts} =
         case Transport of
-            gen_tcp -> {rpc:call(Node, oneproxy, get_local_port, [ExternalPort]), []};
-            ssl -> {ExternalPort, [{reuse_sessions, false}]} % todo repair oneproxy and delete reuse_sessions flag
+            gen_tcp ->
+                {rpc:call(Node, oneproxy, get_local_port, [ExternalPort]), []};
+            ssl ->
+                {ExternalPort, [{reuse_sessions, false}]} % todo repair oneproxy and delete reuse_sessions flag
         end,
 
     % when
@@ -674,10 +693,14 @@ spawn_ssl_echo_client(NodeToConnect) ->
                     #'ServerMessage'{message_id = Id, message_body = Body} =
                         server_messages:decode_msg(Data, 'ServerMessage'),
 
-                    % respond with the same data to the server
-                    ClientAnsProtobuf = #'ClientMessage'{message_id = Id, message_body = Body},
-                    ClientAnsRaw = client_messages:encode_msg(ClientAnsProtobuf),
-                    ?assertEqual(ok, ssl:send(Sock, ClientAnsRaw)),
+                    % respond with the same data to the server (excluding stream_reset)
+                    case Body of
+                        {message_stream_reset, _} -> ok;
+                        _ ->
+                            ClientAnsProtobuf = #'ClientMessage'{message_id = Id, message_body = Body},
+                            ClientAnsRaw = client_messages:encode_msg(ClientAnsProtobuf),
+                            ?assertEqual(ok, ssl:send(Sock, ClientAnsRaw))
+                    end,
 
                     %loop back
                     Loop();

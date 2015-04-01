@@ -15,6 +15,7 @@
 -author("Konrad Zemek").
 
 -include("global_definitions.hrl").
+-include("proto_internal/common/credentials.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -27,7 +28,7 @@
 -deprecated([proxy_subject/1]).
 
 %% API
--export([init/0, get_certs_from_req/2, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3,
+-export([init/0, get_certs_from_oneproxy/2, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3,
     is_proxy_certificate/1, find_eec_cert/3, get_ca_certs/0, get_ca_certs_from_all_cert_dirs/0, strip_self_signed_ca/1, get_ciphers/0]).
 
 %%%===================================================================
@@ -88,26 +89,25 @@ init() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns client's certificates based on cowboy's request.
+%% Returns client's certificates based on oneproxy #certificate_info{} message.
 %% If there is not valid GSI session, {error, no_gsi_session} is returned.
 %% @end
 %%--------------------------------------------------------------------
--spec get_certs_from_req(OneProxyHandler :: pid() | atom(), Req :: term()) ->
-    {ok, {OtpCert :: #'OTPCertificate'{}, Chain :: [#'OTPCertificate'{}]}} |
-    {error, no_gsi_session} | {error, Reason :: term()}.
-get_certs_from_req(OneProxyHandler, Req) ->
-    {SessionId, _} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
-    case SessionId of
+-spec get_certs_from_oneproxy(OneProxyHandler :: pid() | atom(), #certificate_info{}) ->
+    {ok, #certificate{}} | {error, no_gsi_session} | {error, Reason :: term()}.
+get_certs_from_oneproxy(OneProxyHandler, #certificate_info{client_session_id = GsiSessId}) ->
+    case GsiSessId of
         undefined ->
             {error, no_gsi_session};
-        SessionId ->
-            case oneproxy:get_session(OneProxyHandler, SessionId) of
+        _ ->
+            case oneproxy:get_session(OneProxyHandler, GsiSessId) of
                 {error, Reason} ->
                     {error, Reason};
                 {ok, SessionData} ->
                     ClientCerts = base64:decode(SessionData),
-                    [OtpCert | Certs] = lists:reverse([public_key:pkix_decode_cert(DER, otp) || {'Certificate', DER, _} <- public_key:pem_decode(ClientCerts)]),
-                    {ok, {OtpCert, Certs}}
+                    [OtpCert | Certs] = lists:reverse([public_key:pkix_decode_cert(DER, otp)
+                        || {'Certificate', DER, _} <- public_key:pem_decode(ClientCerts)]),
+                    {ok, #certificate{otp_cert = OtpCert, chain = Certs}}
             end
     end.
 

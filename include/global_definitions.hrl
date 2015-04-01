@@ -13,6 +13,8 @@
 -ifndef(GLOBAL_DEFINITIONS_HRL).
 -define(GLOBAL_DEFINITIONS_HRL, 1).
 
+-include("modules/datastore/datastore_models.hrl").
+
 %%%===================================================================
 %%% Global names
 %%%===================================================================
@@ -52,5 +54,11 @@
     HEALTHCHECK_ERROR_LOG(_Msg, [])).
 -define(HEALTHCHECK_ERROR_LOG_MSG(_Msg, _Args),
     lists:flatten(io_lib:format("Healthcheck error in ~p on node ~p: " ++ _Msg, [?MODULE, node()] ++ _Args))).
+
+%%%===================================================================
+%%% Global identities
+%%%===================================================================
+
+-define(GLOBALREGISTRY_IDENTITY, #identity{user_id = <<"GLOBALREGISTRY">>}).
 
 -endif.
