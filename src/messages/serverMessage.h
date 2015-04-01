@@ -16,7 +16,6 @@ class ServerMessage;
 }
 
 namespace messages {
-namespace server {
 
 /**
 * The ServerMessage class represents a message that can by sent form the server
@@ -27,7 +26,6 @@ public:
     using ProtocolServerMessage = one::clproto::ServerMessage;
 };
 
-} // namespace client
 } // namespace messages
 } // namespace one
 

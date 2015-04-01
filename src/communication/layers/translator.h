@@ -10,8 +10,8 @@
 #define HELPERS_COMMUNICATION_LAYERS_TRANSLATOR_H
 
 #include "communication/declarations.h"
-#include "messages/client/clientMessage.h"
-#include "messages/server/serverMessage.h"
+#include "messages/clientMessage.h"
+#include "messages/serverMessage.h"
 
 #include <future>
 #include <type_traits>
@@ -42,7 +42,7 @@ public:
      * @param retires The retries argument to pass to the lower layer.
      * @see ConnectionPool::send()
      */
-    auto send(const messages::client::ClientMessage &msg,
+    auto send(const messages::ClientMessage &msg,
         const int retries = DEFAULT_RETRY_NUMBER);
 
     /**
@@ -54,9 +54,9 @@ public:
      */
     template <typename = void>
     auto reply(clproto::ServerMessage &replyTo,
-        const messages::client::ClientMessage &msg, const int retry)
+        const messages::ClientMessage &msg, const int retry)
     {
-        auto protoMsg = msg.createSerializer()->serialize(msg);
+        auto protoMsg = msg.serialize();
         return LowerLayer::reply(replyTo, std::move(protoMsg), retry);
     }
 
@@ -69,9 +69,9 @@ public:
      */
     template <class SvrMsg>
     std::future<SvrMsg> communicate(
-        const messages::client::ClientMessage &msg, const int retries)
+        const messages::ClientMessage &msg, const int retries)
     {
-        auto protoMsg = msg.createSerializer()->serialize(msg);
+        auto protoMsg = msg.serialize();
         auto future = LowerLayer::communicate(std::move(protoMsg), retries);
         return std::async(
             std::launch::deferred, [future = std::move(future)]() mutable {
@@ -82,9 +82,9 @@ public:
 
 template <class LowerLayer>
 auto Translator<LowerLayer>::send(
-    const messages::client::ClientMessage &msg, const int retries)
+    const messages::ClientMessage &msg, const int retries)
 {
-    auto protoMsg = msg.createSerializer()->serialize(msg);
+    auto protoMsg = msg.serialize();
     return LowerLayer::send(std::move(protoMsg), retries);
 }
 
