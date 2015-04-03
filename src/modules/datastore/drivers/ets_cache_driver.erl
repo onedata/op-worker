@@ -16,7 +16,8 @@
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
--export([save/2, update/3, create/2, exists/2, get/2, delete/2]).
+-export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
+-export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
@@ -93,16 +94,34 @@ get(#model_config{} = ModelConfig, Key) ->
             {error, {not_found, missing_or_deleted}}
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback list/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec list(model_behaviour:model_config(),
+    Fun :: datastore:list_fun(), AccIn :: term()) -> no_return().
+list(#model_config{} = _ModelConfig, _Fun, _AccIn) ->
+    error(not_supported).
+
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(model_behaviour:model_config(), datastore:key()) ->
+-spec delete(model_behaviour:model_config(), datastore:key(), datastore:delete_predicate()) ->
     ok | datastore:generic_error().
-delete(#model_config{} = ModelConfig, Key) ->
-    true = ets:delete(table_name(ModelConfig), Key),
-    ok.
+delete(#model_config{} = ModelConfig, Key, Pred) ->
+    case Pred() of
+        true ->
+            true = ets:delete(table_name(ModelConfig), Key),
+            ok;
+        false ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -110,9 +129,9 @@ delete(#model_config{} = ModelConfig, Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(model_behaviour:model_config(), datastore:key()) ->
-    true | false | datastore:generic_error().
+    {ok, boolean()} | datastore:generic_error().
 exists(#model_config{} = ModelConfig, Key) ->
-    ets:member(table_name(ModelConfig), Key).
+    {ok, ets:member(table_name(ModelConfig), Key)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -122,6 +141,48 @@ exists(#model_config{} = ModelConfig, Key) ->
 -spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
 healthcheck(_) ->
     ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback add_links/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()]) ->
+    no_return().
+add_links(_, _, _) ->
+    erlang:error(not_implemented).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback delete_links/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all) ->
+    no_return().
+delete_links(_, _, _) ->
+    erlang:error(not_implemented).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback fetch_link/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_link(model_behaviour:model_config(), datastore:key(), datastore:link_name()) ->
+    no_return().
+fetch_link(_, _, _) ->
+    erlang:error(not_implemented).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback foreach_link/4.
+%% @end
+%%--------------------------------------------------------------------
+-spec foreach_link(model_behaviour:model_config(), Key :: datastore:key(),
+    fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
+    no_return().
+foreach_link(_, _Key, _, _AccIn) ->
+    erlang:error(not_implemented).
 
 %%%===================================================================
 %%% Internal functions

@@ -13,9 +13,7 @@
 -ifndef(HANDSHAKE_MESSAGES_HRL).
 -define(HANDSHAKE_MESSAGES_HRL, 1).
 
--record(token, {
-    value :: binary()
-}).
+-include("proto_internal/common/credentials.hrl").
 
 -record(handshake_request, {
     token :: #token{},

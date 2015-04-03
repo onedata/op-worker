@@ -10,6 +10,7 @@
 #include "log_message.h"
 #include "tls2tcp_session.h"
 #include "tls2tcp_http_session.h"
+#include "tls2tcp_cert_aware_session.h"
 
 #include <boost/bind.hpp>
 #include <boost/make_shared.hpp>
@@ -53,7 +54,7 @@ template <class session_t> void tls_server<session_t>::start_accept()
                   std::placeholders::_1));
 }
 
-template class tls_server<tls2tcp_session>;
+template class tls_server<tls2tcp_cert_aware_session>;
 template class tls_server<tls2tcp_http_session>;
 
 } // namespace proxy

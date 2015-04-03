@@ -14,11 +14,13 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_internal.hrl").
 -include("proto_internal/oneclient/handshake_messages.hrl").
 -include("proto_internal/oneproxy/oneproxy_messages.hrl").
+-include("cluster_elements/oneproxy/oneproxy.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
 %% API
@@ -26,7 +28,10 @@
 
 -export_type([credentials/0]).
 
--type credentials() :: #token{}. %todo certifica_info support
+%% todo split this model to:
+%% todo globally cached - #certificate{} -> #identity{},
+%% todo and locally cached - #token{} | #certificate_info{} -> #identity{}
+-type credentials() :: #token{} | #certificate_info{}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -71,15 +76,6 @@ get(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error().
-list() ->
-    mnesia_cache_driver:list(model_init()).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -92,9 +88,9 @@ delete(Key) ->
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) -> true | false | datastore:generic_error().
+-spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    datastore:exists(local_only, ?MODULE, Key).
+    ?RESPONSE(datastore:exists(local_only, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -137,10 +133,22 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec fetch(identity:credentials()) ->
     {ok, datastore:document()} | datastore:get_error().
-fetch(Cred) ->
-    case onedata_user:fetch(Cred) of
+fetch(CertInfo = #certificate_info{}) ->
+    case gsi_handler:get_certs_from_oneproxy(?ONEPROXY_REST, CertInfo) of
+        {ok, #certificate{otp_cert = OtpCert}} ->
+            case identity:get(OtpCert) of
+                {ok, Doc = #document{value = Iden}} ->
+                    identity:save(#document{key = CertInfo, value = Iden}),
+                    {ok, Doc};
+                Error_ -> Error_
+            end;
+        Error ->
+            Error
+    end;
+fetch(Token = #token{}) ->
+    case onedata_user:fetch(Token) of
         {ok, #document{key = Id}} ->
-            NewDoc = #document{key = Cred, value = #identity{user_id = Id}},
+            NewDoc = #document{key = Token, value = #identity{user_id = Id}},
             case identity:save(NewDoc) of
                 {ok, _} -> {ok, NewDoc};
                 Error_ -> Error_

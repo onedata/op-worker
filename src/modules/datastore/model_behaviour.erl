@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Behaviour for all models implemented on top of datastore API.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(model_behaviour).
@@ -13,7 +13,7 @@
 
 -include("modules/datastore/datastore.hrl").
 
--type model_action() :: save | get | delete | update | create | exists.
+-type model_action() :: save | get | delete | update | create | exists | list | add_links | delete_links | fetch_link | foreach_link.
 -type model_type() :: atom().
 -type model_config() :: #model_config{}.
 
@@ -65,7 +65,7 @@
 %% Checks if #document with given key exists.
 %% @end
 %%--------------------------------------------------------------------
--callback exists(datastore:key()) -> true | false | datastore:generic_error().
+-callback exists(datastore:key()) -> datastore:exists_return().
 
 
 

@@ -59,7 +59,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(local_only, ?MODULE, Key).
+    datastore:get(globally_cached, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -68,16 +68,16 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(local_only, ?MODULE, Key).
+    datastore:delete(globally_cached, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback exists/1. 
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) -> true | false | datastore:generic_error().
+-spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    datastore:exists(local_only, ?MODULE, Key).
+    ?RESPONSE(datastore:exists(globally_cached, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc

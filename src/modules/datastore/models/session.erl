@@ -15,6 +15,7 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_internal.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
@@ -75,9 +76,9 @@ get(Key) ->
 %% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error().
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
-    mnesia_cache_driver:list(model_init()).
+    datastore:list(global_only, ?MODEL_NAME, ?GET_ALL, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -93,9 +94,9 @@ delete(Key) ->
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) -> true | false | datastore:generic_error().
+-spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    datastore:exists(global_only, ?MODULE, Key).
+    ?RESPONSE(datastore:exists(global_only, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
