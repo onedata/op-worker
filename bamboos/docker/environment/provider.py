@@ -148,7 +148,7 @@ def up(image, bindir, logdir, dns, uid, config_path):
     db_node_mappings, riak_out = _riak_up(configs, dns_servers, uid)
     common.merge(output, riak_out)
 
-    for cfg in configs:
+    for cfg, _ in configs:
         worker, node_out = _node_up(image, bindir, logdir, uid, cfg,
                                          dns_servers, db_node_mappings)
         workers.extend(worker)
