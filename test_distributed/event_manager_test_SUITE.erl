@@ -43,12 +43,12 @@ all() -> [
     event_stream_emission_rule_test,
     event_stream_emission_time_test,
     event_stream_crash_test,
-%%     event_manager_subscription_creation_and_cancellation_test,  %todo reenable
+    event_manager_subscription_creation_and_cancellation_test,
     event_manager_multiple_subscription_test,
     event_manager_multiple_handlers_test
 ].
 
--define(TIMEOUT, timer:seconds(5)).
+-define(TIMEOUT, timer:seconds(15)).
 
 %%%====================================================================
 %%% Test function

@@ -131,9 +131,9 @@ list(Level, ModelName, Fun, AccIn) ->
 delete(Level, ModelName, Key, Pred) ->
     case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
         ok ->
-            spawn(fun() -> delete_links(disk_only, Key, ModelName, all) end),
-            spawn(fun() -> delete_links(global_only, Key, ModelName, all) end),
-            spawn(fun() -> delete_links(local_only, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(disk_only, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(global_only, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(local_only, Key, ModelName, all) end),
             ok;
         {error, Reason} ->
             {error, Reason}
