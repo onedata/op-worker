@@ -31,7 +31,7 @@
     session_getters_test/1,
     session_supervisor_child_crash_test/1]).
 
--perf_test({perf_cases, []}).
+-performance({test_cases, []}).
 all() -> [
     session_manager_session_creation_and_reuse_test,
     session_manager_session_components_running_test,
@@ -97,7 +97,6 @@ session_manager_session_components_running_test(Config) ->
 
         ?assertMatch({ok, #document{key = SessId, value = #session{}}}, Doc),
         {ok, #document{value = #session{
-            identity = Iden,
             node = Node,
             session_sup = SessSup,
             event_manager = EvtMan,

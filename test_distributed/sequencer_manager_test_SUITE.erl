@@ -38,7 +38,7 @@
     sequencer_manager_multiple_streams_messages_ordering_test/1
 ]).
 
--perf_test({perf_cases, []}).
+-performance({test_cases, []}).
 all() -> [
     sequencer_stream_reset_stream_message_test,
     sequencer_stream_messages_ordering_test,

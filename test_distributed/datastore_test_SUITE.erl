@@ -33,7 +33,7 @@
 -export([local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
             global_cache_list_test/1, persistance_test/1, links_test/1, link_walk_test/1]).
 
--perf_test({perf_cases, []}).
+-performance({test_cases, []}).
 all() ->
     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
      global_cache_list_test, persistance_test, links_test, link_walk_test].
