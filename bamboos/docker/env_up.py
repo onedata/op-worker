@@ -10,7 +10,7 @@ import argparse
 import json
 import os
 
-from environment import appmock, client, common, globalregistry, provider, provider_ccm
+from environment import appmock, client, common, globalregistry, provider_worker, provider_ccm
 
 
 parser = argparse.ArgumentParser(
@@ -25,11 +25,11 @@ parser.add_argument(
     dest='image')
 
 parser.add_argument(
-    '-bp', '--bin-provider',
+    '-bp', '--bin-worker',
     action='store',
     default=os.getcwd() + '/oneprovider',
-    help='the path to oneprovider repository (precompiled)',
-    dest='bin_op')
+    help='the path to op_worker repository (precompiled)',
+    dest='bin_op_worker')
 
 parser.add_argument(
     '-bccm', '--bin-ccm',
@@ -108,7 +108,7 @@ if 'op_ccm' in config:
 
 # Start oneprovider_node instances
 if 'oneprovider_node' in config:
-    op_output = provider.up(args.image, args.bin_op, args.logdir, dns, uid,
+    op_output = provider_worker.up(args.image, args.bin_op_worker, args.logdir, dns, uid,
                             args.config_path)
     common.merge(output, op_output)
 
