@@ -23,7 +23,8 @@
 -export([start_link/0, stop/0]).
 
 %% gen_event callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+    code_change/3]).
 
 %% This record is used by ccm (it contains its state). It describes
 %% nodes, dispatchers and workers in cluster. It also contains reference
@@ -97,7 +98,8 @@ init(_) ->
 %% Handling call messages
 %% @end
 %%--------------------------------------------------------------------
--spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result when
+-spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
+    State :: term()) -> Result when
     Result :: {reply, Reply, NewState}
     | {reply, Reply, NewState, Timeout}
     | {reply, Reply, NewState, hibernate}
@@ -226,18 +228,21 @@ heartbeat(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes}, Sen
     ?debug("Heartbeat from node: ~p", [SenderNode]),
     case lists:member(SenderNode, Nodes) or lists:member(SenderNode, InitNodes) of
         true ->
-            gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heartbeat_ok, State#cm_state.state_num}),
+            gen_server:cast({?NODE_MANAGER_NAME, SenderNode},
+                {heartbeat_ok, State#cm_state.state_num}),
             State;
         false ->
             ?info("New node: ~p", [SenderNode]),
             try
                 erlang:monitor_node(SenderNode, true),
                 NewInitNodes = [SenderNode | lists:delete(SenderNode, InitNodes)],
-                gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heartbeat_ok, State#cm_state.state_num}),
+                gen_server:cast({?NODE_MANAGER_NAME, SenderNode},
+                    {heartbeat_ok, State#cm_state.state_num}),
                 State#cm_state{uninitialized_nodes = NewInitNodes}
             catch
                 _:Error ->
-                    ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p", [SenderNode, Error]),
+                    ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p",
+                        [SenderNode, Error]),
                     State
             end
     end.
@@ -249,12 +254,14 @@ heartbeat(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes}, Sen
 %% @end
 %%--------------------------------------------------------------------
 -spec init_ok(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
-init_ok(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes, state_num = StateNum}, SenderNode) ->
+init_ok(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes,
+    state_num = StateNum}, SenderNode) ->
     NewInitNodes = lists:delete(SenderNode, InitNodes),
     NewNodes = [SenderNode | lists:delete(SenderNode, Nodes)],
     NewStateNum = StateNum + 1,
     update_node_managers(NewNodes, NewStateNum),
-    State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes, state_num = NewStateNum}.
+    State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes,
+        state_num = NewStateNum}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -263,7 +270,7 @@ init_ok(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes, state_
 %% they are supposed to synchronize
 %% @end
 %%--------------------------------------------------------------------
--spec update_node_managers(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
+-spec update_node_managers(Nodes :: [node()], StateNum:: non_neg_integer()) -> ok.
 update_node_managers(Nodes, NewStateNum) ->
     UpdateNode = fun(Node) ->
         gen_server:cast({?NODE_MANAGER_NAME, Node}, {update_state, NewStateNum})
@@ -277,13 +284,15 @@ update_node_managers(Nodes, NewStateNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec node_down(Node :: atom(), State :: #cm_state{}) -> #cm_state{}.
-node_down(Node, State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes, state_num = StateNum}) ->
+node_down(Node, State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes,
+    state_num = StateNum}) ->
     ?error("Node down: ~p", [Node]),
     NewNodes = Nodes -- [Node],
     NewInitNodes = InitNodes -- [Node],
     NewStateNum = StateNum + 1,
     update_node_managers(NewNodes, NewStateNum),
-    State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes, state_num = NewStateNum}.
+    State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes,
+        state_num = NewStateNum}.
 
 %%--------------------------------------------------------------------
 %% @private
