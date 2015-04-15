@@ -231,7 +231,6 @@ heartbeat(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes}, Sen
         false ->
             ?info("New node: ~p", [SenderNode]),
             try
-                pong = net_adm:ping(SenderNode),
                 erlang:monitor_node(SenderNode, true),
                 NewInitNodes = [SenderNode | lists:delete(SenderNode, InitNodes)],
                 gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heartbeat_ok, State#cm_state.state_num}),
