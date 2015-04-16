@@ -17,7 +17,7 @@
 
 #include <functional>
 
-using namespace std;
+using std::string;
 using namespace std::placeholders;
 using namespace one::clproto::remote_file_management;
 using namespace one::clproto::communication_protocol;
@@ -168,8 +168,6 @@ boost::shared_future<int>
 ClusterProxyHelper::sh_unlink(const boost::filesystem::path &p)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-
-
 
     m_worker_service.post([&, promise]() {
         DLOG(INFO) << "CluserProxyHelper unlink(path: " << p.string() << ")";
