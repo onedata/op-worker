@@ -231,21 +231,21 @@ TEST_F(ClusterProxyHelperTest, mknod)
     answer.set_answer_status(VOK);
     EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
     auto p1 = proxy->sh_mknod("file_id", 0755, 0);
-    EXPECT_EQ(-EIO, proxy->sh_mknod("file_id", 0755, 0));
+    EXPECT_THROW_POSIX_CODE(p1.get(), EIO);
 
     atom.set_value(VOK);
     answer.set_worker_answer(atom.SerializeAsString());
     EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
-    auto p1 = proxy->sh_mknod("file_id", 0755, 0);
-    EXPECT_EQ(0, proxy->sh_mknod("file_id", 0755, 0));
+    auto p2 = proxy->sh_mknod("file_id", 0755, 0);
+    EXPECT_EQ(0, p2.get());
 
     RemoteFileMangement sentMsg;
 
     atom.set_value(VEEXIST);
     answer.set_worker_answer(atom.SerializeAsString());
     EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
-    auto p1 = proxy->sh_mknod("file_id", 0755, 0);
-    EXPECT_EQ(-EEXIST, proxy->sh_mknod("file_id", 0755, 0));
+    auto p3 = proxy->sh_mknod("file_id", 0755, 0);
+    EXPECT_THROW_POSIX_CODE(p3.get(), EEXIST);
 
     RemoteFileMangement rfm;
 
@@ -290,7 +290,7 @@ TEST_F(ClusterProxyHelperTest, unlink)
     answer.set_worker_answer(atom.SerializeAsString());
     EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
     auto p3 = proxy->sh_unlink("file_id");
-    EXPECT_THROW_POSIX_CODE(p3.get(), EEXISTS);
+    EXPECT_THROW_POSIX_CODE(p3.get(), EEXIST);
 
     RemoteFileMangement rfm;
 

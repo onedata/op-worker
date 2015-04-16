@@ -23,8 +23,6 @@
 
 #include <string>
 
-using namespace std;
-
 namespace one
 {
 namespace helpers
