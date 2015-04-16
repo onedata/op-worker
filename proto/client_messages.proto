@@ -9,6 +9,7 @@
  */
 package one.clproto;
 
+import "common_messages.proto";
 import "handshake_messages.proto";
 import "stream_messages.proto";
 import "event_messages.proto";
@@ -34,5 +35,8 @@ message ClientMessage {
         // diagnostic_messages.proto
         Ping               ping                 = 7;
         GetProtocolVersion get_protocol_version = 8;
+
+        // stream_messages.proto
+        EndOfMessageStream end_of_stream        = 9;
     }
 }
