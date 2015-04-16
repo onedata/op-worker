@@ -26,6 +26,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
@@ -39,8 +40,9 @@
 
 % todo repair oneproxy error:
 % todo [error] <0.1099.0>@oneproxy:main_loop:234 [ oneproxy 5555 ] handle_client_read failed due to: tlsv1 alert internal error
--perf_test({perf_cases, [multi_message_test, multi_ping_pong_test,
-    sequential_ping_pong_test, multi_connection_test, bandwidth_test, python_client_test]}).
+-performance({test_cases, [multi_message_test, multi_ping_pong_test,
+    sequential_ping_pong_test, multi_connection_test, bandwidth_test,
+    python_client_test]}).
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
         multi_message_test, client_send_test, client_communicate_test,
@@ -127,13 +129,23 @@ protobuf_msg_test(Config) ->
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ok = ssl:close(Sock).
 
--perf_test([
+-performance([
     {repeats, 3},
-    {perf_configs, [
-        {ssl_through_oneproxy, [{msg_num, 100000}, {transport, ssl}]},
-        {tcp_direct, [{msg_num, 100000}, {transport, gen_tcp}]}
+    {parameters, [
+        [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
+        [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
     ]},
-    {ct_config, [{msg_num, 1000}, {transport, ssl}]}
+    {config, [{name, ssl_through_oneproxy},
+        {parameters, [
+            [{name, msg_num}, {value, 100000}]
+        ]}
+    ]},
+    {config, [{name, tcp_direct},
+        {parameters, [
+            [{name, msg_num}, {value, 100000}],
+            [{name, transport}, {value, gen_tcp}]
+        ]}
+    ]}
 ]).
 multi_message_test(Config) ->
     % given
@@ -174,9 +186,9 @@ multi_message_test(Config) ->
     T3 = os:timestamp(),
     ok = Transport:close(Sock),
     [
-        {sending_time, utils:milliseconds_diff(T2, T1), ms},
-        {receiving_time, utils:milliseconds_diff(T3, T2), ms},
-        {full_time, utils:milliseconds_diff(T3, T1), ms}
+        #parameter{name = sending_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"},
+        #parameter{name = receiving_time, value = utils:milliseconds_diff(T3, T2), unit = "ms"},
+        #parameter{name = full_time, value = utils:milliseconds_diff(T3, T1), unit = "ms"}
     ].
 
 client_send_test(Config) ->
@@ -269,15 +281,28 @@ client_communiate_async_test(Config) ->
     ?assertEqual({ok, {router_message_called, MsgId2}}, RouterNotification),
     ok = ssl:close(Sock).
 
--perf_test([
+-performance([
     {repeats, 3},
-    {perf_configs, [
-        {ssl_through_oneproxy, [{connections_num, 10}, {msg_num, 100000}, {transport, ssl}]},
-        {tcp_direct, [{connections_num, 10}, {msg_num, 100000}, {transport, gen_tcp}]}
+    {parameters, [
+        [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
+        [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
+        [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
     ]},
-    {ct_config, [{connections_num, 10}, {msg_num, 1000}, {transport, ssl}]}
+    {description, "Opens 'connections_num' connections and for each connection, "
+    "then sends 'msg_num' ping messages and finally receives 'msg_num' pong "
+    "messages."},
+    {config, [{name, ssl_through_oneproxy},
+        {parameters, [
+            [{name, msg_num}, {value, 100000}]
+        ]}
+    ]},
+    {config, [{name, tcp_direct},
+        {parameters, [
+            [{name, msg_num}, {value, 100000}],
+            [{name, transport}, {value, gen_tcp}]
+        ]}
+    ]}
 ]).
-% open 'connections_num' connections and for each connection: send 'msg_num' pings, then receive 'msg_num' pongs
 multi_ping_pong_test(Config) ->
     % given
     remove_pending_messages(),
@@ -327,18 +352,20 @@ multi_ping_pong_test(Config) ->
         {ok, success} = test_utils:receive_msg(success, infinity)
     end, ConnNumbersList),
     T2 = os:timestamp(),
-    [
-        {full_time, timer:now_diff(T2, T1), ms}
-    ].
+    #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
 
--perf_test([
+-performance([
     {repeats, 3},
-    {perf_configs, [
-        [{msg_num, 100000}]
+    {parameters, [
+        [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}]
     ]},
-    {ct_config, [{msg_num, 1000}]}
+    {description, "Opens connection and then sends and receives ping/pong message 'msg_num' times."},
+    {config, [{name, sequential_ping_pong},
+        {parameters, [
+            [{name, msg_num}, {value, 100000}]
+        ]}
+    ]}
 ]).
-% open connection and: (send ping -> receive pong) * 'msg_num' times
 sequential_ping_pong_test(Config) ->
     % given
     remove_pending_messages(),
@@ -372,16 +399,18 @@ sequential_ping_pong_test(Config) ->
     % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ok = ssl:close(Sock),
-    {full_time, utils:milliseconds_diff(T2, T1), ms}.
 
--perf_test([
+    #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
+
+-performance([
     {repeats, 10},
-    {perf_configs, [
-        [{connections_num, 100}]
+    {parameters, [
+        [{name, connections_num}, {value, 100}, {description, "Number of connections."}]
     ]},
-    {ct_config, [{connections_num, 100}]}
+    {description, "Opens 'connections_num' connections to the server, checks "
+    "their state, and closes them."},
+    {config, [{name, multi_connection}]}
 ]).
-% Open 'connections_num' connections to the server, check their state, and close them
 multi_connection_test(Config) ->
     % given
     remove_pending_messages(),
@@ -405,19 +434,30 @@ multi_connection_test(Config) ->
         end, Connections),
     lists:foreach(fun({ok, {Sock, _}}) -> ssl:close(Sock) end, Connections).
 
--perf_test([
+-performance([
     {repeats, 3},
-    {perf_configs, [
-        {tcp_direct, [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, ssl}]},
-        {ssl_through_oneproxy, [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, gen_tcp}]}
+    {parameters, [
+        [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
+        [{name, packet_num}, {value, 10}, {description, "Number of packets."}],
+        [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
     ]},
-    {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 10}, {transport, ssl}]}
+    {config, [{name, ssl_through_oneproxy},
+        {parameters, [
+            [{name, packet_num}, {value, 1000}]
+        ]}
+    ]},
+    {config, [{name, tcp_direct},
+        {parameters, [
+            [{name, packet_num}, {value, 1000}],
+            [{name, transport}, {value, gen_tcp}]
+        ]}
+    ]}
 ]).
 bandwidth_test(Config) ->
     % given
     remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    PacketSize = ?config(packet_size_kilobytes, Config),
+    PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
     Transport = ?config(transport, Config),
     Data = crypto:rand_bytes(PacketSize * 1024),
@@ -447,24 +487,29 @@ bandwidth_test(Config) ->
     T3 = os:timestamp(),
     Transport:close(Sock),
     [
-        {sending_time, utils:milliseconds_diff(T2, T1), ms},
-        {receiving_time, utils:milliseconds_diff(T3, T2), ms},
-        {full_time, utils:milliseconds_diff(T3, T1), ms}
+        #parameter{name = sending_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"},
+        #parameter{name = receiving_time, value = utils:milliseconds_diff(T3, T2), unit = "ms"},
+        #parameter{name = full_time, value = utils:milliseconds_diff(T3, T1), unit = "ms"}
     ].
 
--perf_test([
+-performance([
     {repeats, 3},
-    {perf_configs, [
-        [{packet_size_kilobytes, 1024}, {packet_num, 1000}]
+    {parameters, [
+        [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
+        [{name, packet_num}, {value, 10}, {description, "Number of packets."}]
     ]},
-    {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 10}]}
+    {description, "Same as bandwidth_test, but with ssl client written in python."},
+    {config, [{name, python_client},
+        {parameters, [
+            [{name, packet_num}, {value, 1000}]
+        ]}
+    ]}
 ]).
-% same as bandwidth_test, but with ssl client written in python
 python_client_test(Config) ->
     % given
     remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    PacketSize = ?config(packet_size_kilobytes, Config),
+    PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
 
     Data = crypto:rand_bytes(PacketSize * 1024),
@@ -510,7 +555,7 @@ python_client_test(Config) ->
         end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
     catch port_close(PythonClient),
-    {full_time, utils:milliseconds_diff(T2, T1), ms}.
+    #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
 
 proto_version_test(Config) ->
     % given
@@ -614,7 +659,7 @@ end_per_testcase(_, Config) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Connect to given node using token, with default socket_opts
-%% @equiv connect_via_token(Node, [{active, true}], ssl).
+%% @equiv connect_via_token(Node, [{active, true}], ssl)
 %% @end
 %%--------------------------------------------------------------------
 -spec connect_via_token(Node :: node()) ->
@@ -626,8 +671,7 @@ connect_via_token(Node, SocketOpts) ->
     connect_via_token(Node, SocketOpts, ssl).
 
 connect_via_token(Node, SocketOpts, Transport) ->
-connect_via_token(Node, SocketOpts, Transport, crypto:rand_bytes(10)).
-
+    connect_via_token(Node, SocketOpts, Transport, crypto:rand_bytes(10)).
 
 %%--------------------------------------------------------------------
 %% @doc

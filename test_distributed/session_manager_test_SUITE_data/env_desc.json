@@ -8,7 +8,7 @@
       "ccm": {
         "vm.args": {
           "name": "ccm@",
-          "setcookie": "oneprovider_node"
+          "setcookie": "test_cookie"
         },
         "sys.config": {
           "node_type": "ccm",
@@ -21,7 +21,7 @@
       "worker1": {
         "vm.args": {
           "name": "worker1@",
-          "setcookie": "oneprovider_node"
+          "setcookie": "test_cookie"
         },
         "sys.config": {
           "node_type": "worker",
@@ -33,7 +33,7 @@
       "worker2": {
         "vm.args": {
           "name": "worker2@",
-          "setcookie": "oneprovider_node"
+          "setcookie": "test_cookie"
         },
         "sys.config": {
           "node_type": "worker",

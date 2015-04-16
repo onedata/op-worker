@@ -24,7 +24,7 @@
 
 -export([rest_token_auth/1, rest_cert_auth/1]).
 
--perf_test({perf_cases, []}).
+-performance({test_cases, []}).
 all() -> [rest_token_auth, rest_cert_auth].
 
 -define(TOKEN, "TOKEN").

@@ -74,7 +74,7 @@ init(_Args) ->
 handle(ping, _State) ->
     pong;
 
-handle(healthcheck, State) ->
+handle(healthcheck, _State) ->
     HC = #{
         %?PERSISTENCE_DRIVER => catch ?PERSISTENCE_DRIVER:healthcheck(State),
         %?LOCAL_CACHE_DRIVER => catch ?LOCAL_CACHE_DRIVER:healthcheck(State),
