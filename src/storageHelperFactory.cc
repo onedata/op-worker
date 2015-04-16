@@ -38,9 +38,12 @@ namespace utils {
 } // namespace utils
 
 StorageHelperFactory::StorageHelperFactory(std::shared_ptr<communication::Communicator> communicator,
-                                           const BufferLimits &limits)
+                                           const BufferLimits &limits, boost::asio::io_service &dio_service,
+                                           boost::asio::io_service &cproxy_service)
     : m_communicator{std::move(communicator)}
     , m_limits{limits}
+    , m_dio_service{dio_service}
+    , m_cproxy_service{cproxy_service}
 {
 }
 
@@ -50,7 +53,7 @@ std::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const std
         return std::make_shared<DirectIOHelper>(args);
 
     if(sh_name == "ClusterProxy")
-        return std::make_shared<ClusterProxyHelper>(m_communicator, m_limits, args);
+        return std::make_shared<ClusterProxyHelper>(m_communicator, m_limits, args, m_cproxy_service);
 
     return {};
 }

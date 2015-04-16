@@ -11,6 +11,7 @@
 #include "helpers/storageHelperFactory.h"
 #include "logging.h"
 
+#include <boost/crc.hpp>
 #include <functional>
 #include <thread>
 
@@ -102,7 +103,7 @@ size_t BufferAgent::getReadBufferSize()
     return m_rdBufferTotalSize;
 }
 
-int BufferAgent::onOpen(const std::string &path, ffi_type ffi)
+int BufferAgent::onOpen(std::string path, ffi_type ffi)
 {
     DLOG(INFO) << "BufferAgent::onOpen(" << path << ")";
     // Initialize write buffer's holder
@@ -141,9 +142,10 @@ int BufferAgent::onOpen(const std::string &path, ffi_type ffi)
     return 0;
 }
 
-int BufferAgent::onWrite(const std::string &path, const std::string &buf, size_t size, off_t offset, ffi_type ffi)
+int BufferAgent::onWrite(std::string path, boost::asio::const_buffer buf, off_t offset, ffi_type ffi)
 {
-    DLOG(INFO) << "BufferAgent::onWrite(path: " << path << ", size: " << size << ", offset: " << offset <<")";
+    DLOG(INFO) << "BufferAgent::onWrite(path: " << path << ", size: " << boost::asio::buffer_size(buf) << ", offset: " << offset <<")";
+
     unique_lock guard(m_wrMutex);
         write_buffer_ptr wrapper = m_wrCacheMap[ffi->fh];
 
@@ -168,11 +170,12 @@ int BufferAgent::onWrite(const std::string &path, const std::string &buf, size_t
         // If memory limit is still exceeded, send the block without using buffer
         if(wrapper->buffer->byteSize() > m_bufferLimits.writeBufferPerFileSizeLimit ||
            getWriteBufferSize() > m_bufferLimits.writeBufferGlobalSizeLimit) {
-            return doWrite(path, buf, size, offset, ffi);
+            return doWrite(path, buf, offset, ffi);
         }
 
         // Save the block in write buffer
-        wrapper->buffer->writeData(offset, buf);
+        std::string dump{boost::asio::buffer_cast<const char*>(buf), boost::asio::buffer_size(buf)};
+        wrapper->buffer->writeData(offset, dump);
         updateWrBufferSize(ffi->fh, wrapper->buffer->byteSize());
     }
 
@@ -186,11 +189,13 @@ int BufferAgent::onWrite(const std::string &path, const std::string &buf, size_t
         m_wrCond.notify_one();
     }
 
-    return size;
+    return boost::asio::buffer_size(buf);
 }
 
-int BufferAgent::onRead(const std::string &path, std::string &buf, size_t size, off_t offset, ffi_type ffi)
+int BufferAgent::onRead(std::string path, boost::asio::mutable_buffer finallyBuffer, off_t offset, ffi_type ffi)
 {
+    const auto size = boost::asio::buffer_size(finallyBuffer);
+
     unique_lock guard(m_rdMutex);
         read_buffer_ptr wrapper = m_rdCacheMap[path];
     guard.unlock();
@@ -202,6 +207,7 @@ int BufferAgent::onRead(const std::string &path, std::string &buf, size_t size, 
         wrapper->blockSize = std::min((size_t) m_bufferLimits.preferedBlockSize, (size_t) std::max(size, 2*wrapper->blockSize));
     }
 
+    std::string buf;
     wrapper->buffer->readData(offset, size, buf);
     updateRdBufferSize(path, wrapper->buffer->byteSize());
 
@@ -209,8 +215,8 @@ int BufferAgent::onRead(const std::string &path, std::string &buf, size_t size, 
     if(buf.size() < size) {
 
         // Do read missing data from filesystem
-        std::string buf2;
-        int ret = doRead(path, buf2, size - buf.size(), offset + buf.size(), &wrapper->ffi);
+        std::string buf2('\0', size - buf.size());
+        int ret = doRead(path, boost::asio::buffer(&buf2[0], buf2.size()), offset + buf.size(), &wrapper->ffi);
         if(ret < 0)
             return ret;
 
@@ -247,10 +253,10 @@ int BufferAgent::onRead(const std::string &path, std::string &buf, size_t size, 
 
     m_rdCond.notify_one();
 
-    return buf.size();
+    return boost::asio::buffer_copy(finallyBuffer, boost::asio::buffer(buf));
 }
 
-int BufferAgent::onFlush(const std::string &path, ffi_type ffi)
+int BufferAgent::onFlush(std::string path, ffi_type ffi)
 {
     write_buffer_ptr wrapper;
     {
@@ -266,7 +272,7 @@ int BufferAgent::onFlush(const std::string &path, ffi_type ffi)
         while(wrapper->buffer->blockCount() > 0)
         {
             block_ptr block = wrapper->buffer->removeOldestBlock();
-            int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
+            int res = doWrite(wrapper->fileName, boost::asio::buffer(block->data), block->offset, &wrapper->ffi);
 
             if(res < 0)
             {
@@ -295,7 +301,7 @@ int BufferAgent::onFlush(const std::string &path, ffi_type ffi)
     return 0;
 }
 
-int BufferAgent::onRelease(const std::string &path, ffi_type ffi)
+int BufferAgent::onRelease(std::string path, ffi_type ffi)
 {
     // Cleanup
     {
@@ -384,9 +390,9 @@ void BufferAgent::readerLoop()
             wrapper->buffer->readData(job.offset, job.size, buff);
             if(buff.size() < job.size)
             {
-                std::string tmp;
+                std::string tmp('\0', job.size);
                 off_t effectiveOffset = job.offset + buff.size();
-                int ret = doRead(wrapper->fileName, tmp, job.size, effectiveOffset, &wrapper->ffi);
+                int ret = doRead(wrapper->fileName, boost::asio::buffer(&tmp[0], job.size), effectiveOffset, &wrapper->ffi);
 
                 guard.lock();
                 unique_lock buffGuard(wrapper->mutex);
@@ -447,7 +453,7 @@ void BufferAgent::writerLoop()
             if(block)
             {
                 // Write data to filesystem
-                writeRes = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
+                writeRes = doWrite(wrapper->fileName, boost::asio::buffer(block->data), block->offset, &wrapper->ffi);
 
                 wrapper->cond.notify_all();
             }
@@ -501,4 +507,3 @@ std::shared_ptr<FileCache> BufferAgent::newFileCache(bool isBuffer)
 
 } // namespace helpers
 } // namespace one
-

@@ -95,210 +95,292 @@ string ClusterProxyHelper::requestAtom(const google::protobuf::Message &msg)
 // Helper callbacks //
 //////////////////////
 
-int ClusterProxyHelper::sh_getattr(const char *path, struct stat *stbuf)
+boost::shared_future<struct stat>
+ClusterProxyHelper::sh_getattr(const boost::filesystem::path &p)
 {
-    // Just leave defaults and ignore this call
-    return 0;
+    boost::promise<struct stat> promise;
+    promise.set_exception<std::system_error>(std::system_error(-ENOTSUP, system_category()));
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_access(const char *path, int mask)
+
+boost::shared_future<int>
+ClusterProxyHelper::sh_access(const boost::filesystem::path &p, int mask)
 {
-    // We dont need this method, return success
-    return 0;
+    boost::promise<int> promise;
+    promise.set_value(0);
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_mknod(const char *path, mode_t mode, dev_t rdev)
+
+boost::shared_future<std::string>
+ClusterProxyHelper::sh_readlink(const boost::filesystem::path &p)
 {
-    LOG(INFO) << "CluserProxyHelper mknod(path: " << string(path) << ")";
+    boost::promise<std::string> promise;
+    set_posix_error(promise, ENOTSUP);
 
-    CreateFile msg;
-    msg.set_file_id(string(path));
-    msg.set_mode(mode);
-
-    return translateError(requestAtom(msg));
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_unlink(const char *path)
+
+boost::shared_future<std::vector<std::string>>
+ClusterProxyHelper::sh_readdir(const boost::filesystem::path &p, off_t offset, size_t count, StorageHelperCTX &ctx)
 {
-    LOG(INFO) << "CluserProxyHelper unlink(path: " << string(path) << ")";
+    boost::promise<std::vector<std::string>> promise;
+    set_posix_error(promise, ENOTSUP);
 
-    DeleteFileAtStorage msg;
-    msg.set_file_id(string(path));
-
-    return translateError(requestAtom(msg));
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_chmod(const char *path, mode_t mode)
+
+boost::shared_future<int>
+ClusterProxyHelper::sh_mknod(const boost::filesystem::path &p, mode_t mode, dev_t rdev)
 {
-    return 0;
+    boost::promise<int> promise;
+
+    m_worker_service.post([&]() {
+        DLOG(INFO) << "CluserProxyHelper mknod(path: " << p.string() << ")";
+
+        CreateFile msg;
+        msg.set_file_id(p.string());
+        msg.set_mode(mode);
+
+        set_result(promise, translateError(requestAtom(msg)));
+    });
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_chown(const char *path, uid_t uid, gid_t gid)
+
+boost::shared_future<int>
+ClusterProxyHelper::sh_mkdir(const boost::filesystem::path &p, mode_t mode)
 {
-    return 0;
+    boost::promise<int> promise;
+    set_posix_error(promise, ENOTSUP);
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_truncate(const char *path, off_t size)
+
+boost::shared_future<int>
+ClusterProxyHelper::sh_unlink(const boost::filesystem::path &p)
 {
-    LOG(INFO) << "CluserProxyHelper truncate(path: " << string(path) << ", size: " << size << ")";
+    boost::promise<int> promise;
 
-    TruncateFile msg;
-    msg.set_file_id(string(path));
-    msg.set_length(size);
 
-    return translateError(requestAtom(msg));
+
+    m_worker_service.post([&]() {
+        DLOG(INFO) << "CluserProxyHelper unlink(path: " << p.string() << ")";
+
+        DeleteFileAtStorage msg;
+        msg.set_file_id(p.string());
+
+        set_result(promise, translateError(requestAtom(msg)));
+    });
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_open(const char *path, struct fuse_file_info *fi)
-{
-    LOG(INFO) << "CluserProxyHelper open(path: " << string(path) << ")";
 
-    // Proxy this call to Buffer Agent
-    return m_bufferAgent.onOpen(string(path), fi);
+boost::shared_future<int>
+ClusterProxyHelper::sh_rmdir(const boost::filesystem::path &p)
+{
+    boost::promise<int> promise;
+    set_posix_error(promise, ENOTSUP);
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_read(const char *path, char *buf, size_t size, off_t offset,
-            struct fuse_file_info *fi)
+
+boost::shared_future<int>
+ClusterProxyHelper::sh_symlink(const boost::filesystem::path &from, const boost::filesystem::path &to)
 {
-    DLOG(INFO) << "CluserProxyHelper read(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
+    boost::promise<int> promise;
+    set_posix_error(promise, ENOTSUP);
 
-    string tmpBuff;
-
-    // Proxy this call to Buffer Agent
-    int ret = m_bufferAgent.onRead(string(path), tmpBuff, size, offset, fi);
-    if(ret > 0) {
-        memcpy(buf, tmpBuff.c_str(), ret);
-    }
-
-    return ret;
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_write(const char *path, const char *buf, size_t size,
-             off_t offset, struct fuse_file_info *fi)
-{
-    DLOG(INFO) << "CluserProxyHelper write(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
 
-    // Proxy this call to Buffer Agent
-    return m_bufferAgent.onWrite(string(path), string(buf, size), size, offset, fi);
+boost::shared_future<int>
+ClusterProxyHelper::sh_rename(const boost::filesystem::path &from, const boost::filesystem::path &to)
+{
+    boost::promise<int> promise;
+    set_posix_error(promise, ENOTSUP);
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_release(const char *path, struct fuse_file_info *fi)
-{
-    LOG(INFO) << "CluserProxyHelper release(path: " << string(path) << ")";
 
-    // Proxy this call to Buffer Agent
-    return m_bufferAgent.onRelease(string(path), fi);
+boost::shared_future<int>
+ClusterProxyHelper::sh_link(const boost::filesystem::path &from, const boost::filesystem::path &to)
+{
+    boost::promise<int> promise;
+    set_posix_error(promise, ENOTSUP);
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_flush(const char *path, struct fuse_file_info *fi)
-{
-    LOG(INFO) << "CluserProxyHelper flush(path: " << string(path) << ")";
 
-    // Proxy this call to Buffer Agent
-    return m_bufferAgent.onFlush(string(path), fi);
+boost::shared_future<int>
+ClusterProxyHelper::sh_chmod(const boost::filesystem::path &p, mode_t mode)
+{
+    boost::promise<int> promise;
+    set_posix_error(promise, ENOTSUP);
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_fsync(const char *path, int isdatasync,
-             struct fuse_file_info *fi)
-{
-    /* Just a stub.     This method is optional and can safely be left
-       unimplemented */
 
-    (void) path;
-    (void) isdatasync;
-    (void) fi;
-    return 0;
+boost::shared_future<int>
+ClusterProxyHelper::sh_chown(const boost::filesystem::path &p, uid_t uid, gid_t gid)
+{
+    boost::promise<int> promise;
+    set_posix_error(promise, ENOTSUP);
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_mkdir(const char *path, mode_t mode)
+
+boost::shared_future<int>
+ClusterProxyHelper::sh_truncate(const boost::filesystem::path &p, off_t size)
 {
-    return ENOTSUP;
+    boost::promise<int> promise;
+
+    m_worker_service.post([&]() {
+        DLOG(INFO) << "CluserProxyHelper truncate(path: " << p.string() << ", size: " << size << ")";
+
+        TruncateFile msg;
+        msg.set_file_id(p.string());
+        msg.set_length(size);
+
+        set_result(promise, translateError(requestAtom(msg)));
+    });
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-               off_t offset, struct fuse_file_info *fi)
+
+
+
+boost::shared_future<int>
+ClusterProxyHelper::sh_open(const boost::filesystem::path &p, StorageHelperCTX &ctx)
 {
-    return ENOTSUP;
+    boost::promise<int> promise;
+
+    m_worker_service.post([&]() {
+        DLOG(INFO) << "CluserProxyHelper open(path: " << p.string() << ")";
+
+        // Proxy this call to Buffer Agent
+        set_result(promise, m_bufferAgent.onOpen(p.string(), &ctx.m_ffi));
+    });
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_statfs(const char *path, struct statvfs *stbuf)
+
+boost::shared_future<boost::asio::mutable_buffer>
+ClusterProxyHelper::sh_read(const boost::filesystem::path &p, boost::asio::mutable_buffer buf, off_t offset,
+        StorageHelperCTX &ctx)
 {
-    return ENOTSUP;
+    boost::promise<boost::asio::mutable_buffer> promise;
+
+    m_worker_service.post([&]() {
+        // Proxy this call to Buffer Agent
+        auto ret = m_bufferAgent.onRead(p.string(), buf, offset, &ctx.m_ffi);
+        if(ret < 0) {
+            set_posix_error(promise, ret);
+        } else {
+            auto retBuf = boost::asio::buffer(buf, ret);
+
+            promise.set_value(std::move(retBuf));
+        }
+    });
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_rmdir(const char *path)
+
+boost::shared_future<int>
+ClusterProxyHelper::sh_write(const boost::filesystem::path &p, boost::asio::const_buffer buf, off_t offset,
+         StorageHelperCTX &ctx)
 {
-    return ENOTSUP;
+    boost::promise<int> promise;
+
+    m_worker_service.post([&]() {
+        DLOG(INFO) << "CluserProxyHelper write(path: " << p.string() << ", size: " << boost::asio::buffer_size(buf) << ", offset: " << offset << ")";
+
+        // Proxy this call to Buffer Agent
+        set_result(promise, m_bufferAgent.onWrite(p.string(), buf, offset, &ctx.m_ffi));
+    });
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_symlink(const char *from, const char *to)
+
+boost::shared_future<int>
+ClusterProxyHelper::sh_release(const boost::filesystem::path &p, StorageHelperCTX &ctx)
 {
-    return ENOTSUP;
+    boost::promise<int> promise;
+
+    m_worker_service.post([&]() {
+        DLOG(INFO) << "CluserProxyHelper release(path: " << p.string() << ")";
+
+        // Proxy this call to Buffer Agent
+        set_result(promise, m_bufferAgent.onRelease(p.string(), &ctx.m_ffi));
+    });
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_rename(const char *from, const char *to)
+
+boost::shared_future<int>
+ClusterProxyHelper::sh_flush(const boost::filesystem::path &p, StorageHelperCTX &ctx)
 {
-    return ENOTSUP;
+    boost::promise<int> promise;
+
+    m_worker_service.post([&]() {
+        DLOG(INFO) << "CluserProxyHelper flush(path: " << p.string() << ")";
+
+        // Proxy this call to Buffer Agent
+        set_result(promise, m_bufferAgent.onFlush(p.string(), &ctx.m_ffi));
+    });
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_link(const char *from, const char *to)
+
+boost::shared_future<int>
+ClusterProxyHelper::sh_fsync(const boost::filesystem::path &p, int isdatasync, StorageHelperCTX &ctx)
 {
-    return ENOTSUP;
+    boost::promise<int> promise;
+    set_posix_error(promise, ENOTSUP);
+
+    return promise.get_future();
 }
 
-int ClusterProxyHelper::sh_readlink(const char *path, char *buf, size_t size)
-{
-    return ENOTSUP;
-}
 
-#ifdef HAVE_POSIX_FALLOCATE
-int ClusterProxyHelper::sh_fallocate(const char *path, int mode,
-            off_t offset, off_t length, struct fuse_file_info *fi)
-{
-    return ENOTSUP;
-}
-#endif  /* HAVE_POSIX_FALLOCATE */
+//
+//int ClusterProxyHelper::sh_write(const char *path, const char *buf, size_t size,
+//             off_t offset, struct fuse_file_info *fi)
+//{
+//    DLOG(INFO) << "CluserProxyHelper write(path: " << p.string() << ", size: " << size << ", offset: " << offset << ")";
+//
+//    // Proxy this call to Buffer Agent
+//    return m_bufferAgent.onWrite(p.string(), string(buf, size), size, offset, fi);
+//}
+//
 
-#ifdef HAVE_UTIMENSAT
-int ClusterProxyHelper::sh_utimens(const char *path, const struct timespec ts[2])
+//
+int ClusterProxyHelper::doWrite(const boost::filesystem::path &p, boost::asio::const_buffer buf, off_t offset, ffi_type)
 {
-    return 0;
-}
-#endif /* HAVE_UTIMENSAT */
-
-#ifdef HAVE_SETXATTR
-/* xattr operations are optional and can safely be left unimplemented */
-int ClusterProxyHelper::sh_setxattr(const char *path, const char *name, const char *value,
-            size_t size, int flags)
-{
-    return ENOTSUP;
-}
-
-int ClusterProxyHelper::sh_getxattr(const char *path, const char *name, char *value,
-            size_t size)
-{
-    return ENOTSUP;
-}
-
-int ClusterProxyHelper::sh_listxattr(const char *path, char *list, size_t size)
-{
-    return ENOTSUP;
-}
-
-int ClusterProxyHelper::sh_removexattr(const char *path, const char *name)
-{
-    return ENOTSUP;
-}
-
-#endif /* HAVE_SETXATTR */
-
-int ClusterProxyHelper::doWrite(const string &path, const std::string &buf, size_t size, off_t offset, ffi_type)
-{
-    LOG(INFO) << "CluserProxyHelper doWrite(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
+    LOG(INFO) << "CluserProxyHelper doWrite(path: " << p.string() << ", size: " << boost::asio::buffer_size(buf) << ", offset: " << offset << ")";
 
     WriteFile msg;
-    msg.set_file_id(path);
-    msg.set_data(buf);
+    msg.set_file_id(p.string());
+    msg.set_data(boost::asio::buffer_cast<const char*>(buf), boost::asio::buffer_size(buf));
     msg.set_offset(offset);
 
     WriteInfo answer;
@@ -306,7 +388,7 @@ int ClusterProxyHelper::doWrite(const string &path, const std::string &buf, size
 
     if(!answer.ParseFromString(requestMessage<WriteInfo>(msg)))
     {
-        LOG(WARNING) << "Cannot parse answer for file: " << string(path);
+        LOG(WARNING) << "Cannot parse answer for file: " << p.string();
         return translateError(VEIO);
     }
 
@@ -315,13 +397,14 @@ int ClusterProxyHelper::doWrite(const string &path, const std::string &buf, size
     int error = translateError(answer.answer_status());
     if(error == 0) return answer.bytes_written();
     else           return error;
-    return 0;
 }
 
-int ClusterProxyHelper::doRead(const string &path, std::string &buf, size_t size, off_t offset, ffi_type)
+int ClusterProxyHelper::doRead(const boost::filesystem::path &p, boost::asio::mutable_buffer buf, off_t offset, ffi_type)
 {
+    const auto size = boost::asio::buffer_size(buf);
+
     ReadFile msg;
-    msg.set_file_id(string(path));
+    msg.set_file_id(p.string());
     msg.set_size(size);
     msg.set_offset(offset);
 
@@ -332,38 +415,33 @@ int ClusterProxyHelper::doRead(const string &path, std::string &buf, size_t size
 
     if(!answer.ParseFromString(requestMessage<FileData>(msg, timeout)))
     {
-        LOG(WARNING) << "Cannot parse answer for file: " << string(path);
+        LOG(WARNING) << "Cannot parse answer for file: " << p.string();
         return translateError(VEIO);
     }
 
     DLOG(INFO) << "CluserProxyHelper(offset: " << offset << ", size: " << size << ") read answer_status: " << answer.answer_status() << ", read real size: " << answer.data().size();
 
     if(answer.answer_status() == VOK) {
-        size_t readSize = (answer.data().size() > size ? size : answer.data().size());
-
-        buf = answer.data();
-
-        // if(answer.data().size() != size)
-        //     LOG(WARNING) << "read for file: " << string(path) << " returned " << answer.data().size() << "bytes. Expected: " << size;
-
-        return readSize;
-
+        auto answerBuffer = boost::asio::buffer(answer.data());
+        return boost::asio::buffer_copy(buf, answerBuffer);
     } else if(answer.answer_status() == "ok:TODO2") {
         /// TODO: implement big read
-        LOG(ERROR) << "Cluster requested to read file (" << string(path) << ") directly over TCP/IP which is not implemented yet";
+        LOG(ERROR) << "Cluster requested to read file (" << p.string() << ") directly over TCP/IP which is not implemented yet";
         return -ENOTSUP;
-    } else
+    } else {
         return translateError(answer.answer_status());
-    return 0;
+    }
 }
 
 ClusterProxyHelper::ClusterProxyHelper(std::shared_ptr<communication::Communicator> communicator,
-                                       const BufferLimits &limits, const ArgsMap &args)
+                                       const BufferLimits &limits, const ArgsMap &args,
+                                       boost::asio::io_service &service)
   : m_bufferAgent(
         limits,
-        std::bind(&ClusterProxyHelper::doWrite, this, _1, _2, _3, _4, _5),
-        std::bind(&ClusterProxyHelper::doRead, this, _1, _2, _3, _4, _5))
+        std::bind(&ClusterProxyHelper::doWrite, this, _1, _2, _3, _4),
+        std::bind(&ClusterProxyHelper::doRead, this, _1, _2, _3, _4))
   , m_communicator{std::move(communicator)}
+  , m_worker_service{service}
 {
     m_clusterHostname = args.count("cluster_hostname") ?
                 boost::any_cast<std::string>(args.at("cluster_hostname")) : std::string{};

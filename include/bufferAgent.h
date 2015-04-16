@@ -43,8 +43,8 @@ using wrbuf_size_mem_t = std::unordered_map<fd_type, size_t>;
 using rdbuf_size_mem_t = std::unordered_map<std::string, size_t>;
 
 // Typedef for original read / write functions
-using write_fun = std::function<int(std::string path, const std::string &buf, size_t, off_t, ffi_type)>;
-using read_fun = std::function<int(std::string path, std::string &buf, size_t, off_t, ffi_type)>;
+using write_fun = std::function<int(const boost::filesystem::path &p, boost::asio::const_buffer buf, off_t, ffi_type)>;
+using read_fun = std::function<int(const boost::filesystem::path &p, boost::asio::mutable_buffer buf, off_t, ffi_type)>;
 
 /**
  * BufferAgent gives replacement methods for read and write operations that acts as proxy for real ones.
@@ -149,21 +149,21 @@ public:
     virtual ~BufferAgent();
 
     /// onWrite shall be called on each write operation that filesystem user requests - accumulates data while sending it asynchronously.
-    virtual int onWrite(const std::string &path, const std::string &buf, size_t size, off_t offset, ffi_type);
+    virtual int onWrite(std::string path, boost::asio::const_buffer buf, off_t offset, ffi_type);
 
     /// onRead shall be called on each read operation that filesystem user requests.
     /// onRead returns buffered data if available.
-    virtual int onRead(const std::string &path, std::string &buf, size_t size, off_t offset, ffi_type);
+    virtual int onRead(std::string path, boost::asio::mutable_buffer buf, off_t offset, ffi_type);
 
     /// onFlush shall be called on each flush operation that filesystem user requests.
     /// This metod flushes all buffered data.
-    virtual int onFlush(const std::string &path, ffi_type);
+    virtual int onFlush(std::string path, ffi_type);
 
     /// onRelease shall be called on each release operation that filesystem user requests
-    virtual int onRelease(const std::string &path, ffi_type);
+    virtual int onRelease(std::string path, ffi_type);
 
     /// onOpen shall be called on each open operation that filesystem user requests
-    virtual int onOpen(const std::string &path, ffi_type);
+    virtual int onOpen(std::string path, ffi_type);
 
     /// Starts BufferAgent worker threads
     /// @param worker_count How many worker threads shall be stared to process prefetch request and send buffored data.

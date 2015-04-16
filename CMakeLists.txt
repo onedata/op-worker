@@ -24,6 +24,7 @@ find_package(Threads REQUIRED)
 # Setup fuse
 message(STATUS "Checking for FUSE...")
 find_package(FUSE REQUIRED)
+include_directories(SYSTEM ${FUSE_INCLUDE_DIRS}/.. ${FUSE_INCLUDE_DIRS})
 
 # Setup Intel TBB
 message(STATUS "Checking for Intel TBB...")

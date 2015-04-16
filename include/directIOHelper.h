@@ -35,44 +35,37 @@ public:
      */
     DirectIOHelper(const ArgsMap&);
 
-    int sh_getattr(const char *path, struct stat *stbuf) ;
-    int sh_access(const char *path, int mask) ;
-    int sh_readlink(const char *path, char *buf, size_t size) ;
-    int sh_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) ;
-    int sh_mknod(const char *path, mode_t mode, dev_t rdev) ;
-    int sh_mkdir(const char *path, mode_t mode) ;
-    int sh_unlink(const char *path) ;
-    int sh_rmdir(const char *path) ;
-    int sh_symlink(const char *from, const char *to) ;
-    int sh_rename(const char *from, const char *to) ;
-    int sh_link(const char *from, const char *to) ;
-    int sh_chmod(const char *path, mode_t mode) ;
-    int sh_chown(const char *path, uid_t uid, gid_t gid) ;
-    int sh_truncate(const char *path, off_t size) ;
+    boost::shared_future<struct stat> sh_getattr(const boost::filesystem::path &p);
+    boost::shared_future<int> sh_access(const boost::filesystem::path &p, int mask);
+    boost::shared_future<std::string> sh_readlink(const boost::filesystem::path &p);
+    boost::shared_future<std::vector<std::string>>
+            sh_readdir(const boost::filesystem::path &p, off_t offset, size_t count, StorageHelperCTX &ctx);
+    boost::shared_future<int> sh_mknod(const boost::filesystem::path &p, mode_t mode, dev_t rdev);
+    boost::shared_future<int> sh_mkdir(const boost::filesystem::path &p, mode_t mode);
+    boost::shared_future<int> sh_unlink(const boost::filesystem::path &p);
+    boost::shared_future<int> sh_rmdir(const boost::filesystem::path &p);
+    boost::shared_future<int>
+            sh_symlink(const boost::filesystem::path &from, const boost::filesystem::path &to);
+    boost::shared_future<int>
+            sh_rename(const boost::filesystem::path &from, const boost::filesystem::path &to);
+    boost::shared_future<int>
+            sh_link(const boost::filesystem::path &from, const boost::filesystem::path &to);
+    boost::shared_future<int> sh_chmod(const boost::filesystem::path &p, mode_t mode);
+    boost::shared_future<int> sh_chown(const boost::filesystem::path &p, uid_t uid, gid_t gid);
+    boost::shared_future<int> sh_truncate(const boost::filesystem::path &p, off_t size);
 
-    #ifdef HAVE_UTIMENSAT
-    int sh_utimens(const char *path, const struct timespec ts[2]);
-    #endif // HAVE_UTIMENSAT
 
-    int sh_open(const char *path, struct fuse_file_info *fi) ;
-    int sh_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) ;
-    int sh_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) ;
-    int sh_statfs(const char *path, struct statvfs *stbuf) ;
-    int sh_flush(const char *path, struct fuse_file_info *fi) ;
-    int sh_release(const char *path, struct fuse_file_info *fi) ;
-    int sh_fsync(const char *path, int isdatasync, struct fuse_file_info *fi);
-
-    #ifdef HAVE_POSIX_FALLOCATE
-    int sh_fallocate(const char *path, int mode, off_t offset, off_t length, struct fuse_file_info *fi) ;
-    #endif // HAVE_POSIX_FALLOCATE
-
-    /* xattr operations are optional and can safely be left unimplemented */
-    #ifdef HAVE_SETXATTR
-    int sh_setxattr(const char *path, const char *name, const char *value, size_t size, int flags) ;
-    int sh_getxattr(const char *path, const char *name, char *value, size_t size) ;
-    int sh_listxattr(const char *path, char *list, size_t size) ;
-    int sh_removexattr(const char *path, const char *name) ;
-    #endif // HAVE_SETXATTR
+    boost::shared_future<int> sh_open(const boost::filesystem::path &p, StorageHelperCTX &ctx);
+    boost::shared_future<boost::asio::mutable_buffer>
+            sh_read(const boost::filesystem::path &p, boost::asio::mutable_buffer buf, off_t offset,
+                    StorageHelperCTX &ctx);
+    boost::shared_future<int>
+            sh_write(const boost::filesystem::path &p, boost::asio::const_buffer buf, off_t offset,
+                     StorageHelperCTX &ctx);
+    boost::shared_future<int> sh_release(const boost::filesystem::path &p, StorageHelperCTX &ctx);
+    boost::shared_future<int> sh_flush(const boost::filesystem::path &p, StorageHelperCTX &ctx);
+    boost::shared_future<int>
+            sh_fsync(const boost::filesystem::path &p, int isdatasync, StorageHelperCTX &ctx);
 
 private:
     boost::filesystem::path root(const boost::filesystem::path &path);

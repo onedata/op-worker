@@ -11,15 +11,31 @@
 
 #include <fuse.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #include <boost/any.hpp>
+#include <boost/filesystem/path.hpp>
+#include <boost/asio/buffer.hpp>
+#include <boost/thread/future.hpp>
 
 #include <unordered_map>
+#include <string>
+#include <vector>
 
 namespace one
 {
 namespace helpers
 {
+
+struct StorageHelperCTX {
+
+    fuse_file_info &m_ffi;
+
+    StorageHelperCTX(fuse_file_info &ffi)
+            : m_ffi(ffi) {
+    }
+
+};
 
 /**
  * The IStorageHelper interface.
@@ -33,44 +49,55 @@ public:
 
     virtual ~IStorageHelper() = default;
 
-    virtual int sh_getattr(const char *path, struct stat *stbuf) = 0;
-    virtual int sh_access(const char *path, int mask) = 0;
-    virtual int sh_readlink(const char *path, char *buf, size_t size) = 0;
-    virtual int sh_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) = 0;
-    virtual int sh_mknod(const char *path, mode_t mode, dev_t rdev) = 0;
-    virtual int sh_mkdir(const char *path, mode_t mode) = 0;
-    virtual int sh_unlink(const char *path) = 0;
-    virtual int sh_rmdir(const char *path) = 0;
-    virtual int sh_symlink(const char *from, const char *to) = 0;
-    virtual int sh_rename(const char *from, const char *to) = 0;
-    virtual int sh_link(const char *from, const char *to) = 0;
-    virtual int sh_chmod(const char *path, mode_t mode) = 0;
-    virtual int sh_chown(const char *path, uid_t uid, gid_t gid) = 0;
-    virtual int sh_truncate(const char *path, off_t size) = 0;
+    virtual boost::shared_future<struct stat> sh_getattr(const boost::filesystem::path &p) = 0;
+    virtual boost::shared_future<int> sh_access(const boost::filesystem::path &p, int mask) = 0;
+    virtual boost::shared_future<std::string> sh_readlink(const boost::filesystem::path &p) = 0;
+    virtual boost::shared_future<std::vector<std::string>>
+            sh_readdir(const boost::filesystem::path &p, off_t offset, size_t count, StorageHelperCTX &ctx) = 0;
+    virtual boost::shared_future<int> sh_mknod(const boost::filesystem::path &p, mode_t mode, dev_t rdev) = 0;
+    virtual boost::shared_future<int> sh_mkdir(const boost::filesystem::path &p, mode_t mode) = 0;
+    virtual boost::shared_future<int> sh_unlink(const boost::filesystem::path &p) = 0;
+    virtual boost::shared_future<int> sh_rmdir(const boost::filesystem::path &p) = 0;
+    virtual boost::shared_future<int>
+            sh_symlink(const boost::filesystem::path &from, const boost::filesystem::path &to) = 0;
+    virtual boost::shared_future<int>
+            sh_rename(const boost::filesystem::path &from, const boost::filesystem::path &to) = 0;
+    virtual boost::shared_future<int>
+            sh_link(const boost::filesystem::path &from, const boost::filesystem::path &to) = 0;
+    virtual boost::shared_future<int> sh_chmod(const boost::filesystem::path &p, mode_t mode) = 0;
+    virtual boost::shared_future<int> sh_chown(const boost::filesystem::path &p, uid_t uid, gid_t gid) = 0;
+    virtual boost::shared_future<int> sh_truncate(const boost::filesystem::path &p, off_t size) = 0;
 
-    #ifdef HAVE_UTIMENSAT
-    virtual int sh_utimens(const char *path, const struct timespec ts[2]) = 0;
-    #endif // HAVE_UTIMENSAT
 
-    virtual int sh_open(const char *path, struct fuse_file_info *fi) = 0;
-    virtual int sh_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) = 0;
-    virtual int sh_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) = 0;
-    virtual int sh_statfs(const char *path, struct statvfs *stbuf) = 0;
-    virtual int sh_release(const char *path, struct fuse_file_info *fi) = 0;
-    virtual int sh_flush(const char *path, struct fuse_file_info *fi) = 0;
-    virtual int sh_fsync(const char *path, int isdatasync, struct fuse_file_info *fi) = 0;
+    virtual boost::shared_future<int> sh_open(const boost::filesystem::path &p, StorageHelperCTX &ctx) = 0;
+    virtual boost::shared_future<boost::asio::mutable_buffer>
+            sh_read(const boost::filesystem::path &p, boost::asio::mutable_buffer buf, off_t offset,
+                    StorageHelperCTX &ctx) = 0;
+    virtual boost::shared_future<int>
+            sh_write(const boost::filesystem::path &p, boost::asio::const_buffer buf, off_t offset,
+                     StorageHelperCTX &ctx) = 0;
+    virtual boost::shared_future<int> sh_release(const boost::filesystem::path &p, StorageHelperCTX &ctx) = 0;
+    virtual boost::shared_future<int> sh_flush(const boost::filesystem::path &p, StorageHelperCTX &ctx) = 0;
+    virtual boost::shared_future<int>
+            sh_fsync(const boost::filesystem::path &p, int isdatasync, StorageHelperCTX &ctx) = 0;
 
-    #ifdef HAVE_POSIX_FALLOCATE
-    virtual int sh_fallocate(const char *path, int mode, off_t offset, off_t length, struct fuse_file_info *fi) = 0;
-    #endif // HAVE_POSIX_FALLOCATE
 
-    /* xattr operations are optional and can safely be left unimplemented */
-    #ifdef HAVE_SETXATTR
-    virtual int sh_setxattr(const char *path, const char *name, const char *value, size_t size, int flags) = 0;
-    virtual int sh_getxattr(const char *path, const char *name, char *value, size_t size) = 0;
-    virtual int sh_listxattr(const char *path, char *list, size_t size) = 0;
-    virtual int sh_removexattr(const char *path, const char *name) = 0;
-    #endif // HAVE_SETXATTR
+protected:
+    template<class T>
+    static void set_posix_error(boost::promise<T> &p, int posix_code)
+    {
+        posix_code = posix_code > 0 ? posix_code : -posix_code;
+        p.set_exception(std::system_error(posix_code, std::system_category()));
+    }
+
+    static void set_result(boost::promise<int> &p, int posix_code)
+    {
+        if(posix_code < 0) {
+            set_posix_error(p, posix_code);
+        } else {
+            p.set_value(posix_code);
+        }
+    }
 };
 
 } // namespace helpers
