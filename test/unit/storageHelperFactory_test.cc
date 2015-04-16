@@ -18,7 +18,10 @@ using namespace one::helpers;
 
 TEST(StorageHelperFactoryTest, ObjectBuild)
 {
-    StorageHelperFactory factory(std::make_shared<MockCommunicator>(), BufferLimits{});
+    boost::asio::io_service dio_service;
+    boost::asio::io_service cproxy_service;
+
+    StorageHelperFactory factory(std::make_shared<MockCommunicator>(), BufferLimits{}, dio_service, cproxy_service);
 
     EXPECT_NE((IStorageHelper*)nullptr, factory.getStorageHelper("DirectIO", IStorageHelper::ArgsMap{}).get());
 

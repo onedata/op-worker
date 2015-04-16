@@ -49,140 +49,140 @@ inline boost::filesystem::path DirectIOHelper::root(const boost::filesystem::pat
 boost::shared_future<struct stat>
 DirectIOHelper::sh_getattr(const boost::filesystem::path &p)
 {
-    boost::promise<struct stat> promise;
-    promise.set_exception<std::system_error>(std::system_error(-ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<struct stat>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_access(const boost::filesystem::path &p, int mask)
 {
-    boost::promise<int> promise;
-    promise.set_value(0);
+    auto promise = std::make_shared<boost::promise<int>>();
+    promise->set_value(0);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<std::string>
 DirectIOHelper::sh_readlink(const boost::filesystem::path &p)
 {
-    boost::promise<std::string> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<std::string>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<std::vector<std::string>>
 DirectIOHelper::sh_readdir(const boost::filesystem::path &p, off_t offset, size_t count, StorageHelperCTX &ctx)
 {
-    boost::promise<std::vector<std::string>> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<std::vector<std::string>>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_mknod(const boost::filesystem::path &p, mode_t mode, dev_t rdev)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_mkdir(const boost::filesystem::path &p, mode_t mode)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_unlink(const boost::filesystem::path &p)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_rmdir(const boost::filesystem::path &p)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_symlink(const boost::filesystem::path &from, const boost::filesystem::path &to)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_rename(const boost::filesystem::path &from, const boost::filesystem::path &to)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_link(const boost::filesystem::path &from, const boost::filesystem::path &to)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_chmod(const boost::filesystem::path &p, mode_t mode)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_chown(const boost::filesystem::path &p, uid_t uid, gid_t gid)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error<int>(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_truncate(const boost::filesystem::path &p, off_t size)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
@@ -191,10 +191,10 @@ DirectIOHelper::sh_truncate(const boost::filesystem::path &p, off_t size)
 boost::shared_future<int>
 DirectIOHelper::sh_open(const boost::filesystem::path &p, StorageHelperCTX &ctx)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
@@ -202,10 +202,10 @@ boost::shared_future<boost::asio::mutable_buffer>
 DirectIOHelper::sh_read(const boost::filesystem::path &p, boost::asio::mutable_buffer buf, off_t offset,
                             StorageHelperCTX &ctx)
 {
-    boost::promise<boost::asio::mutable_buffer> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<boost::asio::mutable_buffer>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
@@ -213,40 +213,40 @@ boost::shared_future<int>
 DirectIOHelper::sh_write(const boost::filesystem::path &p, boost::asio::const_buffer buf, off_t offset,
                              StorageHelperCTX &ctx)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_release(const boost::filesystem::path &p, StorageHelperCTX &ctx)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_flush(const boost::filesystem::path &p, StorageHelperCTX &ctx)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_fsync(const boost::filesystem::path &p, int isdatasync, StorageHelperCTX &ctx)
 {
-    boost::promise<int> promise;
-    promise.set_exception(std::system_error(ENOTSUP, system_category()));
+    auto promise = std::make_shared<boost::promise<int>>();
+    set_posix_error(promise, ENOTSUP);
 
-    return promise.get_future();
+    return promise->get_future();
 }
 
 

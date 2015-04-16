@@ -34,6 +34,14 @@ bool identityEqual(const T &lhs, const T &rhs)
     return &lhs == &rhs;
 }
 
+#define EXPECT_THROW_POSIX_CODE(WHAT, CODE) \
+    try { \
+        WHAT; \
+        FAIL(); \
+    } catch(std::system_error &e) { \
+        if(e.code().value() != CODE) { FAIL() << "Invalid error code. Was " << e.code() << " but expected " << CODE; } \
+    } catch(...) { FAIL() << "Unknown exception"; }
+
 class ClusterProxyHelperTest: public ::testing::Test
 {
 protected:
@@ -44,35 +52,40 @@ protected:
     StorageHelperCTX ctx;
     char buf[1024];
 
+    boost::asio::io_service io_service;
+    boost::asio::io_service::work io_work;
+
     ClusterProxyHelperTest()
       : ctx(ffi)
+      , io_work(io_service)
     {
     }
 
     void SetUp() override
     {
+        boost::async([&]() { io_service.run(); });
         mockCommunicator = std::make_shared<MockCommunicator>();
         proxy = std::make_shared<ProxyClusterProxyHelper>(mockCommunicator,
-                                                          IStorageHelper::ArgsMap{{srvArg(0), std::string("testSpace")}});
+                                                          IStorageHelper::ArgsMap{{srvArg(0), std::string("testSpace")}},
+                                                          io_service);
+    }
+
+    void TearDown() override
+    {
+        io_service.stop();
     }
 };
 
-TEST_F(ClusterProxyHelperTest, fsync)
+TEST_F(ClusterProxyHelperTest, open)
 {
-    auto future = proxy->sh_fsync("file_id", 0, ctx);
-    EXPECT_EQ(0, future.get());
+    auto f = proxy->sh_open("file_id", ctx);
+    EXPECT_EQ(0, f.get());
 }
 
-
-//TEST_F(ClusterProxyHelperTest, open)
-//{
-//    EXPECT_EQ(0, proxy->sh_open("file_id", &ffi));
-//}
-//
-//ACTION_P(SaveMsg, msg)
-//{
-//    msg->CopyFrom(arg1);
-//}
+ACTION_P(SaveMsg, msg)
+{
+    msg->CopyFrom(arg1);
+}
 
 //TEST_F(ClusterProxyHelperTest, read)
 //{
@@ -80,12 +93,12 @@ TEST_F(ClusterProxyHelperTest, fsync)
 //    FileData resp;
 //    Answer answer;
 //    std::string sbuf;
-//
+
 //    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
 //    EXPECT_EQ(-EIO, proxy->doRead("file_id", sbuf, 10, 2, &ffi));
-//
+
 //    answer.set_answer_status(VOK);
-//
+
 //    resp.set_answer_status(VOK);
 //    char str[] = {0, 1, 45, 34, 0, 0, 0, 34, 56};
 //    std::string strRaw(str, 9);
@@ -95,29 +108,29 @@ TEST_F(ClusterProxyHelperTest, fsync)
 //    EXPECT_EQ(9, proxy->doRead("file_id", sbuf, 10, 2, &ffi));
 //    for(int i = 0; i < 9; ++i )
 //        EXPECT_EQ(str[i], sbuf[i]);
-//
+
 //    RemoteFileMangement sentMsg;
-//
+
 //    resp.set_answer_status(VENOENT);
 //    answer.set_worker_answer(resp.SerializeAsString());
 //    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
 //    EXPECT_EQ(-ENOENT, proxy->doRead("file_id", sbuf, 10, 2, &ffi));
-//
+
 //    RemoteFileMangement rfm;
-//
+
 //    ReadFile subMsg;
 //    subMsg.set_file_id("file_id");
 //    subMsg.set_size(10);
 //    subMsg.set_offset(2);
-//
+
 //    rfm.set_input(subMsg.SerializeAsString());
 //    rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
 //    rfm.set_space_id("testSpace");
-//
+
 //    EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 //}
-//
-//
+
+
 //TEST_F(ClusterProxyHelperTest, write)
 //{
 //    ::google::protobuf::LogSilencer silencer; //silence protobuf error logs for this testcase, to test malformatted msg processing
@@ -127,226 +140,243 @@ TEST_F(ClusterProxyHelperTest, fsync)
 //    std::string strRaw(str, 10);
 //    std::string sbuf;
 //    sbuf = strRaw;
-//
+
 //    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
 //    EXPECT_EQ(-EIO, proxy->doWrite("file_id", sbuf, 10, 2, &ffi));
-//
+
 //    answer.set_answer_status(VOK);
-//
+
 //    resp.set_answer_status(VOK);
 //    resp.set_bytes_written(9);
 //    answer.set_worker_answer(resp.SerializeAsString());
 //    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
 //    EXPECT_EQ(9, proxy->doWrite("file_id", sbuf, 10, 2, &ffi));
-//
+
 //    RemoteFileMangement sentMsg;
-//
+
 //    resp.set_answer_status(VENOENT);
 //    answer.set_worker_answer(resp.SerializeAsString());
 //    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
 //    EXPECT_EQ(-ENOENT, proxy->doWrite("file_id", sbuf, 10, 2, &ffi));
-//
+
 //    RemoteFileMangement rfm;
-//
+
 //    WriteFile subMsg;
 //    subMsg.set_file_id("file_id");
 //    subMsg.set_data(strRaw);
 //    subMsg.set_offset(2);
-//
+
 //    rfm.set_input(subMsg.SerializeAsString());
 //    rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
 //    rfm.set_space_id("testSpace");
-//
+
 //    EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 //}
-//
-//
+
+
 //TEST_F(ClusterProxyHelperTest, statfs)
 //{
 //    struct statvfs stbuf;
 //    EXPECT_EQ(ENOTSUP, proxy->sh_statfs("file_id", &stbuf));
 //}
-//
-//
-//TEST_F(ClusterProxyHelperTest, release)
-//{
-//    EXPECT_EQ(0, proxy->sh_release("file_id", &ffi));
-//}
-//
-//
-//TEST_F(ClusterProxyHelperTest, fsync)
-//{
-//    EXPECT_EQ(0, proxy->sh_fsync("file_id", 0, &ffi));
-//}
-//
-//
-//TEST_F(ClusterProxyHelperTest, getattr)
-//{
-//    struct stat stbuf;
-//    EXPECT_EQ(0, proxy->sh_getattr("file_id", &stbuf));
-//}
-//
-//
-//TEST_F(ClusterProxyHelperTest, access)
-//{
-//    EXPECT_EQ(0, proxy->sh_access("file_id", 0777));
-//}
-//
-//
-//TEST_F(ClusterProxyHelperTest, readlink)
-//{
-//    EXPECT_EQ(ENOTSUP, proxy->sh_readlink("file_id", buf, 1024));
-//}
-//
-//
-//TEST_F(ClusterProxyHelperTest, readdir)
-//{
-//    EXPECT_EQ(ENOTSUP, proxy->sh_readdir("file_id", nullptr, nullptr, 0, &ffi));
-//}
-//
-//
+
+
+TEST_F(ClusterProxyHelperTest, release)
+{
+    auto p = proxy->sh_release("file_id", ctx);
+    EXPECT_EQ(0, p.get());
+}
+
+
+TEST_F(ClusterProxyHelperTest, fsync)
+{
+    auto p = proxy->sh_fsync("file_id", 0, ctx);
+    EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
+}
+
+
+TEST_F(ClusterProxyHelperTest, getattr)
+{
+    auto p = proxy->sh_getattr("file_id");
+    EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
+}
+
+
+TEST_F(ClusterProxyHelperTest, access)
+{
+    auto p = proxy->sh_access("file_id", 0777);
+    EXPECT_EQ(0, p.get());
+}
+
+
+TEST_F(ClusterProxyHelperTest, readlink)
+{
+    auto p = proxy->sh_readlink("file_id");
+    EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
+}
+
+
+TEST_F(ClusterProxyHelperTest, readdir)
+{
+    auto p = proxy->sh_readdir("file_id", 0, 10, ctx);
+    EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
+}
+
+
 //TEST_F(ClusterProxyHelperTest, mknod)
 //{
 //    Atom atom;
 //    Answer answer;
-//
+
 //    answer.set_answer_status(VOK);
 //    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
 //    EXPECT_EQ(-EIO, proxy->sh_mknod("file_id", 0755, 0));
-//
+
 //    atom.set_value(VOK);
 //    answer.set_worker_answer(atom.SerializeAsString());
 //    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
 //    EXPECT_EQ(0, proxy->sh_mknod("file_id", 0755, 0));
-//
+
 //    RemoteFileMangement sentMsg;
-//
+
 //    atom.set_value(VEEXIST);
 //    answer.set_worker_answer(atom.SerializeAsString());
 //    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
 //    EXPECT_EQ(-EEXIST, proxy->sh_mknod("file_id", 0755, 0));
-//
+
 //    RemoteFileMangement rfm;
-//
+
 //    CreateFile subMsg;
 //    subMsg.set_file_id("file_id");
 //    subMsg.set_mode(0755);
-//
+
 //    rfm.set_input(subMsg.SerializeAsString());
 //    rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
 //    rfm.set_space_id("testSpace");
-//
+
 //    EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 //}
-//
-//
-//TEST_F(ClusterProxyHelperTest, mkdir)
-//{
-//    EXPECT_EQ(ENOTSUP, proxy->sh_mkdir("file_id", 0));
-//}
-//
-//
+
+
+TEST_F(ClusterProxyHelperTest, mkdir)
+{
+    auto p = proxy->sh_mkdir("file_id", 0);
+    EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
+}
+
+
 //TEST_F(ClusterProxyHelperTest, unlink)
 //{
 //    Atom atom;
 //    Answer answer;
-//
+
 //    answer.set_answer_status(VOK);
 //    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
 //    EXPECT_EQ(-EIO, proxy->sh_unlink("file_id"));
-//
+
 //    atom.set_value(VOK);
 //    answer.set_worker_answer(atom.SerializeAsString());
 //    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
 //    EXPECT_EQ(0, proxy->sh_unlink("file_id"));
-//
+
 //    RemoteFileMangement sentMsg;
-//
+
 //    atom.set_value(VEEXIST);
 //    answer.set_worker_answer(atom.SerializeAsString());
 //    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
 //    EXPECT_EQ(-EEXIST, proxy->sh_unlink("file_id"));
-//
+
 //    RemoteFileMangement rfm;
-//
+
 //    DeleteFileAtStorage subMsg;
 //    subMsg.set_file_id("file_id");
-//
+
 //    rfm.set_input(subMsg.SerializeAsString());
 //    rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
 //    rfm.set_space_id("testSpace");
-//
+
 //    EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
 //}
-//
-//
-//TEST_F(ClusterProxyHelperTest, rmdir)
-//{
-//    EXPECT_EQ(ENOTSUP, proxy->sh_rmdir("file_id"));
-//}
-//
-//
-//TEST_F(ClusterProxyHelperTest, symlink)
-//{
-//    EXPECT_EQ(ENOTSUP, proxy->sh_symlink("from", "to"));
-//}
-//
-//
-//TEST_F(ClusterProxyHelperTest, rename)
-//{
-//    EXPECT_EQ(ENOTSUP, proxy->sh_rename("from", "to"));
-//}
-//
-//
-//TEST_F(ClusterProxyHelperTest, link)
-//{
-//    EXPECT_EQ(ENOTSUP, proxy->sh_link("from", "to"));
-//}
-//
-//
-//TEST_F(ClusterProxyHelperTest, chmod)
-//{
-//    EXPECT_EQ(0, proxy->sh_chmod("file_id", 0));
-//}
-//
-//
-//TEST_F(ClusterProxyHelperTest, chown)
-//{
-//    EXPECT_EQ(0, proxy->sh_chown("file_id", 0, 0));
-//}
-//
-//
-//TEST_F(ClusterProxyHelperTest, truncate)
-//{
-//    Atom atom;
-//    Answer answer;
-//    ClusterMsg msg;
-//
-//    answer.set_answer_status(VOK);
-//    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
-//    EXPECT_EQ(-EIO, proxy->sh_truncate("file_id", 10));
-//
-//    atom.set_value(VOK);
-//    answer.set_worker_answer(atom.SerializeAsString());
-//    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
-//    EXPECT_EQ(0, proxy->sh_truncate("file_id", 10));
-//
-//    RemoteFileMangement sentMsg;
-//
-//    atom.set_value(VEEXIST);
-//    answer.set_worker_answer(atom.SerializeAsString());
-//    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
-//    EXPECT_EQ(-EEXIST, proxy->sh_truncate("file_id", 10));
-//
-//    RemoteFileMangement rfm;
-//
-//    TruncateFile subMsg;
-//    subMsg.set_file_id("file_id");
-//    subMsg.set_length(10);
-//
-//    rfm.set_input(subMsg.SerializeAsString());
-//    rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
-//    rfm.set_space_id("testSpace");
-//
-//    EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
-//}
+
+
+TEST_F(ClusterProxyHelperTest, rmdir)
+{
+    auto p = proxy->sh_rmdir("file_id");
+    EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
+}
+
+
+TEST_F(ClusterProxyHelperTest, symlink)
+{
+    auto p = proxy->sh_symlink("from", "to");
+    EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
+}
+
+
+TEST_F(ClusterProxyHelperTest, rename)
+{
+    auto p = proxy->sh_rename("from", "to");
+    EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
+}
+
+
+TEST_F(ClusterProxyHelperTest, link)
+{
+    auto p = proxy->sh_link("from", "to");
+    EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
+}
+
+
+TEST_F(ClusterProxyHelperTest, chmod)
+{
+    auto p = proxy->sh_chmod("file_id", 0);
+    EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
+}
+
+
+TEST_F(ClusterProxyHelperTest, chown)
+{
+    auto p = proxy->sh_chown("file_id", 0, 0);
+    EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
+}
+
+
+TEST_F(ClusterProxyHelperTest, truncate)
+{
+    Atom atom;
+    Answer answer;
+    ClusterMsg msg;
+
+    answer.set_answer_status(VOK);
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
+    auto p1 = proxy->sh_truncate("file_id", 10);
+    EXPECT_THROW_POSIX_CODE(p1.get(), EIO);
+
+    atom.set_value(VOK);
+    answer.set_worker_answer(atom.SerializeAsString());
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(Return(answer));
+    auto p2 = proxy->sh_truncate("file_id", 10);
+    EXPECT_EQ(0, p2.get());
+
+    RemoteFileMangement sentMsg;
+
+    atom.set_value(VEEXIST);
+    answer.set_worker_answer(atom.SerializeAsString());
+    EXPECT_CALL(*mockCommunicator, communicateMock(_, _, _, _)).WillOnce(DoAll(SaveMsg(&sentMsg), Return(answer)));
+    auto p3 = proxy->sh_truncate("file_id", 10);
+    EXPECT_THROW_POSIX_CODE(p3.get(), EEXIST);
+
+    RemoteFileMangement rfm;
+
+    TruncateFile subMsg;
+    subMsg.set_file_id("file_id");
+    subMsg.set_length(10);
+
+    rfm.set_input(subMsg.SerializeAsString());
+    rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
+    rfm.set_space_id("testSpace");
+
+    EXPECT_EQ(rfm.SerializeAsString(), sentMsg.SerializeAsString());
+}
+
+

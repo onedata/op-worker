@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <string>
 #include <vector>
+#include <memory>
 
 namespace one
 {
@@ -84,18 +85,18 @@ public:
 
 protected:
     template<class T>
-    static void set_posix_error(boost::promise<T> &p, int posix_code)
+    static void set_posix_error(std::shared_ptr<boost::promise<T>> p, int posix_code)
     {
         posix_code = posix_code > 0 ? posix_code : -posix_code;
-        p.set_exception(std::system_error(posix_code, std::system_category()));
+        p->set_exception(std::system_error(posix_code, std::system_category()));
     }
 
-    static void set_result(boost::promise<int> &p, int posix_code)
+    static void set_result(std::shared_ptr<boost::promise<int>> p, int posix_code)
     {
         if(posix_code < 0) {
             set_posix_error(p, posix_code);
         } else {
-            p.set_value(posix_code);
+            p->set_value(posix_code);
         }
     }
 };

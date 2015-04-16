@@ -16,8 +16,8 @@
 class ProxyClusterProxyHelper: public one::helpers::ClusterProxyHelper {
 public:
     ProxyClusterProxyHelper(std::shared_ptr<one::communication::Communicator> communicator,
-                            const ArgsMap &args)
-        : ClusterProxyHelper{std::move(communicator), one::helpers::BufferLimits{}, args}
+                            const ArgsMap &args, boost::asio::io_service &io_service)
+        : ClusterProxyHelper{std::move(communicator), one::helpers::BufferLimits{}, args, io_service}
     {
     }
 
