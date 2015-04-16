@@ -8,6 +8,11 @@ import time
 import common
 import docker
 
+try:  # Python 2
+    import httplib
+except ImportError:  # Python 3
+    import http.client as httplib
+
 
 RIAK_READY_WAIT_SECONDS = 60 * 5
 
@@ -39,7 +44,13 @@ def _node_up(command, num, maps, dns, image, uid):
 
 
 def _ready(container):
-    return docker.exec_(container, ['riak', 'ping'], stdout=sys.stderr) == 0
+    ip = docker.inspect(container)['NetworkSettings']['IPAddress']
+    try:
+        conn = httplib.HTTPConnection(ip, 8098, timeout=5)
+        conn.request('HEAD', '/stats')
+        return conn.getresponse().status == 200
+    except StandardError:
+        return False
 
 
 def _ring_ready(container):
@@ -91,7 +102,7 @@ def up(image, dns, uid, maps, nodes):
 
     command = '''
 sed -i 's/riak@127.0.0.1/riak@{hostname}/' /etc/riak/riak.conf
-sed -i 's/127.0.0.1:/0.0.0.0:/' /etc/riak/riak.conf
+sed -i 's/127.0.0.1:/0.0.0.0:/g' /etc/riak/riak.conf
 riak console'''
 
     for num in range(nodes):
@@ -102,7 +113,9 @@ riak console'''
     common.merge(riak_output, dns_output)
 
     _wait_until(_ready, containers)
-    _cluster_nodes(containers, uid)
+
+    if len(containers) > 1:
+        _cluster_nodes(containers, uid)
 
     docker.exec_(containers[0],
                  command=['riak-admin', 'bucket-type', 'create', 'maps', maps],
