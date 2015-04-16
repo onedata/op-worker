@@ -36,7 +36,7 @@
     event_manager_multiple_handlers_test/1
 ]).
 
--perf_test({perf_cases, []}).
+-performance({test_cases, []}).
 all() -> [
     event_stream_the_same_file_id_aggregation_test,
     event_stream_different_file_id_aggregation_test,
