@@ -1,7 +1,7 @@
 /**
  * @file directIOHelper.cc
- * @author Beata Skiba
- * @copyright (C) 2013 ACK CYFRONET AGH
+ * @author Rafal Slota
+ * @copyright (C) 2015 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
@@ -44,11 +44,20 @@ inline boost::filesystem::path DirectIOHelper::root(const boost::filesystem::pat
     return m_rootPath / path;
 }
 
+
 boost::shared_future<struct stat>
 DirectIOHelper::sh_getattr(const boost::filesystem::path &p)
 {
     auto promise = std::make_shared<boost::promise<struct stat>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=]() {
+        struct stat stbuf;
+        if(lstat(root(p).c_str(), &stbuf) == -1) {
+            setPosixError(promise, errno);
+        } else {
+            promise->set_value(std::move(stbuf));
+        }
+    });
 
     return promise->get_future();
 }
@@ -58,7 +67,10 @@ boost::shared_future<int>
 DirectIOHelper::sh_access(const boost::filesystem::path &p, int mask)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    promise->set_value(0);
+
+    m_workerService.post([=, &p]() {
+        setResult(promise, access, root(p).c_str(), mask);
+    });
 
     return promise->get_future();
 }
@@ -68,17 +80,28 @@ boost::shared_future<std::string>
 DirectIOHelper::sh_readlink(const boost::filesystem::path &p)
 {
     auto promise = std::make_shared<boost::promise<std::string>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=]() {
+        char buf[1024];
+        const int res = readlink(root(p).c_str(), buf, 1024 - 1);
+
+        if (res == -1) {
+            setPosixError(promise, errno);
+        } else {
+            buf[res] = '\0';
+            promise->set_value(std::string(buf));
+        }
+    });
 
     return promise->get_future();
 }
 
 
 boost::shared_future<std::vector<std::string>>
-DirectIOHelper::sh_readdir(const boost::filesystem::path &p, off_t offset, size_t count, StorageHelperCTX &ctx)
+DirectIOHelper::sh_readdir(const boost::filesystem::path &p, off_t offset, size_t count, ctx_type ctx)
 {
     auto promise = std::make_shared<boost::promise<std::vector<std::string>>>();
-    set_posix_error(promise, ENOTSUP);
+    setPosixError(promise, ENOTSUP);
 
     return promise->get_future();
 }
@@ -88,7 +111,28 @@ boost::shared_future<int>
 DirectIOHelper::sh_mknod(const boost::filesystem::path &p, mode_t mode, dev_t rdev)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=, &p]() {
+            int res;
+            const auto fullPath = root(p);
+
+            /* On Linux this could just be 'mknod(path, mode, rdev)' but this
+               is more portable */
+            if (S_ISREG(mode)) {
+                res = open(fullPath.c_str(), O_CREAT | O_EXCL | O_WRONLY, mode);
+                if (res >= 0)
+                    res = close(res);
+            } else if (S_ISFIFO(mode))
+                res = mkfifo(fullPath.c_str(), mode);
+            else
+                res = mknod(fullPath.c_str(), mode, rdev);
+
+            if (res == -1) {
+                setPosixError(promise, errno);
+            } else {
+                promise->set_value(0);
+            }
+    });
 
     return promise->get_future();
 }
@@ -98,7 +142,10 @@ boost::shared_future<int>
 DirectIOHelper::sh_mkdir(const boost::filesystem::path &p, mode_t mode)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=]() {
+        setResult(promise, mkdir, root(p).c_str(), mode);
+    });
 
     return promise->get_future();
 }
@@ -108,7 +155,10 @@ boost::shared_future<int>
 DirectIOHelper::sh_unlink(const boost::filesystem::path &p)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=]() {
+        setResult(promise, unlink, root(p).c_str());
+    });
 
     return promise->get_future();
 }
@@ -118,7 +168,10 @@ boost::shared_future<int>
 DirectIOHelper::sh_rmdir(const boost::filesystem::path &p)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=]() {
+        setResult(promise, rmdir, root(p).c_str());
+    });
 
     return promise->get_future();
 }
@@ -128,7 +181,10 @@ boost::shared_future<int>
 DirectIOHelper::sh_symlink(const boost::filesystem::path &from, const boost::filesystem::path &to)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=]() {
+        setResult(promise, symlink, root(from).c_str(), root(to).c_str());
+    });
 
     return promise->get_future();
 }
@@ -138,7 +194,10 @@ boost::shared_future<int>
 DirectIOHelper::sh_rename(const boost::filesystem::path &from, const boost::filesystem::path &to)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=]() {
+        setResult(promise, rename, root(from).c_str(), root(to).c_str());
+    });
 
     return promise->get_future();
 }
@@ -148,7 +207,10 @@ boost::shared_future<int>
 DirectIOHelper::sh_link(const boost::filesystem::path &from, const boost::filesystem::path &to)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=]() {
+        setResult(promise, link, root(from).c_str(), root(to).c_str());
+    });
 
     return promise->get_future();
 }
@@ -158,7 +220,10 @@ boost::shared_future<int>
 DirectIOHelper::sh_chmod(const boost::filesystem::path &p, mode_t mode)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=]() {
+        setResult(promise, chmod, root(p).c_str(), mode);
+    });
 
     return promise->get_future();
 }
@@ -168,7 +233,10 @@ boost::shared_future<int>
 DirectIOHelper::sh_chown(const boost::filesystem::path &p, uid_t uid, gid_t gid)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error<int>(promise, ENOTSUP);
+
+    m_workerService.post([=]() {
+        setResult(promise, lchown, root(p).c_str(), uid, gid);
+    });
 
     return promise->get_future();
 }
@@ -178,19 +246,30 @@ boost::shared_future<int>
 DirectIOHelper::sh_truncate(const boost::filesystem::path &p, off_t size)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=]() {
+        setResult(promise, truncate, root(p).c_str(), size);
+    });
 
     return promise->get_future();
 }
 
 
-
-
 boost::shared_future<int>
-DirectIOHelper::sh_open(const boost::filesystem::path &p, StorageHelperCTX &ctx)
+DirectIOHelper::sh_open(const boost::filesystem::path &p, ctx_type ctx)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=, &ctx]() {
+        const int res = open(root(p).c_str(), ctx.m_ffi.flags);
+        if (res == -1) {
+            setPosixError(promise, errno);
+        } else {
+            fcntl(res, F_SETFL, O_NONBLOCK);
+            ctx.m_ffi.fh = res;
+            promise->set_value(res);
+        }
+    });
 
     return promise->get_future();
 }
@@ -198,258 +277,150 @@ DirectIOHelper::sh_open(const boost::filesystem::path &p, StorageHelperCTX &ctx)
 
 boost::shared_future<boost::asio::mutable_buffer>
 DirectIOHelper::sh_read(const boost::filesystem::path &p, boost::asio::mutable_buffer buf, off_t offset,
-                            StorageHelperCTX &ctx)
+                            ctx_type ctx)
 {
     auto promise = std::make_shared<boost::promise<boost::asio::mutable_buffer>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=, &ctx]() {
+        int fd = ctx.m_ffi.fh > 0 ? ctx.m_ffi.fh : open(root(p).c_str(), O_RDONLY);
+        if(fd == -1) {
+            setPosixError(promise, errno);
+            return;
+        }
+
+        boost::asio::posix::stream_descriptor fh(m_workerService, fd);
+        fh.non_blocking(true);
+
+        if(lseek(fd, offset, SEEK_SET) == -1) {
+            setPosixError(promise, errno);
+            if(ctx.m_ffi.fh > 0)
+                fh.release(); // Do NOT auto-close this file descriptor
+            return;
+        }
+
+        // Helper function for setting return value and cleaning up file handle
+        auto setPromiseAndCleanup = [&ctx, buf, &fh, promise](const boost::system::error_code& ec, std::size_t bytes_transferred) {
+            if(ec) {
+                setPosixError(promise, ec.value());
+            } else {
+                promise->set_value(boost::asio::buffer(buf, bytes_transferred));
+            }
+
+            if(ctx.m_ffi.fh > 0) {
+                fh.release(); // Do NOT auto-close this file descriptor
+            }
+        };
+
+        if(fh.non_blocking()) {
+            fh.async_read_some(boost::asio::buffer(buf), [setPromiseAndCleanup](const boost::system::error_code& ec, std::size_t bytes_transferred) {
+                setPromiseAndCleanup(ec, bytes_transferred);
+            });
+        } else {
+            boost::system::error_code ec;
+            auto bytes_transferred = fh.read_some(boost::asio::buffer(buf), ec);
+            setPromiseAndCleanup(ec, bytes_transferred);
+        }
+    });
 
     return promise->get_future();
 }
+
 
 
 boost::shared_future<int>
 DirectIOHelper::sh_write(const boost::filesystem::path &p, boost::asio::const_buffer buf, off_t offset,
-                             StorageHelperCTX &ctx)
+                             ctx_type ctx)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=, &ctx]() {
+        int fd = ctx.m_ffi.fh > 0 ? ctx.m_ffi.fh : open(root(p).c_str(), O_WRONLY);
+        if(fd == -1) {
+            setPosixError(promise, errno);
+            return;
+        }
+
+        // Prepare file handle
+        boost::asio::posix::stream_descriptor fh(m_workerService, fd);
+        fh.non_blocking(true);
+
+        if(lseek(fd, offset, SEEK_SET) == -1) {
+            setPosixError(promise, errno);
+            if(ctx.m_ffi.fh > 0)
+                fh.release(); // Do NOT auto-close this file descriptor
+            return;
+        }
+
+        // Helper function for setting return value and cleaning up file handle
+        auto setPromiseAndCleanup = [&ctx, buf, &fh, promise](const boost::system::error_code& ec, std::size_t bytes_transferred) {
+            if(ec) {
+                setPosixError(promise, ec.value());
+            } else {
+                promise->set_value(bytes_transferred);
+            }
+
+            if(ctx.m_ffi.fh > 0) {
+                fh.release(); // Do NOT auto-close this file descriptor
+            }
+        };
+
+        if(fh.non_blocking()) {
+            fh.async_write_some(boost::asio::buffer(buf), [setPromiseAndCleanup](const boost::system::error_code& ec, std::size_t bytes_transferred) {
+                setPromiseAndCleanup(ec, bytes_transferred);
+            });
+        } else {
+            boost::system::error_code ec;
+            auto bytes_transferred = fh.write_some(boost::asio::buffer(buf), ec);
+            setPromiseAndCleanup(ec, bytes_transferred);
+        }
+    });
 
     return promise->get_future();
 }
 
 
 boost::shared_future<int>
-DirectIOHelper::sh_release(const boost::filesystem::path &p, StorageHelperCTX &ctx)
+DirectIOHelper::sh_release(const boost::filesystem::path &p, ctx_type ctx)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    m_workerService.post([=, &ctx]() {
+        if (ctx.m_ffi.fh && close(ctx.m_ffi.fh) == -1) {
+            setPosixError(promise, errno);
+        } else {
+            ctx.m_ffi.fh = 0;
+            promise->set_value(0);
+        }
+    });
 
     return promise->get_future();
 }
 
 
 boost::shared_future<int>
-DirectIOHelper::sh_flush(const boost::filesystem::path &p, StorageHelperCTX &ctx)
+DirectIOHelper::sh_flush(const boost::filesystem::path &p, ctx_type ctx)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    promise->set_value(0);
 
     return promise->get_future();
 }
 
 
 boost::shared_future<int>
-DirectIOHelper::sh_fsync(const boost::filesystem::path &p, int isdatasync, StorageHelperCTX &ctx)
+DirectIOHelper::sh_fsync(const boost::filesystem::path &p, int isdatasync, ctx_type ctx)
 {
     auto promise = std::make_shared<boost::promise<int>>();
-    set_posix_error(promise, ENOTSUP);
+
+    promise->set_value(0);
 
     return promise->get_future();
 }
 
-
-
-//int DirectIOHelper::sh_getattr(const char *path, struct stat *stbuf)
-//{
-//    return lstat(root(path).c_str(), stbuf) == -1 ? -errno : 0;
-//}
-//
-//int DirectIOHelper::sh_access(const char *path, int mask)
-//{
-//    return access(root(path).c_str(), mask) == -1 ? -errno : 0;
-//}
-//
-//int DirectIOHelper::sh_readlink(const char *path, char *buf, size_t size)
-//{
-//    const int res = readlink(root(path).c_str(), buf, size - 1);
-//
-//    if (res == -1)
-//        return -errno;
-//
-//    buf[res] = '\0';
-//    return 0;
-//}
-//
-//
-//int DirectIOHelper::sh_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-//               off_t /*offset*/, struct fuse_file_info */*fi*/)
-//{
-//    DIR *dp = opendir(root(path).c_str());
-//    if (dp == nullptr)
-//        return -errno;
-//
-//
-//    for(struct dirent *de; (de = readdir(dp)) != nullptr;)
-//    {
-//        struct stat st;
-//        memset(&st, 0, sizeof(st));
-//        st.st_ino = de->d_ino;
-//        st.st_mode = de->d_type << 12;
-//        if (filler(buf, de->d_name, &st, 0))
-//            break;
-//    }
-//
-//    closedir(dp);
-//    return 0;
-//}
-//
-//int DirectIOHelper::sh_mknod(const char *path, mode_t mode, dev_t rdev)
-//{
-//    int res;
-//    const auto fullPath = root(path);
-//
-//    /* On Linux this could just be 'mknod(path, mode, rdev)' but this
-//       is more portable */
-//    if (S_ISREG(mode)) {
-//        res = open(fullPath.c_str(), O_CREAT | O_EXCL | O_WRONLY, mode);
-//        if (res >= 0)
-//            res = close(res);
-//    } else if (S_ISFIFO(mode))
-//        res = mkfifo(fullPath.c_str(), mode);
-//    else
-//        res = mknod(fullPath.c_str(), mode, rdev);
-//
-//    if (res == -1)
-//        return -errno;
-//
-//    return 0;
-//}
-//
-//int DirectIOHelper::sh_mkdir(const char *path, mode_t mode)
-//{
-//    return mkdir(root(path).c_str(), mode) == -1 ? -errno : 0;
-//}
-//
-//int DirectIOHelper::sh_unlink(const char *path)
-//{
-//    return unlink(root(path).c_str()) == -1 ? -errno : 0;
-//}
-//
-//int DirectIOHelper::sh_rmdir(const char *path)
-//{
-//    return rmdir(root(path).c_str()) == -1 ? -errno : 0;
-//}
-//
-//int DirectIOHelper::sh_symlink(const char *from, const char *to)
-//{
-//    return symlink(root(from).c_str(), root(to).c_str()) == -1 ? -errno : 0;
-//}
-//
-//int DirectIOHelper::sh_rename(const char *from, const char *to)
-//{
-//    return rename(root(from).c_str(), root(to).c_str()) == -1 ? -errno : 0;
-//}
-//
-//int DirectIOHelper::sh_link(const char *from, const char *to)
-//{
-//    return link(root(from).c_str(), root(to).c_str()) == -1 ? -errno : 0;
-//}
-//
-//int DirectIOHelper::sh_chmod(const char *path, mode_t mode)
-//{
-//    return chmod(root(path).c_str(), mode) == -1 ? -errno : 0;
-//}
-//
-//int DirectIOHelper::sh_chown(const char *path, uid_t uid, gid_t gid)
-//{
-//    return lchown(root(path).c_str(), uid, gid) == -1 ? -errno : 0;
-//}
-//
-//int DirectIOHelper::sh_truncate(const char *path, off_t size)
-//{
-//    return truncate(root(path).c_str(), size) == -1 ? -errno : 0;
-//}
-//
-//#ifdef HAVE_UTIMENSAT
-//int DirectIOHelper::sh_utimens(const char *path, const struct timespec ts[2])
-//{
-//    /* don't use utime/utimes since they follow symlinks */
-//    return utimensat(0, root(path).c_str(), ts, AT_SYMLINK_NOFOLLOW) == -1 ? -errno : 0;
-//}
-//#endif /* HAVE_UTIMENSAT */
-//
-//int DirectIOHelper::sh_open(const char *path, struct fuse_file_info *fi)
-//{
-//    const int res = open(root(path).c_str(), fi->flags);
-//    if (res == -1)
-//        return -errno;
-//
-//    fi->fh = res;
-//    return 0;
-//}
-//
-//int DirectIOHelper::sh_read(const char *path, char *buf, size_t size, off_t offset,
-//            struct fuse_file_info *fi)
-//{
-//    int fd;
-//    int res;
-//    if(fi->fh > 0)
-//        fd = fi->fh;
-//    else
-//        fd = open(root(path).c_str(), O_RDONLY);
-//
-//    if (fd == -1)
-//        return -errno;
-//
-//    res = pread(fd, buf, size, offset);
-//    if (res == -1)
-//        res = -errno;
-//
-//    if(fi->fh <= 0)
-//        close(fd);
-//
-//    return res;
-//}
-//
-//int DirectIOHelper::sh_write(const char *path, const char *buf, size_t size,
-//             off_t offset, struct fuse_file_info *fi)
-//{
-//    int fd;
-//    int res;
-//    if(fi->fh > 0)
-//        fd = fi->fh;
-//    else
-//       fd = open(root(path).c_str(), O_WRONLY);
-//
-//    if (fd == -1)
-//        return -errno;
-//
-//    res = pwrite(fd, buf, size, offset);
-//    if (res == -1)
-//        res = -errno;
-//
-//    if(fi->fh <= 0)
-//        close(fd);
-//
-//    return res;
-//}
-//
-//int DirectIOHelper::sh_statfs(const char *path, struct statvfs *stbuf)
-//{
-//    return statvfs(root(path).c_str(), stbuf) == -1 ? -errno : 0;
-//}
-//
-//int DirectIOHelper::sh_release(const char */*path*/, struct fuse_file_info *fi)
-//{
-//    return fi->fh > 0 ? close(fi->fh) : 0;
-//}
-//
-//int DirectIOHelper::sh_fsync(const char */*path*/, int /*isdatasync*/,
-//             struct fuse_file_info */*fi*/)
-//{
-//    /* Just a stub.     This method is optional and can safely be left
-//       unimplemented */
-//
-//    return 0;
-//}
-//
-//int DirectIOHelper::sh_flush(const char */*path*/, struct fuse_file_info */*fi*/)
-//{
-//    return 0;
-//}
-
-DirectIOHelper::DirectIOHelper(const ArgsMap &args)
+DirectIOHelper::DirectIOHelper(const ArgsMap &args, boost::asio::io_service &service)
     : m_rootPath{extractPath(args)}
+    , m_workerService{service}
 {
 }
 

@@ -12,6 +12,9 @@
 #include "helpers/IStorageHelper.h"
 
 #include <boost/filesystem/path.hpp>
+#include <boost/asio.hpp>
+#include <boost/asio/posix/stream_descriptor.hpp>
+#include <boost/asio/posix/basic_stream_descriptor.hpp>
 
 #include <fuse.h>
 #include <sys/types.h>
@@ -33,13 +36,13 @@ public:
      * It shall be ablosute path to diretory used by this storage helper as
      * root mount point.
      */
-    DirectIOHelper(const ArgsMap&);
+    DirectIOHelper(const ArgsMap&, boost::asio::io_service &service);
 
     boost::shared_future<struct stat> sh_getattr(const boost::filesystem::path &p);
     boost::shared_future<int> sh_access(const boost::filesystem::path &p, int mask);
     boost::shared_future<std::string> sh_readlink(const boost::filesystem::path &p);
     boost::shared_future<std::vector<std::string>>
-            sh_readdir(const boost::filesystem::path &p, off_t offset, size_t count, StorageHelperCTX &ctx);
+            sh_readdir(const boost::filesystem::path &p, off_t offset, size_t count, ctx_type ctx);
     boost::shared_future<int> sh_mknod(const boost::filesystem::path &p, mode_t mode, dev_t rdev);
     boost::shared_future<int> sh_mkdir(const boost::filesystem::path &p, mode_t mode);
     boost::shared_future<int> sh_unlink(const boost::filesystem::path &p);
@@ -55,22 +58,39 @@ public:
     boost::shared_future<int> sh_truncate(const boost::filesystem::path &p, off_t size);
 
 
-    boost::shared_future<int> sh_open(const boost::filesystem::path &p, StorageHelperCTX &ctx);
+    boost::shared_future<int> sh_open(const boost::filesystem::path &p, ctx_type ctx);
     boost::shared_future<boost::asio::mutable_buffer>
             sh_read(const boost::filesystem::path &p, boost::asio::mutable_buffer buf, off_t offset,
-                    StorageHelperCTX &ctx);
+                    ctx_type ctx);
     boost::shared_future<int>
             sh_write(const boost::filesystem::path &p, boost::asio::const_buffer buf, off_t offset,
-                     StorageHelperCTX &ctx);
-    boost::shared_future<int> sh_release(const boost::filesystem::path &p, StorageHelperCTX &ctx);
-    boost::shared_future<int> sh_flush(const boost::filesystem::path &p, StorageHelperCTX &ctx);
+                     ctx_type ctx);
+    boost::shared_future<int> sh_release(const boost::filesystem::path &p, ctx_type ctx);
+    boost::shared_future<int> sh_flush(const boost::filesystem::path &p, ctx_type ctx);
     boost::shared_future<int>
-            sh_fsync(const boost::filesystem::path &p, int isdatasync, StorageHelperCTX &ctx);
+            sh_fsync(const boost::filesystem::path &p, int isdatasync, ctx_type ctx);
+
+protected:
+    template <class Result, typename... Args1, typename... Args2>
+    static void setResult(std::shared_ptr<boost::promise<int>> p, Result (*fun)(Args2...), Args1 &&... args)
+    {
+        auto posixStatus = fun(std::forward<Args1>(args)...);
+
+        if(posixStatus < 0) {
+            setPosixError(p, errno);
+        } else {
+            p->set_value(posixStatus);
+        }
+    }
 
 private:
     boost::filesystem::path root(const boost::filesystem::path &path);
 
     const boost::filesystem::path m_rootPath;
+    boost::asio::io_service &m_workerService;
+
+    bool m_async;
+    off_t m_offset;
 };
 
 } // namespace helpers

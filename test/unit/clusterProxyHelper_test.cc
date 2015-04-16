@@ -54,6 +54,7 @@ protected:
 
     boost::asio::io_service io_service;
     boost::asio::io_service::work io_work;
+    std::future<void> th_handle;
 
     ClusterProxyHelperTest()
       : ctx(ffi)
@@ -63,7 +64,7 @@ protected:
 
     void SetUp() override
     {
-        boost::async([&]() { io_service.run(); });
+        th_handle = std::async([&]() { io_service.run(); });
         mockCommunicator = std::make_shared<MockCommunicator>();
         proxy = std::make_shared<ProxyClusterProxyHelper>(mockCommunicator,
                                                           IStorageHelper::ArgsMap{{srvArg(0), std::string("testSpace")}},
@@ -73,6 +74,7 @@ protected:
     void TearDown() override
     {
         io_service.stop();
+        th_handle.get();
     }
 };
 

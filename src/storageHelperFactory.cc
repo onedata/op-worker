@@ -50,7 +50,7 @@ StorageHelperFactory::StorageHelperFactory(std::shared_ptr<communication::Commun
 std::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const std::string &sh_name,
                                                                        const IStorageHelper::ArgsMap &args) {
     if(sh_name == "DirectIO")
-        return std::make_shared<DirectIOHelper>(args);
+        return std::make_shared<DirectIOHelper>(args, m_dio_service);
 
     if(sh_name == "ClusterProxy")
         return std::make_shared<ClusterProxyHelper>(m_communicator, m_limits, args, m_cproxy_service);
