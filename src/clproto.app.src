@@ -1,0 +1,13 @@
+{application, clproto,
+    [
+        {description, "Communication protocol between clients and providers."},
+        {vsn, git},
+        {registered, []},
+        {applications, [
+            kernel,
+            stdlib
+        ]},
+        {mod, {clproto_app, []}},
+        {env, []}
+    ]
+}.
