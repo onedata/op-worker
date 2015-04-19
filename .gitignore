@@ -3,4 +3,5 @@
 
 deps
 ebin
-include
+src/*.erl
+include/*.hrl
