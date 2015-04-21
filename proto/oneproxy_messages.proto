@@ -6,6 +6,7 @@
  * @copyright This software is released under the MIT license cited in
  * 'LICENSE.txt'
  */
+
 package one.proxy.proto;
 
 message ProxyInit {
