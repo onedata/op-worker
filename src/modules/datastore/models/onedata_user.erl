@@ -15,7 +15,7 @@
 
 -include("modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_internal.hrl").
--include("proto_internal/oneclient/handshake_messages.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 
 %% model_behaviour callbacks

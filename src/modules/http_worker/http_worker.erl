@@ -14,7 +14,7 @@
 
 -behaviour(worker_plugin_behaviour).
 
--include("proto_internal/common/credentials.hrl").
+-include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").

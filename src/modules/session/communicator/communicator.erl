@@ -15,9 +15,9 @@
 
 -behaviour(gen_server).
 
--include("proto_internal/oneclient/message_id.hrl").
--include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneclient/server_messages.hrl").
+-include("proto/oneclient/message_id.hrl").
+-include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

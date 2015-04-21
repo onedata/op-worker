@@ -17,9 +17,9 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/event_manager/events.hrl").
--include("proto_internal/oneclient/event_messages.hrl").
--include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneclient/server_messages.hrl").
+-include("proto/oneclient/event_messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -33,7 +33,7 @@
 
 -type event() :: #read_event{} | #write_event{}.
 -type subscription() :: #read_event_subscription{} |
-                        #write_event_subscription{}.
+#write_event_subscription{}.
 -type subscription_id() :: non_neg_integer().
 -type producer() :: gui | all.
 -type event_stream_status() :: {running, EvtStm :: pid(),
@@ -156,7 +156,7 @@ handle_call({event_stream_initialized, SubId}, {EvtStm, _}, #state{
                 gen_server:cast(EvtStm, Msg)
             end, lists:reverse(PendingMsgs)),
             {reply, {ok, EvtStmState}, State#state{event_streams =
-                lists:keyreplace(SubId, 1, EvtStms, {SubId, {running, EvtStm, AdmRule}})
+            lists:keyreplace(SubId, 1, EvtStms, {SubId, {running, EvtStm, AdmRule}})
             }};
         _ ->
             {reply, undefined, State}
@@ -201,6 +201,9 @@ handle_cast({unsubscribe, SubId}, #state{event_stream_sup = EvtStmSup,
     event_streams = EvtStms, session_id = SessId} = State) ->
     {ok, NewEvtStms} = remove_event_stream(EvtStmSup, SessId, SubId, EvtStms),
     {noreply, State#state{event_streams = NewEvtStms}};
+
+handle_cast(#client_message{message_body = #end_of_message_stream{}}, State) ->
+    {stop, shutdown, State};
 
 handle_cast(#client_message{message_body = Evt}, #state{
     event_streams = EvtStms} = State) ->
