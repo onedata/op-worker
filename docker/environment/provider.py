@@ -59,6 +59,9 @@ def _node_up(image, bindir, logdir, uid, config, dns_servers, db_node_mappings):
 
     command = \
         '''set -e
+mkdir -p /root/bin/node/log/
+chown {uid}:{gid} /root/bin/node/log/
+chmod ug+s /root/bin/node/log/
 cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
@@ -69,9 +72,11 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         uid=os.geteuid(),
         gid=os.getegid())
 
-    logdir = os.path.join(os.path.abspath(logdir), name) if logdir else None
     volumes = [(bindir, '/root/build', 'ro')]
-    volumes.extend([(logdir, '/root/bin/node/log', 'rw')] if logdir else [])
+
+    if logdir:
+        logdir = os.path.join(os.path.abspath(logdir), name)
+        volumes.extend([(logdir, '/root/bin/node/log', 'rw')])
 
     container = docker.run(
         image=image,
@@ -159,11 +164,5 @@ def up(image, bindir, logdir, dns, uid, config_path):
         common.merge(output, node_out)
 
     _wait_until_ready(workers)
-
-    if logdir:
-        for node in ccms + workers:
-            docker.exec_(node, ['chown', '-R',
-                                '{0}:{1}'.format(os.geteuid(), os.getegid()),
-                                '/root/bin/node/log/'])
 
     return output
