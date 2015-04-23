@@ -26,6 +26,5 @@ parser.add_argument(
 
 args = parser.parse_args()
 output = globalregistry.up(args.image, args.bin, args.logdir, args.dns,
-                           args.uid,
-                           args.config_path)
+                           args.uid, args.config_path)
 print(json.dumps(output))
