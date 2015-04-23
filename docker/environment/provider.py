@@ -9,9 +9,7 @@ import copy
 import json
 import os
 
-import common
-import docker
-import riak
+from . import common, docker, riak, dns as dns_mod
 
 
 PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60 * 5
@@ -115,7 +113,7 @@ def up(image, bindir, logdir, dns, uid, config_path):
     config['config']['target_dir'] = '/root/bin'
     configs = [_tweak_config(config, node, uid) for node in config['nodes']]
 
-    dns_servers, output = common.set_up_dns(dns, uid)
+    dns_servers, output = dns_mod.set_up_dns(dns, uid)
     ccms = []
     workers = []
 

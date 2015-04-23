@@ -24,42 +24,42 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     '-i', '--image',
     action='store',
-    default='onedata/worker',
+    default=env.default('image'),
     help='the image to use for the components',
     dest='image')
 
 parser.add_argument(
     '-bp', '--bin-provider',
     action='store',
-    default='{0}/oneprovider'.format(os.getcwd()),
+    default=env.default('bin_op'),
     help='the path to oneprovider repository (precompiled)',
     dest='bin_op')
 
 parser.add_argument(
     '-bg', '--bin-gr',
     action='store',
-    default='{0}/globalregistry'.format(os.getcwd()),
+    default=env.default('bin_gr'),
     help='the path to globalregistry repository (precompiled)',
     dest='bin_gr')
 
 parser.add_argument(
     '-ba', '--bin-appmock',
     action='store',
-    default='{0}/appmock'.format(os.getcwd()),
+    default=env.default('bin_am'),
     help='the path to appmock repository (precompiled)',
     dest='bin_am')
 
 parser.add_argument(
     '-bc', '--bin-client',
     action='store',
-    default='{0}/oneclient'.format(os.getcwd()),
+    default=env.default('bin_oc'),
     help='the path to oneclient repository (precompiled)',
     dest='bin_oc')
 
 parser.add_argument(
     '-l', '--logdir',
     action='store',
-    default=None,
+    default=env.default('logdir'),
     help='path to a directory where the logs will be stored',
     dest='logdir')
 

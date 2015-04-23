@@ -9,8 +9,7 @@ from __future__ import print_function
 import re
 import sys
 
-import common
-import docker
+from . import common, docker, dns as dns_mod
 
 
 try:  # Python 2
@@ -93,7 +92,7 @@ def up(image, dns, uid, maps, nodes):
     if not maps:
         maps = '{"props":{"n_val":2, "datatype":"map"}}'
 
-    dns_servers, dns_output = common.set_up_dns(dns, uid)
+    dns_servers, dns_output = dns_mod.set_up_dns(dns, uid)
     riak_output = {}
 
     command = '''

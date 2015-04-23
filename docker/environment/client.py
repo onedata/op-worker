@@ -10,8 +10,7 @@ to start.
 import copy
 import os
 
-import common
-import docker
+from . import common, docker, dns as dns_mod
 
 
 def _tweak_config(config, name, uid):
@@ -80,7 +79,7 @@ def up(image, bindir, dns, uid, config_path):
     config = common.parse_json_file(config_path)['oneclient']
     configs = [_tweak_config(config, node, uid) for node in config['nodes']]
 
-    dns_servers, output = common.set_up_dns(dns, uid)
+    dns_servers, output = dns_mod.set_up_dns(dns, uid)
 
     for cfg in configs:
         node_out = _node_up(image, bindir, uid, cfg, config_path, dns_servers)

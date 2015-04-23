@@ -15,8 +15,6 @@ import os
 import time
 import sys
 
-import dns
-
 
 try:
     import xml.etree.cElementTree as eTree
@@ -107,18 +105,6 @@ def merge(d, merged):
     """
     for key, value in iter(merged.items()):
         d[key] = d[key] + value if key in d else value
-
-
-def set_up_dns(config, uid):
-    """Sets up DNS configuration values, starting the server if needed."""
-    if config == 'auto':
-        dns_config = dns.up(uid)
-        return [dns_config['dns']], dns_config
-
-    if config == 'none':
-        return [], {}
-
-    return [config], {}
 
 
 def get_file_dir(file_path):
