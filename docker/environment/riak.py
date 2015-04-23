@@ -6,16 +6,12 @@ Brings up a riak cluster.
 """
 
 from __future__ import print_function
+
 import re
+import requests
 import sys
 
 from . import common, docker, dns as dns_mod
-
-
-try:  # Python 2
-    import httplib
-except ImportError:  # Python 3
-    import http.client as httplib
 
 RIAK_READY_WAIT_SECONDS = 60 * 5
 
@@ -48,18 +44,18 @@ def _node_up(command, num, maps, dns, image, uid):
 
 def _ready(container):
     ip = docker.inspect(container)['NetworkSettings']['IPAddress']
+    url = 'http://{0}:8098/stats'.format(ip)
     try:
-        conn = httplib.HTTPConnection(ip, 8098, timeout=5)
-        conn.request('HEAD', '/stats')
-        return conn.getresponse().status == 200
-    except StandardError:
+        r = requests.head(url, timeout=5)
+        return r.status_code == requests.codes.ok
+    except requests.ConnectionError:
         return False
 
 
 def _ring_ready(container):
     output = docker.exec_(container, ['riak-admin', 'ring_status'], output=True,
                           stdout=sys.stderr)
-    return bool(re.search('Ring Ready:\s*true', output))
+    return bool(re.search(r'Ring Ready:\s*true', output))
 
 
 def _bucket_ready(bucket, container):
