@@ -1,4 +1,9 @@
-"""Brings up a set of Global Registry nodes along with databases.
+# coding=utf-8
+"""Authors: Tomasz Lichoń, Konrad Zemek
+Copyright (C) 2015 ACK CYFRONET AGH
+This software is released under the MIT license cited in 'LICENSE.txt'
+
+Brings up a set of Global Registry nodes along with databases.
 They can create separate clusters.
 """
 
@@ -96,7 +101,8 @@ def up(image, bindir, logdir, dns, uid, config_path):
 
     gr_containers = []
     for cfg in configs:
-        gr_container, node_out = _node_up(image, bindir, logdir, uid, cfg, dns_servers)
+        gr_container, node_out = _node_up(image, bindir, logdir, uid, cfg,
+                                          dns_servers)
         common.merge(output, node_out)
         gr_containers.append(gr_container)
 

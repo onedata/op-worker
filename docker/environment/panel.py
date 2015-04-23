@@ -1,30 +1,17 @@
-"""Brings up a set of onepanel nodes. They can create separate clusters."""
+# coding=utf-8
+"""Author: Krzysztof Trzepla
+Copyright (C) 2015 ACK CYFRONET AGH
+This software is released under the MIT license cited in 'LICENSE.txt'
 
-from __future__ import print_function
+Brings up a set of onepanel nodes. They can create separate clusters.
+"""
 
 import copy
 import json
 import os
-import sys
-import time
 
 import common
 import docker
-
-
-try:
-    import xml.etree.cElementTree as eTree
-except ImportError:
-    import xml.etree.ElementTree as eTree
-
-try:  # Python 2
-    from urllib2 import urlopen
-    from urllib2 import URLError
-    from httplib import BadStatusLine
-except ImportError:  # Python 3
-    from urllib.request import urlopen
-    from urllib.error import URLError
-    from http.client import BadStatusLine
 
 
 def _tweak_config(config, name, uid):

@@ -1,18 +1,22 @@
-"""Brings up a riak cluster."""
+"""Author: Konrad Zemek
+Copyright (C) 2015 ACK CYFRONET AGH
+This software is released under the MIT license cited in 'LICENSE.txt'
+
+Brings up a riak cluster.
+"""
 
 from __future__ import print_function
 import re
 import sys
-import time
 
 import common
 import docker
+
 
 try:  # Python 2
     import httplib
 except ImportError:  # Python 3
     import http.client as httplib
-
 
 RIAK_READY_WAIT_SECONDS = 60 * 5
 
@@ -67,15 +71,7 @@ def _bucket_ready(bucket, container):
 
 
 def _wait_until(condition, containers):
-    deadline = time.time() + RIAK_READY_WAIT_SECONDS
-    for container in containers:
-        while not condition(container):
-            if time.time() > deadline:
-                print("WARNING: timeout while waiting for Riak",
-                      file=sys.stderr)
-                break
-
-            time.sleep(1)
+    common.wait_until(condition, containers, RIAK_READY_WAIT_SECONDS)
 
 
 def _cluster_nodes(containers, uid):

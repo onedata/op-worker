@@ -1,31 +1,18 @@
-"""Brings up a set of oneprovider nodes. They can create separate clusters."""
+"""Author: Konrad Zemek
+Copyright (C) 2015 ACK CYFRONET AGH
+This software is released under the MIT license cited in 'LICENSE.txt'
 
-from __future__ import print_function
+Brings up a set of oneprovider nodes. They can create separate clusters.
+"""
 
 import copy
 import json
 import os
-import sys
-import time
 
 import common
 import docker
 import riak
 
-
-try:
-    import xml.etree.cElementTree as eTree
-except ImportError:
-    import xml.etree.ElementTree as eTree
-
-try:  # Python 2
-    from urllib2 import urlopen
-    from urllib2 import URLError
-    from httplib import BadStatusLine
-except ImportError:  # Python 3
-    from urllib.request import urlopen
-    from urllib.error import URLError
-    from http.client import BadStatusLine
 
 PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60 * 5
 
@@ -95,30 +82,9 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
     )
 
 
-def _is_up(ip):
-    url = 'https://{0}/nagios'.format(ip)
-    try:
-        fo = urlopen(url, timeout=5)
-        tree = eTree.parse(fo)
-        healthdata = tree.getroot()
-        status = healthdata.attrib['status']
-        return status == 'ok'
-    except URLError:
-        return False
-    except BadStatusLine:
-        return False
-
-
-def _wait_until_ready(workers):
-    worker_ip = docker.inspect(workers[0])['NetworkSettings']['IPAddress']
-    deadline = time.time() + PROVIDER_WAIT_FOR_NAGIOS_SECONDS
-    while not _is_up(worker_ip):
-        if time.time() > deadline:
-            print('WARNING: timeout waiting for "ok" healthcheck status',
-                  file=sys.stderr)
-            break
-
-        time.sleep(1)
+def _ready(container):
+    ip = docker.inspect(container)['NetworkSettings']['IPAddress']
+    return common.nagios_up(ip)
 
 
 def _riak_up(configs, dns_servers, uid):
@@ -158,7 +124,7 @@ def up(image, bindir, logdir, dns, uid, config_path):
         workers.extend(worker)
         common.merge(output, node_out)
 
-    _wait_until_ready(workers)
+    common.wait_until(_ready, workers[0:1], PROVIDER_WAIT_FOR_NAGIOS_SECONDS)
 
     if logdir:
         for node in ccms + workers:

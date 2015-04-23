@@ -8,5 +8,5 @@ function createService(container) {
         Service: container.Name.split('_')[1],
         Instance: removeSlash(container.Name.split('_')[0]),
         Host: container.NetworkSettings.IpAddress
-    }; 
+    };
 }

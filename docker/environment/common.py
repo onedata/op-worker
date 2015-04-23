@@ -1,11 +1,62 @@
-"""A custom utils library used across docker scripts."""
+# coding=utf-8
+"""Authors: Łukasz Opioła, Konrad Zemek
+Copyright (C) 2015 ACK CYFRONET AGH
+This software is released under the MIT license cited in 'LICENSE.txt'
+
+A custom utils library used across docker scripts.
+"""
+
+from __future__ import print_function
 
 import argparse
-import dns
 import inspect
 import json
 import os
 import time
+import sys
+
+import dns
+
+
+try:
+    import xml.etree.cElementTree as eTree
+except ImportError:
+    import xml.etree.ElementTree as eTree
+
+try:  # Python 2
+    from urllib2 import urlopen
+    from urllib2 import URLError
+    from httplib import BadStatusLine
+except ImportError:  # Python 3
+    from urllib.request import urlopen
+    from urllib.error import URLError
+    from http.client import BadStatusLine
+
+
+def nagios_up(ip, port=None):
+    url = 'https://{0}{1}/nagios'.format(ip, (':' + port) if port else '')
+    try:
+        fo = urlopen(url, timeout=5)
+        tree = eTree.parse(fo)
+        healthdata = tree.getroot()
+        status = healthdata.attrib['status']
+        return status == 'ok'
+    except URLError:
+        return False
+    except BadStatusLine:
+        return False
+
+
+def wait_until(condition, containers, timeout):
+    deadline = time.time() + timeout
+    for container in containers:
+        while not condition(container):
+            if time.time() > deadline:
+                warning = 'WARNING: timeout while waiting for condition {0}'
+                print(warning.format(condition.__name__), file=sys.stderr)
+                break
+
+            time.sleep(1)
 
 
 def standard_arg_parser(desc):

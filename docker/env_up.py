@@ -1,6 +1,11 @@
 #!/usr/bin/env python
+# coding=utf-8
 
-"""Brings up a DNS server with container (skydns + skydock) that allow
+"""Author: Łukasz Opioła
+Copyright (C) 2015 ACK CYFRONET AGH
+This software is released under the MIT license cited in 'LICENSE.txt'
+
+Brings up a DNS server with container (skydns + skydock) that allow
 different dockers to see each other by hostnames.
 Run the script with -h flag to learn about script's running options.
 """
@@ -89,8 +94,8 @@ if 'appmock' in config:
 
 # Start globalregistry instances
 if 'globalregistry' in config:
-    gr_output = globalregistry.up(args.image, args.bin_gr, args.logdir, dns, uid,
-                                  args.config_path)
+    gr_output = globalregistry.up(args.image, args.bin_gr, args.logdir, dns,
+                                  uid, args.config_path)
     common.merge(output, gr_output)
 
 # Start oneprovider_node instances
