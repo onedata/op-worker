@@ -16,9 +16,9 @@
 -behaviour(gen_server).
 
 -include("modules/datastore/datastore_models.hrl").
--include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneclient/server_messages.hrl").
--include("proto_internal/oneclient/stream_messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
+-include("proto/oneclient/stream_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -141,7 +141,7 @@ handle_cast({sequencer_stream_terminated, StmId, _, SeqStmState},
     {noreply, State#state{
         sequencer_streams = maps:put(StmId, {state, SeqStmState, []}, SeqStms)}};
 
-handle_cast(#client_message{message_stream = #message_stream{stm_id = StmId}} = Msg,
+handle_cast(#client_message{message_stream = #message_stream{stream_id = StmId}} = Msg,
     #state{sequencer_stream_sup = SeqStmSup, sequencer_streams = SeqStms,
         session_id = SessId} = State) ->
     case maps:find(StmId, SeqStms) of

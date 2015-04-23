@@ -17,8 +17,8 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
--include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneclient/stream_messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/stream_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -128,11 +128,11 @@ handle_cast(initialize, #state{sequencer_manager = SeqMan, stream_id = StmId} = 
                 time_ack_window = TimeAckWin}}
     end;
 
-handle_cast(#client_message{message_stream = #message_stream{seq_num = SeqNum}} =
+handle_cast(#client_message{message_stream = #message_stream{sequence_number = SeqNum}} =
     Msg, #state{sequence_number = SeqNum} = State) ->
     process_pending_messages(process_message(Msg, State));
 
-handle_cast(#client_message{message_stream = #message_stream{seq_num = MsgSeqNum}} =
+handle_cast(#client_message{message_stream = #message_stream{sequence_number = MsgSeqNum}} =
     Msg, #state{sequence_number = SeqNum} = State) when
     is_integer(MsgSeqNum), MsgSeqNum > SeqNum ->
     {noreply, send_message_request(Msg, store_message(Msg, State))};
@@ -207,13 +207,13 @@ code_change(_OldVsn, State, _Extra) ->
 -spec process_message(Msg :: #client_message{}, State :: #state{}) ->
     {stop, shutdown, NewState :: #state{}} |
     {noreply, NewState :: #state{}}.
-process_message(#client_message{message_stream = #message_stream{eos = true}} =
-    Msg, State) ->
+process_message(#client_message{message_stream = #message_stream{},
+    message_body = #end_of_message_stream{}} = Msg, State) ->
     NewState = send_message(Msg, State),
     {stop, shutdown, NewState};
 
 process_message(#client_message{message_stream = #message_stream{
-    seq_num = MsgSeqNum}} = Msg, #state{sequence_number_ack = SeqNumAck,
+    sequence_number = MsgSeqNum}} = Msg, #state{sequence_number_ack = SeqNumAck,
     messages_ack_window = MsgsAckWin} = State) ->
     NewState = send_message(Msg, State),
     case MsgSeqNum =:= SeqNumAck + MsgsAckWin of
@@ -266,7 +266,7 @@ send_message(Msg, #state{sequence_number = SeqNum} = State) ->
 -spec send_message_ack(State :: #state{}) -> NewState :: #state{}.
 send_message_ack(#state{stream_id = StmId, session_id = SessId,
     sequence_number = SeqNum} = State) ->
-    Msg = #message_acknowledgement{stm_id = StmId, seq_num = SeqNum - 1},
+    Msg = #message_acknowledgement{stream_id = StmId, sequence_number = SeqNum - 1},
     ok = communicator:send(Msg, SessId),
     State#state{sequence_number_ack = SeqNum - 1}.
 
@@ -281,10 +281,10 @@ send_message_ack(#state{stream_id = StmId, session_id = SessId,
 -spec send_message_request(Msg :: #client_message{}, State :: #state{}) ->
     NewState :: #state{}.
 send_message_request(#client_message{message_stream = #message_stream{
-    stm_id = StmId, seq_num = MsgSeqNum}}, #state{session_id = SessId,
+    stream_id = StmId, sequence_number = MsgSeqNum}}, #state{session_id = SessId,
     sequence_number = SeqNum} = State) ->
     Msg = #message_request{
-        stm_id = StmId, lower_seq_num = SeqNum, upper_seq_num = MsgSeqNum - 1
+        stream_id = StmId, lower_sequence_number = SeqNum, upper_sequence_number = MsgSeqNum - 1
     },
     ok = communicator:send(Msg, SessId),
     State.
@@ -297,7 +297,7 @@ send_message_request(#client_message{message_stream = #message_stream{
 %%--------------------------------------------------------------------
 -spec store_message(Msg :: #client_message{}, State :: #state{}) ->
     NewState :: #state{}.
-store_message(#client_message{message_stream = #message_stream{seq_num = SeqNum}} =
+store_message(#client_message{message_stream = #message_stream{sequence_number = SeqNum}} =
     Msg, #state{messages = Msgs} = State) ->
     State#state{messages = maps:put(SeqNum, Msg, Msgs)}.
 
@@ -309,6 +309,6 @@ store_message(#client_message{message_stream = #message_stream{seq_num = SeqNum}
 %%--------------------------------------------------------------------
 -spec remove_message(Msg :: #client_message{}, State :: #state{}) ->
     NewState :: #state{}.
-remove_message(#client_message{message_stream = #message_stream{seq_num = SeqNum}},
+remove_message(#client_message{message_stream = #message_stream{sequence_number = SeqNum}},
     #state{messages = Msgs} = State) ->
     State#state{messages = maps:remove(SeqNum, Msgs)}.

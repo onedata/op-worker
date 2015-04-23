@@ -15,8 +15,8 @@
 
 -include("modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_internal.hrl").
--include("proto_internal/oneclient/handshake_messages.hrl").
--include("proto_internal/oneproxy/oneproxy_messages.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
+-include("proto/oneproxy/oneproxy_messages.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
 
 %% model_behaviour callbacks

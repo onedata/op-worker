@@ -13,10 +13,10 @@
 -author("Tomasz Lichon").
 
 -include("modules/datastore/datastore_models.hrl").
--include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneclient/server_messages.hrl").
--include("proto_internal/oneclient/handshake_messages.hrl").
--include("proto_internal/oneproxy/oneproxy_messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
+-include("proto/oneproxy/oneproxy_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

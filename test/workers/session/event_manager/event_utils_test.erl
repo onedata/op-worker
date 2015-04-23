@@ -14,7 +14,7 @@
 
 -ifdef(TEST).
 
--include("proto_internal/oneclient/common_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -define(BLOCK(Offset, Size), #file_block{offset = Offset, size = Size}).
